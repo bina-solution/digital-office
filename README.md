@@ -196,7 +196,7 @@ MIT — see the `LICENSE` file.
 ## License
 
 DGO — the digital office
-Copyright (C) 2026 Bina Solutions
+Copyright (C) 2023 Bina Solutions
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published
