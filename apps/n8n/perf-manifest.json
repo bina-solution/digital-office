@@ -1,0 +1,53 @@
+[
+ {
+  "_comment": "B2 knob wiring: exact JSON paths rewritten in the STAGED workflow copies at push time; repo files keep defaults. One entry per knob target (see ai/context/indox-performance-profiles.md markout).",
+  "file": "indoxApiSupabase01.json",
+  "node": "Poll Line Changes",
+  "path": "parameters.rule.interval.0.secondsInterval",
+  "knob": "perf_line_poll_s",
+  "cast": "int"
+ },
+ {
+  "file": "indoxV2ActionsBS01.json",
+  "node": "Loop Over Items7",
+  "path": "parameters.batchSize",
+  "knob": "perf_extract_fanout",
+  "cast": "int"
+ },
+ {
+  "file": "indoxV2ActionsBS01.json",
+  "node": "Loop Over Items",
+  "path": "parameters.batchSize",
+  "knob": "perf_extract_fanout",
+  "cast": "int"
+ },
+ {
+  "file": "indoxV2Driver01.json",
+  "node": "Wait",
+  "path": "parameters.amount",
+  "knob": "perf_main_jitter_max_s",
+  "template": "={{ {v} ? (Math.floor(Math.random() * {v}) + 3) : 0 }}"
+ },
+ {
+  "_comment": "B3: doc_step lock TTL — bounds freeze damage from killed chains (kills never fire the error workflow). Must exceed the longest legit locked action chain.",
+  "file": "processLock01.json",
+  "node": "SET PROCESS KEY",
+  "path": "parameters.ttl",
+  "knob": "perf_lock_ttl_s",
+  "template": "={{ {v} }}"
+ },
+ {
+  "file": "processLock01.json",
+  "node": "SET PROCESS KEY1",
+  "path": "parameters.ttl",
+  "knob": "perf_lock_ttl_s",
+  "template": "={{ {v} }}"
+ },
+ {
+  "file": "processLock01.json",
+  "node": "GET CHECK PROCESS KEY EXECUTION2",
+  "path": "parameters.ttl",
+  "knob": "perf_lock_ttl_s",
+  "template": "={{ {v} }}"
+ }
+]

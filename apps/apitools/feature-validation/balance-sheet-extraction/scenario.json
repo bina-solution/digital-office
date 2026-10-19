@@ -1,0 +1,11 @@
+{
+  "feature": "balance-sheet-extraction",
+  "description": "Extract structured balance-sheet data from supplier reconciliation documents via N8N workflow. Validates document balance, date, and first-line fields (ID, amount, date) against expected values.",
+  "cases_source": "fixtures/fixtures.json",
+  "workflow_id": "mphF5Nf028u8sIix",
+  "webhook_path": "bs_ex_2",
+  "requires": [
+    "orchestration"
+  ],
+  "notes": "End-to-end BS extraction via the n8n webhook — runs only with FV_CAPABILITIES including 'orchestration' (live n8n workflow); covered by the indox-e2e lane otherwise."
+}

@@ -1,0 +1,72 @@
+{
+  "id": "data-management",
+  "title": {
+    "he": "ניהול נתונים",
+    "en": "Data Management"
+  },
+  "layer": 2,
+  "kind": "service",
+  "system": true,
+  "version": "0.1.0",
+  "summary": {
+    "he": "סיכום הנתונים של כל האפליקציות, גיבוי מלא ושחזור",
+    "en": "The platform's data inventory, full backup and restore"
+  },
+  "capabilities": [
+    {
+      "name": "data-management",
+      "type": "protocol",
+      "endpoint": "http://data-management:8080",
+      "required_ops": [
+        "inventory",
+        "export",
+        "import"
+      ]
+    }
+  ],
+  "use": [],
+  "connections": [],
+  "compose": "docker-compose.yml",
+  "cli": {
+    "alias": "data"
+  },
+  "routing": [
+    {
+      "host": "data-management",
+      "port": 8080,
+      "auth": "sso",
+      "module": {
+        "group": "תשתית",
+        "icon": "database",
+        "embed": true,
+        "alias": "data-management",
+        "id": "data-management",
+        "name": "ניהול נתונים",
+        "desc": "סיכום הנתונים, גיבוי ושחזור",
+        "order": 9,
+        "url_env": "DATA_MANAGEMENT_URL",
+        "url": "http://data-management:8080"
+      }
+    }
+  ],
+  "health": {
+    "structural": "auto",
+    "probe": {
+      "http": "http://data-management:8080/healthz",
+      "interval": "30s"
+    }
+  },
+  "data": {
+    "volumes": [
+      "data_management_state"
+    ],
+    "on_uninstall": "keep"
+  },
+  "resources": {
+    "cpus": "0.5",
+    "memory": "512M"
+  },
+  "observability": {
+    "sentry_platform": "python"
+  }
+}

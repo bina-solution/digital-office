@@ -1,0 +1,102 @@
+# yaml-language-server: $schema=./schema.json
+title: network-state holds a WireGuard PRIVATE KEY, is backed up by nothing, and is replaced by no restore
+opened: '2026-08-24'
+severity: high
+status: open
+summary: network-state holds a WireGuard PRIVATE KEY, is backed up by nothing, and is replaced by no restore
+description: |
+  area: data-management / backup completeness / secrets
+
+  ## Context
+
+  Four independent checks converged on this one 571-byte volume before anyone looked inside it:
+
+    coverage_report.py ....... the ONLY uncovered store on the host (0 enabled apps at risk)
+    restore preflight ........ the ONLY live volume the archive does not carry, so it SURVIVES
+    the console UI ........... shown as a red banner on the data-management page
+    the export inventory ..... absent, exactly as predicted
+
+  It was being treated as a rounding error - 571 bytes, probably scratch state, declare it and move
+  on. That is wrong. Its contents:
+
+    /v/state.json        WireGuard network config: peer public keys, endpoints, and invite records
+                         carrying `secret_hash` values and expiry/used flags
+    /v/wg_private.key    a WireGuard PRIVATE KEY
+
+  So the one store nothing protects is the host's NETWORK IDENTITY, not scratch state. That changes
+  both halves of the question:
+
+  LOSING IT is not "regenerate an empty file". Peers on the other side of those tunnels trust this
+  host by its public key. Losing the private key means the identity is gone and every peer
+  relationship has to be re-established through a fresh invite - which is a coordination problem
+  with whoever runs the other end, not a local restore.
+
+  BUT COPYING IT IS ALSO NOT FREE, and this is why "just add it to the backup" is the wrong reflex.
+  An archive that carries it carries a live private key. The archiver already has a category for
+  exactly this - `kind: secret`, which is how it treats `.env` and `acme.json` - and the restore
+  preflight already WARNS when an archive carries secret artifacts, because restoring them replaces
+  credentials on the target rather than just data. A private key silently folded in as ordinary
+  volume data would defeat that warning: it would be copied by anything that copies volumes, into
+  any environment, without ever being flagged as credential material.
+
+  There is also a CLONE hazard specific to this file. Two hosts restored from the same archive would
+  hold the SAME WireGuard private key and present the same identity to peers. For most volumes a
+  faithful clone is the goal; for a network identity it is a collision.
+
+  ## Action
+
+  - THE DECISION (owner's, and it is a real fork, not a formality):
+      (a) DECLARE IT AS A SECRET - add it to the owning app's app.json so it stops being an
+          undeclared store, and classify it `kind: secret` so the archiver treats it like `.env`:
+          carried only deliberately, and always surfaced by the preflight's secret warning. Best if
+          the identity is meant to survive a rebuild of this same host.
+      (b) DECLARE IT AS DELIBERATELY EXCLUDED - record that this host's network identity is
+          per-host and must NOT travel with an archive, so a restored clone mints its own and
+          re-invites. Best if archives are ever restored onto a DIFFERENT host, which is exactly
+          what the phase-3 move would do.
+    Both are defensible. What is not defensible is the current state, where it is undeclared, so no
+    rule covers it and nobody chose either behaviour.
+  - EITHER WAY it must stop being UNDECLARED: an undeclared store is invisible to the coverage
+    report by construction, which is how a private key ended up outside every backup rule without
+    anyone deciding that.
+  - DO NOT "fix" this by adding it to a generic volume tar. That is choice (a) with the secret
+    classification silently dropped, and it would put a live private key into every archive with no
+    warning attached.
+
+  ## Evidence
+
+  - coverage_report.py, 2026-08-24: 14 undeclared stores, of which 1 uncovered - network-state, 571B
+  - restore preflight for posnet-20260824T010614Z: sole entry under 'live volumes the archive does NOT carry'
+  - volume contents read 2026-08-24 from platform-os-net_network-state: state.json + wg_private.key
+  - apps/drive/app.py:143 _explicit_connection_required and the archiver's `kind: secret` handling are the precedent for treating key material distinctly
+
+  ## Urgency raised 2026 08 24
+
+  IT IS ALSO ONE ROUTINE COMMAND FROM BEING DELETED, and that turns this from a backup gap into
+  something with a live trigger.
+
+  Measured today: `platform-os-net_network-state` is DANGLING - attached to no container:
+
+      docker volume ls -f dangling=true
+        n8nremote_r4_storage            5.8G
+        n8nremote_r1_storage            5.5G
+        n8nremote_r2_storage            5.2G
+        n8nremote_r3_storage            3.0G
+        n8nremote_r5_storage            2.1G
+        ...
+        platform-os-net_network-state   12.0K   <-- the WireGuard private key
+        wa_media                        4.0K
+
+  At the same time the box's root filesystem is 97% FULL (7.2 GiB free of 234G) and
+  `docker system df` advertises 23.12 GB reclaimable from local volumes. Anybody clearing space on
+  this host - which phase 3 makes likely, since a full export needs ~3.8 GiB uncompressed - reaches
+  for `docker volume prune`. That command deletes every dangling volume, so it would take the
+  private key with the 21.8 GB of stale n8nremote_r*_storage it was aimed at.
+
+  So the store that NOTHING backs up and NO restore replaces is also the store that a routine
+  disk-cleanup deletes without a prompt. Those three facts together are the whole risk: no copy
+  exists, no restore recreates it, and the most likely next admin action removes it.
+
+  BEFORE ANY PRUNE ON THIS HOST: copy network-state off it. That is true whichever way the
+  declare-or-exclude decision below goes - the decision is about what ARCHIVES should do, and this
+  is about not losing the key in the meantime.

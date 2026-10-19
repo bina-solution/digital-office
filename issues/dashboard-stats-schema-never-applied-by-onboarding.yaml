@@ -1,0 +1,62 @@
+# yaml-language-server: $schema=./schema.json
+title: dashboard-stats-schema.sql is manual-only, so the INDOX dashboard 404s on every fresh deploy
+opened: '2026-08-24'
+severity: high
+status: resolved
+summary: dashboard-stats-schema.sql is manual-only, so the INDOX dashboard 404s on every fresh deploy
+description: |
+  area: onboarding / INDOX read model
+  As first recorded — status: FIXED 2026-08-24 -- adopted onto claude/release-verification-20260822 and closed here.
+
+  ## Context
+
+  The INDOX dashboard calls a Postgres view that does not exist on a newly deployed machine.
+  Measured on two machines on 2026-08-24:
+
+      laptop    to_regclass('public.indox_dashboard_stats')  ->  t
+      portable  to_regclass('public.indox_dashboard_stats')  ->  f
+
+  The working machine has it because someone once created it by hand. The new machine does
+  not, and nothing in the deploy path would ever create it.
+
+  scripts/ops/dashboard-stats-schema.sql defines the view, and its own header documents the
+  procedure as a manual one:
+
+      --   docker cp dashboard-stats-schema.sql supabase-db-<suffix>:/tmp/dashboard-stats-schema.sql
+      --   docker exec supabase-db-<suffix> psql -U postgres -d postgres -f /tmp/dashboard-stats-schema.sql
+
+  Nothing in the onboard hooks, bbox run, or app-verify invokes it.
+
+  Symptom in the browser, on console3.localhost/#/m/incoming:
+
+      Client error '404 Not Found' for url
+      'http://kong:8000/rest/v1/indox_dashboard_stats?select=doc_table,payload,dirty,updated_at,error
+       &doc_table=eq.incoming_documents&limit=1'
+
+  This is the same shape as fixture-seeding-cannot-apply-the-schema-through-n8n.yaml and the
+  schema.sql gap found on 2026-08-23: a file named as the owner of database objects, which no
+  code applies. Fixing the box is not fixing the defect.
+
+  A second defect is stacked on top of it and is filed separately: the BFF endpoint in front of
+  this view answers HTTP 200 while carrying the 404 as its payload, which is why no monitor
+  ever fired on it.
+
+  ## Impact
+
+  Any fresh deploy - the exact scenario the release is meant to prove - brings up an INDOX
+  dashboard that cannot load. The first screen a new operator sees is an error.
+
+  ## Resolution
+
+  Apply the file from the onboarding path rather than by hand, and add the gate that
+  generalises it: after onboard, fail when a database object that a shipped schema file
+  declares is absent. That single rule catches this, the schema.sql gap, and the next one.
+
+  Interim: the view was applied by hand to the portable box on 2026-08-24 and the endpoint now
+  returns real data. The structural gap is untouched by that.
+
+  ## Evidence
+
+  - to_regclass comparison across laptop and portable, 2026-08-24
+  - scripts/ops/dashboard-stats-schema.sql header, lines 6-7
+  - grep across the repo: no caller outside the header comment and one reference in apps/indox/app/incoming_documents/api/__init__.py:505

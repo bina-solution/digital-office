@@ -1,0 +1,1 @@
+{"error": {"code": "transient_cdp_failure", "message": "Browser42 CDP unavailable: It looks like you are using Playwright Sync API inside the asyncio loop.\nPlease use the Async API instead."}, "ok": false, "protocol_version": 1}

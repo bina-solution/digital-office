@@ -1,0 +1,84 @@
+# yaml-language-server: $schema=./schema.json
+title: The old-date gate re-evaluates COMPLETED documents and pushes them into OLD, which the pipeline can never leave. 92 of 97 OLD documents are finished work that got un-finished.
+opened: '2026-08-11'
+severity: medium
+status: open
+summary: COMPLETED is not protected from the old-date gate. `_terminalKeep` in `Decide DOC BASE Action` suppresses only `mark_max_iterations`, and COMPLETED rows ARE re-admitted to the pickup through the `s_adj` slice (`terminal and not recov`). So a finished document gets re-evaluated for age and moved to OLD -- a status excluded from the eligibility predicate, so the state machine can never bring it back. This is the only mechanism found on 2026-08-10/11 that DESTROYS finished client work rather than merely delaying it.
+description: |
+  id: indox-completed-documents-un-finished-into-old-2026-08-11
+  As first recorded — opened: 2026-08-11T04:15Z · severity: medium-but-irreversible · status: REOPENED-2026-08-11T08:10Z -- the guard is present but INCOMPLETE
+
+  ## Reopened finding
+
+  ```yaml
+  when: 2026-08-11T08:10Z
+  why: I declared this fixed at 05:30. It is not. OLD has grown 98 -> 135 with 24-25 arrivals in the last hour, versus the ~3/hr measured before the fix. The guard IS present in the live code (verified by parsing, line 243) and it is the ONLY old-date branch in the entire estate -- I scanned every active workflow, so this is not an unpatched twin.
+  the_gap: 'THE GUARD TESTS CURRENT STATUS ONLY: `doc.STATUS != "OLD" && doc.STATUS != "COMPLETED"`. A document that completed and was then RE-OPENED reaches the old-date branch as IN_PROGRESS, so it passes the guard and is moved to OLD. Re-opening is real and measured: COMPLETED -> IN_PROGRESS at ~4/hr and COMPLETED -> ACTION_RESTART at ~3/hr. The guard needed to consult PRIOR COMPLETION (an ACTION_LOG completion token or a completion flag), not the present status.'
+  but_part_of_it_is_correct_behaviour: 12 of the 24 recent OLD rows were CREATED WITHIN THE LAST 2 HOURS. Intake is running at ~1,001/hr as the 6-month backfill loads, so genuinely old material is arriving and OLD is the CORRECT terminal state for it. The 25/hr is a MIX of correct terminalisation and guard-gap damage, not 25/hr of destroyed work. Do not "fix" the correct half.
+  measurement_flaw_in_my_own_evidence: '`ACTION_LOG like ''%STATUS COMPLETED%''` also matches `STATUS COMPLETED3` as a substring, so my "130 of 135 were previously COMPLETED" conflated completion variants (STATUS COMPLETED, STATUS COMPLETED (BS), STATUS COMPLETED3). They are all completion variants so the direction holds, but the figure was not measuring what I claimed.'
+  proper_fix: Guard on evidence of prior completion rather than on current status -- e.g. reuse the existing `_terminalKeep` idea but source it from the ACTION_LOG completion tokens, so a re-opened document is still protected. Alternatively, stop COMPLETED documents being re-opened at all, which would fix this and several other symptoms at once.
+  ```
+
+  ## Previous status
+
+  FIXED-AND-VERIFIED-2026-08-11T05:30Z
+
+  ## Fix applied
+
+  ```yaml
+  when: 2026-08-11T05:30Z
+  where: indoxV2ActionsGlobal01 / Decide DOC BASE Action, the anyOldDate branch (was line 239)
+  change: |
+    was:  if (doc.STATUS != "OLD")                              { doc.IS_OLD = true; return 'update_status_old_doc'; }
+    now:  if (doc.STATUS != "OLD" && doc.STATUS != "COMPLETED") { doc.IS_OLD = true; return 'update_status_old_doc'; }
+  behaviour_now: 'A COMPLETED document whose date falls outside the window falls through to the next line''s `no_action_old_date`, which is a no-op. That is correct: a document already adjudicated COMPLETED has had its verdict rendered, and its age was already true when it completed. Re-deciding it later is not new information. COMPLETED rows receive no_action_already_completed on the normal path regardless, so nothing is lost.'
+  verified: 'Parsed (not pattern-matched) from the LIVE version via activeVersionId -> workflow_history: old-date COMPLETED guard = true, P1 (distinct-triple counting) = true, P3 (conditional MAX_ITERATIONS guard) = true. Workflow active, published and in-sync. 51 successes / 0 errors in the 90 seconds after deploy.'
+  state_at_fix: 98 documents in OLD, 93 of them previously COMPLETED, still accruing at ~2-3/hour.
+  ordering_constraint_now_satisfied: This guard was the prerequisite for ever honouring OldDocumentMonthsBack=6. That change was measured to flip 1,276 documents to OLD INCLUDING 414 already COMPLETED; with this guard in place those 414 are protected. The 6-month setting remains UNAPPLIED and is still the owner's call -- note also that the 6-month window is already enforced at ingestion by syncV3Unit0001, so the hardcoded 24 only governs terminalisation of rows already in the table.
+  not_repaired_by_this_fix: The 93 documents ALREADY moved to OLD stay there. Recovering them would require either editing rows (forbidden) or adding OLD to the pickup's eligibility predicate, which is a separate decision with its own blast radius. Flagged, not done.
+  ```
+
+  ## Evidence
+
+  ```yaml
+  measured_2026-08-11T04:15Z:
+    old_total: 97
+    old_that_were_previously_completed: 92
+    old_arrivals_last_hour: 3
+    rate: ~3/hour, steady -- observed at 02:45, 03:15, 04:00
+  all_transitions_out_of_completed_in_one_hour:
+    OLD: 3
+    IN_PROGRESS: 2
+    ACTION_RESTART: 1
+  merged_ruled_out: MERGED did not grow at all in the window (0 recent), so this is NOT dedup correctly removing a completed twin from the count. Documents are genuinely being un-completed.
+  proportion: ~3/hr against ~133/hr completing = a ~2% leak, but cumulative and permanent.
+  ```
+
+  ## Mechanism
+
+  ```yaml
+  gate: indoxV2ActionsGlobal01 / Decide DOC BASE Action -- the old-date branch calling anyOldDate
+  why_completed_rows_reach_it: The eligibility predicate in indoxApiSupabase01 / Get Changed Docs defines terminal = ("STATUS" = 'COMPLETED'), and slice s_adj selects `terminal and not recov` at rn*12.0 + 0.5, so COMPLETED documents ARE polled (a few slots per pass). Decide normally answers no_action_already_completed for them -- but the old-date branch is evaluated without a COMPLETED guard, so it wins first for any document whose DOC_DATE is outside the window.
+  guard_that_exists_one_branch_away: '`const _terminalKeep = [''COMPLETED'',''OLD''].includes(String(normDoc.STATUS||'''').toUpperCase());` is already used to suppress mark_max_iterations. The old-date branch needs the same protection.'
+  ```
+
+  ## Proposed fix
+
+  ```yaml
+  change: Apply the existing _terminalKeep test to the old-date branch so a COMPLETED document is never re-evaluated for age.
+  risk: low
+  why_it_is_correct: A document that has been adjudicated COMPLETED has had its verdict rendered. Age is a property of the document that was already true when it completed; re-deciding it later cannot be new information, only a re-run of an old question against a possibly-changed window.
+  caution: The file is contended -- indoxV2ActionsGlobal01 / Decide DOC BASE Action already carries P1 (distinct-triple iteration counting, marker `new Set((String(normDoc.ACTION_LOG`) and P3 (conditional MAX_ITERATIONS guard, marker `MAX_ITERATIONS' && _iter >= _maxIter`). Pull LIVE immediately before patching and verify both survive the import.
+  ```
+
+  ## Interaction with the deferred p7 decision
+
+  ```yaml
+  detail: '`indoxV2ActionsGlobal01 / Companies` calls indoxSettings01 with `load_settings: false`, so the owner''s console setting OldDocumentMonthsBack = 6 never reaches anyOldDate, which runs at a HARDCODED 24 months. Honouring the 6-month setting was investigated and deliberately NOT deployed because it would flip 1,276 documents to OLD, INCLUDING 414 already COMPLETED.'
+  consequence: That is this same defect at 138x the scale. THE GUARD MUST LAND BEFORE THE SETTING IS HONOURED. If the order is reversed, 414 finished client documents are lost in one pass, irreversibly.
+  also_noted: The 6-month window is ALREADY enforced at ingestion by syncV3Unit0001 (List Req / Search Req read old_document_months_back), so the hardcoded 24 only governs terminalisation of rows already in the table -- which makes fixing the guard more valuable than fixing the setting.
+  ```
+
+  ## Not fixed because
+
+  Raised at 04:15 with two lanes mid-work on higher-value items (the per-type dispatch bottleneck, ~25 hours of queue, and a second apitools instance). A 2%/hr leak did not justify an import into a contended workflow at that moment. It SHOULD be fixed before anyone revisits the 6-month setting.

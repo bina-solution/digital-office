@@ -1,0 +1,106 @@
+# yaml-language-server: $schema=./schema.json
+title: "The message copy button does nothing where the agent is framed cross-origin: the clipboard helper gives up on the async API's refusal instead of falling back"
+opened: 2026-10-09
+category: bug
+severity: medium
+status: resolved
+summary: "The owner, 2026-10-09 14:50, with the toolbar's own tooltip „העתקה\" showing under a message: «העתקה לא עובד». His window was this office's בינה framed by the MacBook's console — a REMOTE tile, which is framed on its own nested host and is therefore cross-origin by design (serve.py:through_console refuses a proxy to an app that owns its origin: /api, /plugins and a websocket at the root). In a cross-origin frame the async Clipboard API is denied by default (Permissions Policy: clipboard-write allows `self`), and the harness's writeClipboard answered that refusal with `catch { return false }` — no fallback, no message, and the button did nothing at all."
+description: |
+  ## Symptom
+
+  Clicking the copy button in a message's action row (the row with 👍/👎, tooltip „העתקה") does
+  nothing: no text reaches the clipboard and the button never shows „הועתק". Reported with a
+  screenshot whose toolbar tooltip already proves the pointer was on the button.
+
+  ## Root cause (two facts, both in this repo)
+
+  1. **The frame is cross-origin.** A remote tile of this agent is emitted by
+     `platform/manager/serve.py:module_entries` with `external: True` and, on every console,
+     WITHOUT a `proxy` — because `through_console()` refuses one to an app whose `module.kind` is
+     `external`, and bina-ds is exactly that (`reconcile._own_host_only`; the app addresses /api,
+     /plugins and a websocket at the origin root, which on another office's console belongs to that
+     office's own agent). Measured 2026-10-05, and written in the code: "the MacBook's בינה framed
+     here made every call to hp-laptop's own agent". So the shell frames
+     `<alias>.<office>.console.<domain>` — another origin than the shell's.
+     The window's title agrees: `desktop.js` appends the office name only for a remote window
+     („בינה ודעת · HP"), and its title bar carries the `external` button.
+
+  2. **The clipboard helper had no fallback.** `dsh-web-frontend`'s minified
+     `writeClipboard` (`Rn`) tried `navigator.clipboard.writeText` and, on ANY rejection, returned
+     false — the legacy `textarea` + `document.execCommand("copy")` path below it was reachable
+     only when `navigator.clipboard` did not exist at all (an insecure context). In a cross-origin
+     frame the API exists and the CALL is refused, so the fallback that was written and shipped
+     was never reached. The caller (`MessageIconActions.onCopy`) returns on `!ok` without any
+     feedback, so the whole failure is silent.
+
+  Measured on the running bundle (served by this office's bina-ds, `assets/index-C04Zg7TP.js`):
+  the stock helper, with `navigator.clipboard.writeText` rejecting, returns `false`, calls no
+  `execCommand`, and copies nothing; with the API absent it copies through the legacy path.
+
+  ## Fix
+
+  `apps/bina-ds/harness/customize.sh` (the one place this office is allowed to change stock dsh,
+  with the same exactly-once anchor discipline): one word of the helper goes away —
+  `catch { return false }` becomes `catch {}` — so the legacy path is what it was written to be:
+  a fallback. It copies inside the same user gesture and is not gated by the Permissions Policy.
+
+  Until a frame is granted `clipboard-write`, this office's own app works; the generic fix (the
+  console adding `allow="clipboard-write"` to the frames it creates) would let every framed app
+  use the native API again, and is NOT part of this change.
+
+  ## Proof
+
+  * The bundle the browser is served carries the patched helper, and still parses
+    (`node --check`): `fetch /assets/index-C04Zg7TP.js` after the change.
+  * A unit run over the function extracted from the SERVED bundle, with
+    `navigator.clipboard.writeText` rejecting (the cross-origin refusal) and a recording
+    `document`: stock returns `false` and takes no legacy path; patched calls
+    `execCommand("copy")` with the message text in the textarea and returns `true`.
+  * THE MEASUREMENT THAT MATTERS — the owner's geometry in a real Chromium (Chrome/154), through
+    the running bina-ds, now kept as a repeatable check:
+    `python3 apps/bina-ds/tools/copy-button-selfcheck.py --app http://bina.localhost:3080 --ip <ip>`.
+    A top page on loopback frames the app same-SITE but other-ORIGIN (a different port; a
+    third-party frame cannot even read localStorage and the harness never activates), a conversation
+    is opened, its last message hovered, its copy button clicked, the clipboard read back from the
+    top page. With a sentinel in the clipboard first, so "nothing happened" is visible:
+
+    | bundle | writeText inside the frame | clipboard after the click |
+    |---|---|---|
+    | stock      | NotAllowedError | the sentinel — nothing copied (the owner's bug, reproduced) |
+    | this fix   | NotAllowedError | the message's own text |
+
+    Both rows are the same frame, the same click, the same browser: only the helper differs.
+
+  * Still not the owner's own browser (Safari on the MacBook). What differs there is the browser,
+    not the condition: the refusal is real in both (the permission policy denies it to any
+    cross-origin frame), and `document.execCommand("copy")` inside a gesture is the path every
+    copy button used before the async API existed.
+
+  ## Left open
+
+  * Total failure is still silent in the UI: `onCopy` returns on `!ok` and the chat shows nothing
+    (the locale has `copy.failed` = „ההעתקה נכשלה", the chat surface never uses it). Unreachable
+    while `execCommand` exists; a smaller, separate change if the owner wants the message.
+  * The generic half is NOT landed: the console adding `allow="clipboard-write"` to the frames it
+    creates would let every framed app use the native API again (today, only the fallback saves
+    them). Proposed, not implemented — it is another app's change and nothing here can prove it
+    fixes the owner's window, which is framed by the MacBook's console.
+tasks:
+  - text: "customize.sh: the clipboard fallback (catch{} instead of catch{return false})"
+    done: true
+  - text: "Apply it to the running container so the owner's next page load has it; verify the SERVED bundle"
+    done: true
+  - text: "Unit-proof the helper's control flow on the served bundle (stock vs patched)"
+    done: true
+  - text: "Prove it end to end in a real browser in the owner's geometry (cross-origin frame) — apps/bina-ds/tools/copy-button-selfcheck.py, stock vs fixed measured"
+    done: true
+  - text: "Rebuild the bina-ds image and verify the patch is in it (`docker run --rm --entrypoint sh <image> -c 'grep -c …'` → 1, stock form 0)"
+    done: true
+  - text: "Propose (not land) the generic half: the console granting allow=\"clipboard-write\" to the frames it creates"
+    done: false
+references:
+  - apps/bina-ds/harness/customize.sh
+  - apps/bina-ds/tools/copy-button-selfcheck.py
+  - platform/manager/serve.py
+  - platform-base/console/static/app.js
+  - platform-base/console/static/desktop.js

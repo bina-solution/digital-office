@@ -1,0 +1,2179 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>התראות</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230e9f6e'/%3E%3Ctext x='16' y='23' font-size='18' text-anchor='middle'%3E%F0%9F%94%94%3C/text%3E%3C/svg%3E">
+<style>
+/* ── what is this screen's own: radii and type (each app stays independent, no external assets).
+   The colours are the office's palette, in the generated block below. Fills width like the console
+   shell; NO app sidebar (avoids double-nav when embedded at /a/alerts/). All fetch/asset URLs are
+   RELATIVE so it works standalone AND embedded. ── */
+:root{
+  --radius:16px; --radius-sm:10px; --radius-pill:999px;
+  --font:"Segoe UI",system-ui,-apple-system,"Noto Sans Hebrew","Assistant",Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+/* @bina-theme-tokens:start */
+/* OLIVE GROVE — the one palette of the office (the owner, 2026-10-07 · DGO-450). Four hues, sampled
+   from his mock-up, and the ground they stand on. A screen never writes a colour: it names one of
+   these. Each hue is the colour itself (a FILL — a button, a bar, a dot), «-d» for text and thin
+   lines on the ground (4.5:1 or more), «-soft» and «-line» for a tint and its hairline, and «-ink»
+   for what is written ON the fill. The role names every screen already uses point at them:
+   (no backtick in this block: one of its copies lives inside a script's template string)
+     olive  the brand and the main action · what is well, what is done
+     sky    what is in motion, what only informs · a link
+     lime   look here — a warning, something waiting
+     plum   a person must act — a failure, a removal, the one final action
+   Contrast, measured (WCAG): ink on the ground 13.7 · muted 4.65 · light text on olive 5.51 and on
+   plum 9.54 · ink on lime 6.88 · its ink on sky 6.32 · sky-d 4.61 · lime-d 4.70 · violet 5.32 ·
+   on the desk: its ink 6.32 (dark: 13.96), and 11.2 where the sky pales (dark: 5.12). */
+:root,:root[data-theme="light"]{
+  color-scheme:light;
+  accent-color:var(--accent);   /* the browser's OWN controls - a checkbox, a radio, a range, a progress bar - on both grounds: said once, here (it was said for eight single controls, and every other one was the browser's blue) */
+  --bg:#f3f5f7; --surface:#fff; --surface-2:#f9fafb; --ink:#1f2a17; --muted:#6a7068; --line:#dcdfde;
+  --olive:#56693f; --olive-d:#475734; --olive-soft:#e7eae4; --olive-line:#bfc6b6; --olive-ink:#f3f5f7;
+  --sky:#7baae3; --sky-d:#2a6fc4; --sky-soft:#edf3fb; --sky-line:#cddff4; --sky-ink:#13263f;
+  --lime:#a9b84c; --lime-d:#69732e; --lime-soft:#f3f5e6; --lime-line:#dee4bb; --lime-ink:#1f2a17;
+  --plum:#5b3349; --plum-d:#4a303b; --plum-soft:#e8e2e6; --plum-line:#c1b1ba; --plum-ink:#f3f5f7;
+  --accent:var(--olive); --accent-d:var(--olive-d); --accent-soft:var(--olive-soft); --accent-ink:var(--olive-ink);
+  --blue:var(--sky-d); --amber:var(--lime-d); --red:var(--plum);
+  --violet:#7c5c6d;   /* plum, lifted a fifth toward white: someone has to look — nothing has failed */
+  --ok:var(--olive); --warn:var(--lime-d); --danger:var(--plum); --info:var(--sky-d);
+  --ok-soft:var(--olive-soft); --warn-soft:var(--lime-soft); --danger-soft:var(--plum-soft); --info-soft:var(--sky-soft);
+  --red-soft:var(--plum-soft); --amber-soft:var(--lime-soft); --blue-soft:var(--sky-soft); --violet-soft:var(--plum-soft);
+  --side:var(--olive); --side-ink:#f3f5f7; --side-mut:#dce1da; --side-line:#788765;
+  --desk:var(--sky); --desk-ink:var(--sky-ink);   /* desktop mode's ground is the sky (the owner, DGO-452), and what is written straight on it */
+  --scrim:rgba(31,42,23,.5);                      /* what dims a screen behind a pop-up */
+  --shadow:0 1px 3px rgba(31,42,23,.08),0 6px 24px rgba(31,42,23,.06);
+  --shadow-lg:0 20px 60px rgba(31,42,23,.28);
+  /* ONE COLOUR AND ONE ANIMAL PER OFFICE (the owner, 2026-10-09 · flt-002). When offices are linked,
+     a person reads WHICH office a thing belongs to without opening it, so each office gets a hue of
+     its own. The hue is an IDENTITY and never a health state: an office that stopped answering keeps
+     its colour, and the quiet mark is the one that says "not answering". Each is an ALIAS of the
+     palette's own hue — no fourth value is invented, and because the ground re-points the hue, the
+     office mark follows the ground by itself. Each office's animal (elephant, deer, eagle) is a
+     glyph of bina-icons.js. */
+  --office-hp:var(--muted);   /* hp · elephant — grey: the heavy laptop at home, in the palette's own grey */
+  --office-mac:var(--lime);   /* macbook · deer — yellow: the palette has one yellow and it is lime. A FILL, so what is written ON it is --lime-ink, never this */
+  --office-vps:var(--sky-d);  /* vps · eagle — deep sky blue, «the eagle in the clouds». THE OWNER'S OWN CHOICE (2026-10-09, in writing: vps = נשר + כחול-שמיים) — this line is the colour he picked, not a default kept for him */
+}
+
+/* ── A LINKED OFFICE'S MARK, BY NAME (flt-004) ───────────────────────────────────────────────
+   The link carries a NAME — mark: {color, animal} in the catalog, from the office's own identity
+   — and never a value: the office that DRAWS a linked tile owns the pixels, so it paints the name
+   with its own palette. These seven rules are that translation, one per family above; a screen sets
+   data-office-hue="lime" and paints var(--office-hue).
+   A name this file does not know paints nothing, which is why the vocabulary in
+   apps/dgo-extend/identity.py may only name families that exist here — and why --red and --ok
+   are not among them: they mean «danger» and «it is well» on every screen in the office. */
+[data-office-hue="grey"]   { --office-hue:var(--muted); }
+[data-office-hue="lime"]   { --office-hue:var(--lime); }
+[data-office-hue="sky"]    { --office-hue:var(--sky-d); }
+[data-office-hue="olive"]  { --office-hue:var(--olive-d); }
+[data-office-hue="plum"]   { --office-hue:var(--plum); }
+[data-office-hue="blue"]   { --office-hue:var(--blue); }
+[data-office-hue="violet"] { --office-hue:var(--violet); }
+/* the dark ground is the same four hues on the palette's own ink, and the SAME legend. Olive on that
+   ink is 2.5:1, so its text step there is olive LIFTED — its own hue and saturation, lighter (7.14
+   on a card, 4.82 on its own tint) — and the brand, the main action and «it is well» take that step.
+   Lime stays «look here» and the sky «in motion», as on the light ground: were lime the accent here
+   (it was, for a day), a warning, a selection and «it is well» were one colour. Each «-d» on its
+   own «-soft» there, measured: olive 4.82 · sky 4.62 · lime 4.63 · plum 4.71. */
+@media (prefers-color-scheme:dark){
+  :root{ color-scheme:dark;
+         --bg:#141b0f; --surface:#1f2a17; --surface-2:#192213; --ink:#f3f5f7; --muted:#a2a8a2; --line:#414a3b;
+         --olive-d:#a5ba8c; --olive-soft:#384629; --olive-line:#56693f;
+         --sky-d:#7baae3; --sky-soft:#2e3f38; --sky-line:#4d6a8c;
+         --lime-d:#a9b84c; --lime-soft:#3b4622; --lime-line:#69732e;
+         --plum-d:#ad99a4; --plum-soft:#402f33; --plum-line:#7c5c6d;
+         --accent:var(--olive-d); --accent-ink:var(--surface);
+         --red:#ad99a4; --violet:#bdadb6; --danger:#ad99a4; --ok:var(--olive-d); --side:var(--surface);
+         --desk:var(--sky-ink); --desk-ink:var(--ink); --scrim:rgba(0,0,0,.6);
+         --shadow:0 1px 3px rgba(0,0,0,.4),0 6px 24px rgba(0,0,0,.3);
+         --shadow-lg:0 20px 60px rgba(0,0,0,.55); }
+}
+:root[data-theme="midnight"]{
+  color-scheme:dark;
+  --bg:#141b0f; --surface:#1f2a17; --surface-2:#192213; --ink:#f3f5f7; --muted:#a2a8a2; --line:#414a3b;
+  --olive-d:#a5ba8c; --olive-soft:#384629; --olive-line:#56693f;
+  --sky-d:#7baae3; --sky-soft:#2e3f38; --sky-line:#4d6a8c;
+  --lime-d:#a9b84c; --lime-soft:#3b4622; --lime-line:#69732e;
+  --plum-d:#ad99a4; --plum-soft:#402f33; --plum-line:#7c5c6d;
+  --accent:var(--olive-d); --accent-ink:var(--surface);
+  --red:#ad99a4; --violet:#bdadb6; --danger:#ad99a4; --ok:var(--olive-d); --side:var(--surface);
+  --desk:var(--sky-ink); --desk-ink:var(--ink); --scrim:rgba(0,0,0,.6);
+  --shadow:0 1px 3px rgba(0,0,0,.4),0 6px 24px rgba(0,0,0,.3);
+  --shadow-lg:0 20px 60px rgba(0,0,0,.55);
+}
+/* THE KEYBOARD'S RING - what the browser draws around the stop the keyboard is on, in the palette, wherever
+   a part draws none of its own. It has no specificity at all (:where), so any rule of a part wins. Two
+   screens said this for themselves; on the others nearly every stop wore the browser's ring (DGO-455).
+   A field keeps the offset it has - fourteen rules draw a field's own outline and say no offset. An area
+   (a scroll box, a table) takes the ring inside, where nothing clips it; a control takes it outside,
+   where a filled button does not hide it. */
+:where(:focus-visible){outline:2px solid var(--accent)}
+:where(:focus-visible:not(a,button,summary,[role=button],input,select,textarea)){outline-offset:-2px}
+:where(a,button,summary,[role=button]):focus-visible{outline-offset:2px}
+/* HEBREW AT A HEAVY WEIGHT - on Windows, where the first family of --font is installed. "Segoe UI" has its
+   Hebrew in Light, Regular, Semibold and Bold. Asked for 800 or 900 the browser takes the family's Black
+   face, which has none, and so has every family after it - so the Hebrew of every title at 800 was drawn in
+   the system's last-resort serif, thin, beside Latin in Black: «חשבונות ומראות» at 20px is 150px wide at 700
+   and 120px at 800 (Chrome 154; the screens ask for 800 in 167 places, the question's title among them).
+   These faces give the family's HEBREW RANGE the faces that have it. A family a sheet names is no longer the
+   system's for those characters, so every weight and both styles are named, each as the system resolves it:
+   measured, only upright 800 and 900 change. Any other character is not theirs and goes on to the next
+   family the screen names - system-ui in --font, on Windows the same faces, Black included - which is why
+   G27 asks that system-ui follows wherever a screen names this family itself. Where the family is not
+   installed nothing here resolves and nothing changes. */
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Light");font-weight:100 300;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI");font-weight:400;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Semibold");font-weight:500 600;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Bold");font-weight:700 900;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Light Italic");font-weight:100 300;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Italic");font-weight:400;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Semibold Italic");font-weight:500 600;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Bold Italic");font-weight:700 900;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+/* @bina-theme-tokens:end */
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--font);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.num{direction:ltr;unicode-bidi:isolate;font-variant-numeric:tabular-nums}
+
+/* page shell — fills the console content area, wide cap for readable line-length */
+.wrap{width:100%;max-width:1160px;margin:0 auto;padding:22px 26px 48px}
+
+.btn{border:1px solid var(--line);background:var(--surface);color:var(--ink);font:inherit;font-weight:600;
+  padding:7px 13px;border-radius:var(--radius-sm);cursor:pointer;box-shadow:var(--shadow);display:inline-flex;align-items:center;gap:6px}
+.btn:hover:not(:disabled){border-color:var(--accent);color:var(--accent-d)}
+.btn:disabled{opacity:.45;cursor:default;box-shadow:none}
+.btn.ghost{box-shadow:none;background:transparent}
+
+/* ── KPI strip (spans full width; 2026 dashboard pattern) ─────────────────── */
+/* Four tiles are one row of four or two rows of two — `auto-fit` made them 3 + 1 on a tablet. The
+   grid, and the strip it becomes in a window and on a phone, are the office's (`.pg-kpis`). */
+#hud{margin:2px 0 18px}
+@media (max-width:430px) and (min-height:700px){#hud{--pg-kpi-cols:2}}   /* a phone; a small WINDOW keeps one row */
+
+/* ── filter bar ───────────────────────────────────────────────────────────── */
+/* ── the app's half of the menu contract ─────────────────────────────────────────────────────────
+   `.bnv-host` is the container the menu MEASURES (its own width, not the window's) and `.appgrid` is
+   the grid whose side column is `--bnv-side`; the rail at 600–839px and the drawer below 600px come
+   from bina-nav.css. `.filters` went with its bar — the filters are menu sections now. */
+.side{border-inline-end:1px solid var(--line)}
+.pg{min-width:0}
+/* Below 600px the menu — this screen's filters — is a drawer, and the head holds the button that
+   opens it, at the end of the title's line (there was none: on a phone the filters could not be
+   reached). The title block gives it the room: a line of text takes the whole row otherwise. */
+.pg-head>div:first-child{flex:1 1 0;min-width:0}
+@media (min-height:700px){.pg-head>.bnv-burger{margin-block-start:-6px}}   /* (level with the title's line) */
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{border:1px solid var(--line);background:var(--surface);color:var(--muted);font:inherit;font-weight:600;font-size:12.5px;
+  padding:6px 12px;border-radius:var(--radius-pill);cursor:pointer;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;box-shadow:var(--shadow)}
+.chip:hover{border-color:var(--accent);color:var(--ink)}
+.chip.on{background:var(--accent-soft);color:var(--accent-d);border-color:transparent}
+.chip .c{font-size:11px;font-weight:700;opacity:.75}
+.chip .sw{width:8px;height:8px;border-radius:50%;flex:none}
+.chip .sw.error{background:var(--red)} .chip .sw.warning{background:var(--amber)} .chip .sw.info{background:var(--blue)}
+.filters .sep{width:1px;align-self:stretch;background:var(--line);margin:2px 2px}
+.filters .grow{margin-inline-start:auto;display:flex;gap:8px;flex-wrap:wrap}
+
+/* ── list ─────────────────────────────────────────────────────────────────── */
+.daygroup{margin-top:20px}
+.daygroup:first-child{margin-top:0}
+.dayhdr{font-size:12px;color:var(--muted);font-weight:700;letter-spacing:.04em;margin:0 4px 9px;text-transform:none;
+  display:flex;align-items:center;gap:10px}
+.dayhdr::after{content:"";flex:1;height:1px;background:var(--line)}
+#list{display:flex;flex-direction:column;gap:10px}
+
+.item{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+  padding:14px 16px 14px 18px;box-shadow:var(--shadow);border-inline-start:4px solid var(--line);
+  display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:start;transition:border-color .12s,box-shadow .12s}
+.item:hover{box-shadow:var(--shadow-lg)}
+.item.lv-error{border-inline-start-color:var(--red)}
+.item.lv-warning{border-inline-start-color:var(--amber)}
+.item.lv-info{border-inline-start-color:var(--blue)}
+.item.unread{background:linear-gradient(90deg,var(--accent-soft),var(--surface) 42%)}
+.item.unread .title::before{content:"";position:absolute;inset-inline-start:-11px;top:7px;width:7px;height:7px;border-radius:50%;background:var(--accent)}
+
+/* source avatar */
+.ava{width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:19px;
+  background:var(--surface-2);border:1px solid var(--line);flex:none}
+.ava{color:var(--muted)}
+.ava svg{width:19px;height:19px}
+.ava.error{background:var(--red-soft);border-color:transparent;color:var(--red)}
+.ava.warning{background:var(--amber-soft);border-color:transparent;color:var(--amber)}
+.ava.info{background:var(--blue-soft);border-color:transparent;color:var(--blue)}
+
+.body{min-width:0}
+.title{position:relative;font-weight:700;color:var(--ink);overflow-wrap:anywhere;padding-inline-start:2px}
+.desc{color:var(--muted);font-size:13px;margin-top:4px;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+/* (two lines are what a row shows of a text; a press on the row shows the whole of it - `onRowClick`) */
+.item.whole .desc{display:block;-webkit-line-clamp:unset;overflow:visible}
+.meta{display:flex;align-items:center;gap:9px;margin-top:9px;font-size:12px;color:var(--muted);flex-wrap:wrap}
+.tag{font-size:11px;font-weight:700;border-radius:6px;padding:2px 8px;white-space:nowrap;background:var(--surface-2);border:1px solid var(--line);color:var(--muted)}
+.tag.src{color:var(--accent-d);background:var(--accent-soft);border-color:transparent}
+.tag.proj{font-family:var(--mono);font-size:10.5px}
+.meta .cnt{display:inline-flex;align-items:center;gap:4px}
+.meta a.open,.desc a{color:var(--accent-d);text-decoration:none;font-weight:700}
+.meta a.open:hover,.desc a:hover{text-decoration:underline}
+/* (what a finger hits is 30px high: «פתח במקור» was 18 - it is 30 whatever the font draws, and its own margin takes
+   the difference back so that the line stays where it was) */
+@media (pointer:coarse){.meta a.open{display:inline-flex;align-items:center;min-height:30px;margin-block:-6px}}
+
+/* row actions */
+.rowacts{display:flex;align-items:center;gap:4px;flex:none;opacity:.35;transition:opacity .12s}
+.item:hover .rowacts{opacity:1}
+.iact{border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:15px;line-height:1;padding:6px;border-radius:8px;
+  min-width:30px;min-height:30px;display:inline-grid;place-items:center}
+.iact:hover{background:var(--surface-2);color:var(--accent-d)}
+.iact.del:hover{color:var(--red)}
+.iact svg,.btn svg{width:15px;height:15px;display:block;flex:none}
+
+/* ── states ───────────────────────────────────────────────────────────────── */
+.state{color:var(--muted);text-align:center;padding:56px 20px;background:var(--surface);border:1px dashed var(--line);
+  border-radius:var(--radius)}
+.state .ico{opacity:.5;margin-bottom:10px;display:flex;justify-content:center}
+.state .ico svg{width:40px;height:40px}
+.state .t{font-size:15px;font-weight:700;color:var(--ink)}
+.state .s{font-size:13px;margin-top:5px}
+.state.err{color:var(--red);border-color:var(--red)}
+.spin{display:inline-block;width:18px;height:18px;border:2px solid var(--line);border-top-color:var(--accent);
+  border-radius:50%;animation:sp .7s linear infinite;vertical-align:-3px;margin-inline-end:8px}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+
+@media (max-width:640px){
+  .wrap{padding:16px 14px 40px}
+  .item{grid-template-columns:auto 1fr;gap:10px}
+  .rowacts{grid-column:1 / -1;justify-content:flex-end;opacity:1;margin-top:-4px}
+  .brand .htext h1{font-size:20px}
+}
+
+/* @bina-page:start */
+.pg{
+  --pg-max:1180px;
+  width:100%;
+  max-width:var(--pg-max);
+  margin:0 auto;
+  padding:20px 24px 48px;
+  box-sizing:border-box;
+}
+/* the header: title block at the start, actions at the end. It wraps rather than shrinking,
+   which is what keeps a long action row off the title on a narrow screen. */
+.pg-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:16px;
+  flex-wrap:wrap;
+  margin-bottom:18px;
+  padding-bottom:14px;
+  border-bottom:1px solid var(--line);
+}
+.pg-head h1{
+  margin:0;
+  font-size:22px;
+  line-height:30px;
+  font-weight:700;
+  letter-spacing:-.01em;
+  color:var(--ink);
+}
+.pg-sub{margin-top:3px;color:var(--muted);font-size:13px;line-height:20px;max-width:70ch}
+.pg-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-inline-start:auto}
+
+/* the live chip. One chip, everywhere: a dot that beats while the number is fresh, and that
+   stops dead when it is not — a still dot is the whole signal that the figure is old. */
+.pg-live{
+  display:inline-flex;align-items:center;gap:7px;
+  font-size:12.5px;line-height:18px;font-weight:700;white-space:nowrap;
+  color:var(--accent-d);
+  background:var(--accent-soft);
+  border-radius:999px;
+  padding:4px 11px;
+  border:0;font-family:inherit;          /* the chip is a <button> where it pauses the refresh */
+}
+button.pg-live{cursor:pointer}
+.pg-live[data-stale="1"]{color:var(--amber);background:var(--warn-soft)}
+.pg-live .beat{width:9px;height:9px;border-radius:50%;background:currentColor;flex:none;animation:pg-beat 1.6s infinite}
+.pg-live[data-stale="1"] .beat{animation:none}
+@keyframes pg-beat{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 45%,transparent)}70%{box-shadow:0 0 0 9px transparent}100%{box-shadow:0 0 0 0 transparent}}
+
+/* the card. `> h2/h3` is the card's own title; an app that puts a toolbar in it uses .pg-cardhead */
+.pg-card{
+  box-sizing:border-box;
+  background:var(--surface);
+  border:1px solid var(--line);
+  border-radius:14px;
+  padding:16px 18px;
+  box-shadow:var(--shadow);
+  margin-bottom:16px;
+}
+.pg-card>h2,.pg-card>h3{margin:0 0 10px;font-size:15px;line-height:22px;font-weight:700;color:var(--ink)}
+.pg-cardhead{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.pg-cardhead>h2,.pg-cardhead>h3{margin:0;font-size:15px;line-height:22px;font-weight:700}
+.pg-cardhead .pg-actions{margin-inline-start:auto}
+.pg-hint{color:var(--muted);font-size:12px;line-height:18px;font-weight:400}
+.pg-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pg-note{color:var(--muted);font-size:12.5px;line-height:19px}
+.pg-empty{padding:18px 4px;color:var(--muted);font-size:13px}
+
+/* ── the KPI tile: the one number a screen leads with ─────────────────────────────
+   Four of these screens drew it four ways — 26, 28 and 30px numbers, three paddings, with and
+   without a shadow (measured 2026-10-06). One tile: a 12.5px label over a 26px tabular number.
+   A state is said twice — the number's colour and a 3px bar on the reading edge — through
+   `data-state`, in the product's legend; a zero is not a state, so a screen leaves the attribute
+   off and adds `is-zero`. The legend is the palette's: what waits is lime, what is in motion is
+   sky, what is done is olive, what failed is plum, what needs a person is plum lifted. What a
+   screen adds of its own (a chip, a sparkline, a sub-line) goes inside the tile; how many tiles
+   share a row is the screen's (`--pg-kpi-cols`), so that no row ends in a lone one. */
+.pg-kpis{display:grid;grid-template-columns:repeat(var(--pg-kpi-cols,4),minmax(0,1fr));gap:12px}
+.pg-kpi{position:relative;min-width:0;overflow:hidden;background:var(--surface);
+  border:1px solid var(--line);border-radius:14px;padding:14px 16px;
+  box-shadow:var(--shadow)}
+.pg-kpi-k{display:block;color:var(--muted);font-size:12.5px;line-height:18px;font-weight:600}
+/* `fit-content`: the number sits under its label at the page's reading edge even when it is an
+   LTR token (`.num`) — as a full-width block its own direction sent it to the far side. */
+.pg-kpi-v{display:block;width:fit-content;max-width:100%;margin-top:4px;font-size:26px;line-height:30px;
+  font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums;white-space:nowrap}
+.pg-kpi-v small{font-size:13px;font-weight:700;letter-spacing:0;margin-inline-start:4px;color:var(--muted)}
+.pg-kpi.is-zero .pg-kpi-v{color:var(--muted)}
+.pg-kpi[data-state]::after{content:"";position:absolute;inset-block:0;inset-inline-start:0;width:3px;background:var(--pg-kpi-c)}
+.pg-kpi[data-state] .pg-kpi-v{color:var(--pg-kpi-c)}
+.pg-kpi[data-state=todo]{--pg-kpi-c:var(--amber)}
+.pg-kpi[data-state=running]{--pg-kpi-c:var(--blue)}
+.pg-kpi[data-state=done]{--pg-kpi-c:var(--accent-d)}
+.pg-kpi[data-state=failed]{--pg-kpi-c:var(--red)}
+.pg-kpi[data-state=person]{--pg-kpi-c:var(--violet)}
+
+/* touch: the header's controls are the ones a phone reaches for first */
+@media (pointer:coarse){
+  .pg-actions .btn,.pg-actions button,.pg-actions a.btn{min-height:44px}
+}
+@media (max-width:640px){
+  .pg{padding:14px 12px 40px}
+  .pg-head{gap:10px;margin-bottom:14px}
+  .pg-head h1{font-size:19px;line-height:26px}
+  .pg-card{padding:14px;border-radius:12px}
+  .pg-actions{margin-inline-start:0;width:100%}
+}
+/* ── a SHORT frame: a window in desktop mode ─────────────────────────────────────
+   Desktop mode opens an app in a window of about 580 × 530, and a person halves and quarters it.
+   A page laid out for a tall frame spent that whole window on its own heading: at 640 × 330 five
+   of the office's screens showed their title, their sentence, their buttons and four tiles — and
+   none of what they are for (photographed 2026-10-07). In a short frame the heading is ONE line:
+   the window's bar already names the app, so the sentence under the title steps aside (a line
+   that reports something — `data-live` — stays), and the room is the content's. */
+@media (max-height:699px){
+  .pg{padding-block-start:10px}
+  .pg-head{gap:8px;margin-bottom:10px;padding-bottom:8px;align-items:center}
+  .pg-head h1{font-size:17px;line-height:24px}
+  .pg-sub:not([data-live]){display:none}
+  .pg-actions{width:auto;margin-inline-start:auto;gap:6px}
+  .pg-actions .btn,.pg-actions button,.pg-actions a.btn{padding:4px 9px;font-size:12px}
+}
+/* …and in the SMALLEST window — its corner dragged in as far as it goes, 380 × 224 of page — a
+   title over a row of buttons was 88px of it. The window's bar already says the screen's name,
+   so where the heading has actions the title steps aside and they are its one line. A title
+   that names a VIEW (`data-view`) stays: the bar says the app, not where in it. */
+@media (max-height:699px) and (max-width:430px){
+  .pg-head:not([data-view]):has(.pg-actions) h1{display:none}
+  .pg-actions{margin-inline-start:0}
+  /* …and a line that reports (`data-live`) shares that line with them, as far as it fits */
+  .pg-head:has(.pg-sub[data-live]){flex-wrap:nowrap}
+  .pg-head>:first-child:has(.pg-sub[data-live]){flex:1 1 0;min-width:0}
+  .pg-sub[data-live]{margin-top:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pg-head:has(.pg-sub[data-live]) .pg-actions{flex:none;flex-wrap:nowrap}
+}
+/* …and there, and at a phone's width, the leading numbers are one STRIP rather than tiles: a
+   hairline grid, key over value, in the columns the screen declares (`--pg-kpi-cols`). Four tiles
+   were 184px of a 530px window, before the first row of what they count. */
+@media (max-height:699px),(max-width:700px){
+  .pg-kpis{gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .pg-kpis>.pg-kpi{border:0;border-radius:0;box-shadow:none;padding:5px 8px}
+  .pg-kpis .pg-kpi-k{font-size:10.5px;line-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pg-kpis .pg-kpi-v{margin-top:0;font-size:17px;line-height:22px}
+  .pg-kpis .pg-kpi-v small{font-size:10.5px;margin-inline-start:3px}
+}
+@media (prefers-reduced-motion:reduce){
+  .pg-live .beat{animation:none}
+}
+/* @bina-page:end */
+
+/* @bina-nav:start */
+/* ── §1 the vocabulary ────────────────────────────────────────────────────── */
+.bnv{
+  --bnv-bg:var(--surface-2);
+  --bnv-ink:var(--ink);
+  --bnv-ink-2:var(--muted);
+  --bnv-hover:color-mix(in srgb, var(--bnv-ink) 6%, transparent);
+  --bnv-active:color-mix(in srgb, var(--bnv-ink) 10%, transparent);
+  --bnv-brand:var(--accent);
+  --bnv-brand-ink:var(--accent-d);
+  --bnv-brand-soft:var(--accent-soft);
+  --bnv-line:var(--line);
+
+  /* geometry — the rail (§3) and the sizes (§4) change THESE, never a rule */
+  --bnv-pad:8px 10px;
+  --bnv-gap:2px;
+  --bnv-row-w:100%;
+  --bnv-row-h:36px;
+  --bnv-row-pad:7px 8px;
+  --bnv-row-gap:8px;
+  --bnv-row-justify:flex-start;
+  --bnv-head-h:52px;
+  --bnv-head-pad:4px 6px 10px;
+  --bnv-head-justify:flex-start;
+  --bnv-primary-w:100%;
+  --bnv-primary-h:44px;
+  --bnv-primary-pad:10px 12px;
+  --bnv-primary-justify:flex-start;
+  --bnv-foot-align:stretch;
+  /* what a rail takes away — `none` per part, because only the owner of a rule may say what
+     that rule's display IS. A `display:none!important`-style override cannot be undone by a
+     narrower container, and a phone must be able to bring these back.
+     A rail takes away WORDS, never a way in: the names, the group heads, the search's field, and
+     «הצג עוד» (which is words) — so the rows «הצג עוד» folds are all there in a rail (`--bnv-rest`),
+     the search stays as its magnifier, and the collapse control stays, turned round, under the
+     avatar. It used to take those three away too: a rail had no search, was missing the folded
+     rows, and — once a person had chosen it — nothing left to press that would bring the menu back. */
+  --bnv-text:block;
+  --bnv-ghead:flex;
+  --bnv-field:block;     /* the search's field */
+  --bnv-more:block;
+  --bnv-rest:none;       /* the rows folded behind «הצג עוד», while they are folded */
+  --bnv-head-dir:row;    /* the brand row: avatar · name · collapse — a rail stacks what is left of it */
+  --bnv-turn:none;       /* the collapse control's arrow */
+  --bnv-side:252px;      /* read by .appgrid — the only width the host asks for */
+  --bnv-off:-100%;       /* where a closed drawer parks; flipped for RTL below */
+
+  background:var(--bnv-bg);
+  color:var(--bnv-ink);
+  display:flex;
+  flex-direction:column;
+  gap:var(--bnv-gap);
+  box-sizing:border-box;
+  height:100%;
+  min-height:0;
+  padding:var(--bnv-pad);
+  font-size:14px;
+  overflow:hidden;
+}
+
+/* ── §2 the parts ─────────────────────────────────────────────────────────── */
+.bnv-scroll{
+  flex:1;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+  gap:var(--bnv-gap);
+  overflow-y:auto;
+  overflow-x:hidden;
+  overscroll-behavior:contain;
+  scrollbar-width:thin;
+}
+.bnv-list{display:flex;flex-direction:column;gap:var(--bnv-gap);min-width:0}
+
+/* brand row: square avatar · name (+ one line of context) · the collapse control */
+.bnv-head{
+  display:flex;
+  flex-direction:var(--bnv-head-dir);
+  align-items:center;
+  justify-content:var(--bnv-head-justify);
+  gap:10px;
+  min-height:var(--bnv-head-h);
+  padding:var(--bnv-head-pad);
+  flex:none;
+  overflow:hidden;
+}
+.bnv-avatar{
+  width:28px;height:28px;border-radius:8px;flex:none;
+  display:grid;place-items:center;overflow:hidden;
+  background:var(--bnv-brand-soft);color:var(--bnv-brand-ink);
+  font-weight:800;font-size:14px;line-height:1;
+}
+.bnv-avatar img{width:100%;height:100%;object-fit:cover;display:block}
+.bnv-head-text{flex:1;min-width:0;display:var(--bnv-text)}
+/* (a brand line reads its own way — `dir=auto`, so what is cut is its end — and still sits on the menu's side) */
+.bnv-head b,.bnv-head small{text-align:-webkit-match-parent;text-align:match-parent}
+.bnv-head b{display:block;font-size:16px;line-height:22px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bnv-head small{display:block;color:var(--bnv-ink-2);font-size:11px;line-height:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bnv-collapse{
+  flex:none;width:28px;height:28px;padding:0;border:0;border-radius:8px;
+  background:transparent;color:var(--bnv-ink-2);
+  display:grid;place-items:center;cursor:pointer;
+}
+.bnv-collapse:hover{background:var(--bnv-hover);color:var(--bnv-ink)}
+.bnv-collapse:focus-visible{outline:2px solid var(--bnv-ink);outline-offset:-2px}
+.bnv-collapse svg{width:16px;height:16px;transform:var(--bnv-turn)}
+
+/* the ONE flat primary action — the same object in every app, at finger size */
+.bnv-primary{
+  box-sizing:border-box;flex:none;width:var(--bnv-primary-w);min-height:var(--bnv-primary-h);
+  display:flex;align-items:center;justify-content:var(--bnv-primary-justify);gap:8px;
+  padding:var(--bnv-primary-pad);border:0;border-radius:10px;
+  background:var(--bnv-brand-soft);color:var(--bnv-brand-ink);
+  font:inherit;font-size:14px;line-height:22px;font-weight:600;
+  text-align:start;text-decoration:none;cursor:pointer;
+}
+.bnv-primary:hover{background:color-mix(in srgb, var(--bnv-brand) 16%, transparent)}
+.bnv-primary:active{background:color-mix(in srgb, var(--bnv-brand) 24%, transparent)}
+.bnv-primary:focus-visible{outline:2px solid var(--bnv-brand);outline-offset:2px}
+.bnv-primary .bnv-label{flex:1}
+.bnv-primary[aria-disabled="true"],.bnv-primary:disabled{opacity:.5;cursor:default}
+
+/* a group: a named block of rows, with its own header */
+.bnv-group{display:flex;flex-direction:column;gap:var(--bnv-gap);min-width:0}
+.bnv-ghead{display:var(--bnv-ghead);align-items:center;gap:2px;min-height:28px;padding:6px 6px 0;flex:none}
+.bnv-gtitle{
+  flex:1;min-width:0;display:var(--bnv-text);
+  color:var(--bnv-ink-2);font-size:11px;line-height:16px;font-weight:600;letter-spacing:.04em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+/* a group action is a small icon button, and there are never more than two */
+.bnv-act{
+  flex:none;width:26px;height:26px;padding:0;border:0;border-radius:7px;
+  background:transparent;color:var(--bnv-ink-2);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;
+}
+.bnv-act:hover{background:var(--bnv-hover);color:var(--bnv-ink)}
+.bnv-act:focus-visible{outline:2px solid var(--bnv-ink);outline-offset:-2px}
+.bnv-act svg{width:15px;height:15px}
+
+/* search lives IN the menu — which is what frees the top of the page for content.
+   Its magnifier is a button (it puts the keyboard in the field), and in a rail it is the whole box:
+   the field is gone (`--bnv-field`), and a press opens the menu over the page, on the field. */
+.bnv-search{
+  display:flex;align-items:center;justify-content:var(--bnv-row-justify);flex:none;
+  margin:0 2px;min-height:34px;
+  border:1px solid var(--bnv-line);border-radius:8px;background:var(--bnv-bg);cursor:pointer;
+}
+.bnv-search button{
+  flex:none;align-self:stretch;width:30px;padding:0;border:0;border-radius:7px;
+  background:transparent;color:var(--bnv-ink-2);
+  display:inline-flex;align-items:center;justify-content:center;cursor:pointer;
+}
+.bnv-search button:hover{color:var(--bnv-ink)}
+.bnv-search button:focus-visible{outline:2px solid var(--bnv-ink);outline-offset:-2px}
+.bnv-search svg{width:15px;height:15px;flex:none}
+.bnv-search input{
+  display:var(--bnv-field);
+  flex:1;min-width:0;padding:7px 0;padding-inline-end:9px;border:0;background:transparent;color:inherit;
+  font:inherit;font-size:13px;line-height:20px;cursor:text;
+}
+.bnv-search input:focus{outline:none}
+.bnv-search:focus-within{border-color:color-mix(in srgb, var(--bnv-brand) 45%, transparent)}
+.bnv-search[hidden]{display:none}
+
+/* the row */
+.bnv-item{
+  box-sizing:border-box;
+  width:var(--bnv-row-w);
+  min-width:0;
+  min-height:var(--bnv-row-h);
+  display:flex;
+  align-items:center;
+  justify-content:var(--bnv-row-justify);
+  gap:var(--bnv-row-gap);
+  padding:var(--bnv-row-pad);
+  border:0;
+  border-radius:8px;
+  background:transparent;
+  color:var(--bnv-ink-2);
+  font:inherit;
+  font-size:14px;
+  line-height:22px;
+  font-weight:500;
+  text-align:start;
+  text-decoration:none;
+  cursor:pointer;
+}
+.bnv-item:hover{background:var(--bnv-hover);color:var(--bnv-ink)}
+.bnv-item:active{background:var(--bnv-active)}
+.bnv-item.is-active,.bnv-item[aria-current="page"]{
+  background:var(--bnv-active);
+  color:var(--bnv-ink);
+  font-weight:500;
+}
+.bnv-item:focus-visible{outline:2px solid var(--bnv-ink);outline-offset:-2px}
+.bnv-item[aria-disabled="true"],.bnv-item:disabled{opacity:.5;cursor:default}
+
+/* a REMOTE app — one that runs on a LINKED office, not on this machine
+   (ai/context/dgo-remote-apps.md §4). The row is a row like any other: same height, same hover,
+   same active tint. What says "not this machine" is one corner bracket in the logo's apps-line
+   colour, mirrored at the row's inline-start corner in BOTH directions (logical properties only —
+   this component has no physical direction anywhere, and the mark is not going to be the first).
+   The colour is the palette's «look here» in its line step (the lime the mark's apps carry). */
+.bnv-item.is-remote{position:relative}
+.bnv-item.is-remote::after{
+  content:"";position:absolute;inset-block-start:3px;inset-inline-start:3px;
+  width:7px;height:7px;pointer-events:none;
+  border-block-start:2px solid var(--lime-d);
+  border-inline-start:2px solid var(--lime-d);
+  border-start-start-radius:3px;
+}
+/* the office did not answer: the mark goes quiet, the row keeps its place — a tile that vanishes
+   is a tile nobody can ask about. The state is FORM here, not words: the office's tag (capped at
+   5em below — "MacBook לא זמינה" was drawn as "…acBook") turns the failure colour and the row dims;
+   the sentence is the row's tooltip. */
+.bnv-item.is-remote.is-offline::after{border-color:var(--bnv-ink-2)}
+/* …and the mark takes the OFFICE's own colour where the row knows which office it is: the shell adds
+   `office-<id>` (console/static/app.js, remoteCls) and the hue is the palette's family
+   `--office-hp/-mac/-vps` — declared in theme-tokens.css and nowhere else (G27/G82). An office with no
+   token keeps the lime this mark ships with, so a fourth office needs one token and no CSS. */
+.bnv-item.office-hp.is-remote::after{border-color:var(--office-hp)}
+.bnv-item.office-mac.is-remote::after{border-color:var(--office-mac)}
+.bnv-item.office-vps.is-remote::after{border-color:var(--office-vps)}
+.bnv-item.is-offline :is(.bnv-ic,.bnv-label){opacity:.72}
+.bnv-item.is-offline .bnv-meta{color:var(--danger)}
+/* `hidden` is how the search filters rows, and it has to beat `display:flex` above */
+.bnv-item[hidden],.bnv-empty[hidden],.bnv-group[hidden]{display:none}
+.bnv-ic{width:18px;height:18px;flex:none;display:inline-flex;align-items:center;justify-content:center}
+.bnv-ic svg,.bnv-ic .ic-svg{width:18px;height:18px;display:block}
+/* the label is what gives way — never the row, never the container.
+   A label that is a NAME someone gave (a folder, a mailbox) carries `dir="auto"`: it is cut at ITS
+   end, not the row's — «Plane — HP ומק» lost its first letters in a narrow rail («…ne — HP ומק») —
+   and `match-parent` keeps it on the row's reading edge whichever way it reads. */
+.bnv-label{flex:1;min-width:0;display:var(--bnv-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  text-align:-webkit-match-parent;text-align:match-parent}
+/* the SECOND column: a count, a size, a time. Tabular, so a list of them aligns. */
+.bnv-meta{
+  flex:none;display:var(--bnv-text);color:var(--bnv-ink-2);
+  font-size:12px;line-height:18px;font-variant-numeric:tabular-nums;
+}
+/* A REMOTE row's meta is a NAME, not a count — and a name may be long ("שרת פיתוח בינה סלושנס").
+   With `flex:none` (above) it held its full width, so the LABEL took the loss: measured on the live
+   rail (218px), `מסמכים שלי` — 73px of text — was drawn in 44px, while the office name kept 124px.
+   That inverts what a row is for: the app is the subject, the office is commentary.
+
+   `flex:0 1 auto` alone does NOT fix it, and that is worth writing down: the row is not overflowing
+   (18 + 8 + 44 + 8 + 124 + 16 = 218), so there is no shrink pressure to resolve — the label simply
+   sits at min-content while the meta takes what it asks for. Nothing is "squeezed out" to shrink.
+
+   So the meta gets a CAP of `min(40%, 5em)` — and the measurement is why it is a formula and not a
+   percentage. At the console's live rail (218px), a 40% cap left the office 81px and still ellipsized
+   the app name by 16px (`חיבורים ומפתחות`, 103px). Swept on the live row: 40% → name 87 (clipped),
+   30% → 107 (fits) + office 61, 26% → 115 + 53, 22% → 124 + 44. `5em` is 60px of office at this
+   font — the shortest tag that still names an office — and it leaves the label 107px, its full
+   width. The percentage half keeps a WIDE rail from giving the office an unbounded share; `flex:0 8`
+   then resolves what is left in the label's favour. `.is-remote` and not every meta on purpose: a
+   count has no office to name, and its fixed slot is what makes a column of them line up. */
+.bnv-item.is-remote .bnv-meta{
+  flex:0 8 auto;min-width:0;max-inline-size:min(40%,5em);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+/* trailing slot: a badge, a dot, a chevron. `nowrap` so it can never wrap into a second line. */
+.bnv-tail{flex:none;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;color:var(--bnv-ink-2);font-size:12px}
+.bnv-item:hover .bnv-tail,.bnv-item.is-active .bnv-tail{color:inherit}
+.bnv-badge{
+  flex:none;min-width:18px;height:18px;padding:0 5px;border-radius:999px;
+  background:var(--bnv-brand-soft);color:var(--bnv-brand-ink);
+  font-size:11px;line-height:18px;font-weight:700;text-align:center;
+}
+.bnv-item:hover .bnv-badge,.bnv-item.is-active .bnv-badge{background:color-mix(in srgb, var(--bnv-brand) 22%, transparent)}
+
+/* Priority+: the rows that did not fit, and the one row that reveals them. (A rail has no such
+   row to press — it is words — so there the folded rows are simply there: `--bnv-rest`.) */
+.bnv-rest{display:var(--bnv-rest);flex-direction:column;gap:var(--bnv-gap);min-width:0}
+.bnv-rest.is-open{display:flex}
+.bnv-more{
+  display:var(--bnv-more);flex:none;width:100%;min-height:28px;padding:4px 8px;border:0;border-radius:8px;
+  background:transparent;color:var(--bnv-ink-2);font:inherit;font-size:12px;font-weight:600;
+  text-align:start;cursor:pointer;
+}
+.bnv-more:hover{background:var(--bnv-hover);color:var(--bnv-ink)}
+.bnv-empty{padding:6px 8px;color:var(--bnv-ink-2);font-size:12px;line-height:18px}
+
+.bnv-foot{
+  flex:none;margin-top:auto;padding-top:10px;border-top:1px solid var(--bnv-line);
+  min-width:0;display:flex;flex-direction:column;gap:var(--bnv-gap);align-items:var(--bnv-foot-align);
+}
+.bnv-foot-text{
+  display:var(--bnv-text);padding:0 8px;max-width:100%;color:var(--bnv-ink-2);
+  font-size:11px;line-height:16px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.bnv-sep{height:1px;background:var(--bnv-line);margin:6px 8px;flex:none}
+
+/* ── §3 the rail: one state, two triggers, a list of values ────────────────── */
+/* `.bnv.is-rail` — a rail somebody chose: the menu's own collapse control (remembered per app),
+   or a host that collapses the menu by itself.
+   `.rail-host .bnv` — a host whose grid column decides and cannot put a class on the aside.
+   Both write the SAME values as the medium size class in §4, so the rail exists once.
+   The values are a rail's while it is SHUT. Opened — by its collapse control, or by its search —
+   it is the whole menu again, the values above, standing over the page (the rule under these).
+   `:where()` keeps that condition out of the selector's weight: the drawer of a phone-sized frame
+   must still out-rank a rail saved on a desktop. */
+:is(.bnv.is-rail,.rail-host .bnv):where(:not(.is-open)){
+  --bnv-pad:12px 10px;
+  --bnv-gap:6px;
+  --bnv-row-w:36px;
+  --bnv-row-h:36px;
+  --bnv-row-pad:0;
+  --bnv-row-gap:0;
+  --bnv-row-justify:center;
+  --bnv-head-h:36px;
+  --bnv-head-pad:0 0 10px;
+  --bnv-head-justify:center;
+  --bnv-primary-w:36px;
+  --bnv-primary-h:36px;
+  --bnv-primary-pad:0;
+  --bnv-primary-justify:center;
+  --bnv-foot-align:center;
+  --bnv-text:none;
+  --bnv-ghead:none;
+  --bnv-field:none;
+  --bnv-more:none;
+  --bnv-rest:flex;
+  --bnv-head-dir:column;
+  --bnv-turn:rotate(180deg);
+}
+/* An OPENED rail: the whole menu, standing over the page until a row is picked or it is shut — the
+   way to a rail's search, and to the names of its rows. (The rail by width says the same in §4.) */
+:is(.bnv.is-rail,.rail-host .bnv).is-open{position:fixed;inset-block:0;inset-inline-start:0;z-index:60;width:min(84vw,320px);box-shadow:var(--shadow-lg)}
+
+/* ── §4 the sizes ─────────────────────────────────────────────────────────── */
+/* The app declares ONE container (`.bnv-host`, on the element that wraps the shell) and one grid
+   (`.appgrid`, whose side column is `--bnv-side`). From there: ≥840px the full menu, 600–839px the
+   rail, <600px a drawer over one pane. Nothing here names a breakpoint of the WINDOW: the menu
+   answers the space it is actually given, so the same app is right in a 940px pane, in a 2000px
+   desktop, and on a 390px phone — which is exactly what a viewport query cannot do. */
+.bnv-host{container-type:inline-size;container-name:bnav}
+.appgrid{
+  display:grid;
+  grid-template-columns:var(--bnv-side,252px) minmax(0,1fr);
+  min-width:0;
+}
+/* …and its `min-height:0` (an app may scroll inside a fixed shell) carries NO weight, so that a
+   page which scrolls can say `min-height:100dvh` of its grid wherever it likes. At one class this
+   line beat a page that said so ABOVE the block: the menu's panel ended where the content did, half
+   way down the screen. Three pages moved their two lines below the block for it; the fourth — the
+   apps screen, whose list is short for as long as it loads — never did. */
+:where(.appgrid){min-height:0}
+/* THE MENU STAYS. Where the PAGE scrolls, the menu's cell is as tall as the page and the menu left
+   with it: by the end of a long list the notifications' filters and the apps' sections were a
+   screen and a half up, over a column left empty (2026-10-09, the live office: 2360px of page). It
+   is a frame tall at the most, and holds on to the frame's top. `:where()` keeps this at one class:
+   the drawer and the opened rail — `position:fixed`, at two classes and more — still say where
+   THEY stand. */
+:where(.appgrid) > .bnv{position:sticky;inset-block-start:0;max-height:100dvh}
+/* Which column the CONTENT is in — owned here, not by each app.
+   The menu is `position:fixed` below 600px, and a fixed child is not a grid item: the browser
+   places the remaining in-flow child (the content) into COLUMN 1, which is the side column. So the
+   content inherited the menu's width — 252px on a desktop, 56/64px in the rail, and 0px once the
+   phone collapses the side column. Measured 2026-10-01 at 390x844: `.pg` was 24px wide, mailview's
+   phone score was clipping 0.0/15, and every adopter's phone layout was a sliver.
+   It survived a green map because the DESKTOP profile has a fine pointer and a static aside: there
+   the menu IS a grid item, the content auto-places into column 2, and nothing looks wrong. */
+.appgrid > :not(.bnv):not(.bnv-scrim):not(.bnv-burger):not(.bnv-drawer){
+  grid-column:2;
+  min-width:0;
+}
+/* the burger: shown only where the menu is a drawer, and it is row-sized there */
+.bnv-burger{
+  display:none;flex:none;width:44px;height:44px;padding:0;border:0;border-radius:10px;
+  background:transparent;color:inherit;align-items:center;justify-content:center;cursor:pointer;
+}
+.bnv-burger:hover{background:color-mix(in srgb, currentColor 8%, transparent)}
+.bnv-burger:focus-visible{outline:2px solid currentColor;outline-offset:-2px}
+.bnv-burger svg{width:20px;height:20px}
+.bnv-scrim{
+  position:fixed;inset:0;z-index:55;border:0;padding:0;
+  background:var(--scrim);   /* the palette's own: mixed from the menu's ink it was a WHITE veil wherever that ink is light */
+  opacity:0;visibility:hidden;transition:opacity .18s ease;
+}
+.bnv-scrim.is-open{opacity:1;visibility:visible}
+
+/* medium — the rail, chosen by container width instead of by a class */
+@container bnav (max-width:839px){
+  .appgrid{--bnv-side:56px}
+  .bnv:where(:not(.is-open)){
+    --bnv-pad:12px 10px;
+    --bnv-gap:6px;
+    --bnv-row-w:36px;
+    --bnv-row-h:36px;
+    --bnv-row-pad:0;
+    --bnv-row-gap:0;
+    --bnv-row-justify:center;
+    --bnv-head-h:36px;
+    --bnv-head-pad:0 0 10px;
+    --bnv-head-justify:center;
+    --bnv-primary-w:36px;
+    --bnv-primary-h:36px;
+    --bnv-primary-pad:0;
+    --bnv-primary-justify:center;
+    --bnv-foot-align:center;
+    --bnv-text:none;
+    --bnv-ghead:none;
+    --bnv-field:none;
+    --bnv-more:none;
+    --bnv-rest:flex;
+    --bnv-head-dir:column;
+    --bnv-turn:rotate(180deg);
+  }
+  .bnv.is-open{position:fixed;inset-block:0;inset-inline-start:0;z-index:60;width:min(84vw,320px);box-shadow:var(--shadow-lg)}
+}
+/* …and a rail somebody CHOSE takes a rail's column — where the frame is wide enough to have given the
+   menu its whole one (below that the two size classes already say). Nothing said it: the icons of a
+   chosen rail stood in a column 252px wide. */
+@container bnav (min-width:840px){
+  .appgrid:has(> .bnv.is-rail){--bnv-side:56px}
+}
+/* compact — one pane, and the menu becomes a drawer over it.
+   `:is(.bnv,.bnv.is-rail,.rail-host .bnv)` is deliberate: a rail saved on a desktop must NOT
+   survive into a phone, so this block has to out-rank the class trigger and the host class. */
+@container bnav (max-width:599px){
+  .appgrid{--bnv-side:0px}
+  .bnv-burger{display:inline-flex}
+  :is(.bnv,.bnv.is-rail,.rail-host .bnv){
+    position:fixed;inset-block:0;inset-inline-start:0;z-index:60;
+    width:min(84vw,320px);box-sizing:border-box;
+    transform:translateX(var(--bnv-off,-100%));
+    transition:transform .18s ease;
+    --bnv-pad:8px 10px;
+    --bnv-gap:2px;
+    --bnv-row-w:100%;
+    --bnv-row-h:44px;
+    --bnv-row-pad:10px 8px;
+    --bnv-row-gap:8px;
+    --bnv-row-justify:flex-start;
+    --bnv-head-h:52px;
+    --bnv-head-pad:4px 6px 10px;
+    --bnv-head-justify:flex-start;
+    --bnv-primary-w:100%;
+    --bnv-primary-h:44px;
+    --bnv-primary-pad:10px 12px;
+    --bnv-primary-justify:flex-start;
+    --bnv-foot-align:stretch;
+    --bnv-text:block;
+    --bnv-ghead:flex;
+    --bnv-field:block;
+    --bnv-more:block;
+    --bnv-rest:none;
+    --bnv-head-dir:row;
+    --bnv-turn:none;
+  }
+  /* The shadow is the OPEN drawer's. On the parked one it still painted: a 40px grey band down the
+     screen edge, over the page, in every app that carries this menu (seen in five, 2026-10-06). */
+  :is(.bnv,.bnv.is-rail,.rail-host .bnv).is-open{
+    transform:none;
+    box-shadow:var(--shadow-lg);
+  }
+}
+/* in RTL the drawer parks on the other side — the only direction-dependent line in this file */
+:is([dir="rtl"],:dir(rtl)) .bnv{--bnv-off:100%}
+
+/* touch: the same rows, sized for a finger. bina keeps 36px on every pointer; a phone needs 44. */
+@media (pointer:coarse){
+  .bnv-item{min-height:44px;padding:10px 8px}
+  .bnv-primary{min-height:44px}
+  .bnv-search{min-height:44px}
+  .bnv-act{width:36px;height:36px}
+  :is(.bnv.is-rail,.rail-host .bnv):where(:not(.is-open)) .bnv-item{width:44px;height:44px;min-height:44px}
+  /* THE RAIL IS A RAIL ONLY IN THE RAIL RANGE. This rule used to read `(max-width:839px)`, which
+     also covers the compact range — and because it comes AFTER the compact block (§4), the same
+     specificity meant it won there: on any touch device narrower than 600px `--bnv-side` was 64px
+     instead of 0, so the drawer opened over a content column 64px wide.
+     Measured 2026-10-01 on the office's own capture at 390x844 (`is_mobile`/`has_touch`, i.e. the
+     profile the phone map uses): `.pg` came out 64px wide and mailview scored clipping 0.0/15 —
+     "text cut with no way to reach it" was not the app's layout, it was this line. The desktop
+     capture never saw it (fine pointer), which is why it survived a green map on both profiles. */
+  @container bnav (min-width:600px) and (max-width:839px){
+    .appgrid{--bnv-side:64px}
+  }
+  @container bnav (min-width:840px){
+    .appgrid:has(> .bnv.is-rail){--bnv-side:64px}
+  }
+}
+/* a SHORT panel — the menu of a window dragged small. Its head, its button and its foot are most
+   of 224px, and the rows were left a sliver to scroll in (measured 2026-10-07 in the drive's
+   menu: 20px for 416px of rows). There the PANEL scrolls, rows and all. */
+@media (max-height:399px){
+  .bnv{overflow-y:auto;overscroll-behavior:contain}
+  .bnv-scroll{flex:none;overflow:visible}
+  /* …and the page's own menu buttons are a cursor's size there, not a finger's: 44px of a head is a
+     fifth of such a window (a touch screen keeps the finger's size — it is not this window). */
+  @media (pointer:fine){.bnv-burger{width:32px;height:32px;border-radius:8px}}
+}
+@media (prefers-reduced-motion:reduce){
+  .bnv,.bnv *,.bnv-scrim{transition:none!important;animation:none!important}
+}
+/* @bina-nav:end */
+/* The page's half of the menu contract: its grid stands the screen's whole height, so the menu's
+   panel does not end where the page's content does, half way down the screen. (The component's own
+   `min-height:0` carries no weight — `:where` — so these two lines hold wherever they are written.) */
+.bnv-host{min-height:100dvh}
+.appgrid{min-height:100dvh}
+</style>
+</head>
+<body>
+<!-- the app's half of the menu contract: the container the menu measures, and the grid whose side
+     column the component's size classes own. The menu is declared below, built by the shared
+     component (gate G27 keeps that component identical in every app that carries it). -->
+<div class="bnv-host">
+<div class="appgrid">
+  <aside class="side bnv" id="sideNav" aria-label="ניווט"></aside>
+  <div class="pg">
+  <header class="pg-head">
+    <div>
+      <h1>התראות</h1>
+      <div class="pg-sub">מרכז התראות מאוחד — שגיאות, אירועים ומצב המערכת מכל האפליקציות.</div>
+    </div>
+    <!-- the menu holds this screen's filters, and below 600px it is a drawer: this opens it (the
+         component shows the button only there, draws it and wires it) -->
+    <button class="bnv-burger" type="button" data-nav-toggle="תפריט" title="תפריט — קריאה, חומרה, מקור"></button>
+    <div class="pg-actions">
+      <button id="live" class="pg-live" onclick="togglePause()" title="השהה/חדש רענון אוטומטי"><span class="beat"></span><span id="liveTxt">חי</span></button>
+      <button id="readAll" class="btn" onclick="readAll()" title="סמן את כל ההתראות כנקראו"><span data-ic="check"></span>סמן הכל כנקרא</button>
+      <button id="clearRead" class="btn ghost" onclick="clearRead()" title="הסר את כל ההתראות שנקראו">נקה נקראו</button>
+    </div>
+  </header>
+
+  <div class="pg-kpis" id="hud"></div>
+
+  <!-- The filter bar lived HERE and is now the menu's three sections: קריאה · חומרה · מקור. A row
+       with a count is where a filter belongs — filtering IS navigation, and the content column is
+       for the notifications themselves. -->
+
+  <div id="list"><div class="state"><span class="spin"></span>טוען התראות…</div></div>
+  </div><!-- /.pg -->
+</div><!-- /.appgrid -->
+</div><!-- /.bnv-host -->
+
+<script>
+/* @bina-nav-js:start */
+var BinaNav = (function () {
+  "use strict";
+
+  // Feather glyphs, one path each — the same vocabulary the hand-written menus use, so a
+  // section row and a route row are the same object to a reader. Anything unknown falls
+  // back to a neutral dot rather than a missing glyph.
+  var ICONS = {
+    home: "M3 10.5 12 3l9 7.5V21a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z",
+    users: "M17 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9.5 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75",
+    user: "M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8",
+    file: "M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7zM14 2v4a2 2 0 0 0 2 2h4",
+    files: "M14 2H7a2 2 0 0 0-2 2v13M17 6H10a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2z",
+    folder: "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z",
+    server: "M4 4h16v6H4zM4 14h16v6H4zM8 7h.01M8 17h.01",
+    activity: "M3 12h4l2-5 4 10 2-5h6",
+    bell: "M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0",
+    database: "M12 8c4.4 0 8-1.3 8-3s-3.6-3-8-3-8 1.3-8 3 3.6 3 8 3zM4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3",
+    git: "M6 3v12M18 9v12M6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 3a3 3 0 1 0 0 6 3 3 0 0 0 0-6",
+    repo: "M4 4h16v13H4zM4 9h16M9 4v5M4 17h10l2 3h4",
+    monitor: "M3 4h18v12H3zM8 20h8M12 16v4",
+    key: "M7.5 15.5a5.5 5.5 0 1 0 0-11 5.5 5.5 0 0 0 0 11zM21 2l-9.6 9.6M15.5 7.5l3 3L22 7l-3-3",
+    lock: "M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4",
+    gear: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8a2 2 0 1 1-2.8 2.8A1.7 1.7 0 0 0 14 21a2 2 0 1 1-4 0 1.7 1.7 0 0 0-2.9-1.2a2 2 0 1 1-2.8-2.8A1.7 1.7 0 0 0 3 14a2 2 0 1 1 0-4 1.7 1.7 0 0 0 1.2-2.9a2 2 0 1 1 2.8-2.8A1.7 1.7 0 0 0 10 3a2 2 0 1 1 4 0 1.7 1.7 0 0 0 2.9 1.2a2 2 0 1 1 2.8 2.8A1.7 1.7 0 0 0 21 10a2 2 0 1 1 0 4",
+    search: "M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.35-4.35",
+    plus: "M12 5v14M5 12h14",
+    edit: "M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z",
+    mail: "M3 5h18v14H3zM3 7l9 6 9-6",
+    send: "M22 2 11 13M22 2l-7 20-4-9-9-4z",
+    inbox: "M3 12h5l2 3h4l2-3h5M3 12V6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v6v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z",
+    archive: "M3 4h18v4H3zM5 8v12h14V8M10 12h4",
+    trash: "M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v6M14 11v6",
+    star: "M12 3l2.9 6 6.1.9-4.5 4.3 1.1 6-5.6-3-5.6 3 1.1-6L3 11.9 9.1 9z",
+    tag: "M20.6 13.4 12 22l-9-9V3h10zM7.5 7.5h.01",
+    clock: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 2",
+    chevron: "M6 9l6 6 6-6",
+    "chevron-end": "M9 6l6 6-6 6",
+    menu: "M4 6h16M4 12h16M4 18h16",
+    x: "M6 6l12 12M18 6 6 18",
+    image: "M3 5h18v14H3zM8.5 11a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3M21 16l-5-5-9 8",
+    id: "M3 5h18v14H3zM7 9h4M7 13h6M15 10a2 2 0 1 0 4 0 2 2 0 0 0-4 0M14 16c.5-1.5 5.5-1.5 6 0",
+    text: "M4 7V4h16v3M9 20h6M12 4v16",
+    share: "M18 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6M6 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6M18 22a3 3 0 1 0 0-6 3 3 0 0 0 0 6M8.6 13.5l6.8 4M15.4 6.5l-6.8 4",
+    layers: "M12 2 2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5",
+    list: "M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01",
+    grid: "M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z",
+    chart: "M4 20V10M10 20V4M16 20v-7M22 20H2",
+    filter: "M3 5h18l-7 8v6l-4 2v-8z",
+    globe: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM3 12h18M12 3c2.5 2.6 2.5 15.4 0 18-2.5-2.6-2.5-15.4 0-18z",
+    cloud: "M18 17H7A4 4 0 0 1 7 9a5.5 5.5 0 0 1 10.6 1.5A3.5 3.5 0 0 1 18 17z",
+    download: "M12 3v12M7 11l5 5 5-5M4 21h16",
+    upload: "M12 21V9M7 13l5-5 5 5M4 4h16",
+    refresh: "M21 12a9 9 0 1 1-3-6.7M21 4v4h-4",
+    play: "M6 4l14 8-14 8z",
+    film: "M3 4h18v16H3zM8 4v16M16 4v16M3 9h5M3 15h5M16 9h5M16 15h5",
+    server2: "M5 3h14v7H5zM5 14h14v7H5zM9 6h.01M9 17h.01",
+    // States and verbs a screen would otherwise reach for an emoji or a text glyph to say.
+    check: "M20 6 9 17l-5-5",
+    info: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 16v-4M12 8h.01",
+    alert: "M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0zM12 9v4M12 17h.01",
+    error: "M7.86 2h8.28L22 7.86v8.28L16.14 22H7.86L2 16.14V7.86zM12 8v4M12 16h.01",
+    chat: "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z",
+    box: "M21 8v8a2 2 0 0 1-1 1.73l-7 4a2 2 0 0 1-2 0l-7-4A2 2 0 0 1 3 16V8a2 2 0 0 1 1-1.73l7-4a2 2 0 0 1 2 0l7 4A2 2 0 0 1 21 8zM3.3 7 12 12l8.7-5M12 22V12",
+    dot: "M12 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2"
+  };
+
+  var LABELS = { more: "הצג עוד", less: "הצג פחות", open: "פתיחת התפריט", close: "סגירת התפריט",
+                 rail: "התפריט: מלא, או פס של סמלים" };
+
+  // Every mounted menu, by `id` — so a toggle anywhere in the document can name the one it opens.
+  var NAVS = {};
+
+  function svg(name) {
+    if (!name) return "";
+    if (name.charAt(0) === "<") return name;            // a caller may pass its own <svg>…</svg>
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
+      + 'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="'
+      + (ICONS[name] || ICONS.dot) + '"/></svg>';
+  }
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  function el(tag, cls, html) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (html != null) n.innerHTML = html;
+    return n;
+  }
+
+  /** A line of the brand row. It is one line, cut where it does not fit — and it reads the way its own
+   *  first letter does (`dir=auto`), so an address («office@…») loses its END. In the menu's own
+   *  right-to-left box it lost its beginning: «…olutions.co.il · Gmail». The stylesheet keeps the line
+   *  on the menu's side whichever way it reads. */
+  function brandLine(tag) {
+    var n = el(tag);
+    n.setAttribute("dir", "auto");
+    return n;
+  }
+
+  /** Is a part of the menu on the screen? A rail takes parts away in the stylesheet — the brand's text,
+   *  the search's field — and what a press does there depends on which. */
+  function shown(n) {
+    return !!n && (typeof n.getClientRects !== "function" || n.getClientRects().length > 0);
+  }
+
+  /** A search box: its magnifier and its field. The magnifier is a BUTTON — it puts the keyboard in the
+   *  field. In a rail the field is gone and the box is the magnifier alone: there a press opens the
+   *  menu over the page (`reach`) and lands in the field. A rail used to have no search at all. */
+  function searchBox(placeholder, value, reach) {
+    var box = el("div", "bnv-search");
+    var go = el("button", null, svg("search"));
+    go.type = "button";
+    go.title = placeholder;
+    go.setAttribute("aria-label", placeholder);
+    var input = el("input");
+    input.type = "search";
+    input.placeholder = placeholder;
+    input.setAttribute("aria-label", placeholder);
+    if (value) input.value = value;
+    box.appendChild(go);
+    box.appendChild(input);
+    box.addEventListener("click", function (ev) {
+      if (ev.target === input) return;
+      if (!shown(input)) reach();
+      input.focus({ preventScroll: true });       // (the menu may still be sliding in: the page must not chase the field)
+    });
+    return { box: box, input: input };
+  }
+
+  /** The element the page actually scrolls inside — the nearest scroller, or none (the window). */
+  function scrollerOf(node) {
+    for (var n = node && node.parentElement; n; n = n.parentElement) {
+      var cs = getComputedStyle(n);
+      if (/(auto|scroll)/.test(cs.overflowY) && n.scrollHeight > n.clientHeight) return n;
+    }
+    return null;
+  }
+
+  /* ── a row ────────────────────────────────────────────────────────────────── */
+  /* The trailing slot is built as NODES, never as a string: the badge is what changes while a
+     person is looking at it (`setBadge`), so it has to be an element this file can find again. */
+  function tailNode(spec) {
+    var has = (spec.badge !== undefined && spec.badge !== null && spec.badge !== "") || spec.tail;
+    if (!has) return null;
+    var tail = el("span", "bnv-tail");
+    if (spec.badge !== undefined && spec.badge !== null && spec.badge !== "") {
+      var badge = el("span", "bnv-badge");
+      badge.setAttribute("data-bnv-badge", "");
+      badge.textContent = spec.badge;
+      tail.appendChild(badge);
+    }
+    if (spec.tail) {
+      if (typeof spec.tail === "string" && spec.tail.charAt(0) === "<") tail.innerHTML += spec.tail;
+      else { var t = el("span"); t.textContent = spec.tail; tail.appendChild(t); }
+    }
+    return tail;
+  }
+
+  function row(spec, ctx) {
+    var node = el(spec.href ? "a" : "button", "bnv-item");
+    if (spec.href) node.setAttribute("href", spec.href); else node.setAttribute("type", "button");
+    if (spec.id !== undefined && spec.id !== null) node.setAttribute("data-bnv-id", spec.id);
+    node.title = spec.title || spec.label || "";
+    node.appendChild(el("span", "bnv-ic", svg(spec.icon)));
+    var label = el("span", "bnv-label");
+    label.textContent = spec.label == null ? "" : spec.label;
+    node.appendChild(label);
+    if (spec.meta !== undefined && spec.meta !== null && spec.meta !== "") {
+      var meta = el("span", "bnv-meta");
+      meta.textContent = spec.meta;
+      node.appendChild(meta);
+    }
+    var tail = tailNode(spec);
+    if (tail) node.appendChild(tail);
+    /* `active` is how a menu with MORE THAN ONE choice says where it stands: notifications picks a
+       level AND a read state AND a source, so `setActive()` (one row in the whole menu) cannot
+       express it. Re-rendering the section carries the marks with it. */
+    if (spec.active) node.classList.add("is-active");
+    if (spec.disabled) { node.setAttribute("aria-disabled", "true"); node.setAttribute("tabindex", "-1"); }
+    node.addEventListener("click", function (ev) {
+      if (spec.disabled) { ev.preventDefault(); return; }
+      if (spec.onClick) spec.onClick(ev, spec);
+      if (ctx.onPick) ctx.onPick(spec.id, spec);
+      if (!spec.keepOpen) ctx.closeDrawer();
+    });
+    return node;
+  }
+
+  /* ── a group: header (title · ≤2 actions · search), rows, Priority+ ───────── */
+  function group(spec, ctx) {
+    var g = el("div", "bnv-group");
+    if (spec.id) g.setAttribute("data-bnv-group", spec.id);
+    var rows = [];
+    var state = { el: g, rows: rows, section: spec, spec: spec };
+
+    var actions = (spec.actions || []).slice(0, 2);
+    if (spec.title || actions.length || spec.search) {
+      var head = el("div", "bnv-ghead");
+      var gtitle = el("span", "bnv-gtitle");
+      gtitle.textContent = spec.title == null ? "" : spec.title;
+      head.appendChild(gtitle);
+      actions.forEach(function (a) {
+        var node = el(a.href ? "a" : "button", "bnv-act", svg(a.icon));
+        if (a.href) node.setAttribute("href", a.href); else node.setAttribute("type", "button");
+        node.title = a.label || a.title || ""; node.setAttribute("aria-label", a.label || a.title || "");
+        node.addEventListener("click", function (ev) { if (a.onClick) a.onClick(ev, a); });
+        head.appendChild(node);
+      });
+      if (spec.search) {
+        var toggle = el("button", "bnv-act", svg("search"));
+        toggle.type = "button";
+        toggle.title = (spec.search.placeholder || "חיפוש");
+        toggle.setAttribute("aria-label", toggle.title);
+        toggle.setAttribute("aria-expanded", spec.search.always ? "true" : "false");
+        head.appendChild(toggle);
+        g.appendChild(head);
+
+        var sb = searchBox(spec.search.placeholder || "חיפוש", spec.search.value, ctx.openMenu);
+        var box = sb.box, input = sb.input;
+        if (!spec.search.always) box.hidden = true;
+        g.appendChild(box);
+        state.input = input; state.box = box; state.toggle = toggle;
+
+        toggle.addEventListener("click", function () {
+          box.hidden = !box.hidden;
+          toggle.setAttribute("aria-expanded", box.hidden ? "false" : "true");
+          if (!box.hidden) input.focus();
+          else { input.value = ""; filter(state, ""); }
+        });
+        var onInput = function () {
+          var q = input.value;
+          if (spec.search.filter !== false) filter(state, q);
+          if (spec.search.onInput) spec.search.onInput(q, spec);
+        };
+        input.addEventListener("input", onInput);
+        input.addEventListener("keydown", function (ev) {
+          if (ev.key === "Escape" && input.value) { input.value = ""; onInput(); }
+          ev.stopPropagation();
+        });
+      } else {
+        g.appendChild(head);
+      }
+    }
+
+    var list = el("div", "bnv-list");
+    var items = spec.items || [];
+    var limit = spec.showMore === true ? 8 : (typeof spec.showMore === "number" ? spec.showMore : 0);
+    var head_items = limit > 0 && items.length > limit ? items.slice(0, limit) : items;
+    var rest_items = limit > 0 && items.length > limit ? items.slice(limit) : [];
+    head_items.forEach(function (it) { var r = row(it, ctx); rows.push(r); list.appendChild(r); });
+    g.appendChild(list);
+
+    if (rest_items.length) {
+      var rest = el("div", "bnv-rest");
+      rest_items.forEach(function (it) { var r = row(it, ctx); rows.push(r); rest.appendChild(r); });
+      g.appendChild(rest);
+      state.rest = rest;
+      var more = el("button", "bnv-more");
+      more.type = "button";
+      var setMore = function (open) {
+        rest.classList.toggle("is-open", open);
+        more.textContent = open ? ctx.labels.less : ctx.labels.more + " (" + rest_items.length + ")";
+      };
+      setMore(false);
+      more.addEventListener("click", function () { setMore(!rest.classList.contains("is-open")); });
+      g.appendChild(more);
+    }
+    return state;
+  }
+
+  /** Client-side filtering: the label and the meta column are what a person reads. */
+  function filter(state, q) {
+    q = (q || "").trim().toLowerCase();
+    var shown = 0;
+    state.rows.forEach(function (r) {
+      var on = !q || r.textContent.toLowerCase().indexOf(q) >= 0;
+      r.hidden = !on;
+      if (on) shown++;
+    });
+    if (q && !shown && !state.empty) {
+      state.empty = el("div", "bnv-empty");
+      state.empty.textContent = "לא נמצאו פריטים";
+      state.el.appendChild(state.empty);
+    } else if (state.empty) {
+      state.empty.hidden = !!shown || !q;
+    }
+  }
+
+  /* ── the mounted menu ─────────────────────────────────────────────────────── */
+  function build(root, cfg) {
+    var ctx = {
+      labels: { more: cfg.labels && cfg.labels.more || LABELS.more, less: cfg.labels && cfg.labels.less || LABELS.less,
+                rail: cfg.labels && cfg.labels.rail || LABELS.rail },
+      onPick: cfg.onPick || null,
+      closeDrawer: function () { if (root.classList.contains("is-open")) api.close(); },
+      openMenu: function () { api.open(); }
+    };
+    var states = [];
+    var rowsById = {};
+    var headName = null, headSub = null, headAvatar = null;   // setBrand() writes these
+    var navSearch = null;                                      // setSearch() writes this
+
+    // 1. the brand row — square avatar, name, one line of context, the collapse control
+    if (cfg.brand) {
+      var head = el("div", "bnv-head");
+      var av = cfg.brand.href ? el("a", "bnv-avatar") : el("span", "bnv-avatar");
+      if (cfg.brand.href) av.setAttribute("href", cfg.brand.href);
+      if (cfg.brand.image) av.innerHTML = '<img src="' + esc(cfg.brand.image) + '" alt="">';
+      else av.textContent = cfg.brand.avatar || (cfg.brand.name || "?").charAt(0);
+      head.appendChild(av);
+      var text = el("div", "bnv-head-text");
+      headName = brandLine("b");
+      headName.textContent = cfg.brand.name || "";
+      text.appendChild(headName);
+      if (cfg.brand.sub) {
+        headSub = brandLine("small");
+        headSub.textContent = cfg.brand.sub;
+        text.appendChild(headSub);
+      }
+      headAvatar = av;
+      head.appendChild(text);
+      if (cfg.collapse !== false) {
+        var cbtn = el("button", "bnv-collapse", svg("chevron-end"));
+        cbtn.type = "button";
+        cbtn.title = ctx.labels.rail;
+        cbtn.setAttribute("aria-label", ctx.labels.rail);
+        /* ONE control, and what it does is what the menu is not. An opened menu folds back. The whole
+           menu becomes a rail — a person's choice, remembered. A chosen rail is the whole menu again;
+           and where the frame has no room for that (a rail by WIDTH), the menu opens over the page.
+           It used to be hidden in a rail: one press of it, and there was nothing left to press. */
+        cbtn.addEventListener("click", function () {
+          if (api.isOpen()) { api.close(); return; }
+          if (shown(headName)) { api.setRail(true); return; }
+          if (root.classList.contains("is-rail")) api.setRail(false);
+          if (!shown(headName)) api.open();
+        });
+        head.appendChild(cbtn);
+      }
+      if (cfg.brand.onClick) {
+        av.style.cursor = "pointer";
+        av.addEventListener("click", function (ev) { if (!cfg.brand.href) ev.preventDefault(); cfg.brand.onClick(ev); });
+      }
+      root.appendChild(head);
+    }
+
+    // 2. the ONE flat primary action
+    if (cfg.primary) {
+      var p = el(cfg.primary.href ? "a" : "button", "bnv-primary");
+      if (cfg.primary.href) p.setAttribute("href", cfg.primary.href); else p.setAttribute("type", "button");
+      p.title = cfg.primary.title || cfg.primary.label || "";
+      p.appendChild(el("span", "bnv-ic", svg(cfg.primary.icon)));
+      var plabel = el("span", "bnv-label");
+      plabel.textContent = cfg.primary.label || "";
+      p.appendChild(plabel);
+      var ptail = tailNode(cfg.primary);
+      if (ptail) p.appendChild(ptail);
+      if (cfg.primary.disabled) { p.setAttribute("aria-disabled", "true"); p.setAttribute("tabindex", "-1"); }
+      p.addEventListener("click", function (ev) {
+        if (cfg.primary.disabled) { ev.preventDefault(); return; }
+        if (cfg.primary.onClick) cfg.primary.onClick(ev);
+        if (!cfg.primary.href) ev.preventDefault();
+        ctx.closeDrawer();
+      });
+      root.appendChild(p);
+    }
+
+    // 3. the scrolling body
+    var scroll = el("div", "bnv-scroll");
+    root.appendChild(scroll);
+
+    // a nav-level search: one box that filters every group, in the menu and not on the page
+    if (cfg.search) {
+      var nsb = searchBox(cfg.search.placeholder || "חיפוש", cfg.search.value, ctx.openMenu);
+      var nbox = nsb.box, ninput = nsb.input;
+      navSearch = ninput;
+      scroll.appendChild(nbox);
+      ninput.addEventListener("keydown", function (ev) {
+        if (ev.key === "Escape" && ninput.value) { ninput.value = ""; states.forEach(function (s) { filter(s, ""); }); }
+        if (ev.key === "Escape") ev.stopPropagation();
+      });
+      /* `filter:false` is how an app says "this box searches the WORLD, not my menu": mail's search
+         queries the mailbox, and hiding every menu row because a message did not match would be the
+         menu answering a question nobody asked. */
+      var filters = cfg.search.filter !== false;
+      ninput.addEventListener("input", function () {
+        var q = ninput.value;
+        if (filters) states.forEach(function (s) { filter(s, q); });
+        if (cfg.search.onInput) cfg.search.onInput(q);
+      });
+    }
+
+    (cfg.sections || []).forEach(function (spec) {
+      var st = group(spec, ctx);
+      states.push(st);
+      scroll.appendChild(st.el);
+      st.rows.forEach(function (r) {
+        var id = r.getAttribute("data-bnv-id");
+        if (id !== null) rowsById[id] = r;
+      });
+    });
+
+    // 4. the pinned footer
+    if (cfg.footer) {
+      var foot = el("div", "bnv-foot");
+      (cfg.footer.items || []).forEach(function (it) { var r = row(it, ctx); foot.appendChild(r); });
+      if (cfg.footer.text) { var ft = el("div", "bnv-foot-text"); ft.textContent = cfg.footer.text; foot.appendChild(ft); }
+      /* `html` is the app's own block — a settings POPUP container, say — so it is not styled as
+         the footer's small print, and it is never hidden by a rail: a rail still opens popups. */
+      if (cfg.footer.html) foot.appendChild(el("div", "bnv-foot-extra", cfg.footer.html));
+      root.appendChild(foot);
+    }
+
+    // 5. the drawer: a scrim, the toggles, Escape — all owned here, none of it in the app
+    var scrim = null;
+    function ensureScrim() {
+      if (scrim) return scrim;
+      scrim = el("button", "bnv-scrim");
+      scrim.type = "button";
+      scrim.setAttribute("aria-label", ctx.labels.less === "הצג פחות" ? "סגירת התפריט" : "close");
+      scrim.addEventListener("click", function () { api.close(); });
+      document.body.appendChild(scrim);
+      return scrim;
+    }
+    if (document.body) ensureScrim();
+
+    /* The page's half of the drawer: a button it marks `data-nav-toggle` opens and shuts the menu,
+       and one it marks `data-nav-find` opens the menu ON its search. The page only places them (as
+       `.bnv-burger`, which the stylesheet shows where the menu is a drawer); the drawing and the
+       wiring are here — two screens had each written both for themselves, and three had no button
+       at all, so on a phone their menu could not be opened. */
+    function bindToggles() {
+      [["data-nav-toggle", "menu", "תפריט", function () { api.toggle(); }],
+       ["data-nav-find", "search", "חיפוש", function () { api.open(); if (navSearch) navSearch.focus({ preventScroll: true }); }]
+      ].forEach(function (kind) {
+        var nodes = document.querySelectorAll("[" + kind[0] + "]");
+        for (var i = 0; i < nodes.length; i++) {
+          var t = nodes[i];
+          if (t.getAttribute("data-bnv-bound") === "1") continue;
+          t.setAttribute("data-bnv-bound", "1");
+          if (kind[0] === "data-nav-toggle") t.setAttribute("aria-expanded", "false");
+          if (!t.getAttribute("aria-label")) t.setAttribute("aria-label", t.getAttribute(kind[0]) || kind[2]);
+          if (!String(t.innerHTML || "").trim()) t.innerHTML = svg(kind[1]);
+          t.addEventListener("click", function (ev) { ev.preventDefault(); kind[3](); });
+        }
+      });
+    }
+
+    var api = {
+      el: root,
+      id: cfg.id || null,
+      sections: states,
+      /** Mark one row as the current place. */
+      setActive: function (id) {
+        Object.keys(rowsById).forEach(function (k) {
+          var on = k === String(id);
+          rowsById[k].classList.toggle("is-active", on);
+          if (on) rowsById[k].setAttribute("aria-current", "page");
+          else rowsById[k].removeAttribute("aria-current");
+        });
+        return api;
+      },
+      /** The badge in a row's trailing slot — a count that changes under the reader. */
+      setBadge: function (id, value) {
+        var r = rowsById[String(id)];
+        if (!r) return api;
+        var tail = r.querySelector(".bnv-tail");
+        var badge = tail && tail.querySelector("[data-bnv-badge]");
+        if (value === null || value === undefined || value === "") {
+          if (badge) badge.remove();
+          return api;
+        }
+        if (!tail) { tail = el("span", "bnv-tail"); r.appendChild(tail); }
+        if (!badge) { badge = el("span", "bnv-badge"); badge.setAttribute("data-bnv-badge", ""); tail.appendChild(badge); }
+        badge.textContent = value;
+        return api;
+      },
+      /** The second column of a row. */
+      setMeta: function (id, value) {
+        var r = rowsById[String(id)];
+        if (!r) return api;
+        var meta = r.querySelector(".bnv-meta");
+        if (!meta) { meta = el("span", "bnv-meta"); r.insertBefore(meta, r.querySelector(".bnv-tail")); }
+        meta.textContent = value == null ? "" : value;
+        meta.hidden = !value;
+        return api;
+      },
+      /** The brand's second line — whose mailbox, which account, which build. */
+      setBrand: function (part) {
+        if (!part) return api;
+        if (part.name != null && headName) headName.textContent = part.name;
+        if (part.sub != null) {
+          if (!headSub) {
+            headSub = brandLine("small");
+            var box = root.querySelector(".bnv-head-text");
+            if (box) box.appendChild(headSub);
+          }
+          headSub.textContent = part.sub;
+        }
+        if (part.avatar != null && headAvatar && !part.image) headAvatar.textContent = part.avatar;
+        return api;
+      },
+      /** Mirror a URL's query into the menu's search, without firing the app's own handler. */
+      setSearch: function (value) {
+        if (navSearch) navSearch.value = value == null ? "" : value;
+        return api;
+      },
+      /** Replace one group's rows in place — a menu whose lists come from the server. */
+      setItems: function (sectionId, items, showMore) {
+        var st = null;
+        states.forEach(function (s) { if (!st && (s.spec.id === sectionId || s.spec.title === sectionId)) st = s; });
+        if (!st) return api;
+        var keep = st.el.querySelector(".bnv-ghead");
+        var keepBox = st.box, keepToggle = st.toggle;
+        st.el.innerHTML = "";
+        if (keep) st.el.appendChild(keep);
+        if (keepBox) st.el.appendChild(keepBox);
+        var fresh = group({ id: st.spec.id, title: null, items: items, showMore: showMore === undefined ? st.spec.showMore : showMore }, ctx);
+        [].slice.call(fresh.el.children).forEach(function (c) { st.el.appendChild(c); });
+        st.rows = fresh.rows;
+        st.rest = fresh.rest;
+        st.rows.forEach(function (r) {
+          var id = r.getAttribute("data-bnv-id");
+          if (id !== null) rowsById[id] = r;
+        });
+        if (keepBox) { st.box = keepBox; st.toggle = keepToggle; }
+        return api;
+      },
+      /** Rail (icon-only) — the state a person chooses; the size classes choose it by width. */
+      setRail: function (on) {
+        if (root.classList.contains("is-open")) api.close();     // (the menu over the page is not a state to be left in)
+        root.classList.toggle("is-rail", !!on);
+        try { if (api.id) localStorage.setItem("bnav:rail:" + api.id, on ? "1" : "0"); } catch (e) { /* private mode */ }
+        if (cfg.onRail) cfg.onRail(!!on);
+        return api;
+      },
+      isRail: function () { return root.classList.contains("is-rail"); },
+      /** The menu over the page: the drawer of a phone-sized container, and a rail that is opened —
+          by its collapse control, or by its search (see bina-nav.css §3 and §4). Where the menu is
+          whole and in its own column nothing calls this. */
+      open: function () {
+        ensureScrim().classList.add("is-open");
+        root.classList.add("is-open");
+        document.querySelectorAll("[data-nav-toggle]").forEach(function (t) {
+          t.setAttribute("aria-expanded", "true");
+        });
+        return api;
+      },
+      close: function () {
+        if (scrim) scrim.classList.remove("is-open");
+        root.classList.remove("is-open");
+        document.querySelectorAll("[data-nav-toggle]").forEach(function (t) {
+          t.setAttribute("aria-expanded", "false");
+        });
+        return api;
+      },
+      toggle: function () { return root.classList.contains("is-open") ? api.close() : api.open(); },
+      isOpen: function () { return root.classList.contains("is-open"); },
+      destroy: function () {
+        if (scrim && scrim.parentElement) scrim.parentElement.removeChild(scrim);
+        root.innerHTML = "";
+        root.classList.remove("bnv", "is-rail", "is-open");
+        if (api.id && NAVS[api.id] === api) delete NAVS[api.id];
+      },
+    };
+
+    bindToggles();
+    if (cfg.id) {
+      NAVS[cfg.id] = api;
+      try {
+        if (cfg.rail === true || (cfg.rail !== false && localStorage.getItem("bnav:rail:" + cfg.id) === "1")) {
+          root.classList.add("is-rail");
+        }
+      } catch (e) { /* private mode: no memory, no failure */ }
+    } else if (cfg.rail) {
+      root.classList.add("is-rail");
+    }
+    if (cfg.onRail) cfg.onRail(root.classList.contains("is-rail"));
+
+    /* Escape shuts a menu that stands over the page, and the key stops there: it was for the top
+       layer, not for whatever the page would close under it (so: on the way DOWN, before the page's
+       own listeners). A search field with something in it keeps its first Escape — it empties itself. */
+    document.addEventListener("keydown", function (ev) {
+      if (ev.key !== "Escape" || !root.classList.contains("is-open")) return;
+      var t = ev.target;
+      if (t && t.value && t.closest && t.closest(".bnv-search")) return;
+      api.close();
+      ev.stopPropagation();
+    }, true);
+    return api;
+  }
+
+  /* ── the two older shapes, kept working ───────────────────────────────────── */
+  /** Sections a page marked up itself: `<section id="x" data-nav="חשבונות" data-nav-icon="users">`.
+      The SAME menu as a declared one — the brand row, the rail, the drawer, the remembered state —
+      with one row per section: this shape built its rows by hand and so had none of them, and the
+      one screen that uses it stood in the office as the menu with no name over it. A row scrolls to
+      its section; the section in view is the one marked. */
+  function mountSections(root, opts) {
+    var secs = [].slice.call(document.querySelectorAll(opts.sections || "[data-nav]"));
+    if (!secs.length) return null;
+    /* A pressed row IS the marked one while the page travels to its section — and stays it when the
+       page cannot travel that far: a last section too short to reach the top left the mark on the
+       long one above it, under the finger that had just pressed another row. */
+    var pressed = 0;
+    var api = build(root, {
+      id: opts.id, brand: opts.brand, rail: opts.rail, collapse: opts.collapse, labels: opts.labels, footer: opts.footer,
+      sections: [{ items: secs.map(function (s) {
+        return { id: s.id, label: s.getAttribute("data-nav") || s.id, icon: s.getAttribute("data-nav-icon"),
+                 onClick: function () {
+                   var sc = scrollerOf(root);
+                   var top = s.getBoundingClientRect().top - (sc ? sc.getBoundingClientRect().top : 0)
+                     + (sc ? sc.scrollTop : window.scrollY) - 8;
+                   pressed = Date.now() + 1200;
+                   api.setActive(s.id);
+                   (sc || window).scrollTo({ top: top, behavior: "smooth" });
+                 } };
+      }) }],
+    });
+    if (typeof IntersectionObserver === "function") {
+      /* The FIRST section in view, in the page's order — not the last one the observer happened to
+         report: on load it reports them all at once, and the mark landed on whichever came last. */
+      var inView = {};
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (en) { inView[en.target.id] = en.isIntersecting; });
+        if (Date.now() < pressed) return;
+        for (var i = 0; i < secs.length; i++) if (inView[secs[i].id]) { api.setActive(secs[i].id); break; }
+      }, { root: scrollerOf(root), rootMargin: "-10% 0px -70% 0px", threshold: 0 });
+      secs.forEach(function (s) { io.observe(s); });
+    }
+    return api;
+  }
+
+  function mount(root, opts) {
+    if (!root) return null;
+    opts = opts || {};
+    root.classList.add("bnv");
+    if (typeof opts.sections === "string") return mountSections(root, opts);
+    // the flat list an app passes when it has routes and nothing else: `{items, onPick}`
+    if (!opts.sections && opts.items) opts = { id: opts.id, items: null, sections: [{ items: opts.items }], onPick: opts.onPick, rail: opts.rail, collapse: false, labels: opts.labels };
+    return build(root, opts);
+  }
+
+  return { mount: mount, svg: svg, icons: ICONS, labels: LABELS, navs: NAVS, forId: function (id) { return NAVS[id] || null; } };
+})();
+/* @bina-nav-js:end */
+</script>
+<script>
+"use strict";
+
+/* @bina-ask:start */
+var binaAsk, binaTell;
+(function () {
+  var doc = document;
+  var CSS = ".bask{position:fixed;inset:0;z-index:2147483000;display:grid;grid-template:minmax(0,1fr)/minmax(0,1fr);place-items:center;padding:16px;background:var(--scrim)}"
+    + ".bask-card{display:flex;flex-direction:column;width:min(440px,100%);max-height:100%;overflow:auto;box-sizing:border-box;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:16px;padding:20px;box-shadow:var(--shadow-lg);font:14px/1.5 var(--font,system-ui,sans-serif);text-align:start;outline:0}"
+    + ".bask-card h2{margin:0 0 8px;font-size:16px;font-weight:800;line-height:1.35}"
+    + ".bask-read{overflow:auto}.bask-read:not(:empty){min-height:19px}"   // never squeezed to nothing: a line of it stays, and past that the card itself scrolls
+    + ".bask-card p{margin:0 0 6px;font-size:13px;color:var(--muted)}"
+    + ".bask-read p:last-child{margin:0}"
+    + ".bask-facts{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:10px 0 0;padding:10px 12px;background:var(--surface-2);border:1px solid var(--line);border-radius:9px}"
+    + ".bask-facts dt{color:var(--muted);font-size:11px;font-weight:600;line-height:1.7}"
+    + ".bask-facts dd{margin:0;font-size:12.5px;font-weight:600;overflow-wrap:anywhere;unicode-bidi:plaintext;text-align:right}"
+    + ".bask-field{display:grid;gap:5px;margin-top:10px;font-size:12px;font-weight:600;color:var(--muted)}"
+    + ".bask-field input{font:inherit;font-size:13px;font-weight:400;height:36px;padding:0 10px;border:1px solid var(--line);border-radius:9px;background:var(--surface);color:var(--ink)}"
+    + ".bask-said{margin-top:10px;padding:8px 12px;border-radius:9px;border-inline-start:4px solid var(--red);background:color-mix(in srgb,var(--red) 14%,var(--surface));font-size:12.5px;overflow-wrap:anywhere}"
+    + ".bask-said:empty{display:none}"
+    + ".bask-acts{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}"
+    + ".bask-btn{height:34px;padding:0 16px;border-radius:9px;border:1px solid var(--line);background:transparent;color:var(--ink);font:inherit;font-size:13px;font-weight:700;cursor:pointer}"
+    + ".bask-btn.primary{background:var(--accent);border-color:transparent;color:var(--accent-ink)}"
+    + ".bask-btn.danger{background:var(--red);border-color:transparent;color:var(--surface)}"
+    + ".bask-btn:disabled{opacity:.5;cursor:default}"
+    + ".bask-field input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}"
+    + "@media (pointer:coarse){.bask-btn{height:44px}.bask-field input{height:44px}}"
+    + "@media (max-height:399px){.bask{padding:8px}.bask-card{padding:12px}.bask-acts{margin-top:10px}}"   // the side menu's own short frame
+    + "#bina-tell{position:fixed;inset-block-end:16px;inset-inline-start:16px;z-index:2147483001;display:grid;gap:8px;max-width:min(420px,calc(100vw - 32px))}"
+    + ".btell{--c:var(--ok);padding:10px 14px;border-radius:12px;background:color-mix(in srgb,var(--c) 14%,var(--surface));color:var(--ink);border:1px solid color-mix(in srgb,var(--c) 38%,var(--surface));border-inline-start:4px solid var(--c);font:13px/1.45 var(--font,system-ui,sans-serif);box-shadow:var(--shadow-lg);cursor:pointer;text-align:start}"
+    + ".btell.warn{--c:var(--lime)}.btell.bad{--c:var(--red)}"   // --ok and --red, not the bare hues: they are the steps that are lifted on the dark ground
+    + ".btell small{display:block;margin-top:2px;font-size:11.5px;color:var(--muted);overflow-wrap:anywhere;unicode-bidi:plaintext}"
+    + ".btell button{margin-inline-start:12px;padding:0;border:0;background:none;font:inherit;font-weight:800;color:var(--blue);text-decoration:underline;cursor:pointer}";
+
+  function el(tag, cls, text) {
+    var n = doc.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+  function style() {
+    if (doc.getElementById("bina-ask-css")) return;
+    var s = el("style", "", CSS);
+    s.id = "bina-ask-css";
+    doc.head.appendChild(s);
+  }
+
+  binaAsk = function (q) {
+    style();
+    return new Promise(function (resolve) {
+      var back = doc.activeElement, field = null, must = q.input && q.input.must;
+      var scrim = el("div", "bask"), card = el("div", "bask-card"), read = el("div", "bask-read"), said = el("div", "bask-said");
+      card.setAttribute("role", "alertdialog");
+      card.setAttribute("aria-modal", "true");
+      card.setAttribute("dir", "rtl");
+      card.setAttribute("tabindex", "-1");
+      said.setAttribute("role", "alert");
+      card.appendChild(el("h2", "", q.title));
+      card.appendChild(read);
+      String(q.body || "").split(/\n+/).forEach(function (line) { if (line.trim()) read.appendChild(el("p", "", line)); });
+      if (q.facts && q.facts.length) {
+        var dl = el("dl", "bask-facts");
+        q.facts.forEach(function (f) { dl.appendChild(el("dt", "", f[0])); dl.appendChild(el("dd", "", f[1])); });
+        read.appendChild(dl);
+      }
+      if (q.input) {
+        var lab = el("label", "bask-field", q.input.label || "");
+        field = el("input");
+        field.value = q.input.value || "";
+        if (q.input.dir) field.setAttribute("dir", q.input.dir);
+        lab.appendChild(field);
+        card.appendChild(lab);
+      }
+      var acts = el("div", "bask-acts"), no = el("button", "bask-btn", q.cancel || "ביטול"),
+          yes = el("button", "bask-btn " + (q.danger ? "danger" : "primary"), q.ok || "אישור");
+      no.setAttribute("type", "button");
+      yes.setAttribute("type", "button");
+      acts.appendChild(no);
+      acts.appendChild(yes);
+      card.appendChild(said);
+      card.appendChild(acts);
+      scrim.appendChild(card);
+      doc.body.appendChild(scrim);
+
+      function fit() { if (must) yes.disabled = field.value.trim() !== must; }
+      function home() { (field || (q.danger ? no : yes)).focus(); }
+      function done(v) {
+        doc.removeEventListener("keydown", key, true);
+        scrim.remove();
+        if (back && back.focus) back.focus();
+        resolve(v);
+      }
+      function cancel() { if (!no.disabled) done(field ? null : false); }
+      function agree() {
+        if (yes.disabled) return;
+        var v = field ? field.value : true;
+        if (!q.run) return done(v);
+        yes.disabled = no.disabled = true;                // in flight: busy, and there is nothing left to cancel
+        yes.textContent = "מבצע…";
+        said.textContent = "";
+        card.focus();
+        Promise.resolve(v).then(q.run).then(function () { done(v); }, function (e) {
+          yes.textContent = q.ok || "אישור";
+          yes.disabled = no.disabled = false;
+          fit();
+          said.textContent = (e && e.message) || "הפעולה נכשלה";
+          home();
+        });
+      }
+      function key(e) {
+        if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); cancel(); }
+        else if (e.key === "Enter" && field && doc.activeElement === field) { e.preventDefault(); agree(); }
+        else if (e.key === "Tab") {                       // the page behind is not reachable while asked
+          var ring = [field, no, yes].filter(function (n) { return n && !n.disabled; });
+          var i = ring.indexOf(doc.activeElement);
+          e.preventDefault();
+          if (ring.length) ring[(i + (e.shiftKey ? ring.length - 1 : 1)) % ring.length].focus();
+        }
+        else if (/^(Arrow|Page)(Up|Down)$/.test(e.key) && doc.activeElement !== field && read.scrollHeight > read.clientHeight) {
+          e.preventDefault();                               // the focus lives on the buttons, outside what scrolls
+          read.scrollTop += (/Up$/.test(e.key) ? -1 : 1) * (/^Page/.test(e.key) ? read.clientHeight : 40);
+        }
+      }
+      yes.addEventListener("click", agree);
+      no.addEventListener("click", cancel);
+      scrim.addEventListener("mousedown", function (e) { if (e.target === scrim) cancel(); });
+      if (field) field.addEventListener("input", fit);
+      doc.addEventListener("keydown", key, true);
+      fit();
+      home();
+    });
+  };
+
+  // The third word is how long the notice stays (ms) — or what more it carries: { ms, more, act, stay }.
+  //   more  the service's own sentence, on a line of its own under the notice's words
+  //   act   [label, fn] — one way on from the notice (an undo, a refresh): pressing it runs fn and takes the notice down
+  //   stay  no clock: the notice is there until it is pressed
+  binaTell = function (text, kind, opt) {
+    style();
+    var o = opt && typeof opt === "object" ? opt : { ms: opt };
+    var box = doc.getElementById("bina-tell");
+    if (!box) { box = el("div"); box.id = "bina-tell"; doc.body.appendChild(box); }
+    var n = el("div", "btell " + (kind || "ok"), text);
+    n.setAttribute("role", kind === "bad" ? "alert" : "status");
+    n.setAttribute("dir", "rtl");
+    if (o.more) n.appendChild(el("small", "", o.more));
+    if (o.act) {
+      var go = el("button", "", o.act[0]);
+      go.setAttribute("type", "button");
+      go.addEventListener("click", function (e) { e.stopPropagation(); n.remove(); o.act[1](); });
+      n.appendChild(go);
+    }
+    n.addEventListener("click", function () { n.remove(); });
+    box.appendChild(n);
+    if (!o.stay) setTimeout(function () { n.remove(); }, o.ms || (kind === "bad" ? 9000 : 5200));
+    return n;
+  };
+})();
+/* @bina-ask:end */
+
+/* ── state ──────────────────────────────────────────────────────────────── */
+var state = { read:"all", level:"all", source:null };   // read: all|unread ; level: all|error|warning|info
+var paused = false, busy = false, stats = null;
+
+/* ── helpers ────────────────────────────────────────────────────────────── */
+function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){
+  return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});}
+/* A LATIN RUN IN A HEBREW LINE IS ONE LEFT-TO-RIGHT ISLAND - a notification's own words are escaped through here.
+   Measured on a running office: in a text «/tmp/wa-pentest» and «/view» were drawn with their first slash at their
+   END, and «~20» with its sign after it; the simulation's «/data» the same. The line lays a Latin run left to right
+   by itself, and the numbers after it with it: only the signs at its EDGES went to the line. So the island is that
+   run - from the word of its first letter to its last letter or digit, the letters of every script that reads left
+   to right («Счёт 42.pdf» is one run) - with the signs attached at its two ends,
+   and NOTHING THE LINE DRAWS RIGHT IS MOVED BY IT:
+   · a sign that touches a Hebrew letter on its other side is the sentence's («ב-HP», «PDF-ים», «מייל/email»), and
+     so is one that touches a bracket that parts the run («מסמך (1).pdf»: the dot stands between the two) - unless
+     the line itself ties it to a digit («91%»); after one joiner a token's own sign is the token's («ב-/tmp/x»);
+     a quote, a dash and the sentence's own mark are the sentence's;
+   · a BRACKET PARTS A RUN WHERE THE LINE PARTS IT: one whose other stands beyond a Hebrew word («(לפי n8n) 3»), and
+     a pair that opens a run («(PDF) 2 קבצים»: the 2 is the files', and the line sets it by them). What a pair holds
+     and what follows it are two runs; a pair that opens inside a run is the run's, both of it;
+   · a bare word or number has no order to lose.
+   A number with a sign before it («~20», «+3%», «~10-15», «+972-50-…») is an island of its own - the number as the
+   line reads one: digits, one separator between two of them, the signs tied to them. A hyphen is not such a sign:
+   before a digit it may be the sentence's dash. */
+function rtl(c){return c!=="־"&&/[\p{Script=Hebrew}\p{Script=Arabic}]/u.test(c||"");}     // a letter of the line's own direction (the maqaf is its joiner, no letter)
+function signed(t){return esc(t).replace(/(^|[\s(\[«,;:]|&quot;|&#39;)([~+±]\d+(?:[.,:\/+\-]\d+)*[#$%°±₪€£¥‰]*)/g,'$1<bdi dir="ltr">$2</bdi>');}
+function islands(text,links){     // links: the addresses in the text, [from, to, the link's markup] each (see linked)
+  var s=String(text==null?"":text),L=links||[],t="",out="",at=0,n=0,m,i,j,k,pair=[],ops=[],has=[0,0,0],
+      re=/[^\p{Script=Hebrew}\p{Script=Arabic}]+/gu,                 // a stretch: what stands between two characters of the line's own direction
+      word=/[\p{L}\d]/u,                                              // a letter or a digit of a run
+      tied=/[#$%°±₪€£¥‰]/,                                            // the signs the line itself ties to a digit beside them (as in signed)
+      put=function(i,j,f){var o="";                                   // the text from i to j, each address in it as its link
+        for(;n<L.length&&L[n][0]<j;n++){o+=f(s.slice(i,L[n][0]))+L[n][2];i=L[n][1];}
+        return o+f(s.slice(i,j));};
+  L.forEach(function(l){t+=s.slice(t.length,l[0])+" ".repeat(l[1]-l[0]);});t+=s.slice(t.length);   // t: the text as the line reads it - a link is a space in it
+  for(i=0;i<t.length;i++){k="([{)]}".indexOf(t[i]);                  // pair[i]: where the bracket at i has its other, as the line pairs them:
+    if(k>=0&&k<3){ops.push(i);has[k]++;}                             // a closer takes the nearest opener of its kind still open (ops; has: how many of each)
+    else if(k>2&&has[k-3]){do{j=ops.pop();has["([{".indexOf(t[j])]--;}while(t[j]!=="([{"[k-3]);pair[j]=i;pair[i]=j;}}   // - and the openers passed over have none
+  while((m=re.exec(t)))for(var b=m.index,end=b+m[0].length,met=0,g,a,e,z;b<end;b+=g.length+1,met=1){   // every run of the stretch, each from b
+    g=t.slice(b,end);a=g.search(met?word:/\p{L}/u);                  // a..z: the run; e: its last letter or digit. A run begins at a letter - and, once the
+    if(a<0)break;                                                    // stretch has met one, at a digit too: the line reads a number after a letter as the letter
+    for(i=a;i<g.length&&!((j=pair[b+i]-b)<a||j>=g.length);)i++;     // a bracket whose other stands before the run or beyond the stretch
+    g=g.slice(0,i);                                                  // parts the run: what follows it is a run of its own
+    e=g.search(/[\p{L}\d][^\p{L}\d]*$/u);
+    while(a>0&&!/[ \t\n\r—–«»"'()\[\]{}]/.test(g[a-1]))a--;         // (a new line is a space to the page; a space that does not break is none)
+    for(z=e;z<g.length-1&&!/[ \t\n\r—–«»"'()\[\]{}.,;:!?]/.test(g[z+1]);)z++;
+    // (what the run's first sign touches, a quote apart: a letter of the line's, or a bracket that closes - then it stands
+    //  between the two, the sentence's; after a bracket that opens it is the token's, «(--help)». And its last sign the same.)
+    for(i=b+a-1;/["'«»]/.test(t[i]||"");)i--;
+    if(rtl(t[i])||/[)\]}]/.test(t[i]||"")){if(/[-:=]/.test(g[a]))a++;else{a+=g.slice(a).search(word);if(/\d/.test(g[a]))while(tied.test(g[a-1]||""))a--;}}
+    for(i=b+z+1;/["'«»]/.test(t[i]||"");)i++;
+    if(rtl(t[i])||/[(\[{]/.test(t[i]||"")){z=e+(g.codePointAt(e)>65535);if(/\d/.test(g[e]))while(tied.test(g[z+1]||""))z++;}
+    if(g[a]==="-"&&/\d/.test(g[a+1]))a++;                            // (a hyphen before a digit may be the sentence's dash: the line's, as in signed)
+    for(i=a;i<=z;i++)if((j=pair[b+i]-b)>z)z=j;                       // (a pair that opens inside the run closes inside it)
+    out+=put(at,b+a,signed);at=b+z+1;
+    out+=/[^\p{L}\d]/u.test(g.slice(a,z+1))?'<bdi dir="ltr">'+put(b+a,at,esc)+"</bdi>":put(b+a,at,esc);   // (a bare word or number has no order to lose)
+  }
+  return out+put(at,s.length,signed);
+}
+/* An address inside a notification's text is a LINK, and what a person reads of it is its site: the whole
+   address — its path, its ids — is one hover and one press away. Printed as text, «הקישור לבקשה:
+   http://console.localhost/#/m/project-pln/…» made a text of three lines out of one that is given two, and
+   what was cut was the sentence after it (read on a running office). Only http and https; everything around
+   it and inside it is escaped as before.
+   A LINK IS A SPACE TO THE LINE, and so it is to islands(), which is given where each stands: the line lays a
+   Latin run and a link inside it as ONE run - «Deploy failed: <the link> (exit 1)» - and the island holds them
+   both; an island set beside the link would part them. */
+/* A LINK TO THE OFFICE ITSELF OPENS IN THE OFFICE. This screen stands in a frame of the console, at the console's
+   own address: an address there that names a tile (`/#/m/…` - a screen, a work item) is the shell's to open, in
+   its frame or in a window of desktop mode, the way every screen of the office sends a person to another tile.
+   It opened a second console in a new tab - under a notification that says of its own link «נפתח בתוך הלשכה, לא
+   בכרטיסייה נפרדת» (read on a running office). Any other address is a new tab, as it was: another site, another
+   office, a page of this office that is not the shell's (a bare screen at /a/… would take the shell's place) -
+   and every address where this page is not framed. */
+function opens(u){
+  var own=false;
+  try{var t=new URL(u,location.href);
+      own=window.top!==window&&t.origin===location.origin&&t.pathname==="/"&&/^#\/m\//.test(t.hash);}catch(e){}
+  return own?' target="_top"':' target="_blank" rel="noopener noreferrer"';
+}
+function linked(text){
+  var s=String(text==null?"":text),links=[],re=/https?:\/\/[^\s<>"'`]+/g,m;
+  while((m=re.exec(s))){
+    var u=m[0],host="",q=u.length;
+    while(/[.,;:!?)\]]/.test(u[q-1]))q--;               // a sentence's own mark after the address is the sentence's
+    u=u.slice(0,q);
+    try{host=new URL(u).host;}catch(e){}
+    if(host)links.push([m.index,m.index+u.length,'<a href="'+esc(u)+'" title="'+esc(u)+'"'+opens(u)+' onclick="event.stopPropagation()"><bdi>'+esc(host)+'</bdi></a>']);
+  }
+  return islands(s,links);
+}
+
+function bucket(level){var l=(level||"info").toLowerCase();
+  if(l==="error"||l==="fatal"||l==="critical")return"error";
+  if(l==="warning"||l==="warn")return"warning";return"info";}
+
+// Names in the shared menu's vocabulary (BinaNav.icons): one drawing per thing, in the menu row
+// and in the list alike.
+var SRC_ICON={"glitchtip-issue":"error","indox":"file","incoming-documents":"file","whatsapp":"chat","my-docs":"files","system":"gear","sync":"refresh","drive":"folder","gmail":"mail","autoheal":"activity"};
+function srcIcon(s){return SRC_ICON[s]||"bell";}
+function ic(name){return typeof BinaNav==="undefined"?"":BinaNav.svg(name);}
+function srcLabel(s){
+  if(s==="glitchtip-issue")return"GlitchTip";
+  if(!s)return"מערכת";
+  var m={"indox":"מסמכים נכנסים","incoming-documents":"מסמכים נכנסים","whatsapp":"וואטסאפ","my-docs":"מסמכים שלי","system":"מערכת","sync":"סנכרון","autoheal":"ריפוי עצמי"};
+  return m[s]||(s.charAt(0).toUpperCase()+s.slice(1));
+}
+var LVL_HE={error:"שגיאה",warning:"אזהרה",info:"מידע"};
+
+function rel(iso){
+  if(!iso)return"";var t=Date.parse(iso);if(isNaN(t))return"";
+  var s=Math.round((Date.now()-t)/1000);if(s<0)s=0;
+  if(s<60)return"עכשיו";
+  var m=Math.round(s/60);if(m<60)return"לפני "+m+" דק׳";
+  var h=Math.round(m/60);if(h<24)return"לפני "+h+" שע׳";
+  var d=Math.round(h/24);if(d<7)return d===1?"לפני יום":"לפני "+d+" ימ׳";   // («ימ׳» is days: one day is not «1 ימ׳»)
+  try{return new Date(t).toLocaleDateString("he-IL",{day:"numeric",month:"short"});}
+  catch(e){return new Date(t).toLocaleDateString();}
+}
+// day bucket label for grouping
+// last-occurrence time (recurrence-aware): drives the displayed time + day grouping,
+// so a re-fired error reads as "just now", not its stale first-seen time.
+function lastAt(n){return (n&&(n.last_seen||(n.meta&&n.meta.lastSeen)))||(n&&n.created_at)||"";}
+function dayKey(iso){var d=new Date(iso);if(isNaN(d))return"—";
+  var today=new Date();var y=new Date();y.setDate(today.getDate()-1);
+  var f=function(x){return x.getFullYear()+"-"+x.getMonth()+"-"+x.getDate();};
+  if(f(d)===f(today))return"היום";
+  if(f(d)===f(y))return"אתמול";
+  try{return d.toLocaleDateString("he-IL",{day:"numeric",month:"long",year:(d.getFullYear()!==today.getFullYear()?"numeric":undefined)});}
+  catch(e){return d.toLocaleDateString();}
+}
+
+
+/* ── KPI strip ──────────────────────────────────────────────────────────── */
+function renderHud(){
+  if(!stats)return;
+  var bl=stats.by_level||{error:0,warning:0,info:0};
+  var cards=[
+    // (its name is one word: in the smallest window of desktop mode «סה״כ התראות» was cut by three pixels, and
+    //  a tile whose name is cut says the whole of it in its title)
+    {k:"סה״כ",t:"סה״כ התראות",v:stats.total||0,cls:"total"},
+    {k:"לא נקראו",v:stats.unread||0,cls:"unread"},
+    {k:"שגיאות",v:bl.error||0,cls:"err"},
+    {k:"אזהרות",v:bl.warning||0,cls:"warn"}
+  ];
+  document.getElementById("hud").innerHTML=cards.map(function(c){
+    // the office's tile and its legend: unread waits to be read (to do), an error failed, a
+    // warning waits for a person's look. Amber is not here — nothing in this list is running.
+    var st={unread:"todo",err:"failed",warn:"person"}[c.cls];
+    return '<div class="pg-kpi'+(c.v?"":" is-zero")+'"'+(st&&c.v?' data-state="'+st+'"':"")+'><span class="pg-kpi-k"'+(c.t?' title="'+esc(c.t)+'"':"")+'>'+esc(c.k)+'</span><span class="pg-kpi-v num">'+c.v+'</span></div>';
+  }).join("");
+}
+
+/* ── the filter bar is the MENU ──────────────────────────────────────────────────────────────────
+   Filtering is navigation, so it belongs where navigation lives. The three axes the bar used to
+   stack into one row — קריאה · חומרה · מקור — are three sections of the shared side menu, each row
+   carrying its count, and the component owns what a row looks like, the rail, the drawer and the
+   count pill. The bar itself is gone from the content column.
+   A menu with THREE independent choices cannot use `setActive` (one row, whole menu), so each item
+   declares `active` about its own axis and the section is re-rendered with the marks in it. */
+var NAV=null;
+
+function mountNav(){
+  if(NAV||typeof BinaNav==="undefined")return NAV;
+  var el=document.getElementById("sideNav"); if(!el)return null;
+  NAV=BinaNav.mount(el,{
+    id:"notifications",
+    brand:{name:"התראות",sub:"מרכז התראות מאוחד",avatar:"ה"},
+    sections:[
+      {id:"read",  title:"קריאה", items:[]},
+      {id:"level", title:"חומרה", items:[]},
+      {id:"source",title:"מקור",  items:[], showMore:8}
+    ]
+  });
+  return NAV;
+}
+
+function renderFilters(){
+  var nav=mountNav(); if(!nav)return;
+  // A count is said once it is KNOWN. The menu is drawn from the start — it was mounted BY the first answered
+  // count, so with the service silent the whole side of the screen was a blank column — and a 0 would be a claim.
+  var bl=(stats&&stats.by_level)||{}, n=function(v){return stats?v||0:undefined;};
+  var un=n(stats&&stats.unread), tot=n(stats&&stats.total);
+
+  nav.setItems("read",[
+    {id:"read:all",    label:"הכל",      icon:"inbox", active:state.read==="all",    onClick:function(){setRead("all");}},
+    {id:"read:unread", label:"לא נקראו", icon:"mail", badge:un, active:state.read==="unread", onClick:function(){setRead("unread");}}
+  ],0);
+
+  nav.setItems("level",[
+    {id:"level:all",     label:"הכל",     icon:"list",  badge:tot,        active:state.level==="all",     onClick:function(){setLevel("all");}},
+    {id:"level:error",   label:"שגיאות",  icon:"error", badge:n(bl.error),  active:state.level==="error",   onClick:function(){setLevel("error");}},
+    {id:"level:warning", label:"אזהרות",  icon:"alert", badge:n(bl.warning),active:state.level==="warning", onClick:function(){setLevel("warning");}},
+    {id:"level:info",    label:"מידע",    icon:"info",  badge:n(bl.info),   active:state.level==="info",    onClick:function(){setLevel("info");}}
+  ],0);
+
+  /* The sources are dynamic and can be many, so the tail is Priority+: the component keeps the
+     first rows and hides the rest behind one row that names how many it holds. */
+  var bs=(stats&&stats.by_source)||{};
+  var srcs=Object.keys(bs);
+  var items=[{id:"source:all", label:"כל המקורות", icon:"grid", active:!state.source, onClick:function(){setSource(null);}}];
+  if(srcs.length>1){
+    srcs.sort(function(a,b){return bs[b]-bs[a];}).forEach(function(s){
+      items.push({id:"source:"+s, label:srcLabel(s), icon:srcIcon(s), badge:bs[s],
+                  active:state.source===s, onClick:function(){setSource(s);}});
+    });
+  }
+  nav.setItems("source", items, 8);
+}
+
+function setLevel(l){state.level=l;renderFilters();load();}
+function setRead(r){state.read=r;OPENED={};renderFilters();load();}   // (a list that is left folds what was opened in it)
+function setSource(s){state.source=s;renderFilters();load();}
+
+/* ── list ───────────────────────────────────────────────────────────────── */
+function itemHtml(n){
+  var b=bucket(n.level), read=n.is_read;
+  var meta=n.meta||{};
+  var proj=meta.project?'<span class="tag proj">'+esc(meta.project)+'</span>':"";
+  var cnt=(meta.count&&Number(meta.count)>1)?'<span class="cnt">×<span class="num">'+esc(meta.count)+'</span></span>':"";
+  var open=n.link?'<a class="open" href="'+esc(n.link)+'"'+opens(n.link)+' onclick="event.stopPropagation()">פתח במקור</a>':"";
+  var desc=n.body?'<div class="desc">'+linked(n.body)+'</div>':"";
+  return ''+
+  '<div class="item lv-'+b+(read?"":" unread")+(OPENED[n.id]?" whole":"")+'" data-id="'+n.id+'" onclick="onRowClick(event,'+n.id+','+(read?"1":"0")+')">'+
+    '<div class="ava '+b+'">'+ic(srcIcon(n.source))+'</div>'+
+    '<div class="body">'+
+      '<div class="title">'+islands(n.title)+'</div>'+
+      desc+
+      '<div class="meta">'+
+        '<span class="tag src">'+esc(srcLabel(n.source))+'</span>'+
+        proj+cnt+
+        '<span title="נראה לראשונה '+esc(rel(n.created_at))+'">'+esc(rel(lastAt(n)))+'</span>'+
+        open+
+      '</div>'+
+    '</div>'+
+    '<div class="rowacts">'+
+      '<button class="iact" title="'+(read?"סמן כלא נקרא":"סמן כנקרא")+'" onclick="event.stopPropagation();toggleRead('+n.id+','+(read?"1":"0")+')">'+ic(read?"mail":"check")+'</button>'+
+      '<button class="iact del" title="הסר" onclick="event.stopPropagation();dismiss('+n.id+')">'+ic("x")+'</button>'+
+    '</div>'+
+  '</div>';
+}
+
+var DRAWN=[];                    // the rows the list holds, as they were last read
+function render(items){
+  var list=document.getElementById("list");
+  DRAWN=items;
+  if(!items.length){
+    var msg=state.read==="unread"?{i:"check",t:"הכל נקרא",s:"אין התראות שלא נקראו. עבודה טובה!"}
+      :(state.level!=="all"||state.source)?{i:"search",t:"אין התראות תואמות",s:"נסה להסיר מסננים."}
+      :{i:"bell",t:"אין התראות",s:"כשתתקבל התראה חדשה (שגיאה, אירוע מערכת) היא תופיע כאן."};
+    list.innerHTML='<div class="state"><div class="ico">'+ic(msg.i)+'</div><div class="t">'+msg.t+'</div><div class="s">'+msg.s+'</div></div>';
+    return;
+  }
+  // group by day (items are newest-first already)
+  var groups=[],cur=null;
+  items.forEach(function(n){
+    var k=dayKey(lastAt(n));
+    if(!cur||cur.k!==k){cur={k:k,items:[]};groups.push(cur);}
+    cur.items.push(n);
+  });
+  list.innerHTML=groups.map(function(g){
+    return '<div class="daygroup"><div class="dayhdr">'+esc(g.k)+'</div>'+
+      g.items.map(itemHtml).join("")+'</div>';
+  }).join("");
+}
+
+async function fetchStats(){
+  try{
+    var r=await fetch("api/notifications/stats",{headers:{Accept:"application/json"}});
+    if(r.ok){stats=await r.json();renderHud();renderFilters();
+      document.getElementById("readAll").disabled=(stats.unread===0);
+      document.getElementById("clearRead").disabled=((stats.total-stats.unread)<=0);
+      reportWidget();return true;}
+  }catch(e){/* keep last */}
+}
+/* The console's desktop mode draws a window pushed far to the side as a small widget: this is what
+   it says — the unread count. A label only; nothing is sent when the page is not embedded.
+   One is said in the singular and with its numeral («1 לא נקראו» it said): the shell gives the line 120px, the
+   tile's name included, and «אחת לא נקראה» needs 133 of them. */
+function reportWidget(){
+  if(window.parent===window)return;
+  var n=(stats&&stats.unread)||0;
+  try{window.parent.postMessage({type:"bina:widget",label:n?(n===1?"1 לא נקראה":n+" לא נקראו"):"הכל נקרא"},location.origin);}catch(e){}
+}
+
+/* In «לא נקראו» the press that OPENS a row also reads it, and the service's list of the unread no longer has it: the
+   text left the screen under the eye that had just opened it. A row that is open there and is not among the unread
+   is asked for by itself, and stands where the service's own order puts it - while it is open, and of this list
+   (its level, its source). One that is gone, or is of another list, is forgotten; one whose own answer did not
+   come stands as it was last read - the list is not held back for one row. (`OPENED[id]` is that last answer.) */
+async function withOpen(items){
+  var here={};items.forEach(function(n){here[n.id]=1;});
+  var ids=Object.keys(OPENED).filter(function(id){return OPENED[id]&&!here[id];});
+  if(!ids.length)return items;
+  var rows=await Promise.all(ids.map(function(id){
+    return fetch("api/notifications/"+id,{headers:{Accept:"application/json"}})
+      .then(function(r){return r.status===404?null:r.ok?r.json():OPENED[id];}).catch(function(){return OPENED[id];});}));
+  rows.forEach(function(n,i){
+    if(!OPENED[ids[i]])return;   // (folded, or its list left, while its answer was on its way: the answer does not open it again)
+    if(n===true)return;          // (not answered by itself yet, and no answer now: it is asked for again at the next read)
+    if(n&&(state.level==="all"||bucket(n.level)===state.level)&&(!state.source||n.source===state.source)){OPENED[ids[i]]=n;items.push(n);}
+    else delete OPENED[ids[i]];
+  });
+  var at=function(n){return n.last_seen||n.created_at||"";};
+  return items.sort(function(a,b){return at(a)<at(b)?1:at(a)>at(b)?-1:b.id-a.id;});
+}
+/* `soft` is a read nobody pressed for - the list's own clock, and the read a row's opening press asks. It does not
+   draw over a MARKED text: the list is redrawn whole, and a word a reader had just marked in a notification was
+   unmarked by the next read. The list waits for the mark - a minute at most, so that a mark left standing does not
+   keep new notifications out of it for good; its numbers do not wait at all. */
+var MARKED=0;                    // when a soft read first met a mark it did not draw over
+function listKey(){return state.read+"|"+state.level+"|"+(state.source||"");}
+async function load(soft){
+  var list=document.getElementById("list"), asked=listKey();
+  try{
+    var qs=["limit=200"];
+    if(state.read==="unread")qs.push("unread=1");
+    if(state.level!=="all")qs.push("level="+state.level);
+    if(state.source)qs.push("source="+encodeURIComponent(state.source));
+    var r=await fetch("api/notifications?"+qs.join("&"),{headers:{Accept:"application/json"}});
+    if(!r.ok)throw new Error(String(r.status));
+    var d=await r.json(), items=d.notifications||[];
+    if(state.read==="unread")items=await withOpen(items);
+    if(asked!==listKey())return; // (the answer of a list that was left is not drawn into the one that replaced it, which asked its own)
+    unheard=false;chip();
+    var mark=getSelection(), held=!!(soft&&mark&&String(mark)&&list.contains(mark.anchorNode));
+    if(held&&!MARKED)MARKED=Date.now();
+    if(!held||Date.now()-MARKED>60000){MARKED=0;render(items);}
+  }catch(e){
+    if(asked!==listKey())return;
+    // the chip stops saying «חי», and a list that WAS read stays: one round with no answer emptied the screen
+    unheard=true;chip();
+    if(!list.querySelector(".item"))list.innerHTML='<div class="state err"><div class="ico">'+ic("alert")+'</div><div class="t">שגיאה בטעינת ההתראות</div><div class="s">המסך שואל שוב מעצמו כל 15 שניות.</div></div>';
+  }
+  fetchStats();
+}
+
+/* ── actions ────────────────────────────────────────────────────────────── */
+/* A PRESS ON A ROW WHOSE TEXT IS CUT OPENS IT, and reads the row (the natural "seen" gesture). A row shows two
+   lines of a notification's text: on a phone most texts are longer, and the press marked the row read and showed
+   nothing more - the end of the sentence, and the link an address at its end is, could not be read at all. What a
+   person opened stays open across the list's reads, in «לא נקראו» too (see withOpen). A row whose text is WHOLE
+   has nothing to open: the press reads it, as it always did.
+   An OPEN text is the reader's own - a word in it is marked and copied, and no press on it folds the row: a press
+   beside the text does (the title, the line under it), and a fold reads nothing. And a press that marks text
+   anywhere in the row - a drag from the title down - is no press at all. */
+var OPENED={};
+function onRowClick(ev,id,isRead){
+  var mark=getSelection();
+  if(ev.target.closest("a,button")||(mark&&String(mark)))return;      // (a link or a button in the row is its own press)
+  var row=ev.currentTarget, text=row.querySelector(".desc"), was=!!OPENED[id];
+  if(was&&ev.target.closest(".desc"))return;
+  if(was||(text&&text.scrollHeight>text.clientHeight+1)){
+    OPENED[id]=!was&&(DRAWN.filter(function(n){return n.id===id;})[0]||true);
+    row.classList.toggle("whole",!was);
+  }
+  if(!was&&!isRead)setRead1(id,true,true);
+  else if(was&&state.read==="unread")load();       // (a row kept in «לא נקראו» while it was open leaves it as it folds)
+}
+async function setRead1(id,read,soft){
+  // the fourth action here that said nothing when it failed: a refusal was not read, and no answer was swallowed
+  try{var r=await fetch("api/notifications/"+id+"/read",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({read:read})});
+      if(!r.ok)binaTell("הסימון נכשל","bad");}
+  catch(e){binaTell("הסימון נכשל — השירות לא ענה","bad");}
+  load(soft);
+}
+function toggleRead(id,isRead){ if(busy)return;busy=true; setRead1(id,!isRead).finally(function(){busy=false;}); }
+
+async function dismiss(id){
+  if(busy)return;busy=true;
+  var el=document.querySelector('.item[data-id="'+id+'"]');
+  if(el){el.style.transition="opacity .15s";el.style.opacity="0";}
+  // each of the three below said its good news whatever came back: a refusal read as done, and a service that
+  // did not answer said nothing at all. (A 404 here means it is already gone - which is what was asked for.)
+  try{var r=await fetch("api/notifications/"+id,{method:"DELETE"});
+      if(r.ok||r.status===404)binaTell("ההתראה הוסרה");else{binaTell("ההסרה נכשלה","bad");if(el)el.style.opacity="";}}
+  catch(e){binaTell("ההסרה נכשלה — השירות לא ענה","bad");if(el)el.style.opacity="";}   // (the row it faded stays in the list)
+  finally{busy=false;load();}
+}
+async function readAll(){
+  if(busy)return;busy=true;
+  try{var r=await fetch("api/notifications/read-all",{method:"POST"});var d=await r.json().catch(function(){return {};});
+      if(r.ok)binaTell(d.updated===1?"סומנה אחת כנקראה":"סומנו "+(d.updated||0)+" כנקראו");else binaTell("הסימון נכשל","bad");}   // (it said «סומנו 1 כנקראו»)
+  catch(e){binaTell("הסימון נכשל — השירות לא ענה","bad");}
+  finally{busy=false;load();}
+}
+/* WHAT DESTROYS ASKS FIRST. «נקה נקראו» deletes every notification that was read - of every level and source, whatever
+   the list is narrowed to - and did so at one press. The count it asks about is READ AT THE PRESS: the tiles' own is
+   a read behind (a moment after «סמן הכל כנקרא» they still counted what was read before it - the question would
+   name three, and ten be deleted). The button is off while the count is read - the press is taken - and that is
+   four seconds at most: a count that cannot be read is not said. Where nothing is read any more nothing is
+   asked: the button stays off, and the list - which is the one that was behind - is read again. */
+async function clearRead(){
+  if(busy)return;busy=true;
+  var b=document.getElementById("clearRead");b.disabled=true;
+  var n=(await Promise.race([fetchStats(),new Promise(function(r){setTimeout(r,4000);})]))?stats.total-stats.unread:NaN;
+  // (the focus the button lost by going off is given back to it - the question returns it there, as before; one a
+  //  person moved meanwhile is theirs)
+  var at=document.activeElement;b.disabled=n<=0;if(!b.disabled&&(!at||at===document.body||at===b))b.focus();
+  if(n<=0||!(await binaAsk({danger:true,ok:"מחיקה",body:"פעולה זו אינה הפיכה.",
+        title:n===1?"למחוק את ההתראה שנקראה?":"למחוק את "+(n>1?n+" ":"")+"ההתראות שנקראו?"}))){busy=false;if(n<=0)load();return;}
+  try{var r=await fetch("api/notifications/clear-read",{method:"POST"});var d=await r.json().catch(function(){return {};});
+      if(r.ok)binaTell(d.deleted===1?"נוקתה התראה אחת":"נוקו "+(d.deleted||0)+" התראות");else binaTell("הניקוי נכשל","bad");}   // (and «נוקו 1 התראות»)
+  catch(e){binaTell("הניקוי נכשל — השירות לא ענה","bad");}
+  finally{busy=false;load();}
+}
+
+/* ── live refresh ───────────────────────────────────────────────────────── */
+/* The chip says what IS: «חי» only while the last read was answered — it beat on above «שגיאה בטעינת ההתראות». */
+var unheard=false;
+function chip(){var l=document.getElementById("live");
+  // the shared chip: `data-stale` is the component's attribute, `paused` its own state
+  l.classList.toggle("paused", paused);
+  l.dataset.stale = paused||unheard ? "1" : "0";
+  document.getElementById("liveTxt").textContent=paused?"מושהה":unheard?"אין תשובה מהשירות":"חי";}
+function togglePause(){paused=!paused;chip();if(!paused)load();}
+
+// A button's icon is named in the markup and drawn from the menu's vocabulary.
+document.querySelectorAll("[data-ic]").forEach(function(e){e.innerHTML=ic(e.getAttribute("data-ic"));});
+renderFilters();   // the menu is the screen's own: there before anything is read
+load();
+setInterval(function(){if(!paused&&!document.hidden)load(true);},15000);
+document.addEventListener("visibilitychange",function(){if(!document.hidden&&!paused)load(true);});
+</script>
+</body>
+</html>

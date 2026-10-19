@@ -1,0 +1,99 @@
+# yaml-language-server: $schema=./schema.json
+title: The fixture seeder applies a 1100-line DDL through an n8n Postgres node, and cannot — 100% E2E loss
+opened: '2026-08-21'
+severity: high
+status: open
+summary: The fixture seeder applies a 1100-line DDL through an n8n Postgres node, and cannot — 100% E2E loss
+description: |
+  area: INDOX E2E / fixture seeding / n8n Postgres node
+
+  ## Context
+
+  Every suite in `bbox indox test all` dies identically, at the same node, in seconds:
+
+      ❌ sync_kernel   died at node 'Seed Test Fixtures': Syntax error at line 295 near "["
+      ❌ sync_sources  (same)   ❌ sync_full  (same)   ❌ doc_base  (same)
+      ❌ bs            (same)   ❌ gdoc       (same)   ❌ pipeline  (same)
+
+  'Seed Test Fixtures' is an executeWorkflow call into indoxV2TestFixtures01, whose second node
+  fetches the whole INDOX schema over HTTP and executes it:
+
+      Fetch Schema   httpRequest  GET http://indox-demo-docs:8088/fixtures/schema.sql  (text)
+      Ensure Schema  postgres 2.5 executeQuery  query: ={{ $('Fetch Schema').first().json.data }}
+
+  That is 1112 lines and ~63 KB of DDL, including two plpgsql function bodies, handed to a node
+  whose job is running a query.
+
+  ## The error message is not evidence
+
+  IMPORTANT for whoever picks this up, because it cost a lot of time here.
+
+  "Syntax error at line 295 near "["" is NOT postgres. It is n8n's own prettifier, in
+  Postgres/v2/helpers/utils.js:
+
+      if (error.message.includes('syntax error at or near') && queries.length) {
+          const snippet = error.message.match(/syntax error at or near "(.*)"/)[1];
+          const failedQureryIndex = queries.findIndex(q => q.query.includes(snippet));
+          const lines = queries[failedQureryIndex].query.split('\n');
+          const lineIndex = lines.findIndex(line => line.includes(snippet));
+          `Syntax error at line ${lineIndex + 1} near "${snippet}"`
+
+  It takes postgres's real `syntax error at or near "X"`, then reports the FIRST LINE THAT
+  CONTAINS X. For a snippet as common as `[`, that line has nothing to do with where the error
+  is. Chasing the reported line number will send you to whichever line happens to contain the
+  first bracket — and when you "fix" that line, the number moves to the next one and looks like
+  progress. It is not.
+
+  ## What is established
+
+  - The SQL file is VALID. psql applies it rc=0 both statement-by-statement (-f) and as one
+    string (-c). Verified twice.
+  - The schema is ALREADY correctly applied in this deployment by `bbox seed`, which pipes the
+    same file through psql (scripts/ui-coverage/seed.sh). settings, tag_rules and
+    incoming_documents all exist; both functions are present with the expected prosrc hashes.
+  - So postgres CAN take this file. What it cannot take is whatever the n8n node sends it.
+  - The node does not pass the query through untouched: executeQuery.operation.js resolves the
+    expression with `query.replace(resolvable, evaluateExpression(...))` — a JS String.replace
+    whose replacement string is the entire 63 KB of SQL — and runQueries() then applies
+    pg-promise formatting under `queryBatching` (default 'single') with `{partial: true}`.
+    Both layers assign meaning to characters that appear in ordinary DDL.
+
+  ## What did not fix it
+
+  Recorded so nobody repeats them believing they are the cause. Both changes are defensible on
+  their own merits and were proven safe, but NEITHER changed the outcome — the battery failed
+  identically afterwards, with only the prettifier's guessed line number moving:
+
+    1. Removing `[` from three SQL comments (commit 630d5926). Reported line moved 87 -> 295.
+       That looked like progress and was not: 295 is simply the next line containing a bracket.
+    2. Converting the two plpgsql bodies from single-quoted-with-'' to dollar-quoting
+       (commit c3768df4). Proven semantics-preserving — md5(prosrc) identical before and after
+       for both functions, behaviour spot-checked — but the failure did not move at all.
+
+  Keep both (bracket-free comments and dollar-quoted bodies are better SQL either way); do not
+  mistake them for the fix.
+
+  ## Fix
+
+  The seeder should not apply schema DDL through an n8n Postgres node at all. The platform
+  already has a correct, proven path for exactly this — `bbox seed` / scripts/ui-coverage/seed.sh
+  pipes the file into psql — and that is what a fixture lane should use.
+
+  If the workflow must stay self-preparing, the minimal correct shape is the one
+  apps/indox/hooks/onboard already uses: gate on a WITNESS rather than re-applying blindly.
+
+      SELECT to_regclass('public.settings') IS NOT NULL;
+
+  Skip 'Ensure Schema' when the witness is present, and when it is absent, fail with a message
+  saying the schema must be applied out of band — rather than attempting a 63 KB DDL through a
+  query node and reporting a line number that means nothing.
+
+  Note the CI lane's premise ("Everything INDOX needs is created by the workflows themselves —
+  INDOX Seed Fixtures: zero special setup commands here") is what forces the current design.
+  That premise is worth revisiting: schema application and fixture seeding are different jobs.
+
+  ## Severity note
+
+  This is 100% loss of the INDOX E2E battery — the branch's headline test surface — and it
+  presents as seven identical failures naming a node in a different workflow, three layers from
+  the cause, with a line number that is actively misleading.

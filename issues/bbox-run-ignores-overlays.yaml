@@ -1,0 +1,59 @@
+# yaml-language-server: $schema=./schema.json
+title: bbox run cannot use OVERLAYS - dcx and compose_args ignore the documented mechanism
+opened: '2026-08-21'
+severity: medium
+status: resolved
+summary: bbox run cannot use OVERLAYS - dcx and compose_args ignore the documented mechanism
+description: |
+  area: layer 0 / compose invocation
+
+  ## Context
+
+  scripts/dc documents and implements OVERLAYS:
+
+      #   OVERLAYS="platform/profiles/ci-images.yml" ./scripts/dc up -d
+      # OVERLAYS: space-separated extra -f files appended AFTER the compiled ones (compose
+      #           merges them)
+      for f in ${OVERLAYS:-}; do ...
+
+  scripts/lib.sh's dcx() - which `bbox run` and every other bbox verb go through - does not:
+
+      dcx() { ( cd "${REPO_ROOT}" && "${BBOX_COMPOSE}" $(compose_args) "$@" ) }
+
+  and compose_args() builds its -f list purely from `reconcile.py compose-files`. So the overlay
+  mechanism exists on one of the two compose entry points and is silently absent from the other.
+
+  ## Impact
+
+  Found on 2026-08-21 while working around ufw-forward-drop-blocks-container-egress.yaml. An
+  overlay adding `build: { network: host }` to all 15 building services worked under
+  `./scripts/dc build` and was silently ignored by `./bbox run`, which went on failing every
+  build with the same DNS error (55 occurrences). The images had to be built through scripts/dc
+  first and `bbox run` used afterwards, purely to get an overlay applied.
+
+  It also means platform/profiles/ci-images.yml - the prebuilt-image overlay the indox-e2e lane
+  depends on - can never be combined with a bbox verb, only with a raw scripts/dc call. Any lane
+  that reaches for bbox instead silently rebuilds from source.
+
+  ## Fix
+
+  Append ${OVERLAYS} in compose_args(), so both entry points compile the same -f list:
+
+      for f in ${OVERLAYS:-}; do [ -n "${f}" ] && a="${a} -f ${f}"; done
+
+  G7 and G32 already police "compose carries the compiled -f list" from the outside; this is the
+  same invariant from the inside - there should be exactly one place that decides what -f list a
+  compose invocation gets.
+
+  ## Where it stands (2026-10-07, hp-laptop, branch dgo-pair)
+
+  Done as written: `compose_args()` in scripts/lib.sh appends `${OVERLAYS}` after the compiled -f
+  list, with this defect named in its comment. Asked of compose on hp-laptop - `config` only, one
+  overlay that adds a label to the console:
+
+      dcx (every bbox verb), no overlay      label absent
+      dcx (every bbox verb), OVERLAYS set    label present
+      scripts/dc,            OVERLAYS set    label present
+tasks:
+- text: "compose_args() appends ${OVERLAYS} after the compiled -f list, so every bbox verb and scripts/dc compile one list (asked of compose: the overlay's label is there under both)"
+  done: true

@@ -1,0 +1,53 @@
+{
+  "id": "hello-bina",
+  "title": {
+    "he": "שלום בינה",
+    "en": "Hello Bina"
+  },
+  "layer": 3,
+  "kind": "service",
+  "version": "0.1.0",
+  "summary": {
+    "he": "אפליקציית דוגמה של צד שלישי — עמוד סטטי קטן",
+    "en": "A third-party sample app — one tiny static page"
+  },
+  "capabilities": [],
+  "use": [],
+  "connections": [],
+  "compose": "docker-compose.yml",
+  "routing": [
+    {
+      "host": "hello-bina",
+      "port": 80,
+      "auth": "sso",
+      "emit_labels": true,
+      "module": {
+        "group": "עסק",
+        "icon": "box",
+        "embed": true,
+        "alias": "hello-bina",
+        "id": "hello-bina",
+        "name": "שלום בינה",
+        "desc": "אפליקציית דוגמה שהותקנה מקטלוג חיצוני",
+        "order": 80,
+        "url": "http://hello-bina:80",
+        "url_env": "HELLO_BINA_URL"
+      },
+      "sso": {
+        "slug": "hello-bina",
+        "display_name": "Hello Bina",
+        "default_host": "hello-bina.localhost",
+        "base_url_env": "HELLO_BINA_BASE_URL",
+        "local_twin": true
+      }
+    }
+  ],
+  "data": {
+    "volumes": [],
+    "on_uninstall": "keep"
+  },
+  "resources": {
+    "cpus": "0.1",
+    "memory": "64M"
+  }
+}

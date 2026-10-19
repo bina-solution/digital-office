@@ -1,0 +1,526 @@
+{
+  "$comment": [
+    "INDOX's DISPLAY CATALOG — the one place a human writes how this app's data reads.",
+    "",
+    "WHAT THIS IS. Every Hebrew word the UI puts on a column header, a status pill, a type bar or",
+    "a filter option comes from here. It is merged into the repo schema by",
+    "scripts/ops/gen-indox-schema.py, so `GET /repos/<r>` serves structure AND presentation",
+    "together and no screen keeps a private label map. Add a label here and it is live on the next",
+    "page load, with no frontend change.",
+    "",
+    "WHY IT EXISTS. Four screens each spelled these enums differently and the grid rendered raw SQL",
+    "identifiers as headers, so a column added to the pipeline reached the operator as an English",
+    "shout (IRRELEVANT, API_TOOLS_FAILED, SOURCE_TYPE) and fixing it meant editing every screen.",
+    "",
+    "RULES.",
+    "  * Labels are DISPLAY ONLY. The raw enum is what is filtered, written and stored.",
+    "  * An unlabelled column still renders — as its raw name. A new column must be visible and",
+    "    usable the day it appears, never blank.",
+    "  * `deprecated: true` hides a column from the default view but KEEPS it declared. A column",
+    "    that exists and is undeclared is the failure this file ends; hiding by omission recreates it.",
+    "  * The COLUMN LIST is generated from the live table, not hand-maintained here. This file only",
+    "    says how the columns that exist should read.",
+    "",
+    "Run `python3 scripts/ops/gen-indox-schema.py --check` to fail when the table has a column the",
+    "schema does not declare."
+  ],
+  "enums": {
+    "STATUS": {
+      "COMPLETED": {
+        "label": "הושלם",
+        "kind": "ok"
+      },
+      "TO_EXTRACT": {
+        "label": "ממתין לעיבוד",
+        "kind": "muted"
+      },
+      "IN_PROGRESS": {
+        "label": "בעיבוד",
+        "kind": "muted"
+      },
+      "NEEDS_REVIEW": {
+        "label": "לבדיקה",
+        "kind": "warn"
+      },
+      "MISSING_COMPANY_ID": {
+        "label": "חסר מזהה חברה",
+        "kind": "warn"
+      },
+      "UNKNOWN_COMPANY": {
+        "label": "חברה לא מזוהה",
+        "kind": "warn"
+      },
+      "MISSING_TYPE": {
+        "label": "חסר סוג",
+        "kind": "warn"
+      },
+      "MISSING_LINK": {
+        "label": "חסר קישור",
+        "kind": "warn"
+      },
+      "MISSING_SHIPMENT": {
+        "label": "חסרה תעודת משלוח",
+        "kind": "warn"
+      },
+      "ACTION_REQUIRED": {
+        "label": "דורש פעולה",
+        "kind": "warn"
+      },
+      "ACTION_RESTART": {
+        "label": "הפעלה מחדש",
+        "kind": "warn"
+      },
+      "PAUSE": {
+        "label": "מושהה",
+        "kind": "warn"
+      },
+      "FROM_OFFICE": {
+        "label": "מהמשרד",
+        "kind": "warn"
+      },
+      "EXTRACTION_FAILED": {
+        "label": "חילוץ נכשל",
+        "kind": "bad"
+      },
+      "MAX_ITERATIONS": {
+        "label": "חריגת ניסיונות",
+        "kind": "bad"
+      },
+      "PRIORITY_SYNC_FAILED": { "label": "סנכרון לפריוריטי נכשל", "kind": "bad" },
+      "API_TOOLS_FAILED": {
+        "label": "כשל בעיבוד",
+        "kind": "bad"
+      },
+      "DOUBLE": {
+        "label": "כפילות",
+        "kind": "muted"
+      },
+      "OLD": {
+        "label": "ישן",
+        "kind": "muted"
+      },
+      "TRASH": {
+        "label": "אשפה",
+        "kind": "muted"
+      },
+      "MERGED": {
+        "label": "מוזג למסמך אחר",
+        "kind": "muted"
+      },
+      "GARBAGE": {
+        "label": "מסמך לא קריא",
+        "kind": "muted"
+      }
+    },
+    "TYPE": {
+      "INVOICE": {
+        "label": "חשבונית"
+      },
+      "SHIPMENT": {
+        "label": "תעודת משלוח"
+      },
+      "ORDER": {
+        "label": "הזמנה"
+      },
+      "RECEIPT": {
+        "label": "קבלה"
+      },
+      "BALANCE_SHEET": {
+        "label": "דוח גיול"
+      },
+      "UNKNOWN": {
+        "label": "לא מזוהה"
+      },
+      "IRRELEVANT": {
+        "label": "לא רלוונטי"
+      },
+      "GARBAGE": {
+        "label": "לא קריא"
+      }
+    },
+    "SOURCE_TYPE": {
+      "GOOGLE_DRIVE_FOLDER": {
+        "label": "תיקיית דרייב"
+      },
+      "GOOGLE_DRIVE_FILE": {
+        "label": "קובץ בדרייב"
+      },
+      "MAIL_ATTACHMENT": {
+        "label": "קובץ מצורף במייל"
+      },
+      "GMAIL": {
+        "label": "מייל"
+      },
+      "WHATSAPP": {
+        "label": "וואטסאפ"
+      },
+      "BALANCE_SHEET": {
+        "label": "מסלול דוח גיול"
+      },
+      "INVOICE": {
+        "label": "מסלול חשבוניות"
+      }
+    },
+    "BOOLEAN_TEXT": {
+      "true": {
+        "label": "כן",
+        "kind": "ok"
+      },
+      "false": {
+        "label": "לא",
+        "kind": "muted"
+      }
+    }
+  },
+  "tables": {
+    "incoming_documents": {
+      "label": "מסמכים נכנסים",
+      "columns": {
+        "ID": {
+          "label": "מזהה",
+          "visible": true
+        },
+        "NAME": {
+          "label": "שם המסמך",
+          "visible": true,
+          "searchable": true
+        },
+        "TYPE": {
+          "label": "סוג",
+          "visible": true,
+          "searchable": true,
+          "enum": "TYPE"
+        },
+        "STATUS": {
+          "label": "סטטוס",
+          "visible": true,
+          "searchable": true,
+          "enum": "STATUS"
+        },
+        "SOURCE_TYPE": {
+          "label": "מקור",
+          "visible": true,
+          "searchable": true,
+          "enum": "SOURCE_TYPE"
+        },
+        "COMPANY_NAME": {
+          "label": "שם חברה",
+          "visible": true,
+          "searchable": true
+        },
+        "COMPANY_ID": {
+          "label": "ח.פ. / ע.מ.",
+          "visible": true
+        },
+        "SHORT_DOC_ID": {
+          "label": "מס׳ מסמך מקוצר",
+          "visible": true,
+          "searchable": true,
+          "description": "חמש הספרות האחרונות — תווית תצוגה בלבד, לעולם לא מפתח התאמה"
+        },
+        "DOC_ID": {
+          "label": "מס׳ מסמך",
+          "visible": true
+        },
+        "DOC_DATE": {
+          "label": "תאריך המסמך",
+          "visible": true
+        },
+        "DOC_TOTAL_AMOUNT": {
+          "label": "סכום",
+          "visible": true,
+          "align": "end"
+        },
+        "REQUIRED_ACTION": {
+          "label": "פעולה נדרשת",
+          "visible": true,
+          "searchable": true
+        },
+        "TIMESTAMP": {
+          "label": "חותמת זמן",
+          "visible": true,
+          "type": "timestamp"
+        },
+        "created_at": {
+          "label": "נוצר בתאריך",
+          "visible": true
+        },
+        "updated_at": {
+          "label": "עודכן בתאריך"
+        },
+        "RECEIVED_DATE": {
+          "label": "תאריך קבלה"
+        },
+        "doc_date_norm": {
+          "label": "תאריך עסקי מנורמל"
+        },
+        "LINK": {
+          "label": "קישור למסמך",
+          "type": "text",
+          "ui_type": "link"
+        },
+        "THUMBNAIL": {
+          "label": "תמונה ממוזערת",
+          "ui_type": "image"
+        },
+        "SYNC_NAME": {
+          "label": "סנכרון מקור"
+        },
+        "SOURCE_ID": {
+          "label": "מזהה במקור"
+        },
+        "SOURCE_LINK": {
+          "label": "קישור למקור",
+          "type": "text",
+          "ui_type": "link"
+        },
+        "PURCHASE_ID": {
+          "label": "מס׳ הזמנה"
+        },
+        "SHIPMENT_DOC_ID": {
+          "label": "מס׳ תעודת משלוח"
+        },
+        "INVOICE_ID": {
+          "label": "מס׳ חשבונית (מדור קודם)"
+        },
+        "LINKED_INVOICE_ID": {
+          "label": "חשבונית מקושרת"
+        },
+        "MERGED_INTO": {
+          "label": "מוזג לתוך"
+        },
+        "ALSO_SEEN_AS": {
+          "label": "נצפה גם כ"
+        },
+        "ERROR": {
+          "label": "שגיאה",
+          "ui_type": "error"
+        },
+        "ACTION_LOG": {
+          "label": "יומן פעולות"
+        },
+        "RETRY_COUNT": {
+          "label": "מספר ניסיונות"
+        },
+        "NEXT_RETRY_AT": {
+          "label": "ניסיון הבא בתאריך"
+        },
+        "ITERATION_COUNT": {
+          "label": "מספר סבבים"
+        },
+        "EMPTY": {
+          "label": "עמודה נטושה (EMPTY)",
+          "deprecated": true,
+          "description": "עמודה ללא משמעות שנותרה בטבלה. מוצהרת כדי שלא תהיה נסתרת — לא להצגה ולא לכתיבה."
+        },
+        "????? ????? ??????": {
+          "label": "עמודה פגומה (שם מקודד שגוי)",
+          "deprecated": true,
+          "description": "שם העמודה נכתב בקידוד שגוי ואינו ניתן לקריאה. מוצהרת כדי שלא תהיה נסתרת."
+        },
+        "SIZE": {
+          "type": "int",
+          "label": "גודל"
+        },
+        "BS_EXTRACTED_LINES": {
+          "type": "text",
+          "label": "שורות שחולצו מהגיול"
+        },
+        "BS_EXTRACTION_VERIFIED": {
+          "type": "bool",
+          "label": "חילוץ הגיול אומת"
+        },
+        "BS_LINE_NOTE": {
+          "type": "text",
+          "label": "הערת שורת גיול"
+        },
+        "BS_LINK_DOCUMENTS_COMPLETED": {
+          "type": "bool"
+        },
+        "SEARCH_IN_DRIVE_COMPLETED": {
+          "type": "bool"
+        },
+        "DOC_DATE_COMPLETED": {
+          "type": "bool"
+        },
+        "DOC_TOTAL_AMOUNT_COMPLETED": {
+          "type": "bool"
+        },
+        "PURCHASE_ID_COMPLETED": {
+          "type": "bool"
+        },
+        "SHIPMENT_ID_COMPLETED": {
+          "type": "bool"
+        },
+        "COMPANY_NAME_COMPLETED": {
+          "type": "bool"
+        },
+        "API_TOOLS_ID_COMPLETED": {
+          "type": "bool"
+        },
+        "INVOICE_ID_COMPLETED": {
+          "type": "bool"
+        },
+        "EX_IS_BS": {
+          "type": "bool"
+        },
+        "EX_IS_BS_COMPLETED": {
+          "type": "bool"
+        },
+        "FIGURE_TYPE_COMPLETED": {
+          "type": "bool"
+        },
+        "DOUBLE_LINE_CONTEXT": {
+          "type": "text",
+          "label": "הקשר כפילות"
+        },
+        "FIGURE_COMPANY_COMPLETED": {
+          "type": "bool"
+        },
+        "BS_EXTRACTION_USE_CACHE": {
+          "type": "bool",
+          "label": "שימוש במטמון חילוץ גיול"
+        },
+        "priority_sync": {
+          "type": "bool",
+          "label": "סונכרן לפריוריטי"
+        },
+        "HASH": {
+          "label": "טביעת קובץ"
+        },
+        "TOTAL_AMOUNT": {
+          "label": "סכום כולל"
+        },
+        "FROM_OFFICE": {
+          "label": "מהמשרד"
+        },
+        "IS_OLD": {
+          "label": "ישן"
+        },
+        "API_TOOLS_ID": {
+          "label": "מזהה במערכת"
+        },
+        "PRIORITY_SYNC_COUNT": {
+          "label": "סנכרוני פריוריטי"
+        },
+        "INV_ID_FOR_SHIP": {
+          "label": "חשבונית לתעודת המשלוח"
+        },
+        "IS_BS": {
+          "label": "האם דוח גיול"
+        },
+        "CONNECTION": {
+          "label": "חיבור"
+        },
+        "FROM_OFFICE_CHECK": {
+          "label": "בדיקת מקור מהמשרד"
+        },
+        "FROM_WAREHOUSE": {
+          "label": "מהמחסן"
+        },
+        "FROM_WAREHOUSE_CHECK": {
+          "label": "בדיקת מקור מהמחסן"
+        },
+        "LINKED_BS": {
+          "label": "דוח גיול מקושר"
+        },
+        "SELECTION_CERTAINTY": {
+          "label": "ודאות ההתאמה"
+        },
+        "SELECTION_SOURCE": {
+          "label": "מקור ההתאמה"
+        },
+        "SELECTION_SCORE_DEBUG": {
+          "label": "ניקוד התאמה (דיבאג)"
+        },
+        "SELECTION_VALUES_HASH": {
+          "label": "טביעת ערכי ההתאמה"
+        },
+        "SELECTION_DEBUG_BASE": {
+          "label": "דיבאג התאמה (בסיס)"
+        },
+        "BS_LINE_DATE": {
+          "label": "תאריך שורת גיול"
+        },
+        "BS_LINE_AMOUNT": {
+          "label": "סכום שורת גיול"
+        },
+        "FIGURE_TYPE": {
+          "label": "סוג הנתון"
+        },
+        "FIGURE_COMPANY": {
+          "label": "חברת הנתון"
+        },
+        "DOC_TIPE": {
+          "label": "סוג מסמך"
+        },
+        "DOC_AMOUNT": {
+          "label": "סכום"
+        },
+        "DOC_DATE_": {
+          "label": "תאריך"
+        },
+        "SHIPMENT_IDS": {
+          "label": "מספרי משלוח"
+        },
+        "ORDER_IDS": {
+          "label": "מספרי הזמנה"
+        },
+        "ORDER_ID": {
+          "label": "מספר הזמנה"
+        },
+        "SHIPMENT_ID": {
+          "label": "מספר משלוח"
+        },
+        "EXTRACTION": {
+          "label": "חילוץ"
+        },
+        "SEARCH_IN_DRIVE": {
+          "label": "חיפוש בדרייב"
+        },
+        "BS_LINK_DOCUMENTS": {
+          "label": "קישור מסמכים לגיול"
+        },
+        "PRIORITY_SYNC": {
+          "label": "סנכרון לפריוריטי"
+        },
+        "SELECTION": {
+          "label": "התאמה"
+        },
+        "BASE_EXTRACTION": {
+          "label": "חילוץ בסיס"
+        },
+        "PER_TYPE_EXTRACTION": {
+          "label": "חילוץ לפי סוג"
+        },
+        "AI_EXTRACTION": {
+          "label": "חילוץ AI"
+        },
+        "EXTRACT_SHIPMENT": {
+          "label": "חילוץ תעודת משלוח"
+        }
+      }
+    },
+    "settings": {
+      "label": "הגדרות",
+      "columns": {
+        "key": {
+          "label": "מפתח",
+          "visible": true,
+          "searchable": true
+        },
+        "value": {
+          "label": "ערך",
+          "visible": true,
+          "searchable": true
+        },
+        "created_at": {
+          "label": "נוצר בתאריך"
+        },
+        "updated_at": {
+          "label": "עודכן בתאריך"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>רשת בדיקה — פיד</title>
+<!-- The office's test network (fixture.py). It is shaped like a real platform ON PURPOSE: a composer
+     that opens a dialog, an editor that is a contenteditable textbox named only by aria-placeholder,
+     a hidden file input behind a button, a Post button that exists only after the dialog opens.
+     Those are exactly the traps the Facebook flow hit (ai/context/setup-facebook-login.md), so a
+     browser script that passes here has already met them once. -->
+<style>
+  :root{--bg:#f0f2f5;--card:#fff;--ink:#1c1e21;--muted:#65676b;--line:#dddfe2;--accent:#6b4d9c}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 "Segoe UI",system-ui,-apple-system,"Noto Sans Hebrew",Arial,sans-serif}
+  header{background:var(--card);border-bottom:1px solid var(--line);padding:10px 18px;display:flex;gap:14px;align-items:center}
+  header b{color:var(--accent);font-size:19px}
+  header nav{margin-inline-start:auto;display:flex;gap:12px}
+  header a{color:var(--muted);text-decoration:none;font-weight:600}
+  main{max-width:640px;margin:18px auto;padding:0 12px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:12px}
+  .who{display:flex;gap:12px;align-items:center}
+  .av{width:48px;height:48px;border-radius:50%;background:#e4e6eb;object-fit:cover;flex:none}
+  .banner{width:100%;aspect-ratio:3/1;border-radius:10px;background:#e4e6eb;object-fit:cover;display:block;margin-bottom:10px}
+  .name{font-weight:800}
+  .muted{color:var(--muted);font-size:13px}
+  button{font:inherit;border:0;border-radius:8px;padding:8px 14px;cursor:pointer;background:#e4e6eb;font-weight:600}
+  button.primary{background:var(--accent);color:#fff}
+  .opener{width:100%;text-align:start;border-radius:20px;padding:10px 14px;color:var(--muted)}
+  dialog{border:0;border-radius:12px;width:min(520px,94vw);padding:16px}
+  dialog::backdrop{background:rgba(0,0,0,.35)}
+  [contenteditable]{min-height:90px;border:1px solid var(--line);border-radius:8px;padding:10px;outline:none}
+  [contenteditable]:empty::before{content:attr(aria-placeholder);color:var(--muted)}
+  .row{display:flex;gap:8px;justify-content:space-between;align-items:center;margin-top:10px}
+  .post p{white-space:pre-wrap;margin:8px 0}
+  .post img{max-width:100%;border-radius:8px}
+  .thumbs img{width:64px;height:64px;object-fit:cover;border-radius:6px}
+</style>
+</head>
+<body>
+<header><b>רשת בדיקה</b><span class="muted">(Test network)</span>
+  <nav><a href="./">פיד</a><a href="settings">הגדרות פרופיל</a></nav></header>
+<main>
+  <p class="muted">רשת הבדיקה של הלשכה הדיגיטלית: פרופיל אחד, פוסטים ותגובות — כדי לוודא שכל שרשרת הפרסום עובדת
+    מקצה לקצה, דרך ה-API ודרך הדפדפן של הלשכה, בלי לגעת בחשבון אמיתי.</p>
+  <section class="card" aria-label="פרופיל">
+    <img id="banner" class="banner" alt="תמונת נושא" hidden>
+    <div class="who"><img id="avatar" class="av" alt="תמונת פרופיל">
+      <div><div class="name" id="p-name"></div><div class="muted" id="p-handle" dir="ltr"></div>
+        <div id="p-bio"></div></div></div>
+  </section>
+
+  <section class="card" aria-label="יצירת פוסט">
+    <button class="opener" id="open" type="button">מה חדש? · What's on your mind?</button>
+  </section>
+
+  <section id="feed" aria-label="פיד"></section>
+</main>
+
+<dialog id="composer" aria-label="יצירת פוסט">
+  <div role="textbox" id="editor" contenteditable="true" aria-multiline="true"
+       aria-placeholder="מה חדש? · What's on your mind?"></div>
+  <div class="thumbs" id="thumbs"></div>
+  <input type="file" id="file" accept="image/*" multiple hidden>
+  <div class="row">
+    <button type="button" id="add-photo">הוספת תמונה · Add photo</button>
+    <span>
+      <button type="button" id="cancel">ביטול</button>
+      <button type="button" class="primary" id="post">פרסום · Post</button>
+    </span>
+  </div>
+</dialog>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const api = (p, o) => fetch("api/" + p, Object.assign({headers: {"content-type": "application/json"}}, o || {})).then(r => r.json());
+const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+let pending = [];
+
+async function load() {
+  const p = await api("profile");
+  $("p-name").textContent = p.name; $("p-handle").textContent = "@" + p.handle; $("p-bio").textContent = p.bio || "";
+  if (p.avatar_url) $("avatar").src = p.avatar_url.replace(/^.*\/fixture\//, "");
+  if (p.banner_url) { $("banner").src = p.banner_url.replace(/^.*\/fixture\//, ""); $("banner").hidden = false; }
+  const posts = (await api("posts")).posts || [];
+  $("feed").innerHTML = posts.map(x => `
+    <article class="card post" id="post-${esc(x.id)}" aria-label="פוסט ${esc(x.id)}">
+      <div class="who"><img class="av" alt="" src="${p.avatar_url ? esc(p.avatar_url.replace(/^.*\/fixture\//, "")) : ""}">
+        <div><div class="name">${esc(p.name)}</div><div class="muted">${new Date(x.created_at * 1000).toLocaleString("he-IL")}</div></div></div>
+      <p>${esc(x.text)}</p>
+      ${(x.media || []).map(m => `<img alt="תמונה בפוסט" src="${esc(m.url.replace(/^.*\/fixture\//, ""))}">`).join("")}
+      <div class="row"><span class="muted">${x.likes || 0} לייקים · ${(x.comments || []).length} תגובות</span>
+        <span><button type="button" data-del="${esc(x.id)}" aria-label="מחיקת פוסט ${esc(x.id)}">מחיקה · Delete</button>
+        <button type="button" data-yes="${esc(x.id)}" aria-label="כן, למחוק את פוסט ${esc(x.id)}" hidden>כן, למחוק</button></span></div>
+    </article>`).join("") || '<div class="card muted">אין עדיין פוסטים.</div>';
+  // an in-page confirmation, the way real platforms do it ("Move to trash" → "Move") — never a
+  // native confirm(), which a browser driver sees as a modal state instead of a page
+  document.querySelectorAll("[data-del]").forEach(b => b.onclick = () => {
+    document.querySelector(`[data-yes="${b.dataset.del}"]`).hidden = false;
+  });
+  document.querySelectorAll("[data-yes]").forEach(b => b.onclick = async () => {
+    await api("posts/" + b.dataset.yes, {method: "DELETE"}); load();
+  });
+}
+$("open").onclick = () => { pending = []; $("thumbs").innerHTML = ""; $("editor").textContent = ""; $("composer").showModal(); $("editor").focus(); };
+$("cancel").onclick = () => $("composer").close();
+$("add-photo").onclick = () => $("file").click();
+$("file").onchange = async () => {
+  for (const f of $("file").files) {
+    const b64 = await new Promise(res => { const r = new FileReader(); r.onload = () => res(String(r.result).split(",")[1]); r.readAsDataURL(f); });
+    pending.push({data_base64: b64, mime: f.type || "image/png"});
+    const img = document.createElement("img"); img.alt = "תמונה שנבחרה"; img.src = "data:" + (f.type || "image/png") + ";base64," + b64; $("thumbs").appendChild(img);
+  }
+};
+$("post").onclick = async () => {
+  const text = $("editor").innerText.trim();
+  if (!text && !pending.length) return;
+  await api("posts", {method: "POST", body: JSON.stringify({text, media: pending})});
+  $("composer").close(); load();
+};
+load();
+</script>
+</body>
+</html>

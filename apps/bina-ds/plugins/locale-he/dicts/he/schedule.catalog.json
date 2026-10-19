@@ -1,0 +1,20 @@
+{
+ "trigger.one": "תזכורת אחת",
+ "trigger.other": "{count} תזכורות",
+ "list.aria": "תזכורות פעילות",
+ "status.scheduled": "מתוזמן",
+ "status.overdue": "באיחור",
+ "frequency.once": "פעם אחת",
+ "frequency.every": "כל {value} {unit}",
+ "unit.day.one": "יום",
+ "unit.day.other": "ימים",
+ "unit.hour.one": "שעה",
+ "unit.hour.other": "שעות",
+ "unit.minute.one": "דקה",
+ "unit.minute.other": "דקות",
+ "unit.second.one": "שנייה",
+ "unit.second.other": "שניות",
+ "relative.now": "עכשיו",
+ "relative.future": "בעוד {value} {unit}",
+ "relative.overdue": "באיחור של {value} {unit}"
+}

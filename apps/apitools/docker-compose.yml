@@ -1,0 +1,238 @@
+# Config below was layered by production/compose.override.yml before the platform-OS
+# refactor; merged here so this app owns its complete definition.
+services:
+  apitools:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: apitools
+    restart: unless-stopped
+    environment:
+    - GOOGLE_VISION_API_KEY=${GOOGLE_VISION_API_KEY:-}
+    - OMP_THREAD_LIMIT=${OMP_THREAD_LIMIT:-1}
+    - SUPABASE_DB_HOST=${APITOOLS_DB_HOST:-supabase-db-${DEPLOYMENT_NAME}}
+    - DOC_DB_PORT=5432
+    - SUPABASE_DB_NAME=${SUPABASE_DB_NAME:-postgres}
+    - SUPABASE_DB_USER=${SUPABASE_DB_USER:-postgres}
+    - SUPABASE_DB_PASSWORD=${SUPABASE_DB_PASSWORD:-}
+    - ALLOCATION_BACKEND=${ALLOCATION_BACKEND:-stub}
+    - ITA_ALLOCATION_URL=${ITA_ALLOCATION_URL:-}
+    - ITA_ALLOCATION_TOKEN=${ITA_ALLOCATION_TOKEN:-}
+    - SIGN_CERT_P12=${SIGN_CERT_P12:-}
+    - SIGN_CERT_PASSWORD=${SIGN_CERT_PASSWORD:-}
+    - SIGN_CERT_CERTIFIED=${SIGN_CERT_CERTIFIED:-}
+    - FLASK_DEBUG=False
+    - LOG_LEVEL=INFO
+    - PORT=8080
+    - OCR_ENGINE=${OCR_ENGINE:-google}
+    - SENTRY_DSN=${APITOOLS_SENTRY_DSN:-}
+    - SENTRY_ENVIRONMENT=${SENTRY_ENVIRONMENT:-production}
+    - SENTRY_RELEASE=0.5.3
+    - GUNICORN_WORKERS=${APITOOLS_GUNICORN_WORKERS:-}
+    - GUNICORN_BACKLOG=${APITOOLS_GUNICORN_BACKLOG:-4096}
+    - GUNICORN_TIMEOUT=${APITOOLS_GUNICORN_TIMEOUT:-900}
+    - GUNICORN_GRACEFUL_TIMEOUT=${APITOOLS_GUNICORN_GRACEFUL_TIMEOUT:-120}
+    - APITOOLS_MAX_CONCURRENT_OCR=${APITOOLS_MAX_CONCURRENT_OCR:-}
+    - APITOOLS_MAX_CONCURRENT_JSON_QUERY=${APITOOLS_MAX_CONCURRENT_JSON_QUERY:-}
+    # ADDED 2026-08-06 — without this line the profile's pin was inert.
+    # src/api/pdf_to_jpeg.py:92 reads APITOOLS_MAX_CONCURRENT_PDF and falls back to
+    # autoscale.ocr_slots_default(), which is MEMORY-DERIVED. The profile set this knob precisely
+    # to stop PDF concurrency drifting whenever APITOOLS_MEM changes — but the value was never
+    # passed into the container, so `.env` showed an authoritative-looking pin while the running
+    # process still derived its slot count from the cgroup. Verified live: the container's
+    # environment carried OCR and JSON_QUERY and simply had no PDF entry.
+    # A knob that is declared but not plumbed is worse than an absent one: it makes verification
+    # lie. Any new APITOOLS_* knob added to perf-profiles.yml MUST get a line here — gate G31
+    # (scripts/refactor/profile-passthrough-lint.py) now fails the build if one does not.
+    - APITOOLS_MAX_CONCURRENT_PDF=${APITOOLS_MAX_CONCURRENT_PDF:-}
+    # HISTORY: 180 (original) -> 45 (found wrong: the algorithm itself was pathological, not the
+    # timeout — every call died at 45s AND at 180s, 100% failure either way) -> 180 (reverted,
+    # correctly, pending a real fix) -> 60 (here, 2026-08-06, after the actual root cause was
+    # fixed — see ocr_query.py APITOOLS_FIND_OPTION_MAX_TEXTS / MAX_ANCHOR_ATTEMPTS).
+    #
+    # This value was NEVER the problem; a "find option" call with a 2,383-identifier list was
+    # doing 135k+ uncapped fuzzy comparisons per request and genuinely took 178-206s regardless
+    # of what this was set to. Verified: the SIGALRM deadline (ocr_api.py _request_deadline) is
+    # armed only AFTER the json-query bulkhead slot is already held — it measures the query's own
+    # execution, not queue-wait — confirmed directly by replaying known-bad file_ids with ZERO
+    # concurrency (no queue possible) and still measuring 178-206s pre-fix.
+    #
+    # Post-fix LOADED distribution (699 real documentJsonQuery calls, real production concurrency,
+    # 2026-08-06): p50=155ms, p90=1513ms, max=17206ms, 0 failures. 60s is ~3.5x the observed max
+    # under real load and ~400x p50 — enough margin that no legitimate call should ever hit it,
+    # while still failing fast (not 180s) if a case slips past the new caps (e.g. a document/list
+    # combination that reaches their upper bound more expensively than anything measured so far).
+    - APITOOLS_QUERY_SOFT_TIMEOUT=${APITOOLS_QUERY_SOFT_TIMEOUT:-60}
+    - APITOOLS_TESSERACT_TIMEOUT=${APITOOLS_TESSERACT_TIMEOUT:-120}
+    - APITOOLS_GOOGLE_VISION_TIMEOUT=${APITOOLS_GOOGLE_VISION_TIMEOUT:-120}
+    - APITOOLS_ALIGNMENT_MAX_CANDIDATES=${APITOOLS_ALIGNMENT_MAX_CANDIDATES:-250}
+    - APITOOLS_ALIGNMENT_MAX_ANCHOR_SCAN=${APITOOLS_ALIGNMENT_MAX_ANCHOR_SCAN:-1500}
+    - APITOOLS_SLOT_WAIT_TIMEOUT=${APITOOLS_SLOT_WAIT_TIMEOUT:-600}
+    - APITOOLS_MAX_MATCH_ATTEMPTS=${APITOOLS_MAX_MATCH_ATTEMPTS:-30}
+    # ADDED 2026-08-11 — same class of defect as APITOOLS_MAX_CONCURRENT_PDF above: these
+    # two knobs existed only as os.getenv defaults in ocr_api.py (_OCR_WEIGHT_MEDIUM_MP /
+    # _OCR_WEIGHT_LARGE_MP) with no way to reach the container, so the tier boundaries could
+    # not be corrected without a rebuild. They decide the ADMISSION WEIGHT of one document,
+    # not the pool size — see the long note in .env for why LARGE_MP must sit ABOVE
+    # pdf_to_jpg.MAX_MP_PER_PAGE (24) or every clamped document is classified whole-pool and
+    # triggers the drain/lockout that sheds everything else with 429.
+    - APITOOLS_OCR_WEIGHT_MEDIUM_MP=${APITOOLS_OCR_WEIGHT_MEDIUM_MP:-6}
+    - APITOOLS_OCR_WEIGHT_LARGE_MP=${APITOOLS_OCR_WEIGHT_LARGE_MP:-16}
+    - APITOOLS_MAX_MP_PER_PAGE=${APITOOLS_MAX_MP_PER_PAGE:-24}
+    # MIN_EFFECTIVE_DPI is a FLOOR that can override the MAX_MP_PER_PAGE CEILING — see the
+    # long note in .env. It must be plumbed alongside the ceiling or the pair cannot be kept
+    # consistent from config, which is exactly how the 63.5MP renders survived a "24.0MP
+    # ceiling" log line for days.
+    - APITOOLS_MIN_EFFECTIVE_DPI=${APITOOLS_MIN_EFFECTIVE_DPI:-100}
+    - APITOOLS_VISION_MAX_PX=${APITOOLS_VISION_MAX_PX:-68000000}
+    volumes:
+    - ./storage:/app/.storage
+    - ./logs:/app/logs
+    networks:
+    - traefik-network
+    healthcheck:
+      test:
+      - CMD
+      - curl
+      - -sf
+      - http://localhost:8082/
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-5s}
+      retries: 3
+      start_period: 60s
+    stop_signal: SIGQUIT
+    stop_grace_period: 30s
+    cpu_shares: 512
+    deploy:
+      resources:
+        limits:
+          cpus: ${APITOOLS_CPUS:-0}
+          memory: ${APITOOLS_MEM:-4G}
+        reservations:
+          cpus: '1.0'
+          memory: 512M
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    labels:
+    - traefik.enable=true
+    - traefik.http.routers.apitools-local.rule=Host(`apitools.localhost`)
+    - traefik.http.routers.apitools-local.entrypoints=web
+    - traefik.http.routers.apitools-local.service=apitools
+    - traefik.http.routers.apitools-http.rule=Host(`${APITOOLS_BASE_URL}`)
+    - traefik.http.routers.apitools-http.entrypoints=web
+    - traefik.http.routers.apitools-http.service=apitools
+    - traefik.http.routers.apitools-https.rule=Host(`${APITOOLS_BASE_URL}`)
+    - traefik.http.routers.apitools-https.entrypoints=websecure
+    - traefik.http.routers.apitools-https.tls=true
+    - traefik.http.routers.apitools-https.service=apitools
+    - traefik.http.routers.apitools-https.tls.certresolver=myresolver
+    - traefik.http.routers.apitools-https.middlewares=authentik@file,apitools-retry@docker
+    - traefik.http.routers.apitools-http.middlewares=authentik@file,apitools-retry@docker
+    # SSO on the -local twin too. app.json declares auth:sso for this host and apitools has no auth of
+    # its own, yet this router carried only the retry middleware — and traefik routes ANY request whose
+    # Host header says apitools.localhost, including one sent to the production IP: measured
+    # 2026-09-30 22:22, `curl -H 'Host: apitools.localhost' http://31.97.196.82/` → 200 (issue
+    # apitools-served-without-sso-to-a-spoofed-host-header). Nothing legitimate used the edge host
+    # without SSO: every internal caller uses http://apitools:8080.
+    - traefik.http.routers.apitools-local.middlewares=authentik@file,apitools-retry@docker
+    - traefik.http.middlewares.apitools-retry.retry.attempts=4
+    - traefik.http.middlewares.apitools-retry.retry.initialinterval=500ms
+    - traefik.http.services.apitools.loadbalancer.server.port=8080
+    - traefik.http.services.apitools.loadbalancer.healthcheck.path=/
+    - traefik.http.services.apitools.loadbalancer.healthcheck.port=8082
+    - traefik.http.services.apitools.loadbalancer.healthcheck.interval=30s
+    - traefik.http.services.apitools.loadbalancer.healthcheck.timeout=10s
+    - traefik.http.services.apitools.loadbalancer.responseforwarding.flushinterval=100ms
+
+  # ── HORIZONTAL SCALE-OUT: NOW DEPLOYED, ON THE PORTABLE BOX ────────────────────────────
+  # (2026-08-11, later the same night) The scale-out below was built — not as a second LOCAL
+  # container, which the measurements at the end of this note still correctly rule out, but as
+  # a second instance on the idle portable laptop (192.168.16.103, 4 cores / 15 GB, load 0.00).
+  # Everything lives in ./scale-out/ : `up.sh remote`, `up.sh lb`, `tunnel.sh`, `haproxy.cfg`.
+  # Roll back with `./scale-out/up.sh down` — that drops the LB's DNS record and 100% of
+  # traffic returns here, with no change to any caller.
+  #
+  # WHAT ACTUALLY CARRIES THE TRAFFIC. A network alias alone was NOT enough once the second
+  # instance moved off-host: docker DNS can only hand out addresses on its own networks, and
+  # the remote instance is reachable only through an ssh -L forward on the bridge gateway. So
+  # a tiny haproxy (haproxy:alpine, ~22 MiB resident) holds the `apitools` alias ALONGSIDE this
+  # container and forwards its share over the tunnel. Two A records, one of which is a proxy.
+  # The alias is still the whole trick: the pipeline hardcodes `http://apitools:8080` in 37
+  # places across 17 workflow files with NO env indirection, and not one of them changed.
+  # (Verify with a real HTTP request. `getent hosts apitools` reports UNRESOLVED from inside
+  # the n8n images even while apitools is being called hundreds of times a minute — it is not
+  # a DNS test here.)
+  #
+  # MEASURED, 25 minutes of real traffic after the split settled:
+  #   /documentOcr        local 111  remote  95   (remote 46%)
+  #   /documentJsonQuery  local 172  remote 141   (remote 45%)
+  #   /docExists          local 145  remote  93   (remote 39%)
+  # Zero non-2xx through the proxy over the whole observation, and zero 429/5xx on EITHER
+  # instance — against 35× 429 and 10× 500 in the 40 minutes before the split. Local apitools
+  # CPU fell from 54-70% to ~17%. ocr_cache inserts ran 386/hr against a pre-split best hour
+  # of 296/hr (hour-to-hour variance on this pipeline is wide, so treat that as directional).
+  #
+  # ~50% IS THE CEILING OF THIS MECHANISM, by construction. The name resolves to TWO A records
+  # and the half that goes straight to this container is load-blind — no weight in the proxy
+  # can reclaim it. Going past ~50% would mean taking the alias off this container so the proxy
+  # owns the name outright, which costs a restart of a live service and makes the proxy a single
+  # point of failure. Not done; the ceiling was not the binding constraint.
+  #
+  # THE ONE THING THAT DOES NOT SURVIVE THE HOST SPLIT — and how it is handled.
+  # The claim two paragraphs down, that instances are interchangeable because "./storage is a
+  # shared bind mount", is only true for the EXTRACTION path. /documentImage, /documentDraw and
+  # /documentOcrDraw serve a raster that /documentOcr wrote to LOCAL disk
+  # (.storage/ocr_pdf_images/<md5>.jpg), and on a cache hit that raster is never rebuilt — so
+  # across two hosts it exists on exactly one of them. /documentImage is the single most-called
+  # endpoint (386 of 1,236 calls in a 40-minute sample) and INDOX uses it for thumbnails, so
+  # letting it 404 would have pushed those callers back onto the expensive /pdfToJpeg re-render
+  # that lookup exists to avoid. haproxy therefore routes those three paths to their own backend
+  # with `retry-on 404` + `option redispatch`: a 404 from one host is transparently retried on
+  # the other. Proven, not assumed — the same file_id returns 404 straight from the remote and
+  # 200 with identical bytes 8/8 times through the LB.
+  #
+  # THE FAILURE MODE THAT WOULD HAVE BEEN SILENT. ocr_cache.py falls back to a LOCAL json file
+  # cache when Postgres is unreachable and logs only a warning. On a remote instance that is
+  # split-brain: it would write results the estate cannot see, and /docExists would answer
+  # "false" for documents it had in fact processed — no error, no 5xx, the extractor simply
+  # gets nothing. The mitigation is structural rather than watchful: the DB leg (-R) and the
+  # traffic leg (-L) are the SAME ssh connection, so a drop takes both down at once and
+  # haproxy stops sending traffic before the remote can write a local-only cache entry. Do not
+  # split tunnel.sh into two ssh processes.
+  #
+  # It is also the only way to get a SECOND SLOT POOL. The bulkhead's slots are file locks
+  # under APITOOLS_CONCURRENCY_LOCK_DIR (/tmp/apitools-locks), container-local, so two
+  # containers have two independent pools — and raising APITOOLS_MAX_CONCURRENT_OCR cannot
+  # buy that: an oversized raster is admitted at `max(1, max_slots)`, the weight IS the pool
+  # size, so it monopolises whatever pool it lands in however large that pool is. A second
+  # container is what stops one document costing the whole estate.
+  #
+  # Instances are interchangeable, which the design requires because DNS can send the
+  # /documentOcr that CREATES a result to one instance and the /documentJsonQuery that READS
+  # it to the other: the OCR cache is Postgres-backed (src/ocr_core/ocr_cache.py,
+  # OCR_CACHE_BACKEND defaults to `postgres`, table ocr_cache keyed by file_hash) and
+  # ./storage is a shared bind mount with content-hash filenames. ./logs is deliberately NOT
+  # shared — RotatingFileHandler renaming the file out from under another container's open
+  # handle is how you lose the evidence you need at 3am.
+  #
+  # WHY A SECOND INSTANCE IS STILL NOT RUNNING ON *THIS* HOST — unchanged and still correct.
+  # Measured at the moment of that decision:
+  #     9,950 MB physical · 8,148 used · 132 MB FREE · ~4.1 GB swapped · load 24
+  #     incoming-documents at 502.1/512 MiB = 98.07%, already OOMKilled once tonight
+  #     drive already OOMKilled once tonight
+  #     declared container limits already sum to ~31 GB against 9.95 GB physical
+  # A second 2 GiB instance here does not add throughput, it evicts a live service — most
+  # likely `incoming-documents`, which serves the `Render Thumbnail` call in this very upload
+  # path. Scale-out belongs on the portable box (4 cores, 15 GB, ~13.5 GB available, load
+  # 0.11, running one container), reached through this same alias mechanism with a proxy
+  # container holding the `apitools` alias locally.
+  #
+  # And the reason that is not merely a deferral: the two knobs below (OCR weight tiers, and
+  # the MIN_EFFECTIVE_DPI floor that was defeating the megapixel ceiling) make the box LESS
+  # loaded, not more. Fixing what each request costs outranks buying more places to pay it.
+networks:
+  traefik-network:
+    external: true

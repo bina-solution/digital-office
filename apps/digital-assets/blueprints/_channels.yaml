@@ -1,0 +1,56 @@
+# The channel catalogue every blueprint draws from — where a business can appear.
+#
+#   social    automatable through the `social` capability (social-list): the channel is bound to one
+#             of social-list's accounts — the office browser on every network, or the network's API —
+#             and profile fields and posts go out through it
+#   website   automatable through the `sites` capability: slots map to `data-da` keys in the pages
+#   listing   a directory/marketplace page the owner updates by hand today (Google Business Profile,
+#             Wolt, …) — the app tracks WHAT must change there and marks it done
+#   print     a physical or document surface (signage, invoices, business cards) — files to produce
+#
+# `core: true` = the eight channels the app always shows (the owner's list: YouTube, GitHub, website,
+# Facebook, Instagram, X, Discord, WhatsApp), whichever blueprint is applied.
+channels:
+  - {id: website,   kind: website, core: true, he: "אתר",        en: "Website"}
+  - {id: facebook,  kind: social,  core: true, he: "פייסבוק",    en: "Facebook",  platform: facebook}
+  - {id: instagram, kind: social,  core: true, he: "אינסטגרם",   en: "Instagram", platform: instagram}
+  - {id: x,         kind: social,  core: true, he: "X",          en: "X",         platform: x}
+  - {id: youtube,   kind: social,  core: true, he: "יוטיוב",     en: "YouTube",   platform: youtube}
+  - {id: github,    kind: social,  core: true, he: "גיטהאב",     en: "GitHub",    platform: github}
+  - {id: discord,   kind: social,  core: true, he: "דיסקורד",    en: "Discord",   platform: discord}
+  - {id: whatsapp,  kind: social,  core: true, he: "וואטסאפ",    en: "WhatsApp",  platform: whatsapp}
+  # not in social-list's catalogue yet (no office-browser script) — tracked by hand until they are
+  - {id: linkedin,  kind: listing, he: "לינקדאין",  en: "LinkedIn", url: "https://www.linkedin.com/"}
+  - {id: tiktok,    kind: listing, he: "טיקטוק",    en: "TikTok",   url: "https://www.tiktok.com/tiktokstudio/upload"}
+  - {id: telegram,  kind: listing, he: "טלגרם",     en: "Telegram", url: "https://web.telegram.org/a/"}
+  - {id: threads,   kind: listing, he: "Threads",   en: "Threads",  url: "https://www.threads.com/"}
+  - {id: blog,      kind: website, he: "בלוג",      en: "Blog"}
+  - {id: email,     kind: print,   he: "דיוור ודוא״ל", en: "Email"}
+  - {id: rss,       kind: website, he: "RSS",       en: "RSS"}
+  - {id: gbp,       kind: listing, he: "פרופיל Google", en: "Google Business Profile", url: "https://business.google.com/"}
+  - {id: google-search, kind: listing, he: "חיפוש Google", en: "Google Search"}
+  - {id: apple-maps, kind: listing, he: "Apple Maps", en: "Apple Maps", url: "https://businessconnect.apple.com/"}
+  - {id: bing,      kind: listing, he: "Bing Places", en: "Bing Places", url: "https://www.bingplaces.com/"}
+  - {id: waze,      kind: listing, he: "Waze",      en: "Waze"}
+  - {id: b144,      kind: listing, he: "B144",      en: "B144"}
+  - {id: dapei-zahav, kind: listing, he: "דפי זהב", en: "Dapei Zahav"}
+  - {id: easy,      kind: listing, he: "איזי",      en: "Easy"}
+  - {id: wolt,      kind: listing, he: "וולט",      en: "Wolt"}
+  - {id: tenbis,    kind: listing, he: "תן ביס",    en: "10bis"}
+  - {id: cibus,     kind: listing, he: "סיבוס",     en: "Cibus"}
+  - {id: mishloha,  kind: listing, he: "משלוחה",    en: "Mishloha"}
+  - {id: tabit,     kind: listing, he: "טאביט",     en: "Tabit"}
+  - {id: ontopo,    kind: listing, he: "אונטופו",   en: "Ontopo"}
+  - {id: tripadvisor, kind: listing, he: "טריפאדוויזר", en: "Tripadvisor"}
+  - {id: rest,      kind: listing, he: "רסט",       en: "Rest"}
+  - {id: hackernews, kind: listing, he: "Hacker News", en: "Hacker News", url: "https://news.ycombinator.com/submit"}
+  - {id: producthunt, kind: listing, he: "Product Hunt", en: "Product Hunt", url: "https://www.producthunt.com/"}
+  - {id: reddit,    kind: listing, he: "Reddit",    en: "Reddit"}
+  - {id: press,     kind: listing, he: "עיתונות",   en: "Press"}
+  - {id: luma,      kind: listing, he: "אירועים (Luma)", en: "Luma"}
+  - {id: youtube-live, kind: social, he: "שידור חי ביוטיוב", en: "YouTube Live", platform: youtube}
+  - {id: app-store, kind: website, he: "חנות האפליקציות", en: "App store"}
+  - {id: print,     kind: print,   he: "דפוס",      en: "Print"}
+  - {id: signage,   kind: print,   he: "שילוט",     en: "Signage"}
+  - {id: invoice,   kind: print,   he: "חשבוניות",  en: "Invoices"}
+  - {id: premises-file, kind: print, he: "תיק העסק", en: "Premises file"}

@@ -1,0 +1,91 @@
+# yaml-language-server: $schema=./schema.json
+title: "An inventory sweep took 54 seconds: the browser's profile was walked once for every service that mounts it"
+opened: 2026-10-07
+category: performance
+severity: medium
+status: resolved
+summary: "The data screen showed grey bars for most of a minute on hp-laptop. 39 of a sweep's 54 seconds went to one question — which writable host directories hold files git does not track — because the archiver walked a directory once per service that mounts it (the browser's profile: five services, 2,008 files, five walks), asking a Windows mount about every entry twice. Walked once, with one directory read per directory, the same answer takes 4 seconds and the sweep 17."
+description: |
+  ## What was seen
+
+  The live map of 2026-10-07 photographed «ניהול נתונים» at three sizes and every picture was of
+  its loading state. The page's own line said why: «הסריקה ארכה 48 שנ׳».
+
+  ## Measured (hp-laptop, load 0.9, one sweep at a time)
+
+  A fresh sweep, timed by the section the service reports it finished:
+
+       1.0s  apps
+       4.4s  volumes        (+3.4)
+       6.8s  databases      (+2.4)
+       8.2s  redis, secrets (+1.4)
+      54.2s  binds, attribution (+46.0)
+
+  The last step, in its parts, inside the service's container:
+
+      compose_config     5.7s   (45 services)
+      tracked_paths      0.1s   (3,528 paths)
+      stateful_binds    36.8s   (4 directories reported)
+
+  and the walk itself, replayed with a clock on every directory:
+
+      data/browser42                  walked 5×  ·  2008 files (2004 untracked)  ·  39.3s
+      platform-base/n8n/workflows     walked 3×  ·    17 files                   ·   0.0s
+      platform-base/authentik/blueprints  3×, traefik/config 1×, data/power 1×, .dgo/doors 1×
+
+  A bare `os.walk` of the same profile takes 0.7 s.
+
+  ## Why
+
+  `scripts/deployment-archive.py::stateful_binds` looped over every service's mounts and walked the
+  directory behind each writable bind — so a directory five services mount was walked five times —
+  with `Path.rglob("*")`, then `is_file()` and `stat()` on every entry: two questions to the file
+  system per file, each a round trip over a Windows mount (about 4 ms a file here).
+
+  The same loop had a second defect the clock does not show: a file listed and gone before its
+  `stat()` — which a live browser profile does all day — raised, and the whole inventory section
+  was reported as "could not read compose config".
+
+  ## The fix (dgo-pair)
+
+  One walk per directory (`walked`), `os.walk` (one directory read per directory), one `os.stat` per
+  untracked file, and a file that is gone is not counted. The function's answer is the same
+  dictionary, byte for byte: checked on hp-laptop against the committed function on the same
+  compose configuration —
+
+      as committed   37.7s   {data/browser42: 216256154, data/power: 85, authentik/blueprints: 19013, traefik/config: 11303}
+      working tree    4.2s   the same four numbers
+
+  The export uses the same function for the same dictionary, so a full archive's slowest step is
+  shorter by the same amount.
+
+  `platform-base/data-management/test_binds.py` builds a small repository and a compose
+  configuration by hand and holds both: the answer is per file (a tracked sentinel does not hide a
+  tree; an all-tracked directory is not state), a directory five services mount is walked once, and
+  a file that goes away mid-walk fails nothing. Against the committed archiver it fails.
+
+  ## After (the service restarted — it reads the archiver from the checkout when it starts)
+
+       0.8s  apps · 2.8s volumes · 5.7s databases · 6.6s redis, secrets · 17.5s binds, attribution
+
+  17 seconds, of which reading the compose configuration is 5.7.
+
+  ## Still true
+
+  * `compose_config()` is the largest single cost left (`scripts/dc config` for 45 services). It is
+    read on every sweep; caching it needs an owner for "which files make the configuration", and is
+    not done here.
+  * The live map now waits for a screen that is still drawing its placeholders (25 s cap) and marks
+    the panel `BUSY` when the cap runs out, so a slow screen is named instead of filed as a picture.
+tasks:
+  - text: "Walk each bind directory once, with one directory read per directory; same answer"
+    done: true
+  - text: "A file that goes away mid-walk fails nothing"
+    done: true
+  - text: "A test that holds the answer and the single walk (G72 runs it)"
+    done: true
+references:
+  - scripts/deployment-archive.py
+  - platform-base/data-management/inventory.py
+  - platform-base/data-management/test_binds.py
+  - scripts/ui-coverage/live-ui-map.py

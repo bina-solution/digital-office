@@ -1,0 +1,129 @@
+# yaml-language-server: $schema=./schema.json
+title: sync-v3 lists a watched folder exactly one level deep — anything nested inside it is permanently and silently invisible
+opened: "2026-08-06"
+category: bug
+severity: medium
+status: open
+summary: >-
+  Drive discovery uses `'<folder>' in parents`, which returns direct children only. A subfolder
+  inside a watched to_sync/synced/failed folder is never descended into, never counted, and never
+  reported — no error, no warning, no partial-result flag. Costs nothing on this deployment today;
+  costs documents silently the first time a client nests.
+description: |
+  ## Symptom
+
+  A folder nested inside a folder a pipe watches is invisible to INDOX forever. Not
+  "processed late", not "errored" — **absent**. Nothing in `sync_ledger`, nothing in
+  `incoming_documents`, nothing in the sync board's counts, and no signal anywhere that
+  a listing was incomplete.
+
+  ## Mechanism
+
+  Drive discovery scopes every listing with the Drive v3 parent predicate:
+
+      q = "'<folder_id>' in parents and trashed=false and mimeType!='application/vnd.google-apps.folder'"
+
+  `in parents` matches **direct children only** — it is not transitive. The `mimeType!=folder`
+  clause then removes subfolders from the result set, so the engine cannot even observe that a
+  subfolder was there to descend into. The two clauses together make the omission unobservable
+  from inside the pipe: a folder containing 1 file and 10,000 nested files lists as 1.
+
+  This is the same *shape* as `issues/drive-op-list-single-page.yaml` (a bounded read presented
+  as a complete one) but a different mechanism and a different code path — that one truncates at
+  a page boundary, this one truncates at a tree boundary. Fixing either does not fix the other.
+
+  ## Why it costs nothing on hacohen TODAY (measured, not assumed)
+
+  Exactly one folder in either production pipe's tree has a subfolder:
+
+      1m25RdFEkfv_5KjSqFGM8gpjupXWZuUW2   סרוקות- נכשל (בוריס)          2,001 files
+        └── 122uDKW3HMwv3OwuShJ1foAn2LcAq9OoV   סרוקות שבוריס לא הצליח לתת שם
+
+  The subfolder holds **16 files, every one created between 2024-07 and 2025-02** — so
+  0 in-window (>= 2026-02-06) and 0 absent from `incoming_documents`. It is stale content in a
+  bin that is not itself registry-wired. The candidate-A drain figure of 535 unseen in-window
+  files is therefore unaffected.
+
+  Neither `drive-gdoc-scanned` nor `drive-gdoc-chat-export` has a subfolder under any of its six
+  to_sync/synced/failed folders. Verified 2026-08-06 by listing each with
+  `mimeType='application/vnd.google-apps.folder'`.
+
+  ## Why it is still worth fixing
+
+  Nothing prevents it. The watched folders are ordinary Drive folders in the client's own tree,
+  edited by the client's staff, and "make a subfolder to tidy up" is the single most natural
+  thing a person does to a folder that has accumulated 17,066 files. The day someone does that
+  inside `סרוקות- לפני שמות`, those documents stop being processed and **no one finds out** —
+  there is no error to notice, and the sync board's count simply gets smaller, which looks like
+  a quiet week rather than a fault.
+
+  That is this session's dominant defect pattern: not a wrong answer, an answer that is quietly
+  incomplete and indistinguishable from a correct one. It has already appeared as `op_list`
+  returning 100 for a 17,067-file folder, as `PGRST_DB_MAX_ROWS=1000` capping unpaged selects,
+  and as a `SOURCE_ID` join that matched on folder ids.
+
+  ## Reproduction
+
+  No stack required beyond a Drive connection with the service account:
+
+    1. Pick any registry pipe's `to_sync` folder id, e.g.
+       `1stuMSjbnyUTCtbq6KIzooHCGXpEey_7P` (`סרוקות- לפני שמות`, 380 files).
+    2. Count what the engine sees — direct non-folder children, fully paged:
+
+         q = "'1stuMSjbnyUTCtbq6KIzooHCGXpEey_7P' in parents and trashed=false
+              and mimeType!='application/vnd.google-apps.folder'"
+       -> 380
+
+    3. Count subfolders of the same folder:
+
+         q = "'1stuMSjbnyUTCtbq6KIzooHCGXpEey_7P' in parents and trashed=false
+              and mimeType='application/vnd.google-apps.folder'"
+       -> 0 today; create one, drop a PDF into it, and step 2 still returns 380.
+
+    4. Confirmed instance of the same query pair on the folder that DOES have a subfolder:
+       `1m25RdFEkfv_5KjSqFGM8gpjupXWZuUW2` lists 2,001 direct files and 1 subfolder;
+       the subfolder's 16 files appear in neither the file listing nor any count derived
+       from it.
+
+  ## Fix options
+
+  Three, in increasing cost. The choice is a product decision, not a mechanical one:
+
+  1. **Detect and report (cheapest, closes the silence).** Keep listing one level, but run the
+     `mimeType='...folder'` counterpart query and surface a non-zero subfolder count on the sync
+     board and in `/sync/inventory` as a warning: "3 subfolders under to_sync are not being
+     scanned". Turns a silent omission into a visible one. Does not process the files, but the
+     failure mode stops being invisible, which is the actual defect.
+  2. **Recurse with a depth bound.** Walk subfolders to a configured depth (default 1 = today's
+     behaviour, so it is opt-in per pipe). Needs care: the `synced` folder holds 17,066 files and
+     a naive recursive walk multiplies listing cost; and moving a file OUT of a nested folder on
+     success changes where it lands, which the processors assume is flat.
+  3. **Flatten on ingest.** Treat a subfolder's contents as belonging to the parent. Simplest for
+     the engine, but it silently reorganises the client's Drive, which is out of bounds.
+
+  Recommend (1) now — it is small, needs no engine change, and converts the dangerous property
+  (undetectable) into a merely inconvenient one (detected, unprocessed). Then (2) behind a
+  per-pipe `max_depth` in `sync_registry` if a real nested case appears.
+
+  ## Verification for whichever fix lands
+
+  Create a subfolder under a test pipe's `to_sync`, put two files in it, run one pass:
+    * fix (1) must report subfolder_count=1 / unscanned_files=2 without processing them;
+    * fix (2) must deliver both files and leave them findable in `sync_ledger`.
+  Neither may change the counts for a pipe with no subfolders — assert the two production pipes
+  still report 380 / 17,066 / 0 and 326 / 2,465 / 750.
+tasks:
+  - text: "Add the subfolder-count probe to Drive discovery and surface it on the sync board and /sync/inventory"
+    done: false
+  - text: "Decide whether recursion is wanted at all, or whether detect-and-report is the permanent answer"
+    done: false
+  - text: "If recursing: add a per-pipe max_depth to sync_registry (default 1) and to the fixture's config keys"
+    done: false
+  - text: "Re-check the six production folders for subfolders after any client-side reorganisation"
+    done: false
+references:
+  - issues/drive-op-list-single-page.yaml
+  - apps/indox/blueprint/n8n/SyncScanUnit0001.json
+  - apps/indox/blueprint/n8n/SyncSource000001.json
+  - apps/indox/blueprint/fixtures/sync_registry.json
+  - apps/indox/hooks/sync-registry-converge.py

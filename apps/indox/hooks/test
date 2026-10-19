@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+#: run the n8n E2E suites headlessly + scorecard (--junit <path>)
+# bbox indox test — ONE entrypoint for the INDOX v2 E2E suites (thin wrapper → python).
+set -euo pipefail
+HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$(cd "${HOOK_DIR}/../../.." && pwd)/scripts/lib.sh"   # npath()
+cd "$(cd "${HOOK_DIR}/.." && pwd)"
+export PYTHONIOENCODING=utf-8 PYTHONUNBUFFERED=1
+# npath: `pwd` returns an MSYS path (/c/Users/...) and python.exe reads that as C:\c\Users\...,
+# so every INDOX suite died with "can't open file" on Windows before running a single test.
+exec python3 "$(npath "${HOOK_DIR}")/test.py" "$@"

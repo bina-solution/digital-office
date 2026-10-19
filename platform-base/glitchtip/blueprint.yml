@@ -1,0 +1,25 @@
+# GlitchTip declarative blueprint — './scripts/glitchtip-push' configures the instance from this.
+# Secrets/owner come from .env (NOT stored here).
+schema: glitchtip-blueprint/v1
+org:
+  name: ${GLITCHTIP_ORG_NAME}      # = ${BUSINESS_NAME}; its slug is COMPANY_SLUG, which is what
+                                   # notifications polls. One identity, both ends.
+  team: developers                 # GLITCHTIP_TEAM_SLUG
+
+# NOTE: there is deliberately no `projects:` list here.
+#
+# glitchtip is a layer-2 BASE app: it must not know its consumers by name. This file used to
+# enumerate my-docs / drive / mailview / apitools / incoming-docs, which meant uninstalling
+# any of those apps left glitchtip provisioning an error project for a service that no longer
+# existed — and it still listed librechat and feature-validation long after both were parked in
+# attic/.
+#
+# Instead each app declares its own project in its manifest:
+#
+#     "observability": { "sentry_platform": "python" }         # project name = app id
+#     "observability": { "sentry_project": "incoming-docs",    # legacy DSN env var spelling
+#                        "sentry_platform": "python" }
+#
+# and `reconcile.py render` compiles them into .generated/glitchtip.projects.yml, which
+# glitchtip-push reads. The project set is therefore exactly the enabled apps that asked for one.
+# Enforced by gate G9 (scripts/refactor/layering-lint.py).

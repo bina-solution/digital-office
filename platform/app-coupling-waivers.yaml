@@ -1,0 +1,63 @@
+# app-coupling-waivers — chassis that names an installable app, and why.
+#
+# G33 (scripts/refactor/app-coupling-lint.py) asserts that layer 1 and 2 apps do not name layer 2/3
+# apps in their source. What is here is the coupling that ALREADY existed when the gate was
+# introduced: recorded so the gate is green today and NEW coupling fails, not because any of it is
+# endorsed. Each entry lists where it occurs; deleting one and keeping the gate green is always an
+# improvement.
+#
+# data-management is deliberately absent. It is the newest chassis app and has zero entries: it
+# discovers postgres and redis instances by container IMAGE and reads their credentials from each
+# container's own POSTGRES_USER / REDIS_PASSWORD, so a newly installed app with its own database is
+# inventoried and backed up without anyone editing the backup service.
+#
+# Format:  <chassis app id>: [ <app id it names>, ... ]
+
+
+any-concurrency:
+  # 2x — e.g. apps/any-concurrency/app.py:278
+  - "apitools"
+  # 13x — e.g. apps/any-concurrency/app.py:62
+  - "n8n"
+
+app-management:
+  # 1x — e.g. platform-base/app-management/test_conditions.py:248
+  - "bina-ui"
+  # 1x — e.g. platform-base/app-management/test_conditions.py:119
+  - "browser42"
+  # 2x — e.g. platform-base/app-management/test_conditions.py:85
+  - "drive"
+  # 3x — e.g. platform-base/app-management/test_conditions.py:222
+  - "glitchtip"
+  # 1x — e.g. platform-base/app-management/test_conditions.py:99
+  - "indox"
+  # 13x — e.g. platform-base/app-management/test_conditions.py:53
+  - "mail"
+  # 7x — e.g. platform-base/app-management/app.py:654
+  - "n8n"
+  # 1x — e.g. platform-base/app-management/test_conditions.py:131
+  - "ollama"
+  # 1x — e.g. platform-base/app-management/test_conditions.py:125
+  - "portainer"
+
+connections:
+  # 8x — e.g. platform-base/connections/test_broker.py:39
+  - "drive"
+  # 3x — e.g. platform-base/connections/test_broker.py:41
+  - "indox"
+  # 1x — e.g. platform-base/connections/app.py:1190
+  - "n8n"
+
+console:
+  # 1x — e.g. platform-base/console/app.py:167
+  - "any-concurrency"
+  # 1x — e.g. platform-base/console/app.py:340
+  - "drive"
+  # 1x — e.g. platform-base/console/test_app.py:29
+  - "machine"
+  # 3x — e.g. platform-base/console/static/app.js:282
+  - "mail"
+
+postgres:
+  # 2x — e.g. platform-base/postgres/hooks/keygen.py:77
+  - "supabase"

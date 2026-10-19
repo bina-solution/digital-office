@@ -1,0 +1,66 @@
+{
+  "id": "redisinsight",
+  "title": {
+    "he": "מפקח Redis",
+    "en": "RedisInsight"
+  },
+  "layer": 3,
+  "kind": "tool",
+  "version": "1.0.0",
+  "summary": {
+    "he": "כלי תצוגה וניפוי שגיאות למטמון ולתורים",
+    "en": "Browser and debugger for the cache and queues"
+  },
+  "capabilities": [],
+  "use": [
+    {
+      "capability": "kv",
+      "strength": "requires",
+      "after": true
+    }
+  ],
+  "connections": [
+    {
+      "id": "redis-password",
+      "required": true
+    }
+  ],
+  "compose": "docker-compose.yml",
+  "routing": [
+    {
+      "host": "redisinsight",
+      "port": 5540,
+      "auth": "sso",
+      "service": "redisinsight",
+      "emit_labels": false,
+      "module": {
+        "name": "RedisInsight",
+        "icon": "activity",
+        "desc": "מטמון ותורים (Redis)",
+        "group": "תשתית",
+        "order": 250,
+        "embed": false
+      },
+      "sso": {
+        "slug": "redisinsight",
+        "display_name": "RedisInsight",
+        "default_host": "redisinsight.localhost",
+        "base_url_env": "REDISINSIGHT_BASE_URL",
+        "local_twin": true
+      }
+    }
+  ],
+  "health": {
+    "structural": "auto"
+  },
+  "data": {
+    "volumes": [
+      "redisinsight_data"
+    ],
+    "on_uninstall": "prompt"
+  },
+  "resources": {
+    "cpus": "1",
+    "memory": "1G"
+  }
+}

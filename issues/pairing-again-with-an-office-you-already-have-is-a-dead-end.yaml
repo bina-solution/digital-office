@@ -1,0 +1,85 @@
+# yaml-language-server: $schema=./schema.json
+title: "Pairing again with an office this one already holds ends in a 409 the joining screen cannot act on"
+opened: 2026-10-11
+category: bug
+severity: high
+status: open
+summary: >
+  `Pairing._guard_replace` (pair_api.py:235-245) refuses a pairing whose peer id already has a record
+  here, and the ONLY screen that turns that refusal into a decision is the HOST's (`connect.js:788`,
+  the `btnReplace` button). The JOINER's two paths — `confirmCode` (`connect.js:517-526`) and
+  `acceptReply` (`connect.js:801-816`) — go straight to `notBuilt` (`connect.js:280`), which prints
+  «הפעולה נכשלה:» plus the server's sentence verbatim. Measured 2026-10-11 11:43 on vps1: the owner
+  joined hp-laptop from the office's own screen, exchanged both codes, pressed אישור, and the screen
+  said «כבר קיימת כאן רשומה בשם hp-laptop — צימוד קודם. כדי להחליף אותה שלחו replace: true.» — a
+  developer instruction addressed to a person, at the END of the flow, with nothing to press. The
+  commonest case is exactly this one (re-pairing after a link died), where "a previous pairing" is not
+  an error but the record one wants to replace.
+description: |
+  ## Measured (2026-10-11 11:43, office `vps1`, its own console)
+
+  ```
+  the owner's screen: «הצטרפות ללשכה» → הדבקת קוד התשובה → קוד אישור → אישור
+  the answer: 409  «כבר קיימת כאן רשומה בשם hp-laptop — צימוד קודם. כדי להחליף אותה שלחו replace: true.»
+  the screen: «הפעולה נכשלה:» + that sentence, no button, no way back
+  ```
+
+  Evidence: `ci-artifacts/owner-reports/2026-10-11-hp-pairing-409.webp`.
+
+  ## Why it is structural
+
+  * `_guard_replace` is called from `offer_confirm:476` (joiner) and `claim:516` (host).
+  * `connect.js:788` handles that 409 — but inside `claim`, the host's path, and only there.
+  * `confirmCode` (joiner) and `acceptReply` (joiner) have no such branch: the refusal reaches
+    `notBuilt`, which renders the server's own words.
+  * The refusal text is a protocol instruction (`replace: true`), not a sentence about the two
+    offices a person can act on.
+
+  ## What has to be true before this is closed
+
+  1. A pairing of the same two offices, made from the JOINING screen, either succeeds or is refused
+     with a way forward — the same «להחליף את הרשומה הקיימת ולהמשיך» press the host already has,
+     offered on both paths.
+  2. No screen shows a person `replace: true`; the sentence is about the record and what replacing it
+     does to the existing link (the old pair's token/slot/pair_id are named as what is replaced).
+  3. A repeated pairing of a `kind: paired` record is a replacement, covered by the drop-in test:
+     success and failure paths leave no orphan (pair_id, slot, vault token).
+  4. The pairing screen says what happens at each step and what the OTHER side must do (offer →
+     reply → one shared six digits, confirmed on each office) — the owner's report was as much about
+     not understanding the flow as about the refusal.
+  ## Two more ways this screen blocked him, same day, both measured
+
+  * **A live claim does not survive a restart, and the screen blamed the wrong thing.** 2026-10-11,
+    traefik access log: 09:04:27 UTC the owner's `POST /api/pair/claim` answered 200 (he had pasted the
+    other office's offer and held a reply plus the six digits); a container recreate 15 s later
+    dropped the claim (claims are in `Pairing.claims`, memory only); from 09:06:08 he pressed אישור
+    nine times over 23 s and every one answered `404` — «אין כאן בקשת צימוד חיה במזהה הזה (אולי היא
+    פגה, או שהאפליקציה אותחלה)». The screen read that 404 as *the route missing* and told him the
+    office «מריצה גרסה שקודמת לצימוד מהמסך» — a wrong sentence about a server that had answered
+    correctly. **FIXED**: `api()` marks an error whose body carried the server's own sentence
+    (`err.said`), and `notBuilt` guesses "an older version" only for a body-less 404/405/501.
+    **Operational rule this cost us**: do not recreate/rebuild this app while a pairing is in flight —
+    check the edge log for recent `/api/pair/` activity first.
+  * The flow's own explanation is on the offer panel («השלב הבא: בלשכה המארחת סורקים את הקוד הזה…») but
+    nothing on the paste/confirm panels says whose turn it is, so a person who arrives holding a code
+    cannot tell whether this office is the joiner or the host.
+
+  ## Landed 2026-10-11 (vps1)
+
+  * `static/connect.js` — the replace press moved into one place (`offerReplace`, over the pure
+    `replaceRefusal`) and is offered on BOTH roles; the join screens now answer the same refusal the
+    host always could. Proven by `tests/connect-selftest.mjs` (new cases: the refusal is recognised,
+    the protocol instruction is never what a person reads, and a 404/409 that is not it stays out),
+    `tests/pair_contract.py` PASS, and an end-to-end run on the live image with two throwaway offices:
+    round 1 pairs fully; round 2 → host replaces with `replace: true` (200), the joiner's confirm
+    without it answers 409 naming `replace`, and its second press writes the pairing — one record
+    under the peer's name, not two.
+  * Deployed here (`./scripts/dc up -d --build --force-recreate dgo-extend`, healthy; the screen
+    serves `connect.js?v=1791709698`). **Uncommitted**: this checkout is detached at `d24547e2` and
+    commit/push need the owner's explicit word; until then a converge of this office from another
+    office stashes the change.
+references:
+- apps/dgo-extend/pair_api.py
+- apps/dgo-extend/static/connect.js
+- apps/dgo-extend/tests/connect-selftest.mjs
+- ci-artifacts/owner-reports/2026-10-11-hp-pairing-409.webp

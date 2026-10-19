@@ -1,0 +1,678 @@
+{
+  "updatedAt": "2026-04-20T10:59:33.934Z",
+  "createdAt": "2026-02-13T09:16:05.542Z",
+  "id": "indoxV2QueryDocDate01",
+  "name": "Query DOCUMENT_DATE",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "ID"
+            },
+            {
+              "name": "API_TOOLS_ID"
+            },
+            {
+              "name": "LINK"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -896,
+        -128
+      ],
+      "id": "5fa4ed78-66fe-4bfa-9aae-914ae09a3238",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -672,
+        -128
+      ],
+      "id": "e6b61884-eb93-4d49-a4eb-4d9f81511864",
+      "name": "Start"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "indoxV2UploadApiTools01",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/indoxV2UploadApiTools01",
+          "cachedResultName": "Upload Doc To API TOOLS"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "HASH": "={{ $json.API_TOOLS_ID }}",
+            "LINK": "={{ $json.LINK || null }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "LINK",
+              "displayName": "LINK",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "HASH",
+              "displayName": "HASH",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "each",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        -240,
+        -32
+      ],
+      "id": "02e57fbf-6234-4c94-941e-13f654798dec",
+      "name": "Upload OR Get API_TOOLS_ID",
+      "retryOnFail": true,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "40af2929-a4ed-4fc0-9ec8-eb392307d940",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        208,
+        -32
+      ],
+      "id": "b700ac7f-a213-48ff-9631-d7aaf79d2a4b",
+      "name": "IS OK"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        432,
+        192
+      ],
+      "id": "a88dc76c-2866-468d-9afd-3167a3e1637e",
+      "name": "Failed API_TOOLS_ID"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e69518aa-a04e-4af6-99a7-f0488ebb8317",
+              "name": "result",
+              "value": "={{ $json.result?.result || null}}",
+              "type": "string"
+            },
+            {
+              "id": "35c8afed-91ae-4cac-bfd4-93fca0489c9a",
+              "name": "file_id",
+              "value": "={{ $json.file_id }}",
+              "type": "string"
+            },
+            {
+              "id": "9034d30c-a009-4017-8e4b-71bf186dc08c",
+              "name": "error",
+              "value": "={{ $json.result?.error?.message || null }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1584,
+        -48
+      ],
+      "id": "a64ca7c5-397a-41ab-9fde-4486404358bd",
+      "name": "Result"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "9a2c300b-ed4f-4d25-af27-90742262814b",
+              "leftValue": "={{ $json?.result?.result }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        656,
+        -384
+      ],
+      "id": "d8c555c8-4a90-41b5-b50b-b29e5a5a6310",
+      "name": "If has results"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://apitools.hacohen.bina-solutions.co.il/documentJsonQuery",
+        "sendBody": true,
+        "specifyBody": "=json",
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "jsonBody": "={\n  \"file_id\": \"{{ $('Upload OR Get API_TOOLS_ID').item.json.file_id }}\",\n  \"ocr_json_query\": {{ $('DOCUMENT_DATE Query1').first().json.purchase_order_id_query.toJsonString() }}\n}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "0dc07842-493e-418a-9812-4ed5bbcf2e9c",
+      "name": "Extract BELOW",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        864,
+        -224
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 2100,
+      "maxTries": 3,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://apitools.hacohen.bina-solutions.co.il/documentJsonQuery",
+        "sendBody": true,
+        "specifyBody": "=json",
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "jsonBody": "={\n  \"file_id\": \"{{ $('Upload OR Get API_TOOLS_ID').item.json.file_id }}\",\n  \"ocr_json_query\": {{ $('DOCUMENT_DATE Query').first().json.purchase_order_id_query.toJsonString() }}\n}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "f2b75079-edf3-4ae2-888a-d32b9e3e640c",
+      "name": "Extract AFTER",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        432,
+        -224
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        880,
+        176
+      ],
+      "id": "06fe20ec-7458-49e8-b361-bba18d1c2c6f",
+      "name": "Map Query Error"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"purchase_order_id_query\": {\n    \"action\": \"find after\",\n    \"action_value\": [\n      \"תאריך חשבונית\",\n      \"תאריך התעודה\",\n      \"תאריך אסמכתא\",\n      \"תאריך רישום\",\n      \"תאריך המסמך\",\n      \"תאריך מסמך\",\n      \"תאריך הפקת החשבון\",\n      \"תאריך הפקת המסמך\",\n      \"תאריך הפקת מסמך\",\n      \"תאריך הפקה\",\n      \"תאריך הזיכוי\",\n      \"תאריך זיכוי\",\n      \"תאריך חיוב\",\n      \"תאריך משלוח\",\n      \"ת.אסמכתא\",\n      \"ת.אסמכתה\",\n      \"ת.הנפקה\",\n      \"ת.רישום\",\n      \"ת.משלוח\",\n      \"ת.המסמך\",\n      \"ת.התעודה\",\n      \"תאריך\",\n      \"רישום\"\n    ],\n    \"value_validations\": [\n        {\n            \"validation_type\": \"has_number\"\n        },\n        {\n            \"validation_type\": \"length_greater_than\",\n            \"validation_value\": 7\n        },\n        { \"validation_type\": \"length_less_than\", \"validation_value\": 11 }\n    ],\n    \"is_rtl\": true\n  }\n}",
+        "options": {}
+      },
+      "id": "4a3ff6d6-7faa-4cdb-a0ae-a7a5e2e7e8c1",
+      "name": "DOCUMENT_DATE Query",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -240,
+        -224
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"purchase_order_id_query\": {\n    \"action\": \"find below\",\n    \"action_value\": [\n      \"תאריך חשבונית\",\n      \"תאריך התעודה\",\n      \"תאריך אסמכתא\",\n      \"תאריך רישום\",\n      \"תאריך הדפסה\",\n      \"תאריך המסמך\",\n      \"תאריך מסמך\",\n      \"תאריך הפקת החשבון\",\n      \"תאריך הפקת המסמך\",\n      \"תאריך הפקת מסמך\",\n      \"תאריך הפקה\",\n      \"תאריך הזיכוי\",\n      \"תאריך זיכוי\",\n      \"תאריך חיוב\",\n      \"תאריך משלוח\",\n      \"ת.אסמכתא\",\n      \"ת.אסמכתה\",\n      \"ת.הנפקה\",\n      \"ת.רישום\",\n      \"ת.משלוח\",\n      \"ת.המסמך\",\n      \"ת.התעודה\",\n      \"תאריך\",\n      \"רישום\"\n    ],\n    \"value_validations\": [\n        {\n            \"validation_type\": \"has_number\"\n        },\n        {\n            \"validation_type\": \"length_greater_than\",\n            \"validation_value\": 7\n        },\n        { \"validation_type\": \"length_less_than\", \"validation_value\": 11 }\n    ],\n    \"is_rtl\": true\n  }\n}\n\n",
+        "options": {}
+      },
+      "id": "3da5df45-4ca4-485e-81c3-196bf3b684eb",
+      "name": "DOCUMENT_DATE Query1",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -16,
+        -224
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "3456e851-7ada-4d49-baae-e5ab44d9aeb4",
+              "name": "ID",
+              "value": "={{ $(\"Start\").item.json.ID }}",
+              "type": "string"
+            },
+            {
+              "id": "70d0ca3a-b27e-40ca-9109-5bd53512ffaa",
+              "name": "result",
+              "value": "={{ $json.result || null }}",
+              "type": "string"
+            },
+            {
+              "id": "765d597c-0388-415d-9131-9e87b840f7d4",
+              "name": "ok",
+              "value": "={{ !!$json.result && $json.result.error === undefined }}",
+              "type": "boolean"
+            },
+            {
+              "id": "67eb213b-0fac-4bab-a75a-076e610fce9c",
+              "name": "error",
+              "value": "={{ $json.error || null }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2000,
+        -32
+      ],
+      "id": "8532f7c3-da0a-4500-9ee5-d37452d2f1a5",
+      "name": "Output"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1408,
+        -48
+      ],
+      "id": "35561264-5e14-4f5b-aa57-73c58c103f85",
+      "name": "Merge"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1104,
+        -384
+      ],
+      "id": "cd0610c4-c761-48d3-ac22-e695b81d6339",
+      "name": "Merge1"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1104,
+        -32
+      ],
+      "id": "122138b7-a2de-4b5e-a44e-db0f68dedfa5",
+      "name": "Merge2"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        656,
+        -32
+      ],
+      "id": "11aa8a05-25db-4729-aa24-35a5f31d9aec",
+      "name": "Merge3"
+    },
+    {
+      "parameters": {
+        "jsCode": "\n\n// Compile regex once at module level (critical for performance)\nconst DOT_SEPARATOR = /^(\\d{1,2})\\.(\\d{1,2})\\.(\\d{2}|\\d{4})$/;\nconst SLASH_SEPARATOR = /^(\\d{1,2})\\/(\\d{1,2})\\/(\\d{2}|\\d{4})$/;\n\nfunction unifyDateFormat(dateString) {\n  // Early validation - fastest path\n  if (!dateString || typeof dateString !== 'string') return null;\n  \n  // Trim once\n  const str = dateString.trim();\n  \n  // Direct regex matching (faster than string operations)\n  let match = DOT_SEPARATOR.exec(str);\n  \n  if (!match) {\n    match = SLASH_SEPARATOR.exec(str);\n    if (!match) return null; // Invalid format\n  }\n  \n  // Destructure captured groups\n  let [, day, month, year] = match;\n  \n  // Fast string operations (avoid padStart for performance)\n  day = day.length === 1 ? '0' + day : day;\n  month = month.length === 1 ? '0' + month : month;\n  \n  // Handle 2-digit years efficiently\n  if (year.length === 2) {\n    year = '20' + year;\n  }\n  \n  // Direct string concatenation (fastest)\n  return day + '/' + month + '/' + year;\n}\n\n// Loop over input items and add a new field called 'myNewField' to the JSON of each one\nfor (const item of $input.all()) {\n  item.json.result = unifyDateFormat(item.json.result)\n}\n\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1776,
+        -48
+      ],
+      "id": "0d55b44b-763c-4849-a294-d30be4c57a3b",
+      "name": "Parse Date Result"
+    }
+  ],
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Upload OR Get API_TOOLS_ID",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "DOCUMENT_DATE Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload OR Get API_TOOLS_ID": {
+      "main": [
+        [
+          {
+            "node": "IS OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IS OK": {
+      "main": [
+        [
+          {
+            "node": "Extract AFTER",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Failed API_TOOLS_ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Failed API_TOOLS_ID": {
+      "main": [
+        [
+          {
+            "node": "Merge3",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Result": {
+      "main": [
+        [
+          {
+            "node": "Parse Date Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If has results": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract BELOW",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract BELOW": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 1
+          }
+        ],
+        [
+          {
+            "node": "Merge2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract AFTER": {
+      "main": [
+        [
+          {
+            "node": "If has results",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map Query Error": {
+      "main": [
+        [
+          {
+            "node": "Merge2",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "DOCUMENT_DATE Query": {
+      "main": [
+        [
+          {
+            "node": "DOCUMENT_DATE Query1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Output": {
+      "main": [
+        []
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge1": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge2": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge3": {
+      "main": [
+        [
+          {
+            "node": "Map Query Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Date Result": {
+      "main": [
+        [
+          {
+            "node": "Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false,
+    "errorWorkflow": "errorHandler01"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {
+    "When Executed by Another Workflow": [
+      {
+        "json": {
+          "LINK": "https://drive.google.com/file/d/1_geLTieVeqzyjtzyDOWHSrWb6dHlU9q8/view"
+        }
+      }
+    ]
+  },
+  "versionId": "f325a6b9-216b-4ddb-a20e-2de2944f794f",
+  "activeVersionId": "3ef8ac40-f49f-4edb-adff-a9ebea0c2b78",
+  "versionCounter": 175,
+  "triggerCount": 0,
+  "tags": [
+    {
+      "updatedAt": "2025-11-27T17:35:29.026Z",
+      "createdAt": "2025-11-27T17:35:29.026Z",
+      "id": "wHGj6nJ2l5p2OnXD",
+      "name": "beta"
+    }
+  ],
+  "shared": [
+    {
+      "updatedAt": "2026-02-13T09:16:05.542Z",
+      "createdAt": "2026-02-13T09:16:05.542Z",
+      "role": "workflow:owner",
+      "workflowId": "indoxV2QueryDocDate01",
+      "projectId": "EChUnhWXmjrEc3fG",
+      "project": {
+        "updatedAt": "2024-09-26T18:07:08.765Z",
+        "createdAt": "2024-09-26T17:59:24.039Z",
+        "id": "EChUnhWXmjrEc3fG",
+        "name": "Shlomo Bolo <person8@example.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null
+      }
+    }
+  ]
+}

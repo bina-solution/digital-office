@@ -1,0 +1,355 @@
+# Config below was layered by production/compose.override.yml before the platform-OS
+# refactor; merged here so this app owns its complete definition.
+services:
+  chat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: chat-${DEPLOYMENT_NAME:-bina-deployment}
+    restart: always
+    # Capped 2026-08-06. This service had NO deploy.resources block, so docker reported the host
+    # total (9.717GiB) as its limit — i.e. unlimited. On a 10GB WSL2 VM that is how the VM reaches
+    # its ceiling, starves Windows, and takes the whole daemon (and every in-flight n8n execution)
+    # with it. Measured high-water via cgroup memory.peak: 216MiB. 512M is ~2.4x that.
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+    environment:
+    - AUTH_USERNAME=${CHAT_AUTH_USER:-admin}
+    - AUTH_PASSWORD=${CHAT_AUTH_PASS:-1234}
+    # ── the settings/company webhook credential ────────────────────────────────────────────────
+    # ONE secret, two names. n8n's 'Settings Auth'(m44S) credential is provisioned from
+    # SETTINGS_AUTH_USER/PASS (apps/n8n/blueprint.yml); this service's code reads
+    # N8N_SETTINGS_USER/PASS. Nothing bridged them, and the service shipped a hardcoded literal
+    # default for its half — so it authenticated with a password no deployment ever set and n8n
+    # answered "Authorization data is wrong!" on every startup. The bot then ran with an EMPTY admin
+    # list, which does not look like an auth failure: it looks like nobody being an admin, so every
+    # document and every admin menu item is silently refused.
+    - N8N_SETTINGS_USER=${SETTINGS_AUTH_USER:-settings}
+    - N8N_SETTINGS_PASS=${SETTINGS_AUTH_PASS:-}
+    # Which n8n these webhooks live on. Service DNS, so it is THIS deployment's n8n — see the note
+    # in src/config.js about the previous default having been one customer's public hostname.
+    - N8N_WEBHOOK_BASE=${N8N_WEBHOOK_BASE:-http://n8n:5678/webhook}
+    # indox, addressed through its OWN API. apps/chat declares `use: indox-api` and apps/indox
+    # provides it at http://incoming-documents:8080; the prefix is indox's own blueprint default.
+    # This is how chat gets companies now — instead of an n8n webhook that cached them in an n8n KV
+    # and, on a miss, ran a sub-workflow against indox's tables. Chat must never read indox's
+    # `settings` table: that is indox's document-processing configuration, not a shared store.
+    - INDOX_API_BASE=${INDOX_API_BASE:-http://incoming-documents:8080}
+    - INDOX_API_PREFIX=${INDOX_API_PREFIX:-/incomingDocuments}
+    # The INDOX tenant the LEGACY settings/company webhooks serve (tenant-scoped since the
+    # 2026-08-28 cutover — a tenantless call is an n8n error execution, not a soft miss).
+    # Empty = legacy source disabled; chat-owned botAdmins + ADMINS keep working.
+    - INDOX_INSTANCE=${INDOX_INSTANCE:-}
+    - TRUST_EDGE_AUTH=${TRUST_EDGE_AUTH:-false}
+    # glitchtip-push provisions one project per APP ID and derives the env name from it
+    # (init-projects.sh: <PROJECT_NAME>_SENTRY_DSN). The id became `chat`, so the project is `chat`
+    # and the DSN arrives as CHAT_SENTRY_DSN. Reading the old WHATSAPP_HACOHANIM_SENTRY_DSN — now
+    # orphaned and empty — silently disabled error reporting for this service: Sentry initialises
+    # with an empty DSN, reports nothing, and logs nothing about why.
+    - SENTRY_DSN=${CHAT_SENTRY_DSN:-}
+    - AGENT_RUNNER_URL=${AGENT_RUNNER_URL:-http://agent-runner:7700}
+    - AGENT_RUNNER_TOKEN=${AGENT_RUNNER_TOKEN:-}
+    - AGENT_RUNNER_TIMEOUT_MS=${AGENT_RUNNER_TIMEOUT_MS:-1800000}
+    - DEV_GROUP_JID=120363409728311191@g.us
+    - DISPATCHER_URL=http://dispatcher:8800
+    - DISPATCHER_TOKEN=${DISPATCHER_TOKEN:-}
+    # ── local chat backend: the platform's own Postgres ──────────────────────────────────────
+    # Direct postgres to supabase-db, NOT through PostgREST/kong: the conversation list is one query
+    # with three LATERALs, which PostgREST cannot express — it would become an N+1 of HTTP calls, one
+    # per conversation. And kong/PostgREST belong to the OPTIONAL gallery app apps/supabase while the
+    # database is layer 1, so depending on them would make local chat stop working the moment someone
+    # uninstalls a gallery app. Same reasoning, and the same connection style, as apps/supabase's own
+    # storage service.
+    #
+    # Absent these, the backend degrades to an empty conversation list rather than crashing — which is
+    # correct behaviour, and also exactly why the omission would otherwise be easy to miss.
+    - SUPABASE_DB_PASSWORD=${SUPABASE_DB_PASSWORD:-}
+    - SUPABASE_DB_NAME=${SUPABASE_DB_NAME:-postgres}
+    - CHAT_DB_SCHEMA=${CHAT_DB_SCHEMA:-public}
+    # The credential plane. Every profile on the private chat engine is an ordinary vault instance
+    # holding a minted API key, so this service both CREATES instances here at bootstrap and hands
+    # clients somewhere to fetch a key from. Default is the service DNS name on the shared network.
+    - CONNECTIONS_URL=${CONNECTIONS_URL:-http://connections:8990}
+    # Identities are NOT configured here any more. `CHAT_SELF_USER` used to name one process-wide
+    # identity, which made "who am I" a property of the container rather than of the request — and
+    # left the identity switcher with nothing to authenticate against. Profiles are declared in
+    # apps/chat/app.json under `engine.profiles` and reconciled at start by
+    # chatapi/engine/bootstrap.js, each with its own credential. See ai/context/app-engine-pattern.md.
+    #
+    # Set to 1 to refuse the browser-session path and require a profile key on every engine op —
+    # correct for an automation-only deployment, and it locks the UI out by design.
+    - CHAT_ENGINE_REQUIRE_KEY=${CHAT_ENGINE_REQUIRE_KEY:-}
+    # Where the service's own small state lives: the ACTIVE connection pointer and the bot→connection
+    # attachments. Both defaulted to `/data`, which this container does not mount — so both were
+    # written to the container's writable layer and lost on every recreate. The symptom was silent and
+    # looked like a UI bug: the operator's chosen connection and chosen bot reverted to the defaults
+    # after each deploy, with nothing in the logs.
+    #
+    # A SUBDIRECTORY of the existing bind, not a new volume and not a change to WHATSAPP_DATA_DIR —
+    # that variable points at the live WhatsApp pairing session, and repointing it logs the phone out.
+    - CHAT_STATE_DIR=${CHAT_STATE_DIR:-/app/data/chat-state}
+    volumes:
+    - ${WHATSAPP_DATA_DIR:-./data}:/app/data
+    - wa_media:/wa_media
+    networks:
+    - traefik-network
+    healthcheck:
+      # `curl -f http://localhost:3000` was the probe, and this image is node:22-slim, which has no
+      # curl. Every check died with "exec: curl: executable file not found", so the container sat
+      # permanently unhealthy while the admin panel was serving perfectly well — the probe was
+      # reporting on itself, not on the app. node is the one binary this image is guaranteed to
+      # have, so the probe uses it.
+      #
+      # 127.0.0.1, not `localhost`: node 18+ resolves localhost to ::1 first, and the server binds
+      # IPv4 only, so the honest-looking spelling would fail with ECONNREFUSED.
+      test:
+      - CMD
+      - node
+      - -e
+      - "require('http').get('http://127.0.0.1:3000',r=>process.exit(r.statusCode<400?0:1)).on('error',()=>process.exit(1))"
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 60s
+    labels:
+    - traefik.enable=true
+    - traefik.http.routers.chat-local.rule=Host(`chat.localhost`)
+    - traefik.http.routers.chat-local.entrypoints=web
+    - traefik.http.routers.chat-local.service=chat
+    - traefik.http.routers.chat-local.middlewares=authentik@file
+    - traefik.http.routers.chat-http.rule=Host(`${CHAT_APP_BASE_URL:-chat.${DEPLOYMENT_DOMAIN:-localhost}}`)
+    - traefik.http.routers.chat-http.entrypoints=web
+    - traefik.http.routers.chat-http.service=chat
+    - traefik.http.routers.chat-http.middlewares=authentik@file
+    - traefik.http.routers.chat-https.rule=Host(`${CHAT_APP_BASE_URL:-chat.${DEPLOYMENT_DOMAIN:-localhost}}`)
+    - traefik.http.routers.chat-https.entrypoints=websecure
+    - traefik.http.routers.chat-https.tls=true
+    - traefik.http.routers.chat-https.service=chat
+    - traefik.http.routers.chat-https.tls.certresolver=myresolver
+    - traefik.http.routers.chat-https.middlewares=authentik@file
+    - traefik.http.services.chat.loadbalancer.server.port=${CHAT_APP_PORT:-3000}
+    depends_on:
+      n8n:
+        condition: service_healthy
+
+  # -- chat-relay: the PRIVATE chat engine ------------------------------------------------------
+  #
+  # The seat `mailserver` occupies for mail: an engine we RUN, addressed only over the docker
+  # network, never routed and never reachable from a browser. `chat_local` stays the protocol id;
+  # only the object chatapi/adapters/index.js `build()` returns changes. Full argument, op mapping
+  # and stage plan: ai/context/chat-buzz-engine-plan.md.
+  #
+  # PINNED BY SHA, not `:main`. buzz is v0.5.x with ~1,900 open PRs and its 127-kind registry IS its
+  # API - kinds land weekly. `sha-1c8321c` is byte-identical to the `main` tag on 2026-09-02
+  # (digest sha256:49cfc220...). Bumping it is deliberate and re-runs the stage-0 probe set.
+  #
+  # RELAY_URL IS LOAD-BEARING, and not as a hint. The relay resolves the community from the request
+  # Host header through `bind_community`, which FAILS CLOSED - there is no default tenant - and it
+  # seeds its own community row at boot from the authority of RELAY_URL
+  # (`bind_deployment_community`). So the value here must be exactly the address chatapi dials:
+  # `chat-relay:3000` is both the network alias and the Host header node sends, and the two must
+  # agree or every request is rejected as an unmapped host.
+  chat-relay:
+    image: ghcr.io/block/buzz:sha-1c8321c
+    container_name: chat-relay-${DEPLOYMENT_NAME:-bina-deployment}
+    restart: unless-stopped
+    environment:
+      - BUZZ_BIND_ADDR=0.0.0.0:3000
+      - BUZZ_HEALTH_PORT=8080
+      - RELAY_URL=ws://chat-relay:3000
+      # The relay's OWN identity - it signs the membership roster and every relay-authored
+      # system event. Auto-minted by the connections plane (apps/chat/app.json
+      # contributes.connection_providers: chat-relay-key, automint hex/32) and STABLE: a new
+      # key makes every event the relay previously signed unverifiable.
+      - BUZZ_RELAY_PRIVATE_KEY=${CHAT_RELAY_KEY}
+      # Its OWN database on the platform's postgres, not a schema in `public`. buzz owns 43
+      # migrations, a partitioned `events` table and its own extensions; sharing `public` would put
+      # them next to chat_*, indox and apitools with no way to export or drop either half.
+      # Precedent: platform-base/postgres/volumes/db/_supabase.sql. Declared in app.json data.sql.
+      - DATABASE_URL=postgres://postgres:${SUPABASE_DB_PASSWORD}@supabase-db:5432/buzz
+      # Redis is MANDATORY (`redis_url: String`, not Option) - presence, typing and cross-node
+      # fan-out. The layer-1 `kv` service, same password as everything else.
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+      - BUZZ_AUTO_MIGRATE=true
+      # Media (Blossom). NOT in the readiness gate - readiness.rs checks postgres + redis +
+      # deletion catalog only - so the relay is healthy with or without this; it gates attachments
+      # and nothing else. Path addressing because docker DNS resolves `chat-relay-minio`, not
+      # `<bucket>.chat-relay-minio`.
+      - BUZZ_S3_ENDPOINT=http://chat-relay-minio:9000
+      - BUZZ_S3_ADDRESSING_STYLE=path
+      - BUZZ_S3_ACCESS_KEY=${CHAT_RELAY_S3_KEY:-chat_relay}
+      - BUZZ_S3_SECRET_KEY=${CHAT_RELAY_S3_SECRET:-${SUPABASE_DB_PASSWORD}}
+      - BUZZ_S3_BUCKET=chat-media
+      # Off: this deployment has no git forge on the relay, and the probe costs a startup round trip
+      # against object storage for a feature nothing here uses.
+      - BUZZ_GIT_CONFORMANCE_PROBE=false
+      # Every socket is still NIP-42 authenticated; the relay is not routed and not published, so a
+      # membership roster would only add a second place to keep profiles in sync. Hardening later =
+      # flip this and call `buzz-admin add-member` from engine/bootstrap.js (the image ships it).
+      - BUZZ_REQUIRE_RELAY_MEMBERSHIP=false
+      - RUST_LOG=${CHAT_RELAY_LOG:-buzz_relay=info,buzz_db=warn,buzz_auth=warn,buzz_pubsub=warn}
+    volumes:
+      - chat_relay_git:/data/git
+    networks:
+      - traefik-network
+    depends_on:
+      chat-relay-init:
+        condition: service_completed_successfully
+    # The runtime image has bash but no curl and no wget, so the probe talks to /dev/tcp directly.
+    # Upstream's own compose does the same, for the same reason.
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "bash -ec 'exec 3<>/dev/tcp/127.0.0.1/8080; printf \"GET /_readiness HTTP/1.1\\r\\nHost: 127.0.0.1\\r\\nConnection: close\\r\\n\\r\\n\" >&3; grep -q \"200 OK\" <&3'"
+      interval: 10s
+      timeout: ${HEALTHCHECK_TIMEOUT:-5s}
+      retries: 12
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: ${CHAT_RELAY_MEM_LIMIT:-512M}
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+
+  # Creates the `buzz` database, once, before the relay starts. The relay's own BUZZ_AUTO_MIGRATE
+  # builds every TABLE but cannot create the DATABASE it connects to.
+  #
+  # NO container_name, deliberately - the lesson mailserver-init records: a one-shot service exits
+  # and stays as a stopped container, so a fixed name belongs to that corpse and the next create
+  # fails the whole `up` with a name conflict.
+  #
+  # Uses the supabase/postgres image the stack already has on disk, so this adds no pull. Idempotent
+  # by construction: it asks pg_database first, so a re-run on a live deployment is a no-op and can
+  # never touch data.
+  chat-relay-init:
+    image: supabase/postgres:15.8.1.085
+    restart: "no"
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -eu
+        export PGPASSWORD="${SUPABASE_DB_PASSWORD}"
+        for i in $$(seq 1 60); do
+          psql -h supabase-db -U postgres -d postgres -c 'select 1' >/dev/null 2>&1 && break
+          echo "chat-relay-init: waiting for supabase-db ($$i)"; sleep 2
+        done
+        if psql -h supabase-db -U postgres -d postgres -tAc "select 1 from pg_database where datname='buzz'" | grep -q 1; then
+          echo "chat-relay-init: database buzz already exists - leaving it alone"
+        else
+          psql -h supabase-db -U postgres -d postgres -c 'CREATE DATABASE buzz'
+          echo "chat-relay-init: created database buzz"
+        fi
+    networks:
+      - traefik-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+
+  # Object storage for chat attachments (Blossom blobs).
+  #
+  # Why a second store when the platform already runs supabase-storage: that service is configured
+  # STORAGE_BACKEND=file with GLOBAL_S3_BUCKET=stub - it is not an S3 SERVER, it is an S3 client
+  # writing to a disk. buzz speaks S3 as a client and needs a server on the other end. Revisit if
+  # supabase-storage's S3-protocol endpoint is ever enabled here; the only change would be the three
+  # BUZZ_S3_* vars on chat-relay.
+  chat-relay-minio:
+    # quay.io, not Docker Hub: MinIO withdrew the `minio/minio` repository from Docker Hub (a
+    # pull answers "repository does not exist", measured 2026-09-17 on a fresh machine), so a
+    # first bring-up died here while every host with the image already cached kept working.
+    # Same release, same digest family, published by MinIO on quay.io — the only registry they
+    # still maintain. Keep the tag identical so the pin lint (G15) and the VPS's cache agree.
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    container_name: chat-relay-minio-${DEPLOYMENT_NAME:-bina-deployment}
+    restart: unless-stopped
+    command: ["server", "/data"]
+    environment:
+      - MINIO_ROOT_USER=${CHAT_RELAY_S3_KEY:-chat_relay}
+      - MINIO_ROOT_PASSWORD=${CHAT_RELAY_S3_SECRET:-${SUPABASE_DB_PASSWORD}}
+      - MINIO_UPDATE=off
+    volumes:
+      - chat_relay_media:/data
+    networks:
+      - traefik-network
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: ${HEALTHCHECK_TIMEOUT:-5s}
+      retries: 12
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: ${CHAT_RELAY_S3_MEM_LIMIT:-256M}
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+
+  # The bucket. Same no-container_name rule as chat-relay-init, same create-only idempotence.
+  chat-relay-minio-init:
+    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z   # quay.io — see the minio service above
+    restart: "no"
+    depends_on:
+      chat-relay-minio:
+        condition: service_healthy
+    entrypoint:
+      - /bin/sh
+      - -euc
+      - |
+        mc alias set local http://chat-relay-minio:9000 "${CHAT_RELAY_S3_KEY:-chat_relay}" "${CHAT_RELAY_S3_SECRET:-${SUPABASE_DB_PASSWORD}}"
+        mc mb --ignore-existing local/chat-media
+        mc anonymous set none local/chat-media
+        echo "chat-relay-minio-init: bucket chat-media ready"
+    networks:
+      - traefik-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+networks:
+  traefik-network:
+    external: true
+volumes:
+  # NOT `external: true`. It was, and it was the only external volume in the whole repo — every
+  # other volume is compose-managed. `external` means "something else creates this", and nothing
+  # did: a fresh install died with `external volume "wa_media" not found` after loading 26 images.
+  # Only this app writes it, nothing pre-seeds it, nothing shares it, so compose should own it
+  # exactly like mail_state or n8n_storage.
+  wa_media: null
+  # buzz relay state. `git` is the relay's on-disk repo root (unused here - no forge on this
+  # deployment - but the relay creates it at boot); `media` is the Blossom blob store behind
+  # minio, which is why it is a volume and not a bind: it holds every chat attachment.
+  chat_relay_git: null
+  chat_relay_media: null

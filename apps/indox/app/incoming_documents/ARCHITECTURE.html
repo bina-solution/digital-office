@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Incoming Documents — System Architecture (Old vs New)</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #161a22;
+    --border: #2a2f3a;
+    --text: #e6e6e6;
+    --muted: #9aa3b2;
+    --accent: #5aa1ff;
+  }
+  html, body { background: var(--bg); color: var(--text); font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif; margin: 0; }
+  header { padding: 24px 32px; border-bottom: 1px solid var(--border); background: linear-gradient(180deg, #1a1f2c, var(--bg)); }
+  header h1 { margin: 0 0 4px; font-size: 22px; }
+  header p { margin: 0; color: var(--muted); font-size: 14px; }
+  main { padding: 24px 32px 96px; max-width: 1400px; margin: 0 auto; }
+  section { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 20px 24px; margin-bottom: 28px; }
+  section h2 { margin: 0 0 8px; font-size: 18px; color: var(--accent); }
+  section .sub { color: var(--muted); font-size: 13px; margin-bottom: 16px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; margin: 8px 0 16px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; border: 1px solid #0006; }
+  .swatch.old { background: #fde2e2; }
+  .swatch.new { background: #dff5e1; }
+  .swatch.keep { background: #eef2ff; }
+  .swatch.store { background: #fff3e0; }
+  .mermaid { background: #fff; border-radius: 8px; padding: 16px; overflow: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+  th { color: var(--accent); font-weight: 600; }
+  td.old { color: #ef9a9a; }
+  td.new { color: #a5d6a7; }
+  code { background: #0006; padding: 1px 6px; border-radius: 4px; font-size: 12px; }
+  .toc { display: flex; flex-wrap: wrap; gap: 12px; font-size: 13px; }
+  .toc a { color: var(--accent); text-decoration: none; padding: 4px 10px; border: 1px solid var(--border); border-radius: 999px; }
+  .toc a:hover { background: #1f2533; }
+  footer { color: var(--muted); font-size: 12px; padding: 24px 32px; border-top: 1px solid var(--border); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Incoming Documents — System Architecture</h1>
+  <p>Old (n8n-only) vs New (Python + Redpanda + multi-backend, with native n8n Kafka trigger). Locking is intentionally omitted from these diagrams.</p>
+</header>
+<main>
+
+<section>
+  <div class="toc">
+    <a href="#old">1. Old system</a>
+    <a href="#new">2. New system</a>
+    <a href="#map">3. Side-by-side mapping</a>
+    <a href="#seq">4. Migration boundary (sequence)</a>
+    <a href="#gantt">5. Cut-over timeline</a>
+  </div>
+</section>
+
+<section id="old">
+  <h2>1. OLD system (today)</h2>
+  <div class="sub">Single Google Sheet, polling trigger, two monolithic n8n workflows on the data side.</div>
+  <div class="legend">
+    <span><i class="swatch old"></i> replaced by new system</span>
+    <span><i class="swatch keep"></i> stays unchanged</span>
+    <span><i class="swatch store"></i> external store / service</span>
+  </div>
+<pre class="mermaid">
+flowchart LR
+    subgraph Trigger["Triggers"]
+        GST["Google Sheets Trigger<br/>poll מסמכים נכנסים"]
+        SCH["Schedule Trigger<br/>periodic sweep"]
+        WH06["Webhook (0.1.6 only)"]
+    end
+
+    subgraph Orch["n8n Orchestrator"]
+        ID016["Incoming Documents 0.1.6<br/>xWM5NQjGxl0qAhHg<br/>213 nodes · ~32 batch-upsert sites"]
+    end
+
+    subgraph Helpers["Helper subworkflows (n8n)"]
+        SETT["Settings"]
+        FT["Figure Document Type"]
+        FC["Figure Document COMPANY_ID"]
+        Q["Query SHIPMENT_ID / PURCHASE_ID /<br/>DOCUMENT_DATE / TOTAL_AMOUNT /<br/>INVOICE_ID / IS_BALANCE_SHEET"]
+        SF["Search File / Warehouse Scans"]
+        BSE["Balance Sheet Extractor v2"]
+        INV["Invoice Extractor (Gemini)"]
+        UDT["Upload Doc To API TOOLS"]
+    end
+
+    subgraph DataIO["Data-side workflows (BEING REPLACED)"]
+        BU["Batch Upsert<br/>indoxDocBatchUpsert01<br/>diff + GSheet batchUpdate/append"]
+        GET["Get Incoming Document<br/>indoxDocGet01<br/>single / by_ids / filter / all"]
+    end
+
+    subgraph External["External services"]
+        GSHEET[("Google Sheet<br/>AutomationValues<br/>52 cols × 39,582 rows")]
+        APITOOLS[("apitools OCR")]
+        GEMINI[("Gemini / Vision")]
+    end
+
+    GST --> ID016
+    SCH --> ID016
+    WH06 --> ID016
+
+    ID016 --> SETT
+    ID016 --> FT
+    ID016 --> FC
+    ID016 --> SF
+    ID016 --> BSE
+    ID016 --> INV
+    ID016 -- "~32 call sites" --> BU
+    ID016 -- "Get Line By ID" --> GET
+
+    FT --> Q
+    FT --> UDT
+    FC --> UDT
+    Q --> UDT
+    UDT --> APITOOLS
+    BSE --> APITOOLS
+    INV --> GEMINI
+
+    BU --> GSHEET
+    GET --> GSHEET
+
+    classDef replace fill:#fde2e2,stroke:#c0392b,stroke-width:2px,color:#000
+    classDef stay fill:#eef2ff,stroke:#3949ab,color:#000
+    classDef ext fill:#fff3e0,stroke:#e65100,color:#000
+    class BU,GET,GST replace
+    class SETT,FT,FC,Q,SF,BSE,INV,UDT,SCH,WH06,ID016 stay
+    class GSHEET,APITOOLS,GEMINI ext
+</pre>
+</section>
+
+<section id="new">
+  <h2>2. NEW system (target)</h2>
+  <div class="sub">
+    <code>0.1.6</code> keeps periodic sweeping (Schedule → Get wrapper → API → repo) <strong>and</strong> gains a native <strong>Kafka trigger</strong> for live changes.
+    The Python API is the <em>only</em> writer to repos and the <em>sole publisher</em> of change events to Redpanda — so live updates from <strong>both</strong> the GSheet repo and the Supabase repo flow through the same per-repo topic.
+  </div>
+  <div class="legend">
+    <span><i class="swatch new"></i> newly built</span>
+    <span><i class="swatch keep"></i> unchanged</span>
+    <span><i class="swatch store"></i> data store / external</span>
+  </div>
+<pre class="mermaid">
+flowchart LR
+    subgraph Producers["External event producers"]
+        PUB["Other services / scripts"]
+        BACKFILL["Migration / backfill CLI"]
+    end
+
+    subgraph N8N["n8n (slimmer)"]
+        KTRIG["Kafka Trigger (NEW)<br/>topic: ${KAFKA_TOPIC_PREFIX}.&lt;repo&gt;<br/>(live updates)"]
+        SWEEP["Schedule Trigger<br/>(periodic sweep — kept)"]
+        WHMAN["Webhook / Manual<br/>(kept)"]
+        ID016N["Incoming Documents 0.1.6"]
+
+        BUW["Batch Upsert wrapper (NEW)<br/>= HTTP PUT Python API"]
+        GETW["Get Incoming Document wrapper (NEW)<br/>= HTTP POST Python API<br/>(used by sweep + per-row reads)"]
+        SETT["Settings, Figure*, Query*,<br/>Search File, Extractors<br/>(unchanged)"]
+    end
+
+    subgraph Apitools["apitools blueprint /incomingDocuments (NEW)"]
+        REPOS["RepoRegistry<br/>.storage/incoming_documents/repos.json"]
+        DIFF["DiffEngine<br/>backend-agnostic"]
+        GSREPO["GSheetRepo"]
+        SBREPO["SupabaseRepo"]
+        KPROD["Kafka Producer<br/>publishes change events<br/>on every successful write"]
+        ROUTES["HTTP routes:<br/>PUT  /repos/&lt;r&gt;/documents<br/>POST /repos/&lt;r&gt;/documents/query<br/>POST /repos/&lt;r&gt;/schema/ensure"]
+    end
+
+    subgraph Bus["Message bus — Redpanda"]
+        RP[("topic per repo:<br/>${KAFKA_TOPIC_PREFIX}.&lt;repo&gt;<br/>3 partitions · 7d retention<br/>collects events from BOTH<br/>gsheet repos and supabase repos")]
+    end
+
+    subgraph Backends["Document repositories (pluggable, per repo)"]
+        GSHEET[("Google Sheet repo<br/>e.g. prod_gsheet")]
+        SUPA[("Supabase repo<br/>e.g. prod_supabase")]
+    end
+
+    subgraph ExtSvc["External services (unchanged)"]
+        APITOOLS_OCR[("apitools OCR")]
+        GEMINI[("Gemini / Vision")]
+    end
+
+    %% n8n triggers fan into 0.1.6
+    KTRIG --> ID016N
+    SWEEP --> ID016N
+    WHMAN --> ID016N
+
+    %% sweep path: 0.1.6 → Get wrapper → API → repo
+    ID016N -- "sweep: read all / filter" --> GETW
+    %% per-row reads
+    ID016N -- "per-row read" --> GETW
+    %% upserts
+    ID016N -- "~32 call sites" --> BUW
+
+    BUW -- "PUT" --> ROUTES
+    GETW -- "POST" --> ROUTES
+
+    ROUTES --> REPOS
+    ROUTES --> DIFF
+    DIFF --> GSREPO
+    DIFF --> SBREPO
+
+    GSREPO -- "read / batchUpdate / append" --> GSHEET
+    SBREPO -- "read / upsert / DDL" --> SUPA
+
+    %% events: Python publishes after successful writes (both backends)
+    GSREPO -- "on write" --> KPROD
+    SBREPO -- "on write" --> KPROD
+    KPROD --> RP
+
+    %% Live consumers
+    RP -- "live updates" --> KTRIG
+    PUB --> RP
+    BACKFILL --> ROUTES
+
+    %% helper / OCR side untouched
+    ID016N --> SETT
+    SETT --> APITOOLS_OCR
+    SETT --> GEMINI
+
+    classDef new fill:#dff5e1,stroke:#1b5e20,stroke-width:2px,color:#000
+    classDef stay fill:#eef2ff,stroke:#3949ab,color:#000
+    classDef store fill:#fff3e0,stroke:#e65100,color:#000
+    class RP,REPOS,DIFF,GSREPO,SBREPO,KPROD,ROUTES,BUW,GETW,KTRIG,PUB,BACKFILL new
+    class ID016N,SWEEP,WHMAN,SETT,APITOOLS_OCR,GEMINI stay
+    class GSHEET,SUPA store
+</pre>
+</section>
+
+<section id="map">
+  <h2>3. Side-by-side mapping</h2>
+  <table>
+    <thead>
+      <tr><th>Concern</th><th class="old">OLD</th><th class="new">NEW</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Live trigger</td><td class="old">Google Sheets polling trigger inside <code>0.1.6</code></td><td class="new">Native <strong>Kafka trigger</strong> on <code>${prefix}.&lt;repo&gt;</code> consumed directly by <code>0.1.6</code></td></tr>
+      <tr><td>Sweep / catch-up</td><td class="old">Schedule trigger + GSheet read inside helpers</td><td class="new"><strong>Kept.</strong> Schedule trigger → Get wrapper → <code>POST /documents/query</code> → repo</td></tr>
+      <tr><td>Batch upsert (data side)</td><td class="old"><code>Batch Upsert</code> workflow: GSheet read → Code-node diff → <code>googleapis batchUpdate</code> + <code>append</code></td><td class="new"><code>PUT /incomingDocuments/repos/&lt;r&gt;/documents</code> → <code>DiffEngine</code> → <code>GSheetRepo</code> or <code>SupabaseRepo</code></td></tr>
+      <tr><td>Batch get</td><td class="old"><code>Get Incoming Document</code>: switch (single/all/complex/custom-filter) → <code>googleapis values.get</code></td><td class="new"><code>POST /incomingDocuments/repos/&lt;r&gt;/documents/query</code> → unified <code>Query</code> translated per-backend</td></tr>
+      <tr><td>Event source for the bus</td><td class="old">N/A</td><td class="new">Python API publishes after every successful write — same topic shape regardless of backend (GSheet repos and Supabase repos both feed the same per-repo topic)</td></tr>
+      <tr><td>Schema mgmt</td><td class="old">Implicit (sheet header is the schema)</td><td class="new"><code>POST /repos/&lt;r&gt;/schema/ensure</code> — no-op for GSheet, real DDL for Supabase</td></tr>
+      <tr><td>Repo creation</td><td class="old">Manual: create the sheet + tab + header by hand in Google</td><td class="new"><code>POST /repos</code> = transactional <code>create_repo()</code>: registers config <strong>and</strong> provisions the underlying storage. GSheet → creates spreadsheet (if no ID given) + adds tab + writes header + shares with editors. Supabase → creates schema + table + columns + PK index + grants. Plus Kafka topic. Idempotent; rolls back on failure.</td></tr>
+      <tr><td>Backend choice</td><td class="old">Hard-coded to one Google Sheet</td><td class="new"><code>RepoConfig.backend ∈ {gsheet, supabase}</code> per repo, in registry JSON</td></tr>
+      <tr><td>Observability</td><td class="old">n8n executions UI</td><td class="new">Sentry + Redpanda console + structured logs in apitools</td></tr>
+      <tr><td>Replay</td><td class="old">Not possible</td><td class="new">Re-consume from Kafka offset</td></tr>
+      <tr><td>Helpers (Settings/Figure*/Query*/Extractors)</td><td class="old">n8n</td><td class="new"><strong>Unchanged</strong></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="seq">
+  <h2>4. Migration boundary — request sequences</h2>
+  <div class="sub">Two paths now exist into <code>0.1.6</code>: live (Kafka) and sweep (Schedule). Both go through the same Python API.</div>
+
+  <h3 style="margin:18px 0 6px;font-size:14px;color:var(--muted);">4a. Live update path</h3>
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant Caller as Any caller<br/>(0.1.6 wrapper, backfill, etc.)
+    participant Py as apitools<br/>PUT /repos/&lt;r&gt;/documents
+    participant Repo as GSheet repo / Supabase repo
+    participant Kp as KafkaProducer
+    participant Bus as Redpanda<br/>${prefix}.&lt;repo&gt;
+    participant N8N as 0.1.6 (Kafka Trigger)
+
+    Caller->>Py: PUT rows[]
+    Py->>Repo: write
+    Repo-->>Py: ok
+    Py->>Kp: publish change event(s)
+    Kp->>Bus: append (key = ID)
+    Bus-->>N8N: deliver event
+    note over N8N: 0.1.6 processes the event<br/>(may then call Get + Batch Upsert wrappers)
+</pre>
+
+  <h3 style="margin:18px 0 6px;font-size:14px;color:var(--muted);">4b. Sweep path (kept)</h3>
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant S as Schedule Trigger
+    participant N8N as 0.1.6
+    participant Getw as Get wrapper
+    participant Py as apitools
+    participant Repo as GSheet / Supabase
+
+    S->>N8N: tick
+    N8N->>Getw: query (filter / all)
+    Getw->>Py: POST /documents/query
+    Py->>Repo: read
+    Repo-->>Py: rows
+    Py-->>Getw: rows
+    Getw-->>N8N: rows
+    note over N8N: process rows the same way<br/>as the Kafka path<br/>(then writes via Batch Upsert wrapper)
+</pre>
+</section>
+
+<section id="gantt">
+  <h2>5. Cut-over timeline</h2>
+  <div class="sub">Old system stays primary through phases 3–5 (feature flag <code>INCOMING_DOCS_ENABLED=false</code>). Phase 6 flips production traffic.</div>
+<pre class="mermaid">
+gantt
+    title Cut-over timeline (per phase)
+    dateFormat  X
+    axisFormat  P%d
+
+    section Phase 1
+    Context collection           :done, p1, 0, 1
+    section Phase 2
+    Implementation + Test plan   :done, p2, after p1, 1
+    section Phase 3
+    Build & test (both backends) :active, p3, after p2, 4
+    section Phase 4
+    New n8n wrappers + Kafka trigger swap :p4, after p3, 2
+    Parity capture (n8n tee)     :p4b, after p3, 1
+    section Phase 5
+    Review + improvements        :p5, after p4, 1
+    section Phase 6
+    Human verification & migration :p6, after p5, 1
+</pre>
+</section>
+
+</main>
+<footer>
+  Render: open this file directly in a browser. Mermaid is loaded from the official CDN.
+</footer>
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: "default",
+    securityLevel: "loose",
+    flowchart: { htmlLabels: true, useMaxWidth: true, curve: "basis" },
+    sequence: { useMaxWidth: true },
+    gantt: { useMaxWidth: true },
+  });
+</script>
+</body>
+</html>

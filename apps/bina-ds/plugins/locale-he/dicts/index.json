@@ -1,0 +1,230 @@
+{
+ "dsh": "0.1.6-alpha.1",
+ "namespaces": {
+  "agent-team": {
+   "file": "agent-team.json",
+   "source": "client-ui-agent-team/src/client/mount.ts",
+   "keys": 35
+  },
+  "approval": {
+   "file": "approval.json",
+   "source": "client/ui-approval/src/client/index.ts",
+   "keys": 5
+  },
+  "chat": {
+   "file": "chat.json",
+   "source": "client/ui-chat/src/client/apply.ts",
+   "keys": 104
+  },
+  "command": {
+   "file": "command.json",
+   "source": "client/ui-commands/src/client/index.ts",
+   "keys": 28
+  },
+  "common": {
+   "file": "common.json",
+   "source": "client/locale/src/client/index.ts",
+   "keys": 37
+  },
+  "conversation": {
+   "file": "conversation.json",
+   "source": "client/ui-conversation/src/client/apply.ts",
+   "keys": 153
+  },
+  "cordis": {
+   "file": "cordis.json",
+   "source": "ui-cordis/src/client/index.ts",
+   "keys": 50
+  },
+  "deliverables": {
+   "file": "deliverables.json",
+   "source": "client/ui-deliverables/src/client/index.ts",
+   "keys": 37
+  },
+  "documentHtml": {
+   "file": "documentHtml.json",
+   "source": "client/ui-sidebar-documentpreview/src/client/html/index.ts",
+   "keys": 4
+  },
+  "documentMarkdown": {
+   "file": "documentMarkdown.json",
+   "source": "client/ui-sidebar-documentpreview/src/client/markdown/index.ts",
+   "keys": 4
+  },
+  "feedback": {
+   "file": "feedback.json",
+   "source": "client/ui-message-feedback/src/client/index.ts",
+   "keys": 20
+  },
+  "goal": {
+   "file": "goal.json",
+   "source": "client/ui-goal/src/client/index.ts",
+   "keys": 12
+  },
+  "job": {
+   "file": "job.json",
+   "source": "client/ui-jobs/src/client/index.ts",
+   "keys": 15
+  },
+  "model": {
+   "file": "model.json",
+   "source": "client/ui-model-selection/src/client/index.ts",
+   "keys": 21
+  },
+  "open-in-app": {
+   "file": "open-in-app.json",
+   "source": "client/ui-open-in-app/src/client/index.ts",
+   "keys": 39
+  },
+  "permission.access": {
+   "file": "permission.access.json",
+   "source": "client/ui-permission-presets/src/client/index.ts",
+   "keys": 17
+  },
+  "plan": {
+   "file": "plan.json",
+   "source": "client/ui-plan/src/client/index.ts",
+   "keys": 6
+  },
+  "question": {
+   "file": "question.json",
+   "source": "client/ui-user-questions/src/client/index.ts",
+   "keys": 15
+  },
+  "reference": {
+   "file": "reference.json",
+   "source": "client/ui-reference/src/client/index.ts",
+   "keys": 10
+  },
+  "schedule.catalog": {
+   "file": "schedule.catalog.json",
+   "source": "client/ui-schedule/src/client/index.ts",
+   "keys": 18
+  },
+  "session-log-download": {
+   "file": "session-log-download.json",
+   "source": "session-log-export/src/client/index.ts",
+   "keys": 9
+  },
+  "settings": {
+   "file": "settings.json",
+   "source": "client/ui-settings-general/src/client/index.ts",
+   "keys": 11
+  },
+  "settings.agentPreset": {
+   "file": "settings.agentPreset.json",
+   "source": "client/ui-agent-preset/src/client/index.ts",
+   "keys": 57
+  },
+  "settings.archivedSessions": {
+   "file": "settings.archivedSessions.json",
+   "source": "client/ui-settings-unarchive-sessions/src/client/index.ts",
+   "keys": 15
+  },
+  "settings.locale": {
+   "file": "settings.locale.json",
+   "source": "client/locale/src/client/index.ts",
+   "keys": 1
+  },
+  "settings.models": {
+   "file": "settings.models.json",
+   "source": "client/ui-settings-models/src/client/index.ts",
+   "keys": 103
+  },
+  "settings.permission": {
+   "file": "settings.permission.json",
+   "source": "client/ui-permission-presets/src/client/index.ts",
+   "keys": 12
+  },
+  "settings.pluginInventory": {
+   "file": "settings.pluginInventory.json",
+   "source": "client/ui-settings-plugin-inventory/src/client/index.ts",
+   "keys": 36
+  },
+  "settings.plugins": {
+   "file": "settings.plugins.json",
+   "source": "client/ui-settings-plugins/src/client/index.ts",
+   "keys": 52
+  },
+  "settings.theme": {
+   "file": "settings.theme.json",
+   "source": "client/ui-theme/src/client/index.ts",
+   "keys": 9
+  },
+  "sidebar": {
+   "file": "sidebar.json",
+   "source": "client/ui-sidebar/src/client/index.ts",
+   "keys": 5
+  },
+  "sidebarCodePreview": {
+   "file": "sidebarCodePreview.json",
+   "source": "client/ui-sidebar-documentpreview/src/client/code/index.ts",
+   "keys": 3
+  },
+  "sidebarDocumentPreview": {
+   "file": "sidebarDocumentPreview.json",
+   "source": "client/ui-sidebar-documentpreview/src/client/index.ts",
+   "keys": 19
+  },
+  "sidebarFiles": {
+   "file": "sidebarFiles.json",
+   "source": "client/ui-sidebar-files/src/client/index.ts",
+   "keys": 13
+  },
+  "sidebarImage": {
+   "file": "sidebarImage.json",
+   "source": "client/ui-sidebar-documentpreview/src/client/image/index.ts",
+   "keys": 5
+  },
+  "sidebarPdf": {
+   "file": "sidebarPdf.json",
+   "source": "client/ui-sidebar-documentpreview/src/client/pdf/index.ts",
+   "keys": 9
+  },
+  "sidebarRight": {
+   "file": "sidebarRight.json",
+   "source": "client/ui-sidebar-right/src/client/index.ts",
+   "keys": 21
+  },
+  "sidebarTerminal": {
+   "file": "sidebarTerminal.json",
+   "source": "client/ui-sidebar-terminal/src/client/index.ts",
+   "keys": 27
+  },
+  "skill": {
+   "file": "skill.json",
+   "source": "client/ui-skill/src/client/index.ts",
+   "keys": 7
+  },
+  "slash.menu": {
+   "file": "slash.menu.json",
+   "source": "client/ui-input-trigger/src/client/index.ts",
+   "keys": 9
+  },
+  "subagent": {
+   "file": "subagent.json",
+   "source": "client/ui-subagent/src/client/index.ts",
+   "keys": 37
+  },
+  "trajectory": {
+   "file": "trajectory.json",
+   "source": "client/ui-trajectory/src/client/index.ts",
+   "keys": 182
+  },
+  "workflowRun": {
+   "file": "workflowRun.json",
+   "source": "client/ui-workflow-run/src/client/index.ts",
+   "keys": 18
+  },
+  "workspace": {
+   "file": "workspace.json",
+   "source": "client/ui-workspace/src/client/index.ts",
+   "keys": 63
+  },
+  "directory-browser": {
+   "file": "directory-browser.json",
+   "source": "client/ui-directory-picker-browse/src/client/index.ts",
+   "keys": 13
+  }
+ }
+}

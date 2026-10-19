@@ -1,0 +1,57 @@
+[
+ {
+  "cache_key": "invoice:2ef978b2eb9aa95ab8ce26b1151cfd23",
+  "kind": "invoice",
+  "value": "{\"data\":{\"AI_COMPANY_ID\":\"512643859\",\"AI_DOC_ID\":\"SI266M001207\",\"AI_DOC_DATE\":\"31/03/2026\",\"AI_DOC_AMOUNT\":\"397.00\",\"AI_SHIPMENT_IDS\":[\"SH26M002532\"],\"AI_ORDER_IDS\":\"PO26003580\",\"AI_TYPE\":\"INVOICE\"},\"success\":true,\"processedAt\":\"2026-06-28T16:21:22.183Z\",\"evalMetadata\":{},\"fullResponse\":{}}"
+ },
+ {
+  "cache_key": "invoice:10333e12643d7ae10b82ddfbb8b1a072",
+  "kind": "invoice",
+  "value": "{\"data\":{\"AI_COMPANY_ID\":\"514947746\",\"AI_DOC_ID\":\"SI256000355\",\"AI_DOC_DATE\":\"31/05/2025\",\"AI_DOC_AMOUNT\":\"9391.00\",\"AI_SHIPMENT_IDS\":[\"SH25000521\",\"SH25000551\"],\"AI_ORDER_IDS\":\"943\",\"AI_TYPE\":\"INVOICE\"},\"success\":true,\"processedAt\":\"2026-06-28T16:21:43.635Z\",\"evalMetadata\":{},\"fullResponse\":{}}"
+ },
+ {
+  "cache_key": "invoice:40f1a4b4c8ac194f601a343226696699",
+  "kind": "invoice",
+  "value": "{\"data\":{\"AI_COMPANY_ID\":\"511705477\",\"AI_DOC_ID\":\"84471487\",\"AI_DOC_DATE\":\"05/01/2026\",\"AI_DOC_AMOUNT\":\"11496.00\",\"AI_SHIPMENT_IDS\":[\"55561440\",\"83481D55526\"],\"AI_ORDER_IDS\":\"25013558-\",\"AI_TYPE\":\"INVOICE\"},\"success\":true,\"processedAt\":\"2026-06-28T16:22:06.108Z\",\"evalMetadata\":{},\"fullResponse\":{}}"
+ },
+ {
+  "cache_key": "invoice:21c6c1a5c7ef3f470fcbf1400189a29a",
+  "kind": "invoice",
+  "value": "{\"data\":{\"AI_COMPANY_ID\":\"516711157\",\"AI_DOC_ID\":\"SI266000206\",\"AI_DOC_DATE\":\"28/02/2026\",\"AI_DOC_AMOUNT\":\"15047.00\",\"AI_SHIPMENT_IDS\":[\"SH26000462\",\"SH26000469\"],\"AI_ORDER_IDS\":\"\",\"AI_TYPE\":\"INVOICE\"},\"success\":true,\"processedAt\":\"2026-06-28T16:22:23.485Z\",\"evalMetadata\":{},\"fullResponse\":{}}"
+ },
+ {
+  "cache_key": "invoice:af0c8b6b4f6ae6fb4a9640c5c4257680",
+  "kind": "invoice",
+  "value": "{\"data\":{\"AI_COMPANY_ID\":\"510818859\",\"AI_DOC_ID\":\"2540081279NH\",\"AI_DOC_DATE\":\"30/11/2025\",\"AI_DOC_AMOUNT\":\"1259.00\",\"AI_SHIPMENT_IDS\":[\"NSH25A41965\"],\"AI_ORDER_IDS\":\"PO25011213\",\"AI_TYPE\":\"INVOICE\"},\"success\":true,\"processedAt\":\"2026-06-28T16:23:11.532Z\",\"evalMetadata\":{},\"fullResponse\":{}}"
+ },
+ {
+  "cache_key": "invoice:3849ffe7ad8f60c4ee6c8997e49de650",
+  "kind": "invoice",
+  "value": "{\"data\":{\"AI_COMPANY_ID\":\"512069865\",\"AI_DOC_ID\":\"SI256012375\",\"AI_DOC_DATE\":\"30/12/2025\",\"AI_DOC_AMOUNT\":\"16619.00\",\"AI_SHIPMENT_IDS\":[\"SH25016869\"],\"AI_ORDER_IDS\":\"PO25012442\",\"AI_TYPE\":\"INVOICE\"},\"success\":true,\"processedAt\":\"2026-06-28T16:23:32.031Z\",\"evalMetadata\":{},\"fullResponse\":{}}"
+ },
+ {
+  "cache_key": "invoice:aefbb8c5aff3475eaa447631005149bc",
+  "kind": "invoice",
+  "value": "{\"data\":{\"AI_COMPANY_ID\":\"513513796\",\"AI_DOC_ID\":\"SI2600214\",\"AI_DOC_DATE\":\"28/02/2026\",\"AI_DOC_AMOUNT\":\"60603.00\",\"AI_SHIPMENT_IDS\":[\"SH2600924\",\"SH2600925\",\"SH2600926\",\"SH2600829\"],\"AI_ORDER_IDS\":\"2083\",\"AI_TYPE\":\"INVOICE\"},\"success\":true,\"processedAt\":\"2026-06-28T16:23:51.444Z\",\"evalMetadata\":{},\"fullResponse\":{}}"
+ },
+ {
+  "cache_key": "invoice:be1cfb2a85650e68445577bfd0a60288",
+  "kind": "invoice",
+  "value": "{\"data\":{\"AI_COMPANY_ID\":\"514947746\",\"AI_DOC_ID\":\"SI256000535\",\"AI_DOC_DATE\":\"31/07/2025\",\"AI_DOC_AMOUNT\":\"3075.00\",\"AI_SHIPMENT_IDS\":[\"SH25000822\"],\"AI_ORDER_IDS\":\"915\",\"AI_TYPE\":\"INVOICE\"},\"success\":true,\"processedAt\":\"2026-06-28T16:23:55.802Z\",\"evalMetadata\":{},\"fullResponse\":{}}"
+ },
+ {
+  "cache_key": "invoice:89eeb4ebe8a619495113003a08f7d5bd",
+  "kind": "invoice",
+  "value": "{\"data\":{\"AI_COMPANY_ID\":\"511022493\",\"AI_DOC_ID\":\"20342503040\",\"AI_DOC_DATE\":\"29/05/2025\",\"AI_DOC_AMOUNT\":\"849.00\",\"AI_SHIPMENT_IDS\":[\"M5125032502\"],\"AI_ORDER_IDS\":\"PO25005306\",\"AI_TYPE\":\"INVOICE\"},\"success\":true,\"processedAt\":\"2026-06-28T16:50:17.686Z\",\"evalMetadata\":{},\"fullResponse\":{}}"
+ },
+ {
+  "cache_key": "invoice:777ab556d473688388360eebd7c9883f",
+  "kind": "invoice",
+  "value": "{\"data\":{\"AI_COMPANY_ID\":\"511022493\",\"AI_DOC_ID\":\"20352500552\",\"AI_DOC_DATE\":\"11/12/2025\",\"AI_DOC_AMOUNT\":\"-395.00\",\"AI_SHIPMENT_IDS\":[],\"AI_ORDER_IDS\":\"\",\"AI_TYPE\":\"INVOICE\"},\"success\":true,\"processedAt\":\"2026-06-28T16:51:10.642Z\",\"evalMetadata\":{},\"fullResponse\":{}}"
+ },
+ {
+  "cache_key": "invoice:c002271f87774fab6fd8a39cde1ddb1a",
+  "kind": "invoice",
+  "value": "{\"data\":{\"AI_COMPANY_ID\":\"511301129\",\"AI_DOC_ID\":\"SI256001661\",\"AI_DOC_DATE\":\"22/04/2025\",\"AI_DOC_AMOUNT\":\"65106.00\",\"AI_SHIPMENT_IDS\":[\"SH25002022\",\"SH25002024\"],\"AI_ORDER_IDS\":\"3705\",\"AI_TYPE\":\"INVOICE\"},\"success\":true,\"processedAt\":\"2026-06-28T17:00:24.376Z\",\"evalMetadata\":{},\"fullResponse\":{}}"
+ }
+]

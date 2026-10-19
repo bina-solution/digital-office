@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+#: per-sync counts from the reconcile ledger (reached as `sync state`)
+# bbox indox sync state — per-sync state from the sync-v3 reconcile ledger.
+# Reports, per registry source, engine + delivered/review + open attempts/backoff + cursor mode.
+#
+# [v1 retirement 2026-08-25] This used to open with a SyncApi STATUS call over /indox-manage,
+# which fanned one live listing per pipe × state into SyncSource000001 and took 15-25s (gmail
+# label searches dominated). That whole lane is deleted — STATUS now refuses as an unknown verb —
+# and the ledger view below answers the same question from indexed counts, instantly. The console
+# sync UI never used STATUS either: its /sync/status reads platform-services directly.
+set -euo pipefail
+cd "$(cd "$(dirname "$0")/.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # DN
+. "$(dirname "$0")/_schema-lib.sh"   # INDOX_PG + indox_resolve_instance
+
+# [cutover 2026-08-31] The report is PER TENANT: `--instance=<id>` (or INDOX_INSTANCE) names it,
+# else the sole production tenant resolves with a printed note. public.* here were compat views.
+_INST_ARG=""
+for _a in "$@"; do case "${_a}" in --instance=*) _INST_ARG="${_a#--instance=}" ;; esac; done
+IFS='|' read -r _IID SCH <<<"$(indox_resolve_instance "${_INST_ARG}")"
+[ -n "${SCH:-}" ] || exit 1
+
+# ---- sync-v3 view: registry engine + ledger convergence gate (ai/context/archive/indox-pre-2026-09/sync-v3-plan.md) ----
+# Ledger reads are instant (indexed counts) - no folder/label walking.
+SB_CONTAINER="${SB_CONTAINER:-supabase-db-${DN}}"
+# PIPE NAME vs LEDGER IDENTITY. Since phase 6b every sync_ledger/sync_cursor row's
+# `source` is `<instance>/<pipe>`, while sync_registry still names pipes plainly — so joining the
+# two on the raw column matched NOTHING: this report printed 0 delivered for every configured pipe
+# and then listed the real rows underneath as "(gone)", which reads as "your pipes have delivered
+# nothing and there is orphaned data" when the truth was "the join is on the wrong namespace".
+# `regexp_replace(source,'^[^/]*/','')` is the same normalisation syncLedgerApi01's `Build Reset`
+# already uses for exactly this reason (stripping a leading instance segment from an already-bare
+# name is a no-op, so it is safe on pre-6b rows too) — one mechanism, not a second spelling. The
+# `sv3%` test-fixture filter has to move onto the normalised name for the same reason: qualified
+# rows all start with the instance, so `source not like 'sv3%'` had silently stopped excluding the
+# sv3s_* test pipes.
+V3JSON="$(docker exec "${SB_CONTAINER}" psql -U postgres -d postgres -tA -c "
+select json_build_object(
+  'registry', (select value from \"${SCH}\".settings where key='sync_registry'),
+  'ledger', (select coalesce(json_agg(t),'[]') from (
+     select regexp_replace(source,'^[^/]*/','') as source, status, count(*)::int as c
+     from \"${SCH}\".sync_ledger
+     where regexp_replace(source,'^[^/]*/','') not like 'sv3%' group by 1,2) t),
+  'attempts', (select coalesce(json_agg(t),'[]') from (
+     select regexp_replace(source,'^[^/]*/','') as source, count(*)::int as open,
+            count(*) filter (where not_before>now())::int as backing
+     from \"${SCH}\".sync_ledger
+     where status = 'failed'
+       and regexp_replace(source,'^[^/]*/','') not like 'sv3%' group by 1) t),
+  'cursors', (select coalesce(json_agg(t),'[]') from (
+     select regexp_replace(source,'^[^/]*/','') as source, mode,
+            walk_token is not null as has_walk, steady_cursor is not null as has_steady
+     from \"${SCH}\".sync_cursor
+     where regexp_replace(source,'^[^/]*/','') not like 'sv3%') t));" 2>/dev/null || true)"
+
+[ -n "${V3JSON}" ] && echo "${V3JSON}" | python3 -c '
+import sys, json
+d = json.loads(sys.stdin.read())
+try: reg = json.loads(d.get("registry") or "[]")
+except Exception: reg = []
+led = {}
+for r in d.get("ledger") or []:
+    led.setdefault(r["source"], {})[r["status"]] = r["c"]
+att = {r["source"]: r for r in d.get("attempts") or []}
+cur = {r["source"]: r for r in d.get("cursors") or []}
+print()
+print("sync-v3 (reconcile ledger)  -  engine per registry source; delivered+review = ledger terminal")
+print("  %-12s %-7s %10s %8s %9s %8s %7s" % ("source", "engine", "delivered", "review", "attempts", "backoff", "cursor"))
+for s in reg:
+    name = s.get("name","?"); eng = s.get("engine","v1")
+    l = led.get(name, {}); a = att.get(name, {}); c = cur.get(name, {})
+    print("  %-12s %-7s %10s %8s %9s %8s %7s" % (
+        name, eng, l.get("delivered",0), l.get("needs_review",0),
+        a.get("open",0), a.get("backing",0), c.get("mode","-")))
+extra = sorted(set(list(led)+list(att)) - {s.get("name") for s in reg})
+for name in extra:
+    l = led.get(name, {}); a = att.get(name, {})
+    print("  %-12s %-7s %10s %8s %9s %8s %7s" % (name, "(gone)", l.get("delivered",0),
+        l.get("needs_review",0), a.get("open",0), a.get("backing",0), "-"))
+' 2>/dev/null || true

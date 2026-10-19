@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# Prevent Git-Bash/MSYS from rewriting container paths. No-op on real Linux.
+export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
+
+# n8n-clean-recreate — DESTRUCTIVE force-clean-recreate of the n8n instance from the blueprint.
+#
+# n8n-push is upsert-only: it NEVER deletes workflows/credentials/tags that exist in the instance
+# but not in the blueprint. This script makes the instance MATCH the blueprint exactly by wiping
+# first, then restoring:
+#   1. WIPE   -> TRUNCATE workflow/credential/tag/execution content in the n8n Postgres.
+#               The owner (user), settings, projects, roles and the encryption key are PRESERVED,
+#               so no re-auth or owner re-bootstrap churn.
+#   2. RESTORE-> delegate to ./n8n-push (owner bootstrap if needed, credentials, workflows, re-activate, restart).
+#   3. TAGS   -> rebuild tag_entity + workflows_tags DETERMINISTICALLY from the workflow files.
+#               (n8n's import:workflow does not reliably recreate tag entities on an empty DB, so we
+#                own this step rather than depend on CLI behaviour.)
+#
+# Usage: ./bbox n8n clean-recreate --yes      (the --yes/-y flag is REQUIRED — it wipes data)
+#        N8N_CONTAINER=... PG_CONTAINER=...       (override derived container names)
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # read_env, DN, N8N_CONTAINER, PG_CONTAINER (overridable via env)
+N8N_DIR="${REPO_ROOT}/apps/n8n"
+WF_DIR="${N8N_DIR}/blueprint/n8n"
+PGUSER="$(read_env POSTGRES_USER)"; PGDB="$(read_env POSTGRES_DB)"; PGPW="$(read_env POSTGRES_PASSWORD)"
+log() { echo "[n8n-clean-recreate] $*"; }
+psql_n8n() { docker exec -e PGPASSWORD="${PGPW}" -i "${PG_CONTAINER}" psql -U "${PGUSER}" -d "${PGDB}" -v ON_ERROR_STOP=1 "$@"; }
+
+FORCE="${1:-}"
+if [ "${FORCE}" != "--yes" ] && [ "${FORCE}" != "-y" ]; then
+  echo "REFUSING: this TRUNCATEs all workflows/credentials/tags/executions in '${PG_CONTAINER}'." >&2
+  echo "          owner + settings are preserved; data is restored from the blueprint afterwards." >&2
+  echo "          Re-run with --yes to proceed." >&2
+  exit 2
+fi
+
+log "Container: ${N8N_CONTAINER} / DB: ${PG_CONTAINER} (${PGDB})"
+docker ps --format '{{.Names}}' | grep -Fxq "${N8N_CONTAINER}" || { echo "Error: '${N8N_CONTAINER}' not running." >&2; exit 1; }
+docker ps --format '{{.Names}}' | grep -Fxq "${PG_CONTAINER}"  || { echo "Error: '${PG_CONTAINER}' not running."  >&2; exit 1; }
+
+# ── 1) WIPE content (owner/settings/projects/roles preserved). CASCADE clears the join/child tables:
+#       workflows_tags, shared_workflow, shared_credentials, webhook_entity, workflow_history,
+#       workflow_statistics, execution_data/metadata, *_dependency, workflow_publish*. ──
+log "Wiping workflow/credential/tag/execution content (CASCADE)..."
+psql_n8n -q -c "TRUNCATE TABLE workflow_entity, credentials_entity, tag_entity, execution_entity, webhook_entity, workflow_statistics RESTART IDENTITY CASCADE;"
+log "  wiped. counts now: $(psql_n8n -tAc "SELECT 'wf='||count(*) FROM workflow_entity;" | tr -d '\r')"
+
+# ── 2) RESTORE from blueprint via the normal push (creds + workflows + re-activate + restart) ──
+log "Delegating to the push hook for restore..."
+# The hook is `push` — `n8n-push` was its pre-refactor script name, so this path did not exist and
+# the whole restore step failed silently after the TRUNCATE above (i.e. clean-recreate WIPED and
+# never restored).
+"${SCRIPT_DIR}/push"
+
+# ── 3) REBUILD tags deterministically from the workflow files ──
+log "Rebuilding tags (tag_entity + workflows_tags) from blueprint files..."
+docker exec "${N8N_CONTAINER}" sh -c 'rm -rf /tmp/n8n-clean-wf && mkdir -p /tmp/n8n-clean-wf'
+# Tags must be rebuilt from the SAME set push imports: central + every app's own blueprint. Taring
+# only WF_DIR rebuilt tags for the 29 central workflows and silently dropped them for the ~91
+# app-owned ones.
+_CLEAN_STAGE="${REPO_ROOT}/.n8n-clean-stage"; rm -rf "${_CLEAN_STAGE}"; mkdir -p "${_CLEAN_STAGE}"
+cp "${WF_DIR}"/*.json "${_CLEAN_STAGE}/" 2>/dev/null || true
+for _bp in "${REPO_ROOT}"/apps/*/blueprint/n8n; do
+  [ -d "${_bp}" ] || continue
+  cp "${_bp}"/*.json "${_CLEAN_STAGE}/" 2>/dev/null || true
+done
+tar -C "${_CLEAN_STAGE}" -cf - . | docker exec -i "${N8N_CONTAINER}" tar -C /tmp/n8n-clean-wf -xf -
+rm -rf "${_CLEAN_STAGE}"
+TAG_SQL="$(docker exec -i "${N8N_CONTAINER}" node - <<'NODE'
+const fs=require('fs'),p=require('path'),d='/tmp/n8n-clean-wf';
+const tags={}, assoc=[];
+for(const f of fs.readdirSync(d)){
+  if(!f.endsWith('.json')) continue;
+  let w; try{ w=JSON.parse(fs.readFileSync(p.join(d,f),'utf8')); }catch(e){ continue; }
+  if(!w||!w.id) continue;
+  for(const t of (w.tags||[])){ if(!t||!t.id||!t.name) continue; tags[t.id]=t.name; assoc.push([w.id,t.id]); }
+}
+const esc=s=>String(s).replace(/'/g,"''");
+const out=['BEGIN;','DELETE FROM workflows_tags;','DELETE FROM tag_entity;'];
+for(const id of Object.keys(tags))
+  out.push(`INSERT INTO tag_entity (id,name,"createdAt","updatedAt") VALUES ('${esc(id)}','${esc(tags[id])}',now(),now());`);
+for(const [w,t] of assoc)
+  out.push(`INSERT INTO workflows_tags ("workflowId","tagId") VALUES ('${esc(w)}','${esc(t)}') ON CONFLICT DO NOTHING;`);
+out.push('COMMIT;');
+process.stdout.write(out.join('\n'));
+NODE
+)"
+printf '%s' "${TAG_SQL}" | psql_n8n -q
+log "  tags: $(psql_n8n -tAc "SELECT count(*) FROM tag_entity;" | tr -d '\r') entities, $(psql_n8n -tAc "SELECT count(*) FROM workflows_tags;" | tr -d '\r') associations"
+
+log "Done. Instance now matches the blueprint exactly (workflows + credentials + tags)."

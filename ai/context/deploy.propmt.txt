@@ -1,0 +1,16 @@
+Deploy a new app, declaratively, into deployment-hacohen.
+
+Read first: compose.yml, production/ (or development/) compose.yml + compose.override.yml,
+.env / .env.ex, and context/deployment-context.txt (layout, domains, networks, conventions).
+
+Decide prod vs dev:
+- prod → production/<app>/docker-compose.yml, route <app>.${DEPLOYMENT_DOMAIN}, add to production/compose.yml includes.
+- dev  → development/<app>/docker-compose.yml, route <app>.dev.${DEPLOYMENT_DOMAIN}, add to development/compose.yml includes.
+
+Follow the existing patterns: container_name `<app>-${DEPLOYMENT_NAME:-bina-deployment}`,
+attach `traefik-network`, Traefik labels + Authentik ForwardAuth middleware in the override,
+secrets/URLs as `${..._BASE_URL}` vars in .env(.ex), Homepage labels, json-file log limits.
+Research the latest official docker-compose deploy for the service before writing.
+
+Verify: bring it up from repo root (`docker compose up -d <app>`), then use Playwright to
+load the production URL, log in, and browse to confirm it works end to end.

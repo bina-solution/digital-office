@@ -1,0 +1,11 @@
+# Capabilities still provided by the LEGACY LANE (services not yet migrated to apps/).
+#
+# During the strangler migration a migrated app may `use` a capability whose provider has no
+# manifest yet. Without this bridge the resolver would (correctly) refuse to render. Each entry
+# says: "this capability exists, it is served by production/<service>, trust it for now".
+#
+# THIS FILE MUST BE EMPTY WHEN THE REFACTOR IS DONE. Every line here is remaining work: when the
+# providing app migrates and declares the capability in its own app.json, delete the line. An
+# empty file (or a missing one) means apps/ owns the whole graph.
+#
+#   capability: production service that currently provides it

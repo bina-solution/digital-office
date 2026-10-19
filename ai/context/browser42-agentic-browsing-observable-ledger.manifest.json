@@ -1,0 +1,31 @@
+{
+  "format": "browser42-observable-session-ledger/v1",
+  "source": "/mnt/c/Users/user/AppData/Roaming/Code/User/workspaceStorage/e7501d96042f8d70f2befed2d6e3f4cb/GitHub.copilot-chat/transcripts/1927e3ab-1c5e-460b-9c06-a10838ce82ed.jsonl",
+  "source_sha256": "37b2c01774e5eeebb01cdc7bb09fc02aa315714f979a6cf9c5786e6bb5f94f18",
+  "output": "ai/context/browser42-agentic-browsing-observable-ledger.jsonl.gz",
+  "output_sha256": "2001cefc3a53f5b8689efbb4a585082c01cc5548bea91699b1bdd0f895af1419",
+  "source_event_count": 9678,
+  "exported_event_count": 9678,
+  "source_event_types": {
+    "assistant.message": 1547,
+    "assistant.turn_end": 1566,
+    "assistant.turn_start": 1607,
+    "session.start": 1,
+    "tool.execution_complete": 2425,
+    "tool.execution_start": 2422,
+    "user.message": 110
+  },
+  "exported_event_types": {
+    "assistant.message": 1547,
+    "assistant.turn_end": 1566,
+    "assistant.turn_start": 1607,
+    "session.start": 1,
+    "tool.execution_complete": 2425,
+    "tool.execution_start": 2422,
+    "user.message": 110
+  },
+  "invalid_source_lines": 0,
+  "redactions": 18,
+  "private_fields_removed": 1256,
+  "scope": "All observable transcript events. Private chain-of-thought/reasoning is excluded. Tool outputs are included only when the source transcript stored them in an observable message or tool event."
+}

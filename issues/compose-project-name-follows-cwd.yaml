@@ -1,0 +1,147 @@
+# yaml-language-server: $schema=./schema.json
+title: compose_args pins no --project-name, so the project follows the caller's cwd and containers hide from bbox stop
+opened: '2026-08-22'
+severity: high
+status: resolved
+summary: compose_args pins no --project-name, so the project follows the caller's cwd and containers hide from bbox stop
+description: |
+  area: layer 0 / compose invocation
+
+  ## Context
+
+  scripts/lib.sh:257 compose_args() ends:
+
+      printf '%s --project-directory .' "${a}"
+
+  `--project-directory .` and NO `--project-name`. Compose then derives the project name from
+  the basename of the directory the caller happened to be in. The function's own comment states
+  the assumption rather than enforcing it:
+
+      # cd'd to REPO_ROOT by the caller, so "." names the repo and keeps the project name stable.
+
+  So the project name is a property of the CALLER, not of the deployment. Every invocation made
+  from the repo root gets `deployment-hacohen`; one made from `apps/indox/` gets `indox`, and
+  compose treats those as two unrelated stacks that happen to share a network and container
+  names.
+
+  This is the same function as bbox-run-ignores-overlays.yaml, but a distinct fault: that one is
+  about WHICH -f files are compiled, this one is about WHICH PROJECT the result lands in.
+
+  ## Impact
+
+  Measured on shlomo-laptop, 2026-08-22. A container `incoming-documents-shlomo-laptop` carried
+
+      com.docker.compose.project=indox        (created 2026-08-21T15:30:53Z)
+
+  while every other container in the stack carried `deployment-hacohen`. The consequences chain:
+
+    1. `bbox stop` acts on project `deployment-hacohen`, so it did NOT stop that container - it
+       survived the stop and kept serving.
+    2. `bbox run` then tried to create its own `incoming-documents` service and collided on the
+       container NAME, which is global to the engine, not scoped to the project.
+    3. The collision aborted the `up` PARTWAY. Casualties: `kong` and `storage` were never
+       created at all, and `apitools` was left in state `created` (StartedAt=0001-01-01).
+    4. With `supabase-kong` absent, its DNS name stopped resolving and the INDOX data path died
+       from both ends - the BFF logged `[Errno -2] Name or service not known` every ~2.3s and
+       n8n resolved `supabase-kong` -> ENOTFOUND.
+
+  Blast radius while it lasted: `/incomingDocuments/dashboard/stats` served an empty 67-byte 200
+  (the UI showed "שגיאת רענון ... מוצג הנתון האחרון"), and n8n executions over the preceding 3h
+  were 16 stuck `running`, 8 error, 1 success.
+
+  None of this announced itself as a compose problem. The visible symptom was a DNS error in a
+  dashboard, three layers from the cause.
+
+  Recovery was `docker rm -f incoming-documents-shlomo-laptop` then `./bbox run`; afterwards the
+  stats body went 67 -> 7,355 bytes, refresher errors 0 in 5 min, and executions 48 success /
+  7 error / 1 canceled / 0 stuck in 20 min.
+
+  NOT established: which command created the `indox`-project container on 2026-08-21. The user
+  reports only ever using `bbox run` / `bbox stop`. apps/indox/hooks/extract-gate was checked and
+  correctly `cd`s to REPO_ROOT, so it is not the culprit. The point of this issue is that the
+  mechanism ALLOWS it at all - a stray compose call from any app directory is enough, and nothing
+  detects the result.
+
+  ## Deeper finding 2026-08-22
+
+  The real defect is not one line - it is that this codebase carries TWO different definitions of
+  "belongs to this stack", and they disagree exactly where it hurts:
+
+      compose's definition:  the com.docker.compose.project LABEL
+      bbox's definition:     the container NAME ends with -${DEPLOYMENT_NAME}
+
+  A container can satisfy one and not the other. Ours did: name `incoming-documents-shlomo-laptop`
+  (right suffix) with label `project=indox` (wrong project). It therefore fell through EVERY net:
+
+  1. bbox:579  `stop)` is `need_docker; dc down "$@"` - project-scoped, no orphan handling at all,
+     not even --remove-orphans. It cannot see the container.
+
+  2. bbox:598  the `reset)` sweep DOES exist for this class, and its comment describes our exact
+     outage ("created by a DIFFERENT project or invocation ... it survives, and the next
+     `bbox run` dies with 'container name already in use'"). But its filter is:
+
+         if n and not n.endswith("-"+dn): print(n)
+
+     It force-removes only containers WITHOUT the deployment suffix, on the assumption that
+     anything carrying the suffix is reclaimable by project label. That assumption is precisely
+     what fails here. So the one class that actually breaks `bbox run` - right name, wrong project
+     - is exactly the class the sweep skips. Even `bbox reset` would not have cleared it.
+
+  3. bbox:613  `status)` counts membership with `grep -c -- "-${DN}$"` over `docker ps`. It
+     therefore counted the orphan as a healthy member of the stack. Status did not merely miss the
+     problem, it actively reported the broken container as ours and up - which is why this sat
+     visible in `docker ps` for over a day and looked fine.
+
+  So: the cwd-derived project name is the ENABLER, and the name-suffix-as-identity convention is
+  what makes the result undetectable and unremovable by every bbox verb.
+
+  ## Fix
+
+  Pin the project name in compose_args() so cwd stops being an input:
+
+      printf '%s --project-directory . --project-name "%s"' "${a}" "${COMPOSE_PROJECT}"
+
+  where COMPOSE_PROJECT is derived once (repo basename, or better an explicit constant / .env
+  key) rather than per-caller. Run from the repo root the value is identical to today's, so the
+  change is a no-op for every existing container and cannot re-name a running stack; it only
+  removes the failure mode for invocations made from elsewhere.
+
+  Then make the two definitions of ownership agree, which is where the real fix lives:
+
+  a. bbox:598 - change the reset sweep's filter from "no deployment suffix" to "not carrying THIS
+     project's label". Ask docker, not the name:
+
+         docker ps -a --filter "label=com.docker.compose.project=${COMPOSE_PROJECT}" ...
+
+     and treat any container matching the stack's compiled container_names but NOT that label as
+     a foreign squatter to remove.
+
+  b. bbox:613 - `status` must key on the project label, not `grep -- "-${DN}$"`, and should print
+     a loud line when a container matching a compiled container_name carries a different project.
+     One line here would have turned a day-long silent outage into an immediate diagnosis.
+
+  c. bbox:579 - `stop` needs the same sweep as `reset`, or at minimum `--remove-orphans`. Today it
+     is a bare `dc down` and has no defence whatsoever.
+
+  ## Where this stands, 2026-10-07 (branch dgo-pair)
+
+  The three places the two definitions of ownership had to agree, as this record lists them:
+
+  - **cwd is not an input.** Every compose call goes through `_dcx_run`, which changes to the
+    checkout's root first; the project name derives from the checkout's PHYSICAL directory (`pwd -P`),
+    and a name pinned in `.env` (`COMPOSE_PROJECT_NAME`) now wins in the shell as it does in compose.
+  - **b — `status` says it, loudly.** `bbox status` names the compose project it is talking about
+    ("deployment hp · compose project mydgo") and prints every container that holds one of this
+    stack's compiled names under ANOTHER project (`foreign_containers`, scripts/lib.sh — the names are
+    the compiled configuration's and the labels are the engine's, so nothing is a list).
+  - **c — `stop` does not lie.** After `down` it prints the same containers as "still there — held by
+    another compose project".
+  - **and the collision itself is refused, not suffered.** `bbox run` asks the same question FIRST —
+    before the slot, the builds and the hooks — and stops with the names, the project that holds them
+    and the one command that removes just those containers. Measured, asked as if this checkout were
+    a project named `other`: exit 1 after 1 s, 45 containers named, and the set of running containers
+    identical before and after. As the office is: none held.
+
+  Left as it was, on purpose: **a — `reset` does not remove them.** A container another project holds
+  may be another clone's live stack; removing it is that owner's act. `bbox run` after a reset says
+  exactly what to remove.

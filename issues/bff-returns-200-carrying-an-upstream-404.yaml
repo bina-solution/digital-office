@@ -1,0 +1,49 @@
+# yaml-language-server: $schema=./schema.json
+title: The incoming-documents BFF answers HTTP 200 while its body carries an upstream 404
+opened: '2026-08-24'
+severity: high
+status: open
+summary: The incoming-documents BFF answers HTTP 200 while its body carries an upstream 404
+description: |
+  area: incoming-documents BFF / observability
+
+  ## Context
+
+  Measured in the browser against the portable deployment on 2026-08-24:
+
+      GET /a/incoming/incomingDocuments/dashboard/stats   ->   HTTP 200
+      body: Client error '404 Not Found' for url 'http://kong:8000/rest/v1/indox_dashboard_stats?...'
+
+  The upstream failed. The BFF caught it, kept the message, and returned it inside a successful
+  response. Every layer above - the browser, any uptime check, any alerting on status codes -
+  sees a 200.
+
+  This is why the missing view (dashboard-stats-schema-never-applied-by-onboarding.yaml) went
+  unnoticed: the page rendered an error banner, but nothing that watches HTTP ever had a reason
+  to look.
+
+  It is the eleventh recorded instance of the class in
+  apps/indox/issues/unread-failure-defect-class.md - a component reports its failure correctly
+  and the caller reduces it to something indistinguishable from success - and the only instance
+  so far that sits in the product rather than in tooling or tests.
+
+  ## Impact
+
+  Any upstream failure behind this endpoint is invisible to monitoring. The class of bug it
+  hides is exactly the class that a fresh-deploy verification is supposed to surface.
+
+  ## Resolution
+
+  Propagate the upstream status. A 404 from PostgREST should leave this endpoint as a 5xx (the
+  view is a server-side dependency, not a client error) with the upstream message as detail.
+
+  Then audit the sibling endpoints in the same module for the same handler shape, since one
+  swallowing handler is rarely alone.
+
+  Note: fixing the missing view removed the trigger on this box. It did not remove the
+  swallowing behaviour, which is still present and untested.
+
+  ## Evidence
+
+  - browser network capture, console3.localhost/#/m/incoming, 2026-08-24: request 5 of 7, /a/incoming/incomingDocuments/dashboard/stats, statusCode 200
+  - the rendered error banner quoting the upstream 404 for the same request

@@ -1,0 +1,25 @@
+# apitools -> connections cutover (compose override).
+# Apply:  docker compose -f production/apitools/docker-compose.yml \
+#                        -f apps/<id>/apitools.inject.override.yml up -d
+#
+# Original CMD (Dockerfile):  gunicorn --config gunicorn.conf.py run:application
+#
+# Secrets now sourced from connections /api/export/apitools:
+#   supabase-db-password -> SUPABASE_DB_PASSWORD  (the ledger's Postgres — REQUIRED or /business 500s)
+#   gemini-key         -> GEMINI_API_KEY          (bs-extraction)
+#   google-vision-key  -> GOOGLE_VISION_API_KEY   (remote OCR; OCR_ENGINE=local by default -> optional)
+#   n8n-encryption-key -> N8N_ENCRYPTION_KEY      (decrypt the n8n gsheet cred row, same lane as INDOX)
+# Non-secret DB config (SUPABASE_DB_HOST/PORT/NAME/USER, POSTGRES_*) stays in .env — NOT blanked.
+services:
+  apitools:
+    volumes:
+      - ../../platform-base/connections/inject.sh:/inject.sh:ro
+    environment:
+      - CONN_URL=http://connections:8990
+      - CONN_SERVICE=apitools
+      - SUPABASE_DB_PASSWORD=
+      - GEMINI_API_KEY=
+      - GOOGLE_VISION_API_KEY=
+      - N8N_ENCRYPTION_KEY=
+    entrypoint: ["sh","/inject.sh","sh","-c",
+      "exec gunicorn --config gunicorn.conf.py run:application"]

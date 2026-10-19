@@ -1,0 +1,77 @@
+# connections-mode overlay — make the credential plane the SINGLE source of truth for the whole stack.
+#
+#   docker compose -f compose.yml -f compose.connections.yml up -d
+#
+# Every consumer below boots through `inject.sh`: it waits for `connections` to be healthy, pulls THIS
+# service's secrets from /api/export, exports them, then execs the real command. The secrets are BLANK
+# in the environment here — they come only from connections (DB override -> .env seed -> auto-mint).
+# This is fail-closed: if connections is down, consumers don't boot (that's the point — one plane owns
+# every credential). Non-secret config (hosts, ports, selectors) still comes from .env.
+#
+# Paths are repo-root-relative because this overlay is applied on top of the root compose.yml
+# (project directory = repo root). Verified live: apitools loads 8 secrets incl. the ledger's
+# SUPABASE_DB_PASSWORD (blank in env) and /business stays 200; inbox loads 5.
+services:
+  inbox:
+    depends_on:
+      connections: {condition: service_healthy}
+    volumes:
+      - ./platform-base/connections/inject.sh:/inject.sh:ro
+    environment:
+      - CONN_URL=http://connections:8990
+      - CONN_SERVICE=inbox
+      - GMAIL_IMAP_APP_PW=
+      - LOCALMAIL_USER=
+      - LOCALMAIL_PW=
+    entrypoint: ["sh","/inject.sh","sh","-c",
+      "exec gunicorn -w 1 -k gthread --threads 12 -b 0.0.0.0:8970 --timeout 120 --access-logfile - entry:app"]
+
+  apitools:
+    depends_on:
+      connections: {condition: service_healthy}
+    volumes:
+      - ./platform-base/connections/inject.sh:/inject.sh:ro
+    environment:
+      - CONN_URL=http://connections:8990
+      - CONN_SERVICE=apitools
+      - SUPABASE_DB_PASSWORD=
+      - GEMINI_API_KEY=
+      - GOOGLE_VISION_API_KEY=
+      - N8N_ENCRYPTION_KEY=
+    entrypoint: ["sh","/inject.sh","sh","-c",
+      "exec gunicorn --config gunicorn.conf.py run:application"]
+
+  # any-concurrency — deployment-wide concurrency observer (Python/uvicorn, has python3 for the
+  # injector). Reads POSTGRES_PASSWORD (execution spans) + REDIS_PASSWORD (Bull queues); both blank
+  # here and sourced from connections. POSTGRES_USER/DB are non-secret config from .env.
+  any-concurrency:
+    depends_on:
+      connections: {condition: service_healthy}
+    volumes:
+      - ./platform-base/connections/inject.sh:/inject.sh:ro
+    environment:
+      - CONN_URL=http://connections:8990
+      - CONN_SERVICE=any-concurrency
+      - POSTGRES_PASSWORD=
+      - REDIS_PASSWORD=
+    entrypoint: ["sh","/inject.sh","sh","-c",
+      "exec uvicorn app:app --host 0.0.0.0 --port 8080 --proxy-headers --forwarded-allow-ips=*"]
+
+  # machine — host/Docker inspector. Requires NO secrets (manifest requires: []), so the injector is a
+  # no-op that still proves the whole stack boots THROUGH the credential plane (fail-closed on it).
+  machine:
+    depends_on:
+      connections: {condition: service_healthy}
+    volumes:
+      - ./platform-base/connections/inject.sh:/inject.sh:ro
+    environment:
+      - CONN_URL=http://connections:8990
+      - CONN_SERVICE=machine
+    entrypoint: ["sh","/inject.sh","sh","-c",
+      "exec uvicorn app:app --host 0.0.0.0 --port 8080 --proxy-headers --forwarded-allow-ips=*"]
+
+# incoming-documents lives in the dev stack (development/incoming-documents/, not the root include
+# chain), so it's cut over by its own overlay:
+#   docker compose -f development/incoming-documents/docker-compose.yml \
+#                  -f platform-base/connections/rollout/incoming-documents.inject.override.yml up -d
+# Same for drive / glitchtip / machine — their rollout/*.inject.override.yml apply per service.

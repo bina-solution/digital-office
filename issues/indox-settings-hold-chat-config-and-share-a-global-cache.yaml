@@ -1,0 +1,72 @@
+# yaml-language-server: $schema=./schema.json
+title: INDOX settings hold chat config, and the settings cache is not tenant-scoped
+opened: '2026-08-27'
+severity: high
+status: open
+summary: INDOX settings hold chat config, and the settings cache is not tenant-scoped
+description: |
+  ## Context
+
+  Two separate problems found while drawing the global / per-instance line across INDOX's 87
+  settings keys.
+
+  1. WhatsappAdmins lives in INDOX
+  ---------------------------------
+  `public.settings` carries `WhatsappAdmins` (a comma-separated list of phone numbers), and
+  indoxSettings01 maps it to `whatsapp_admins` in its API response. It is chat/notification
+  configuration sitting in the document-processing app's config table — the wrong owner.
+
+  Related, same shape: `GmailToWhatsappAllowedMails`.
+
+  2. The settings cache is GLOBAL, and that defeats instance isolation
+  --------------------------------------------------------------------
+  indoxSettings01 is a Redis-cached read API (6 GET webhooks, 9 redis nodes, 1 postgres node)
+  serving settings, extraction queries and COMPANIES to the v1 generation
+  (indoxGmailDocDownloader01, indoxGmailBSDownloader01, indoxGmailLinkDownloader01,
+  SyncProcBS000001 — all active, 22/2/1/30 runs in the 24h before filing).
+
+  Its three cache keys carry no instance:
+
+      indox.settings.companies      get / set / delete
+      indox.settings.keyval         get / set / delete
+      indox.settings.queries        get / set / delete
+
+  INDOX is being made multi-instance by giving each instance its own Postgres schema
+  (indox_<id>). That boundary is enforced by Postgres and is solid — but it is bypassed
+  entirely here, because these reads are served from Redis and never reach Postgres. With two
+  instances configured, whichever one warms the cache first has its settings AND its supplier
+  list served to the other for the TTL. Companies is the sharp end: a client's document would be
+  matched against another client's supplier registry.
+
+  This cannot be caught by the schema separation, by G26, or by any SQL-level check. It is
+  invisible until two tenants exist, and then it is silent.
+
+  ## Action
+
+  - Chat config (low risk, do anytime):
+      * move WhatsappAdmins + GmailToWhatsappAllowedMails to the chat app's own settings
+      * drop them from public.settings and from indoxSettings01's mapping block
+      * NOTE: the mapping block is a rename layer (WhatsappAdmins -> whatsapp_admins); whatever
+        reads `whatsapp_admins` from the settings API must move with it, or it breaks silently
+
+  - Cache scoping (MUST land before a second instance is enabled):
+      * key the cache per instance: indox.<instance>.settings.{companies,keyval,queries}
+      * the invalidate-cache webhook must clear only the calling instance's keys
+      * the BFF's _invalidate_settings_cache() must pass the instance it wrote to
+      * add a check that fails if a cache key is written without an instance segment
+
+  - Consider whether the v1 read path should exist at all: v2/v3 read config through
+    indoxApi01 directly, so this cached workflow is a second config reader with different
+    semantics. Retiring it once the v1 downloaders are retired removes the whole class.
+
+  ## Evidence
+
+  redis node keys, read from the live graph on 2026-08-27:
+    KVStorage/1  indox.settings.companies   (get/set)
+    KVStorage2/3 indox.settings.keyval      (get/set)
+    KVStorage4/5 indox.settings.queries     (get/set)
+    Clear Cache 1-3  delete, same three keys
+
+  v1 consumers still live (runs in the preceding 24h):
+    indoxGmailDocDownloader01 22 · SyncProcBS000001 30 · indoxProcessDocument01 38
+    indoxGmailBSDownloader01 2 · indoxGmailLinkDownloader01 1 · indoxSettings01 527

@@ -1,0 +1,63 @@
+# yaml-language-server: $schema=./schema.json
+title: platform-os-net's reconcile.py still validates types only at the top level
+opened: '2026-08-24'
+severity: high
+status: open
+summary: platform-os-net's reconcile.py still validates types only at the top level
+description: |
+  area: registry / config validation / cross-clone drift
+
+  ## Context
+
+  The recursive type check landed in THIS repo as 74c76b93, closing the hole that let
+  routing[0].module.name ship as an object and render as "[object Object]share-2" in the console2
+  sidebar. The app that shipped that entry does NOT live here - it lives in a sibling clone:
+
+      C:\Users\user\Desktop\personalWorkspace\platform-os-net\apps\network\app.json
+
+  and so does that clone's own copy of the validator:
+
+      C:\Users\user\Desktop\personalWorkspace\platform-os-net\platform\manager\reconcile.py
+
+  Measured 2026-08-24 in that file: `_check_enums` present, `_check_types` ABSENT. So the clone that
+  actually produced the bad entry is still running the validator that cannot catch it. Fixing the
+  entry alone leaves the next one free to land exactly the same way.
+
+  NOT A COPY-PASTE PORT, and this is the part worth knowing before someone tries. The two files have
+  diverged: that copy is 1606 lines dated 2026-08-12, this repo's is current and its `validate()`
+  already differs (this one hoists the JS type map to module scope, which the port needs). Dropping
+  this file over that one would revert three months of that clone's own changes.
+
+  THE PORT IS SMALL AND SELF-CONTAINED:
+    1. hoist the `JS = {...}` map out of `validate()` to module scope (the checker needs it),
+    2. add `_check_types(aid, val, spec, path, errs)` immediately after `_check_enums`, mirroring
+       its recursion through `properties` and `items`,
+    3. call it on the line after the existing `_check_enums(...)` call inside `validate()`.
+  A value whose type is already wrong must NOT be descended into - reporting "must be string" and
+  then a cascade about the keys inside it buries the one line that matters.
+
+  VERIFY IT THE SAME WAY THIS ONE WAS VERIFIED, in both directions, because a validator that only
+  passes proves nothing:
+    - regression: every app.json in that clone still validates with zero errors
+    - detection: inject {"en": "...", "he": "..."} into routing[0].module.name of any app and
+      confirm the error names the full path, e.g.
+      "field 'routing'[0].module.name must be string, got dict"
+
+  ## Action
+
+  - Port the three-step change above into platform-os-net's reconcile.py, by hand rather than by
+    file copy, and verify both directions.
+  - RELATED, and currently uncommitted in that clone: a peer session applied the entry fix to
+    apps/network/app.json on branch `platform-os-network` (module.name -> "רשת", module.desc -> the
+    Hebrew string, top-level title/summary untouched) and deliberately left it uncommitted for the
+    owner to decide. The entry fix closes the visible symptom; only the validator port closes the
+    class.
+  - This issue exists because the finding would otherwise live only in a session transcript. Neither
+    change was made by this session: platform-os-net is a different repository, outside the branch
+    this session is scoped to.
+
+  ## Evidence
+
+  - 2026-08-24 grep of platform-os-net/platform/manager/reconcile.py: _check_enums present, _check_types absent, 1606 lines, mtime 2026-08-12
+  - 2026-08-24 GET /api/modules from console2: network.name and network.desc are dicts; console3 returns 11 modules with zero non-string name/desc
+  - deployment-hacohen 74c76b93: the same fix here, with 29 app.json validating clean and the injected shape caught

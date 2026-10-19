@@ -1,0 +1,7 @@
+# social-list — HTTP to the platforms' APIs, the browser-session client (plain requests), the
+# catalogue and scripts (YAML), and Pillow to cut every image to the size each platform wants.
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+requests==2.32.3
+PyYAML==6.0.2
+Pillow==11.0.0

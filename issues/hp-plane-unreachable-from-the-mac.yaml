@@ -1,0 +1,137 @@
+# yaml-language-server: $schema=./schema.json
+title: "Plane of the hp-laptop office is unusable from the Mac: the office link was dead (orphaned dgo-link + one blackholed UDP path), the HP machine answers nothing, and Plane's own sign-in leaves the origin it was reached on"
+opened: 2026-10-06
+category: ops
+severity: high
+status: open
+summary: "The owner's screenshot at 16:02 local (13:02 UTC) shows `ניהול פרויקטים · HP` — the hp-laptop office's Plane framed in the office browser — rendering Plane's own 'Looks like Plane didn't start up correctly' page, and `./bbox project-pln tasks list --as azaria` fails with ConnectionResetError. Measured: both office links (hp-laptop AND vps1) had their last WireGuard handshake at ~12:33:40 UTC; dgo-link was sitting in a DEAD network namespace (the documented lnk-003 fault) and was restored by `--force-recreate`; vps1 is up and TCP-reachable yet captures ZERO of this office's UDP on any port; and 192.168.16.102 (the HP machine) answers nothing at all on the LAN."
+description: |
+  ## Symptom (what a person sees)
+
+  * In the office browser the HP office's Plane window shows Plane's OWN error page
+    (`Looks like Plane didn't start up correctly 🙁`), i.e. the app was reached and its web answered —
+    the API behind it did not (`data/plane-shots/` holds the earlier session's shots of the same arc).
+  * `./bbox project-pln tasks list --as azaria` → the app runs on a linked office, reaching it at
+    `http://plane.hp-laptop:9004`, and the request dies: `HTTP -1: ConnectionResetError`.
+  * An earlier shot of the same path (`data/plane-shots/signin-failure-redirect-plane-localhost.png`,
+    2026-10-06 11:36 UTC) shows a DIFFERENT and structural failure: after Plane's own sign-in through
+    the door, the browser is sent to `http://plane.localhost/…` — a host that exists on the HP office
+    and not on the Mac → `ERR_CONNECTION_REFUSED`.
+
+  ## Measured (2026-10-06, 13:03–13:25 UTC, from the Mac office)
+
+  ```
+  curl -s http://dgo-extend:8983/api/link
+    hp-laptop : state "down", state_error "ConnectionResetError", delivery.up false,
+                catalog.ok false (catalog last fetched 12:12:22), door 9004 listening
+    vps1      : state "down", state_error "ConnectionResetError", delivery.up false
+
+  docker exec dgo-net-local wg show
+    wg2 (vps1, 31.97.196.82:51820)     latest handshake 34m45s ago (= 12:33:40), rx 0, tx growing
+    wg4 (hp-laptop, 192.168.16.102:51830) latest handshake 34m44s ago,            rx 0, tx growing
+  # after ./scripts/dc restart dgo-net (13:11): 0 B received, 740 B sent, no handshake at all
+
+  # the machine itself: nothing answers on the LAN
+  tcp 192.168.16.102 → 22, 443, 8000, 3080, 8080, 51830  : all closed
+  tcp 192.168.16.1:80 (the gateway/router)               : OPEN
+  sweep 192.168.16.1-254 on 22/2222/8080/8000            : no host answered
+
+  # vps1 IS up (TCP 22 and SSH work); it is our UDP that never arrives
+  on vps1: tcpdump -n -i any 'udp and port 51820'     → 0 packets
+  on vps1: tcpdump -n -i any 'udp and port 9999/51999' → 0 packets, while raw UDP probes were sent
+  from here: UDP to stun.cloudflare.com:3478 and stun.l.google.com:19302 → replies (so UDP egress works)
+             STUN XOR-MAPPED = 79.177.165.212:59038  (the same public IP vps1 has on record)
+  on vps1: wg show wg0 transfer, sampled 46 s apart → received UNCHANGED, sent growing (it retries us)
+  ```
+
+  ## Root cause #1 — dgo-link was orphaned in a dead network namespace (FIXED here)
+
+  `dgo-link` runs with `network_mode: service:dgo-net`. Recreating/restarting `dgo-net` gives it a NEW
+  network namespace and Docker does NOT move the consumer into it:
+
+  ```
+  before: dgo-net  net:[4026533190]   dgo-link net:[4026533111]
+          ss -ltn (in dgo-link) → LISTEN 10.79.2.1:9002/8983/3081, 10.79.4.2:9004/8983/3081
+                                  (addresses that no longer exist in the live namespace)
+  after: ./scripts/dc up -d --force-recreate dgo-link
+          dgo-net  net:[4026533190]   dgo-link net:[4026533190]   ← same namespace
+          ss -ltn (in dgo-link) → the same six listeners, now on the LIVE addresses
+                                  (10.79.2.1:9002/8983/3081, 10.79.4.2:9004/8983/3081)
+          curl http://plane.hp-laptop:9004/ → was "Recv failure: Connection reset by peer",
+                                             now a 5 s timeout (the door accepts; the tunnel is dead)
+  ```
+
+  This is exactly `issues/the-link-goes-dark-after-every-tunnel-rebuild.yaml` (lnk-003, open): the
+  consumers' listeners live in a namespace whose interfaces are gone, so a peer's packets arrive on the
+  live `wg*` and meet no listener (kernel RST → the `ConnectionResetError` every surface reports).
+  **Restart is not enough — the container must be RECREATED**, and it must be recreated whenever
+  `dgo-net` is. Note the trap this incident walked into: the same fault is EASY TO CREATE BY HAND —
+  any `./scripts/dc restart dgo-net` (including the diagnosis step in this investigation) orphans
+  `dgo-link` again until it is force-recreated.
+
+  ## Root cause #2 — this office's UDP never reaches vps1 (NOT ours to fix from here)
+
+  vps1 is alive: SSH answers, `wg0` listens on `0.0.0.0:51820`, its peer is our key with our public
+  address on record, and its `sent` counter grows while `received` stays frozen. On the vps1 side a
+  tcpdump on the public interface sees NONE of our packets — not the handshakes, not raw probes on
+  other ports — while the same machine reaches public STUN/DNS over UDP and TCP to vps1 is fine. This
+  is the same failure class as `issues/the-office-tunnel-wedges-silently-and-nothing-measures-it.yaml`
+  (2026-10-04: "one blackholed source port left it dead for 15 hours"; the fix then was a fresh local
+  listen port). Today it is destination-wide rather than port-specific, and both pairs' handshakes
+  stopped within one second of each other (12:33:40 / 12:33:41), which is what a change on OUR side of
+  the path looks like — a router/ISP event, not an office one. Candidate remedies (owner-level): a
+  fresh `DGO_WG_PORT` in `.env` + recreate `dgo-net`/`dgo-link` as one unit, and a router restart.
+
+  ## Root cause #3 — the HP machine answers nothing at all
+
+  192.168.16.102 (the endpoint the pairing recorded for hp-laptop) answers no TCP port, while the
+  gateway does; no host on the subnet answered SSH either. From the Mac office, "the HP laptop is off,
+  asleep or off this network" cannot be distinguished from "its office is down" — the owner has to look
+  at the machine. A 254-host sweep cannot see an office edge on macOS/WSL anyway (Lima and WSL publish
+  to the host's loopback, not to the LAN), so port sweeps are not evidence of "the app is down".
+
+  ## Root cause #4 — Plane itself (independent of the link, and still open)
+
+  * Reached through the DOOR (`plane.hp-laptop:9004`), Plane's own sign-in answers an absolute
+    `Location: http://plane.localhost/…`, which the door forwards verbatim → the browser leaves for a
+    host that does not exist on this machine (`ERR_CONNECTION_REFUSED`, measured 11:36 UTC). The
+    console path (`plane.hp-laptop.console.localhost`, `/a/plane/`) exists and DOES rewrite Host/Origin
+    (and `_peer_location` rewrites redirects in `apps/dgo-extend/app.py`); the raw door does not, so the
+    door URL is not a usable way to reach a remote app — a person must not be handed it.
+  * When Plane's web answers and its API does not, Plane renders its own "didn't start up correctly"
+    page. That is the still-open `issues/plane-api-dead-for-ten-hours-while-docker-said-healthy.yaml`
+    (pln-001) whose three fixes (GUNICORN_WORKERS=2 / a decisive API-port healthcheck / the autoheal
+    label) have never been landed. It can only be confirmed on the HP machine while the link is up.
+
+  ## What has to be true before this is closed
+
+  1. `dgo-net` and `dgo-link` are recreated as ONE UNIT by `bbox`/`scripts/dc` (lnk-003), so a link
+     cannot be silently orphaned by a rebuild — including a plain `restart`.
+  2. A DELIVERY probe per pair (door + catalog + a real app request) reported in `/api/link` and on a
+     screen, so "tunnel up" is never shown as "link up" (lnk-003 / lnk-004).
+  3. A remote app is never reachable only through the door: the owner-facing tile keeps using the
+     console host (Host/Origin/Location rewritten), and reaching a remote app through `door:port`
+     either works or refuses with a sentence that says why.
+  4. Plane's own API-death detection lands (pln-001), so the "didn't start up correctly" page is
+     accompanied by something the office measures.
+references:
+  - apps/dgo-extend/docker-compose.yml
+  - apps/dgo-extend/link-proxy.py
+  - apps/dgo-extend/app.py
+  - issues/the-link-goes-dark-after-every-tunnel-rebuild.yaml
+  - issues/the-office-tunnel-wedges-silently-and-nothing-measures-it.yaml
+  - issues/plane-api-dead-for-ten-hours-while-docker-said-healthy.yaml
+  - data/plane-shots/signin-failure-redirect-plane-localhost.png
+tasks:
+  - text: "LAND THE UNIT: recreate dgo-link whenever dgo-net is recreated (scripts/dc or the manifest) — lnk-003, still open after a second live hit"
+    done: false
+  - text: "Recreate the pair as one unit NOW on the Mac office (dgo-link force-recreated 2026-10-06 13:2x, verified same netns)"
+    done: true
+  - text: "Owner: say whether the HP laptop is powered on and on this network (192.168.16.102 answers nothing)"
+    done: false
+  - text: "Fresh DGO_WG_PORT + recreate dgo-net/dgo-link as one unit, then handshake check on both ends (vps1 UDP is blackholed)"
+    done: false
+  - text: "Never hand a person the door URL for a remote app: the tile must keep the console host, and the door must refuse with a sentence"
+    done: false
+  - text: "Land pln-001 (GUNICORN_WORKERS, API-port healthcheck, autoheal) so Plane's own death is measured instead of shown as 'didn't start up correctly'"
+    done: false

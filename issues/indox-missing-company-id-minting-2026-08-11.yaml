@@ -1,0 +1,94 @@
+# yaml-language-server: $schema=./schema.json
+title: Documents are routed to MISSING_COMPANY_ID by a company matcher that is working correctly on empty input. 560 of 575 carry no COMPANY_NAME, and a third of them were judged before ever being OCR'd.
+opened: '2026-08-11'
+severity: medium
+status: open
+summary: '''FIGURE COMPANY OFFLINE MISS c=0'' fires ~57/hr and ''STATUS MISSING_COMPANY_ID (DOC BASE)'' fires ~55/hr. The matching rates mean an offline company lookup returning ZERO candidates is what puts documents into MISSING_COMPANY_ID. The matcher is NOT broken: 560 of 575 such documents have no COMPANY_NAME at all, so c=0 is the correct answer to an empty query. The defect is upstream -- the documents arrive at company resolution with nothing to match on.'
+description: |
+  id: indox-missing-company-id-minting-2026-08-11
+  As first recorded — opened: 2026-08-11T06:10Z · severity: medium-and-accelerating · status: DIAGNOSED-NOT-FIXED
+
+  ## Measured 2026-08-11t06:05z
+
+  ```yaml
+  population: 575
+  no_company_name: 560
+  has_a_name: 15
+  base_extraction_ran: 486
+  base_flag_set: 455
+  company_name_action_ever_ran: 10
+  no_api_tools_id: 199
+  no_link: 158
+  age:
+    older_than_6h: 412
+    touched_1_to_6h: 101
+    touched_under_1h: 62
+  control_group:
+    completed_with_company_id: 7194
+    of_those_lacking_a_name: 23
+  ```
+
+  ## Update 2026-08-11t08:20z accelerating and mechanism changed
+
+  ```yaml
+  rate: 26 -> 21 -> 32 -> 57 -> 41 -> 84 per hour (02:00 through 07:00). DOUBLED in the last hour.
+  scale: 84/hr against ~240/hr completing = diverting ~26% of pipeline output. Now the largest live defect.
+  totals: 563 (05:48) -> 624 (07:20) -> 648 (08:20).
+  THE_MECHANISM_HAS_SHIFTED_and_this_changes_the_fix: 'Of the 118 most recent arrivals: 106 still have NO COMPANY_NAME (unchanged), but only ONE was never OCR''d -- against 199 of 575 (35%) earlier. So the "judged before OCR existed" ordering half of this defect HAS RESOLVED ON ITS OWN. These documents are now genuinely OCR''d and base-extracted, and the company name is simply not being extracted from them.'
+  ANSWERED_2026-08-11T08:35Z_IT_IS_CLASS_SPECIFIC:
+    the_discriminator_is_SOURCE_TYPE:
+      MAIL_ATTACHMENT: 70 failing / 96 resolved  = 42% FAILURE RATE
+      GMAIL: 15 failing / 105 resolved = 12.5%
+      GOOGLE_DRIVE_FOLDER: 36 failing / 320 resolved = 10%
+      summary: Mail attachments fail company resolution at ~4x the rate of every other source, and account for 57% of failures while being only 16% of successes.
+    the_documents_are_READABLE_so_this_is_not_an_OCR_problem: 'On the same failing cohort of 122: DOC_DATE was successfully extracted on 81 (66%), DOC_ID on 22, amount on 10. Two-thirds yielded a date, so the OCR text was legible and COMPANY_NAME extraction specifically failed.'
+    SENDER_HYPOTHESIS_REFUTED_2026-08-11T08:45Z:
+      what_was_tested: That mail attachments fail because the company is identifiable from the SENDER rather than the document body, and the matcher only reads the document.
+      why_it_is_dead:
+      - 'SOURCE_ID is NOT an email address: 0 of 159 failing documents contain ''@'', and 0 of 197 RESOLVED mail attachments do either. It is a message/file identifier.'
+      - 'Both cohorts carry source identity IDENTICALLY: failing 114/114 have SOURCE_ID and SOURCE_LINK; resolved 139/139 likewise. Source-data presence cannot be the discriminator.'
+      - 'The companies table''s email columns are barely populated: 136 of 1,183 have ''מייל 1'' (11.5%), 6 have ''מייל 2'', and TRUSTED_SOURCE_TYPES is EMPTY for all 1,183. So even if a sender were available there is little to match it against.'
+      A_FALSE_POSITIVE_IN_MY_OWN_QUERY_DISCARDED: 'My domain-match test reported "would_match_by_domain: 159" -- a 100% match rate. That is an ARTIFACT, not a finding. The predicate was `sid LIKE ''%'' || split_part(email,''@'',2)`, and where a company email row yields an empty domain that collapses to `LIKE ''%''`, which matches everything. Discarded. Reporting it would have been a fabricated 100% success rate.'
+      what_remains: Mail attachments fail at 42% vs 10-12% for other sources, the documents ARE readable (66% yielded a DOC_DATE), and it is NOT missing sender data. The cause therefore lies in the document CONTENT -- e.g. attachments more often being scans/photos without letterheads. Confirming that requires examining actual OCR text, which means client document content and should be done deliberately rather than incidentally.
+    hypothesis_marked_as_hypothesis: 'For a mail attachment the company is often identifiable from the SENDER rather than from the document body -- an invoice attached to an email may carry no letterhead, while the sending address identifies the company unambiguously. If extraction reads only the document, mail attachments fail disproportionately, which is exactly the 4x pattern measured. NOT YET TESTED. Test: take failing MAIL_ATTACHMENT documents and check whether the sender address maps to a known company in the companies table.'
+    part_of_it_is_legitimate: Of the 122 failures, 26 are TYPE=UNKNOWN and 14 are TYPE=IRRELEVANT. Those plausibly have no company at all and belong in review rather than in a pipeline fix. So the fixable portion is smaller than the headline 84/hr.
+  the_question_that_now_decides_the_fix: 'Do these documents genuinely lack a company name -- in which case MISSING_COMPANY_ID is the CORRECT terminal state and they need human review, not a pipeline fix -- or is COMPANY_NAME extraction failing on a specific document class arriving in the backfill? The COMPANY_NAME action fires 431/hr pipeline-wide and works for the vast majority, so a class-specific extraction failure is plausible. Test: sample the OCR text of recent MISSING_COMPANY_ID documents and check whether a company name is visibly present but unextracted.'
+  do_not: Do not drain or bulk-edit these rows. bak_missing_company_drain_20260806 (293 rows) shows this was previously "resolved" that way and it recurred.
+  ```
+
+  ## Arrival rate is climbing
+
+  ```yaml
+  method: 'Counted ''STATUS MISSING_COMPANY_ID%'' entries in ACTION_LOG filtered by EACH ENTRY''S OWN epoch. This is a true arrival rate. NOTE: an earlier attempt bucketed rows by the MAX epoch in ACTION_LOG, which is last-touch and lumps every retried row into recent buckets -- that method was withdrawn as unsafe and must not be reused.'
+  per_hour:
+    1380: 7
+    00:00: 14
+    01:00: 17
+    02:00: 26
+    03:00: 21
+    04:00: 32
+    05:00: 57
+  note: roughly 8x growth across 6 hours, against ~153/hr completing
+  ```
+
+  ## The two explanations
+
+  ```yaml
+  E1_ordering: Company resolution runs before the evidence exists. Directly evidenced for at least 199 documents (35%) which have NO API_TOOLS_ID -- they had not been OCR'd when they were judged. For those, the verdict was rendered on a document the pipeline had not yet read.
+  E2_extraction_quality: Base extraction ran (486 of 575) but the COMPANY_NAME action almost never did (10 of 575). So it is not that extraction looked and found nothing -- the name-extraction step appears not to have been reached at all on this cohort. That points back at E1 rather than at OCR quality.
+  verdict: 'The weight of evidence is on E1 (ordering / premature judgement), not on documents genuinely lacking a company. The decisive contrast: COMPANY_NAME fires 431/hr pipeline-wide -- the single most frequent action -- yet fired on only 1.7% of this cohort.'
+  ```
+
+  ## Why it matters
+
+  ~57 documents/hr diverted against ~153/hr completing. MISSING_COMPANY_ID is not in the pickup's normal advancement path, so these do not come back on their own. A prior drain of this same state exists as bak_missing_company_drain_20260806 (293 rows), so this has recurred before and was previously handled by draining rows rather than by fixing the ordering.
+
+  ## Not fixed because
+
+  Two lanes were mid-work on higher-value items (the selection-stage ceiling, which caps ALL completions at ~118/hr, and horizontal scale-out toward the owner's 500/hr target). This is diagnosed and recorded rather than half-fixed. It should NOT be resolved by draining rows again -- the owner's standing rule is "never just move itmes or edit db row!!!! you need to really fix the pipline!! we aim to perfect state machine".
+
+  ## Next step when picked up
+
+  - Read the LIVE 'FIGURE COMPANY OFFLINE' code in indoxV2ActionsGlobal01 (via activeVersionId -> workflow_history; workflow_entity.nodes is only a draft) and find the gate that admits a document with a null API_TOOLS_ID to company resolution.
+  - Establish whether COMPANY_NAME extraction is a separate action that this cohort never reaches, or a step inside base extraction that silently no-ops.
+  - Check whether the 199 no-API_TOOLS_ID documents should have been held at 'awaiting OCR upload' instead -- that is the 6452-document backlog and the pipeline's binding constraint.

@@ -1,0 +1,1061 @@
+# yaml-language-server: $schema=./schema.json
+title: INDOX efficiency diagnosis — the complete journey of one document, the measured time and resource budget of every stage, the complexity that makes it worse as the corpus grows, and the ranked plan for the smoothest fastest possible run
+opened: '2026-08-10'
+category: performance
+severity: critical
+status: open
+summary: 'The pipeline spends 292 n8n executions and ~1.7 hours of amortized wall time to finish ONE document, against a floor of 41-51. It is currently creating ~29,000 executions/hour and completing 20 documents/hour — roughly 1,450 executions per completed document. Two mechanisms account for almost all of it, and both are now pinned to a specific node. (1) THE REPEAT: indoxV2Driver01''s node `If2` tests `$execution.mode != ''test''`, which is unconditionally true in production, so every action a document receives spawns a brand-new full driver execution for the same document — the "continue in the same execution" branch that would prevent it exists, is already wired, and is reachable only in test mode. A second self-call runs in parallel; measured driver executions are exactly 2.0x the per-pass baseline. The only bound is max_actions_per_doc = 50, and the measured 22-32 passes sit comfortably inside it. (2) THE COST OF EACH REPEAT: the AI leg of base extraction is 82.9% of the most expensive workflow''s node time, and 65% of that is queue wait rather than model time; it is the sole source of a field in 3.7% of runs, and in 56.8% of runs it returns nothing at all while the local extractor — which costs 694 ms — supplies every field. The two compound: the system runs a 160-second AI call ~6 times per document to re-derive an answer it already had in under a second. Behind them: supabase-db, which holds every document, the OCR cache and the company registry, is still pinned at 1.0 CPU / 1 GiB with stock 128 MB shared_buffers against a 225 MB hot working set — the same ceiling that was just fixed on n8n-postgres one layer over; and the @registry_ids binding is rebuilt from the companies table on every read, including a node that spends 190 ms constructing a 2,378-element registry and md5-ing 187 KB of JSON in order to return an 8-character string, twice per document per pass. That registry term is the one that scales with the CLIENT rather than the corpus.'
+description: |
+  ## Method
+
+  ```yaml
+  windows:
+    n8n_execution_history: execution_entity retains 2026-08-10T07:21:09Z -> 16:50:18Z (9h29m, 33,531 rows) at the time of the census. Older executions are pruned, so every "24h" filter below is in practice this 9.5-hour window. Stated explicitly wherever it matters.
+    supabase_pg_stat_statements: stats_reset 2026-08-09T09:03:32Z, read at 2026-08-10T17:13:48Z = 1 day 08:10:16. All supabase-side query totals are over that 32.2-hour window.
+    n8n_pg_stat_statements: stats_reset 2026-08-10T16:42:02Z, read at ~17:05Z = ~23 minutes. Short window; used only for rates, and my own diagnostic queries are excluded by name.
+    container_stats: two `docker stats --no-stream` samples at ~16:55Z and ~17:14Z.
+  principals:
+    n8n_db: psql -U hacohen -d n8n inside n8n-postgres-shlomo-laptop
+    doc_db: psql -U postgres -d postgres inside supabase-db-shlomo-laptop — the SAME role the pipeline uses (credential `INDOX Supabase Postgres`), per the state-machine map's principal proof. Not supabase_admin, not the PostgREST `authenticator` role.
+  attribution_technique:
+    what: 'n8n''s execution_data.data is COMPACTED — a flat array in which purely-numeric strings are indices into that same array. Numbers, however, are stored INLINE. Two consequences exploited here, both safe without a dereferencer:'
+    doc_attribution: 'Document IDs appear as literal strings in the blob, so `data LIKE ''%doc_xxx%''` finds every execution that touched a document. Batch executions mention many documents, so raw counts overstate. Every per-document figure below is therefore AMORTIZED: sum(1/ndocs) where ndocs is the count of distinct doc_ ids in that execution. Both the raw and amortized numbers are given.'
+    node_timing: '`"executionTime":<ms>` is an inline number, so per-node timings are extractable with `regexp_matches(data,''"executionTime":([0-9]+)'',''g'')` with no dereferencing. Validated against a hand-read execution (898157): the extracted node times sum to 67,222 ms against a 67.2 s wall time, and across 1,587 executions the node times account for 99.6% of wall — i.e. the extraction is complete, not a sample.'
+  not_used:
+  - '`updated_at` is NOT used as a progress signal anywhere in this document (~4,500 rows were rewritten backwards). Where it appears it is only as "rows touched in the last hour", which is a set-membership question, not an ordering one.'
+  - Inclusive wall time is never presented as if it were additive. Parent executions in n8n include their children's time; the double counting is called out at every point where it would otherwise mislead.
+  caveat_deploy: READ-ONLY investigation. No workflow, container, DB row or config was changed. Other lanes were importing workflows and rebuilding containers during the window; two containers restarted mid-measurement (n8n-postgres at ~16:43Z, drive at ~16:36Z), which is why some rates differ between the early and late samples. Both are reported.
+  ```
+
+  ## Journey
+
+  ```yaml
+  specimen:
+    id: doc_msm3oxeu136v4c
+    type: INVOICE
+    company_id: '510616956'
+    api_tools_id: 65d738344a99bd515375114fe21d1cba
+    created_at: '2026-08-09T17:52:53Z'
+    completed_at: '2026-08-10T16:54:30Z'
+    elapsed: 23 hours 2 minutes
+    why_this_one: Picked because it reached STATUS='COMPLETED' inside the retained execution window, so its late life is fully reconstructable. Its BASE extraction happened on 08-09 (execution 682582, visible in ACTION_LOG) and is therefore OUTSIDE the window — that gap is accounted for explicitly in the fan-out arithmetic below.
+  hops_note: Ordered as the document actually travels. Workflow ids are n8n workflowIds; the executing definition is workflow_history.nodes at workflow_entity.activeVersionId, read live today — NOTE that two of the versionIds carried in the brief and in issues/state-machine-map-2026-08-10.yaml are STALE (see corrections_to_prior_claims). Node-level detail for BaseDocEx01 is read from execution 898157 directly.
+  hops:
+  - hop: 0
+    name: INGEST
+    workflow: syncV3Deliver0001 ("Sync v3 Deliver") / gmailApiImap01 / indoxGmail*Downloader01
+    does: Discovers the file, writes the incoming_documents row with STATUS='IN_PROGRESS' (or 'TO_EXTRACT' via status_override) and a LINK. Measured 320 successful executions, p50 62.4 s, 30,184 s total (2.88% of pipeline wall).
+    writes: 1 row upsert per document
+  - hop: 1
+    name: PICKUP (the 5-minute poll)
+    workflow: indoxApiSupabase01
+    live_version: ece2eaf4-bd40-486c-953a-e43abf6ec802
+    trigger: '"Poll Line Changes" — scheduleTrigger, {"rule":{"interval":[{"field":"minutes","minutesInterval":5}]}} = EVERY 5 MINUTES = 288 firings/day = 12/hour.'
+    correction: 'The brief and issues/state-machine-map-2026-08-10.yaml both say "2-minute poll, LIMIT 40". Read from the LIVE definition today: the interval is 5 MINUTES and the LIMIT is 120 (the query''s own comments record the 40 -> 120 raise under "[width 2026-08-10]"). Dispatch budget is therefore 12 x 120 = 1,440 row-slots/hour, not 1,200. Both prior figures are superseded.'
+    nodes:
+    - Get Changed Docs (postgres, id=indox-poll-q) — the pickup query, LIMIT 120, retryOnFail maxTries 4
+    - Terminalize Stalled (postgres, id=indox-terminalize) — the reaper, fires on the SAME trigger, NO LIMIT
+    - Process Changed Doc -> executeWorkflow indoxV2Driver01, mode:"once", waitForSubWorkflow:false
+    mode_once_consequence: '`mode:"once"` means all <=120 picked rows enter ONE driver execution, which is why a single driver execution mentions ~41.6 documents in my execution_data census.'
+    pickup_query_shape: 'NINE slices, not four: s_burst, s_fin, s_finstale, s_live, s_new, s_old, s_stale, s_recov, s_adj — each an independent row_number() over the eligible set, seven of them with an md5() tiebreak computed per row, UNION ALLed and then re-grouped by min(k). Full verbatim text in `complexity.pickup_query`.'
+    important_state_machine_update: 'The live WHERE now explicitly admits NEEDS_REVIEW, EXTRACTION_FAILED, DOUBLE, ACTION_RESTART, UNKNOWN_COMPANY, API_TOOLS_FAILED, MISSING_COMPANY_ID and MISSING_TYPE, and there is a dedicated `s_recov` slice for them ordered by `needs_base desc`. The state-machine map''s central finding — "fifteen of nineteen statuses have no working path back into the machine" — has been ADDRESSED in the live definition since that map was written. Terminalize Stalled has also changed: IN_PROGRESS >6h now goes back to TO_EXTRACT with RETRY_COUNT+1, and only reaches MAX_ITERATIONS at RETRY_COUNT >= 5. It no longer writes NEEDS_REVIEW for the IN_PROGRESS arm.'
+    measured_cost: 892 calls, 363.58 ms mean, 324.3 s total (supabase 32.2h window)
+  - hop: 2
+    name: DRIVER
+    workflow: indoxV2Driver01 ("Incoming Documents v2")
+    live_version: 9c2e57f9-edc6-421e-b844-22536d9c0300
+    measured:
+      executions_9h5: 1,088 success + 189 error + 197 running
+      avg_nodes_per_execution: 22.1
+      avg_wall: 62.4 s
+      pct_time_in_hottest_node: 69.3%
+      inclusive_wall_total: 206,793 s (19.71% of pipeline)
+      error_p50: 2,673.8 s
+    note: Driver wall time is INCLUSIVE of decide + actions + extraction. It is not additional work; it is the same seconds counted at a higher altitude.
+    THE_ROOT_CAUSE_OF_THE_REPEAT:
+      node: indoxV2Driver01 / If2
+      condition: '{{ $execution.mode }} notEquals "test"'
+      why_it_is_the_root_cause: |-
+        In production `$execution.mode` is never 'test', so If2 is UNCONDITIONALLY TRUE on every pass and always takes output 0:
+          Execute Action -> Check Next Action -> If2(true) -> No Operation, do nothing4
+          -> MAP ID1 [disabled, so items pass through] -> Execute Workflow
+             [executeWorkflow -> {{$workflow.id}} = ITSELF, {ID}, waitForSubWorkflow:false]
+        EVERY action a document receives therefore spawns a brand-new full driver execution for that same document ID. There is no counter on it, no delay, and no convergence test — If2 is not testing progress, it is testing the execution mode. The "continue in the same execution" branch (Check next In Same Execution -> Run By ID) is the FALSE branch, i.e. it is test-mode-only and never runs in production.
+      second_self_call: Independently, `Execute Action` also fans out to If USE ACTION LINE -> Group By ACTION (groups of <=25) -> Loop Over Items37 (batchSize 10) -> Dispatch Action Lines [executeWorkflow -> indoxV2Driver01, SELF, waitForSubWorkflow:false]. So there are TWO self-invocations per pass.
+      measured_confirmation: indoxDocGet01 runs exactly once per Run-By-ID pass and was measured at 137/hour. indoxV2Driver01 was measured at 275/hour in the same window = 2.0x — both self-invocations confirmed live, not hypothetical.
+      the_ceiling: 'The only bound is in indoxV2ActionsGlobal01 / "Decide DOC BASE Action": `_iter = (ACTION_LOG.match(/\d{13}/g) || []).length; _maxIter = __CFG().max_actions_per_doc || 50; if (_iter >= _maxIter && !terminalKeep) return ''mark_max_iterations''`. The cap is 50 ACTIONS PER DOCUMENT. The measured 22-32 passes are comfortably INSIDE the permitted envelope — nothing stops the loop before 50.'
+      note: This supersedes my earlier hypothesis that the repeat was purely the poll re-selecting unchanged rows. The poll contributes (any write bumps updated_at, which re-enters the s_burst slice at absolute priority k = rn*1.0 - 1000.0), but the dominant multiplier is the driver respawning itself once per action.
+  - hop: 3
+    name: DECIDE
+    workflow: indoxV2Decide01 ("indox-v2 Decide")
+    chain: When Called -> "Determine Action" (batch normalize + stateful dedup census, writes doc._dup) -> "Set decide mode (docbase)" -> "Call router_doc_base (decide)" [= indoxV2ActionsGlobal01 in mode=decide] -> "Route By Type" -> per-type decide -> "Decided" (chain proven in issues/state-machine-map-2026-08-10.yaml topology.decide_chain)
+    measured: 810 success, avg 8.34 s, p50 3.43 s, 6,197 s total (0.59%)
+    consequence: EVERY document passes "Decide DOC BASE Action" unconditionally before any per-type decide is reachable.
+  - hop: 4
+    name: ACTIONS — DOC BASE
+    workflow: indoxV2ActionsGlobal01 ("indox-v2 Actions — DOC BASE")
+    measured:
+      success: 911, p50 0.57 s, p90 5.64 s
+      canceled: 69, p50 3,600.02 s
+      error: 19, p50 3,552.97 s
+      running_now: 208, oldest 9.7 hours
+      inclusive_wall_total: 179,929 s (17.15%)
+      avg_nodes: 4.5, pct_in_hottest_node 39.0%
+    finding: The success path is sub-second at p50. The 179,929 s is almost entirely the 88 canceled/errored executions that sat at ~3,600 s — they hold a production worker slot for a full hour and are then thrown away. 3,600 s is a timeout, not work.
+  - hop: 5
+    name: BASE EXTRACTION
+    workflow: BaseDocEx01 ("Base Document Extraction (local + AI, parallel)")
+    measured_9h5:
+      success: 1,312 — p50 126.1 s, p90 612.4 s, p99 809.4 s, max 976.5 s, total 290,864 s
+      canceled: 161 — total 24,345.9 s
+      error: 42 — total 7,710.6 s
+      running_now: 150, oldest 8.8 hours
+      inclusive_wall_total: 322,920 s = 30.78% of ALL pipeline wall time
+    anchor_check: 'The brief''s anchor was p50 264-339 s, p90 654-798 s, max 1297 s. Measured now: p50 126.1 s, p90 612.4 s, max 976.5 s. CONFIRMED IMPROVED — p50 has roughly halved, consistent with today''s thumbnail and /documentJsonQuery fixes. The shape is unchanged.'
+    node_by_node:
+      source: execution 898157 (doc_msnfw3v0fivoiz), read verbatim from execution_data
+      total_wall_ms: 67222
+      nodes:
+      - n: 1
+        node: Doc In
+        type: executeWorkflowTrigger
+        ms: 1
+      - n: 2
+        node: Lock Map Set (retry scope)
+        type: set
+        ms: 39
+      - n: 3
+        node: Upload+OCR
+        type: executeWorkflow
+        target: indoxV2UploadApiTools01
+        sub_execution: 898160
+        ms: 694
+      - n: 4
+        node: Check Local Enabled (Base)
+        type: set
+        ms: 33
+      - n: 5
+        node: If Local Disabled (Base)
+        type: if
+        ms: 1
+      - n: 6
+        node: Call JQExV3 Base
+        type: executeWorkflow
+        target: JQExV3Base000001
+        sub_execution: 898164
+        ms: 1780
+      - n: 7
+        node: Build Local Result (Base)
+        type: code
+        ms: 2
+      - n: 8
+        node: Check AI Enabled (Base)
+        type: set
+        ms: 15
+      - n: 9
+        node: If AI Disabled (Base)
+        type: if
+        ms: 0
+      - n: 10
+        node: Extract Base via Webhook
+        type: httpRequest
+        target: indoxV2ExtractInvoiceGemini01 (webhook)
+        ms: 64613
+      - n: 11
+        node: Build AI Result (Base)
+        type: code
+        ms: 5
+      - n: 12
+        node: Merge Local + AI (Base)
+        type: merge
+        ms: 1
+      - n: 13
+        node: Select Base
+        type: code
+        ms: 38
+      - n: 14
+        node: Return
+        type: noOp
+        ms: 0
+      the_finding: 'Node 10 is 64,613 ms of 67,222 ms = 96.1% of that execution. Nodes 1-9 and 11-14 together cost 2,609 ms. The document''s own _TIMINGS field records what the LOCAL extractor spent to produce all three base fields: {"TYPE":614,"DOC_DATE":71, "COMPANY_ID":9} = 694 ms. And SELECTION_DEBUG_BASE for that execution reads {"COMPANY_ID":"AGREE","TYPE":"AGREE","DOC_DATE":"AGREE","LOCAL_STATUS":"ran","AI_STATUS":"ran"} — the 64.6-second AI call returned exactly what the 0.69-second local call had already returned.'
+    at_scale:
+      window: 1,587 successful BaseDocEx01 executions, last 4 hours
+      avg_nodes: 14.0
+      avg_sum_of_node_times: 192.3 s
+      avg_single_hottest_node: 159.4 s
+      pct_of_all_node_time_in_the_single_hottest_node: 82.9%
+      avg_wall: 193.0 s
+      pct_of_wall_accounted_by_node_times: 99.6%
+      reading: 82.9% of every second BaseDocEx01 spends is one node, and that node is the AI webhook. There is no hidden queue latency INSIDE BaseDocEx01 — 99.6% of its wall time is accounted for by its own node timings.
+  - hop: 5a
+    name: BASE EXTRACTION -> apitools (the local leg)
+    workflows:
+    - indoxV2UploadApiTools01
+    - JQExV3Base000001
+    measured:
+      upload_api_tools: 1,639 success, avg 22.3 s, 38,606 s total (3.68%), avg 8.2 nodes, 66.7% in hottest
+      jq_ex_v3_base: 1,546 success, avg 14.4 s, 20,044 s total (1.91%), avg 5.0 nodes, 77.0% in hottest
+    http_calls: POST /documentOcr (upload) and POST /documentJsonQuery (per field / batched) on apitools
+  - hop: 5b
+    name: BASE EXTRACTION -> Gemini (the AI leg)
+    workflow: indoxV2ExtractInvoiceGemini01 ("invoice Extractor - Gemini 3.1 pro")
+    invoked_as: webhook (httpRequest from BaseDocEx01 node 10)
+    measured_4h:
+      executions: 3,343 success
+      own_duration: avg 21.6 s, p50 15.0 s, p90 47.2 s, max 333.6 s, total 72,293 s
+      queue_latency: avg 40.44 s, p90 126.06 s, max 397.78 s
+      avg_nodes: 25.0, wall accounted by node times 97.2%
+      queued_now: 51 in status 'new', 39 'running'
+    the_second_finding: Gemini is the ONLY workflow in the system with meaningful queue latency. Every other workflow waits under 1.3 s to be dequeued (drive api 0.41 s, process_lock 0.50 s, indox api 0.36 s, BaseDocEx01 itself 0.39 s). Gemini waits 40.4 s on average and 126 s at p90. So of the ~62 s a single Gemini call costs its caller, ~40 s (65%) is queue wait for a worker slot and ~22 s is the model. The caller's node averages 159.4 s because BaseDocEx01 issues ~2.1 Gemini executions per run (3,343 Gemini / 1,587 BaseDocEx in the same 4 hours).
+  - hop: 6
+    name: PER-TYPE ACTIONS
+    workflows:
+    - indoxV2ActionsGDoc01
+    - indoxV2ActionsShip01
+    - indoxV2ActionsBS01
+    measured:
+      gdoc: 591 success, avg 5.81 s, 4,001 s total (0.38%)
+      shipment: 459 success, avg 5.45 s, 2,621 s total (0.25%)
+    note: cheap; not a bottleneck
+  - hop: 7
+    name: WRITE-BACK
+    workflows:
+    - indoxV2Upsert01
+    - indoxDocBatchUpsert01
+    - indoxDocGet01
+    - indoxApiRouter01
+    - indoxApiSupabase01
+    - processLock01
+    measured:
+      upsert_central: 867 success, 16,508 s (1.57%)
+      batch_upsert: 867 success, 12,960 s (1.24%)
+      get_incoming_document: 858 success, 6,182 s (0.59%)
+      indox_api_router: 2,358 success, 14,648 s (1.40%)
+      indox_api_supabase: 2,365 success, 7,205 s (0.69%)
+      process_lock: 2,414 success, 4,309 s (0.41%)
+    terminal_write: 'STATUS=''COMPLETED'' via ''Build: ... - STATUS COMPLETED'' in the per-type action workflow'
+  re_delivery_paths:
+    intro: Complete census of every mechanism that can hand the SAME document to the driver again. Read from the live definitions. This is the mechanical explanation of the measured 31.9 driver deliveries per document per hour.
+    paths:
+    - n: 1
+      mechanism: self-respawn per action
+      where: indoxV2Driver01 If2 -> MAP ID1 -> Execute Workflow (self)
+      bound: NONE — one per action until _iter >= 50
+    - n: 2
+      mechanism: action-line self-call
+      where: Group By ACTION (<=25) -> Loop Over Items37 (10) -> Dispatch Action Lines (self)
+      bound: one child per loop iteration
+    - n: 3
+      mechanism: 5-min poll re-pickup
+      where: Poll Line Changes -> Get Changed Docs
+      bound: s_burst rn<=6 at absolute priority; LIMIT 120
+      note: 'any write bumps updated_at, which re-enters the 15-minute burst window. The query''s OWN comment states the loop: ''an action writes the row -> the row enters the changed-window -> it is picked again on the next poll -> next action -> repeat'''
+    - n: 4
+      mechanism: tail drainer (3rd independent feeder)
+      where: 'indoxV2TailDrain01 Every 5 min -> Pick Drain Candidates LIMIT 25 -> Drain Loop batchSize 1 -> Driver: Run By ID (waitForSubWorkflow:true)'
+      bound: 25 driver calls / 5 min
+    - n: 5
+      mechanism: hourly whole-corpus sweep
+      where: indoxV2Driver01 Schedule Trigger {hours:1,minute:5} -> GETALL Req -> Lines Batching Loop (20000)
+      bound: 1/hour x entire table
+    - n: 6
+      mechanism: poll node retry
+      where: Process Changed Doc retryOnFail maxTries 3 wait 3000ms onError:continueRegularOutput
+      bound: 3
+    - n: 7
+      mechanism: NEXT_RETRY_AT / RETRY_COUNT backoff
+      where: indoxV2ActionsGlobal01 'Record Base Doc Failure' AND errorHandler01 'Backoff + Dead-letter' — byte-identical logic
+      bound: 5 attempts; NEXT_RETRY_AT = now() + 5*power(3,RETRY_COUNT) min = 5/15/45/135; 'infinity' at >=5
+    - n: 8
+      mechanism: Terminalize re-queue
+      where: 'Terminalize Stalled: IN_PROGRESS >6h -> TO_EXTRACT with RETRY_COUNT+1'
+      bound: 5 attempts then MAX_ITERATIONS
+    - n: 9
+      mechanism: loop-back inside DOC BASE
+      where: Upsert (central) - Base Doc -> Loop Base Doc, and Record Base Doc Failure -> Loop Base Doc (batchSize 1)
+      bound: per batch item
+    - n: 10
+      mechanism: per-node retries
+      where: Figure Document Type 3267ms, Mark Invoice Completed 3333ms, Apply Gmail Label 5000ms, every indoxApiSupabase01 pg node maxTries 4
+      bound: 3-4 each
+    - n: 11
+      mechanism: Wait nodes
+      where: Wait {{Math.floor(Math.random()*6)+3}}s, Wait1, Webhook Callback Wait (20 min limit)
+      bound: '-'
+    - n: 12
+      mechanism: redis process lock
+      where: Check LOCKED -> processLock01 check_and_lock (INCR + TTL 600)
+      bound: TTL 600s
+    the_silent_drop:
+      finding: 'When processLock01 reports the document is already LOCKED, the driver takes `If NOT LOCKED` -> false -> `If TEST` -> (production branch) -> "Call ''Snooze Incoming Document''" -> "Process Blocked Error" — AND BOTH OF THOSE NODES ARE `disabled: true`. So a lock collision does not defer the document and does not raise an error: the document is SILENTLY DISCARDED for that pass.'
+      why_it_matters: There are five independent feeders (paths 1, 2, 3, 4, 5) racing for the same document, arbitrated only by a Redis lock whose loser is dropped on the floor. Every lost arbitration is a complete wasted pass — the work of getting the row, deciding, and acquiring the lock is all thrown away. This converts lock contention directly into the measured execution volume, and it gets WORSE as concurrency rises.
+  fan_out:
+    question: A prior partial measurement suggested ~398 executions per document against a theoretical floor near 11. VERIFY OR CORRECT — do not take on trust.
+    verdict: DIRECTIONALLY CORRECT, REFINED TO 292 MEASURED (330 INCLUDING THE MISSING SUBTREE)
+    measurement:
+      specimen: doc_msm3oxeu136v4c
+      query: select count(*), count(*) filter (where ndocs<=1), sum(1.0/greatest(ndocs,1)) from (select d."executionId", (select count(distinct m[1]) from regexp_matches(d.data,'(doc_[a-z0-9]{10,})','g') m) ndocs from execution_data d join execution_entity e on e.id=d."executionId" where d.data like '%doc_msm3oxeu136v4c%') hit;
+      raw_mentions: 1070
+      dedicated_executions_ndocs_eq_1: 248
+      amortized_executions: 292.1
+      span: 2026-08-10T14:38:25Z -> 16:54:45Z = 8,180 s (2h16m) of the document's last life
+      sum_of_inclusive_wall_across_those_executions: 145,808 s
+    what_the_292_excludes: 'This document''s BASE EXTRACTION subtree happened on 2026-08-09 (execution 682582, stamped in ACTION_LOG) and is outside the retained window. A document extracted inside the window additionally accrues, per the measured repeat rates below: 5.86 BaseDocEx01 + 6.41 UploadApiTools + 6.37 JQExV3Base + ~12 Gemini + ~7 drive ~= 38 executions. So the like-for-like figure is ~330.'
+    per_workflow_breakdown_for_the_specimen:
+    - wf: Incoming Documents v2 (error)
+      execs: 50
+      dedicated: 5
+      avg_docs: 33.9
+      amortized_s: 3090.7
+    - wf: Incoming Documents v2 (success)
+      execs: 109
+      dedicated: 27
+      avg_docs: 29.4
+      amortized_s: 1124.3
+    - wf: indox-v2 Tail Drainer
+      execs: 20
+      dedicated: 0
+      avg_docs: 10.5
+      amortized_s: 550.7
+    - wf: indox-v2 Actions — GDoc
+      execs: 110
+      dedicated: 27
+      avg_docs: 4.1
+      amortized_s: 248.9
+    - wf: Get Incoming Document
+      execs: 111
+      dedicated: 27
+      avg_docs: 29.5
+      amortized_s: 248.8
+    - wf: indox-v2 Decide
+      execs: 100
+      dedicated: 22
+      avg_docs: 30.5
+      amortized_s: 205.2
+    - wf: indox api
+      execs: 122
+      dedicated: 32
+      avg_docs: 112.6
+      amortized_s: 189.8
+    - wf: indox-v2 Upsert (central)
+      execs: 10
+      dedicated: 5
+      avg_docs: 2.0
+      amortized_s: 127.8
+    - wf: Batch Upsert
+      execs: 10
+      dedicated: 5
+      avg_docs: 2.0
+      amortized_s: 101.5
+    - wf: indox api - supabase
+      execs: 153
+      dedicated: 32
+      avg_docs: 97.7
+      amortized_s: 88.2
+    - wf: process_lock
+      execs: 108
+      dedicated: 31
+      avg_docs: 27.8
+      amortized_s: 51.9
+    - wf: indox-v2 Actions — DOC BASE
+      execs: 100
+      dedicated: 22
+      avg_docs: 30.5
+      amortized_s: 27.8
+    total_amortized_wall_s: 6068
+    reading: '~1.7 HOURS of amortized wall time for one document, and the "dedicated" column tells the story on its own: 27, 27, 22, 32, 31, 32, 22 — this document made between 22 and 32 complete round trips through decide + actions + get + upsert. Not 1. Not 3.'
+    cost_of_ONE_pass:
+      source: read node-by-node from the live definitions
+      execute_workflow_invocations: 19
+      chain: 'Run-By-ID execution: 1 Get Line By ID -> indoxDocGet01; 2 Call INDOX GETALL -> indoxApiRouter01; 3 Call Supabase -> indoxApiSupabase01; 4 Call indox-v2 Decide -> indoxV2Decide01; 5 Call router_doc_base -> indoxV2ActionsGlobal01 (mode=decide); 6 Call router_<type> -> per-type actions (0 if TYPE unresolved); 7 Check LOCKED -> processLock01; 8 Dispatch Action Lines -> SELF; 9 Execute Workflow -> SELF. Act-lane execution: 10 Call Actions—DOC BASE -> indoxV2ActionsGlobal01 (mode=act); 11 Call BaseDocEx01 (mode "each", PER ITEM); 12 Upload+OCR -> indoxV2UploadApiTools01; 13 Download file -> driveApi01; 14 Call JQExV3 Base -> JQExV3Base000001; 15 Upsert (central) -> indoxV2Upsert01; 16 Delegate to Batch Upsert -> indoxDocBatchUpsert01; 17 Call INDOX UPSERT -> indoxApiRouter01; 18 Call Supabase -> indoxApiSupabase01; 19 SB Unlock Doc -> processLock01.'
+      http_request_nodes: 9
+      http_breakdown: UploadApiTools 3 (/docExists, /documentOcr, thumbnail) + driveApi01 2 (d:download x2) + JQExV3 1 (/documentJsonQuery) + BaseDocEx01 1 (/webhook/invoice_extractor) + Gemini 1 (Google DocumentAI) [+0-2 priority-sync on the shipment lane]
+      postgres_nodes: 12
+      postgres_breakdown: PG Get 1; Load Company Resolver Gen x2 (decide + act) = 2 AT 190 ms EACH; BaseDocEx01 Check Local Enabled + Check AI Enabled = 2; JQExV3 Load V3 Config 1 AT 212 ms; Gemini Check AI Enabled + Load V3 Config (AI) + KVStorage + KVStorage1 = 4; Load Match Index + PG Upsert = 2.
+      registry_rebuilds_per_pass: 3
+      registry_cost_per_pass: ~600 ms of pure registry re-materialisation, per document, per pass
+      key_batching_defect: indoxV2ActionsGlobal01 / "Loop Base Doc" has batchSize 1 and calls BaseDocEx01 in mode "each" — there is NO batching at the single most expensive step in the system.
+      measured_confirmation:
+        method: execution counts per hour, normalised against indoxDocGet01 = exactly 1 per Run-By-ID pass
+        indoxDocGet01: 137/hr = the pass baseline
+        indoxV2Driver01: 275/hr = 2.0x -> both self-invocations confirmed
+        indoxV2ActionsGlobal01: 219/hr = 137 decide-mode + 82 act-mode -> DOC BASE runs TWICE per document per pass
+        BaseDocEx01: 1,238/hr = 9.0 per pass (Loop Base Doc batchSize 1 over an action-line group)
+        indoxApiSupabase01: 1,827/hr = 13.3 per pass
+        JQExV3Base000001: 1,233/hr = 1,233 full 215 KB registry reads per hour from this node alone
+    the_floor:
+      one_clean_pass_no_extraction: 12
+      one_pass_as_actually_built: 19
+      note: The system's OWN minimum for one pass is 19 executeWorkflow invocations, not 12 — two of the 19 are the driver calling itself, which is pure overhead (see journey.hops[2].THE_ROOT_CAUSE_OF_THE_REPEAT), and two more are the double evaluation of indoxV2ActionsGlobal01 in decide then act mode.
+      realistic_floor_for_a_document_that_needs_all_its_state_transitions: 41-51
+      realistic_composition: 'A document legitimately needs ~3 actions: (a) extract base -> COMPANY_ID/TYPE/DATE, (b) per-type extraction, (c) selection + mark completed. At the theoretical 12 that is 41 including the one-time extraction subtree; at the as-built 17 (19 minus the two self-calls) it is 51.'
+      correction_to_the_brief: '"a theoretical floor near 11" is right for a SINGLE pass counted generously. The honest floor for a real document on the current topology is 41-51. The measured 292-330 is therefore a 6-8x waste factor, not a 27x one. That is still the largest single lever in the system, but the plan below is costed against 6-8x.'
+      cost_of_the_measured_27_passes:
+        execute_workflow_sub_executions: 27 x 19 = 513
+        http_calls: 27 x 9 = 243
+        sql_statements: 27 x 12 = 324
+        registry_rebuilds: 27 x 3 = 81 full 2,378-identifier rebuilds = ~16 seconds of pure DB CPU for ONE document
+    system_wide_ratio:
+      executions_per_hour_measured: 484/minute averaged over 16:52-17:11Z = ~29,000/hour. Earlier in the window the rate was ~9,000-12,000/hour (10-minute buckets 14:40-16:40Z ranged 725-2,342). Both are reported; the system is bursty and currently at the high end.
+      documents_completed_per_hour: 20
+      completed_per_hour_source: '`select count(*) from incoming_documents where updated_at > now()-interval ''60 minutes'' and "STATUS"=''COMPLETED''` = 20. Cross-check: COMPLETED went 6,341 at 16:52Z -> 6,358 at 17:12Z (+17 in 20 min = 51/h); and 6,321 at 14:01Z (state-machine map) -> 6,341 at 16:52Z (+20 in 2.85h = 7/h). The rate is bursty; 20/h is the middle measurement and is used throughout.'
+      executions_per_completed_document: ~1450
+      why_it_differs_from_292: 292 is the cost of a document that FINISHES. ~1,450 is total system throughput divided by completions — it includes all the work spent on the ~300 documents that were worked on this hour and did not finish. The gap between 292 and 1,450 is the cost of thrash on non-completing documents.
+  ```
+
+  ## Budget
+
+  ```yaml
+  header_warning: n8n parent executions include their children's wall time. The percentages below sum to 100% of *execution-seconds recorded*, NOT to 100% of distinct work. "Incoming Documents v2" (19.71%) and "indox-v2 Actions — DOC BASE" (17.15%) are almost entirely re-counted BaseDocEx01 seconds. The `exclusive` column is the honest one.
+  totals:
+    total_execution_seconds_in_window: ~1,049,000
+    window_wall_clock_seconds: 34,149
+    execution_seconds_per_wall_second: 30.7
+    on_cores: 6
+    reading: 30.7 execution-seconds are consumed per wall-clock second on 6 cores. That ratio is only possible because most of it is BLOCKED, not computing — waiting on a child execution, on a queue slot, or on an HTTP response.
+  per_stage:
+  - stage: BaseDocEx01 — base extraction
+    inclusive_s: 322920
+    pct_inclusive: 30.78
+    exclusive_s: ~264000
+    p50: 126.1
+    p90: 612.4
+    max: 976.5
+    cpu_vs_wait: 82.9% of node time is the AI webhook node, and 65% of THAT is queue wait for a worker slot (Gemini queue latency 40.4 s avg vs 21.6 s model time). So roughly 54% of this stage is pure queueing, 28% is waiting on the Gemini model (external), and ~4% is real local work (694 ms apitools + 1,780 ms JQ per run).
+    burns_cpu_in: nobody locally — it is a blocked HTTP wait. The model runs off-box.
+    critical_path: true
+  - stage: indoxV2Driver01 — driver (PARENT)
+    inclusive_s: 206793
+    pct_inclusive: 19.71
+    exclusive_s: ~0 — re-counted child time
+    note: error path p50 2,673.8 s vs success p50 12.8 s; 189 errored executions dominate
+    critical_path: true
+  - stage: indoxV2ActionsGlobal01 — DOC BASE (PARENT)
+    inclusive_s: 179929
+    pct_inclusive: 17.15
+    exclusive_s: ~0 — re-counted child time
+    note: success p50 0.57 s. The 179,929 s is 88 canceled/errored executions parked at p50 3,600 s — a timeout, not work. Each holds a worker slot for an hour.
+    critical_path: true
+  - stage: indoxV2ExtractInvoiceGemini01 — AI extractor
+    inclusive_s: 64346
+    pct_inclusive: 6.13
+    exclusive_s: 64346
+    p50: 15.0
+    p90: 47.2
+    max: 333.6
+    queue_latency: avg 40.44 s, p90 126.06 s, max 397.78 s
+    burns_cpu_in: n8n workers (orchestration only); the model is external
+    critical_path: true
+  - stage: driveApi01 — drive fetch
+    inclusive_s: 55199
+    pct_inclusive: 5.26
+    exclusive_s: 55199
+    p50: 12.9
+    p90: 35.1
+    burns_cpu_in: drive-shlomo-laptop (1.0 CPU cap, 384 MiB, measured 18.7%)
+    critical_path: true
+  - stage: indoxV2UploadApiTools01 -> apitools /documentOcr
+    inclusive_s: 38606
+    pct_inclusive: 3.68
+    exclusive_s: 38606
+    burns_cpu_in: apitools (4.0 CPU cap, measured 80-98%)
+    critical_path: true
+  - stage: syncV3Deliver0001 — ingest
+    inclusive_s: 30184
+    pct_inclusive: 2.88
+    critical_path: NO — parallelisable, off the per-document path
+  - stage: JQExV3Base000001 -> apitools /documentJsonQuery
+    inclusive_s: 20044
+    pct_inclusive: 1.91
+    burns_cpu_in: apitools
+    critical_path: true
+  - stage: gmailApiImap01 — mail ingest
+    inclusive_s: 18112
+    pct_inclusive: 1.73
+    critical_path: false
+  - stage: indoxV2Upsert01 + indoxDocBatchUpsert01 — write-back
+    inclusive_s: 29468
+    pct_inclusive: 2.81
+    burns_cpu_in: supabase-db (1.0 CPU cap, measured 20-58%)
+    critical_path: true
+  - stage: indoxApiRouter01 + indoxApiSupabase01 — API layer
+    inclusive_s: 21853
+    pct_inclusive: 2.09
+    critical_path: true
+  - stage: errorHandler01
+    inclusive_s: 11304
+    pct_inclusive: 1.08
+    note: 959 error-mode executions + 1,200 queued with NULL startedAt; queue latency avg 16.4 s
+    critical_path: false
+  container_cpu:
+    method: two `docker stats --no-stream` samples, ~16:55Z and ~17:14Z
+    samples:
+    - container: n8n-worker-2
+      cpu: 117.00% / 80.49%
+      mem: 457 MiB / 483 MiB of 2 GiB
+    - container: n8n-worker-1
+      cpu: 83.08% / 118.88%
+      mem: 478 MiB / 1.186 GiB of 2 GiB
+    - container: apitools
+      cpu: 97.70% / 80.39%
+      mem: 921 MiB / 1024 MiB of 6 GiB
+    - container: supabase-db
+      cpu: 57.52% / 20.14%
+      mem: 268 MiB / 233 MiB of 1 GiB
+    - container: n8n-postgres
+      cpu: 40.05% / 29.67%
+      mem: 1.424 GiB / 1.265 GiB of 2 GiB
+    - container: n8n-worker-1-runners
+      cpu: 37.52% / 26.10%
+      mem: 211 MiB / 175 MiB of 1.5 GiB
+    - container: n8n main
+      cpu: 27.40% / 13.96%
+      mem: 560 MiB / 576 MiB of 2 GiB
+    - container: drive
+      cpu: 18.68%
+      mem: 162 MiB of 384 MiB
+    - container: n8n-worker-2-runners
+      cpu: 10.40% / 14.30%
+      mem: 242 MiB / 250 MiB of 1.5 GiB
+    who_burns_the_cpu: 'In order: the two n8n workers (~200% combined — orchestration, JS nodes, payload serialization), apitools (~80-98% of its 4-core cap — OCR and geometry), then the two databases. The task-runners are comparatively idle (10-38%), which means the workers'' CPU is n8n''s own item-plumbing and execution-data serialization, not user JS code.'
+    load: loadavg 14.48 / 15.92 / 24.31 on 6 cores = 2.4x oversubscribed
+  memory:
+    host_total: 9,950 MiB
+    host_free: 709 MiB at 16:55Z -> 189 MiB at 17:14Z (falling)
+    swap: 4,069 MiB -> 4,379 MiB of 6,144 MiB used (rising)
+    container_limits_sum: 31.2 GiB (3.1x over-commit)
+    verdict: THERE IS NO MEMORY HEADROOM AND IT IS GETTING WORSE DURING THE WINDOW. Every recommendation in section 5 that needs RAM names where it comes from.
+  n8n_bookkeeping_overhead:
+    window: 23 minutes on n8n-postgres (pg_stat_statements reset 16:42:02Z)
+    measured:
+    - stmt: INSERT INTO execution_data
+      calls: 7469
+      total_s: 93.2
+      mean_ms: 12.482
+    - stmt: UPDATE execution_data SET workflowData,data
+      calls: 7304
+      total_s: 214.0
+      mean_ms: 29.3
+    - stmt: DELETE FROM execution_data WHERE executionId
+      calls: 11929
+      total_s: 98.8
+      mean_ms: 8.28
+    - stmt: DELETE FROM execution_entity WHERE id IN (...)
+      calls: 119
+      total_s: 102.9
+      mean_ms: 864.46
+    sum_db_seconds: 508.9
+    over_wall_seconds: 1380
+    pct_of_one_core: 36.9%
+    payload_size: execution_data = 2,337 MB over 28,892 rows = 81 KB per execution
+    write_volume: 81 KB x ~29,000 executions/hour = ~2.3 GB/hour written and then deleted
+    verdict: 37% of one core, permanently, purely to record that these executions happened. 7,469 executions created in 23 minutes confirms the ~19,500-29,000/hour rate independently of execution_entity (which pruning keeps small).
+  ```
+
+  ## Complexity
+
+  ```yaml
+  symbols:
+    N: document count in incoming_documents (16,680 today)
+    C: company count in public.companies (1,183 today) -> 2,378 bound identifiers
+    D: documents in flight per hour (measured 317)
+    P: polls per hour (12 — the trigger is every 5 MINUTES, not 2; see journey.hops[1].correction)
+    E: base extractions per document (measured 5.86)
+    Q: apitools queries per document (measured 5.4 /documentJsonQuery calls per file_id)
+  per_poll:
+    frequency: 12/hour (every 5 minutes), NOT 30/hour — see journey.hops[1].correction
+    pickup_query:
+      cost: O(N log N) with a large constant — TWO full scans and ~10 sorts per evaluation
+      why: (a) The `elig` CTE full-scans incoming_documents; its WHERE is a 9-way OR chain including `"STATUS" is null or "STATUS" = ''` and an unanchored `updated_at > now() - interval '15 minutes'`, which no single index can serve. (b) Inside that WHERE, the dup-detector `"ID" in (select z."ID" from (...) z where z._n > 1)` is a SECOND full scan carrying `count(*) over (partition by "COMPANY_ID", trim(coalesce(nullif("DOC_ID",''), nullif("COMPANY_DOC_ID",''))))` — a window that forces a sort of the entire table on a COMPUTED expression that cannot be indexed, plus 4 regexp_replace calls per row. (c) NINE slices (s_burst, s_fin, s_finstale, s_live, s_new, s_old, s_stale, s_recov, s_adj) each run their own row_number() over the eligible set, seven with an md5() tiebreak computed per row. (d) `u` UNION ALLs all nine, then `group by "ID"` with `min(k)` — a tenth sort/hash-aggregate. Roughly two full scans plus ten sorts, every 5 minutes, to return 120 rows.
+      measured: 892 calls, 363.58 ms mean, 324.3 s total (32.2h window)
+      scales_with: CORPUS, not with the 120 rows returned
+      unproven: Whether the planner materialises `elig` (referenced 9 times, so it should) or re-evaluates it per slice. EXPLAIN was deliberately NOT run against the live pickup to avoid adding load to the pipeline's own database. If it is not materialised the cost is ~9x the above.
+    terminalize_stalled:
+      cost: O(N), UNBOUNDED UPDATE — no LIMIT
+      why: The WHERE is a disjunction over "STATUS" + updated_at and the leading `"ID" <> '__bootstrap__'` is non-sargable, so it full-scans. Plus one `NOT EXISTS` drain-guard subquery (uncorrelated, so evaluable once).
+      frequency: 288/day — same 5-minute trigger as the pickup, so both run together
+    tail_drainer_same_cadence:
+      cost: O(N) — `shared` CTE does GROUP BY "COMPANY_DOC_ID" HAVING count(DISTINCT "COMPANY_ID") > 1 over the WHOLE table, plus a NOT EXISTS anti-join against indox_dupid_targets_20260810
+      measured: 79 calls, 11,951.82 ms mean — 12 SECONDS per call
+      frequency: every 5 minutes
+    verdict_per_poll: 'Every 5 minutes the database is asked to full-scan incoming_documents at least four times: twice for the pickup, once for the unbounded reaper UPDATE, once for the tail drainer''s whole-table GROUP BY. That is the measured source of seq_tup_read = 759,431,037.'
+  per_document:
+    registry_binding:
+      cost: O(16 x C) per call, called E times per document -> O(N x E x C) for the corpus
+      why: '`public.extraction_queries` is a VIEW, not a table. Its definition: `SELECT ... bind_registry(s.value::jsonb, jsonb_build_object(''@registry_ids'', COALESCE(r.registry_ids,''[]''), ''@registry_idents'',..., ''@registry_names'',..., ''@registry_name_map'',..., ''@registry_primary_map'',...)) FROM settings s LEFT JOIN company_registry r ON r.instance = s.instance WHERE s.key LIKE ''q\_v3\_%''`. There are 16 matching settings rows, and `company_registry` is re-evaluated per row rather than once. The 2,378 identifiers are rebuilt from the 1,183-row companies table and re-substituted into every query template, on every call.'
+      measured:
+        query: select coalesce(jsonb_object_agg(key, query), $1::jsonb) as cfg from public.extraction_queries where instance = $2
+        calls: 4906
+        mean_ms: 734.24
+        total_s: 3602.2
+        rank: '#1 query on supabase-db by total time'
+        collateral: companies seq_scan = 142,560, seq_tup_read = 168,330,421 tuples from a 1,183-row table
+      per_node_explain_analyze_note: EXPLAIN (ANALYZE, BUFFERS) against the live supabase DB, per reading node
+      per_node_explain_analyze:
+      - node: indoxV2ActionsGlobal01 / Load Company Resolver Gen
+        statement: SELECT COALESCE((SELECT resolver_gen FROM extraction_queries WHERE instance=... AND key='q_v3_company'),'')
+        measured_ms: 190.5
+        plan: Seq Scan on companies rows=1183 -> CTE ident rows=2378 -> sort 2378 rows (337 kB quicksort) -> GroupAggregate
+        calls_per_hour: 219
+        the_absurdity: THIS QUERY WANTS AN 8-CHARACTER STRING. To produce it the view must build the entire 2,378-element registry, run bind_registry to splice it into the 187 KB q_v3_company JSON, and then md5() the whole 187 KB — 190 ms for 8 bytes. And it runs TWICE per document per pass, because `Route Mode` sits AFTER `Load Company Resolver Gen`, so decide-mode calls pay the act-mode cost.
+        cost: 219 x 190 ms = ~42 s/hour of supabase CPU, entirely wasted
+      - node: JQExV3Base/BS/Invoice/Order/Ship000001 + indoxV2ExtractInvoiceGemini01 / Load V3 Config
+        statement: select coalesce(jsonb_object_agg(key, query),'{}') from extraction_queries where instance=...
+        measured_ms: 212.4
+        plan: same rows=2378 CTE, x16 keys via Materialize
+        calls_per_hour: 1,233 (JQExV3Base alone) + 2,091 (Gemini)
+        cost: 1,233 x 212 ms = ~4.4 MINUTES/hour of DB CPU, plus ~215 KB x 1,233 = ~265 MB/hour of JSON shipped into n8n worker heaps
+      payload_sizes:
+        q_v3_company_bytes: 186956
+        other_15_keys_total: ~28 KB
+        largest_jsonb_array: 2,378 elements  <- the reported 2,378 identifiers
+        composition: 1,212 + 1,166 = 2,378, from 1,183 companies x ~2 identifier columns via a LATERAL VALUES fan-out
+        total_string_leaves_in_q_v3_company: 7183
+      the_punchline: APITOOLS_FIND_OPTION_MAX_TEXTS truncates a find-option list to 25. Of the 2,378 identifiers rebuilt, serialised and shipped on every call, apitools uses at most 25. (Quoted from the workflow comment in JQExV3Base000001 'Fan Fields'; NOT read from the running apitools container, so UNPROVEN for the current build.)
+      company_registry_is_also_a_plain_view: '`company_registry` has relkind=''v'' — it is a plain VIEW, not materialised. So is `extraction_queries`. Nothing is cached anywhere in this path.'
+      this_is_the_one_that_scales_with_the_CLIENT: Cost is independent of N but linear in C, and it is paid once per extraction. A client with 5,000 companies pays 4.2x per call. A client with 5,000 companies AND 200k documents pays 4.2 x 12 = 50x the current 3,602 s.
+    ocr_cache_read:
+      cost: O(blob) per call, and blob does not fit in shared_buffers
+      measured:
+        query: SELECT ocr_json FROM ocr_cache WHERE file_hash = $1
+        calls: 165220
+        mean_ms: 17.65
+        total_s: 2915.9
+        table_size: 175 MB over 5,140 rows (avg 32 kB, max 548 kB per blob)
+        shared_buffers: 128 MB — SMALLER THAN THE TABLE
+      why_it_is_worse_than_it_looks: Per the apitools profile, /docExists and /documentImage both load and decode the FULL OCR JSONB via OcrObject.from_file_id in order to return, respectively, a boolean and a static file path — 1,775 worker-seconds = 10.8% of all apitools CPU spent on data neither endpoint's output depends on.
+    postgrest_layer:
+      measured:
+      - calls: 38004
+        mean_ms: 77.56
+        total_s: 2947.6
+        q: PostgREST SELECT over incoming_documents
+      - calls: 26760
+        mean_ms: 31.43
+        total_s: 841.1
+        q: settings jsonb_object_agg lookup
+      - calls: 3179
+        mean_ms: 270.37
+        total_s: 859.5
+        q: SELECT name FROM pg_timezone_names
+      - calls: 3967
+        mean_ms: 302.77
+        total_s: 1201.1
+        q: INSERT INTO indox_sync_stats
+      - calls: 279
+        mean_ms: 7710.73
+        total_s: 2151.3
+        q: select pg_sleep($1)
+      notes:
+      - 'pg_timezone_names is pure PostgREST schema-cache overhead: 859 s of a 1-core DB spent listing timezones.'
+      - '`select pg_sleep($1)` — 279 calls at 7.7 SECONDS each, 2,151 s total, holding a database connection the whole time. No occurrence of `pg_sleep` exists anywhere in platform-base/, apps/ or scripts/ (grep returned zero hits), so this is issued from a live n8n node or from PostgREST. UNPROVEN: which caller.'
+      - settings table has 66 rows and 48,132 sequential scans.
+  per_hour_whole_corpus:
+    get_all_sweep:
+      cost: O(N), hard cap 20,000
+      status: BROKEN — 2/2 observed executions failed at 'Call INDOX GETALL' (state-machine map P2)
+      headroom: 16,680 / 20,000 = 83.4% of cap
+      note: even when fixed, it dies permanently at 20k rows
+    tail_drainer:
+      measured: 79 calls, 11,951.82 ms mean, 944.2 s total — 12 SECONDS per call
+      cost: O(N) with a multi-predicate filter and an anti-join against indox_dupid_targets_20260810
+  measured_scan_pressure:
+    incoming_documents:
+      seq_scan: 72732
+      seq_tup_read: 759431037
+      idx_scan: 359453
+      idx_tup_fetch: 205004769
+      n_tup_upd: 66741
+      n_tup_hot_upd: 37887
+      reading: 759 MILLION rows read sequentially from a 16,680-row table in 32 hours — an average of 10,442 rows per sequential scan, i.e. most scans read the whole table. Index scans fetch 570 tuples each on average, which is not point-lookup behaviour either.
+    companies:
+      seq_scan: 142560
+      seq_tup_read: 168330421
+      reading: 168 million tuples from a 1,183-row table = the registry view, 120 scans per second of pipeline time
+  growth_curve:
+    assumptions: Extrapolated from the measured per-call costs, holding hardware and the current algorithm constant. Marked PROJECTION — these are arithmetic extrapolations of measured constants, not measurements.
+    table:
+    - N: 16680
+      pickup_ms_per_poll: 364
+      pickup_s_per_hour: 10.9
+      terminalize_relative: 1.0
+      registry_s_per_hour: 112
+      get_all: 83.4% of cap
+      verdict: current state
+    - N: 18000
+      pickup_ms_per_poll: 396
+      pickup_s_per_hour: 11.9
+      terminalize_relative: 1.08
+      registry_s_per_hour: 121
+      get_all: 90% of cap
+      verdict: PROJECTION — nothing breaks yet
+    - N: 50000
+      pickup_ms_per_poll: 1200
+      pickup_s_per_hour: 36
+      terminalize_relative: 3.0
+      registry_s_per_hour: 336
+      get_all: DEAD — exceeds the 20,000 cap and the Guard Get Size node throws
+      verdict: PROJECTION — GET_ALL is permanently gone (it already fails today). Pickup is still tolerable. Registry hits 336 s/h = 9.3% of supabase-db's single core.
+    - N: 200000
+      pickup_ms_per_poll: 5500
+      pickup_s_per_hour: 165
+      terminalize_relative: 12.0
+      registry_s_per_hour: 1344
+      get_all: DEAD
+      verdict: 'PROJECTION — the pickup query alone consumes 165 s of every 3,600 s on a 1-core DB, the reaper''s unbounded full-table UPDATE runs 12x heavier every 5 minutes, and the registry consumes 1,344 s/h = 37% of the core. With C also growing to 5,000 the registry term alone becomes ~157% of one core: the DB cannot serve it.'
+    the_terms_that_scale_with_the_CORPUS_not_the_document_count:
+    - 'pickup dup-detector window function: O(N log N) x 30 polls/hour — five whole-corpus sorts per poll'
+    - 'Terminalize Stalled: O(N) full-scan UPDATE x 30/hour'
+    - 'GET_ALL hourly sweep: O(N), hard-capped at 20,000, ALREADY FAILING at 16,680'
+    - 'PostgREST SELECT over incoming_documents: 38,004 calls at 77.56 ms'
+    the_term_that_scales_with_the_CLIENT_not_the_corpus:
+    - 'the @registry_ids binding: O(16 x C) per extraction. This is the one that gets worse as the CLIENT grows (more companies), independently of how many documents they have, and it is already the #1 query on the database.'
+  ```
+
+  ## Where the time goes
+
+  ```yaml
+  note: 'Ranked by share of TOTAL PIPELINE WALL TIME, de-nested: parent workflows whose time is entirely their children''s are excluded from the ranking and shown separately, so these shares sum to distinct work. CPU share is attributed to the container that actually burns it.'
+  ranked:
+  - rank: 1
+    stage: AI leg of base extraction (BaseDocEx01 node 'Extract Base via Webhook' -> Gemini)
+    share_of_wall: 25.5%
+    share_of_local_cpu: ~3% — n8n worker orchestration only; the model is off-box
+    composition: 65% queue wait for a worker slot, 35% model time
+    critical_path: true
+    parallelisable: already parallel with the local leg — that is the problem, it is the slow half of a barrier
+    note: decisive for 3.7% of documents; see section 5 item P1
+  - rank: 2
+    stage: drive api — file fetch
+    share_of_wall: 5.26%
+    share_of_local_cpu: drive container, 18.7% of its 1.0-CPU cap
+    critical_path: true
+    parallelisable: partly
+  - rank: 3
+    stage: apitools /documentOcr via indoxV2UploadApiTools01
+    share_of_wall: 3.68%
+    share_of_local_cpu: apitools — 34.0% of apitools worker-seconds (5,608 s of 16,486 s)
+    critical_path: true
+    parallelisable: bounded by APITOOLS_MAX_CONCURRENT_OCR=8 of 10 gunicorn workers
+  - rank: 4
+    stage: ingest (Sync v3 Deliver + mail api)
+    share_of_wall: 4.61%
+    share_of_local_cpu: low
+    critical_path: false
+    parallelisable: YES — fully off the per-document path
+  - rank: 5
+    stage: write-back (Upsert central + Batch Upsert)
+    share_of_wall: 2.81%
+    share_of_local_cpu: supabase-db, 20-58% of its 1.0-CPU cap
+    critical_path: true
+    parallelisable: NO — serialized through a 1-core database
+  - rank: 6
+    stage: API layer (indox api router + indox api supabase)
+    share_of_wall: 2.09%
+    critical_path: true
+    parallelisable: partly
+  - rank: 7
+    stage: apitools /documentJsonQuery via JQExV3Base000001
+    share_of_wall: 1.91%
+    share_of_local_cpu: apitools — 53.3% of apitools worker-seconds (8,789 s of 16,486 s) — the single largest CPU consumer on the box
+    critical_path: true
+    parallelisable: 'bulkhead is inert: 12 slots > 10 workers, so it never sheds'
+    note: 'THE DIVERGENCE THAT MATTERS: /documentJsonQuery is only 1.91% of WALL time but 53.3% of apitools CPU. It is cheap to wait for and expensive to run. When the AI leg is removed (P1) this becomes the bottleneck.'
+  - rank: 8
+    stage: errorHandler01
+    share_of_wall: 1.08%
+    critical_path: false
+    note: 1,200 executions queued with NULL startedAt; avg queue latency 16.4 s
+  - rank: 9
+    stage: local leg of base extraction (nodes 1-9, 11-14 of BaseDocEx01)
+    share_of_wall: ~1.0%
+    share_of_local_cpu: apitools
+    critical_path: true
+    note: 2,609 ms of a 67,222 ms execution. This is the part that produces the answer.
+  excluded_as_re_counted_parent_time:
+  - stage: indoxV2Driver01
+    inclusive_pct: 19.71
+    actual: children's time, re-counted
+  - stage: indoxV2ActionsGlobal01
+    inclusive_pct: 17.15
+    actual: 88 executions parked at a 3,600 s timeout, plus children's time
+  the_one_sentence: A quarter of the pipeline's wall time is spent waiting for an AI call that, 96% of the time, returns an answer the system already computed in 694 milliseconds — and it does that ~6 times per document because one If node asks "am I in test mode?" when it meant to ask "is there more work to do?", and so respawns the whole pipeline once per action.
+  the_third_sentence: 'And underneath both: to process one document the database is asked to rebuild a 2,378-identifier company registry three times per pass — once, at 190 ms, purely to return an 8-character hash — while every 5 minutes it full-scans the whole document table four times over (twice for the pickup, once for an unbounded reaper UPDATE, once for the tail drainer) on a container capped at a single core.'
+  the_second_sentence: 'Measured in CPU rather than wall time the answer is different and equally actionable: apitools is the only saturated compute resource (80-98% of 4 cores), 53.3% of it is /documentJsonQuery and 10.8% of it is two endpoints loading a 32 kB OCR blob to return a boolean and a file path.'
+  ```
+
+  ## Plan ordering
+
+  by leverage (expected saving / (risk x effort))
+
+  ## Plan overlap warning
+
+  P1 and P2 target overlapping seconds. Their savings are NOT additive; the combined estimate is computed multiplicatively in `combined_estimate`.
+
+  ## Plan
+
+  ```yaml
+  - id: P1
+    title: Make the AI leg of base extraction conditional on the local leg failing
+    leverage: HIGHEST
+    evidence:
+    - 'execution 898157: node ''Extract Base via Webhook'' = 64,613 ms of 67,222 ms = 96.1%'
+    - '1,587 executions over 4h: 82.9% of ALL node time is the single hottest node'
+    - 'Agreement census over the same 1,587 executions, extracted from SELECTION_DEBUG_BASE: LOCAL_ONLY on all three fields 902 (56.8%) — the AI returned NOTHING; AGREE on all three 359 (22.6%); NONE on all three 65 (4.1%) — neither produced anything; AI_ONLY on at least one field 59 (3.7%) — the ONLY runs where AI added information; DISAGREE_PREFER_LOCAL 93 field-level occurrences, of which the selector chose LOCAL in 93 of 93.'
+    - 'the local leg''s own _TIMINGS for the same document: {TYPE:614, DOC_DATE:71, COMPANY_ID:9} = 694 ms'
+    change: Gate node 10 ("Extract Base via Webhook") behind an If that fires only when the local leg produced no value for at least one of COMPANY_ID / TYPE / DOC_DATE. The existing "Check AI Enabled (Base)" / "If AI Disabled (Base)" pair is already the right insertion point — it currently tests a static flag; make it test the local result. Keep the Merge and Select Base nodes exactly as they are, so the selector's prefer-local semantics are untouched.
+    expected_firing_rate: ~11% of runs (65 NONE + 59 AI_ONLY + ~50 partial-miss of 1,587)
+    arithmetic: 'BaseDocEx01 = 322,920 s inclusive = 30.78% of pipeline wall. 82.9% of its node time is the AI node => 267,700 s. Running it in 11% of cases instead of 100% saves 0.89 x 267,700 = 238,300 s = 22.7% of TOTAL pipeline wall time. Second-order: it removes ~89% of the 3,343 Gemini executions per 4 hours, which frees the worker slots that are currently producing 40.4 s of queue latency for everything else — so the remaining stages get faster too.'
+    risk: LOW-MEDIUM
+    risk_detail: 'The 3.7% of runs where AI is the sole source of a field STILL RUN under this gate, because in those runs the local leg produced nothing — that is exactly the trigger condition. The residual exposure is the DISAGREE class where AI was right and local wrong; but the selector already prefers local in 93 of 93 disagreements today, so that behaviour is unchanged. Net: no document loses a field it gets today.'
+    blast_radius: one If node inside BaseDocEx01. Reversible by flipping the condition back to the static flag.
+    effort: S
+    verification: After the change, re-run the SELECTION_DEBUG_BASE census. `AI_ONLY` count must not fall below 59 per 1,587 extractions; BaseDocEx01 p50 should fall from 126 s toward ~5 s.
+  - id: P2
+    title: Stop the driver respawning itself once per action — continue in the same execution
+    leverage: HIGHEST
+    evidence:
+    - indoxV2Driver01 / If2 condition is `{{ $execution.mode }} notEquals 'test'` — UNCONDITIONALLY TRUE in production
+    - its true branch is No Operation, do nothing4 -> MAP ID1 (disabled, passthrough) -> Execute Workflow [-> {{$workflow.id}} = ITSELF, waitForSubWorkflow:false]
+    - its false branch — Check next In Same Execution -> Run By ID — is the CONTINUE-IN-PLACE path, and it is reachable only in test mode
+    - 'a second self-call exists in parallel: Group By ACTION (<=25) -> Loop Over Items37 (10) -> Dispatch Action Lines [-> SELF]'
+    - 'measured: indoxDocGet01 137/hr (1 per Run-By-ID pass) vs indoxV2Driver01 275/hr = exactly 2.0x — both self-calls confirmed live'
+    - 317 distinct documents received 10,110 driver deliveries in 60 minutes = 31.9 each
+    - BaseDocEx01 ran 1,161 times over 198 distinct documents in 90 minutes = 5.86 per document
+    - indoxV2UploadApiTools01 6.41 per document; JQExV3Base000001 6.37 per document
+    - 'worst single document: doc_msncwyoscezlkg — 53 base extractions in 90 minutes, 15,637 execution-seconds'
+    - the only bound is max_actions_per_doc = 50 in Decide DOC BASE Action; 22-32 measured passes are INSIDE the permitted envelope
+    root_cause: 'Not the pickup predicate — the driver. Every action a document receives spawns a brand-new full driver execution for the same ID, because the node that decides whether to continue in-place or respawn is testing `$execution.mode`, not progress. Each respawn re-pays the entire 19-invocation pass: get the row, decide, evaluate DOC BASE twice, rebuild the registry three times, acquire the lock.'
+    change:
+      step_1_the_fix: Make If2 test progress instead of execution mode. The correct condition is "is there a next action for this document AND have we not exceeded the per-execution action budget" — and the continue-in-place branch it should route to ALREADY EXISTS (Check next In Same Execution -> Run By ID) and is already wired. This is a condition change on one If node, not new topology. Keep a bounded respawn (say every 10th action) so a single execution cannot run unboundedly long.
+      step_2: 'Remove the duplicate: `Execute Action` currently fans out to BOTH `Dispatch Action Lines` (self) and, via Check Next Action/If2, `Execute Workflow` (self). One of the two is redundant. Keep the action-line lane (it batches <=25 documents per group); drop the per-document respawn.'
+      step_3: 'Make the LOCKED branch defer instead of silently dropping. `Call ''Snooze Incoming Document''` and `Process Blocked Error` are both `disabled: true`, so a lock collision discards the pass. Re-enable a deferral (or write NEXT_RETRY_AT) so the work already done is not thrown away.'
+      step_4_defence_in_depth: Make `extract_base_doc` a no-op when BASE_EXTRACTION_COMPLETED='true' AND API_TOOLS_ID is present, unless STATUS='ACTION_RESTART'. 867 rows sit in TO_EXTRACT already carrying BASE_EXTRACTION_COMPLETED='true'.
+      step_5_index: There is no index on "STATUS" — the 7 existing indexes are on ID, HASH, (CONNECTION, SOURCE_ID), created_at, updated_at, doc_date_norm and TIMESTAMP. Add one covering the pickup's status predicate.
+    arithmetic: 'Step 1+2 alone remove one of the two self-invocations outright: measured 2.0x -> 1.0x on driver executions, i.e. HALF of all driver, decide, DOC BASE, get-doc and process_lock executions disappear with no behavioural change. Beyond that, converting per-action respawn into in-place continuation collapses the per-pass overhead (get row + decide + 2x DOC BASE + 3x registry rebuild = ~600 ms of DB CPU + ~13 sub-executions) from once-per-action to once-per-document. Against the measured 5.86x base-extraction repeat, eliminating 4.86 of every 5.86 removes 0.83 x 322,920 = 268,000 s; the same ~4.9x reduction applies to UploadApiTools (38,606 s), JQExV3 (20,044 s), drive api (55,199 s), Gemini (64,346 s), Upsert (16,508 s), Batch Upsert (12,960 s), indox api (14,648 s), indox api - supabase (7,205 s) and process_lock (4,309 s) = 233,825 s reduced ~4.9x saves ~186,000 s = 17.7% of pipeline wall.'
+    risk: MEDIUM
+    risk_detail: Longer-lived single executions replace many short ones, so a crash loses more work — bound it with the every-10th-action respawn in step 1. The continue-in-place branch is already written and already exercised in test mode, so it is not new code. Step 3 changes a silent drop into a deferral, which can only increase throughput.
+    blast_radius: one If condition, one connection removed, two disabled nodes re-enabled, one index. No schema change required for steps 1-3.
+    effort: M
+    verification: indoxV2Driver01 executions/hour must fall to ~1.0x indoxDocGet01 executions/hour (from the measured 2.0x), and driver deliveries per document per hour from 31.9 to under 6.
+  - id: P3
+    title: Give supabase-db the resources n8n-postgres was just given
+    leverage: HIGH
+    evidence:
+    - 'container limits: NanoCpus 1000000000 = 1.0 CPU, Memory 1073741824 = 1 GiB'
+    - shared_buffers = 16384 x 8 kB = 128 MB (stock default)
+    - effective_cache_size = 16384 x 8 kB = 128 MB (stock default)
+    - work_mem = 4 MB (stock), synchronous_commit = ON
+    - 'hot working set: incoming_documents 50 MB + ocr_cache 175 MB = 225 MB — 1.8x shared_buffers'
+    - measured 57.52% then 20.14% of its ONE core
+    - 165,220 ocr_json reads at 17.65 ms mean = 2,915.9 s
+    - incoming_documents seq_tup_read 759,431,037; companies seq_tup_read 168,330,421
+    the_point: n8n-postgres was found pinned at 1 CPU and raised to 3 with synchronous_commit=off. supabase-db — which holds every document, the OCR cache, the company registry and the settings table, and serves the pickup query, the registry view and 165k OCR blob reads — is STILL at 1.0 CPU / 1 GiB / stock 128 MB buffers. It is the same ceiling, one layer over, and it is now the lower of the two.
+    change:
+    - 'cpus: 1.0 -> 2.0'
+    - 'memory: 1 GiB -> 1.5 GiB'
+    - 'shared_buffers: 128 MB -> 384 MB (the whole hot set becomes resident)'
+    - 'effective_cache_size: 128 MB -> 1 GB'
+    - 'work_mem: 4 MB -> 16 MB (the pickup query runs five window sorts)'
+    - 'synchronous_commit: on -> off (matching n8n-postgres)'
+    where_the_memory_comes_from: 'MANDATORY, because the host has 189 MiB free and 4,379 MiB of swap in use. The 512 MiB must be reclaimed first. Cheapest sources, both measured this window and both irrelevant to INDOX: glitchtip is capped at 768 MiB and using 56.58 MiB; authentik-worker is capped at 768 MiB and using 139-231 MiB. Cutting each to 256 MiB frees 1,024 MiB of limit — more than enough — with no INDOX impact. Do NOT take it from n8n-postgres (1.265-1.424 GiB of its 2 GiB is real, and its shared_buffers is 1 GB).'
+    arithmetic: 'ocr_cache (175 MB) cannot be resident in 128 MB of shared_buffers, so all 165,220 reads miss. Making the hot set resident should take the 17.65 ms mean into low single digits: at 5 ms that is 2,915.9 -> 826 s, saving ~2,090 s per 32 h = 65 s/hour = 1.8% of a core returned, plus the same effect on the pickup query (363.58 ms) and the registry view (734 ms). Doubling the core count halves the queueing at the DB, which is on the critical path of every write-back.'
+    risk: LOW — configuration only
+    blast_radius: 'supabase-db restart. Coordinate: other lanes are active.'
+    effort: S
+  - id: P4
+    title: Materialize the @registry_ids binding instead of recomputing it per extraction
+    leverage: HIGH — and it is the item that gets worse as the client grows
+    evidence:
+    - '#1 query on supabase-db: 4,906 calls, 734.24 ms mean, 3,602.2 s total over 32.2 h'
+    - public.extraction_queries is a VIEW calling bind_registry() over company_registry
+    - 16 settings rows match 'q\_v3\_%'; company_registry is re-evaluated per row
+    - 'companies: 142,560 sequential scans, 168,330,421 tuples read, from a 1,183-row table'
+    - 1,183 companies -> the 2,378-identifier binding named in the brief
+    change:
+      main: '`company_registry` and `extraction_queries` are BOTH plain views (relkind=''v'') — nothing is cached anywhere in this path. The view already computes its own cache key: `left(md5(q.query::text),8) AS resolver_gen`. Use it. Either (a) convert extraction_queries to a MATERIALIZED VIEW refreshed on companies/settings change, or (b) add a `company_registry_cache` table keyed (instance, resolver_gen) holding the already-bound JSON, with the view falling back to live computation on a miss. Option (b) is safer — it cannot serve stale data, because a changed registry produces a different resolver_gen by construction.'
+      free_win_do_this_first: 'In indoxV2ActionsGlobal01, `Load Company Resolver Gen` sits BEFORE `Route Mode`. So every decide-mode call pays the 190 ms act-mode cost for a value it never uses. MOVING THAT NODE TO AFTER `Route Mode`, on the act branch only, halves its calls with zero semantic change. Measured: 219 calls/hour, of which 137 are decide-mode. That is 137 x 190 ms = 26 s/hour of a single-core database, recovered by moving one node.'
+      second_free_win: '`Load Company Resolver Gen` builds the full 2,378-element registry, splices it into 187 KB of JSON and md5()s the result — to obtain 8 characters. Expose `resolver_gen` as its own cheap view (or a generated column on a small table) so the 8-character read does not force the 187 KB build.'
+    arithmetic: '3,602.2 s over 32.2 h = 112 s/hour = 11.3% of supabase-db''s single core, eliminated. Broken down by node: Load V3 Config at 1,233 calls/hour x 212 ms = 4.4 minutes/hour (and ~265 MB/hour of JSON shipped into n8n worker heaps, which is also why the n8n workers show ~200% CPU on serialization); Load Company Resolver Gen at 219 x 190 ms = 42 s/hour, of which 26 s/hour is recoverable by moving one node. It also removes 168 million tuple reads, which is most of why that container shows 57% CPU. GROWTH: the term is O(C) and is paid per extraction, so at 5,000 companies it becomes 4.2x = 47% of one core, and at 5,000 companies plus 200k documents it exceeds one core entirely. This is the single clearest scaling cliff in the system.'
+    risk: LOW-MEDIUM — staleness if the refresh is missed; option (b) is immune by construction. The node move is zero-risk.
+    blast_radius: one view + one node moved; the 'Fan Fields' node already ASSERTS that no @registry_ sentinel survives, so a broken binding fails loudly rather than silently
+    effort: S for the two free wins, M for the materialization
+  - id: P5
+    title: Bound the runaway timeouts that hold worker slots for a full hour
+    leverage: HIGH relative to effort
+    evidence:
+    - 'indoxV2ActionsGlobal01: 69 canceled at p50 3,600.02 s and 19 errored at p50 3,552.97 s, against a SUCCESS p50 of 0.57 s and p90 of 5.64 s'
+    - 208 indoxV2ActionsGlobal01 + 232 driver + 150 BaseDocEx01 executions in 'running', oldest 9.7 hours
+    - 1,200 error-mode executions with NULL startedAt — queued and never started
+    - n8n production capacity is 2 workers x N8N_WORKER_CONCURRENCY=8 = 16 slots
+    - Gemini queue latency avg 40.44 s / p90 126.06 s, while every other workflow waits under 1.3 s
+    the_causal_chain: ~590 executions are parked in 'running', many for 8-10 hours, against 16 production slots. That is why Gemini — the highest-volume webhook consumer — waits 40 seconds for a slot, and that queue wait is 65% of the cost of the AI leg, which is 25.5% of all pipeline wall time. Bounding the hung executions attacks the queue latency directly without touching worker concurrency (which is correctly frozen at 8 for documented OOM reasons and cannot be raised — the host has 189 MiB free).
+    change:
+    - reduce the indoxV2ActionsGlobal01 workflow timeout from 3,600 s to 120 s (21x its measured success p90 of 5.64 s)
+    - add an explicit timeout on the 'Extract Base via Webhook' HTTP node — currently it can wait indefinitely; set it to ~180 s (well above Gemini's p90 of 47.2 s plus queue)
+    - investigate why 1,200 error-mode executions never start; the Error Handler is itself backlogged (avg queue 16.4 s, p90 43.9 s)
+    arithmetic: 88 executions x ~3,580 s of held slot = 315,000 slot-seconds recovered in the window, against a total capacity of 16 slots x 34,149 s = 546,000 slot-seconds. That is 58% of the system's entire production capacity currently consumed by executions that are going to be discarded. Recovering even half of it roughly doubles effective throughput and should collapse the 40.4 s Gemini queue latency toward the sub-1.3 s that every other workflow already enjoys.
+    risk: LOW — a shorter timeout converts a silent hour-long hang into a fast, visible error
+    blast_radius: two workflow settings
+    effort: S
+  - id: P6
+    title: Fix the two structurally miscosted apitools endpoints
+    leverage: MEDIUM-HIGH on the only saturated CPU resource
+    evidence:
+    - /docExists and /documentImage both call OcrObject.from_file_id, loading and decoding the entire OCR JSONB
+    - to return, respectively, a boolean and a static file path
+    - measured 1,775 worker-seconds = 10.8% of ALL apitools CPU
+    - '/docExists: 1,353 calls, p50 290 ms, p99 10,335 ms, max 117,107 ms — for a boolean'
+    - cached blob size avg 32 kB, max 548 kB across 5,098 rows
+    change: /docExists -> SELECT 1 FROM ocr_cache WHERE file_hash = %s; /documentImage -> path join + send_file, with no OCR load
+    arithmetic: 10.8% of apitools CPU returned. apitools is measured at 80-98% of its 4.0-CPU cap and is the only compute resource actually saturated on the box, so this is ~0.43 of a core recovered on the binding constraint.
+    risk: LOW
+    blast_radius: two handlers
+    effort: S
+  - id: P7
+    title: Stop rasterizing scanned PDFs twice
+    leverage: MEDIUM
+    evidence:
+    - get_ocr calls _ocr_pdf_paged -> pdf_pages_to_jpeg_bytes (full poppler render + per-page deskew), then immediately calls pdf_to_jpg_from_path again, re-rendering EVERY page at 300 dpi and deskewing again
+    - the second render exists only to build a drawing base image
+    - /documentDraw and /documentOcrDraw received ZERO calls in a 2-hour window
+    - 30 paged_ocr events produced 28 image saves
+    change: make the drawing base image lazy — build it on first request from /documentDraw or /documentOcrDraw, not on every OCR
+    arithmetic: halves the raster+deskew cost of the paged_ocr route; deskew is the expensive half and is currently paid twice per page
+    risk: LOW — only affects two endpoints that receive no traffic
+    blast_radius: apitools ocr_processor
+    effort: S
+  - id: P8
+    title: Stop re-OCR'ing documents that can never succeed
+    leverage: MEDIUM
+    evidence:
+    - 274 real OCR runs over only 146 distinct file hashes — 128 were repeats
+    - 'top two offenders: 64x and 38x in 2 hours = 37% of all OCR events'
+    - 'root cause: two 33-byte and 37-byte text stubs stored as .pdf; _get_document_ocr swallows the ValueError into response[''error''] and returns HTTP 200 with NO cache write, so the caller treats it as transient and retries forever'
+    - 'unlogged: zero hits for ''Error processing OCR'' across 18,653 log lines'
+    change: return 4xx for an undecodable body, or write a negative cache entry keyed by file_hash; and log the swallowed exception
+    arithmetic: removes 37% of OCR events, on the endpoint that is 34.0% of apitools worker-seconds
+    risk: LOW
+    effort: S
+  - id: P9
+    title: Recalibrate the apitools bulkheads (they are currently inert)
+    leverage: MEDIUM
+    evidence:
+    - 'APITOOLS_MAX_CONCURRENT_JSON_QUERY=12 > GUNICORN_WORKERS=10 — with sync workers at most 10 requests can be in flight, so 12 slots can never be exhausted and the bulkhead can never shed. Confirmed: 0 x HTTP 429 across 1,198 /documentJsonQuery calls.'
+    - APITOOLS_QUERY_SOFT_TIMEOUT=60 did not bound 20 responses that exceeded 60 s (max 463 s) because the SIGALRM is armed only around json_query(), not around from_file_id, body parse or serialization
+    - APITOOLS_MAX_CONCURRENT_OCR=8 of 10 workers leaves 2 for everything else; the perf-profile's own history records this exact cliff being measured and reverted once (non-OCR p50 12 s -> 31 s at 8 slots). /docExists p99 of 10.3 s is that cliff, live again.
+    - 26 x HTTP 429 occurred with ZERO log lines
+    change: JSON slots 12 -> 6; OCR slots 8 -> 5; arm the deadline around the whole request, not just json_query(); log shed events
+    risk: LOW
+    effort: S
+  - id: P10
+    title: Cut n8n execution-history write amplification — WITHOUT disabling history
+    leverage: MEDIUM
+    constraint_ack: The owner has forbidden disabling n8n execution history. This item therefore does NOT propose EXECUTIONS_DATA_SAVE_ON_SUCCESS=none globally. It proposes per-workflow scoping, which keeps full history for every workflow anyone actually debugs.
+    evidence:
+    - execution_data = 2,337 MB over 28,892 rows = 81 KB per execution
+    - ~29,000 executions/hour x 81 KB = ~2.3 GB/hour written and then deleted
+    - 'on n8n-postgres in 23 minutes: INSERT 93.2 s + UPDATE 214.0 s + DELETE execution_data 98.8 s + DELETE execution_entity 102.9 s = 508.9 s = 36.9% of one core'
+    - DELETE FROM execution_entity WHERE id IN (...) has a mean of 864 ms
+    change: 'Set `settings.saveDataSuccessExecution = ''none''` on the five highest-volume, lowest-diagnostic-value leaf workflows only: driveApi01 (1,623-2,265/h), indoxApiRouter01 (1,234/h), indoxApiSupabase01 (1,207/h), processLock01 (1,126/h), indoxDocBatchUpsert01 (801/h). Errors are still saved in full. That is roughly 6,200 of 12,500 hourly executions.'
+    arithmetic: halves the 2.3 GB/hour and returns ~18% of one core on n8n-postgres
+    risk: LOW and reversible per workflow
+    note: This is overhead reduction, not a fix. P1 and P2 reduce the execution COUNT itself, which is strictly better and makes P10 largely unnecessary. Do P10 only if P2 slips.
+    effort: S
+  ```
+
+  ## Do not do
+
+  ```yaml
+  - item: raise N8N_WORKER_CONCURRENCY above 8
+    why: Documented OOM history, and the host has 189 MiB free with 4,379 MiB of swap in use and container limits already over-committed 3.1x. The queue latency that makes this tempting is caused by ~590 hung executions holding slots (P5), not by too few slots.
+  - item: raise n8n-postgres memory to fix the execution_data churn
+    why: the churn is 2.3 GB/hour of transient data; P1/P2/P10 remove the volume rather than buffering it
+  - item: repair the hourly GET_ALL sweep as-is
+    why: It is O(N) with a hard 20,000 cap and is already at 83.4% of it. Repairing it buys a few weeks and then fails permanently. Replace it with a bounded, resumable cursor sweep — or delete it once P2 removes the need for a whole-corpus re-drive. Note it is also a re-delivery path in its own right (journey.re_delivery_paths path 5).
+  - item: tune the pickup query before fixing the driver
+    why: The pickup costs 364 ms twelve times an hour = 4.4 s/hour. The driver's per-action respawn costs orders of magnitude more. Fix P2 first, then re-measure the pickup — most of its load is a symptom of the working set being re-delivered, not a cause.
+  ```
+
+  ## Combined estimate
+
+  ```yaml
+  method: multiplicative, not additive, because P1 and P2 act on the same seconds
+  base_extraction:
+    today: 322,920 s inclusive (30.78% of pipeline wall)
+    after_P2: number of extractions falls 5.86 -> ~1.2, a factor of 4.9
+    after_P1: cost of each remaining extraction falls by 0.829 x 0.89 = 73.8%
+    result: 322,920 x (1/4.9) x (1 - 0.738) = 17,300 s
+    saving: 305,600 s = 29.1% of total pipeline wall
+  everything_else_P2_touches:
+    scope: UploadApiTools + JQExV3 + drive + Gemini + Upsert + Batch Upsert + indox api + supabase api + process_lock = 233,825 s
+    result: reduced ~4.9x -> ~47,700 s
+    saving: 186,100 s = 17.7% of total pipeline wall
+  slot_recovery_P5:
+    scope: 315,000 slot-seconds of 546,000 total capacity currently held by executions that will be discarded
+  free_wins_note: Three changes with essentially no design risk, each a single node edit, together worth more than most of the rest. Do these before anything structural.
+  free_wins_worth_doing_first:
+  - change: move `Load Company Resolver Gen` to AFTER `Route Mode` (act branch only)
+    saving: 26 s/hour of a single-core DB
+    risk: none
+    effort: minutes
+  - change: delete one of the two driver self-invocations (they are redundant)
+    saving: ~50% of driver/decide/DOC BASE/get-doc/process_lock executions
+    risk: low
+    effort: minutes
+  - change: 're-enable the LOCKED deferral (two nodes are `disabled: true`, so lock losers are silently discarded)'
+    saving: every lost lock arbitration is currently a fully wasted pass
+    risk: low
+    effort: minutes
+  throughput_projection:
+    label: PROJECTION — arithmetic extrapolation, not a measurement
+    today: 20 documents/hour at ~29,000 executions/hour (~1,450 executions per completion)
+    after_P1_P2_P5: Executions per document fall from ~292-330 toward ~40 (a factor of ~7.5) and the dominant per-extraction cost falls 74%. On unchanged hardware that projects to roughly 140 documents/hour, at which point the binding constraint becomes apitools CPU (currently 80-98% of 4 cores, of which P6+P7+P8 return ~10.8% + the paged-raster half + 37% of OCR events).
+    drain_time_for_the_10,322_non_completed_rows:
+      at_20_per_hour: 516 hours = 21.5 days
+      at_140_per_hour: 74 hours = 3.1 days
+  ```
+
+  ## Corrections to prior claims
+
+  ```yaml
+  - claim: the pickup is a 2-minute poll with LIMIT 40
+    verdict: SUPERSEDED — BOTH FIGURES ARE WRONG AGAINST THE LIVE DEFINITION
+    measured: indoxApiSupabase01 "Poll Line Changes" is {"rule":{"interval":[{"field":"minutes","minutesInterval":5}]}} = EVERY 5 MINUTES, and "Get Changed Docs" ends `limit 120`. The query's own comments record the 40 -> 120 raise under "[width 2026-08-10]". Dispatch budget = 12 x 120 = 1,440 row-slots/hour. Both the brief and issues/state-machine-map-2026-08-10.yaml carry the older 2-minute/40 figures.
+  - claim: live versionIds (from the brief / the state-machine map)
+    verdict: TWO OF FOUR ARE STALE — do not reuse them
+    measured: indoxApiSupabase01 activeVersionId is ece2eaf4-bd40-486c-953a-e43abf6ec802, NOT 6d27b0fb-ffdd-40bd-b559-2b291c086ff4. indoxV2ActionsGlobal01 activeVersionId is dc38d8ce-053e-4261-ba22-ebba72dc9f53, NOT 41afcdbe-75fb-4ea5-aba0-7c823d966e39. indoxV2Decide01 (c30553c0-...) and indoxV2Driver01 (9c2e57f9-...) are correct. Anything derived from the two stale versions needs re-checking.
+  - claim: fifteen of nineteen statuses have no working path back into the machine (state-machine map, 14:01Z)
+    verdict: ADDRESSED IN THE LIVE DEFINITION SINCE THAT MAP WAS WRITTEN
+    measured: 'The live pickup WHERE now explicitly admits NEEDS_REVIEW, EXTRACTION_FAILED, DOUBLE, ACTION_RESTART, UNKNOWN_COMPANY, API_TOOLS_FAILED, MISSING_COMPANY_ID and MISSING_TYPE, and carries a dedicated `s_recov` slice for them ordered by `needs_base desc` (rn <= 120, interleave key rn*6.0 + 0.6). Terminalize Stalled has also been rewritten: the IN_PROGRESS arm now returns the row to TO_EXTRACT with RETRY_COUNT+1 and a 10-minute-per-attempt backoff, reaching MAX_ITERATIONS only at RETRY_COUNT >= 5. It no longer writes NEEDS_REVIEW for stalled IN_PROGRESS rows. NEEDS_REVIEW is nevertheless still growing (1,177 at 14:01Z -> 1,232 at 17:12Z), so the remaining writer(s) — errorHandler01 ''Backoff + Dead-letter'' at RETRY_COUNT >= 5, and the TO_EXTRACT arm of the reaper — are now the ones to look at. NOT re-investigated here; flagged.'
+  - claim: ~398 executions per document, theoretical floor near 11
+    verdict: DIRECTIONALLY CORRECT, REFINED
+    measured: 292.1 amortized executions (248 dedicated, 1,070 raw mentions) for doc_msm3oxeu136v4c over the 9.5-hour retained window, EXCLUDING its extraction subtree which predated the window; ~330 like-for-like. The floor of 11 is right for a single pass with no extraction; the honest floor for a document that needs all its real state transitions is 41. Waste factor 7-8x, not 27x.
+  - claim: BaseDocEx01 p50 ~264-339 s, p90 ~654-798 s, max ~1297 s
+    verdict: CONFIRMED IMPROVED
+    measured: p50 126.1 s, p90 612.4 s, p99 809.4 s, max 976.5 s over 1,312 successes
+  - claim: /documentJsonQuery and /documentOcr dominate apitools
+    verdict: CONFIRMED
+    measured: /documentJsonQuery 53.3% and /documentOcr 34.0% of apitools worker-seconds = 87.3% combined
+  - claim: n8n-postgres was pinned at 1 CPU (now 3)
+    verdict: CONFIRMED, AND THE SAME DEFECT IS LIVE NEXT DOOR
+    measured: n8n-postgres NanoCpus=3000000000. supabase-db is still NanoCpus=1000000000 with 1 GiB and stock 128 MB shared_buffers.
+  - claim: the same drive file downloaded 91-160 times
+    verdict: NOT REPRODUCED IN THIS WINDOW
+    measured: 'Over 2,265 driveApi01 executions in 60 minutes, the most-repeated 33-character Drive-shaped file id appeared 6 times, and the median 1. The earlier figure may have been measured differently, over a longer window, or with a looser id pattern (a deliberately loose regex here returned 40,549 "files", which is clearly matching non-file tokens). What IS true: driveApi01 runs 1,830-2,265 times/hour against ~317 documents in flight = ~6-7 drive calls per document per hour, which P2 reduces with everything else. Treat the 91-160 figure as UNPROVEN pending a re-measurement.'
+  - claim: the Gemini extractor called ~44x per document
+    verdict: UNPROVEN BY DIRECT ATTRIBUTION
+    measured: 'indoxV2ExtractInvoiceGemini01''s execution_data contains NO doc_ identifiers (0 matches across a 60-minute sample), so it cannot be attributed to a document by text search — it is invoked by webhook carrying a file/api_tools identifier. Indirect measurement: 3,343 Gemini executions per 4 hours against 1,587 BaseDocEx01 executions = 2.11 Gemini calls per base extraction, and base extraction runs 5.86 times per document, giving ~12 Gemini calls per document per pass-set. Over a document''s multi-hour life 44 is plausible but NOT PROVEN here.'
+  - claim: 654 executions running, ~550 orphaned integrated sub-executions up to 9 hours old
+    verdict: CONFIRMED AND WORSE
+    measured: '766 ''integrated'' + 40 ''webhook'' + 5 ''error'' + 4 ''trigger'' = 815 in ''running'', plus 1,200 error-mode executions with a NULL startedAt (queued, never started). Oldest running: 9.7 hours (indoxV2Driver01 and indoxV2ActionsGlobal01, both from 07:21Z).'
+  ```
+
+  ## Unproven
+
+  - which caller issues `select pg_sleep($1)` — 279 calls at 7.71 s each, 2,151 s total, holding a DB connection throughout. No occurrence of pg_sleep exists in platform-base/, apps/ or scripts/.
+  - the exact multiplier behind BaseDocEx01's 159.4 s average hottest-node time vs a single Gemini call's ~62 s; the 2.11 executions-per-extraction ratio explains most but not all of it.
+  - whether the apitools batch endpoint (ocr_json_queries) is reached at all: 1,198 /documentJsonQuery calls over 223 distinct file_ids = 5.4 calls/document matches the UN-batched shape exactly, but request bodies are not logged.
+  - the 91-160 drive re-download figure (see corrections).
+  - ~44 Gemini calls per document (see corrections).
+  - exclusive-vs-inclusive wall time for the parent workflows is estimated by subtracting measured children, not measured directly; n8n does not record exclusive time.

@@ -1,0 +1,1250 @@
+{
+  "updatedAt": "2026-04-27T09:16:30.179Z",
+  "createdAt": "2025-11-20T20:53:29.009Z",
+  "id": "indoxV2FigureCompanyId01",
+  "name": "Figure Document COMPANY_ID",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "ID"
+            },
+            {
+              "name": "API_TOOLS_ID"
+            },
+            {
+              "name": "LINK"
+            },
+            {
+              "name": "SOURCE_ID"
+            },
+            {
+              "name": "NAME"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -1696,
+        48
+      ],
+      "id": "cb88249a-1ce8-46c0-b00a-a731c037b562",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "indoxV2UploadApiTools01",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/indoxV2UploadApiTools01",
+          "cachedResultName": "Upload Doc To API TOOLS"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "HASH": "={{ $json.API_TOOLS_ID || null}}",
+            "LINK": "={{ $json.LINK || null }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "LINK",
+              "displayName": "LINK",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "HASH",
+              "displayName": "HASH",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "each",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        -416,
+        128
+      ],
+      "id": "fee68ab3-4efe-4194-8814-1ae0fd8206e7",
+      "name": "Upload OR Get API_TOOLS_ID",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "40af2929-a4ed-4fc0-9ec8-eb392307d940",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -176,
+        128
+      ],
+      "id": "23b4632a-a7df-400a-9f3a-88c1974e23aa",
+      "name": "IS OK"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://apitools.hacohen.bina-solutions.co.il/documentJsonQuery",
+        "sendBody": true,
+        "specifyBody": "=json",
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "jsonBody": "={{ \n{\n  \"file_id\": $('Upload OR Get API_TOOLS_ID').item.json.file_id,\n  \"ocr_json_query\": {\n    \"action\": \"find option\",\n    \"action_value\":  $(\"Call 'Settings'\").last().json.all_companies_identifiers,\n    \"value_validations\": [],\n  \"is_rtl\": true\n  }\n}\n}}",
+        "options": {}
+      },
+      "id": "248a785d-bb35-4879-b964-5912c721d28a",
+      "name": "Find Option",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        48,
+        128
+      ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 2600,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1936,
+        256
+      ],
+      "id": "33fb9586-1fb4-4760-a07d-f2ce0e2ef618",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map((item, index) => ({\n  json: {\n    ...item.json,\n    originalIndex: index\n  }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1280,
+        128
+      ],
+      "id": "7fab55b8-fff4-42a6-b1fa-9d3fea6199ff",
+      "name": "Index Order"
+    },
+    {
+      "parameters": {
+        "sortFieldsUi": {
+          "sortField": [
+            {
+              "fieldName": "originalIndex"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.sort",
+      "typeVersion": 1,
+      "position": [
+        2080,
+        256
+      ],
+      "id": "dbacddb7-ee69-4de7-9dfc-5518fc4c57ce",
+      "name": "Sort1"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -1472,
+        128
+      ],
+      "id": "ddca7ad2-205b-4c6e-b453-1c9e00e11cc2",
+      "name": "Start"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ed898b0e-0390-4f7b-b1ae-1008ba184d9c",
+              "name": "ID",
+              "value": "={{ $('Start').item.json.ID }}",
+              "type": "string"
+            },
+            {
+              "id": "f05e21e4-e8e8-4377-b6fe-33395e5c62f3",
+              "name": "LINK",
+              "value": "={{ $('Start').item.json.LINK }}",
+              "type": "string"
+            },
+            {
+              "id": "d49388e7-08a1-47dc-98cb-52b14a8e88cb",
+              "name": "COMPANY_ID",
+              "value": "={{ $json.company_id || null}}",
+              "type": "string"
+            },
+            {
+              "id": "719a6757-1e3a-4904-aa83-2374ce770b61",
+              "name": "COMPANY_NAME",
+              "value": "={{ $json.company_name || null }}",
+              "type": "string"
+            },
+            {
+              "id": "765d597c-0388-415d-9131-9e87b840f7d4",
+              "name": "ok",
+              "value": "={{ $json.ok != false }}",
+              "type": "boolean"
+            },
+            {
+              "id": "d726f563-91e3-46f5-8fa9-e58959ba6ce1",
+              "name": "error",
+              "value": "={{ $json.error || null }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2240,
+        256
+      ],
+      "id": "ad9e372a-6760-4c81-b5f4-66460d0e082d",
+      "name": "End"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "indoxSettings01",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/indoxSettings01",
+          "cachedResultName": "Settings"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "load_settings": false,
+            "load_queries": false,
+            "TRIGGERED_FROM": "=Figure Document COMPANY_ID: {{ $execution.id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "load_settings",
+              "displayName": "load_settings",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean",
+              "removed": false
+            },
+            {
+              "id": "load_companies",
+              "displayName": "load_companies",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean",
+              "removed": false
+            },
+            {
+              "id": "load_queries",
+              "displayName": "load_queries",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean",
+              "removed": false
+            },
+            {
+              "id": "TRIGGERED_FROM",
+              "displayName": "TRIGGERED_FROM",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -1472,
+        -80
+      ],
+      "id": "f19ed916-ee81-4e1d-b988-348b1f71b473",
+      "name": "Call 'Settings'",
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "content": "[\n  {\n    \"ID\": \"174466791syugg5\",\n    \"API_TOOLS_ID\": \"\",\n    \"LINK\": \"\"\n  },\n  {\n    \"ID\": \"6351558443u7pgx\",\n    \"API_TOOLS_ID\": \"\",\n    \"LINK\": \"\"\n  },\n  {\n    \"ID\": \"92780309oeri3y\",\n    \"API_TOOLS_ID\": \"f941b808c6cf99727b708ba4e6b78579\",\n    \"LINK\": \"https://drive.google.com/file/d/1VRdrotYgQ9hkrn9iA5tNPHZO-Ook1hgK/view?usp=drivesdk\"\n  },\n  {\n    \"ID\": \"233242372o4hlp\",\n    \"API_TOOLS_ID\": \"b956787c253d3edf2de5fe93f32d148c\",\n    \"LINK\": \"https://drive.google.com/file/d/1aPAnSJ4NcB-ozRXkKyVeCHKVJ1ZbIr5o/view?usp=drivesdk\"\n  },\n  {\n    \"ID\": \"11402858ogwztt\",\n    \"API_TOOLS_ID\": \"8969c6077520f9e3bf4b45cd0403f959\",\n    \"LINK\": \"https://drive.google.com/file/d/11a4BnPCnWwSEUT2PY7hyhVmSFKEa7bC_/view?usp=drivesdk\"\n  },\n  {\n    \"ID\": \"7066176677r2b5j\",\n    \"API_TOOLS_ID\": \"\",\n    \"LINK\": \"http://bina-solutions.co.il\"\n  },\n  {\n    \"ID\": \"303136393352372\",\n    \"API_TOOLS_ID\": \"1bc1f4b50ec3cf9fe007bc775ede9eba\",\n    \"LINK\": \"https://drive.google.com/file/d/1MFZZT0tBtOH3S7YRnahYDRHV8R2hObBC\"\n  },\n  {\n    \"ID\": \"545037430td6emd\",\n    \"API_TOOLS_ID\": \"9b23ccab15e88b91b043765c4c265a2f\",\n    \"LINK\": \"https://drive.google.com/file/d/1P_poVxw0bQ3ulciHhJ4xfhQcatQ9u07_\"\n  },\n  {\n    \"ID\": \"404818980ufnr3t\",\n    \"API_TOOLS_ID\": \"0b7a3f81cca166dea05a2d6c2d301062\",\n    \"LINK\": \"https://drive.google.com/file/d/1mUGQtZnhYJia7dclIrgBif0hHkb0hBMk\"\n  },\n  {\n    \"ID\": \"112013276rqcufw\",\n    \"API_TOOLS_ID\": \"a71aabcce78a4b953df31feb3572239c\",\n    \"LINK\": \"https://drive.google.com/file/d/1dEVzlfC9DugQ5I8t2gNCXFyZk5e-UScs\"\n  },\n  {\n    \"ID\": \"517591408ub4irj\",\n    \"API_TOOLS_ID\": \"4ad05aed2badb29ca2c02a3fa0db389d\",\n    \"LINK\": \"https://drive.google.com/file/d/1IfR28_Ekes5YWBDtjFPUAvDb1q8E0bGJ\"\n  },\n  {\n    \"ID\": \"183158912xsi2qs\",\n    \"API_TOOLS_ID\": \"5e71d1bdd2d2a1e9369272ec0f562508\",\n    \"LINK\": \"https://drive.google.com/file/d/131FGA2v4kV8RKFfPAkBUDl68oZDESLoH/view?usp=drivesdk\"\n  },\n  {\n    \"ID\": \"335374208dy2pmc\",\n    \"API_TOOLS_ID\": \"e045f49895f9fe2e1de0f34fb1dd78bf\",\n    \"LINK\": \"https://drive.google.com/file/d/1iqHQ9To6f6HzRfeg6vHh40EC-ppCOjLw\"\n  },\n  {\n    \"ID\": \"934972859n5txwv\",\n    \"API_TOOLS_ID\": \"a426c331c2340ea14e79e25c155a7864\",\n    \"LINK\": \"https://drive.google.com/file/d/15c1OTV-bI7lRQWzIcrdw8Q5ed9jpWe33\"\n  },\n  {\n    \"ID\": \"122975222zovwji\",\n    \"API_TOOLS_ID\": \"11fbd26156d36684c45ee0fd86653665\",\n    \"LINK\": \"https://drive.google.com/file/d/1KoFPYdxwQcnKWMgTS2qkMP1AbPAA6fbB\"\n  },\n  {\n    \"ID\": \"510772304qozn5g\",\n    \"API_TOOLS_ID\": \"c3fd9e1a011b1d51543f3d0410a896f9\",\n    \"LINK\": \"https://drive.google.com/file/d/1OvVJGDqZ8wW7R-8RQHFYNuu33rXYU72v/view?usp=drivesdk\"\n  },\n  {\n    \"ID\": \"641981575b3z0dd\",\n    \"API_TOOLS_ID\": \"032bda0bb710476e61009eff3009d1c8\",\n    \"LINK\": \"https://drive.google.com/file/d/1fAl0GlEFXu-OrgU6nMKSmjmhEXt35-CL\"\n  },\n  {\n    \"ID\": \"83040460yf1yxe\",\n    \"API_TOOLS_ID\": \"1a8544da07966ff856c1e3729b0ddb32\",\n    \"LINK\": \"https://drive.google.com/file/d/1f5AV98jdCJHM89F0eaQGGFgLRuu2YlIq\"\n  },\n  {\n    \"ID\": \"208200071w6djqb\",\n    \"API_TOOLS_ID\": \"a08f877e87811247ebb35097b58e11c1\",\n    \"LINK\": \"https://drive.google.com/file/d/1Hw09y2TpP4BT_HF1ExRmkKHuTPKLE028/view?usp=drivesdk\"\n  },\n  {\n    \"ID\": \"45523725ofzr4o\",\n    \"API_TOOLS_ID\": \"d1924d7a990a9aaef9977ee5e8013cad\",\n    \"LINK\": \"https://drive.google.com/file/d/1eBRvoo9utfVZgKQjCu8_nhPdar2tYkxS/view?usp=drivesdk\"\n  }\n]",
+        "height": 512
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1440,
+        -672
+      ],
+      "typeVersion": 1,
+      "id": "dc13f69a-dddb-4293-9020-6ac9f3d26a5c",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "489f26a0-0b84-479b-947e-65bcf2f8e857",
+              "leftValue": "={{ $json.LINK }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "4e3503c8-8930-4462-a350-03e6a36491df",
+              "leftValue": "={{ $json.API_TOOLS_ID }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "4757882b-f546-4ed6-8e97-684d8e6bba98",
+              "leftValue": true,
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -608,
+        288
+      ],
+      "id": "60f55584-c68d-458e-99da-468474dcbb01",
+      "name": "If Good INPUT"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "20c15328-1c23-403c-9709-8fe3464e0f8d",
+              "name": "error",
+              "value": "={{ \"Unable to figure COMPANY_ID.. \" + ($json.error  || \"\" )}}",
+              "type": "string"
+            },
+            {
+              "id": "3f2624a4-92dc-4bb1-9875-0d55ba92c8ec",
+              "name": "originalIndex",
+              "value": "={{ $('Index Order').item.json.originalIndex }}",
+              "type": "number"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1296,
+        272
+      ],
+      "id": "fb341dc6-207b-4303-8bb2-29a9a0db276a",
+      "name": "Map Fail"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        288,
+        288
+      ],
+      "id": "be3a4fd2-d64b-446d-9f2f-40470ab6fad2",
+      "name": "Merge1"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        48,
+        288
+      ],
+      "id": "d647aac8-169e-4553-be21-9e37ef4926f7",
+      "name": "Merge2"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -176,
+        288
+      ],
+      "id": "931ea149-4a72-4198-946a-db6ac5ede0ce",
+      "name": "Merge3"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "984304bc-1b28-4a66-8086-7f11fd60fbdb",
+              "leftValue": "={{ $json.result.result.matches[0].option }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        288,
+        128
+      ],
+      "id": "3f6d1c7d-347e-447d-930b-27bdb8eb40a5",
+      "name": "If Results"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        736,
+        272
+      ],
+      "id": "88496715-868e-469c-b246-8b05447477b7",
+      "name": "Merge4"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1552,
+        -192
+      ],
+      "id": "a0f69252-f107-4cf7-9d2b-ccf56eff003d",
+      "name": "Merge5"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "b16374de-99ba-4a88-a7d9-111493ebb570",
+              "leftValue": "={{ $json.result.result }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        736,
+        128
+      ],
+      "id": "a599bf9e-f58b-492b-8042-45aa1f3ba1ef",
+      "name": "If Query results"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        976,
+        272
+      ],
+      "id": "f7ce7370-3fb1-452c-a270-1541ad8dfb58",
+      "name": "Merge6"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://apitools.hacohen.bina-solutions.co.il/documentJsonQuery",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "=json",
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "jsonBody": "={\n  \"file_id\": \"{{ $('Upload OR Get API_TOOLS_ID').item.json.file_id }}\",\n  \"ocr_json_query\": {{ $('Company Id AFTER Query').first().json.company_id_query.toJsonString() }},\n   \"match_index\":  {{ $('Company Id AFTER Query').first().json.match_index || 0 }},\n   \"draw\": true,\n   \"format\": \"img\"\n}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "9561ab34-a20f-4acb-859e-135605537cc0",
+      "name": "Extract COMPANY ID AFTER",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        512,
+        128
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2600,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "\n\n\nlet query = {\n  \"company_id_query\": {\n    \"action\": \"find after\",\n    \"action_value\": [\n        \"ח.פ\",\n        \"ע.מ\"\n    ],\n    \"value_validations\": [\n        {\"validation_type\": \"has_number\"},\n        {\n            \"validation_type\": \"length_greater_than\",\n            \"validation_value\": 1\n        },\n        { \"validation_type\": \"length_less_than\", \"validation_value\": 20 },\n\n    ],\n    \"is_rtl\": true\n  },\n  // \"match_index\": -1\n}\n\nreturn query;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1312,
+        -80
+      ],
+      "id": "aa5b15f9-b722-4e22-95e9-89a1ad51b002",
+      "name": "Company Id AFTER Query"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ff941e85-2d9f-4230-a97d-dc94ba374a45",
+              "name": "company_id",
+              "value": "={{ $json.result.result.matches[0].option }}",
+              "type": "string"
+            },
+            {
+              "id": "3f2624a4-92dc-4bb1-9875-0d55ba92c8ec",
+              "name": "originalIndex",
+              "value": "={{ $('Index Order').item.json.originalIndex }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        512,
+        -32
+      ],
+      "id": "703aaea3-027d-4cd8-8b25-603723c3234d",
+      "name": "Map Option Results1"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ff941e85-2d9f-4230-a97d-dc94ba374a45",
+              "name": "company_id",
+              "value": "={{ $json.result.result }}",
+              "type": "string"
+            },
+            {
+              "id": "3f2624a4-92dc-4bb1-9875-0d55ba92c8ec",
+              "name": "originalIndex",
+              "value": "={{ $('Index Order').item.json.originalIndex }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        976,
+        -32
+      ],
+      "id": "7e0a1441-3611-4697-aa6d-5d1d05b9c6a6",
+      "name": "Map Option Results"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "89704b3d-1471-44a3-835d-77e34f5906db",
+              "leftValue": "={{ $json.company_id_by_mail}}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "56b2441a-31e1-4855-b8d7-760abe38642d",
+              "leftValue": "={{ $json.company_id_by_name}}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -832,
+        128
+      ],
+      "id": "add1c4c9-879d-4673-b941-7865f3407be9",
+      "name": "If Found By Source"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ff941e85-2d9f-4230-a97d-dc94ba374a45",
+              "name": "company_id_by_mail",
+              "value": "={{ Object.entries($(\"Call 'Settings'\").last().json.company_id_by_mails)\n  .filter(([key, value]) => !!key && $json.SOURCE_ID.endsWith(key))?.[0]?.[1] }}",
+              "type": "string"
+            },
+            {
+              "id": "ad463d31-4147-49e2-b4a8-17f469bc13f4",
+              "name": "company_id_by_name",
+              "value": "={{ \nObject.entries($(\"Call 'Settings'\").last().json.company_name_by_identifier)\n  .filter(([key, value]) => !!value && $json.NAME.includes(value))?.[0]?.[0]\n}}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1008,
+        128
+      ],
+      "id": "7116d9ce-2383-4c42-b342-ce00093eb95e",
+      "name": "Try By SOURCE_ID"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ff941e85-2d9f-4230-a97d-dc94ba374a45",
+              "name": "company_id",
+              "value": "={{ $json.company_id_by_mail || $json.company_id_by_name || null }}",
+              "type": "string"
+            },
+            {
+              "id": "3f2624a4-92dc-4bb1-9875-0d55ba92c8ec",
+              "name": "originalIndex",
+              "value": "={{ $('Index Order').item.json.originalIndex }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -624,
+        -32
+      ],
+      "id": "d1c17116-62dd-4f07-b116-1c67eb3b4611",
+      "name": "Map Option Results3"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        976,
+        -192
+      ],
+      "id": "1773429f-a114-4dfd-916f-ab0949145c9e",
+      "name": "Merge7"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -432,
+        -192
+      ],
+      "id": "4342a577-c397-4178-8653-6ce21acf7f55",
+      "name": "No Operation, do nothing"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "45f50cee-96ab-4823-b97a-f6ee07708784",
+              "name": "company_name",
+              "value": "={{  $(\"Call 'Settings'\").last().json.company_name_by_identifier[$json.company_id] || null}}",
+              "type": "string"
+            },
+            {
+              "id": "11608b63-9b20-401d-8c06-c755c53c088f",
+              "name": "company_id",
+              "value": "={{ $(\"Call 'Settings'\").last().json.company_first_identifier_by_identifier[$json.company_id] || null }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1712,
+        -48
+      ],
+      "id": "2525ecf3-1337-416e-a45f-b8bd067b2c49",
+      "name": "Map Final Results"
+    }
+  ],
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Start",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Call 'Settings'",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload OR Get API_TOOLS_ID": {
+      "main": [
+        [
+          {
+            "node": "IS OK",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IS OK": {
+      "main": [
+        [
+          {
+            "node": "Find Option",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Option": {
+      "main": [
+        [
+          {
+            "node": "If Results",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Sort1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Index Order": {
+      "main": [
+        [
+          {
+            "node": "Try By SOURCE_ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sort1": {
+      "main": [
+        [
+          {
+            "node": "End",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Index Order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "End": {
+      "main": [
+        []
+      ]
+    },
+    "If Good INPUT": {
+      "main": [
+        [
+          {
+            "node": "Upload OR Get API_TOOLS_ID",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge3",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Map Fail": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge1": {
+      "main": [
+        [
+          {
+            "node": "Merge4",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge2": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge3": {
+      "main": [
+        [
+          {
+            "node": "Merge2",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "If Results": {
+      "main": [
+        [
+          {
+            "node": "Map Option Results1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract COMPANY ID AFTER",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge4": {
+      "main": [
+        [
+          {
+            "node": "Merge6",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "If Query results": {
+      "main": [
+        [
+          {
+            "node": "Map Option Results",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge6",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge5": {
+      "main": [
+        [
+          {
+            "node": "Map Final Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge6": {
+      "main": [
+        [
+          {
+            "node": "Map Fail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract COMPANY ID AFTER": {
+      "main": [
+        [
+          {
+            "node": "If Query results",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call 'Settings'": {
+      "main": [
+        [
+          {
+            "node": "Company Id AFTER Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map Option Results1": {
+      "main": [
+        [
+          {
+            "node": "Merge7",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Map Option Results": {
+      "main": [
+        [
+          {
+            "node": "Merge5",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "If Found By Source": {
+      "main": [
+        [
+          {
+            "node": "Map Option Results3",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "If Good INPUT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Try By SOURCE_ID": {
+      "main": [
+        [
+          {
+            "node": "If Found By Source",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge7": {
+      "main": [
+        [
+          {
+            "node": "Merge5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map Option Results3": {
+      "main": [
+        [
+          {
+            "node": "No Operation, do nothing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No Operation, do nothing": {
+      "main": [
+        [
+          {
+            "node": "Merge7",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map Final Results": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {
+    "When Executed by Another Workflow": [
+      {
+        "json": {
+          "LINK": "https://drive.google.com/file/d/1_1EZwJKgVsFHnBCaEwhDK1VAir5yDITl/view"
+        }
+      }
+    ]
+  },
+  "versionId": "508143e3-021c-4885-9fcb-777759a249a4",
+  "activeVersionId": "ea9345ae-637c-4125-bc8b-ae7732ea36c8",
+  "versionCounter": 145,
+  "triggerCount": 0,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2025-11-20T20:53:29.009Z",
+      "createdAt": "2025-11-20T20:53:29.009Z",
+      "role": "workflow:owner",
+      "workflowId": "indoxV2FigureCompanyId01",
+      "projectId": "EChUnhWXmjrEc3fG",
+      "project": {
+        "updatedAt": "2024-09-26T18:07:08.765Z",
+        "createdAt": "2024-09-26T17:59:24.039Z",
+        "id": "EChUnhWXmjrEc3fG",
+        "name": "Shlomo Bolo <person8@example.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null
+      }
+    }
+  ]
+}

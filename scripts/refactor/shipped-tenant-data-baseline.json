@@ -1,0 +1,88 @@
+{
+ "apps/apitools/feature-validation/balance-sheet-extraction/fixtures/fixtures.json": {
+  "drive-open-url": 12
+ },
+ "apps/indox/blueprint/demo-docs/balance_sheet/dataset.csv": {
+  "drive-folder-url": 1,
+  "drive-open-url": 55,
+  "client-mailbox": 1
+ },
+ "apps/indox/blueprint/demo-docs/invoice/dataset.csv": {
+  "drive-folder-url": 2,
+  "drive-open-url": 90,
+  "client-mailbox": 2
+ },
+ "apps/indox/blueprint/demo-docs/invoice/files/vvyz-alktryk-2.pdf": {
+  "client-mailbox": 1
+ },
+ "apps/indox/blueprint/demo-docs/invoice/files/vvyz-alktryk-3.pdf": {
+  "client-mailbox": 1
+ },
+ "apps/indox/blueprint/demo-docs/invoice/files/vvyz-alktryk-4.pdf": {
+  "client-mailbox": 1
+ },
+ "apps/indox/blueprint/demo-docs/shipment/dataset.csv": {
+  "drive-open-url": 15
+ },
+ "apps/indox/blueprint/demo/companies-seed.json": {
+  "client-mailbox": 1
+ },
+ "apps/indox/blueprint/demo/companies-upsert-items.json": {
+  "client-mailbox": 1
+ },
+ "apps/indox/blueprint/demo/loadtest.yml": {
+  "connection-instance-id": 2
+ },
+ "apps/indox/blueprint/fixtures/tag_rules.json": {
+  "client-mailbox": 1
+ },
+ "apps/indox/blueprint/n8n/SyncScanUnit0001.json": {
+  "connection-instance-id": 1
+ },
+ "apps/indox/blueprint/n8n/SyncSource000001.json": {
+  "connection-instance-id": 1
+ },
+ "apps/indox/blueprint/n8n/indoxGmailLinkDownloader01.json": {
+  "client-mailbox": 2
+ },
+ "apps/indox/blueprint/n8n/indoxProcessDocument01.json": {
+  "drive-open-url": 1,
+  "connection-instance-id": 1
+ },
+ "apps/indox/blueprint/n8n/indoxV2BSTest01.json": {
+  "drive-open-url": 2
+ },
+ "apps/indox/blueprint/n8n/indoxV2ExtractBalanceSheet01.json": {
+  "connection-instance-id": 1
+ },
+ "apps/indox/blueprint/n8n/indoxV2ExtractInvoiceGemini01.json": {
+  "connection-instance-id": 1
+ },
+ "apps/indox/blueprint/n8n/indoxV2GDocTest01.json": {
+  "drive-open-url": 1
+ },
+ "apps/indox/blueprint/n8n/indoxV2QueryPurchaseId01.json": {
+  "connection-instance-id": 1
+ },
+ "apps/indox/blueprint/n8n/indoxV2QueryShipmentId01.json": {
+  "connection-instance-id": 1
+ },
+ "apps/indox/blueprint/n8n/indoxV2SearchFile01.json": {
+  "connection-instance-id": 1
+ },
+ "apps/indox/blueprint/n8n/indoxV2SearchWarehouse01.json": {
+  "connection-instance-id": 1
+ },
+ "apps/indox/blueprint/n8n/indoxV2UploadApiTools01.json": {
+  "connection-instance-id": 1
+ },
+ "apps/indox/blueprint/n8n/syncV3Main0001.json": {
+  "connection-instance-id": 1
+ },
+ "apps/indox/blueprint/n8n/tVzFMkz18pCsXRyw.json": {
+  "connection-instance-id": 1
+ },
+ "apps/mail/mailapi/fixtures/tag_rules.json": {
+  "client-mailbox": 1
+ }
+}

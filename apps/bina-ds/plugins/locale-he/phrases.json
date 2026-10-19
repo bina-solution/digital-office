@@ -1,0 +1,44 @@
+{
+  "$comment": [
+    "Strings the Hebrew UI draws at random instead of showing one fixed sentence.",
+    "Key = '<namespace>/<dictionary key>' — the namespace must exist in dicts/index.json and the key must exist in its English source under dicts/en/. Value = the pool the browser half picks from; the picked value REPLACES the Hebrew dictionary value for that key.",
+    "build-client.mjs validates every entry (known namespace, known key, at least two non-empty values, no {placeholder}) and refuses the build otherwise, then bakes the pools into lib/client.js. A pool whose English source ends with '...' gets the Hebrew ellipsis '…' appended to whatever it picks.",
+    "conversation/hero.headline — the blank-session hero title (was the single string 'אל הלא־נודע').",
+    "chat/chat.deepDiving — the turn-status word shown beside the composer while the agent works (English 'Deep diving...')."
+  ],
+  "conversation/hero.headline": [
+    "הנני מוכן ומזומן",
+    "אם אני כאן הכל כאן",
+    "איך אפשר לעזור",
+    "מה שצריך לעשות",
+    "קדימה לפעולה",
+    "כל מה שתבקש",
+    "כל מה שתבקשי",
+    "עומד כאן נרגש",
+    "במה אוכל לעזור?",
+    "מה עושים היום?",
+    "הנני הנני"
+  ],
+  "chat/chat.deepDiving": [
+    "עובד",
+    "עושה",
+    "חושב",
+    "מבין",
+    "מוודא",
+    "מעדכן",
+    "קורא",
+    "מנתח",
+    "מריץ",
+    "מברר",
+    "מגבש",
+    "מתאר",
+    "מאמת",
+    "מסכם",
+    "מתכנן",
+    "מתקן",
+    "מפתח",
+    "פועל",
+    "מארגן",
+    "מאחד"
+  ]
+}

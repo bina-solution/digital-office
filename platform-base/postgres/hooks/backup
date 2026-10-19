@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+#: snapshot the application database (documents, settings, sync cursors, companies, drive index)
+#
+# backup <outdir> <mode>   — invoked by scripts/deployment-archive.py, never by hand.
+#
+# This is the store that holds the business: 6,341 `incoming_documents`, 1,184 `companies`, 610
+# `drive_files`, the `settings` table every app reads its knobs from, and the four tables that make
+# a sync resumable rather than restartable — `sync_cursor`, `sync_ledger`, `sync_pipe_state`,
+# `sync_attempt`. Lose those cursors and the next run does not continue; it re-ingests six months.
+#
+# WHY THIS DUMPS `public`, EVERY `indox_*` TENANT SCHEMA, AND `_supabase`. A self-hosted supabase
+# database is not one thing:
+#
+#   public/          THIS DEPLOYMENT'S shared tables — and, since the tenancy migration, the
+#                    COMPATIBILITY VIEWS over the tenant schemas. Dumped whole and restored
+#                    with --clean.
+#   indox_<tenant>/  THE BUSINESS DATA since the tenancy cutover (public.incoming_documents etc.
+#                    are VIEWS over these). Discovered at dump time via pg_namespace — see the
+#                    block below; a deployment without the tenancy layer discovers zero schemas
+#                    and this hook degrades to exactly the old public-only behaviour.
+#   auth/, storage/  NOT HERE. They belong to gotrue and storage-api, which create them by
+#                    migration, so their rows cannot land before those services have run — see
+#                    apps/supabase/hooks/{backup,restore}, which own them and start them.
+#   _supabase        the analytics/logs database. Operational telemetry, not deployment state, so
+#                    `config` mode drops it entirely.
+#
+# ACLs and owners are KEPT here, unlike the n8n dump. Supabase's whole security model is GRANTs to
+# `anon` / `authenticated` / `service_role` plus RLS policies; a --no-acl restore produces a database
+# that looks complete and returns 401/permission-denied from every REST call. The role NAMES are
+# deterministic (platform-base/postgres/volumes/db/roles.sql creates them on every fresh init) and
+# only their passwords come from .env, so preserving ACLs is portable and dropping them is not.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+. "${REPO_ROOT}/scripts/archive-lib.sh"   # archive_require / archive_stop / archive_project
+
+OUT="${1:?usage: backup <outdir> <mode>}"
+MODE="${2:-full}"
+DB="$(archive_require supabase-db)"
+[ -n "${DB}" ] || { echo "[postgres/backup] no supabase-db container running — cannot dump" >&2; exit 1; }
+U=supabase_admin
+
+q() { docker exec "${DB}" psql -U "${U}" -d postgres -tAc "$1" 2>/dev/null | tr -d '\r' | tr -d ' '; }
+
+pd() {  # pd <outfile> <pg_dump args...>
+  local f="$1"; shift
+  docker exec "${DB}" pg_dump -U "${U}" "$@" > "${OUT}/${f}.part" \
+    || { echo "[postgres/backup] pg_dump ${f} failed" >&2; rm -f "${OUT}/${f}.part"; return 1; }
+  mv "${OUT}/${f}.part" "${OUT}/${f}"
+  echo "ARTIFACT ${f}"
+}
+
+# ── TENANT-SCHEMA DISCOVERY (2026-08-31, the tenancy migration's export fix) ────────────────────
+# Since the cutover, public.incoming_documents & friends are VIEWS; the real tables live in
+# indox_<tenant> schemas. A `-n public` dump therefore carries view definitions and ZERO documents
+# — and the view-level FACTs below still resolve, so the archive verifies green while empty. That
+# is the bug this block closes.
+#
+# INVARIANTS (reviewed 3 rounds with the server session — keep them when touching this):
+#  1. Discovery FAILS CLOSED: a failed query refuses the whole export rather than silently
+#     shrinking it back to `-n public`. That silent shrink IS the original bug re-entered, and it
+#     would fire exactly under transient conditions (container mid-restart) — the kind that
+#     survives testing and lands during a real migration.
+#  2. PLAIN top-level assignment — never wrap this in a helper with `local`/`declare`:
+#     `local V="$(...)"` tests local's own status (always 0), the `||` goes decorative, and a
+#     fail-open return looks identical to "no tenant schemas".
+#  3. `'indox\_%'` — the underscore is LIKE's any-character wildcard and MUST stay escaped, or
+#     `indoxanything` matches too.
+#  4. Tenant schemas ride in the SAME archive as public, never a separate file — pg_restore then
+#     creates the tenant tables before the public views that select from them.
+# Degradation: no indox_% schemas → TENANT_SCHEMAS empty → args stay exactly `-n public`, plus one
+# `FACT tenant_schemas 0` on both sides — byte-compatible with a pre-tenancy deployment.
+TENANT_SCHEMAS="$(docker exec "${DB}" psql -U "${U}" -d postgres -tAc \
+    "select nspname from pg_namespace where nspname like 'indox\\_%' order by nspname;" \
+    | tr -d '\r')" \
+  || { echo "[postgres/backup] tenant-schema discovery FAILED — refusing to write a possibly incomplete archive" >&2; exit 1; }
+DUMP_NS=(-n public)
+for s in ${TENANT_SCHEMAS}; do DUMP_NS+=(-n "${s}"); done
+pd supabase-public.dump -d postgres -Fc "${DUMP_NS[@]}" || exit 1
+if [ "${MODE}" = "full" ]; then
+  pd supabase-_supabase.dump -d "_supabase" -Fc || exit 1
+fi
+echo "SKIPVOL supabase_db_data"
+
+for t in incoming_documents settings sync_ledger sync_cursor sync_pipe_state sync_attempt \
+         companies drive_files ocr_cache business_documents chat_messages tag_rules; do
+  echo "FACT ${t} $(q "select count(*) from public.${t};")"
+done
+echo "FACT public_tables $(q "select count(*) from information_schema.tables where table_schema='public';")"
+# Content, not just cardinality. Two databases can hold 6,341 rows each and disagree about every
+# one of them; this hashes the identity + status of every document so a restore that lost or
+# rewrote content cannot pass by counting.
+# NB: incoming_documents' columns are UPPERCASE identifiers (a Sheets-era legacy), so they must be
+# double-quoted or postgres folds them to lowercase and the query fails with `column "id" does not
+# exist`. settings' columns are ordinary lowercase.
+# On a tenancy estate these two read through public VIEWS, i.e. the ACTIVE instance only —
+# view-level, non-authoritative. The per-schema shas below are the real comparison.
+echo "FACT documents_sha $(q "select md5(string_agg(\"ID\"::text||coalesce(\"STATUS\",''), '|' order by \"ID\")) from public.incoming_documents;")"
+echo "FACT settings_sha $(q "select md5(string_agg(key||'='||coalesce(value::text,''), '|' order by key, instance)) from public.settings;")"
+echo "FACT tenant_schemas $(printf '%s\n' ${TENANT_SCHEMAS} | grep -c . || true)"
+for s in ${TENANT_SCHEMAS}; do
+  echo "FACT ${s}_documents $(q "select count(*) from ${s}.incoming_documents;")"
+  echo "FACT ${s}_documents_sha $(q "select md5(string_agg(\"ID\"::text||coalesce(\"STATUS\",''), '|' order by \"ID\")) from ${s}.incoming_documents;")"
+  echo "FACT ${s}_action_log $(q "select count(*) from ${s}.indox_action_execution_log;")"
+  echo "FACT ${s}_settings $(q "select count(*) from ${s}.settings;")"
+done
+exit 0

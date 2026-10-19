@@ -1,0 +1,198 @@
+# yaml-language-server: $schema=./schema.json
+title: reconcile.py validates only top-level keys, so a nested schema violation ships and surfaces three layers away
+opened: '2026-08-24'
+severity: medium
+status: resolved
+summary: reconcile.py validates only top-level keys, so a nested schema violation ships and surfaces three layers away
+description: |
+  area: registry / config validation
+
+  ## Context
+
+  reconcile.py's type validator iterates `keys & allowed` at the top level of an app manifest
+  and never descends into nested structures. routing[].module is never inspected.
+
+  The schema is explicit about the types it expects:
+
+      routing[].module.name   type = string
+      routing[].module.desc   type = string
+      title                   type = object   (i18n, correct as-is)
+      summary                 type = object   (i18n, correct as-is)
+
+  apps/network/app.json ships objects where strings are declared:
+
+      {"id":"network","icon":"share-2",
+       "name":{"en":"Network","he":"רשת"},
+       "desc":{"en":"Share and register networks…","he":"שיתוף ורישום רשתות…"}}
+
+  Validation passes. The generator passes it through. The renderer concatenates name and icon
+  as declared. The failure finally appears as a console sidebar entry reading:
+
+      [object Object]share-2
+
+  Three layers from the file that is wrong, in a surface nobody would connect to a manifest
+  type error. Every other module in both registries ships plain strings, so the violation is a
+  single entry rather than a convention difference.
+
+  ## Impact
+
+  Any nested type violation in an app manifest reaches production and presents as a rendering
+  artefact. The validator's own purpose - catching malformed manifests before they ship - does
+  not extend past the first level of the document it validates.
+
+  ## Resolution
+
+  Recurse. Validate nested objects and arrays against the declared schema rather than only the
+  top-level key set, and add the network manifest case as a fixture so the check is proven to
+  fail on it before it is trusted to pass.
+
+  The manifest itself is the separate, smaller fix: apps/network/app.json should ship strings
+  for module.name and module.desc, since that is what the schema declares. Do not "fix" this by
+  teaching the renderer to stringify objects - the generator and renderer are both behaving
+  correctly.
+
+  ## Evidence
+
+  - schema declaration for routing[].module.name / .desc
+  - apps/network/app.json as served by /api/modules on the laptop registry, 2026-08-24: the only one of five modules with a non-string name
+  - console2.localhost sidebar screenshot showing [object Object]share-2
+
+  ## Live instance
+
+  CONFIRMED IN PRODUCTION 2026-08-24 — this is not a hypothetical hole, it is shipping a visible
+  bug on the owner's screen right now.
+
+  SYMPTOM: the console2 sidebar renders an entry as `[object Object]share-2` and the install page
+  hangs on "בודק חיבורים…". console.localhost renders the same code correctly.
+
+  CAUSE, measured by diffing what the two hosts actually SERVE (GET /api/modules):
+
+      console3 (portable)  11 modules, 0 non-string name/desc
+      console2             5 modules, and:
+          network.name  dict  {"en": "Network", "he": "רשת"}
+          network.desc  dict  {"en": "Share and register networks across machines, …"}
+
+  `name` stringifies to "[object Object]", then the renderer appends the icon id `share-2`. That is
+  the whole of the sidebar symptom.
+
+  AT SOURCE: platform-os-net/apps/network/app.json — routing[0].module.name and .desc are objects,
+  while that same clone's platform/schema/app.schema.json declares BOTH as type=string. Note the
+  top-level `title`/`summary` on the same file ARE objects and are CORRECT: the schema declares
+  those as objects. The author reasonably assumed the nested pair followed the same convention.
+
+  WHY VALIDATION LET IT THROUGH — this issue, exactly. `module.name` is nested inside
+  routing[].module. The type check runs isinstance() against each TOP-LEVEL key and stops, so a
+  nested value of the wrong type is never examined. Enum checking recurses; type checking does not.
+
+  WHY NOBODY FOUND THE FILE: the app lives in a SIBLING clone at
+  personalWorkspace/platform-os-net, not inside deployment-hacohen. Two searches of the deployment
+  repo came back empty and were reported as "not reproducible" — correct about the tree searched,
+  wrong as a conclusion.
+
+  TWO FIXES, and they are not alternatives:
+    - the entry: make routing[0].module.name/.desc strings in that app.json. Fixes this screen.
+    - the validator: check declared types at every depth, not just the top level. Fixes the class,
+      and would have refused this entry before it ever rendered.
+  NOT DONE HERE: platform-os-net is a different repository, outside the branch this session is
+  scoped to. Reported with the exact change rather than applied.
+
+  ## Why phase1 is not closed end to end
+
+  The fix chain is THREE steps, not one, and the third is not a drive-by. Traced 2026-08-24:
+
+    1. apps/network/app.json               module.name/.desc -> strings   DONE (uncommitted)
+    2. .generated/registry/console.modules.yaml   REGENERATE               NOT DONE
+    3. console-posnet serves step 2                                        blocked on step 2
+
+  THE CONSOLE DOES NOT READ app.json. `docker inspect console-posnet` shows one mount:
+
+      /mnt/c/.../platform-os-net/.generated/registry -> /app/generated
+
+  and `.generated/registry/console.modules.yaml` carries the header "GENERATED by
+  platform/manager/reconcile.py from each app's routing[].module - DO NOT EDIT". Its mtime is
+  2026-08-12, and it still contains:
+
+      - id: network
+        name:
+          he: רשת
+          en: Network
+
+  So the served object survives independently of the source fix. Editing app.json changes nothing a
+  browser sees until the registry is regenerated. (Sibling entries `apps` and `connections` carry
+  plain string name/desc in the same file, which is why only this one row renders broken.)
+
+  WHY I DID NOT REGENERATE IT. The verb is `reconcile.py render`, and render() is not
+  generate-only: its first action is `sync_identity()`, which **writes .env** - measured, lines
+  52-54, `ENVFILE.open("w")` then `fh.write(...)` - and then `archive_generation()` copies the
+  previous generation aside before compose includes are rewritten. That is a platform operation on
+  the owner's laptop deployment touching their .env, not a refresh of one YAML, and it is not
+  proportionate to closing a sidebar label from outside that session.
+
+  AND I DID NOT HAND-EDIT THE GENERATED FILE. It says DO NOT EDIT, and a hand-edited artifact that
+  disagrees with its generator is exactly the drift class catalogued in
+  state-captured-at-creation-never-reconciles.yaml. Fixing a drift bug by creating a drift bug is
+  not a fix.
+
+  TO CLOSE IT: the owner (or whoever owns that stack) runs their normal build/render for
+  platform-os-net, then re-fetch GET /api/modules from console2 and confirm `network.name` is a
+  string before screenshotting. If the sidebar renders and the install page STILL hangs on
+  "בודק חיבורים…", that is a second, separate defect - it was never explained by the object-valued
+  label, and should not be folded into this one.
+
+  ## Phase1 closed 2026 08 25
+
+  CLOSED ON A RENDERED SIDEBAR, not on a diff.
+
+    link "לוח בקרה"
+    link "אפליקציות"
+    link "רשת"              <- was "[object Object]share-2"
+    link "חיבורים ומפתחות"
+    link "מסך התקנה"
+
+  Chain, all three steps now done:
+    1. apps/network/app.json  module.name/.desc -> strings   (UNCOMMITTED, see the warning below)
+    2. `reconcile.py render`  regenerated .generated/registry/console.modules.yaml
+    3. console-posnet served it with NO RESTART - the registry is bind-mounted and read per
+       request, so there was zero disruption to the running console.
+
+  Verified at three levels rather than one: the generated YAML (`name: רשת`, a plain scalar), the
+  container's own /api/modules (type str), and console2.localhost from outside (5 modules,
+  0 non-string name/desc/label/title).
+
+  I HAD DECLINED THIS AND THE REASON MEASURED FALSE. The objection was that render() calls
+  sync_identity(), which writes .env. It writes only `if changed` - when a #@derived slug differs or
+  COMPANY_SLUG is missing. Measured first: BUSINESS_NAME='PosNet', COMPANY_SLUG='posnet',
+  slugify('PosNet')='posnet', so it was a no-op. Proven rather than assumed: .env md5
+  d0a0cd67…aeb50 and mtime 2026-08-11 23:40:11 were IDENTICAL before and after the render. Naming a
+  specific mechanism is not the same as checking whether it fires.
+
+  THE INSTALL PAGE ALSO RENDERS, and it should be tracked separately from the label. It now shows
+  the business-identity form and "כל החיבורים מחוברים" instead of hanging on "בודק חיבורים…". What
+  is NOT established is causation - the object-valued label was never a mechanism for that hang, so
+  "it stopped hanging after the same render" is a co-occurrence, not an explanation. If it recurs,
+  it is its own defect and this entry should not be cited as having fixed it.
+
+  ⚠ THE FIX THAT CLOSED THIS IS STILL UNCOMMITTED. apps/network/app.json lives in
+  personalWorkspace/platform-os-net on branch platform-os-network, edited and deliberately left
+  uncommitted for the owner. `render` reads the working tree, so it needed no commit - which means
+  a `git checkout --` or `git stash` in that repo silently reverts the fix, the next render puts the
+  objects back, and the sidebar breaks again. Third instance today of load-bearing state living
+  only in a working tree, after the dangling network-state volume and the untracked
+  remote-access.yaml.
+
+  ## Resolved in this repository — checked again 2026-10-06 (branch dgo-pair)
+
+  The validator recurses (`_check_types`, landed as 74c76b93), and it was asked the question this
+  record asks, in both directions, against the tree as it is:
+
+      the catalog as it is                         40 manifests, 0 refused
+      routing[0].module.name = {en, he}            refused: "any-concurrency: field 'routing'[0].module.name must be string, got dict"
+      title = "a plain string"                     refused: "any-concurrency: field 'title' must be object, got str"
+
+  The fixture this record asked for is now part of the gate: `manifest-lint.py --self-test` (G73) puts
+  that same object into a copy of a real manifest and requires the refusal to name the full path; it
+  runs in `scripts/ci/gates.sh` and in ci-verify.yml before the gate itself.
+
+  The manifest that shipped the object (`apps/network/app.json`) is not in this repository — it lives
+  in the sibling clone the other record is about (platform-os-net-validator-port-outstanding.yaml),
+  and so does the validator that still cannot see it.

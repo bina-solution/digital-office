@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+#: assert notifications (התראות) is healthy — /healthz token+poller+db true + clean logs
+#
+# verify — notifications' own post-bring-up assertion. Invoked generically by
+# `run_app_hooks verify` (scripts/lib.sh); layer 0 no longer names this app.
+#
+# This was "P7 notifications" in scripts/baseline.sh, criterion 4 of the healthy baseline
+# ("notification service (התראות) working — no special errors"). Moved verbatim: same port, same
+# /healthz parse (token AND poller AND db), same log filter, same pass/fail split.
+#
+# The token half of this depends on glitchtip's hooks/verify passing — the poller authenticates
+# with GLITCHTIP_API_TOKEN. Both hooks run in the same `run_app_hooks verify` sweep and both
+# report independently, which is the point: whichever one is red names its own fact.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # cn, ok/bad, colors
+
+# GET a path inside a python container's own localhost (bypasses traefik+authentik).
+inhealth() { # inhealth <container> <port> <path>
+  docker exec "$1" python3 -c "import urllib.request,sys
+try: sys.stdout.write(urllib.request.urlopen('http://localhost:$2$3',timeout=8).read().decode())
+except Exception as e: sys.stderr.write(str(e)); sys.exit(1)" 2>/dev/null
+}
+
+nf="$(cn notifications)"
+if [ -z "${nf}" ]; then
+  bad "notifications — container not running"
+  exit 1
+fi
+
+nfj="$(inhealth "${nf}" 8977 /healthz)"
+nfok="$(printf '%s' "${nfj}" | python3 -c "import sys,json
+try: d=json.load(sys.stdin)
+except Exception: print('parse'); sys.exit()
+print('ok' if d.get('token') and d.get('poller') and d.get('db') else 'bad:'+json.dumps({k:d.get(k) for k in ('token','poller','db')}))" 2>/dev/null)"
+nflog="$(docker logs --tail 400 "${nf}" 2>&1 | grep -iE 'TOKEN not set|poll_glitchtip failed|traceback' || true)"
+
+if [ "${nfok}" = ok ] && [ -z "${nflog}" ]; then
+  ok "notifications — /healthz token+poller+db true; logs clean"
+  exit 0
+fi
+bad "notifications — healthz=${nfok:-unreachable}; log=$(echo "${nflog}" | head -1)"
+exit 1

@@ -1,0 +1,54 @@
+# yaml-language-server: $schema=./schema.json
+title: "A user-layer cordis.patch.yml in the bina_ds_home volume outlives the image it was written for — and neither the old nor the new image boots"
+opened: 2026-09-30
+category: bug
+severity: critical
+status: in-progress
+summary: "An agent dropped a TEMPORARY plugin insert into /data/dsh/cordis.patch.yml (the harness's user layer, on the persistent volume) to try its plugin without a rebuild. The old image then names a package it does not ship (harness alive, never binds :3080); the new image, whose profile also inserts the id, dies on 'duplicate loader entry'. Every Azaria session was down from 13:43. The rollback path cannot save you from state that both versions share."
+description: |
+  ## What happened
+
+  * 13:13 — the timeline session wrote `/data/dsh/cordis.patch.yml` on the `bina_ds_home` volume:
+    "TEMPORARY, 2026-09-30: loads the office's timeline lane for a live proof while the image that
+    will carry the same row … waits for its rebuild" — an `insert: {id: timeline-lanes, name:
+    '@bina/dsh-timeline-lanes'}`. dsh applies DSH_HOME's patch on top of the profile's.
+  * 13:43 — a recreate of bina-ds (via the retired tmp/bina-ds-restart.sh, see the sibling issue)
+    started the OLD image against that volume. The loader entry names a package the old image does
+    not ship. dsh does not crash: the process stays alive at ~30% CPU, prints the adapter and
+    workspace lines, and never serves. Docker: "unhealthy", 5 probe timeouts.
+  * 13:52 — self-update.sh launched the NEW image (which ships the row in its profile patch). Same
+    id twice → `TypeError: duplicate loader entry id: timeline-lanes` → exit 1 → the health gate
+    rolled back to the old image within 45 s, correctly — into the same non-booting state.
+
+  Reproduced by the coordinating session on a COPY of the volume: the new image boots with a
+  temporary home and fails with the real one.
+
+  ## Why this is structural, not a one-off
+
+  The profile (`apps/bina-ds/harness/profile/cordis.patch.yml`, in the image, in git) is the ONE
+  owner of the plugin list — that is the design (apps/bina-ds/README.md). A second, unversioned
+  layer on the data volume is state that every image version shares and none can be rolled back
+  from: the rollback swaps the binary, not the data. It is exactly the "new version migrates the
+  data dir, old version cannot read it" trap, in miniature.
+
+  ## Fix
+
+  Move the volume file aside (its content is the image profile's row, which git has), restart the
+  running container, relaunch the new image through self-update.sh. Then make it impossible to
+  recur (tasks).
+tasks:
+  - text: "Move /data/dsh/cordis.patch.yml aside on the volume (14:17) and restart bina-ds (14:24; healthy 14:4x after a slow cold boot under load 150)"
+    done: true
+  - text: "Relaunch a new image via self-update.sh once the box is quiet (the coordinating session builds it with the fixes below instead of relaunching 76119e3eb907)"
+    done: false
+  - text: "entrypoint.sh: when DSH_HOME holds a cordis.patch.yml, move it aside (kept, timestamped), say so loudly with the path, notify the owner, and boot — recover, do not block (the owner's rule for self-development); the profile is the only patch layer this deployment boots from"
+    done: true
+  - text: "office-operations SKILL.md: 'to try a plugin, change the profile and rebuild (guarded); never write into /data/dsh'"
+    done: true
+  - text: "self-update.sh health gate: on rollback ALSO failing, say so in the notification and print the last 20 harness log lines — today's rollback reported nothing for 5 minutes (log_harness_tail at every failure point, the last 8 lines in the notification, a progress line every minute while waiting)"
+    done: true
+references:
+  - apps/bina-ds/harness/profile/cordis.patch.yml
+  - apps/bina-ds/self-update.sh
+  - apps/bina-ds/harness/entrypoint.sh
+  - apps/bina-ds/README.md

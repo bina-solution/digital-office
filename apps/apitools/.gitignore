@@ -1,0 +1,21 @@
+__pycache__/
+.venv/
+.venv*
+.idea/
+.vscode
+!.gitignore
+.storage
+.test_files
+.storage*
+.test_files*
+# Runtime dirs: contents ignored, but the DIRECTORY itself ships (.gitkeep). They are compose bind
+# sources — absent from a fresh clone, docker silently creates them root-owned (gate G0).
+# A bare `logs/` would exclude the dir itself, and git cannot re-include a file under an excluded
+# directory, so the `dir/*` + `!dir/.gitkeep` form is required.
+logs/*
+!logs/.gitkeep
+storage/*
+!storage/.gitkeep
+
+.scraps*/
+.coverage

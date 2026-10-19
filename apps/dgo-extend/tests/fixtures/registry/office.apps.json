@@ -1,0 +1,47 @@
+{
+  "_comment": "FIXTURE — a compiled registry (.generated/registry/office.apps.json) as layer 0 renders it, for the catalog contract in ai/context/dgo-remote-apps.md. Not a second source: the shape is asserted against the real compiler by apps/dgo-extend/tests/phase3.py.",
+  "generated_by": "platform/manager/reconcile.py",
+  "apps": [
+    {
+      "app": "bina-ds",
+      "alias": "bina",
+      "name": "בינה ודעת",
+      "name_en": "Bina",
+      "icon": "bot",
+      "group": "ראשי",
+      "desc": "הסוכן של הלשכה",
+      "order": 1,
+      "port": 3080,
+      "agent_api_port": 3081,
+      "auth": "bearer:vault:bina-ds",
+      "host": "bina.localhost",
+      "module": {"kind": "embedded", "path": "/a/bina/"},
+      "health": "/healthz"
+    },
+    {
+      "app": "n8n",
+      "alias": "n8n",
+      "name": "n8n",
+      "name_en": "n8n",
+      "icon": "workflow",
+      "group": "אוטומציה",
+      "desc": "אוטומציות",
+      "order": 30,
+      "port": 5678,
+      "module": {"kind": "external", "path": "/"},
+      "health": "/healthz"
+    },
+    {
+      "app": "drive",
+      "alias": "drive",
+      "name": "דרייב",
+      "icon": "folder",
+      "group": "עסק",
+      "desc": "קבצים",
+      "order": 12,
+      "port": 8975,
+      "module": {"kind": "embedded", "path": "/a/drive/"},
+      "health": "/healthz"
+    }
+  ]
+}

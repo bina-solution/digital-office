@@ -1,0 +1,1188 @@
+{
+  "updatedAt": "2025-10-26T23:43:39.906Z",
+  "createdAt": "2025-08-09T18:51:57.917Z",
+  "id": "indoxDocCreate01",
+  "name": "Create Incoming Document",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// --- Process Add Request ---\n// This code validates incoming data, generates a unique ID, and maps the data to the Google Sheet format.\n\nconst body = $input.item.json;\n\n// 1. Validate required fields\nif (!body.NAME) {\n  throw new Error('Validation failed: Missing required fields NAME.');\n}\n\n// 2. Map and enrich the data for the new row\nconst newRow = {\n  ID: Math.floor(Math.random()*999999999) + Math.random().toString(36).substring(2, 8),\n  TYPE: body.TYPE?.toUpperCase() || '',\n  COMPANY_DOC_ID: body.COMPANY_DOC_ID || '',\n  COMPANY_ID: body.COMPANY_ID,\n  COMPANY_NAME: null,\n  NAME: body.NAME,\n  LINK: body.LINK,\n  SOURCE_TYPE: body.SOURCE_TYPE || '',\n  SOURCE_ID: body.SOURCE_ID || '',\n  SOURCE_LINK: body.SOURCE_LINK || '',\n  SIZE: body.SIZE || null,\n  HASH: body.HASH || '',\n  TIMESTAMP: new Date().toISOString(),\n  STATUS: body.STATUS || 'NEW',\n  REQUIRED_ACTION: body.REQUIRED_ACTION || '',\n  PURCHASE_ID: body.PURCHASE_ID || null,\n  LINKED_BS: body.LINKED_BS || null, \n  BS_LINE_AMOUNT: body.BS_LINE_AMOUNT || null,\n  BS_LINE_DATE: body.BS_LINE_DATE || null,\n  BS_LINE_NOTE: body.BS_LINE_NOTE || null\n};\n\n// Remove null values\nconst newRowWithoutNulls = Object.fromEntries(\n  Object.entries(newRow).filter(([key, value]) => value !== null)\n);\n// 3. Return the processed data for the next node\nreturn {\n  json: newRowWithoutNulls\n};\n"
+      },
+      "id": "00dd051e-e269-4c9b-8879-f55eb25d257e",
+      "name": "Code - Process Add Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -96,
+        -368
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "incoming_document",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "5c8d8376-b8da-484f-890c-23f92db63efa",
+      "name": "Webhook - Add Document",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -784,
+        -320
+      ],
+      "webhookId": "add_incoming_document"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"success\": false, \"data\": $json } }}",
+        "options": {}
+      },
+      "id": "1f6ada01-c36d-4f82-b73d-414d9a999c0c",
+      "name": "Response - Add Fail",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1760,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "id": "5077e553-a8cb-4c34-8bb4-afe5c80c0b20",
+      "name": "Response - Add Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1584,
+        -288
+      ]
+    },
+    {
+      "parameters": {
+        "inputSource": "jsonExample",
+        "jsonExample": "{\n  \"NAME\": \"Annual Financial Report 2024\",\n  \"LINK\": \"https://example.com/documents/annual-report-2024.pdf\",\n  \"TYPE\": \"FINANCIAL_REPORT\",\n  \"COMPANY_DOC_ID\": \"DOC_12345\",\n  \"COMPANY_ID\": \"COMP_67890\",\n  \"SOURCE_TYPE\": \"UPLOAD\",\n  \"SOURCE_ID\": \"SRC_98765\",\n  \"SOURCE_LINK\": \"https://example.com/source/upload-portal\",\n  \"SIZE\": 2048576,\n  \"HASH\": \"sha256:a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456\",\n  \"STATUS\": \"PENDING_REVIEW\",\n  \"REQUIRED_ACTION\": \"VALIDATION_REQUIRED\",\n  \"FROM_OFFICE\": \"\",\n  \"FROM_OFFICE_CHECK\": \"\",\n  \"PURCHASE_ID\": null,\n  \"LINKED_BS\": null, \n  \"BS_LINE_AMOUNT\": null,\n  \"BS_LINE_DATE\": null,\n  \"BS_LINE_NOTE\": null,\n  \"SHORT_DOC_ID\": null\n}"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -736,
+        -496
+      ],
+      "id": "ecb63224-846c-48b8-ba06-2eb4cd2b1aaa",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -272,
+        -368
+      ],
+      "id": "0eb4795f-84fa-4abf-b808-120ef6e07374",
+      "name": "Start"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "return $json.body"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -544,
+        -320
+      ],
+      "id": "1018ecc5-e226-42be-8661-6dc901ae79ad",
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo",
+          "mode": "list",
+          "cachedResultName": "AutomationValues"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 542119184,
+          "mode": "list",
+          "cachedResultName": "מסמכים נכנסים",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo/edit#gid=542119184"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [
+            "ID"
+          ],
+          "schema": [
+            {
+              "id": "ID",
+              "displayName": "ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "NAME",
+              "displayName": "NAME",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "TYPE",
+              "displayName": "TYPE",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "COMPANY_ID",
+              "displayName": "COMPANY_ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "COMPANY_DOC_ID",
+              "displayName": "COMPANY_DOC_ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "LINK",
+              "displayName": "LINK",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "SOURCE_TYPE",
+              "displayName": "SOURCE_TYPE",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "SOURCE_ID",
+              "displayName": "SOURCE_ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "SOURCE_LINK",
+              "displayName": "SOURCE_LINK",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "SIZE",
+              "displayName": "SIZE",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "HASH",
+              "displayName": "HASH",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "TIMESTAMP",
+              "displayName": "TIMESTAMP",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "STATUS",
+              "displayName": "STATUS",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "REQUIRED_ACTION",
+              "displayName": "REQUIRED_ACTION",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "PURCHASE_ID",
+              "displayName": "PURCHASE_ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "SHIPMENT_DOC_ID",
+              "displayName": "SHIPMENT_DOC_ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "COMPANY_NAME",
+              "displayName": "COMPANY_NAME",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "FROM_OFFICE",
+              "displayName": "FROM_OFFICE",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "BS_EXTRACTED_LINES",
+              "displayName": "BS_EXTRACTED_LINES",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "LINKED_BS",
+              "displayName": "LINKED_BS",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "BS_LINE_AMOUNT",
+              "displayName": "BS_LINE_AMOUNT",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "BS_LINE_DATE",
+              "displayName": "BS_LINE_DATE",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "BS_LINE_NOTE",
+              "displayName": "BS_LINE_NOTE",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "FROM_OFFICE_CHECK",
+              "displayName": "FROM_OFFICE_CHECK",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "BS_LINK_DOCUMENTS_COMPLETED",
+              "displayName": "BS_LINK_DOCUMENTS_COMPLETED",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "SEARCH_IN_DRIVE_COMPLETED",
+              "displayName": "SEARCH_IN_DRIVE_COMPLETED",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "EMPTY",
+              "displayName": "EMPTY",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "PURCHASE_ID_COMPLETED",
+              "displayName": "PURCHASE_ID_COMPLETED",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "cellFormat": "RAW",
+          "useAppend": true
+        }
+      },
+      "id": "d97e7436-f5d3-4789-909d-e2e08cd1dc37",
+      "name": "Google Sheets - Add Row1",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        1152,
+        -112
+      ],
+      "notesInFlow": false,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "e2knIZpw8YF0QBAB",
+          "name": "Google Sheets person17@example.com"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "9ab7c718-4c68-4067-a7df-747a35db0e75",
+              "leftValue": true,
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1536,
+        -96
+      ],
+      "id": "91b16a34-31c4-4f62-b608-c10d4a841190",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "amount": 35
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1984,
+        -112
+      ],
+      "id": "ac114e53-cb6c-41ba-b736-98e07527e2ca",
+      "name": "Wait",
+      "webhookId": "bd2bccb2-77ec-4640-be98-aa02da2c2920"
+    },
+    {
+      "parameters": {
+        "dataToSave": {
+          "values": [
+            {
+              "key": "TYPE",
+              "value": "ADD_DOCUMENT"
+            },
+            {
+              "key": "INPUT",
+              "value": "={{ $json.toJsonString() }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executionData",
+      "typeVersion": 1.1,
+      "position": [
+        -96,
+        -576
+      ],
+      "id": "4588f61b-9bdd-4984-8ef3-4d3a8b81dd84",
+      "name": "Execution Data1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "83de4c02-cc3b-42dd-9ee3-720a59f2db47",
+              "leftValue": "={{ $json.HASH }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        208,
+        -128
+      ],
+      "id": "1c292fa2-090b-4f8f-bd69-caa4e3e6d8a6",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "1fcfc32c-c108-4df1-8006-60645a5e6755",
+              "leftValue": "={{ [undefined, null, '', \"unknown\"].includes($json.COMPANY_DOC_ID?.toLowerCase()) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "bab2316f-b3be-4526-bac3-d4e6acaf6247",
+              "leftValue": "={{ [undefined, null, \"\", \"unknown\"].includes($json.COMPANY_ID?.toLowerCase()) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        208,
+        -368
+      ],
+      "id": "6c86b907-4761-4fcd-8a87-97b618a770a8",
+      "name": "If Has COMPANY_ID AND COMPANY_DOC_ID"
+    },
+    {
+      "parameters": {
+        "url": "https://n8n.hacohen.bina-solutions.co.il/webhook/incoming_document",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "=COMPANY_DOC_ID",
+              "value": "={{ $json.COMPANY_DOC_ID }}"
+            },
+            {
+              "name": "COMPANY_ID",
+              "value": "={{ $json.COMPANY_ID }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        448,
+        -384
+      ],
+      "id": "0b12a4e7-7b21-42ee-bd30-fe0e26849b5a",
+      "name": "Search COMPANY_ID AND COMPANY_DOC_ID",
+      "alwaysOutputData": false,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "https://n8n.hacohen.bina-solutions.co.il/webhook/incoming_document",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "HASH",
+              "value": "={{ $('Code - Process Add Request').item.json.HASH }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        448,
+        -208
+      ],
+      "id": "7fd27a60-e8e1-4bfc-aa51-f4f1d15804ee",
+      "name": "Search HASH",
+      "alwaysOutputData": false,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "return {\n  ...$('Start').item.json,\n  ID: $json?.data?.[0]?.ID || $('Code - Process Add Request').item.json.ID\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        -320
+      ],
+      "id": "e1b7171d-2c9a-4655-ba05-12cb5f6419d4",
+      "name": "Map Found ID"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "d37a17c6-986a-4e48-b521-936e18fa7519",
+              "leftValue": "={{ $json.data[0].ID }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        656,
+        -336
+      ],
+      "id": "c38a93bb-98a1-4536-8e5b-8e2c7d9d5896",
+      "name": "If Has Match"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        816,
+        -432
+      ],
+      "id": "ff5ee5e4-e763-4896-95e7-6619dc0dead9",
+      "name": "Found"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "return { \n  \"success\": true, \n  \"message\": \"Document added successfully\", \n  \"data\": $json , \n  \"action\": $('Found').isExecuted ? \"updated\" : \"created\"\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1360,
+        -208
+      ],
+      "id": "459d30af-a627-49f2-846a-c472be770582",
+      "name": "Code1"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 542119184,
+          "mode": "list",
+          "cachedResultName": "מסמכים נכנסים",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo/edit#gid=542119184"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "={{ $json.filters[0]?.field ?? \"EMPTY\" }}",
+              "lookupValue": "={{ $json.filters[0]?.value ?? \"\" }}"
+            },
+            {
+              "lookupColumn": "={{ $json.filters[1]?.field ?? \"EMPTY\" }}",
+              "lookupValue": "={{ $json.filters[1]?.value ?? \"\" }}"
+            }
+          ]
+        },
+        "combineFilters": "AND",
+        "options": {}
+      },
+      "id": "29362b52-aa15-49e3-bdf9-ded4cce4c039",
+      "name": "Google Sheets - Get All Rows1",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        -272,
+        240
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "e2knIZpw8YF0QBAB",
+          "name": "Google Sheets person17@example.com"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// --- Data Filtering and Processing ---\n// This code applies the filters to the retrieved Google Sheets data\n\nconst allData = $('Google Sheets - Get All Rows1').all();\nconst filterConfig = $('Code - Process Get Request').first().json;\n\n// Helper function to check if a value matches the filter\nfunction matchesFilter(rowValue, filter) {\n  if (!rowValue) rowValue = '';\n  const rowValueStr = rowValue.toString().toLowerCase();\n  const filterValueStr = filter.value.toLowerCase();\n  \n  switch (filter.type) {\n    case 'exact':\n      return rowValueStr === filterValueStr;\n    case 'contains':\n      return rowValueStr.includes(filterValueStr);\n    default:\n      return false;\n  }\n}\n\n// Filter the data based on the provided filters\nconst filteredResults = allData.filter(item => {\n  const row = item.json;\n  \n  // All filters must match (AND logic)\n  return filterConfig.filters.every(filter => {\n    const fieldValue = row[filter.field];\n    return matchesFilter(fieldValue, filter);\n  });\n});\n\n// Prepare response data\nconst responseData = {\n  totalFound: filteredResults.length,\n  filters: filterConfig.filters.map(f => ({\n    field: f.field,\n    type: f.type,\n    value: f.value\n  })),\n  data: filteredResults.map(item => item.json)\n};\n\n// Return filtered results\nreturn filteredResults.length > 0 \n  ? [{ json: responseData }]\n  : [{ json: { ...responseData, error: 'No matching records found' } }];"
+      },
+      "id": "b83811ea-c8d4-477c-adc4-9807dad8ccc8",
+      "name": "Code - Filter Data1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -48,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"success\": false, \"error\": $json.error || \"No documents found matching the specified criteria\", \"totalFound\": $json.totalFound || 0, \"filters\": $json.filters || [] } }}",
+        "options": {
+          "responseCode": 404
+        }
+      },
+      "id": "e9b41551-44ab-46ca-bad1-b5b6710e90cd",
+      "name": "Response - Get Fail1",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        112,
+        416
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// --- Enhanced Process Get Request ---\n// This code supports multiple query types: exact match, contains, and multiple field filtering\n\nconst query = $json.query;\n\n// Define valid searchable fields\nconst validFields = [\n  'ID', 'TYPE', 'COMPANY_DOC_ID', 'COMPANY_ID', 'COMPANY_NAME', 'HASH', \"SHORT_DOC_ID\",\n  'NAME', 'LINK', 'SOURCE_TYPE', 'SOURCE_ID', 'STATUS', 'REQUIRED_ACTION'\n];\n\n// Helper function to validate field names\nfunction isValidField(field) {\n  return validFields.includes(field.toUpperCase());\n}\n\n// Initialize filters array\nconst filters = [];\n\n// Process query parameters\nfor (const [key, value] of Object.entries(query)) {\n  if (!value || value === '') continue; // Skip empty values\n  \n  const upperKey = key.toUpperCase();\n  \n  // Handle 'contains' queries (field_contains=value)\n  if (key.endsWith('_contains')) {\n    const fieldName = key.replace('_contains', '').toUpperCase();\n    if (isValidField(fieldName)) {\n      filters.push({\n        type: 'contains',\n        field: fieldName,\n        value: value.toString()\n      });\n    }\n  }\n  // Handle exact match queries\n  else if (isValidField(upperKey)) {\n    filters.push({\n      type: 'exact',\n      field: upperKey,\n      value: value.toString()\n    });\n  }\n}\n\n// Validate that at least one filter was provided\nif (filters.length === 0) {\n  throw new Error('Validation failed: At least one valid query parameter is required. Valid fields: ' + validFields.join(', '));\n}\n\n// Return the filters configuration\nreturn {\n  json: {\n    filters: filters,\n    queryType: filters.length === 1 ? 'single' : 'multiple',\n    totalFilters: filters.length\n  }\n};"
+      },
+      "id": "e07d48a2-a4f7-4f7e-bf66-d0fffc71dc2a",
+      "name": "Code - Process Get Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -512,
+        272
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"success\": true, \"message\": \"Documents retrieved successfully\", \"totalFound\": $json.totalFound, \"filters\": $json.filters, \"data\": $json.data } }}",
+        "options": {}
+      },
+      "id": "a0839c21-5f0a-4f72-a7d2-8349b95cfc6c",
+      "name": "Response - Get Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        144,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "path": "incoming_document",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "89af036a-1048-4919-8497-5f056713f429",
+      "name": "Webhook - Get",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -736,
+        272
+      ],
+      "webhookId": "get_incoming_document"
+    },
+    {
+      "parameters": {
+        "dataToSave": {
+          "values": [
+            {
+              "key": "TYPE",
+              "value": "GET"
+            },
+            {
+              "key": "INPUT",
+              "value": "={{ $json.toJsonString() }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executionData",
+      "typeVersion": 1.1,
+      "position": [
+        -288,
+        496
+      ],
+      "id": "6b0470b9-b4f0-4c34-8299-7c4df119b933",
+      "name": "Execution Data"
+    }
+  ],
+  "connections": {
+    "Code - Process Add Request": {
+      "main": [
+        [
+          {
+            "node": "If Has COMPANY_ID AND COMPANY_DOC_ID",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Webhook - Add Document": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Code - Process Add Request",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Execution Data1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets - Add Row1": {
+      "main": [
+        [
+          {
+            "node": "Code1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Response - Add Fail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Add Row1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "Search HASH",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Google Sheets - Add Row1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Has COMPANY_ID AND COMPANY_DOC_ID": {
+      "main": [
+        [
+          {
+            "node": "Search COMPANY_ID AND COMPANY_DOC_ID",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search COMPANY_ID AND COMPANY_DOC_ID": {
+      "main": [
+        [
+          {
+            "node": "If Has Match",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search HASH": {
+      "main": [
+        [
+          {
+            "node": "If Has Match",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map Found ID": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Add Row1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Has Match": {
+      "main": [
+        [
+          {
+            "node": "Found",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Map Found ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Found": {
+      "main": [
+        [
+          {
+            "node": "Map Found ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code1": {
+      "main": [
+        [
+          {
+            "node": "Response - Add Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets - Get All Rows1": {
+      "main": [
+        [
+          {
+            "node": "Code - Filter Data1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Response - Get Fail1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Filter Data1": {
+      "main": [
+        [
+          {
+            "node": "Response - Get Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Process Get Request": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Get All Rows1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Execution Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Response - Get Fail1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook - Get": {
+      "main": [
+        [
+          {
+            "node": "Code - Process Get Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": {
+    "When Executed by Another Workflow": [
+      {
+        "json": {
+          "NAME": "אל גל תעשיות 04.25.pdf",
+          "LINK": "https://drive.google.com/file/d/1F7vBy4O0WblMGsxN6s-keeQ-2360E-XF/view?usp=drivesdk",
+          "TYPE": "BALANCE_SHEET",
+          "COMPANY_DOC_ID": null,
+          "COMPANY_ID": "511623688",
+          "SOURCE_TYPE": "GOOGLE_DRIVE_FOLDER",
+          "SOURCE_ID": "14BiWFxQpfUqxSlv0P4SiJZr8BabBj5ZB",
+          "SOURCE_LINK": null,
+          "SIZE": 86125,
+          "HASH": "5a56d1f80745b2f6c1fec0d88432dc38",
+          "STATUS": null,
+          "REQUIRED_ACTION": null,
+          "FROM_OFFICE": null,
+          "FROM_OFFICE_CHECK": null,
+          "PURCHASE_ID": null,
+          "LINKED_BS": null,
+          "BS_LINE_AMOUNT": null,
+          "BS_LINE_DATE": null,
+          "BS_LINE_NOTE": null
+        }
+      }
+    ]
+  },
+  "versionId": "0b8651f8-5ce9-4bdd-ba39-d6e872c785dd",
+  "activeVersionId": "0b8651f8-5ce9-4bdd-ba39-d6e872c785dd",
+  "versionCounter": 104,
+  "triggerCount": 2,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2025-08-09T18:51:57.917Z",
+      "createdAt": "2025-08-09T18:51:57.917Z",
+      "role": "workflow:owner",
+      "workflowId": "indoxDocCreate01",
+      "projectId": "EChUnhWXmjrEc3fG",
+      "project": {
+        "updatedAt": "2024-09-26T18:07:08.765Z",
+        "createdAt": "2024-09-26T17:59:24.039Z",
+        "id": "EChUnhWXmjrEc3fG",
+        "name": "Shlomo Bolo <person8@example.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null
+      }
+    }
+  ]
+}

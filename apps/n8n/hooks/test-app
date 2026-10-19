@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+set -euo pipefail
+export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
+
+# test-app — live workflow testing + execution diagnosis behind `bbox n8n test|plan|exec`,
+# powered by the vendored n8nac facade against the local instance (127.0.0.1:5678 is published
+# loopback-only by the n8n compose). Exit semantics are n8nac's, DESIGNED for agents:
+#   Class A (missing credentials/model)      -> exit 0: inform the user, do NOT block
+#   runtime state (webhook not armed/registered) -> exit 0: do NOT edit code blindly
+#   Class B (bad expressions, wiring errors) -> exit 1: fixable — the agent iterates
+#
+#   test-app test <wfId> [--prod] [--data <json>]   trigger via webhook/chat/form + verdict
+#   test-app plan <wfId> [--json]                   infer how to test + a suggested payload
+#   test-app exec list|get [...]                    execution diagnosis via the API
+#   test-app verify <wfId>                          live node-schema validation (537 schemas)
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+TOOLING="${REPO_ROOT}/apps/n8n/tooling"
+log() { echo "[n8n-test] $*"; }
+
+VERB="${1:-}"; shift || true
+case "${VERB}" in test|plan|exec|verify) ;; *) echo "usage: test-app test|plan|exec|verify ..." >&2; exit 2 ;; esac
+
+API_KEY="$(read_env N8N_API_KEY)"
+[ -n "${API_KEY}" ] || { echo "Error: N8N_API_KEY not in .env yet — run any 'bbox n8n push <app>' once (it mints one)." >&2; exit 1; }
+
+# The n8nac facade keeps its workspace state in cwd — pinned to tooling/ (gitignored) so it is
+# one per checkout and survives nothing it shouldn't. Idempotent re-setup on every call is
+# cheaper than detecting staleness.
+N8NAC="${TOOLING}/node_modules/n8nac/dist/index.js"
+[ -f "${N8NAC}" ] || N8NAC="$(ls "${HOME}/.cache/bbox-n8n-tooling"/*/node_modules/n8nac/dist/index.js 2>/dev/null | head -1)"
+[ -n "${N8NAC}" ] && [ -f "${N8NAC}" ] || { echo "Error: toolchain not installed — run any 'bbox n8n code' verb once." >&2; exit 1; }
+export N8NAC_TELEMETRY_DISABLED=1
+cd "${TOOLING}"
+# v4 workspace environment, created idempotently on every call (cheaper than staleness checks).
+# The env's workflows-path is a scratch dir — n8nac's own pull/push is never used (bbox owns
+# sync); only the live verbs (test/executions/verify) ride this env.
+mkdir -p .n8nac-workspace
+node "${N8NAC}" env add local --base-url http://127.0.0.1:5678 --workflows-path .n8nac-workspace >/dev/null 2>&1 || true
+printf '%s' "${API_KEY}" | node "${N8NAC}" env auth set local --api-key-stdin >/dev/null 2>&1 || true
+node "${N8NAC}" env use local >/dev/null 2>&1 || true
+
+case "${VERB}" in
+  test)   exec node "${N8NAC}" test "$@" ;;
+  plan)   exec node "${N8NAC}" test-plan "$@" ;;
+  exec)   exec node "${N8NAC}" execution "$@" ;;
+  verify) exec node "${N8NAC}" verify "$@" ;;
+esac

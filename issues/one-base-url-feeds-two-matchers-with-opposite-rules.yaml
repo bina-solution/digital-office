@@ -1,0 +1,77 @@
+# yaml-language-server: $schema=./schema.json
+title: "One <APP>_BASE_URL feeds two matchers with OPPOSITE rules: traefik's `Host()` must not carry a port, authentik's `external_host` must — so setting it for SSO kills the app's own router"
+opened: 2026-09-30
+category: bug
+severity: high
+status: resolved
+summary: "traefik compares a `Host()` rule against the request's host with the PORT STRIPPED, and compares the rest literally — so a rule written `Host(host:8080)` never matches anything, while `Host(host)` matches a request whose Host header is `host:8080`. The compiler renders the rule as `Host(${<APP>_BASE_URL})` and authentik's proxy provider takes its `external_host` from the SAME variable, and the outpost matches the FULL Host header (port included). A value that satisfies the identity provider therefore kills the route, and the value that routes correctly loses SSO — measured both ways on the same host."
+description: |
+  ## Measured (2026-09-30, this engine, in-network :80 — what the browser's request looks like after
+  ## the host's port mapping; the owner's browser reaches the edge as `Host: <host>:8080`)
+
+  | host | live rule (what traefik reads) | `Host: x:8080` | `Host: x` |
+  |---|---|---|---|
+  | `console.localhost` | `Host(console.localhost)` | **302** (SSO, matched) | **302** |
+  | `forge.console.localhost` | `Host(forge.console.localhost)` | **200** | **200** |
+  | `forge.console.localhost` | `Host(forge.console.localhost:8080)` (the value before the fix) | **404** | — |
+  | `plane.console.localhost` | `Host(plane.console.localhost:8080)` (today's value) | **404** | **404** |
+
+  The control is the console: its rule is port-less and the whole office uses `console.localhost:8080`
+  every day. The failure is total, not partial — a port in the rule matches NEITHER spelling, which is
+  why it reads as "the app is down" rather than "the rule is wrong".
+
+  ## Why it is structural
+
+  Two consumers, one variable, contradictory requirements:
+
+  * **traefik** (`routing.override.yml`, rendered by `reconcile.py` as
+    `Host(${<APP>_BASE_URL:-<host>.<domain>})`): the port must NOT be in the value.
+  * **authentik** (`reconcile.py` → the generated blueprint's `proxyprovider.external_host`, built
+    from the same `sso.base_url_env`): the port MUST be in the value, because the proxy outpost
+    matches a request to its provider by the FULL Host header (the note above
+    `scripts/ci-env.sh`'s port rewrite records the measurement: `console.localhost:8080` → 404 with a
+    port-less provider, `console.localhost` → 302).
+
+  So "every `*_BASE_URL` on this engine carries `:8080`" is right for identity and wrong for routing,
+  and a host that needs BOTH — every SSO'd app with its own host — cannot be satisfied by one value.
+  `apps/git`'s forge is the case that made it visible: `auth: "none"`, so only traefik reads it, and
+  the port-less value is the correct one today; the day DGO-58 flips it to `auth: "sso"`, the same
+  variable has to serve both and one of them breaks.
+
+  ## Suggested fix (compiler-level, one place)
+
+  Split the two consumers, as the compiler already splits other per-route facts:
+
+  1. the ROUTER rule comes from a host-only value — either a new `routing[].host_env` (default
+     `<APP>_HOST` or `<host>.<domain>`, never a port), or the compiler strips a trailing `:port` from
+     the value it interpolates by rendering `${VAR%:*}`-equivalent logic in the two places it emits
+     rules (it already renders those labels as text, so it can emit a literal default and a host-only
+     variable);
+  2. `external_host` keeps reading `<APP>_BASE_URL` (host:port, which the outpost needs);
+  3. a gate assertion that no rendered `Host(...)` rule contains a colon, so this cannot come back
+     silently — the failure mode is a 404, which looks like an outage of the app, not of the config.
+
+  ## Resolution (same day)
+
+  The split was implemented at the compiler, which is the only place that can do it: `reconcile.py`'s
+  `traefik_host()` (d3497a85) reads this machine's `.env` at render time and renders the HOST PART of a
+  ported value as a literal, so **the value keeps the port the identity provider needs and the router
+  gets a port-less rule**. Verified from `apps/git`'s side (commit 7ec2797f): with
+  `FORGE_BASE_URL=forge.console.localhost:8080`, `.generated/routing.override.yml` carries
+  `Host(forge.console.localhost)`, both Host spellings answer 200, `forge.url` and every `browse_url`
+  stay `http://forge.console.localhost:8080`, and the in-container self-test is 8/8. The interim
+  per-app rule this file proposed is superseded — the value is uniform again.
+
+  The live tracker for the parts that remain (the `-local` twins, the authentik outpost's gated-host
+  list, the gate) is
+  `issues/traefik-v3-ignores-the-request-port-so-every-ported-base-url-router-is-dead.yaml`; this file
+  is kept as the record of the CONFLICT between the two consumers, which is what made the compiler fix
+  the right one rather than a workaround in one app.
+
+  ## Evidence trail
+
+  * `apps/git/README.md` § "The forge's origin on this engine" records the forge half and the exact
+    command that showed it.
+  * Found while checking a platform-wide instruction that "every `<APP>_BASE_URL` is `<host>:8080`" —
+    the instruction is what the identity provider needs, and applying it to a route-only host breaks
+    that host's router. Reverted the intent, kept the port-less value, and filed this instead.

@@ -1,0 +1,176 @@
+{
+  "id": "bdchh5urW9lBzudZ",
+  "name": "Snooze Incoming Document",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "ID"
+            },
+            {
+              "name": "SECONDS",
+              "type": "number"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -384,
+        -32
+      ],
+      "id": "92df87ab-0d59-4ae0-b9bb-d862d9e7e9b7",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "amount": "={{ $json.SECONDS }}"
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -208,
+        -32
+      ],
+      "id": "e7bd637b-b965-4478-a5e9-6872e95e5987",
+      "name": "Wait",
+      "webhookId": "ab334f72-9202-4848-b83e-d55115f0206e"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "sv5xxRBVGxvV0kXx",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/sv5xxRBVGxvV0kXx",
+          "cachedResultName": "Incoming Documents 0.1.7"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ID": "={{ $json.ID }}"
+          },
+          "matchingColumns": [
+            "ID"
+          ],
+          "schema": [
+            {
+              "id": "ID",
+              "displayName": "ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -48,
+        -32
+      ],
+      "id": "15987b6f-5569-4df2-8c22-d211d50f7d25",
+      "name": "Call 'Incoming Documents 0.1.3'"
+    }
+  ],
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Call 'Incoming Documents 0.1.3'",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "executionTimeout": 1200,
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": {
+    "When Executed by Another Workflow": [
+      {
+        "json": {
+          "ID": "1450762820b906b",
+          "SECONDS": 1
+        }
+      }
+    ]
+  },
+  "tags": [
+    {
+      "updatedAt": "2026-06-18T12:36:08.448Z",
+      "createdAt": "2026-06-18T12:36:08.448Z",
+      "id": "jk2EbQHJ7ocN5wgw",
+      "name": "indox"
+    },
+    {
+      "updatedAt": "2026-06-18T12:46:09.965Z",
+      "createdAt": "2026-06-18T12:46:09.965Z",
+      "id": "6Oq57itlw9J33G1Q",
+      "name": "main"
+    },
+    {
+      "updatedAt": "2026-06-18T12:46:09.978Z",
+      "createdAt": "2026-06-18T12:46:09.978Z",
+      "id": "1Fr8yG54LofkLiCf",
+      "name": "api"
+    }
+  ],
+  "shared": [
+    {
+      "updatedAt": "2026-06-18T15:15:59.717Z",
+      "createdAt": "2026-06-18T15:15:59.717Z",
+      "role": "workflow:owner",
+      "workflowId": "bdchh5urW9lBzudZ",
+      "projectId": "e0VPSSkEh9XxPMfC",
+      "project": {
+        "updatedAt": "2026-06-18T15:08:18.056Z",
+        "createdAt": "2026-06-18T15:07:27.086Z",
+        "id": "e0VPSSkEh9XxPMfC",
+        "name": "Shlomo Laptop <shlomo@local.dev>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "54115aa9-c202-44f5-b668-4aaef946db8c"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": null,
+    "description": null
+  }
+}

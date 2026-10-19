@@ -1,0 +1,14 @@
+# feature-validation — next
+
+Build a daily deployment-report capability INTO the existing feature-validation service
+(not a new service). It should:
+
+- Run the feature-validation suites + any n8n workflow tagged `feature-validation`.
+- Add an `online-tools` domain: curl the prod health endpoint of each service
+  (n8n, apitools, chat, glitchtip, portainer, …).
+- Produce a "what's going on in this deployment" report.
+- Send it to a Telegram channel (env: bot token + scheduling settings).
+- Serve a status webpage with latest benchmark/feature results (githubstatus.com style).
+- Add scheduling + hardening so this is THE main live observability layer.
+
+See also: bigger-plan.txt.

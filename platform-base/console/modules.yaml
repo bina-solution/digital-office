@@ -1,0 +1,25 @@
+# The console's OWN built-in views only (view:, never embed:).
+#
+# Every APP tile is compiled: each app declares its own tile in routing[].module and
+# reconcile.py writes .generated/registry/console.modules.yaml, which this container mounts
+# read-only at /app/generated. A layer-2 shell must not author the list of layer-3 apps it
+# shows — that is how a feature-validation tile outlived the service. Gate G9 enforces it.
+# NOTE: no "לוח בקרה" view either — it restated the rail beside it. The rail IS the launcher, and
+# the shell opens on its first tile (app.js route()).
+#
+# NOTE: the "apps" screen is no longer a built-in console view. It is the app-management app
+# (layer 1), which owns the whole apps surface — launcher AND lifecycle (enable/disable/install/
+# uninstall). Its tile is compiled from app-management's routing[].module with id "apps", so
+# #/m/apps embeds /a/app-management/. See platform-base/app-management/.
+#
+# NOTE: the "install" view (business details + the connections' rows) is gone (core-003). A fresh
+# office meets the install wizard — static/install.html, served by app.py instead of the shell until
+# the control plane's office record carries installed_at — and connections have their own app.
+# The console's own display settings: today, the switch for desktop mode (static/desktop.js).
+- id: settings
+  name: הגדרות מסוף
+  icon: monitor
+  group: הגדרות
+  view: settings
+  desc: תצוגה ומצב שולחן עבודה
+  order: 13

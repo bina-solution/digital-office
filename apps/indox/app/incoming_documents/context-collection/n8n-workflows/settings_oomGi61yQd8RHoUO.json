@@ -1,0 +1,1932 @@
+{
+  "updatedAt": "2026-02-10T16:25:16.979Z",
+  "createdAt": "2024-12-12T13:57:08.152Z",
+  "id": "indoxSettings01",
+  "name": "Settings",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"invoice_id_query\": {\n    \"action\": \"find after\",\n    \"action_value\": [\n        \"חשבונית מס זיכוי מס':\",\n            \"חשבונית מס זיכוי\",\n\n      \"חשבונית מס מרוכזת מספר:\",\n            \"חשבונית מס מרכזת\",\n      \"חשבונית מס/קבלה מס':\",\n        \"חשבונית מס מספר:\",\n        \"חשבונית מס/קבלה\",\n      \"חשבונית מס / קבלה\",\n        \"חשבונית מס מספר\",\n        \"חשבונית מס מס':\",\n        \"חשבונית מס\\\"\",\n        \"חשבונית מס -\",\n        \"חשבונית מס :\",\n        \"חשבונית זיכוי\",\n        \"חשבונית מס'\",\n        \"חשבונית מס\"\n    ], \n    \"value_validations\": [\n        { \"validation_type\":\"has_number\" },\n        { \"validation_type\": \"length_greater_than\", \"validation_value\": 3 },\n        { \"validation_type\": \"length_less_than\", \"validation_value\": 20 }\n    ],\n    \"is_rtl\": true\n  }\n}\n",
+        "options": {}
+      },
+      "id": "2e003373-9c22-4787-9c4f-bac00f5bffd7",
+      "name": "Invoice Id Query",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        400,
+        1024
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"shipping_id_query\": {\n    \"action\": \"find after\",\n    \"action_value\": [\n        \"תעודת משלוח מספר\",\n        \"משלוח מספר\",\n        \"תעודת משלוח מס':\",\n        \"תעודת משלוח מס'\",\n        \"משלוח מספר    \",\n         \"משלוח מס' :    \",\n       \"תעודת משלוח מס'\",\n        \"תעודת משלוח                \",\n        \"תעודת משלוח מס\",\n        \"תעודת משלוח\",\n        \"מספר משלוח\",\n        \"משלוח מס'\"\n\n    ],\n    \"value_validations\": [\n        {\n            \"validation_type\": \"has_number\"\n        },\n        {\n            \"validation_type\": \"length_greater_than\",\n            \"validation_value\": 3\n        },\n        { \"validation_type\": \"length_less_than\", \"validation_value\": 20 }\n    ],\n    \"is_rtl\": true\n  }\n}\n\n",
+        "options": {}
+      },
+      "id": "90546e5e-e458-4422-bb93-be1762b7f190",
+      "name": "Shipping Id Query",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        576,
+        1024
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"centralized_invoice_id_query\": {\n    \"action\": \"find after\",\n    \"action_value\": [\n        \"חשבונית מס מרכזת\"\n    ],\n    \"value_validations\": [\n        {\n            \"validation_type\": \"has_number\"\n        },\n        {\n            \"validation_type\": \"length_greater_than\",\n            \"validation_value\": 3\n        },\n        { \"validation_type\": \"length_less_than\", \"validation_value\": 20 }\n    ],\n    \"is_rtl\": true\n  }\n}\n\n",
+        "options": {}
+      },
+      "id": "37872530-0480-4127-8c70-5d6b95e03648",
+      "name": "Centralized Invoice Id Query",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        752,
+        1024
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const COMPANY_NAME_FIELD = \"שם חברה\";\nconst IDENTIFIER_FIELDS = [\"מזהה 1\", \"מזהה 2\", \"שם ספק מפריוריטי\"];\nconst EMAIL_FIELDS = [\"מייל 1\", \"מייל 2\"];\n\n// Single-pass processing with pre-allocated structures\nconst companies = {};\nconst company_name_by_identifier = {};\nconst company_name_by_mail = {};\nconst company_id_by_mails = {};\nconst company_first_identifier_by_identifier = {};\nconst all_companies_identifiers = [];\n\n// Process all data in a single iteration\n$('Load Companies Table').all().forEach(item => {\n  const json = item.json;\n  const name = json[COMPANY_NAME_FIELD];\n  \n  // Collect and process identifiers\n  const identifiers = [];\n  for (const field of IDENTIFIER_FIELDS) {\n    const id = json[field];\n    if (id != null && id !== \"\") {\n      const strId = String(id);\n      identifiers.push(strId);\n      company_name_by_identifier[strId] = name;\n      all_companies_identifiers.push(strId);\n    }\n  }\n  \n  // Map all identifiers to the first (primary) identifier\n  const primaryId = identifiers[0];\n  if (primaryId) {\n    for (const id of identifiers) {\n      company_first_identifier_by_identifier[id] = primaryId;\n    }\n  }\n  \n  // Collect and process emails\n  const mails = [];\n  for (const field of EMAIL_FIELDS) {\n    const mail = json[field];\n    if (mail != null && mail !== \"\") {\n      const normalizedMail = String(mail).trim().toLowerCase();\n      mails.push(normalizedMail);\n      company_name_by_mail[normalizedMail] = name;\n      if (primaryId) {\n        company_id_by_mails[normalizedMail] = primaryId;\n      }\n    }\n  }\n  \n  companies[name] = { identifiers, mails };\n});\n\nreturn [{\n  companies,\n  company_name_by_identifier,\n  company_name_by_mail,\n  company_id_by_mails,\n  company_first_identifier_by_identifier,\n  all_companies_identifiers\n}];"
+      },
+      "id": "d59a84a0-d5ef-4824-9217-f18c20774b23",
+      "name": "Companies",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        768
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "function getGoogleDriveId(url = \"\") {\n    const regex = /\\/folders\\/([a-zA-Z0-9-_]+)/;\n    const match = url.match(regex);\n    return match ? match[1] : null;\n}\n\nfunction getSeparatedItems(itemsStr) {\n  let items = [];\n  if (itemsStr.includes(\",\")) {\n    items = itemsStr.split(\",\");\n  } else {\n    items = [itemsStr];\n  }\n  return items.map(item => item.trim());\n}\n\nlet settings = {}\nlet settings_items = $('Load Settings Table').all();\nlet settings_jsons = settings_items.map(setting_item => setting_item.json)\n\n\nsettings_jsons.forEach( setting => {\n  if (setting[\"הגדרה\"] === \"DocumentsToProcessFolder\") {\n    let docs_source_folder = setting[\"ערך\"];\n    settings[\"docs_source_folder_id\"] = getGoogleDriveId(docs_source_folder);\n  } \n  else if (setting[\"הגדרה\"] === \"ProcessedDocumentsFolder\") {\n    let docs_dest_folder = setting[\"ערך\"];\n    settings[\"docs_dest_folder_id\"] = getGoogleDriveId(docs_dest_folder);\n  }\n  else if (setting[\"הגדרה\"] === \"ProcessedDocumentsFailsFolder\") {\n    let docs_fails_dest_folder = setting[\"ערך\"];\n    settings[\"docs_fails_dest_folder_id\"] = getGoogleDriveId(docs_fails_dest_folder);\n  }\n  else if (setting[\"הגדרה\"] === \"GmailDownloadedDocumentsFolder\") {\n    let gmail_docs_dest_folder = setting[\"ערך\"];\n    settings[\"gmail_docs_dest_folder_id\"] = getGoogleDriveId(gmail_docs_dest_folder);\n  }\n  else if (setting[\"הגדרה\"] === \"GmailDownloadedBalanceDocsFolder\") {\n    let gmail_balance_docs_dest_folder = setting[\"ערך\"];\n    settings[\"gmail_balance_docs_dest_folder_id\"] = getGoogleDriveId(gmail_balance_docs_dest_folder);\n  }\n  else if (setting[\"הגדרה\"] === \"GmailDocsDownloadIgnoredMails\") {\n    let gmail_docs_download_ignored_mails = setting[\"ערך\"];\n    settings[\"gmail_docs_download_ignored_mails\"] = getSeparatedItems(gmail_docs_download_ignored_mails)\n  }\n\n  else if (setting[\"הגדרה\"] === \"WhatsappAdmins\") {\n    let whatsapp_admins = setting[\"ערך\"];\n    settings[\"whatsapp_admins\"] = getSeparatedItems(whatsapp_admins)\n  }\n})\n\nreturn [settings]"
+      },
+      "id": "2a5de9e3-c585-4552-88ee-5e4fa26f8c3c",
+      "name": "Settings",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        528,
+        480
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "6ebb3ce3-7b31-4326-86f2-94ecff702ce5",
+      "name": "Settings Loader Start",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -592,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "let settings = {}\n\nif ($('Settings').isExecuted) {\n  let settings_table = $('Settings').first().json;\n  settings = {...settings, ...settings_table}\n}\n\nif($('Companies').isExecuted){\n  let companies_data = $('Companies').first().json;\n  settings = {\n    ...settings, ...companies_data,\n  }\n}\n\nif($('Invoice Id Query').isExecuted){\n  let invoice_query = $('Invoice Id Query').first().json;\n  let shipment_query = $('Shipping Id Query').first().json;\n  let centrelized_invoice_query = $('Centralized Invoice Id Query').first().json;\n  let purchase_order_id = $('Purchase Order Id Query').first().json;\n  \n  settings = {\n    ...settings, \n    ...invoice_query, ...shipment_query, \n    ...centrelized_invoice_query,\n    ...purchase_order_id\n  }\n}\n\n\n\n\n\nreturn {json: settings}"
+      },
+      "id": "261c719e-5d77-4751-bcf0-909eafa0143a",
+      "name": "Settings Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        96,
+        1328
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "67a955cc-92d9-4b89-a8d2-f3f9723ad129",
+              "leftValue": "={{ $('Start').first().json.load_queries }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "02785a09-1f64-4ab0-90af-30202b7ae591",
+      "name": "If Load Queries",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        96,
+        1056
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "0fef179a-c5aa-459c-865e-8e808d457fa9",
+              "leftValue": "={{ $('Start').first().json.load_companies }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "1ed2c9ac-4502-404e-91f3-e553db3f7f12",
+      "name": "If Load Companies",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        96,
+        784
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "88566445-56f8-4e66-a0c5-3683700d77e0",
+              "leftValue": "={{ $json.load_settings }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "8558c6bc-1929-49c6-9f17-42ab1f6ff73a",
+      "name": "If Load Settings",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        96,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo",
+          "mode": "list",
+          "cachedResultName": "AutomationValues",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1467881049,
+          "mode": "list",
+          "cachedResultName": "הגדרות",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo/edit#gid=1467881049"
+        },
+        "options": {}
+      },
+      "id": "29f045aa-96ad-49c1-b43e-93de5cb91a9d",
+      "name": "Load Settings Table",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        320,
+        480
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "maxTries": 3,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "e2knIZpw8YF0QBAB",
+          "name": "Google Sheets person17@example.com"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo",
+          "mode": "list",
+          "cachedResultName": "AutomationValues",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 749586510,
+          "mode": "list",
+          "cachedResultName": "חברות",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo/edit#gid=749586510"
+        },
+        "options": {}
+      },
+      "id": "d4030211-dd70-48dc-8c5d-707d5c324541",
+      "name": "Load Companies Table",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        352,
+        768
+      ],
+      "executeOnce": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "e2knIZpw8YF0QBAB",
+          "name": "Google Sheets person17@example.com"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"purchase_order_id_query\": {\n    \"action\": \"find after\",\n    \"action_value\": [\n        \"הזמנת רכש\"\n    ],\n    \"value_validations\": [\n        {\n            \"validation_type\": \"has_number\"\n        },\n        {\n            \"validation_type\": \"length_greater_than\",\n            \"validation_value\": 3\n        },\n        { \"validation_type\": \"length_less_than\", \"validation_value\": 20 }\n    ],\n    \"is_rtl\": true\n  }\n}\n\n",
+        "options": {}
+      },
+      "id": "b0129eb6-32ac-456b-8af9-28781a7d0512",
+      "name": "Purchase Order Id Query",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        960,
+        1024
+      ]
+    },
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "load_settings",
+              "type": "boolean"
+            },
+            {
+              "name": "load_companies",
+              "type": "boolean"
+            },
+            {
+              "name": "load_queries",
+              "type": "boolean"
+            },
+            {
+              "name": "TRIGGERED_FROM"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -592,
+        272
+      ],
+      "id": "3f70cd63-37ec-4db2-aeb4-6f694e52ef08",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        496
+      ],
+      "id": "f057853b-b882-45fa-9856-0bbcb8e89826",
+      "name": "Start"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get data from other nodes\nconst automationSettingsJson = $('Load Settings Table').all()\n\nconst shippingIdDefaultQuery = $('Shipping Id Query').first().json[\"shipping_id_default_query\"];\nconst receiptIdDefaultQuery = $('Invoice Id Query').first().json[\"recipit_id_default_query\"];\nconst centralizedReceiptIdDefaultQuery = $('Centralized Invoice Id Query').first().json[\"centralized_invoice_id_default_query\"];\nconst companiesUniqueIdentifiers = $('Companies').first().json[\"companies\"];\nconst companiesEmails = $('Companies Emails').first().json[\"companies_emails\"];\n\n\n// Combine all values from companiesUniqueIdentifiers into a single list\nlet combinedCompaniesUniqueIdentifiers = [];\nlet companyNamesByIdentifiers = {}; // To store {identifier: companyName} mappings\n\nfor (const [companyName, identifiers] of Object.entries(companiesUniqueIdentifiers)) {\n    // Append all identifiers to the combined list\n    combinedCompaniesUniqueIdentifiers = combinedCompaniesUniqueIdentifiers.concat(identifiers);\n    \n    // Map each identifier to the company name\n    identifiers.forEach(identifier => {\n        companyNamesByIdentifiers[identifier] = companyName;\n    });\n}\n\n\n\nlet companyNameByEMails = {};\n\n// Loop through the companiesEmails object and map emails to company names\nfor (const [companyName, emails] of Object.entries(companiesEmails)) {\n    emails.forEach(email => {\n        companyNameByEMails[email] = companyName;\n    });\n}\n\n\nfunction getGoogleDriveId(url = \"\") {\n    const regex = /\\/folders\\/([a-zA-Z0-9-_]+)/;\n    const match = url.match(regex);\n    return match ? match[1] : null;\n}\n\nvar documents_to_process_folder = null;\nvar processed_documents_folder = null;\nvar processed_documents_folder_fails = null;\nvar GmailDownloadedDocumentsFolder = null;\nvar GmailDownloadedBalanceDocsFolder = null;\n\nvar documents_to_process_folder_id = null;\nvar processed_documents_folder_id = null;\nvar processed_documents_folder_fails_id = null;\nvar GmailDownloadedDocumentsFolderID = null;\nvar GmailDownloadedBalanceDocsFolderID = null;\n\n\nautomationSettingsJson.forEach( setting => {\n  setting_json = setting.json\n  console.log(\"Setting\")\n  console.log(setting_json)\n  \n  if (setting_json[\"הגדרה\"] === \"DocumentsToProcessFolder\") {\n    documents_to_process_folder = setting_json[\"ערך\"];\n    documents_to_process_folder_id = getGoogleDriveId(documents_to_process_folder);\n  }\n\n  if (setting_json[\"הגדרה\"] === \"ProcessedDocumentsFolder\") {\n    processed_documents_folder = setting_json[\"ערך\"];\n    processed_documents_folder_id = getGoogleDriveId(processed_documents_folder);\n  }\n  \n  if (setting_json[\"הגדרה\"] === \"ProcessedDocumentsFailsFolder\") {\n    processed_documents_folder_fails = setting_json[\"ערך\"]\n    processed_documents_folder_fails_id = getGoogleDriveId(processed_documents_folder_fails);\n  }\n\n  if (setting_json[\"הגדרה\"] === \"GmailDownloadedDocumentsFolder\") {\n    GmailDownloadedDocumentsFolder = setting_json[\"ערך\"]\n    GmailDownloadedDocumentsFolderID = getGoogleDriveId(GmailDownloadedDocumentsFolder);\n  }\n\n  if (setting_json[\"הגדרה\"] === \"GmailDownloadedBalanceDocsFolder\") {\n      GmailDownloadedBalanceDocsFolder = setting_json[\"ערך\"]\n        GmailDownloadedBalanceDocsFolderID = getGoogleDriveId(GmailDownloadedBalanceDocsFolder);\n  }\n})\n\n\n// Construct the output with the correct values\nreturn [\n  {\n    \"json\": {\n      \"a\": automationSettingsJson,\n      \"documents_to_process_folder\": documents_to_process_folder_id,\n      \"processed_documents_folder\": processed_documents_folder_id,\n      \"processed_documents_folder_fails\": processed_documents_folder_fails_id,\n      \"GmailDownloadedDocumentsFolder\": GmailDownloadedDocumentsFolderID,\n      \"GmailDownloadedBalanceDocsFolder\": GmailDownloadedBalanceDocsFolderID,\n      \"shipping_id_default_query\": shippingIdDefaultQuery,\n      \"receipt_id_default_query\": receiptIdDefaultQuery,\n      \"centralized_invoice_id_default_query\": centralizedReceiptIdDefaultQuery,\n      \"companies_uniqe_identifiers\": companiesUniqueIdentifiers,\n      \"combined_companies_uniqe_identifiers\": combinedCompaniesUniqueIdentifiers,\n      \"company_names_by_identifiers\": companyNamesByIdentifiers,\n      \"companyNameByEMails\": companyNameByEMails\n    }\n  }\n];"
+      },
+      "id": "115d0225-462a-4b0f-846f-4924aa04eb31",
+      "name": "Setting Loader",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2416,
+        -480
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Handle company lookup requests\nconst queryParams = $('Company Webhook').first().json.query;\nconst settings = $('Settings Data').first().json;\n\nlet result = {};\n\n// Check what parameter was provided\nif (queryParams.name) {\n  // Look up by company name\n  const companyName = queryParams.name;\n  if (settings.companies[companyName]) {\n    result = {\n      name: companyName,\n      ...settings.companies[companyName]\n    };\n  } else {\n    result = { error: 'Company not found', name: companyName };\n  }\n} \nelse if (queryParams.id || queryParams.identifier) {\n  // Look up by identifier\n  const identifier = queryParams.id || queryParams.identifier;\n  const companyName = settings.company_name_by_identifier[identifier];\n  \n  if (companyName && settings.companies[companyName]) {\n    result = {\n      name: companyName,\n      identifier: identifier,\n      ...settings.companies[companyName]\n    };\n  } else {\n    result = { error: 'Company not found', identifier: identifier };\n  }\n} \nelse if (queryParams.email || queryParams.mail) {\n  // Look up by email\n  const email = (queryParams.email || queryParams.mail).toLowerCase().trim();\n  const companyName = settings.company_name_by_mail[email];\n  \n  if (companyName && settings.companies[companyName]) {\n    result = {\n      name: companyName,\n      email: email,\n      ...settings.companies[companyName]\n    };\n  } else {\n    result = { error: 'Company not found', email: email };\n  }\n} \nelse if (!!queryParams.all) {\n  result = settings\n}\nelse {\n  // No parameters provided, return all companies\n  result = {\n    companies: settings.companies,\n    total_count: Object.keys(settings.companies).length\n  };\n}\n\nreturn [{ json: result }];"
+      },
+      "id": "d8c8e2c8-a3dd-419d-90a6-8669bce64a9a",
+      "name": "Handle Company Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        784,
+        -1376
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Handle query lookup requests\nconst queryParams = $('Query Webhook').first().json.query;\nconst settings = $('Load Settings').first().json;\n\nlet result = {};\n\n// Available queries\nconst availableQueries = {\n  'invoice_id': settings.invoice_id_query,\n  'shipping_id': settings.shipping_id_query, \n  'centralized_invoice_id': settings.centralized_invoice_id_query,\n  'purchase_order_id': settings.purchase_order_id_query\n};\n\nif (queryParams.key) {\n  const queryKey = queryParams.key;\n  if (availableQueries[queryKey]) {\n    result = {\n      key: queryKey,\n      query: availableQueries[queryKey]\n    };\n  } else {\n    result = { \n      error: 'Query not found', \n      key: queryKey,\n      available_queries: Object.keys(availableQueries)\n    };\n  }\n} else {\n  // No key provided, return all queries\n  result = {\n    queries: availableQueries,\n    available_keys: Object.keys(availableQueries)\n  };\n}\n\nreturn [{ json: result }];"
+      },
+      "id": "590c3f2d-e667-4849-b142-1f92246b94ff",
+      "name": "Handle Query Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2048,
+        -576
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Handle setting lookup requests\nconst queryParams = $('Setting Webhook').first().json.query;\nconst settings = $('Load Settings').first().json;\n\nlet result = {};\n\n// Available settings\nconst availableSettings = {\n  'docs_source_folder_id': settings.docs_source_folder_id,\n  'docs_dest_folder_id': settings.docs_dest_folder_id,\n  'docs_fails_dest_folder_id': settings.docs_fails_dest_folder_id,\n  'gmail_docs_dest_folder_id': settings.gmail_docs_dest_folder_id,\n  'gmail_balance_docs_dest_folder_id': settings.gmail_balance_docs_dest_folder_id,\n  'all_companies_identifiers': settings.all_companies_identifiers\n};\n\nif (queryParams.key) {\n  const settingKey = queryParams.key;\n  if (availableSettings.hasOwnProperty(settingKey)) {\n    result = {\n      key: settingKey,\n      value: availableSettings[settingKey]\n    };\n  } else {\n    result = { \n      error: 'Setting not found', \n      key: settingKey,\n      available_settings: Object.keys(availableSettings)\n    };\n  }\n} else {\n  // No key provided, return all settings\n  result = {\n    settings: availableSettings,\n    available_keys: Object.keys(availableSettings)\n  };\n}\n\nreturn [{ json: result }];"
+      },
+      "id": "226989f6-2378-4fc4-a592-fc08945c42e3",
+      "name": "Handle Setting Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2048,
+        -368
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "7523e103-a219-483d-b429-27e24b1b3ef7",
+      "name": "Company Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        976,
+        -1376
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "564aa941-40c9-4792-a87e-7475f871e873",
+      "name": "Query Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        2240,
+        -576
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "2fc08566-7f6b-4466-bbbc-696f9671cac4",
+      "name": "Setting Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        2240,
+        -368
+      ]
+    },
+    {
+      "parameters": {
+        "path": "company",
+        "authentication": "basicAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "304f247c-7293-44fc-bf8a-ad66ae7728f3",
+      "name": "Company Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -560,
+        -1376
+      ],
+      "webhookId": "company-webhook",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "m44SrEHRVzHZlXiw",
+          "name": "Settings Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "path": "query",
+        "options": {}
+      },
+      "id": "2fad5380-6e4f-42fa-8e24-0827996371ec",
+      "name": "Query Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        1792,
+        -576
+      ],
+      "webhookId": "query-webhook"
+    },
+    {
+      "parameters": {
+        "path": "setting",
+        "options": {}
+      },
+      "id": "6357d8f3-5466-450a-bfd1-cb1cb676f64d",
+      "name": "Setting Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        1792,
+        -368
+      ],
+      "webhookId": "setting-webhook"
+    },
+    {
+      "parameters": {
+        "key": "companies_settings"
+      },
+      "type": "n8n-nodes-kv-storage.kvStorage",
+      "typeVersion": 1,
+      "position": [
+        -352,
+        -1376
+      ],
+      "id": "843d9add-93e5-4b57-b854-d5e61d32a80d",
+      "name": "KVStorage"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "30391b3a-9b77-4a8a-9004-56c86cb2328a",
+              "leftValue": "={{ $input.item.json?.val[0] }}",
+              "rightValue": "",
+              "operator": {
+                "type": "object",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -192,
+        -1472
+      ],
+      "id": "fc939e2e-4e37-4016-922e-a6ce455dd1ec",
+      "name": "If Found Cache"
+    },
+    {
+      "parameters": {
+        "operation": "setValue",
+        "key": "companies_settings",
+        "val": "={{ $json }}",
+        "ttl": 1200
+      },
+      "type": "n8n-nodes-kv-storage.kvStorage",
+      "typeVersion": 1,
+      "position": [
+        400,
+        -1568
+      ],
+      "id": "2e000c82-4a09-46c1-97fa-67a956f6517a",
+      "name": "KVStorage1"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        608,
+        -1376
+      ],
+      "id": "802470fa-b683-468a-9449-8a72dd171d20",
+      "name": "Settings Data"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "\nreturn {\n  ...$json.val[0]\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        -1568
+      ],
+      "id": "2fa7fe71-36de-4c55-ac45-595f478b39c5",
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "dataToSave": {
+          "values": [
+            {
+              "key": "TRIGGERED_FROM",
+              "value": "={{ $json.TRIGGERED_FROM || \"UNKNOWN\" }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executionData",
+      "typeVersion": 1.1,
+      "position": [
+        208,
+        304
+      ],
+      "id": "29981279-a9ac-491e-90aa-da81487884f0",
+      "name": "Execution Data"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "f2e57dd3-ac5d-4cb5-a595-737b8c7f2b67",
+      "name": "Company Response1",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        960,
+        -960
+      ]
+    },
+    {
+      "parameters": {
+        "key": "key_val_settings"
+      },
+      "type": "n8n-nodes-kv-storage.kvStorage",
+      "typeVersion": 1,
+      "position": [
+        -368,
+        -960
+      ],
+      "id": "20119911-0dc3-4316-9a18-2124ae235e96",
+      "name": "KVStorage2"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "30391b3a-9b77-4a8a-9004-56c86cb2328a",
+              "leftValue": "={{ $input.item.json?.val[0] }}",
+              "rightValue": "",
+              "operator": {
+                "type": "object",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -208,
+        -1056
+      ],
+      "id": "583ed6fd-6b17-46bf-863d-cc2d4f173906",
+      "name": "If Found Cache1"
+    },
+    {
+      "parameters": {
+        "operation": "setValue",
+        "key": "key_val_settings",
+        "val": "={{ $json }}",
+        "ttl": 1200
+      },
+      "type": "n8n-nodes-kv-storage.kvStorage",
+      "typeVersion": 1,
+      "position": [
+        384,
+        -1152
+      ],
+      "id": "5fe4582b-105b-429b-aea8-482e71a32cf8",
+      "name": "KVStorage3"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        592,
+        -960
+      ],
+      "id": "d7370cae-8f02-4ae8-a375-54d1d42bc725",
+      "name": "Settings Data1"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "\nreturn {\n  ...$json.val[0]\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -16,
+        -1152
+      ],
+      "id": "a951e75c-20ff-4ab1-8c6a-4689362b5a97",
+      "name": "Code1"
+    },
+    {
+      "parameters": {
+        "path": "setting",
+        "authentication": "basicAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "d7077cf6-c7a3-4579-8f2c-e037e8140058",
+      "name": "Settings Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -576,
+        -960
+      ],
+      "webhookId": "company-webhook",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "m44SrEHRVzHZlXiw",
+          "name": "Settings Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Handle company lookup requests\nconst queryParams = $('Settings Webhook').first().json.query;\nconst settings = $('Settings Data1').first().json;\n\nlet result = {};\n\n// Check what parameter was provided\nif (queryParams.key) {\n  // Look up by company name\n  if (settings[queryParams.key]) {\n    result = {\n      key: queryParams.key,\n      val: settings[queryParams.key]\n    };\n  } else {\n    result = { error: 'Settings key not found', key: queryParams.key };\n  }\n} else {\n    result = { ...settings};\n  }\n\n\nreturn [{ json: result }];"
+      },
+      "id": "b136eb81-4bb4-478f-87b6-7f0f0ffc9f7d",
+      "name": "Handle Settings Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        768,
+        -960
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "indoxSettings01",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/indoxSettings01",
+          "cachedResultName": "Settings"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "load_settings": false,
+            "load_companies": true,
+            "load_queries": false,
+            "TRIGGERED_FROM": "COMPANIES_API"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "load_settings",
+              "displayName": "load_settings",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean"
+            },
+            {
+              "id": "load_companies",
+              "displayName": "load_companies",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean"
+            },
+            {
+              "id": "load_queries",
+              "displayName": "load_queries",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean",
+              "removed": false
+            },
+            {
+              "id": "TRIGGERED_FROM",
+              "displayName": "TRIGGERED_FROM",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        -1376
+      ],
+      "id": "fa97ed00-9f39-4962-b300-e6756bf507d5",
+      "name": "Load Companies For API",
+      "retryOnFail": true,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "indoxSettings01",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/indoxSettings01",
+          "cachedResultName": "Settings"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "load_settings": true,
+            "load_companies": false,
+            "load_queries": false,
+            "TRIGGERED_FROM": "COMPANIES_API"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "load_settings",
+              "displayName": "load_settings",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean"
+            },
+            {
+              "id": "load_companies",
+              "displayName": "load_companies",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean"
+            },
+            {
+              "id": "load_queries",
+              "displayName": "load_queries",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean",
+              "removed": false
+            },
+            {
+              "id": "TRIGGERED_FROM",
+              "displayName": "TRIGGERED_FROM",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        -16,
+        -960
+      ],
+      "id": "9e562483-9a90-4e82-a862-5b496f97a99d",
+      "name": "Load Settings For API1",
+      "retryOnFail": true,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "// Map companies to companies_by_identifiers {identifier: name}\nlet companies_item = $('Companies').first();\nlet companies_json = companies_item.json.companies;\n\nlet company_name_by_identifier = {}\nObject.entries(companies_json).forEach(([name, data]) => {\n  console.log(name)\n  console.log(data)\n  data.identifiers?.forEach(idf => company_name_by_identifier[idf] = name)\n});\n\nreturn [{\"company_name_by_identifier\":  company_name_by_identifier}];"
+      },
+      "id": "ad6d4930-afa3-4d0d-bf80-cb20eb01d45f",
+      "name": "Company Name By Identifier",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1808,
+        -160
+      ],
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Map companies to companies_by_mails {mail: name}\nlet companies_item = $('Companies').first();\nlet companies_json = companies_item.json.companies;\n\nlet company_name_by_mails = {}\nlet company_id_by_mails = {}\n\nObject.entries(companies_json).forEach(([name, data]) => {\n  console.log(name)\n  console.log(data)\n  data.mails?.forEach(idf => company_name_by_mails[idf] = name)\n  data.mails?.forEach(idf => company_id_by_mails[idf] = data.identifiers?.[0])\n});\n\n\nreturn [{\"company_name_by_mail\":  company_name_by_mails, \"company_id_by_mails\": company_id_by_mails}];"
+      },
+      "id": "d7ae4b9a-92ec-44e2-bb87-87e126b527fd",
+      "name": "Companies By Mail",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2016,
+        -160
+      ],
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Returns list of all identifiers\n// Map companies to companies_by_identifiers {identifier: name}\nlet companies_item = $('Companies').first();\nlet companies_json = companies_item.json.companies;\n\nlet allIdentifiers = [].concat(...Object.values(companies_json).map(data => data.identifiers || []));\n\n\nreturn [{\"all_companies_identifiers\": allIdentifiers}];"
+      },
+      "id": "23d3950d-b373-4770-91b4-62836ebc1648",
+      "name": "All Companies Identifiers",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2192,
+        -160
+      ],
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "4308849e-c531-4277-9f9a-f1f7907037d8",
+      "name": "Company Response2",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        976,
+        -544
+      ]
+    },
+    {
+      "parameters": {
+        "key": "key_val_queries"
+      },
+      "type": "n8n-nodes-kv-storage.kvStorage",
+      "typeVersion": 1,
+      "position": [
+        -352,
+        -544
+      ],
+      "id": "4083f6c0-a912-4c02-b6f4-117bcf62f0b0",
+      "name": "KVStorage4"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "30391b3a-9b77-4a8a-9004-56c86cb2328a",
+              "leftValue": "={{ $input.item.json?.val[0] }}",
+              "rightValue": "",
+              "operator": {
+                "type": "object",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -192,
+        -640
+      ],
+      "id": "052f520b-a2e7-409d-a518-73dac73f000a",
+      "name": "If Found Cache2"
+    },
+    {
+      "parameters": {
+        "operation": "setValue",
+        "key": "key_val_queries",
+        "val": "={{ $json }}",
+        "ttl": 1200
+      },
+      "type": "n8n-nodes-kv-storage.kvStorage",
+      "typeVersion": 1,
+      "position": [
+        400,
+        -736
+      ],
+      "id": "9976e671-a610-4b33-a4d4-3ece3a131e11",
+      "name": "KVStorage5"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        608,
+        -544
+      ],
+      "id": "b2500545-f592-4956-a782-c451b950caee",
+      "name": "Settings Data2"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "\nreturn {\n  ...$json.val[0]\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        -736
+      ],
+      "id": "26150694-06a0-4f9d-88ce-0157184ce6d6",
+      "name": "Code2"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Handle company lookup requests\nconst queryParams = $('Queries Webhook').first().json.query;\nconst settings = $('Settings Data2').first().json;\n\nlet result = {};\n\n\nresult = { ...settings};\n\n\nreturn [{ json: result }];"
+      },
+      "id": "200b4399-5ca2-4371-a8ef-517a5c8c8f5e",
+      "name": "Handle Settings Request1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        784,
+        -544
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "indoxSettings01",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/indoxSettings01",
+          "cachedResultName": "Settings"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "load_settings": false,
+            "load_companies": false,
+            "load_queries": true,
+            "TRIGGERED_FROM": "COMPANIES_API"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "load_settings",
+              "displayName": "load_settings",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean"
+            },
+            {
+              "id": "load_companies",
+              "displayName": "load_companies",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean"
+            },
+            {
+              "id": "load_queries",
+              "displayName": "load_queries",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean",
+              "removed": false
+            },
+            {
+              "id": "TRIGGERED_FROM",
+              "displayName": "TRIGGERED_FROM",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        -544
+      ],
+      "id": "3e7f4b81-6fed-4fa7-8377-b3883c6b3959",
+      "name": "Load Settings For API",
+      "retryOnFail": true,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "path": "queries",
+        "authentication": "basicAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "6fbf3087-f7f5-451a-ab59-e666523cfd29",
+      "name": "Queries Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -560,
+        -544
+      ],
+      "webhookId": "company-webhook",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "m44SrEHRVzHZlXiw",
+          "name": "Settings Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "fdd1e360-d7e8-4f8e-9392-e7645f97b996",
+      "name": "Company Response3",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        544,
+        -176
+      ],
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -352,
+        -176
+      ],
+      "id": "fced9553-e1a6-445c-a379-f29cb838a114",
+      "name": "HTTP Request",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -144,
+        -176
+      ],
+      "id": "4ced0542-7141-4776-9b65-9142247c2652",
+      "name": "HTTP Request1",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        64,
+        -176
+      ],
+      "id": "6832fbec-2b87-4375-9322-df261e5aa272",
+      "name": "HTTP Request2",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Loop over input items and add a new field called 'myNewField' to the JSON of each one\nfor (const item of $input.all()) {\n  item.json.myNewField = 1;\n}\n\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        272,
+        -176
+      ],
+      "id": "761f74c1-e56a-4912-91ff-c68b6a803c8d",
+      "name": "Code in JavaScript",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "path": "all_settings",
+        "authentication": "basicAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "87637649-37f4-4db0-966a-3a67cafa1b63",
+      "name": "All Setting Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -560,
+        -176
+      ],
+      "webhookId": "company-webhook",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "m44SrEHRVzHZlXiw",
+          "name": "Settings Auth"
+        }
+      },
+      "disabled": true
+    }
+  ],
+  "connections": {
+    "Invoice Id Query": {
+      "main": [
+        [
+          {
+            "node": "Shipping Id Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shipping Id Query": {
+      "main": [
+        [
+          {
+            "node": "Centralized Invoice Id Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Centralized Invoice Id Query": {
+      "main": [
+        [
+          {
+            "node": "Purchase Order Id Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Companies": {
+      "main": [
+        [
+          {
+            "node": "If Load Queries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Settings": {
+      "main": [
+        [
+          {
+            "node": "If Load Companies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Settings Loader Start": {
+      "main": [
+        [
+          {
+            "node": "Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Load Queries": {
+      "main": [
+        [
+          {
+            "node": "Invoice Id Query",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Settings Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Load Companies": {
+      "main": [
+        [
+          {
+            "node": "Load Companies Table",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "If Load Queries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Load Settings": {
+      "main": [
+        [
+          {
+            "node": "Load Settings Table",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "If Load Companies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Settings Table": {
+      "main": [
+        [
+          {
+            "node": "Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Companies Table": {
+      "main": [
+        [
+          {
+            "node": "Companies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Purchase Order Id Query": {
+      "main": [
+        [
+          {
+            "node": "Settings Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Settings Output": {
+      "main": [
+        []
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "If Load Settings",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Execution Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Company Request": {
+      "main": [
+        [
+          {
+            "node": "Company Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Query Request": {
+      "main": [
+        [
+          {
+            "node": "Query Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Setting Request": {
+      "main": [
+        [
+          {
+            "node": "Setting Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Company Webhook": {
+      "main": [
+        [
+          {
+            "node": "KVStorage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "KVStorage": {
+      "main": [
+        [
+          {
+            "node": "If Found Cache",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Found Cache": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Load Companies For API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Settings Data": {
+      "main": [
+        [
+          {
+            "node": "Handle Company Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "Settings Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "KVStorage2": {
+      "main": [
+        [
+          {
+            "node": "If Found Cache1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Found Cache1": {
+      "main": [
+        [
+          {
+            "node": "Code1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Load Settings For API1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Settings Data1": {
+      "main": [
+        [
+          {
+            "node": "Handle Settings Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code1": {
+      "main": [
+        [
+          {
+            "node": "Settings Data1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Settings Webhook": {
+      "main": [
+        [
+          {
+            "node": "KVStorage2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Settings Request": {
+      "main": [
+        [
+          {
+            "node": "Company Response1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Companies For API": {
+      "main": [
+        [
+          {
+            "node": "KVStorage1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Settings Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Settings For API1": {
+      "main": [
+        [
+          {
+            "node": "KVStorage3",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Settings Data1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Company Name By Identifier": {
+      "main": [
+        [
+          {
+            "node": "Companies By Mail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Companies By Mail": {
+      "main": [
+        [
+          {
+            "node": "All Companies Identifiers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "KVStorage4": {
+      "main": [
+        [
+          {
+            "node": "If Found Cache2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Found Cache2": {
+      "main": [
+        [
+          {
+            "node": "Code2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Load Settings For API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Settings Data2": {
+      "main": [
+        [
+          {
+            "node": "Handle Settings Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code2": {
+      "main": [
+        [
+          {
+            "node": "Settings Data2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Settings Request1": {
+      "main": [
+        [
+          {
+            "node": "Company Response2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Settings For API": {
+      "main": [
+        [
+          {
+            "node": "KVStorage5",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Settings Data2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Queries Webhook": {
+      "main": [
+        [
+          {
+            "node": "KVStorage4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request2": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Company Response3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "All Setting Webhook": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "executionTimeout": 1200
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {
+    "Settings Loader Start": [
+      {
+        "json": {}
+      }
+    ],
+    "Company Webhook": [
+      {
+        "json": {
+          "headers": {
+            "host": "n8n.hacohen.bina-solutions.co.il",
+            "user-agent": "axios/1.8.3",
+            "accept": "application/json,text/html,application/xhtml+xml,application/xml,text/*;q=0.9, image/*;q=0.8, */*;q=0.7",
+            "accept-encoding": "gzip, compress, deflate, br",
+            "x-forwarded-for": "172.18.0.1",
+            "x-forwarded-host": "n8n.hacohen.bina-solutions.co.il",
+            "x-forwarded-port": "443",
+            "x-forwarded-proto": "https",
+            "x-forwarded-server": "60882555e47e",
+            "x-real-ip": "172.18.0.1"
+          },
+          "params": {},
+          "query": {
+            "all": true,
+            "TRIGGERED_FROM": "INCOMING_DOCUMENT"
+          },
+          "body": {},
+          "webhookUrl": "https://n8n.hacohen.bina-solutions.co.il/webhook/company",
+          "executionMode": "production"
+        }
+      }
+    ],
+    "Settings Webhook": [
+      {
+        "json": {
+          "headers": {
+            "host": "n8n.hacohen.bina-solutions.co.il",
+            "user-agent": "axios/1.8.3",
+            "accept": "application/json,text/html,application/xhtml+xml,application/xml,text/*;q=0.9, image/*;q=0.8, */*;q=0.7",
+            "accept-encoding": "gzip, compress, deflate, br",
+            "x-forwarded-for": "172.18.0.1",
+            "x-forwarded-host": "n8n.hacohen.bina-solutions.co.il",
+            "x-forwarded-port": "443",
+            "x-forwarded-proto": "https",
+            "x-forwarded-server": "60882555e47e",
+            "x-real-ip": "172.18.0.1"
+          },
+          "params": {},
+          "query": {
+            "key": "gmail_docs_download_ignored_mails",
+            "TRIGGERED_FROM": "PINNED_TEST"
+          },
+          "body": {},
+          "webhookUrl": "https://n8n.hacohen.bina-solutions.co.il/webhook/company",
+          "executionMode": "production"
+        }
+      }
+    ],
+    "When Executed by Another Workflow": [
+      {
+        "json": {
+          "load_settings": true,
+          "load_companies": true,
+          "load_queries": true,
+          "TRIGGERED_FROM": "Gmail Documents Downloader"
+        }
+      }
+    ],
+    "Queries Webhook": [
+      {
+        "json": {
+          "headers": {
+            "host": "n8n.hacohen.bina-solutions.co.il",
+            "user-agent": "axios/1.8.3",
+            "accept": "application/json,text/html,application/xhtml+xml,application/xml,text/*;q=0.9, image/*;q=0.8, */*;q=0.7",
+            "accept-encoding": "gzip, compress, deflate, br",
+            "x-forwarded-for": "172.18.0.1",
+            "x-forwarded-host": "n8n.hacohen.bina-solutions.co.il",
+            "x-forwarded-port": "443",
+            "x-forwarded-proto": "https",
+            "x-forwarded-server": "60882555e47e",
+            "x-real-ip": "172.18.0.1"
+          },
+          "params": {},
+          "query": {
+            "TRIGGERED_FROM": "PINNED_TEST"
+          },
+          "body": {},
+          "webhookUrl": "https://n8n.hacohen.bina-solutions.co.il/webhook/company",
+          "executionMode": "production"
+        }
+      }
+    ],
+    "All Setting Webhook": [
+      {
+        "json": {
+          "headers": {
+            "host": "n8n.hacohen.bina-solutions.co.il",
+            "user-agent": "axios/1.8.3",
+            "accept": "application/json,text/html,application/xhtml+xml,application/xml,text/*;q=0.9, image/*;q=0.8, */*;q=0.7",
+            "accept-encoding": "gzip, compress, deflate, br",
+            "x-forwarded-for": "172.18.0.1",
+            "x-forwarded-host": "n8n.hacohen.bina-solutions.co.il",
+            "x-forwarded-port": "443",
+            "x-forwarded-proto": "https",
+            "x-forwarded-server": "60882555e47e",
+            "x-real-ip": "172.18.0.1"
+          },
+          "params": {},
+          "query": {
+            "TRIGGERED_FROM": "PINNED_TEST"
+          },
+          "body": {},
+          "webhookUrl": "https://n8n.hacohen.bina-solutions.co.il/webhook/company",
+          "executionMode": "production"
+        }
+      }
+    ]
+  },
+  "versionId": "86430070-37e5-4fc5-837b-386c6b01a4c2",
+  "activeVersionId": "86430070-37e5-4fc5-837b-386c6b01a4c2",
+  "versionCounter": 152,
+  "triggerCount": 5,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2024-12-12T13:57:08.152Z",
+      "createdAt": "2024-12-12T13:57:08.152Z",
+      "role": "workflow:owner",
+      "workflowId": "indoxSettings01",
+      "projectId": "EChUnhWXmjrEc3fG",
+      "project": {
+        "updatedAt": "2024-09-26T18:07:08.765Z",
+        "createdAt": "2024-09-26T17:59:24.039Z",
+        "id": "EChUnhWXmjrEc3fG",
+        "name": "Shlomo Bolo <person8@example.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null
+      }
+    }
+  ]
+}

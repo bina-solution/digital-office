@@ -1,0 +1,64 @@
+# Config below was layered by production/compose.override.yml before the platform-OS
+# refactor; merged here so this app owns its complete definition.
+services:
+  portainer:
+    image: portainer/portainer-ce:alpine-sts
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    container_name: portainer-${DEPLOYMENT_NAME:-bina-deployment}
+    restart: unless-stopped
+    volumes:
+    # Project socket on the host side — see the note in platform-base/traefik/docker-compose.yml.
+    # The container-side path is unchanged, so the -H flag below still resolves.
+    - ${BBOX_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock
+    - portainer_data:/data
+    - ./portainer_password.txt:/portainer_password.txt
+    command:
+    - -H
+    - unix:///var/run/docker.sock
+    - --admin-password-file
+    - /portainer_password.txt
+    networks:
+    - traefik-network
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    labels:
+    - traefik.enable=true
+    - traefik.http.routers.portainer-local.rule=Host(`portainer.localhost`)
+    - traefik.http.routers.portainer-local.entrypoints=web
+    - traefik.http.routers.portainer-local.service=portainer
+    - traefik.http.routers.portainer-http.rule=Host(`${PORTAINER_BASE_URL}`)
+    - traefik.http.routers.portainer-http.entrypoints=web
+    - traefik.http.routers.portainer-http.service=portainer
+    - traefik.http.routers.portainer-https.rule=Host(`${PORTAINER_BASE_URL}`)
+    - traefik.http.routers.portainer-https.entrypoints=websecure
+    - traefik.http.routers.portainer-https.tls=true
+    - traefik.http.routers.portainer-https.tls.certresolver=myresolver
+    - traefik.http.routers.portainer-https.service=portainer
+    - traefik.http.services.portainer.loadbalancer.server.port=9000
+    healthcheck:
+      test:
+      - CMD
+      - nc
+      - -z
+      - -v
+      - localhost
+      - '9000'
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 40s
+volumes:
+  portainer_data: null
+networks:
+  traefik-network:
+    external: true

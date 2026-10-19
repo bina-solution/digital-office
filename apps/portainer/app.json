@@ -1,0 +1,66 @@
+{
+  "id": "portainer",
+  "title": {
+    "he": "מכולות",
+    "en": "Portainer"
+  },
+  "layer": 3,
+  "kind": "tool",
+  "version": "1.0.0",
+  "summary": {
+    "he": "ניהול מכולות Docker",
+    "en": "Docker container management"
+  },
+  "capabilities": [],
+  "use": [],
+  "connections": [
+    {
+      "id": "portainer-admin",
+      "required": true
+    }
+  ],
+  "compose": "docker-compose.yml",
+  "routing": [
+    {
+      "host": "portainer",
+      "port": 9000,
+      "auth": "none",
+      "emit_labels": false
+    }
+  ],
+  "health": {
+    "structural": "auto"
+  },
+  "data": {
+    "volumes": [
+      "portainer_data"
+    ],
+    "on_uninstall": "prompt"
+  },
+  "contributes": {
+    "connection_providers": [
+      {
+        "id": "portainer-admin",
+        "automint": {
+          "type": "password",
+          "chars": 24
+        },
+        "title": "Portainer admin password",
+        "kind": "password",
+        "pillar": "app-password",
+        "app": {
+          "name": "Portainer",
+          "url_env": "PORTAINER_BASE_URL",
+          "user": "admin"
+        },
+        "env": "PORTAINER_ADMIN_PASSWORD",
+        "now": "debian-install.sh random-generates production/portainer/portainer_password.txt (gitignored); portainer reads it via --admin-password-file. CI writes the file from .env.",
+        "probe": {
+          "type": "http",
+          "url": "http://portainer:9000/api/status"
+        },
+        "wizard": "auto-mint (owner never types it); rendered to the file by the injector"
+      }
+    ]
+  }
+}

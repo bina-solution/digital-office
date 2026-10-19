@@ -1,0 +1,12 @@
+services:
+  hello-bina:
+    image: caddy:2-alpine
+    container_name: hello-bina-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: hello-bina
+    restart: unless-stopped
+    command: ["caddy", "respond", "--listen", ":80", "--body", "hello from a third-party catalog"]
+    networks:
+      - traefik-network
+networks:
+  traefik-network:
+    external: true

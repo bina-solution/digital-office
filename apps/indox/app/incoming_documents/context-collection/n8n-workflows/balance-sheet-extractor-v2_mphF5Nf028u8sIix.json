@@ -1,0 +1,2122 @@
+{
+  "updatedAt": "2026-04-26T13:08:02.264Z",
+  "createdAt": "2025-12-11T17:19:54.017Z",
+  "id": "mphF5Nf028u8sIix",
+  "name": "Balance Sheet Extractor - v2",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "bs_ex_2",
+        "authentication": "basicAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "065e0f3c-4b24-493e-bcf7-247fb0f94c33",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -80,
+        1136
+      ],
+      "webhookId": "a33c7ec8-c766-4d68-b05b-008d6e1027eb",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "azPhHBvOWaf9IsEA",
+          "name": "Incoming Documents"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "word-doc-condition",
+                    "leftValue": "={{ $(\"Before Start\").item.binary.data.mimeType }}",
+                    "rightValue": "text/plain",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Text"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "2cd928a5-7364-4d43-8ff5-89ea6407ad38",
+                    "leftValue": "={{ $(\"Before Start\").item.binary.data.mimeType }}",
+                    "rightValue": "text/csv",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "CSV"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "excel-condition",
+                    "leftValue": "={{ $(\"Before Start\").item.binary.data.mimeType }}",
+                    "rightValue": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "GSheet"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "e8209c9b-c736-44bf-a25f-5b1cd62f0d58",
+                    "leftValue": "={{ $(\"Before Start\").item.binary.data.mimeType }}",
+                    "rightValue": "application/vnd.ms-excel",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Excel"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $(\"Before Start\").item.binary.data.mimeType }}",
+                    "rightValue": "image/jpeg",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "jpeg-condition"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "JPEG"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $(\"Before Start\").item.binary.data.mimeType }}",
+                    "rightValue": "image/png",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "png-condition"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "PNG"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "pdf-condition",
+                    "leftValue": "={{ $(\"Before Start\").item.binary.data.mimeType }}",
+                    "rightValue": "application/pdf",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "PDF"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        2912,
+        1040
+      ],
+      "id": "f854cc1d-df54-4ac9-a838-04fd422908d5",
+      "name": "File Type Router"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        5456,
+        1424
+      ],
+      "id": "623984b8-f02f-4f70-8902-f7230c528773",
+      "name": "API Response"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        3488,
+        800
+      ],
+      "id": "df932574-382e-42d3-9252-95f059c69ae8",
+      "name": "Textual Input"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        3168,
+        800
+      ],
+      "id": "c2d5048b-83df-4288-88e3-e32e17af090f",
+      "name": "Extract from File"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Loop over input items and add a new field called 'myNewField' to the JSON of each one\nconst allData = {};\nlet i = 0;\nfor (const item of $input.all()) {\n  i += 1;\n  allData[\"line_\" + i] = item.json;\n  // Object.assign(allData, item.json);\n}\n\nreturn [{\n  json: allData\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3328,
+        880
+      ],
+      "id": "c640c4b9-b687-495a-9a42-b6f02b25b4f2",
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "content": "# Cache Check",
+        "height": 384,
+        "width": 1008,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1696,
+        656
+      ],
+      "id": "f392ff99-b698-49e3-97d6-1a69f831b194",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        3168,
+        624
+      ],
+      "id": "46a8b46e-8a17-4f80-a397-c6b83327c53a",
+      "name": "Extract from File1"
+    },
+    {
+      "parameters": {
+        "operation": "xlsx",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        3168,
+        960
+      ],
+      "id": "5002662c-5f40-4f39-91e0-e30d34a4236f",
+      "name": "Extract from File2"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Handle unsupported file formats\nconst mimeType = items[0].binary?.data?.mimeType || \"unknown\";\nconst fileName = items[0].binary?.data?.fileName || \"unknown\";\n\nreturn [{\n  json: {\n    success: false,\n    error: \"Unsupported file format\",\n    details: `File type '${mimeType}' is not supported. Supported formats: PDF, Word (.docx), Excel (.xlsx), JPEG, PNG`,\n    fileName: fileName,\n    mimeType: mimeType,\n    processedAt: new Date().toISOString()\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        4848,
+        1248
+      ],
+      "id": "b129fa33-6773-4e4b-a5e8-7684d1a7d17c",
+      "name": "Response Format: Unsupported File Error"
+    },
+    {
+      "parameters": {
+        "binaryData": true,
+        "dataPropertyName": "cached_input_key"
+      },
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 1,
+      "position": [
+        1744,
+        816
+      ],
+      "id": "4a0d89fa-972d-4e21-8630-e1868f695639",
+      "name": "Crypto"
+    },
+    {
+      "parameters": {
+        "key": "={{ $json.cached_input_key }}"
+      },
+      "type": "n8n-nodes-kv-storage.kvStorage",
+      "typeVersion": 1,
+      "position": [
+        1920,
+        800
+      ],
+      "id": "07b39cf4-8a1a-4cc7-86f3-1c787cd4e80d",
+      "name": "KVStorage"
+    },
+    {
+      "parameters": {
+        "operation": "setValue",
+        "key": "={{ $('Start').first().json.cached_input_key }}",
+        "val": "={{ $json.toJsonString() }}",
+        "expire": false
+      },
+      "type": "n8n-nodes-kv-storage.kvStorage",
+      "typeVersion": 1,
+      "position": [
+        5680,
+        1056
+      ],
+      "id": "742b2929-1bc5-4b24-b42a-d4ef96733aa9",
+      "name": "KVStorage1"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        5216,
+        1072
+      ],
+      "id": "452a5f14-4668-4872-a482-e92df83a707b",
+      "name": "End"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        1120
+      ],
+      "id": "3c5378e1-a642-4070-b2dc-8add99c63189",
+      "name": "Before Start"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2672,
+        1136
+      ],
+      "id": "866f76e7-7c5c-4877-aea6-e6dcba3bc1a1",
+      "name": "Start"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        2512,
+        720
+      ],
+      "id": "563dc44f-88c5-4fee-bd0d-49257146680f",
+      "name": "API Response1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "30391b3a-9b77-4a8a-9004-56c86cb2328a",
+              "leftValue": "={{ $input.item.json?.val[0] }}",
+              "rightValue": "",
+              "operator": {
+                "type": "object",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2080,
+        816
+      ],
+      "id": "48ebfe96-32ac-44ba-b00b-bdb35dd1eeef",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "return {\n  \"json\": {\n    \"cached_input_key\": $('Crypto').item.json.cached_input_key\n  },\n  \"binary\": $(\"Before Start\").item.binary\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2512,
+        912
+      ],
+      "id": "132db04a-754b-4dc6-84ec-dcdc1bc46c14",
+      "name": "Code2"
+    },
+    {
+      "parameters": {
+        "content": "# Prepare Response",
+        "height": 656,
+        "width": 544,
+        "color": 2
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        4480,
+        816
+      ],
+      "id": "2a336107-8213-4ba0-be34-c86138fc23ca",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "content": "# Cache Set",
+        "height": 224,
+        "width": 464,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        5424,
+        992
+      ],
+      "id": "6db7786a-44c6-4074-ad00-d8afd6aa167b",
+      "name": "Sticky Note6"
+    },
+    {
+      "parameters": {
+        "content": "# Balance Sheet Extraction",
+        "height": 1008,
+        "width": 1328
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3088,
+        464
+      ],
+      "id": "836a6458-8a00-44da-ac65-d904b1d4ed8a",
+      "name": "Sticky Note3"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "eea89e5c-53d2-47c6-b259-0ce0eee65e2d",
+              "leftValue": "={{ $json.use_cache}}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1584,
+        1120
+      ],
+      "id": "a7ad39d1-3139-4140-9276-6416273eba9d",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "LINK"
+            },
+            {
+              "name": "use_cache",
+              "type": "boolean"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -80,
+        1344
+      ],
+      "id": "8c7824b8-2477-4fc2-b2da-9f28787a1331",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $binary }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "object",
+                      "operation": "notEmpty",
+                      "singleValue": true
+                    },
+                    "id": "e8da54be-a09f-43e1-9bc5-0d9bbf76e518"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "binary"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "ab565658-14a3-4a04-90fe-9ee67f27888c",
+                    "leftValue": "={{ !!$json.LINK }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "link"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        384,
+        1328
+      ],
+      "id": "7f4639ef-8b48-4534-b009-6eab5ac08131",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.LINK }}",
+          "mode": "url"
+        },
+        "options": {
+          "binaryPropertyName": "data",
+          "googleFileConversion": {
+            "conversion": {
+              "docsToFormat": "text/plain",
+              "slidesToFormat": "application/pdf"
+            }
+          }
+        }
+      },
+      "id": "5b2f7ecd-5379-46d4-9321-76317aec5826",
+      "name": "Download LINK",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        720,
+        1344
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "KirWFwoFdEFmnN0R",
+          "name": "Google Drive person17@example.com"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "8551a8b2-ce2b-4f77-912a-8cdbece9d709",
+              "leftValue": "={{ $binary }}",
+              "rightValue": "",
+              "operator": {
+                "type": "object",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        912,
+        1344
+      ],
+      "id": "83c7c0e2-ce4e-4e04-b83e-6bbd81bdb43e",
+      "name": "If Binary"
+    },
+    {
+      "parameters": {
+        "jsCode": "for (const item of $input.all()) {\n  item.json.success = false;\n  item.json.error = \"failed_to_get_gd_link\";\n}\n\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1184,
+        1360
+      ],
+      "id": "475fe08d-10db-462f-a400-a25efcb7cce5",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "jsCode": "for (const item of $input.all()) {\n  item.json = item.json.val[0] || {};\n}\n\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2288,
+        720
+      ],
+      "id": "1713f5ab-1f44-4bca-acb1-2b37d6e80c87",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "37f1c08b-d334-4c58-a5e8-1b3cdd4b207e",
+              "name": "LINK",
+              "value": "={{ $json.GDRIVE_LINK }}",
+              "type": "string"
+            },
+            {
+              "id": "41af91b8-f273-48eb-8a50-afa497b5a1ac",
+              "name": "use_cache",
+              "value": false,
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -80,
+        1600
+      ],
+      "id": "5b21c732-7b2a-46e5-946d-9d29aedb61b4",
+      "name": "MAP LINK"
+    },
+    {
+      "parameters": {
+        "dataTableId": {
+          "__rl": true,
+          "value": "E4fUDXr9nxDOv8o4",
+          "mode": "list",
+          "cachedResultName": "BALANCE_SHEET_EX_EVAL",
+          "cachedResultUrl": "/projects/EChUnhWXmjrEc3fG/datatables/E4fUDXr9nxDOv8o4"
+        },
+        "filterRows": true,
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "RUN_COMPLETED",
+              "condition": "isFalse"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.evaluationTrigger",
+      "typeVersion": 4.7,
+      "position": [
+        -512,
+        1600
+      ],
+      "id": "c49dd1b0-74d0-4428-9bc7-3f40e6529c7d",
+      "name": "Eval Start"
+    },
+    {
+      "parameters": {
+        "content": "# Next steps\n\nEval table: BALANCE_SHEET_EX_EVAL  - https://n8n.hacohen.bina-solutions.co.il/projects/EChUnhWXmjrEc3fG/datatables/E4fUDXr9nxDOv8o4\n\n##  Complete evaluation setup\n- put the currect  Expected values in the eval table (where missing)\n- add a few failing balance sheets from incoming documents to eval table, and enter the expected values \n- change RUN_COMPLETED to false for all lines that need to rerun \n\n-- Run Current prompt \n- run this workflow from \"Start Eval\" trigger, let it finish, go over results.\n\n\n-- Develop Refined Prompt \n- write a new prompt that works for all example \n- rerun, until prompt is refined and works for all balance sheets in excel \n\n\n## Current Prompt is in the GREEN NOTE, and in the textual / visual Gemini nodes \n",
+        "height": 800,
+        "width": 768,
+        "color": 2
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        256,
+        272
+      ],
+      "typeVersion": 1,
+      "id": "2b8c186c-fdf6-485a-8bed-81df642a54b8",
+      "name": "Sticky Note9"
+    },
+    {
+      "parameters": {
+        "dataTableId": {
+          "__rl": true,
+          "value": "E4fUDXr9nxDOv8o4",
+          "mode": "list",
+          "cachedResultName": "BALANCE_SHEET_EX_EVAL",
+          "cachedResultUrl": "/projects/EChUnhWXmjrEc3fG/datatables/E4fUDXr9nxDOv8o4"
+        },
+        "outputs": {
+          "values": [
+            {
+              "outputName": "DOCUMENT_TOTAL",
+              "outputValue": "={{ $json.data.summary.documentTotal }}"
+            },
+            {
+              "outputName": "DOCUMENT_TOTAL_MATCH",
+              "outputValue": "={{ $('End').item.json.data.summary.documentTotal == $('Eval Start').last().json.EXPECTED_BALANCE }}"
+            },
+            {
+              "outputName": "DOCUMENT_DATE",
+              "outputValue": "={{ $('End').item.json.data.documentDate }}"
+            },
+            {
+              "outputName": "DOCUMENT_DATE_MATCH",
+              "outputValue": "={{ $('End').item.json.data.documentDate == $('Eval Start').last().json.EXPECTED_DOCUMENT_DATE }}"
+            },
+            {
+              "outputName": "FIRST_LINE_ID",
+              "outputValue": "={{ $('End').item.json.data.lines[0].id }}"
+            },
+            {
+              "outputName": "FIRST_LINE_ID_MATCH",
+              "outputValue": "={{ $('End').item.json.data.lines[0].id == $('Eval Start').last().json.EXPECTED_FIRST_LINE_ID }}"
+            },
+            {
+              "outputName": "FIRST_LINE_DATE",
+              "outputValue": "={{ $('End').item.json.data.lines[0].date }}"
+            },
+            {
+              "outputName": "FIRST_LINE_DATE_MATCH",
+              "outputValue": "={{ $('End').item.json.data.lines[0].date == $('Eval Start').last().json.EXPECTED_FIRST_LINE_DATE }}"
+            },
+            {
+              "outputName": "FIRST_LINE_AMOUNT",
+              "outputValue": "={{ $('End').item.json.data.lines[0].amount }}"
+            },
+            {
+              "outputName": "FIRST_LINE_AMOUNT_MATCH",
+              "outputValue": "={{ $('End').item.json.data.lines[0].amount == $('Eval Start').last().json.EXPECTED_FIRST_LINE_AMOUNT }}"
+            },
+            {
+              "outputName": "RUN_COMPLETED",
+              "outputValue": "={{ true }}"
+            },
+            {
+              "outputName": "VERIFIED",
+              "outputValue": "={{ $('End').item.json.data.summary.totalsMatch }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.evaluation",
+      "typeVersion": 4.8,
+      "position": [
+        5680,
+        1232
+      ],
+      "id": "7cbc4c12-bf82-43a3-ae76-aabbd200af86",
+      "name": "Evaluation1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "223f1807-7549-49b0-881d-7d5e6facff81",
+              "leftValue": "={{ $json.success }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        5456,
+        1072
+      ],
+      "id": "d0a308b8-cf99-4a46-ba97-ec6567247185",
+      "name": "If Success"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "3bc4fd55-3f28-40df-966d-9f1b5722ee9a",
+              "leftValue": "={{ $(\"Eval Start\").isExecuted }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        5456,
+        1248
+      ],
+      "id": "788ec312-c654-48f5-af28-bd6e7db2dad1",
+      "name": "If Eval Run"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "04ce5540-a4e3-42c4-bc5c-0c34cbcd02cf",
+              "name": "prompt",
+              "value": "You are an expert accounting assistant. The provided file is a balance sheet or supplier reconciliation document. These documents are typically exchanged between companies to align their accounting records. Each line item in any table found usually references a separate, distinct document (such as an invoice, shipment confirmation, receipt, order, or credit memo) and its associated cost or monetary value.\n\nExtract the following information for each line item in any accounting table found:\n1. ID (a unique identifier for the line item, often the number of the referenced document like an invoice number, order number, or transaction ID. If multiple potential IDs exist pick according to this order \n[\n\"חשבונית מס\"\n, \"אסמכתה\"\n, \"מסמך חיוב\"\n, \"מסמך\"\n, \"סימוכין\"\n, \"מספר מסמך\"\n].\n If no clear ID is found, use an empty string \"\").\n2. Date (the date associated with the line item or the referenced document, in YYYY-MM-DD format. If multiple potential Date's, exist pick according to this order [\"תאריך אסמכתה\", \"תאריך מסמך\", \"תאריך\"]. If no date is found for a line, use an empty string \"\").\n3. Amount (Extract the monetary values associated with each line item. When possible, extract BOTH values):\n   - amount: The original document amount - the full invoice or transaction value when it was created. Look for columns like \"סכום בחובה\" (debit), \"סכום בזכות\" (credit), \"amount\", \"invoice amount\", or similar terms indicating the original document value.\n   - balanceAmount: The remaining balance still owed on this document. Look for columns like \"יתרה לתשלום\" (balance for payment), \"balance\", \"amount due\", \"outstanding\", or similar terms indicating what's left to pay.\n   \n   **Extraction Rules:**\n   - If BOTH columns exist: extract both amount and balanceAmount separately\n   - If ONLY original amount exists: set amount to that value, set balanceAmount to 0\n   - If ONLY balance exists: set both amount and balanceAmount to the same value (assume full amount is still owed)\n   - If NO amount is found: set both to 0\n   - ALWAYS IGNORE: \"יתרה מצטברת\" (cumulative balance), \"running total\", \"accumulated balance\" - these are running totals across multiple lines, not individual line amounts\n   \n   Return amounts as numbers. If an amount cannot be parsed as a number, use 0.\n4. Notes (Concise and important remarks or descriptions. Capture only significant details that differentiate the line item or provide critical context, such as specific item descriptions, unique transaction details, or reasons for adjustments. Focus on important and concise information. Avoid trivial or overly verbose information. If no truly important notes are found, use an empty string \"\").\n\nAdditionally, identify a primary date for the entire statement or document (e.g., statement date, reconciliation period end date) in YYYY-MM-DD format. If no specific overall document date is found, use an empty string \"\".\nAlso if total amount is provided within the document extract the value and provide it in the output as documentTotalAmount.\nAlso, calculate the sum of all valid 'amount' values from the extracted lines. This total should reflect the sum of the individual line item costs you've identified. If no amounts are found, this total should be 0.\n\nStrictly return ONLY the JSON object with the following structure. Do not use null values; use an empty string \"\" for missing string values and 0 for missing numeric values. Do not include any explanations, apologies, or conversational text outside of the JSON structure. All keys in the specified JSON structure (\"documentDate\", \"lines\", \"documentTotalAmount\", \"totalAmount\", and within \"lines\": \"id\", \"date\", \"amount\", \"notes\") must be present.\nEnsure that any double quotes that are part of the string data itself (e.g., in company names within the 'notes' field) are properly escaped with a backslash (e.g., \"Company\\\"s Data Inc.\").\n{\n  \"documentDate\": \"YYYY-MM-DD\" | \"\",\n  \"lines\": [\n    { \n      \"id\": \"string\" | \"\", \n      \"date\": \"YYYY-MM-DD\" | \"\", \n      \"amount\": number | 0,\n      \"balanceAmount\": number | 0,\n      \"notes\": \"string\" | \"\" \n    }\n  ],\n  \"documentTotalAmount\": number | 0,\n  \"totalAmount\": number | 0\n}\nIf no accounting table suitable for this kind of line-by-line document reconciliation is found, or if the document doesn't seem to contain relevant accounting data, return an empty array for \"lines\", an empty string \"\" for \"documentDate\", and 0 for \"totalAmount\", still within the specified JSON structure.\nEnsure 'amount' is a numerical value (or 0 if not found). Extract only numerical values for amounts, ignore currency symbols or text.\nFocus on structured tabular data representing lists of transactions or referenced documents and their individual costs.",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1440,
+        864
+      ],
+      "id": "9bd1cb35-ed78-4dcd-940e-6b0a2f98c504",
+      "name": "CONFIG"
+    },
+    {
+      "parameters": {
+        "text": "={{ JSON.stringify( $json )}}",
+        "schemaType": "manual",
+        "inputSchema": "={{ $('Config1').last().json.json_schema.toJsonString() }}",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.informationExtractor",
+      "typeVersion": 1.2,
+      "position": [
+        3664,
+        1024
+      ],
+      "id": "a6f3ffff-aa18-49f6-8764-fe1c1128bf49",
+      "name": "Information Extractor",
+      "retryOnFail": false,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.5-pro",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        3664,
+        1152
+      ],
+      "id": "011cf341-15f4-4b71-8ff3-6affdc4eb5a2",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "6mfcsdRaqQ4IdQ8Y",
+          "name": "ai-studio-bs-extraction"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1eb10550-35b7-47d8-89c1-724445f636a2",
+              "name": "error",
+              "value": "={{ $json.error }}",
+              "type": "string"
+            },
+            {
+              "id": "2bb95d5f-603c-48da-bba3-b05b593c0909",
+              "name": "response",
+              "value": "={{ $json.output }}",
+              "type": "object"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        4160,
+        1008
+      ],
+      "id": "4da35f8e-245c-484d-9a1c-7eb14552be21",
+      "name": "Output"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Loop over input items and add a new field called 'myNewField' to the JSON of each one\n\nfunction loose_parse(text) {\n  if (!text) return null;\n\n  // 1. Initial cleanup: Remove Markdown code blocks and whitespace\n  let currentText = text.replace(/```json/gi, '').replace(/```/g, '').trim();\n\n  // 2. Fast Path: Try parsing immediately (in case cleanup was enough)\n  try {\n    return JSON.parse(currentText);\n  } catch (e) {\n    // Continue to advanced repair strategies\n  }\n\n  // 3. Extraction: Isolate the JSON object/array from surrounding text\n  // (e.g., \"Here is the data: { ... } Hope this helps!\")\n  const firstCurly = currentText.indexOf('{');\n  const firstSquare = currentText.indexOf('[');\n  \n  let startIdx = -1;\n  let endIdx = -1;\n\n  // Determine if we are looking for an Object {} or Array []\n  if (firstCurly !== -1 && (firstSquare === -1 || firstCurly < firstSquare)) {\n    startIdx = firstCurly;\n  } else if (firstSquare !== -1) {\n    startIdx = firstSquare;\n  }\n\n  if (startIdx !== -1) {\n    // Find the last matching closing bracket to strip trailing text\n    // Note: This is a simple look-ahead; for nested structures, we rely on the parser later.\n    const lastCurly = currentText.lastIndexOf('}');\n    const lastSquare = currentText.lastIndexOf(']');\n    endIdx = Math.max(lastCurly, lastSquare);\n    \n    if (endIdx > startIdx) {\n      currentText = currentText.substring(startIdx, endIdx + 1);\n    } else {\n      // If no closing bracket found, assume truncated and take everything\n      currentText = currentText.substring(startIdx);\n    }\n  }\n\n  // 4. Syntax Repair: Fix common JSON invalidities\n  // Fix 1: Remove trailing commas (e.g., {\"a\": 1,} -> {\"a\": 1})\n  currentText = currentText.replace(/,(\\s*[}\\]])/g, '$1');\n\n  // Try parsing again after extraction and minor repairs\n  try {\n    return JSON.parse(currentText);\n  } catch (e) {\n    // Continue to truncation handling\n  }\n\n  // 5. Truncation Repair: Balance unclosed braces/brackets/quotes\n  // This handles cases where the token limit cut off the response\n  let stack = [];\n  let inString = false;\n  let isEscaped = false;\n  \n  // We rebuild the string char by char to track state\n  for (let i = 0; i < currentText.length; i++) {\n    const char = currentText[i];\n\n    if (isEscaped) {\n      isEscaped = false;\n      continue;\n    }\n\n    if (char === '\\\\') {\n      isEscaped = true;\n      continue;\n    }\n\n    if (char === '\"') {\n      inString = !inString;\n    }\n\n    if (!inString) {\n      if (char === '{') stack.push('}');\n      else if (char === '[') stack.push(']');\n      else if (char === '}' || char === ']') {\n        // If we find a closing bracket that matches the stack, pop it\n        if (stack.length > 0 && stack[stack.length - 1] === char) {\n          stack.pop();\n        }\n      }\n    }\n  }\n\n  // Close any open string\n  if (inString) currentText += '\"';\n  \n  // Close any open structures (reverse order)\n  while (stack.length > 0) {\n    currentText += stack.pop();\n  }\n\n  try {\n    return JSON.parse(currentText);\n  } catch (e) {}\n\n  // 6. Last Resort: \"JavaScipt Object\" Fallback\n  // Useful if the LLM used single quotes {'key': 'val'} or unquoted keys {key: \"val\"}\n  // We use `new Function` (safer than eval, but still requires trust in the input source)\n  try {\n    const fn = new Function(`return ${currentText}`);\n    return fn();\n  } catch (e) {\n    console.error(\"loose_parse failed to recover JSON info\", e);\n    return null; // Return null if absolutely unrecoverable\n  }\n}\nfor (const item of $input.all()) {\n  item.json.output = loose_parse(item.json.error)\n}\n\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3984,
+        1088
+      ],
+      "id": "b8afa94c-8ddf-433c-a988-905b8294f073",
+      "name": "Code in JavaScript11"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "/**\n * Flexible Financial Reconciliation (Handles Sign Flips & Variable Balance Locations)\n * \n * Key Features:\n * - Computes total balance from transactions (running balance)\n * - Handles initial balance from multiple possible locations\n * - Reconciles even when AI flips signs (matches on absolute values)\n * - Provides comprehensive reconciliation statistics\n * \n * Input: Array of items where each item.json = { \"response\": {..., \"summary\": {...}, \"transactions\": [...]} }\n * Output: Each item augmented with 'compute' object containing reconciliation results\n */\n\nlet item = $input.item;\nconst TOLERANCE = 0.001;\n\n// --- 1. VALIDATE INPUT ---\nif (!item || typeof item !== 'object') {\n    return item;\n}\n\nitem.json = item.json || {};\nconst compute = {};\nconst docContent = item.json.response;\n\nif (!docContent || typeof docContent !== 'object') {\n    compute.reconciliation_result = false;\n    compute.error_details = \"FATAL ERROR: Missing or invalid 'response' object.\";\n    item.json = { docContent, compute };\n    return item;\n}\n\nconst summary = docContent.summary;\nconst transactions = docContent.transactions || [];\n\nif (!summary) {\n    compute.reconciliation_result = false;\n    compute.error_details = \"FATAL ERROR: Missing 'summary' object in response.\";\n    item.json = { docContent, compute };\n    return item;\n}\n\n// --- 2. COMPUTE TOTALS FROM TRANSACTIONS ---\nlet computedTotalDebit = 0;\nlet computedTotalCredit = 0;\nlet computedTotalBalance = 0;\n\nfor (const transaction of transactions) {\n    const debit = parseFloat(transaction.debit_amount) || 0;\n    const credit = parseFloat(transaction.credit_amount) || 0;\n    \n    computedTotalDebit += debit;\n    computedTotalCredit += credit;\n    computedTotalBalance += (debit - credit); // Net change per transaction\n}\n\n// --- 3. EXTRACT SUMMARY VALUES (with flexible initial balance detection) ---\nconst summaryTotalDebit = parseFloat(summary.total_debit_amount) || 0;\nconst summaryTotalCredit = parseFloat(summary.total_credit_amount) || 0;\nconst finalBalance = parseFloat(summary.final_accumulated_balance) || 0;\n\n// Try multiple possible initial balance locations\nconst initialDocBalance = parseFloat(summary.initial_document_balance) || parseFloat(summary.initial_balance) || 0;\nconst cutoffBalance = parseFloat(summary.cutoff_accumulated_balance) || 0;\n\n// Determine which initial balance to use (prefer non-zero values)\nconst possibleInitials = [initialDocBalance, cutoffBalance, initialDocBalance + cutoffBalance];\nconst initialBalance = possibleInitials.find(val => Math.abs(val) > TOLERANCE) || 0;\n\n// --- 4. FLEXIBLE RECONCILIATION (handles sign flips) ---\n\n// Helper function to check if two values match (considering sign flips)\nconst isMatch = (val1, val2, tolerance = TOLERANCE) => {\n    return Math.abs(val1 - val2) <= tolerance || Math.abs(Math.abs(val1) - Math.abs(val2)) <= tolerance;\n};\n\n// Debit Reconciliation (check both normal and flipped signs, but only if summary value exists)\nconst debitDiff = computedTotalDebit - summaryTotalDebit;\nconst hasDebitSummary = Math.abs(summaryTotalDebit) > TOLERANCE;\nconst isDebitReconciled = !hasDebitSummary || isMatch(computedTotalDebit, summaryTotalDebit);\n\n// Credit Reconciliation (only if summary value exists)\nconst creditDiff = computedTotalCredit - summaryTotalCredit;\nconst hasCreditSummary = Math.abs(summaryTotalCredit) > TOLERANCE;\nconst isCreditReconciled = !hasCreditSummary || isMatch(computedTotalCredit, summaryTotalCredit);\n\n// --- 5. BALANCE RECONCILIATION (test all combinations) ---\n\n// Calculate expected final balances using different initial balance sources\nconst expectedBalances = [\n    initialBalance + summaryTotalDebit - summaryTotalCredit,\n    initialDocBalance + summaryTotalDebit - summaryTotalCredit,\n    cutoffBalance + summaryTotalDebit - summaryTotalCredit,\n    initialBalance + computedTotalBalance // Using computed net change\n];\n\n// Check if ANY expected balance matches the final balance (with sign flexibility)\nconst balanceChecks = expectedBalances.map(expected => ({\n    expected,\n    difference: expected - finalBalance,\n    matches: isMatch(expected, finalBalance)\n}));\n\nconst isBalanceReconciled = balanceChecks.some(check => check.matches);\nconst bestBalanceMatch = balanceChecks.find(check => check.matches) || balanceChecks[0];\n\n// --- 6. POPULATE COMPUTE OBJECT ---\n\n// Source Data\ncompute.initial_balance = initialBalance;\ncompute.initial_document_balance = initialDocBalance;\ncompute.cutoff_accumulated_balance = cutoffBalance;\ncompute.actual_final_balance = finalBalance;\n\n// Computed Transaction Totals\ncompute.computed_total_debit = computedTotalDebit;\ncompute.computed_total_credit = computedTotalCredit;\ncompute.computed_net_change = computedTotalBalance;\n\n// Summary Totals\ncompute.summary_total_debit = summaryTotalDebit;\ncompute.summary_total_credit = summaryTotalCredit;\n\n// Debit Reconciliation\ncompute.debit_reconciliation_result = isDebitReconciled;\ncompute.debit_difference = debitDiff;\ncompute.debit_abs_difference = Math.abs(debitDiff);\ncompute.debit_summary_available = hasDebitSummary;\n\n// Credit Reconciliation\ncompute.credit_reconciliation_result = isCreditReconciled;\ncompute.credit_difference = creditDiff;\ncompute.credit_abs_difference = Math.abs(creditDiff);\ncompute.credit_summary_available = hasCreditSummary;\n\n// Balance Reconciliation\ncompute.balance_reconciliation_result = isBalanceReconciled;\ncompute.expected_final_balance = bestBalanceMatch.expected;\ncompute.balance_difference = bestBalanceMatch.difference;\ncompute.balance_abs_difference = Math.abs(bestBalanceMatch.difference);\n\n// All tested balance scenarios\ncompute.all_balance_scenarios = expectedBalances.map((exp, idx) => ({\n    scenario: idx,\n    expected: exp,\n    difference: exp - finalBalance,\n    reconciled: balanceChecks[idx].matches\n}));\n\n// Overall Result\ncompute.reconciliation_result = isBalanceReconciled && isDebitReconciled && isCreditReconciled;\ncompute.tolerance = TOLERANCE;\n\n// Detailed Status Message\nif (!compute.reconciliation_result) {\n    let errors = [];\n    if (!isBalanceReconciled) errors.push(`Balance mismatch (Δ: ${bestBalanceMatch.difference.toFixed(3)})`);\n    if (!isDebitReconciled && hasDebitSummary) errors.push(`Debit mismatch (Δ: ${debitDiff.toFixed(3)})`);\n    if (!isCreditReconciled && hasCreditSummary) errors.push(`Credit mismatch (Δ: ${creditDiff.toFixed(3)})`);\n    \n    compute.error_details = errors.length > 0 ? `Reconciliation Failed: ${errors.join('; ')}` : 'Reconciliation PASSED (summary totals not provided, balance verified)';\n    compute.reconciliation_summary = {\n        status: errors.length > 0 ? 'FAILED' : 'PASSED',\n        passed_checks: [isBalanceReconciled, isDebitReconciled, isCreditReconciled].filter(Boolean).length,\n        total_checks: 3,\n        skipped_checks: [\n            !hasDebitSummary ? 'debit' : null,\n            !hasCreditSummary ? 'credit' : null\n        ].filter(Boolean)\n    };\n} else {\n    const skippedChecks = [\n        !hasDebitSummary ? 'debit' : null,\n        !hasCreditSummary ? 'credit' : null\n    ].filter(Boolean);\n    \n    compute.error_details = skippedChecks.length > 0 \n        ? `Reconciliation PASSED (${skippedChecks.join(', ')} totals not provided, balance verified)` \n        : `Reconciliation PASSED (tolerance: ${TOLERANCE})`;\n    compute.reconciliation_summary = {\n        status: 'PASSED',\n        passed_checks: 3,\n        total_checks: 3,\n        skipped_checks: skippedChecks\n    };\n}\n\n// --- 7. RETURN AUGMENTED ITEM ---\nitem.json = {\n    docContent,\n    compute\n};\n\nreturn item;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4544,
+        896
+      ],
+      "id": "f9d95121-ce0f-4d42-880f-656240c08987",
+      "name": "Append Verifications Field1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Transform response data to legacy format with smart reference and date selection\nconst reference_priority_kws = [\"אסמכתא\", \"אסמ\", \"חשבונית\", \"doc number\", \"invoice\", \"מסמך חיוב\", \"מסמך\", \"מס' תעודה\", \"מספר ת. יומן\", \"סימוכין\", \"מספר מסמך\", \"פקודה\", \"מספר מסמך התאמה\"];\nconst date_priority_kws = [\"תאריך אסמכתא\", \"ת.אסמ\", \"תאריך מסמך\", \"doc date\", \"תאריך חשבונית\", \"ת. למאזן\", \"תאריך למאזן\", \"ת. אירוע\", \"תאריך\"];\n\nfunction selectBestReference(references) {\n  if (!references || references.length === 0) return { value: \"\", selectionMethod: \"none_available\" };\n  if (references.length === 1) return { value: references[0]?.value || \"\", selectionMethod: \"only_option\" };\n  for (const kw of reference_priority_kws) {\n    const match = references.find(r => r.key && r.key.toLowerCase().includes(kw.toLowerCase()));\n    if (match) return { value: match.value || \"\", selectionMethod: \"keyword_match\", matchedKeyword: kw };\n  }\n  return { value: references.find(r => r.value)?.value || \"\", selectionMethod: \"fallback\" };\n}\n\nfunction cleanReference(value) {\n  if (!value) return \"\";\n  let cleaned = String(value).trim().replace(/\\s+/g, '').replace(/[^a-zA-Z0-9]/g, '');\n  const match = cleaned.match(/^([a-zA-Z]*)(\\d+)([a-zA-Z]*)$/);\n  return match ? match[1] + match[2] : cleaned;\n}\n\nfunction selectBestDate(dates) {\n  if (!dates || dates.length === 0) return { value: \"\" };\n  for (const kw of date_priority_kws) {\n    const match = dates.find(d => d.key && d.key.toLowerCase().includes(kw.toLowerCase()));\n    if (match) return { value: match.value || \"\" };\n  }\n  return { value: dates[0]?.value || \"\" };\n}\n\n// פונקציית עזר להמרת תאריך ל-DD/MM/YYYY\nconst formatToDMY = (dateStr) => {\n  if (!dateStr || !dateStr.includes('-')) return dateStr;\n  const parts = dateStr.split('-');\n  return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : dateStr;\n};\n\nreturn $input.all().map(({ json: { docContent: r, compute: c } }) => {\n  const { doc_header: h, summary: s, transactions: t } = r;\n  \n  const lines = t.map(l => {\n    const refSelection = selectBestReference(l.references || []);\n    const dateSelection = selectBestDate(l.dates || []);\n    return {\n      id: cleanReference(refSelection.value),\n      date: formatToDMY(dateSelection.value), // המרה כאן\n      amount: Number(l.debit_amount) || -Number(l.credit_amount) || 0,\n      balanceAmount: Number(l.accumulated_balance) || 0,\n      notes: [l.transaction_description_he, l.note].filter(Boolean).join(\" - \"),\n      refrences: l.references\n    };\n  });\n  \n  return { \n    docContent: r, \n    compute: c,\n    response: {\n      success: true,\n      data: {\n        documentDate: formatToDMY(h.date), // המרה כאן\n        lines,\n        summary: {\n          totalsMatch: c.balance_reconciliation_result || c.debit_reconciliation_result,\n          calculatedAmountSum: c.computed_total_debit,\n          matchType: c.balance_reconciliation_result ? \"exact\" : \"none\",\n          totalLines: t.length,\n          documentTotal: s.final_accumulated_balance,\n          calculatedBalanceSum: c.actual_final_balance,\n          difference: c.balance_reconciliation_difference\n        },\n        clientName: r.doc_header.company_name_he\n      },\n      processedAt: new Date().toISOString()\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4704,
+        896
+      ],
+      "id": "4e0ec305-4f94-4516-b1e2-cdb2df044756",
+      "name": "Format Response1"
+    },
+    {
+      "parameters": {
+        "resource": "document",
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-pro",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.5-pro"
+        },
+        "text": "={{ $(\"CONFIG\").last().json.prompt }}",
+        "inputType": "binary",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1,
+      "position": [
+        4096,
+        1696
+      ],
+      "id": "5c45306e-dcc6-414d-ac1f-51cf2256e66f",
+      "name": "Document Processor",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "6mfcsdRaqQ4IdQ8Y",
+          "name": "ai-studio-bs-extraction"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://apitools.hacohen.bina-solutions.co.il/documentOcr",
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "{\"truncate_from\": \"end\", \"max_pages\":3}",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e812345b-5852-4aac-a971-afaed247aee8",
+      "name": "Document OCR",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3168,
+        1120
+      ],
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-pro",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.5-pro"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "={{ $(\"CONFIG\").last().json.prompt }}",
+              "role": "model"
+            },
+            {
+              "content": "=textxtual fileinput: {{ JSON.stringify( $json )}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1,
+      "position": [
+        4848,
+        1712
+      ],
+      "id": "e740d9ec-8a68-469f-a370-586935cd5494",
+      "name": "Text Processor",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "6mfcsdRaqQ4IdQ8Y",
+          "name": "ai-studio-bs-extraction"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "for (const item of $input.all()) {\n  item.json.json_schema = {\n  \"$schema\": \"https://json-schema.org/draft/2020-12/schema\",\n  \"title\": \"JSON_SUPPLIER_RECONCILIATION_DOC\",\n  \"type\": \"object\",\n  \"description\": \"JSON schema for a balance sheet or supplier reconciliation document with logical pre-calculation steps.\",\n  \"additionalProperties\": false,\n  \"properties\": {\n    \"valid_input\": {\n      \"type\": \"boolean\",\n      \"description\": \"Is the input a valid Balance Doc?\"\n        },\n    \"doc_header\": {\n      \"type\": \"object\",\n      \"description\": \"Metadata, structural analysis, and mathematical validation of the full document before truncation.\",\n      \"additionalProperties\": false,\n      \"properties\": {\n        \"pages_count\": {\n          \"type\": \"integer\",\n          \"description\": \"The total number of pages in the document.\",\n          \"minimum\": 1\n        },\n        \"company_name_he\": {\n          \"type\": \"string\",\n          \"description\": \"Hebrew name of the issuing company.\"\n        },\n        \"statement_type_he\": {\n          \"type\": \"string\",\n          \"description\": \"Type of statement in Hebrew (e.g., 'דוח גיול חובות').\"\n        },\n        \"date\": {\n          \"type\": \"string\",\n          \"pattern\": \"^\\\\d{4}-\\\\d{2}-\\\\d{2}$|^$\",\n          \"description\": \"The primary date of the ledger/balance sheet in YYYY-MM-DD format.\"\n        },\n        \"column_identification\": {\n          \"type\": \"object\",\n          \"description\": \"The OCR headers identified to map the document logic.\",\n          \"properties\": {\n            \"refrence_kws\":{\n              \"type\": \"array\",\n              \"description\": \"Identify and extract all headers of columns containing document references or identifiers. Match headers against keywords: ['אסמכתא', 'אסמ', 'חשבונית', 'doc', 'invoice', 'מסמך', 'תעודה', 'יומן', 'סימוכין', 'פקודה', 'ref', 'voucher', 'receipt', 'slip']. If a reference column header is not visible or missing, strictly map these columns to keys: r1, r2, r3.\",\n              \"items\": {\n                \"type\": \"string\"\n              }\n            },\n            \"unique_key_kw\": {\n              \"type\": \"string\",\n              \"description\": \"The column header text used to identify unique lines (teke first from this priority list ['אסמכתא', 'אסמ','חשבונית','doc number','invoice', 'מסמך חיוב','מסמך','מס' תעודה','מספר ת. יומן','סימוכין','מספר מסמך','פקודה']\"\n            },\n            \"credit_kw\": {\n              \"type\": \"string\",\n              \"description\": \"The column header text for credit amounts (e.g., 'זכות').\"\n            },\n            \"debit_kw\": {\n              \"type\": \"string\",\n              \"description\": \"The column header text for debit amounts (e.g., 'חובה').\"\n            },\n            \"balance_kw\": {\n              \"type\": \"string\",\n              \"description\": \"The column header text for the running balance (e.g., 'יתרה').\"\n            },\n          },\n          \"required\": [\n            \"refrence_kws\",\n            \"unique_key_kw\",\n            \"balance_kw\"\n            \n          ]\n        },\n        \"full_document_logic\": {\n          \"type\": \"object\",\n          \"description\": \"Extraction of ALL lines (including those to be ignored) to validate counts and math.\",\n          \"properties\": {\n            \"initial_document_balance\": {\n              \"type\": \"number\",\n              \"description\": \"Use the opening balance stated at the start of the document (e.g., 'יתרת פתיחה'). If no opening balance is stated, use 0.\"\n            },\n            \"all_transaction_identifiers\": {\n              \"type\": \"array\",\n              \"description\": \"An ordered list of the unique key value for EVERY transaction line in the document (from top to bottom).\",\n              \"items\": {\n                \"type\": [\n                  \"string\",\n                  \"integer\"\n                ]\n              }\n            },\n            \"all_transactions_math_log\": {\n              \"type\": \"array\",\n              \"description\": \"A math log for EVERY line to verify balance progression. transaction_change = Credit - Debit.\",\n              \"items\": {\n                \"type\": \"object\",\n                \"properties\": {\n                  \"id\": {\n                    \"type\": [\n                      \"string\",\n                      \"integer\"\n                    ],\n                    \"description\": \"Corresponds to all_transaction_identifiers\"\n                  },\n                  \"tsc\": {\n                    \"type\": \"number\",\n                    \"description\": \"Positive for Credit, Negative for Debit. (transaction_change)\"\n                  },\n                  \"rb\": {\n                    \"type\": \"number\",\n                    \"description\": \"The value in the balance column for this line. (resulting_balance)\"\n                  }\n                },\n                \"required\": [\n                  \"tsc\",\n                  \"rb\"\n                ]\n              }\n            },\n            \"total_lines_count\": {\n              \"type\": \"integer\",\n              \"description\": \"Total number of transaction lines detected in the entire document.\"\n            },\n          },\n          \"required\": [\n            \"initial_document_balance\",\n            \"all_transaction_identifiers\",\n            \"all_transactions_math_log\",\n            \"total_lines_count\",\n          ]\n        },\n        \"selection_logic\": {\n          \"type\": \"object\",\n          \"description\": \"Logic defining which lines are kept (last 60) and where the cutoff occurs.\",\n          \"properties\": {\n            \"selected_transaction_identifiers\": {\n              \"type\": \"array\",\n              \"description\": \"The subset of identifiers from 'all_transaction_identifiers' that will be fully extracted in the 'transactions' array (Max 60).\",\n              \"items\": {\n                \"type\": [\n                  \"string\",\n                  \"integer\"\n                ]\n              }\n            },\n            \"cutoff_transaction_identifier\": {\n              \"type\": [\n                \"string\",\n                \"integer\",\n                \"null\"\n              ],\n              \"description\": \"The identifier of the last line NOT selected (the line immediately before the first selected line). Null if all lines are selected.\"\n            },\n            \"cutoff_accumulated_balance\": {\n              \"type\": \"number\",\n              \"description\": \"The 'resulting_balance' of the cutoff_transaction_identifier. This becomes the OPENING BALANCE for the selected set. 0 if no lines were cut.\"\n            }\n          },\n          \"required\": [\n            \"selected_transaction_identifiers\",\n            \"cutoff_accumulated_balance\"\n          ]\n        }\n      },\n      \"required\": [\n        \"company_name_he\",\n        \"statement_type_he\",\n        \"column_identification\",\n        \"full_document_logic\",\n        \"selection_logic\"\n      ]\n    },\n    \"transactions\": {\n      \"type\": \"array\",\n      \"description\": \"Detailed extraction of the lines listed in 'doc_header.selection_logic.selected_transaction_identifiers'. (Very Importent.. Allwase return the selected transactions)\",\n      \"items\": {\n        \"type\": \"object\",\n        \"additionalProperties\": false,\n        \"properties\": {\n          \"unique_key\": {\n            \"type\": [\n              \"string\",\n              \"integer\"\n            ],\n            \"description\": \"The unique identifier matching the list in doc_header.\"\n          },\n          \"references\": {\n            \"type\": \"array\",\n            \"minItems\": 1,\n            \"items\": {\n              \"type\": \"object\",\n              \"properties\": {\n                \"key\": {\n                  \"type\": \"string\"\n                },\n                \"value\": {\n                  \"type\": \"string\"\n                }\n              },\n              \"required\": [\n                \"key\",\n                \"value\"\n              ]\n            },\n            \"description\": \"List with all refrences and there values (including unique key)\"\n          },\n          \"dates\": {\n            \"type\": \"array\",\n            \"minItems\": 1,\n            \"items\": {\n              \"type\": \"object\",\n              \"properties\": {\n                \"key\": {\n                  \"type\": \"string\"\n                },\n                \"value\": {\n                  \"type\": \"string\",\n                  \"pattern\": \"^\\\\d{4}-\\\\d{2}-\\\\d{2}$\"\n                }\n              },\n              \"required\": [\n                \"key\",\n                \"value\"\n              ]\n            }\n          },\n          \"debit_amount\": {\n            \"type\": \"number\"\n          },\n          \"credit_amount\": {\n            \"type\": \"number\"\n          },\n          \"accumulated_balance\": {\n            \"type\": \"number\"\n          },\n          \"transaction_description_he\": {\n            \"type\": \"string\"\n          },\n          \"currency\": {\n            \"type\": \"string\",\n            \"pattern\": \"^[A-Z]{3}$\"\n          },\n          \"note\": {\n            \"type\": \"string\"\n          }\n        },\n        \"required\": [\n          \"unique_key\",\n          \"refrences\",\n          \"dates\",\n          \"accumulated_balance\",\n          \"debit_amount\",\n          \"credit_amount\",\n          \"currency\"\n        ]\n      }\n    },\n    \"summary\": {\n      \"type\": \"object\",\n      \"description\": \"Summary totals based on the 'selected' lines plus the carry-over from the cutoff.\",\n      \"additionalProperties\": false,\n      \"properties\": {\n        \"currency\": {\n          \"type\": \"string\",\n          \"pattern\": \"^[A-Z]{3}$\"\n        },\n        \"initial_document_balance\": {\n          \"type\": \"number\",\n          \"description\": \"Should match 'doc_header.full_document_logic.initial_document_balance' or 0\"\n        },\n        \"cutoff_accumulated_balance\": {\n          \"type\": \"number\",\n          \"description\": \"Should match 'doc_header.selection_logic.cutoff_accumulated_balance' or 0\"\n        },\n        \"total_debit_amount\": {\n          \"type\": \"number\",\n          \"description\": \"The final debit amount displayed in the document (usually at / after bottom line), (importent) leave empty if not explicitly displayed.\"\n        },\n        \"total_credit_amount\": {\n          \"type\": \"number\",\n          \"description\": \"The final credit amount displayed in the document (usually at / after bottom line), (importent) leave empty if not explicitly displayed.\"\n        },\n        \"final_accumulated_balance\": {\n          \"type\": \"number\",\n          \"description\": \"The final Accumulated Balance displayed in the document (usually at / after bottom line), leave empty if not displayed.\"\n        },\n        \"calculated_accumulated_balance\": {\n          \"type\": \"number\",\n          \"description\": \"The Final Calculated Accumulated Balance of both unselected and selected.\"\n        }\n      },\n      \"required\": [\n        \"currency\",\n        \"initial_document_balance\",\n        \"cutoff_accumulated_balance\",\n        \"final_accumulated_balance\",\n        \"calculated_accumulated_balance\"\n      ]\n    },\n    \"valid_output\": {\n      \"type\": \"boolean\",\n      \"description\": \"Dose the output look good?, is there an halucination?\"\n    }\n  },\n  \"required\": [\n    \"valid_input\",\n    \"doc_header\",\n    \"transactions\",\n    \"summary\",\n    \"valid_output\"\n  ]};\n}\n\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        704
+      ],
+      "id": "ee3f1388-13b1-419a-805d-a2a4b3aac72b",
+      "name": "Config1",
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a26c02e9-1283-4d10-b3d7-51789ba0da44",
+              "leftValue": "={{ $json.response }}",
+              "rightValue": "",
+              "operator": {
+                "type": "object",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4320,
+        1008
+      ],
+      "id": "558501ea-320c-44ca-8c84-8593cfb5017e",
+      "name": "If Output"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\n// --- UTILS ---\nconst getBBox = (vertices) => {\n  const xs = vertices.map(v => v.x || 0);\n  const ys = vertices.map(v => v.y || 0);\n  const l = Math.min(...xs);\n  const r = Math.max(...xs);\n  const t = Math.min(...ys);\n  const b = Math.max(...ys);\n  return { l, r, t, b, w: r - l, h: b - t, cx: (l + r) / 2, cy: (t + b) / 2 };\n};\n\n/**\n * Detects if text is predominantly Right-to-Left (RTL)\n * Returns: { isRTL: boolean, rtlCount: number, ltrCount: number, hasText: boolean }\n */\nconst detectRTL = (text) => {\n  if (!text || typeof text !== 'string') {\n    return { isRTL: false, rtlCount: 0, ltrCount: 0, hasText: false };\n  }\n\n  // RTL Unicode ranges: Arabic, Hebrew, Syriac, Thaana, N'Ko\n  const rtlChars = /[\\u0590-\\u05FF\\u0600-\\u06FF\\u0700-\\u074F\\u0750-\\u077F\\u08A0-\\u08FF\\uFB50-\\uFDFF\\uFE70-\\uFEFF]/g;\n  \n  // LTR letters (Latin, Cyrillic, Greek, etc.) - excluding numbers and punctuation\n  const ltrChars = /[A-Za-z\\u00C0-\\u024F\\u0400-\\u04FF\\u0370-\\u03FF]/g;\n\n  const rtlMatches = text.match(rtlChars);\n  const ltrMatches = text.match(ltrChars);\n\n  const rtlCount = rtlMatches ? rtlMatches.length : 0;\n  const ltrCount = ltrMatches ? ltrMatches.length : 0;\n\n  // If no letters found, not considered text\n  const hasText = (rtlCount + ltrCount) > 0;\n\n  // RTL if more than 50% of letters are RTL\n  const isRTL = hasText && rtlCount > ltrCount;\n\n  return { isRTL, rtlCount, ltrCount, hasText };\n};\n\n\n// --- MAIN LOGIC ---\nconst words = [];\nlet rtlCount = 0;\n\nfor (const item of items) {\n  const ocr = item.json?.json?.ocr_json || item.json?.ocr_json || item.json;\n  const annotations = ocr.textAnnotations || ocr.responses?.[0]?.textAnnotations || [];\n  \n  for (let i = 1; i < annotations.length; i++) {\n    const ann = annotations[i];\n    const verts = ann.boundingPoly?.vertices;\n    \n    if (verts?.length === 4) {\n      const bbox = getBBox(verts);\n      \n      if (bbox.w > 0 && bbox.h > 0) {\n        const text = ann.description;\n        if (detectRTL(text)) rtlCount++;\n        \n        words.push({\n          t: text,\n          x: Math.round(bbox.cx),\n          y: Math.round(bbox.cy)\n        });\n      }\n    }\n  }\n}\n\nif (!words.length) {\n  return { words: [], error: \"No OCR data found\" };\n}\n\n// Detect predominant direction\nconst isRTL = rtlCount > words.length / 2;\n\n// Group into lines (tolerance: avg height * 0.5)\nconst avgH = words.reduce((sum, w, i, arr) => {\n  if (i === 0) return 0;\n  return sum + Math.abs(w.y - arr[i - 1].y);\n}, 0) / (words.length - 1 || 1);\n\nconst lineThreshold = avgH * 0.5 || 10;\n\nwords.sort((a, b) => {\n  const dy = a.y - b.y;\n  if (Math.abs(dy) > lineThreshold) return dy; // Different lines: sort by y\n  return isRTL ? b.x - a.x : a.x - b.x; // Same line: RTL or LTR\n});\n\n// Minimize output: just text and coordinates\nreturn {\n  words: words.map(w => ({ t: w.t, x: w.x, y: w.y })),\n  dir: isRTL ? \"rtl\" : \"ltr\"\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3328,
+        1120
+      ],
+      "id": "e8a1519a-3db4-457c-86e6-a09db40a9ffc",
+      "name": "Prepare OCR For LLM"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "df08253d-0222-4aa7-8fea-581221d8be2c",
+              "name": "data",
+              "value": "={{ $json.response.data }}",
+              "type": "object"
+            },
+            {
+              "id": "7f276377-3f35-441a-ba8d-7a63c21b182b",
+              "name": "success",
+              "value": "={{ $json.response.success }}",
+              "type": "boolean"
+            },
+            {
+              "id": "2d9b8e06-4afe-481a-8369-0115210121fe",
+              "name": "processedAt",
+              "value": "={{ $json.response.processedAt }}",
+              "type": "string"
+            },
+            {
+              "id": "3a4c0b6a-5c97-4e2e-9eeb-0a0187f1ff13",
+              "name": "evalMetadata",
+              "value": "={{ $('Start').last().json.full_response ? $json.evalMetadata : {} }}",
+              "type": "object"
+            },
+            {
+              "id": "522bc164-f726-4087-9013-f6933b67f350",
+              "name": "fullResponse",
+              "value": "={{ $('Start').last().json.full_response ? $json : {} }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        4848,
+        896
+      ],
+      "id": "253a1f6d-4a12-4885-8497-afed6275994c",
+      "name": "Map Response"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "extract-content",
+              "name": "content",
+              "value": "={{ $json.content.parts[0].text }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        4288,
+        1696
+      ],
+      "id": "f5b59117-4e8d-4c95-b657-89649b318081",
+      "name": "Extract Response"
+    },
+    {
+      "parameters": {
+        "functionCode": "const raw = items[0].json.content;\nconst jsonText = raw.replace(/^```json\\n/, '').replace(/\\n```$/, '');\n\ntry {\n  const parsed = JSON.parse(jsonText);\n  return [{ json: parsed }];\n} catch (error) {\n  // Return error response for invalid JSON\n  return [{\n    json: {\n      error: \"Failed to parse AI response as JSON\",\n      rawResponse: raw,\n      parseError: error.message\n    }\n  }];\n}"
+      },
+      "id": "cbcb75bc-da38-4319-ba4a-88b7c292dd5a",
+      "name": "Parse JSON Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        4464,
+        1696
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const item = items[0].json;\n\nif (item.error) {\n  return [{ json: { success: false, error: item.error, details: item.parseError || \"Unknown error\" } }];\n}\n\nconst convertDate = (dateStr) => {\n  if (!dateStr || !dateStr.includes('-')) return dateStr;\n  const parts = dateStr.split('-');\n  return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : dateStr;\n};\n\nconst lines = item.lines || [];\nconst documentTotal = item.documentTotalAmount || item.totalAmount || 0;\nconst documentDate = item.documentDate || \"\";\n\nconst calculatedAmountSum = lines.reduce((acc, line) => acc + (parseFloat(line.amount) || 0), 0);\nconst calculatedBalanceSum = lines.reduce((acc, line) => acc + (parseFloat(line.balanceAmount) || 0), 0);\nconst tolerance = Math.min(100, documentTotal * 0.001);\n\nconst amountMatches = Math.abs(calculatedAmountSum - documentTotal) <= tolerance;\nconst balanceMatches = Math.abs(calculatedBalanceSum - documentTotal) <= tolerance;\n\nconst response = {\n  success: true,\n  data: {\n    documentDate: convertDate(documentDate),\n    lines: lines.map(line => ({\n      id: line.id || \"\",\n      date: convertDate(line.date),\n      amount: parseFloat(line.amount) || 0,\n      balanceAmount: parseFloat(line.balanceAmount) || 0,\n      notes: line.notes || \"\"\n    })),\n    summary: {\n      totalLines: lines.length,\n      documentTotal: documentTotal,\n      calculatedAmountSum: parseFloat(calculatedAmountSum.toFixed(2)),\n      calculatedBalanceSum: parseFloat(calculatedBalanceSum.toFixed(2)),\n      totalsMatch: amountMatches || balanceMatches\n    }\n  },\n  processedAt: new Date().toISOString()\n};\n\nreturn [{ json: response }];"
+      },
+      "id": "cf9ebf09-db0a-4bdd-aedd-a2c12f3df91e",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        4640,
+        1696
+      ]
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        3488,
+        1120
+      ],
+      "id": "dc2f82ae-4f4b-46f9-8bf5-79581d1daebb",
+      "name": "Visual Input"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Handle unsupported file formats\nconst mimeType = items[0].binary?.data?.mimeType || \"unknown\";\nconst fileName = items[0].binary?.data?.fileName || \"unknown\";\n\nreturn [{\n  json: {\n    success: false,\n    error: \"LLM Faild\",\n    details: `Faild getting output from llm.`,\n    fileName: fileName,\n    mimeType: mimeType,\n    processedAt: new Date().toISOString()\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        4848,
+        1072
+      ],
+      "id": "35f7aaaf-5b4b-4787-b6a7-3ac0549b92a6",
+      "name": "Response Format: No LLM Output"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "37f1c08b-d334-4c58-a5e8-1b3cdd4b207e",
+              "name": "LINK",
+              "value": "={{ $json.body.LINK }}",
+              "type": "string"
+            },
+            {
+              "id": "41af91b8-f273-48eb-8a50-afa497b5a1ac",
+              "name": "use_cache",
+              "value": "={{ $json.body.use_cache || true }}",
+              "type": "boolean"
+            },
+            {
+              "id": "bc93fbae-3f3e-4522-bfb4-1e2af2b75f64",
+              "name": "full_response",
+              "value": "={{ $json.body.full_response || false }}",
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        144,
+        1200
+      ],
+      "id": "648a1c6b-29fb-4710-9b12-2f0cd3c72a11",
+      "name": "MAP LINK1"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -432,
+        1824
+      ],
+      "id": "10774982-0f0c-47f1-8ca5-e28e363a6b85",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "operation": "setValue",
+        "key": "={{ \"c565df33c7194f72ce2395956c771695\" }}"
+      },
+      "type": "n8n-nodes-kv-storage.kvStorage",
+      "typeVersion": 1,
+      "position": [
+        -160,
+        1824
+      ],
+      "id": "0eda29bb-affd-4d94-afdc-8a84876485a1",
+      "name": "Delete Cache"
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "MAP LINK1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "File Type Router": {
+      "main": [
+        [
+          {
+            "node": "Extract from File1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract from File2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract from File2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Document OCR",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Document OCR",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Document OCR",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Response Format: Unsupported File Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Textual Input": {
+      "main": [
+        [
+          {
+            "node": "Information Extractor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "Textual Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File1": {
+      "main": [
+        [
+          {
+            "node": "Textual Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File2": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Response Format: Unsupported File Error": {
+      "main": [
+        [
+          {
+            "node": "End",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crypto": {
+      "main": [
+        [
+          {
+            "node": "KVStorage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "End": {
+      "main": [
+        [
+          {
+            "node": "API Response",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "If Eval Run",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "If Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "KVStorage1": {
+      "main": [
+        []
+      ]
+    },
+    "Before Start": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "CONFIG",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Config1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "KVStorage": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "File Type Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Response1": {
+      "main": [
+        []
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code2": {
+      "main": [
+        [
+          {
+            "node": "Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "Crypto",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Before Start",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Download LINK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download LINK": {
+      "main": [
+        [
+          {
+            "node": "If Binary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Binary": {
+      "main": [
+        [
+          {
+            "node": "Before Start",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "API Response1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MAP LINK": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Eval Start": {
+      "main": [
+        [
+          {
+            "node": "MAP LINK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Success": {
+      "main": [
+        [
+          {
+            "node": "KVStorage1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Eval Run": {
+      "main": [
+        [
+          {
+            "node": "Evaluation1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Information Extractor": {
+      "main": [
+        [
+          {
+            "node": "Output",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code in JavaScript11",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Information Extractor",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript11": {
+      "main": [
+        [
+          {
+            "node": "Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append Verifications Field1": {
+      "main": [
+        [
+          {
+            "node": "Format Response1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Document OCR": {
+      "main": [
+        [
+          {
+            "node": "Prepare OCR For LLM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Output": {
+      "main": [
+        [
+          {
+            "node": "If Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Response1": {
+      "main": [
+        [
+          {
+            "node": "Map Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Output": {
+      "main": [
+        [
+          {
+            "node": "Append Verifications Field1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Response Format: No LLM Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare OCR For LLM": {
+      "main": [
+        [
+          {
+            "node": "Visual Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map Response": {
+      "main": [
+        [
+          {
+            "node": "End",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Response": {
+      "main": [
+        [
+          {
+            "node": "Parse JSON Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse JSON Response": {
+      "main": [
+        [
+          {
+            "node": "Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Visual Input": {
+      "main": [
+        [
+          {
+            "node": "Information Extractor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Response Format: No LLM Output": {
+      "main": [
+        [
+          {
+            "node": "End",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MAP LINK1": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Delete Cache",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {
+    "Eval Start": [
+      {
+        "json": {
+          "GDRIVE_LINK": "https://drive.google.com/file/d/1MaLIw1Yly2KSeoFBU-kul8JvqVbVU2vBRAn5FVbDDLQ/edit",
+          "NAME": "זגמן - טקסט",
+          "EXPECTED_FIRST_LINE_DATE": "2024-01-25",
+          "EXPECTED_FIRST_LINE_ID": "340972",
+          "EXPECTED_FIRST_LINE_AMOUNT": "3206",
+          "FIRST_LINE_ID": "340972",
+          "FIRST_LINE_AMOUNT": "3206",
+          "FIRST_LINE_DATE": "2024-01-25",
+          "DOCUMENT_DATE": "",
+          "EXPECTED_DOCUMENT_DATE": "",
+          "FIRST_LINE_ID_MATCH": true,
+          "FIRST_LINE_DATE_MATCH": true,
+          "FIRST_LINE_AMOUNT_MATCH": true,
+          "DOCUMENT_DATE_MATCH": true,
+          "RUN_COMPLETED": false,
+          "VERIFIED": true,
+          "DOCUMENT_TOTAL_DEBIT_MATCH": false,
+          "EXPECTED_BALANCE": 21609,
+          "EXPECTED_TOTAL_CREDIT": 531,
+          "EXPECTED_TOTAL_DEBIT": 22140,
+          "DOCUMENT_TOTAL_DEBIT": 22140,
+          "DOCUMENT_BALANCE": -21609,
+          "DOCUMENT_BALANCE_MATCH": true,
+          "DOCUMENT_CREDIT_MATCH": false,
+          "DOCUMENT_TOTAL_CREDIT": 531,
+          "MiMe_type": "docs",
+          "FIRST_LINE_ID_SELECTION_METHOD": "first_nonempty_fallback",
+          "FIRST_LINE_ID_MATCHED_KEYWORD": "",
+          "FIRST_LINE_ID_KEYWORD_PRIORITY": "-1",
+          "FIRST_LINE_ID_TOTAL_OPTIONS": "2",
+          "FIRST_LINE_ID_ALL_OPTIONS": "[{\"key\":\"מספר\",\"value\":\"340972\"},{\"key\":\"סוג\",\"value\":\"חשבונית\"}]",
+          "FIRST_LINE_DATE_SELECTION_METHOD": "only_option",
+          "FIRST_LINE_DATE_MATCHED_KEYWORD": "",
+          "FIRST_LINE_DATE_KEYWORD_PRIORITY": "-1",
+          "FIRST_LINE_DATE_TOTAL_OPTIONS": "1",
+          "FIRST_LINE_DATE_ALL_OPTIONS": "[{\"key\":\"תאריך\",\"value\":\"2024-01-25\"}]",
+          "COMPUTED_TOTAL_DEBIT": "22140",
+          "COMPUTED_TOTAL_CREDIT": "531",
+          "COMPUTED_EXPECTED_FINAL_BALANCE": "21609",
+          "COMPUTED_ACTUAL_FINAL_BALANCE": "-21609",
+          "BALANCE_RECONCILED": "true",
+          "BALANCE_DIFFERENCE": null,
+          "DEBIT_RECONCILED": "true",
+          "DEBIT_DIFFERENCE": null,
+          "CREDIT_RECONCILED": "true",
+          "CREDIT_DIFFERENCE": null,
+          "RECONCILIATION_TOLERANCE": "0.001",
+          "FIRST_LINE_INDEX": "0",
+          "DOCUMENT_TOTAL": null,
+          "DOCUMENT_TOTAL_MATCH": null,
+          "id": 8,
+          "createdAt": "2025-11-18T01:48:55.253Z",
+          "updatedAt": "2025-12-15T15:56:09.498Z",
+          "row_number": 1,
+          "row_id": 8,
+          "_rowsLeft": 2
+        }
+      }
+    ],
+    "When Executed by Another Workflow": [
+      {
+        "json": {
+          "LINK": "https://drive.google.com/file/d/1AjXsk_QASOUG8_X45bo9yAVltGzRumbY",
+          "use_cache": false
+        }
+      }
+    ],
+    "Webhook Trigger": [
+      {
+        "json": {
+          "headers": {
+            "host": "n8n:5678",
+            "user-agent": "feature-validation-balance-sheet/1.0",
+            "accept-encoding": "gzip, deflate",
+            "accept": "*/*",
+            "connection": "keep-alive",
+            "content-type": "application/json",
+            "content-length": "112",
+            "authorization": "Basic YWRtaW46d2Rua2pkNzI4NzYyODczYmhqZDM4NjIxM2hqZzM3ZGtzeGk3MnNo"
+          },
+          "params": {},
+          "query": {},
+          "body": {
+            "LINK": "https://drive.google.com/file/d/1MaLIw1Yly2KSeoFBU-kul8JvqVbVU2vBRAn5FVbDDLQ/edit",
+            "use_cache": false
+          },
+          "webhookUrl": "https://n8n.hacohen.bina-solutions.co.il/webhook/bs_ex_2",
+          "executionMode": "production"
+        }
+      }
+    ]
+  },
+  "versionId": "2393d5e4-a5c6-4c8b-beb2-a6c3c1b5fa65",
+  "activeVersionId": "2393d5e4-a5c6-4c8b-beb2-a6c3c1b5fa65",
+  "versionCounter": 327,
+  "triggerCount": 1,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2025-12-11T17:19:54.017Z",
+      "createdAt": "2025-12-11T17:19:54.017Z",
+      "role": "workflow:owner",
+      "workflowId": "mphF5Nf028u8sIix",
+      "projectId": "EChUnhWXmjrEc3fG",
+      "project": {
+        "updatedAt": "2024-09-26T18:07:08.765Z",
+        "createdAt": "2024-09-26T17:59:24.039Z",
+        "id": "EChUnhWXmjrEc3fG",
+        "name": "Shlomo Bolo <person8@example.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null
+      }
+    }
+  ]
+}

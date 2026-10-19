@@ -1,0 +1,40 @@
+# yaml-language-server: $schema=./schema.json
+title: '`bbox indox test` dies at ''Seed Test Fixtures'' on valid SQL — the applier appears to break statements on a `;` that sits inside a single-quoted function body'
+opened: '2026-08-10'
+severity: medium
+status: open
+summary: Every INDOX E2E suite starts by calling "indox-v2 Test Fixtures", which fetches apps/indox/blueprint/fixtures/schema.sql over HTTP from indox-demo-docs and applies it. That step fails with a SQL syntax error pointing at a line INSIDE a plpgsql function body. The statement it points at is valid SQL — proven — so the fault is in the applier, not the schema.
+description: |
+  id: test-fixtures-sql-applier-splits-quoted-bodies · area: indox test harness / indoxV2TestFixtures01
+
+  ## Observed
+
+  ```yaml
+  - run_1: 'died at node ''Seed Test Fixtures'': Syntax error at line 14 near "$"'
+  - run_3: 'died at node ''Seed Test Fixtures'': Syntax error at line 284 near "["'
+  ```
+
+  ## Note
+
+  Run 1's `$` fault was a genuine schema bug and is FIXED — incdoc_action_log_append had been added on 2026-08-10 with a dollar-quoted body (`as $$ ... $$`), which this file is explicitly not allowed to contain (header, and line 547: the n8n Postgres node uses pg-promise, which reads `$` as its own variable syntax). It is now single-quoted, and the rewritten body was proven md5-identical to the deployed function before landing. After that fix the suite got PAST the seed step, so the fix was real.
+
+  ## The remaining fault
+
+  ```yaml
+  points_at: schema.sql line 284 — `parts text[];` inside public.incdoc_doc_date_norm
+  proof_the_sql_is_fine: The entire CREATE OR REPLACE FUNCTION statement for incdoc_doc_date_norm was run verbatim against the live database inside `begin; ... rollback;` — psql returned CREATE FUNCTION and the rollback left the deployed function untouched. psql respects quoting, so the statement is valid and self-consistent.
+  therefore: Something between the HTTP fetch and Postgres is mis-parsing the file. The most likely shape is a naive split on `;`, which would cut this function's body into fragments and try to execute `parts text[]` as a statement — producing precisely "syntax error near [". Note the file header ASSERTS it is "sent to the n8n Postgres node as ONE multi-statement query"; that assertion is worth re-checking against the live node, because the symptom is what a splitter produces.
+  unproven: I did not read indoxV2TestFixtures01's apply node to confirm the mechanism. The statement-is-valid half is proven; the splitter half is inference from the symptom.
+  ```
+
+  ## Why it matters
+
+  It blocks objective 4 (a green INDOX suite) at the very first step, for every suite — sync_kernel, sync_sources, sync_full, doc_base, bs, gdoc, pipeline all call this node before doing anything. It is also a latent PRODUCTION risk if the same applier is used for a fresh install: schema.sql is applied as one transaction, so one mis-split statement takes the whole INDOX schema with it, and a new deployment would come up with no schema.
+
+  ## Good news
+
+  The suite's safety gate is sound and unaffected. G64 (scripts/refactor/test-registry-scope-lint.py) passes: no test blueprint touches the live registry, every connection is stamped unconditionally, every test registry key is crash-swept, and every live source kind has coverage. The post-run sweep also reported "0 fixture row(s) in public.incoming_documents" on every failed run, so nothing leaked into client data.
+
+  ## Next step
+
+  Read the apply node inside indoxV2TestFixtures01 (the one consuming http://indox-demo-docs:8088/fixtures/schema.sql) and establish whether it splits. If it does, either stop splitting, or make the splitter quote-aware. Do NOT work around it by rewriting the schema to avoid `;` inside function bodies — that constraint would be impossible to hold and would push the same failure onto the next person.

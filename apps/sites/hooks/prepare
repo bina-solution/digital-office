@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+#: sites prepare — the renderer comes back with the app
+#
+# prepare — sites' bring-up step. Invoked generically by `bbox run` via run_app_hooks; the CLI does
+# not know this app exists, and this hook does not need it to.
+#
+# WHY IT EXISTS. `sites-render` is the app's Chromium: the beauty check and `renderSite` go through
+# it, and it takes no traffic of its own, so it is the one container of this app that can sit dead
+# without anything looking broken — `docker compose` prints it as `Exited (0)`, no healthcheck
+# complaint reaches a page, and the first person to notice is whoever runs a beauty scan days later
+# and reads „שירות הרינדור אינו זמין”. Measured 2026-09-30: it had exited with code 0 (a deliberate
+# stop, not a crash — no OOM, restart count 0), the app still enabled, and nothing was going to
+# bring it back: `restart: unless-stopped` faithfully preserves an explicit stop.
+#
+# So the app's own bring-up puts it back. Idempotent and cheap: a running renderer costs one
+# `docker inspect` and the hook says so and returns.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+SERVICE="sites-render"
+
+cid="$("${REPO_ROOT}/scripts/dc" ps -a -q "${SERVICE}" 2>/dev/null | head -n1 || true)"
+if [ -n "${cid}" ] && [ "$(docker inspect -f '{{.State.Running}}' "${cid}" 2>/dev/null || echo false)" = "true" ]; then
+  echo "sites: renderer already up (${cid:0:12})"
+  exit 0
+fi
+
+echo "sites: renderer is not running — starting ${SERVICE}"
+if "${REPO_ROOT}/scripts/dc" up -d "${SERVICE}"; then
+  echo "sites: renderer started"
+  exit 0
+fi
+
+echo "sites: could not start ${SERVICE} — the beauty check and renderSite will report 'שירות הרינדור אינו זמין' until it is up (./scripts/dc up -d ${SERVICE})" >&2
+exit 1

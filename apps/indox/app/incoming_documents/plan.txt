@@ -1,0 +1,53 @@
+Plan to migrate incoming documents api from n8n batch-update / get workflows into a python api that abstracts the api to support both google sheet and supabase. it allow you to create document-repos and gives the main Incoming Documents 0.1.6 will still call batch upsert and get workflows but they will be using the apitools api to interact with the document repo (thats sits eithere in google sheet or supabase). 
+behaviour should be exactly like the current n8n implimitations. in batch upsert api you can seperate the unlock part from the api and keep it in the batch upsert n8n workflow.
+for Incoming Documents 0.1.6 current gsheet triger will be replaced with a kafka trigger listening to prefix.<config.document-repo> ands this property will also be passed to batchupsert / get workflows to know which document repo to interact with.
+the python api will also handle the kafka topic creation and population.
+
+
+
+fase one:
+context collection.
+get the follwing document into ./context-collection:
+- n8n Incoming Documents 0.1.6
+- n8n batch update workflow (used in Incoming Documents 0.1.6)
+- n8n batch get workflow (same)
+- n8n supabse batch upsert workflow 
+- read apitools project 
+- figure and collect all other active workflows in n8n instance 
+- incoming-documents.csv real example of the current running gsheet document-repo 
+- collect configuration of the current production incoming documents system (deployed on n8n), to later use in the first document-repo in the system.
+- space holders for missing apikeys / configs / creds etc.
+
+fase two:
+Planing.
+- plan the perfect implementation.
+- plan the perfect testing strategy.
+
+
+fase three:
+Implementation. Test. Loop.
+- [DONE] implement the python system accourding to the plan.
+- [DONE] run the tests and fix any issues that arise. (54 unit tests passing)
+- [DONE] battle test the new implementation (full test coverage, via e2e curl tests), build up tests, and high volume/load tests. (200-row CSV upsert verified composite-key dedup: 6 within-batch + 8 cross-batch noop matches)
+- [DONE] link to supabase table view (studio_url on SupabaseBackendConfig + Open source button in webapp; commit 662ac68)
+- [DONE] active repo source polling / event publishing (poller.py daemon thread, wired in api/__init__.py:start_polling, per-repo flock, snapshot diff -> Kafka producer)
+- [DONE] composite upsert matching rules (UpsertMatchRule on RepoConfig; PostgREST OR-chunked select; commit a9c6f56)
+- [DONE] kafka events emit FULL-row payload on ROW_CHANGED (matches n8n GSheet trigger semantics for seamless 0.1.6 integration)
+- [TODO] fix Supabase studio_url to deep-link to the specific table (currently lands on /database/tables listing all tables)
+- [TODO] 29k-row stress test on real incoming-documents.csv (verify high volume + composite-key dedup leaves zero duplicate HASH / COMPANY_ID+SHORT_DOC_ID / COMPANY_ID+COMPANY_DOC_ID rows)
+- [TODO] deep system analysis / phase-3 summary
+
+fase four:
+N8N Implementation (without editing current workflows).
+- new n8n workflow for creating repo / high volume upserts / verify requested logic and upsert matching logic / delete rows / delete repo / verify all worked properly.
+- new n8n workflows for batch upsert and get that use the new python api to interact with the document repo.
+- new n8n workflow examples for kafka trigger 
+- push them to the running n8n instanse, run, test, verify behviour. loop
+
+
+fase five:
+over look the entire process, suggest improvements, and implement them.
+
+fase six:
+Humen verification and migration.
+provide detailed instruction on how to migrate the existing n8n implmeitation to complete the migration.

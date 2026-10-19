@@ -1,0 +1,232 @@
+# dgo-extend — the office's extension: further office instances, links between them, and apps placed on them
+# (see app.py's docstring).
+#
+# What this container deliberately does NOT have: an SSH client, a key, or the engine socket.
+# Every command that runs on a machine goes through `apps/computers` (/api/computers/<id>/exec) —
+# the one door to the fleet — so this app cannot reach a machine the owner has not approved the
+# office key on, and every action it takes is in the computers app's own log.
+services:
+  dgo-extend:
+    # The image CI publishes for this commit (DGO-41). `pull_policy: missing` means it is
+    # fetched only when it is not here already, so a checkout that has built it is untouched;
+    # the `build:` below stays as the fallback. Needs the GHCR package readable — a package made
+    # from a private repo is private, so `docker login ghcr.io` on a machine that must pull.
+    image: ghcr.io/solomonboltin/digital-office/dgo-extend:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dgo-extend-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: dgo-extend
+    restart: unless-stopped
+    environment:
+      - SENTRY_DSN=${DGO_EXTEND_SENTRY_DSN:-}
+      - DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-bina-deployment}
+      - CONNECTIONS_URL=${CONNECTIONS_URL:-http://connections:8990}
+      - COMPUTERS_URL=${COMPUTERS_URL:-http://computers:8977}
+      - GIT_URL=${GIT_URL:-http://git:8978}
+      - DOMAINS_URL=${DOMAINS_URL:-http://domains:8980}
+      # Where THIS office's checkout lives on the machine that runs it. `bbox` exports it
+      # (scripts/lib.sh), and it is read on the local machine through `computers` — it is the
+      # office's own answer to "which code am I running", which is what a new office is built from.
+      - DGO_HOME_REPO=${BBOX_REPO_HOST:-}
+      - DGO_STATE_DIR=/data
+      # THIS office's own short name on the network (`macbook`, `vps1`, `portable`) — the id a
+      # linked office sees as `<alias>.<office>.console.<domain>` and the name its catalog carries.
+      # Declared here rather than hand-written into the volume: the id is what every link, tile and
+      # vault instance of this office is named from, and it must survive a rebuilt container.
+      - DGO_OFFICE_ID=${DGO_OFFICE_ID:-}
+      # THIS office's own tunnel listen port (net.py:local_listen_port). Empty = the pair's port
+      # (51820). It exists because the DIALING side's source port is the one part of the path this
+      # office does not control: on 2026-10-04 a home network blackholed every packet of the flow
+      # sourced from 51820 while every other flow from the same machine crossed normally, and the link
+      # sat dead for 15 hours with the tunnel counting its handshakes as sent. Only the dialing side's
+      # port may move — the port the far end listens on is the address we dial and never changes here.
+      - DGO_WG_PORT=${DGO_WG_PORT:-}
+      # HOW THIS OFFICE IS REACHED FOR A TUNNEL, when it can be reached at all (pair_api.py): the
+      # host/IP another office dials, and the UDP port `dgo-net` publishes below. An office that sets
+      # neither only DIALS — which is the right answer wherever nothing inbound is possible (the Mac
+      # engine forwards TCP 80/443 to loopback and nothing else). A container cannot learn its
+      # machine's LAN address by looking, so it is a declaration in `.env`.
+      - DGO_WG_ENDPOINT=${DGO_WG_ENDPOINT:-}
+      - DGO_WG_PUBLISH_PORT=${DGO_WG_PUBLISH_PORT:-}
+      # ...and WHY NOT, when it cannot be: the reason `hooks/prepare` measured on the machine
+      # (`wsl-nat`, `engine-guest`) and the owner's own "this office only dials" (DGO_WG_AUTO=0).
+      # The screen says it with what would change it, instead of "none - this office only dials".
+      - DGO_WG_DIAL_ONLY=${DGO_WG_DIAL_ONLY:-}
+      - DGO_WG_AUTO=${DGO_WG_AUTO:-}
+      # WHO a request arriving over a link BECOMES on this office, when the app it reaches declared no
+      # mapping of its own: the account `bbox run` creates at this office's edge. A NAME, not a
+      # credential. Declared here because the other way to learn it is reading `.env` on the machine
+      # through `computers`, and an office with no door to its own machine cannot do that.
+      - DGO_SSO_USER=${AUTHENTIK_BOOTSTRAP_USER:-}
+      - DGO_IDENTITY_DIR=/identity
+      - DGO_REGISTRY_DIR=/registry
+    volumes:
+      # the declarations (one YAML per office) and the run logs — the office's intent, kept
+      - dgo_extend_state:/data
+      # the peer registry: one file per app that runs on a remote office and is shown HERE. The
+      # console mounts this same volume at /app/peers.d (declared in app.json contributes.volumes).
+      - dgo_extend_peers:/data/peers
+      # THIS OFFICE's own identity (Ed25519 + WireGuard, minted by `bbox dgo identity`). Read here,
+      # never written: the private halves exist so that a rebuilt office keeps its name on the
+      # network, and they are carried by `bbox export` because the volume is declared in app.json.
+      - dgo_identity:/identity:ro
+      # the tunnel plan this app RENDERS (net.py) and `dgo-net` applies. Written here, read there:
+      # one owner of the plan, one applier, no second opinion about what the link allows.
+      - dgo_tunnel:/tunnel
+      # THIS OFFICE's OWN compiled registry, read-only (DGO-37). The catalog this office publishes
+      # on a link is a PROJECTION of `.generated/registry/office.apps.json`, so there is exactly one
+      # list of which apps this office has — the compiler's — and never a second one maintained here.
+      # The same mount the console takes, for the same reason.
+      - ../../.generated/registry:/registry:ro
+    networks:
+      - traefik-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://localhost:8983/healthz',timeout=8).status==200 else 1)"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          # Waits on remote machines, computes nothing: one poll per running converge every few
+          # seconds. 0.3 CPU is a ceiling set by the slowest remote, not by concurrency.
+          cpus: '0.3'
+          memory: 160M
+        reservations:
+          cpus: '0.02'
+          memory: 32M
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+
+  # The tunnel, as this app's own sidecar. Its CONFIG is rendered by the app from the declarations
+  # it owns (net.py) and lives in `dgo_tunnel`; this container only APPLIES it. Kept in the app's
+  # compose rather than compiled by layer 0 for one reason: which offices are linked is a declaration
+  # in the app's volume, not a fact of the catalogue.
+  dgo-net:
+    # THE APP'S OWN IMAGE, by the app's own name — one Dockerfile is one image. These two sidecars
+    # carried another name for it (`digital-office-dgo-extend`, behind a knob nothing set), so a
+    # rebuild of the app left its tunnel and its door on the previous build without a word: measured
+    # 2026-10-06, the tunnel ran an entrypoint two hours older than the app that renders its plan.
+    #
+    # …and ONE service builds it: `dgo-extend`. The sidecars name the image and carry no `build:`.
+    # Each of the three had one, and compose stamps the building SERVICE's name on what it builds
+    # (`com.docker.compose.service`), so three builds of one Dockerfile were three image ids under
+    # one tag: rebuilding any one left the other two "not what the files say now" with identical
+    # layers (measured 2026-10-07 — same last layer, three ids). Brought up with the app, as every
+    # bring-up does, a missing image is built once from the app's service and all three are created
+    # from it (compose 5.3.1, measured in a throwaway project); a sidecar started ALONE on a machine
+    # that has never held the image has nothing to build from, and says so.
+    image: ghcr.io/solomonboltin/digital-office/dgo-extend:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    container_name: dgo-net-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: dgo-net
+    restart: unless-stopped
+    # NET_ADMIN to create the interface, NET_RAW for the firewall's replies; /dev/net/tun is the
+    # kernel's tunnel device. Without them the container starts and reports "no tunnel" — which is a
+    # state this app shows, not a crash (see net.py's docstring).
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    sysctls:
+      # A tunnel that forwards must accept packets addressed to the peer's tunnel address.
+      net.ipv4.ip_forward: "1"
+    # The tunnel's one inbound door, for an office that LISTENS (a paired office another one dials).
+    # Off by default in the only way a port mapping can be: it binds LOOPBACK on a port nothing
+    # dials, so an office that never set these publishes nothing reachable. A listening office sets
+    # DGO_WG_PUBLISH_BIND=0.0.0.0 and DGO_WG_PUBLISH_PORT=<its port> in `.env` (and DGO_WG_PORT to the
+    # same number, so the interface listens where the mapping lands) — and opens that UDP port in the
+    # machine's own firewall, which no container can do for it.
+    ports:
+      - "${DGO_WG_PUBLISH_BIND:-127.0.0.1}:${DGO_WG_PUBLISH_PORT:-51839}:${DGO_WG_PUBLISH_PORT:-51839}/udp"
+    volumes:
+      - dgo_tunnel:/tunnel
+    entrypoint: ["/tunnel-entrypoint.sh"]
+    networks:
+      - traefik-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.2'
+          memory: 96M
+        reservations:
+          cpus: '0.02'
+          memory: 16M
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+
+  # The DELIVERY half of a link (DGO-24): what an ALLOWED packet actually reaches.
+  #
+  # `net.py` renders the tunnel and `firewall.py` renders what may ARRIVE — and firewall.py's own
+  # docstring says the rest belongs to someone else: "deciding that it ends up at the app's container
+  # rather than at this container's own stack is FORWARDING ... the permission, not the delivery".
+  # This is that half. It is a proxy rather than a DNAT because the app's address is Docker's, not a
+  # declaration's, and a rendered IP silently stops delivering the day the app is recreated.
+  #
+  # It shares `dgo-net`'s NETWORK NAMESPACE because that is the only place the tunnel's address exists
+  # at all — measured 2026-10-01: wg0/10.79.x.1 lives inside that container, and the machine running
+  # it has no WireGuard interface whatever. It needs NO capability and no firewall of its own: a
+  # connection delivered this way terminates in that namespace, and letting it in is the permission
+  # chain's own list of the served ports (`firewall.py`'s `from_tunnel`) — a second chain would look
+  # right and deliver nothing, because a base chain's `accept` is not final across chains (measured:
+  # a SYN accepted in such a chain was still dropped by the permission chain).
+  #
+  # It mounts the plan read-only: the app has the opinion (linkproxy.py), this only applies it.
+  dgo-link:
+    # the app's own image, built by the app's service (see dgo-net)
+    image: ghcr.io/solomonboltin/digital-office/dgo-extend:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    container_name: dgo-link-${DEPLOYMENT_NAME:-bina-deployment}
+    restart: unless-stopped
+    # NO `hostname:` here, deliberately: with `network_mode: service:…` the container has no network
+    # settings of its own, and Docker refuses the pair ("conflicting options: hostname and the network
+    # mode"). Its name in the namespace is the tunnel container's, which is the correct one — the
+    # address it answers on is `dgo-net`'s.
+    network_mode: "service:dgo-net"
+    depends_on:
+      - dgo-net
+    volumes:
+      - dgo_tunnel:/tunnel:ro
+      # THE DOOR'S OTHER HALF (DGO-32). On a machine whose tunnel runs on the HOST (`wg-quick@wg0`),
+      # the tunnel address is not in this container's namespace, so the serving doors are UNIX SOCKETS
+      # here and a small systemd unit on the machine listens on the address and bridges into them
+      # (`converge.REMOTE_DOOR`). The directory is a BIND under the checkout because both sides have to
+      # see the same files: the socket this process creates, and the one the host process connects to.
+      # Absolute (`BBOX_REPO_HOST`), never relative: compose trims a relative source and mounts an
+      # empty directory instead (measured 2026-10-02 — see ai/context/repo-path-trailing-space-bind-mount.md).
+      - ${BBOX_REPO_HOST:-/var/lib/bbox}/.dgo/doors:/doors
+    entrypoint: ["python3", "/app/link-proxy.py"]
+    deploy:
+      resources:
+        limits:
+          # Copies a few hundred bytes per request and waits: the ceiling is set by the links that
+          # exist, not by this process.
+          cpus: '0.1'
+          memory: 64M
+        reservations:
+          cpus: '0.01'
+          memory: 16M
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+
+volumes:
+  dgo_extend_state:
+  dgo_tunnel:
+  dgo_extend_peers:
+  dgo_identity:
+networks:
+  traefik-network:
+    external: true

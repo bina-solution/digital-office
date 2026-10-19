@@ -1,0 +1,191 @@
+# engine.yaml — the PROJECT ENGINE on macOS: a Linux guest that owns dockerd, driven by Lima.
+#
+# This is the macOS twin of the WSL distro on Windows (ai/context/running-on-wsl.md). On macOS
+# there is no Linux kernel, so the engine has to live in a VM; Lima is the thin, Apache-2.0,
+# redistributable layer over Apple's own Virtualization.framework that boots one. Docker Desktop
+# and OrbStack are proprietary and are never used — see packaging/macos.md.
+#
+# What this guest is, in one line: Ubuntu 24.04 (arm64) + Docker CE 28.5.2 pinned + the repo
+# mounted at the SAME PATH as on the host, so `./bbox run` inside it is byte-for-byte the VPS run.
+#
+# Read by packaging/macos/engine.sh, which passes the sizing (--cpus/--memory/--disk) and the
+# mount (--mount ~:w) as flags — those depend on the machine, the template does not.
+minimumLimaVersion: 2.0.0
+
+# Apple Virtualization.framework, not QEMU: no extra binary to ship, no admin at runtime, and
+# virtiofs mounts (the repo bind-mounts every compose service reads). macOS 13+.
+vmType: vz
+
+# ── the guest image, PINNED ────────────────────────────────────────────────────────────────────
+# A dated Ubuntu cloud image with its sha256, so two machines get the same guest and a bad
+# download fails at the digest, not weeks later as a mystery. Fallbacks to the rolling "release"
+# image exist ONLY so that Ubuntu retiring the dated image does not brick a fresh install; a
+# fallback boot prints which one it used. Kept in step with lima's own _images/ubuntu-24.04.yaml.
+images:
+- location: "https://cloud-images.ubuntu.com/releases/noble/release-20260705/ubuntu-24.04-server-cloudimg-arm64.img"
+  arch: "aarch64"
+  digest: "sha256:7df0201546f75b8bcc1044594c806c35749421ad3c9bc1be2a3ab806cfae39cc"
+- location: "https://cloud-images.ubuntu.com/releases/noble/release-20260705/ubuntu-24.04-server-cloudimg-amd64.img"
+  arch: "x86_64"
+  digest: "sha256:ffe6203da54deeb6db5d2a98a83f9ec8e55f149d3f7ba622e1abe5fa966ee3d6"
+- location: "https://cloud-images.ubuntu.com/releases/noble/release/ubuntu-24.04-server-cloudimg-arm64.img"
+  arch: "aarch64"
+- location: "https://cloud-images.ubuntu.com/releases/noble/release/ubuntu-24.04-server-cloudimg-amd64.img"
+  arch: "x86_64"
+
+# Lima's own containerd is NOT the engine — dockerd is. Off, so nothing competes for cgroups/ports.
+containerd:
+  system: false
+  user: false
+
+# The mount is passed by engine.sh (`--mount "$HOME:w"`): the repo lives under the user's home and
+# must appear at the same absolute path inside the guest, because every compose file bind-mounts
+# host paths (${REPO_ROOT}/…) and dockerd resolves them from INSIDE the guest.
+mountType: virtiofs
+
+# ── ports ──────────────────────────────────────────────────────────────────────────────────────
+# traefik binds :80/:443 inside the guest. On macOS an unprivileged process cannot bind below
+# 1024 (measured 2026-09-17: `nc -l 80` → refused), so the edge lands on 8080/8443 on the host.
+# URLs are therefore http://<app>.localhost:8080 — traefik's Host() matcher ignores the port, so
+# every `-local` router matches unchanged. Everything else forwards port-for-port by default.
+portForwards:
+- guestPort: 80
+  hostPort: 8080
+- guestPort: 443
+  hostPort: 8443
+# ── the pair tunnel: another office on this LAN dials THIS office ───────────────────────────────
+# 51830/udp is the office tunnel's published port (`apps/dgo-extend`: WG_PORT / DGO_WG_PUBLISH_PORT).
+# Without a rule here a Mac office can only DIAL — the guest forwards TCP 80/443 and nothing else, so
+# mac↔mac and mac↔Windows(NAT) could not pair (measured 2026-10-05, contract §C "Who can be
+# dialed"). Three things are deliberate:
+#   · hostIP "0.0.0.0" — Lima's default is 127.0.0.1, and a peer on the network cannot reach loopback;
+#   · hostPort explicit — a UDP rule without one does not match (lima-vm/lima#4040);
+#   · proto udp — supported ONLY by Lima's GRPC forwarder, the default since v1.1.0, so the 2.2.0 this
+#     repo pins (fetch-runtime.sh) has it; the SSH forwarder (LIMA_SSH_PORT_FORWARDER) silently cannot
+#     do UDP, so it must never be set for this engine.
+# The guest can see neither half of this (its Mac's LAN address, or that a packet arrives at all), so
+# engine.sh hands both to it as BBOX_HOST_LAN_ADDR / BBOX_HOST_UDP_PORT — and only when THIS instance
+# really forwards the port — where `apps/dgo-extend/hooks/prepare` turns them into the office's
+# declared address (contract §"the engine's half"). macOS may ask for incoming-connection consent on
+# the first packet; `./bbox engine doctor` says whether the port is really held.
+- guestPort: 51830
+  hostPort: 51830
+  hostIP: "0.0.0.0"
+  proto: udp
+# The engine's socket, exposed on the host for `docker`/`limactl`-free inspection and for any
+# host-side tool that wants the PROJECT engine (never Desktop's). bbox itself runs in-guest.
+- guestSocket: "/var/run/docker.sock"
+  hostSocket: "{{.Dir}}/sock/docker.sock"
+
+hostResolver:
+  hosts:
+    host.docker.internal: host.lima.internal
+
+# ── provisioning: the engine, pinned ───────────────────────────────────────────────────────────
+provision:
+- mode: system
+  script: |
+    #!/bin/bash
+    set -eux -o pipefail
+    sed -i 's/host.lima.internal.*/host.lima.internal host.docker.internal/' /etc/hosts
+- mode: system
+  script: |
+    #!/bin/bash
+    # Swap for the guest. The stack fills the guest's memory on an 8 GB Mac (measured 2026-09-18:
+    # 4.2/4.9 GB at idle, 140 MB free during an image build), and a cloud image ships with NO swap,
+    # so the first spike sends the kernel into reclaim thrash: load average 100+ on 4 cores, health
+    # probes timing out, every host 404 at the edge. Swap turns that into a slow minute.
+    #
+    # 2 GB -> 4 GB (2026-09-28). Two gigabytes was not headroom, it was a second ceiling: measured
+    # 1.9/2.0 GB in use, and once swap is FULL the kernel has nowhere to put a cold page, so the next
+    # allocation is an OOM kill instead of a slowdown. That is how the office browser died twice in two
+    # days (`oom-kill: … task=chromium`, container exit 137, load 90-200 on 4 vCPUs) - and an
+    # OOM-killed Chromium is the event that used to cost a saved login. The guest disk has 23 GB free,
+    # so the price is disk, not RAM. Override with BBOX_VM_SWAP_GB.
+    #
+    # GROWING IS DONE BY ADDING A FILE, NEVER BY `swapoff`. This guest normally arrives here with swap
+    # saturated, and `swapoff` must pull every swapped page back into a RAM that is by definition
+    # short - the one operation guaranteed to fail exactly when it is needed. A second file, enabled
+    # alongside the first, grows the pool with no moment in which there is no swap at all.
+    set -eux -o pipefail
+    SWAP_GB="${BBOX_VM_SWAP_GB:-4}"
+    if [ ! -f /swapfile ]; then
+      fallocate -l "${SWAP_GB}G" /swapfile && chmod 600 /swapfile && mkswap /swapfile
+      echo '/swapfile none swap sw 0 0' >> /etc/fstab
+    fi
+    have_mb="$(awk '/^\/swap/{s+=$3} END{print int(s/1024)}' /proc/swaps)"
+    want_mb=$(( SWAP_GB * 1024 ))
+    if [ "${have_mb:-0}" -lt "${want_mb}" ]; then
+      extra_mb=$(( want_mb - have_mb ))
+      if [ ! -f /swapfile2 ]; then
+        fallocate -l "${extra_mb}M" /swapfile2 && chmod 600 /swapfile2 && mkswap /swapfile2
+        echo '/swapfile2 none swap sw 0 0' >> /etc/fstab
+      fi
+      swapon /swapfile2 || true
+    fi
+    swapon /swapfile || true
+- mode: system
+  script: |
+    #!/bin/bash
+    # Docker CE 28.5.2, PINNED. Docker 29 raises the daemon's hard API floor to 1.40 and caps
+    # DOCKER_MIN_API_VERSION there, so traefik v3.3 (client API 1.24) discovers ZERO routers and
+    # every *.localhost 404s while traefik reports healthy (CLAUDE.md § "Docker 29 does not work").
+    # Same major as the production VPS and the Windows distro. `apt-mark hold` keeps it there.
+    set -eux -o pipefail
+    export DEBIAN_FRONTEND=noninteractive
+    if command -v dockerd >/dev/null 2>&1; then exit 0; fi
+    apt-get update
+    apt-get install -y ca-certificates curl gnupg git python3 python3-yaml rsync jq
+    install -m 0755 -d /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+    chmod a+r /etc/apt/keyrings/docker.asc
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu noble stable" \
+      > /etc/apt/sources.list.d/docker.list
+    apt-get update
+    V='5:28.5.2-1~ubuntu.24.04~noble'
+    C='2.40.3-1~ubuntu.24.04~noble'
+    apt-get install -y "docker-ce=${V}" "docker-ce-cli=${V}" containerd.io docker-buildx-plugin "docker-compose-plugin=${C}"
+    apt-mark hold docker-ce docker-ce-cli docker-compose-plugin
+- mode: system
+  script: |
+    #!/bin/bash
+    # The project endpoint, written EXACTLY as bbox's ensure_project_engine would write it, so
+    # `bbox run` sees no difference and never restarts the daemon (it only rewrites+restarts when
+    # the drop-in differs). /run/bbox-docker.sock is BBOX_DOCKER_SOCK's default.
+    set -eux -o pipefail
+    mkdir -p /etc/systemd/system/docker.service.d
+    printf '%s\n' '[Service]' \
+      'Environment=DOCKER_MIN_API_VERSION=1.24' \
+      'ExecStart=' \
+      'ExecStart=/usr/bin/dockerd -H fd:// -H unix:///run/bbox-docker.sock --containerd=/run/containerd/containerd.sock' \
+      > /etc/systemd/system/docker.service.d/10-bbox-endpoint.conf
+    systemctl daemon-reload
+    # RESTART, not just enable: the package install above already started docker.service, and a
+    # drop-in only takes effect on the next start. Without this the daemon runs, answers on
+    # /var/run/docker.sock, and /run/bbox-docker.sock never appears — bbox then compares the
+    # drop-in, finds it identical, and never restarts either (measured 2026-09-17).
+    systemctl enable docker.service
+    systemctl restart docker.service
+    # The lima user forwards /var/run/docker.sock to the host; it needs to be able to open it.
+    usermod -aG docker "{{.User}}" || true
+
+probes:
+- description: "the project engine answers"
+  script: |
+    #!/bin/bash
+    set -eux -o pipefail
+    if ! timeout 120s bash -c "until sudo docker info >/dev/null 2>&1; do sleep 3; done"; then
+      echo >&2 "dockerd is not answering yet"
+      exit 1
+    fi
+    # No Go-template braces here: Lima renders this script as a template, so a docker
+    # --format '{{…}}' would be eaten by Lima before docker ever saw it.
+    v="$(sudo docker version | awk '/^Server:/{s=1} s && /Version:/{print $2; exit}')"
+    case "${v}" in 28.*) ;; *) echo >&2 "engine is ${v}, expected 28.x"; exit 1 ;; esac
+  hint: See "/var/log/cloud-init-output.log" in the guest (limactl shell bbox sudo cat /var/log/cloud-init-output.log)
+
+message: |
+  The bbox project engine is up (Docker 28.x inside a Lima/vz guest).
+  Host-side socket: {{.Dir}}/sock/docker.sock
+  Run the stack:    ./bbox run          (bbox hands itself into the guest)
+  Open it:          http://console.localhost:8080

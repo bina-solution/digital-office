@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  autounattend.xml — install Windows 10 with no human at the keyboard.
+
+  Windows Setup looks for a file with this exact name at the ROOT of any attached removable or
+  optical media, so it is burned to its own tiny ISO and presented as a second CD.
+
+  WHY THIS EXISTS
+  Testing BinaOS-Setup.exe needs a Windows machine that has never seen this platform. Driving the
+  Windows installer by hand over VNC is 40 minutes of screenshot-and-click that cannot be repeated,
+  cannot run unattended, and produces a slightly different machine every time. This file makes the
+  guest reproducible.
+
+  DELIBERATE CHOICES
+  * AHCI disk and an e1000 NIC, not virtio. Windows 10 has in-box drivers for both, so setup needs
+    no driver injection from a virtio CD - which is the step that otherwise forces interaction.
+  * Local admin with autologon: WSL2 wants a real interactive session, and `wsl ––import` is
+    deliberately non-elevated, so the installer must run as a logged-in user rather than a service.
+  * OpenSSH Server is enabled on first logon so the rest of the test is scriptable from Linux.
+-->
+<unattend xmlns="urn:schemas-microsoft-com:unattend">
+
+  <settings pass="windowsPE">
+    <component name="Microsoft-Windows-International-Core-WinPE"
+               processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35"
+               language="neutral" versionScope="nonSxS">
+      <SetupUILanguage><UILanguage>en-US</UILanguage></SetupUILanguage>
+      <InputLocale>en-US</InputLocale>
+      <SystemLocale>en-US</SystemLocale>
+      <UILanguage>en-US</UILanguage>
+      <UserLocale>en-US</UserLocale>
+    </component>
+
+    <component name="Microsoft-Windows-Setup"
+               processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35"
+               language="neutral" versionScope="nonSxS">
+      <DiskConfiguration>
+        <!-- WillWipeDisk: the guest disk is created fresh for each run, so there is nothing to lose
+             and everything to gain from not asking. -->
+        <Disk wcm:action="add" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+          <DiskID>0</DiskID>
+          <WillWipeDisk>true</WillWipeDisk>
+          <CreatePartitions>
+            <!-- MBR, not GPT/ESP: the guest boots through SeaBIOS because OVMF could not read the
+                 install DVD (it timed out and fell through to PXE). Two partitions - a small active
+                 System Reserved one holding the boot files, then Windows taking the rest. -->
+            <CreatePartition wcm:action="add">
+              <Order>1</Order><Type>Primary</Type><Size>500</Size>
+            </CreatePartition>
+            <CreatePartition wcm:action="add">
+              <Order>2</Order><Type>Primary</Type><Extend>true</Extend>
+            </CreatePartition>
+          </CreatePartitions>
+          <ModifyPartitions>
+            <ModifyPartition wcm:action="add">
+              <Order>1</Order><PartitionID>1</PartitionID>
+              <Label>System</Label><Format>NTFS</Format><Active>true</Active>
+            </ModifyPartition>
+            <ModifyPartition wcm:action="add">
+              <Order>2</Order><PartitionID>2</PartitionID>
+              <Label>Windows</Label><Format>NTFS</Format><Letter>C</Letter>
+            </ModifyPartition>
+          </ModifyPartitions>
+        </Disk>
+      </DiskConfiguration>
+
+      <ImageInstall>
+        <OSImage>
+          <InstallFrom>
+            <!-- By NAME, not index: index numbering differs between consumer and business ISOs, and
+                 picking the wrong index installs a different edition without saying so. -->
+            <MetaData wcm:action="add" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+              <Key>/IMAGE/NAME</Key>
+              <Value>Windows 10 Pro</Value>
+            </MetaData>
+          </InstallFrom>
+          <InstallTo><DiskID>0</DiskID><PartitionID>2</PartitionID></InstallTo>
+        </OSImage>
+      </ImageInstall>
+
+      <UserData>
+        <AcceptEula>true</AcceptEula>
+        <FullName>BinaOS Test</FullName>
+        <Organization>BinaOS</Organization>
+        <!-- The generic Windows 10 Pro KMS client setup key. It selects the edition during setup and
+             does NOT activate; the guest runs in the normal evaluation grace period, which is all a
+             throwaway test VM needs. -->
+        <ProductKey><Key>W269N-WFGWX-YVC9B-4J6C9-T83GX</Key></ProductKey>
+      </UserData>
+    </component>
+  </settings>
+
+  <settings pass="oobeSystem">
+    <!-- The locales have to be repeated HERE, not only in windowsPE. Without this component OOBE
+         still shows "Let's start with region. Is this right?" and then the keyboard-layout pages,
+         and an unattended install sits on them forever with nobody to click Yes. HideEULAPage and
+         friends below do not cover those pages - they are driven by whether the locale is already
+         known. Learned the hard way: the install ran perfectly all the way to OOBE and then stopped
+         on a region picker. -->
+    <component name="Microsoft-Windows-International-Core"
+               processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35"
+               language="neutral" versionScope="nonSxS">
+      <InputLocale>en-US</InputLocale>
+      <SystemLocale>en-US</SystemLocale>
+      <UILanguage>en-US</UILanguage>
+      <UILanguageFallback>en-US</UILanguageFallback>
+      <UserLocale>en-US</UserLocale>
+    </component>
+
+    <component name="Microsoft-Windows-Shell-Setup"
+               processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35"
+               language="neutral" versionScope="nonSxS">
+      <OOBE>
+        <HideEULAPage>true</HideEULAPage>
+        <HideLocalAccountScreen>true</HideLocalAccountScreen>
+        <HideOEMRegistrationScreen>true</HideOEMRegistrationScreen>
+        <HideOnlineAccountScreens>true</HideOnlineAccountScreens>
+        <HideWirelessSetupInOOBE>true</HideWirelessSetupInOOBE>
+        <ProtectYourPC>3</ProtectYourPC>
+        <NetworkLocation>Work</NetworkLocation>
+      </OOBE>
+
+      <UserAccounts>
+        <LocalAccounts>
+          <LocalAccount wcm:action="add" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+            <Name>binaos</Name>
+            <DisplayName>BinaOS Test</DisplayName>
+            <Group>Administrators</Group>
+            <Password><Value>BinaOS!test1</Value><PlainText>true</PlainText></Password>
+          </LocalAccount>
+        </LocalAccounts>
+      </UserAccounts>
+
+      <!-- WSL2 needs a real interactive session, and `wsl ––import` is deliberately non-elevated,
+           so the installer has to run as a logged-in user rather than as a service. -->
+      <AutoLogon>
+        <Enabled>true</Enabled>
+        <Username>binaos</Username>
+        <LogonCount>99</LogonCount>
+        <Password><Value>BinaOS!test1</Value><PlainText>true</PlainText></Password>
+      </AutoLogon>
+
+      <TimeZone>UTC</TimeZone>
+
+      <FirstLogonCommands>
+        <!-- SSH first: everything after this point is driven from the Linux host. -->
+        <SynchronousCommand wcm:action="add" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+          <Order>1</Order>
+          <Description>Enable OpenSSH Server</Description>
+          <CommandLine>powershell -NoProfile -ExecutionPolicy Bypass -Command "Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0; Set-Service -Name sshd -StartupType Automatic; Start-Service sshd"</CommandLine>
+        </SynchronousCommand>
+        <SynchronousCommand wcm:action="add" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+          <Order>2</Order>
+          <Description>Allow SSH through the firewall</Description>
+          <CommandLine>powershell -NoProfile -ExecutionPolicy Bypass -Command "New-NetFirewallRule -Name sshd -DisplayName 'OpenSSH Server' -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 22"</CommandLine>
+        </SynchronousCommand>
+        <SynchronousCommand wcm:action="add" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+          <Order>3</Order>
+          <Description>Enable WSL</Description>
+          <!-- ONE feature per command. Chaining both dism calls behind a ';' in a single
+               PowerShell -Command left VirtualMachinePlatform Disabled while WSL showed Enabled -
+               so wsl.exe existed, WSL2 could not run, and the installer would have failed at
+               `wsl ––import` for a reason with no obvious connection to the installer. Separate
+               SynchronousCommands are also individually retried and individually logged. -->
+          <CommandLine>powershell -NoProfile -ExecutionPolicy Bypass -Command "dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart"</CommandLine>
+        </SynchronousCommand>
+        <SynchronousCommand wcm:action="add" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+          <Order>4</Order>
+          <Description>Enable the virtual machine platform (WSL2 needs it; WSL1 does not)</Description>
+          <CommandLine>powershell -NoProfile -ExecutionPolicy Bypass -Command "dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart"</CommandLine>
+        </SynchronousCommand>
+        <SynchronousCommand wcm:action="add" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+          <Order>5</Order>
+          <Description>Mark the guest ready</Description>
+          <CommandLine>cmd /c echo ready &gt; C:\binaos-guest-ready.txt</CommandLine>
+        </SynchronousCommand>
+        <SynchronousCommand wcm:action="add" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+          <Order>6</Order>
+          <Description>Reboot into the enabled features</Description>
+          <CommandLine>shutdown /r /t 30 /c "enabling WSL"</CommandLine>
+        </SynchronousCommand>
+      </FirstLogonCommands>
+    </component>
+  </settings>
+</unattend>

@@ -1,0 +1,781 @@
+{
+  "updatedAt": "2026-02-09T12:20:48.749Z",
+  "createdAt": "2025-09-27T00:54:56.342Z",
+  "id": "indoxV2QueryPurchaseId01",
+  "name": "Query PURCHASE_ID",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "72d31359-d3a5-4246-af26-22a901684d38",
+              "leftValue": "={{ $json.error }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -1968,
+        496
+      ],
+      "id": "f47c8c5f-cb21-45e7-abe9-23a29ffb4a95",
+      "name": "If OCR Error"
+    },
+    {
+      "parameters": {
+        "errorMessage": "=Failed to perform ocr {{ $json.error }}"
+      },
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        -1744,
+        480
+      ],
+      "id": "d2eb55d6-1349-467d-a23f-a7c757ad7951",
+      "name": "Stop and Error"
+    },
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "API_TOOLS_ID"
+            },
+            {
+              "name": "LINK"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -1536,
+        16
+      ],
+      "id": "fe5ed063-2b44-45f7-aafc-e0d420f4b26d",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $('Google Sheets Trigger').item.json.LINK }}",
+          "mode": "url"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -1968,
+        672
+      ],
+      "id": "63a439af-f2ca-4c30-8fc8-cd9802974e74",
+      "name": "Download file2"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://apitools.hacohen.bina-solutions.co.il/documentOcr",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "dont_return_ocr",
+              "value": "={{true}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "31e21625-c6da-4891-a081-d8e4270b45ed",
+      "name": "Document OCR1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1744,
+        672
+      ],
+      "executeOnce": false
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -1248,
+        16
+      ],
+      "id": "0ec3d1ab-4673-41d1-9e88-1ea6abaf45c7",
+      "name": "Start"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "765d597c-0388-415d-9131-9e87b840f7d4",
+              "name": "ok",
+              "value": "={{ !!$json.result }}",
+              "type": "boolean"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        480,
+        176
+      ],
+      "id": "88134db3-b840-43bc-9f66-346973a7ad3b",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "indoxV2UploadApiTools01",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/indoxV2UploadApiTools01",
+          "cachedResultName": "Upload Doc To API TOOLS"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "HASH": "={{ $json.API_TOOLS_ID }}",
+            "LINK": "={{ $json.LINK || null }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "LINK",
+              "displayName": "LINK",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "HASH",
+              "displayName": "HASH",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "each",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        -992,
+        16
+      ],
+      "id": "73761545-7fe3-425d-95cd-a1bf69a40d4d",
+      "name": "Upload OR Get API_TOOLS_ID"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "40af2929-a4ed-4fc0-9ec8-eb392307d940",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -784,
+        16
+      ],
+      "id": "0bee779a-c387-4d08-9e53-5008c8b65f97",
+      "name": "IS OK"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -480,
+        176
+      ],
+      "id": "cdc6542e-a35f-4b20-85f9-98b99f0262f7",
+      "name": "Failed API_TOOLS_ID"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e69518aa-a04e-4af6-99a7-f0488ebb8317",
+              "name": "result",
+              "value": "={{ $json.result?.result || null}}",
+              "type": "string"
+            },
+            {
+              "id": "35c8afed-91ae-4cac-bfd4-93fca0489c9a",
+              "name": "file_id",
+              "value": "={{ $json.file_id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        144,
+        -128
+      ],
+      "id": "3dd67ed1-e52b-4aac-95b3-1e3ed95f6496",
+      "name": "Result"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "9a2c300b-ed4f-4d25-af27-90742262814b",
+              "leftValue": "={{ $json?.result?.result }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -256,
+        -112
+      ],
+      "id": "cd7f63e1-c09f-459b-b231-c7cc16af014c",
+      "name": "If has results"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"purchase_order_id_query\": {\n    \"action\": \"find after\",\n    \"action_value\": [\n      \"מס' אצל לקוח\",\n      \"מס' הזמנת לקוח:\",\n      \"מס הזמנת לקוח\",\n      \"הזמנת לקוח:\",\n      \":הזמ' מקור\",\n      \"הזמנת רכש מספר\",\n      \"הזמנת רכש מס\",\n      \"מס הזמנת רכש\",\n      \"ע\\\"ס הזמנות\",\n      \"---- מס' הזמנה\",\n      \"מס' הזמנה\",\n      \"הזמנת רכש\",\n      \"הזמנתכם\",\n      \"מהזמנה\",\n      \"הזמנה\"\n    ],\n    \"value_validations\": [\n        {\n            \"validation_type\": \"has_number\"\n        },\n        {\n            \"validation_type\": \"length_greater_than\",\n            \"validation_value\": 3\n        },\n        { \"validation_type\": \"length_less_than\", \"validation_value\": 20 }\n    ],\n    \"is_rtl\": true\n  }\n}\n\n",
+        "options": {}
+      },
+      "id": "f5ec5361-25f6-4f4f-9484-18dd96065c70",
+      "name": "PURCHASE_ID Query",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -992,
+        -224
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"purchase_order_id_query\": {\n    \"action\": \"find below\",\n    \"action_value\": [\"מס הזמנת רכש\",\"מס' הזמנה\",\"הזמנת רכש\",\"הזמנתכם\"],\n    \"value_validations\": [\n        {\n            \"validation_type\": \"has_number\"\n        },\n        {\n            \"validation_type\": \"length_greater_than\",\n            \"validation_value\": 3\n        },\n        { \"validation_type\": \"length_less_than\", \"validation_value\": 20 }\n    ],\n    \"is_rtl\": true\n  }\n}\n\n",
+        "options": {}
+      },
+      "id": "8d1a8e99-62ec-4cf1-9fda-5150875e0624",
+      "name": "PURCHASE_ID Query1",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -768,
+        -224
+      ]
+    },
+    {
+      "parameters": {
+        "content": "Fails\nhttps://drive.google.com/file/d/1hWvy2s7LDqM3hZ3FvCG2arVVgjckmO2Q/edit\n\nhttps://drive.google.com/file/d/1sX0UIYbobjQCSuPruFRK5rDUA78QCWxV/edit"
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1264,
+        464
+      ],
+      "id": "63cc1a6d-7dae-4c86-b1bc-8b4aa0331296",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://apitools.hacohen.bina-solutions.co.il/documentJsonQuery",
+        "sendBody": true,
+        "specifyBody": "=json",
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "jsonBody": "={\n  \"file_id\": \"{{ $('Upload OR Get API_TOOLS_ID').item.json.file_id }}\",\n  \"ocr_json_query\": {{ $('PURCHASE_ID Query1').first().json.purchase_order_id_query.toJsonString() }}\n}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "c237926e-fb50-411f-8ffb-cae7cd2d8f76",
+      "name": "Extract BELOW",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -64,
+        0
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 2100,
+      "maxTries": 3,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://apitools.hacohen.bina-solutions.co.il/documentJsonQuery",
+        "sendBody": true,
+        "specifyBody": "=json",
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "jsonBody": "={\n  \"file_id\": \"{{ $('Upload OR Get API_TOOLS_ID').item.json.file_id }}\",\n  \"ocr_json_query\": {{ $('PURCHASE_ID Query').first().json.purchase_order_id_query.toJsonString() }}\n}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "cb6ae2d6-f50f-4f49-a4da-c4d3e83cb4d9",
+      "name": "Extract AFTER",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -480,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -240,
+        176
+      ],
+      "id": "c155ae11-00b5-4507-ae18-24688ad69d29",
+      "name": "Map Query Error"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        160,
+        176
+      ],
+      "id": "d5bedd4f-8e73-4e00-8c35-b9220a2acbaa",
+      "name": "Map Query Error1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "9a2c300b-ed4f-4d25-af27-90742262814b",
+              "leftValue": "={{ $json?.result?.result }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        320,
+        544
+      ],
+      "id": "39facb6d-d7ac-4c48-ac9f-57f2a9b12c96",
+      "name": "If has results1"
+    },
+    {
+      "parameters": {
+        "text": "={{ $('Extract BELOW').item.json.result.error.full_text }}",
+        "attributes": {
+          "attributes": [
+            {
+              "name": "order_id",
+              "description": "=order id, usually after {{ $('PURCHASE_ID Query').first().json.purchase_order_id_query.toJsonString() }} or below {{ $('PURCHASE_ID Query1').first().json.purchase_order_id_query.toJsonString() }}\n"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.informationExtractor",
+      "typeVersion": 1.2,
+      "position": [
+        560,
+        608
+      ],
+      "id": "692ecb97-0d13-4b81-a28d-e1a1f5ead398",
+      "name": "Information Extractor"
+    },
+    {
+      "parameters": {
+        "model": "qwen2.5vl:3b",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmOllama",
+      "typeVersion": 1,
+      "position": [
+        560,
+        752
+      ],
+      "id": "fec45962-77dd-4040-afec-c6d528a6e7a5",
+      "name": "Ollama Model",
+      "credentials": {
+        "ollamaApi": {
+          "id": "7EtGaV94DlDDrs7q",
+          "name": "Ollama account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "If OCR Error": {
+      "main": [
+        [
+          {
+            "node": "Stop and Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download file2": {
+      "main": [
+        [
+          {
+            "node": "Document OCR1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Upload OR Get API_TOOLS_ID",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "PURCHASE_ID Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload OR Get API_TOOLS_ID": {
+      "main": [
+        [
+          {
+            "node": "IS OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IS OK": {
+      "main": [
+        [
+          {
+            "node": "Extract AFTER",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Failed API_TOOLS_ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Failed API_TOOLS_ID": {
+      "main": [
+        [
+          {
+            "node": "Map Query Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Result": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If has results": {
+      "main": [
+        [
+          {
+            "node": "Result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract BELOW",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PURCHASE_ID Query": {
+      "main": [
+        [
+          {
+            "node": "PURCHASE_ID Query1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract BELOW": {
+      "main": [
+        [
+          {
+            "node": "Result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Map Query Error1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract AFTER": {
+      "main": [
+        [
+          {
+            "node": "If has results",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Map Query Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map Query Error": {
+      "main": [
+        [
+          {
+            "node": "Map Query Error1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map Query Error1": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If has results1": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Information Extractor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Information Extractor",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": {
+    "When Executed by Another Workflow": [
+      {
+        "json": {
+          "API_TOOLS_ID": "915f80f8c1f5f3e157c4225871e7ac8b",
+          "LINK": "https://drive.google.com/file/d/1G4szLHyz7GNcaUsjvjimF7WNTwAb47Kf"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      }
+    ]
+  },
+  "versionId": "9233a5a2-d7ef-4eac-9297-efec25901822",
+  "activeVersionId": "3fada830-d9be-4de9-ae78-810f1e6ba445",
+  "versionCounter": 92,
+  "triggerCount": 0,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2025-09-27T00:54:56.342Z",
+      "createdAt": "2025-09-27T00:54:56.342Z",
+      "role": "workflow:owner",
+      "workflowId": "indoxV2QueryPurchaseId01",
+      "projectId": "EChUnhWXmjrEc3fG",
+      "project": {
+        "updatedAt": "2024-09-26T18:07:08.765Z",
+        "createdAt": "2024-09-26T17:59:24.039Z",
+        "id": "EChUnhWXmjrEc3fG",
+        "name": "Shlomo Bolo <person8@example.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null
+      }
+    }
+  ]
+}

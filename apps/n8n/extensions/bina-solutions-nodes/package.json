@@ -1,0 +1,37 @@
+{
+  "name": "bina-solutions-nodes",
+  "version": "0.1.0",
+  "description": "Nodes for operations in Bina Solutions Ecosystem",
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepare": "npm run build"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "@types/node": "^20.11.0",
+    "n8n-workflow": "^1.47.0"
+  },
+  "peerDependencies": {
+    "n8n-workflow": "*"
+  },
+  "dependencies": {
+  },
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "nodes": [
+      {
+        "name": "HelloWorld.node.js",
+        "type": "dist/nodes/HelloWorld/HelloWorld.node.js"
+      },
+      {
+        "name": "Calculator.node.js",
+        "type": "dist/nodes/Calculator/Calculator.node.js"
+      },
+      {
+        "name": "TableSheet.node.js",
+        "type": "dist/nodes/TableSheet/TableSheet.node.js"
+      }
+    ]
+  }
+}

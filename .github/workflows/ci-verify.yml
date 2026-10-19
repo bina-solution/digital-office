@@ -1,0 +1,755 @@
+name: ci-verify
+
+# Brings the self-hosted stack up from scratch (like a fresh `down -v` + `up -d` on
+# the dev laptop) and asserts each app came up correctly from the DECLARATIVE config
+# (compose + .env + blueprints). See scripts/ci-verify.sh.
+#
+# Scope: the FULL stack EXCEPT apitools (a headless OCR backend with no UI — it is
+# built and tested in indox-e2e, and stripping it keeps this UI-verify stack lean).
+# chat now builds in-repo, so it runs here and its admin panel is
+# screenshotted. External-API
+# features (Google Vision, LLM keys) are NOT exercised — CI uses generated secrets and
+# local-only paths. Optional repo secret N8N_ENCRYPTION_KEY makes committed n8n
+# credentials decrypt (not required; import/count check passes either way).
+
+on:
+  push:
+    branches: [main, shlomo-laptop, release-v2-lockin, platform-os-refactor]
+    # The auto-publish step below commits the refreshed scorecard/screenshots back
+    # to .ci-cd/ with [skip ci]; ignoring that path is a second guard against loops.
+    paths-ignore: ['.ci-cd/**']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-verify-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write   # publish step pushes the refreshed .ci-cd/ back to the branch
+  checks: write     # named JUnit Check Run
+
+jobs:
+  verify:
+    # The CI_VERIFY_PAUSED switch existed for one reason: this lane needs the FULL stack, the
+    # self-hosted DinD box was a 2-vCPU machine that could not host it, and the GitHub-hosted
+    # fallback was billing-blocked — so the only options were "skip" or "burn minutes".
+    # Both premises are gone: the lane now runs on the portable runner (4 cores / 15 GB — more
+    # capable than the 2-vCPU VPS) where minutes are free, so it runs unconditionally again.
+    # Re-add an `if:` here if you ever need to gate it; it is no longer a cost decision.
+    runs-on: [self-hosted, portable]
+    timeout-minutes: 50
+    env:
+      # Everything except apitools (headless OCR backend, no UI) and the redundant
+      # n8n-worker-2 replica (+its runner) — dropped to free runner CPU/RAM so
+      # authentik/n8n initialise reliably. worker-1 still verifies the worker path.
+      # chat IS included (in-repo now) so its admin panel is screenshotted.
+      # SERVICES is DERIVED (see the "Derive SERVICES" step). No roots = every app enabled in
+      # platform.state.yaml, i.e. the whole platform — which is what a deployment-verify lane
+      # means. The excludes below reproduce this lane's PREVIOUS hand-written set exactly, so
+      # behaviour is unchanged; what changes is that a newly added service now joins this lane
+      # automatically unless someone deliberately lists it here.
+      #
+      # WORTH REVIEWING: this lane calls itself the full-stack verify, yet these excludes show it
+      # never started console, connections, drive, mail, my-docs, notifications or app-management.
+      # That was invisible while the list was hand-written; it is now explicit. Deleting entries
+      # from LANE_EXCLUDE is how you widen the lane.
+      # `webmail`, `meta` and `studio` were removed from this list when roundcube was deleted and
+      # supabase studio + postgres-meta moved to the gallery app `supabase-studio`. They were dead
+      # entries: --exclude on a service that no longer exists now warns rather than silently
+      # ignoring, which is what surfaced them.
+      LANE_EXCLUDE: >-
+        apitools,app-management,console,connections,drive,
+        my-docs,notifications,inbox,mailview,mailserver,
+        incoming-documents,
+        n8n-worker-2,n8n-worker-2-runners
+    steps:
+      - uses: actions/checkout@v4
+
+      # apitools is excluded via LANE_EXCLUDE above, so the derived SERVICES never names it.
+      # The old "Strip apitools service" step that edited production/compose{,.override}.yml is
+      # gone with those files — service selection is the capability graph's job now.
+
+      - name: Cap CPU limits to the 2-vCPU runner (prod sizes some services higher)
+        run: |
+          set -euo pipefail
+          # docker compose up ENFORCES deploy.resources.limits.cpus and errors if a
+          # service asks for more than the host has (e.g. browser42-browser cpus '3' on a
+          # 2-vCPU runner). Cap every `cpus: 'N'` to <= 2 across the compose files; the
+          # committed values stay correct for the bigger prod host.
+          python3 scripts/ci/cap-cpus.py
+
+      - name: Generate CI .env (random secrets; local *.localhost over http)
+        env:
+          N8N_ENCRYPTION_KEY_SECRET: ${{ secrets.N8N_ENCRYPTION_KEY }}
+        run: |
+          chmod +x scripts/ci-env.sh
+          ./scripts/ci-env.sh
+
+      - name: Validate compose
+        run: ./scripts/dc config -q
+
+      - name: Derive SERVICES from the capability graph
+        run: |
+          set -euo pipefail
+          # No --for: the closure is every app enabled in platform.state.yaml (the whole
+          # platform), which is what "deployment verify" means. LANE_EXCLUDE is the deliberate,
+          # reviewable trim — see the comment on it in this job's env.
+          bash scripts/ci/derive-services.sh
+
+      - name: Bring up stack (authentik-first, then the rest)
+        run: |
+          set -euo pipefail
+          chmod +x bbox scripts/* 2>/dev/null || true   # bbox is the deployment CLI used below
+          # traefik-network is declared external (created out-of-band on the host).
+          . ./scripts/lib.sh && ensure_network   # one implementation (scripts/lib.sh)
+          # Cold CI runner: authentik migrations + blueprint + embedded-outpost sync take a while,
+          # so give `bbox run --wait` a generous ceiling (same gate local uses, just more headroom).
+          export BBOX_WAIT_TIMEOUT=600
+          # Phase 1 — authentik + redis ALONE. Authentik's migrations + serial blueprint application
+          # are CPU-heavy; giving them uncontended cores here (instead of racing the whole stack)
+          # cuts init from ~20 min to a few. `bbox run` --waits until the authentik-bootstrap SENTINEL
+          # is HEALTHY = SSO truly ready (blueprint applied AND the embedded outpost serving every
+          # gated host). Replaces the old proxyprovider DB-count poll, which only proved rows-written
+          # (L2), not outpost-serving (L3) — the gap that caused transient *.localhost 404s.
+          ./bbox run authentik-postgres authentik-server authentik-worker authentik-bootstrap redis
+          # Phase 2 — everything else (build the custom images now); --wait gates the rest too.
+          ./bbox run --build $SERVICES
+          ./bbox run $SERVICES   # reconcile any "created" stragglers
+          echo "---- initial state ----"
+          ./scripts/dc ps
+
+      - name: Verify declarative bring-up
+        run: |
+          chmod +x scripts/ci-verify.sh scripts/ci-screenshots.sh apps/n8n/hooks/push
+          ./scripts/ci-verify.sh   # writes ci-artifacts/ci-results.junit.xml + ci-summary.md (-> $GITHUB_STEP_SUMMARY)
+
+      # The INDOX full-system E2E runs in the FAST lane (.github/workflows/indox-e2e.yml —
+      # lean stack, ~3x quicker feedback). This lane verifies the full deployment bring-up.
+      - name: Capture app screenshots (browser42)
+        if: always()
+        run: ./scripts/ci-screenshots.sh
+
+      - name: Publish verification report (named per-app checks)
+        if: always()
+        uses: mikepenz/action-junit-report@v5
+        with:
+          report_paths: ci-artifacts/ci-results.junit.xml
+          check_name: deployment-verification
+          detailed_summary: true
+          include_passed: true
+          fail_on_failure: false
+
+      - name: Upload verification artifacts (report + screenshots)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-verify-${{ github.run_number }}
+          path: ci-artifacts/
+          if-no-files-found: ignore
+
+      # Publish the scorecard + screenshots into committed .ci-cd/ so the
+      # observability is browsable on the repo page (not just inside this run).
+      # Runs on push + manual dispatch (NOT pull_request — forks have no write
+      # token). Commit carries [skip ci] and .ci-cd/** is in paths-ignore → no loop.
+      - name: Publish observability to .ci-cd/ (commit back)
+        if: always() && github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+          chmod +x scripts/ci-publish.sh
+          export CI_PUBLISH_DATE="$(date -u '+%Y-%m-%d %H:%M UTC')"
+          ./scripts/ci-publish.sh ci-artifacts
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f .ci-cd
+          if git diff --cached --quiet; then
+            echo "No .ci-cd changes to publish."; exit 0
+          fi
+          git commit -m "ci(observability): publish run #${{ github.run_number }} scorecard + screenshots [skip ci]"
+          # Rebase the single publish commit onto the current branch tip, then push.
+          git push origin "HEAD:${GITHUB_REF_NAME}" || echo "push skipped (branch advanced or no write access) — artifacts still uploaded."
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          echo "==== docker ps -a ===="; docker ps -a || true
+          for c in authentik-server-ci authentik-worker-ci authentik-bootstrap-ci n8n-ci \
+                   glitchtip-ci browser42-browser-ci portainer-ci machine-ci any-concurrency-ci; do
+            echo "==== docker logs: $c ===="; docker logs --tail 60 "$c" 2>&1 || true
+          done
+
+      - name: Teardown (wipe volumes)
+        if: always()
+        run: ./bbox reset --force --remove-orphans || ./scripts/dc down -v --remove-orphans || true
+
+  # ── platform-OS invariants ────────────────────────────────────────────────
+  # These are cheap, need no stack, and exist so the app-ownership model cannot
+  # silently decay back into a second home for services.
+  platform-invariants:
+    runs-on: [self-hosted, portable]
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/ci/pip-ensure.sh yaml:pyyaml
+      - name: G5 — nothing lives outside apps/
+        run: python3 scripts/refactor/ownership-lint.py --strict
+      - name: G7 — no bare `docker compose` (silent no-op under the app model)
+        run: python3 scripts/refactor/compose-invocation-lint.py
+      - name: G9 — layering invariant (a base app may never name a layer-3 app)
+        run: python3 scripts/refactor/layering-lint.py --strict
+      # G31 — G9's blind spot. It scans platform-base/ but never looked at LAYER 0, which is where
+      # app knowledge actually piled up: bbox minted portainer's admin password on every run (for a
+      # gallery app that ships disabled), chmod'ed traefik's acme.json, and lib.sh carried a whole
+      # browser42-keyed function into every entry point. G9 passed the entire time. Ratcheted: the
+      # three known debts are listed in the script with their task ids, anything new fails.
+      - name: G31 — layer 0 carries no app-specific logic
+        run: |
+          python3 scripts/refactor/layer0-lint.py --self-test
+          python3 scripts/refactor/layer0-lint.py
+      # G32 — G7 checks that compose carries the compiled -f list. It never checked WHICH compose,
+      # or which ENGINE. `docker compose` is a plugin search that resolves to Docker Desktop's
+      # binary wherever Desktop is installed, and a /var/run/docker.sock bind is Desktop's socket
+      # under WSL integration — the hijack that made traefik discover zero routers while reporting
+      # healthy, 404ing every gated host. packaging/make-runtime-compose.py, which produces the file
+      # the SHIPPED ARTIFACT boots from, was calling bare `docker compose` the whole time.
+      - name: G32 — no engine or compose bypass
+        run: |
+          python3 scripts/refactor/engine-bypass-lint.py --self-test
+          python3 scripts/refactor/engine-bypass-lint.py
+      # G33 — platform.state.yaml had FOUR writers and two spellings ({enabled: bool} vs
+      # {state: …, by: …}), which is why disposition() must accept both and why three inline
+      # parsers in app.py drifted from it. One writer, one shape, one parser.
+      - name: G33 — one writer of platform.state.yaml
+        run: |
+          python3 scripts/refactor/state-writer-lint.py --self-test
+          python3 scripts/refactor/state-writer-lint.py
+      # G34 — `attic/` was deleted on the strength of a README that said nothing referenced it. Two
+      # things did: THIS repo's indox-e2e lane booted a compose stack out of it, and
+      # digital-office/sim/build.mjs read a dashboard html out of it. The survivor moved to
+      # legacy/feature-validation and legacy/README.md now declares its consumers — but a table in a
+      # README is prose. This is the mechanical half: a reference into legacy/ must be on the
+      # allow-list in the gate, with a reason. Comments and .md docs are not references.
+      - name: G34 — every reference into legacy/ is declared
+        run: |
+          python3 scripts/refactor/legacy-ref-lint.py --self-test
+          python3 scripts/refactor/legacy-ref-lint.py
+      # G35 — a publisher selector from the native-group proof leaked into a proposed generic action
+      # API. Historical evidence remains intact, but operative Browser42 surfaces must derive all
+      # site behavior from the task and live inspection rather than compiled-in fixture knowledge.
+      - name: G35 — Browser42 contains no incident fixtures
+        run: |
+          python3 scripts/refactor/browser42-site-neutrality-lint.py --self-test
+          python3 scripts/refactor/browser42-site-neutrality-lint.py
+      # G22 ran on the `fresh` lane only, so a compose-profile gate could reach main without CI ever
+      # looking. Found by `scripts/ci/gates.sh --verify-ci`, which is the point of that check.
+      - name: G22 — no app gates its services behind a compose profile
+        run: python3 scripts/refactor/profile-gate-lint.py
+      # The gate LIST is scripts/ci/gates.sh. This asserts the steps above still match it, so a gate
+      # added to the list cannot quietly skip CI (and vice versa).
+      - name: gates — CI enumeration matches the canonical list
+        run: bash scripts/ci/gates.sh --verify-ci
+      # G25 — a declared capability must actually be CONSUMED. Three apps declared
+      # `use: sql (requires)`, the resolver pulled the postgres provider into the closure and
+      # ordered bring-up around it, and then all three connected to a Postgres of their own: FOUR
+      # servers across THREE major versions where the graph says there is one. The declaration was
+      # decorative, and nothing noticed because nothing checked. An app that genuinely needs its own
+      # instance says so with `own_instance` + `reason`, which keeps the decision visible instead
+      # of silent. --strict additionally refuses an own_instance with no reason.
+      - name: G25 — a declared capability is actually consumed
+        run: python3 scripts/refactor/capability-use-lint.py --self-test && python3 scripts/refactor/capability-use-lint.py --strict
+      # G26 — `data.volumes` is the only machine-readable inventory of state this platform has, and
+      # nothing read it, so it rotted: drive declared [] while owning localdrive_data, mail declared
+      # one of five. There is no backup tooling yet; whoever writes it will derive it from this
+      # field, and a backup built on a wrong inventory silently skips what the manifest forgot —
+      # you find out at restore. Rule: if git tracks it, it is not state.
+      - name: G26 — data.volumes matches the state the compose actually creates
+        run: python3 scripts/refactor/data-volumes-lint.py
+      # G30 — the enabled render declares 36.4 GiB of memory limits against hosts of 7-16 GiB.
+      # Nobody chose that: every limit is a literal in one app's compose and no view summed them.
+      # On one Docker host the caps protect nothing (the host OOM-killer fires first and picks its
+      # own victim), so they read as a capacity plan while behaving like decoration — and under
+      # swarm/k8s the same numbers become hard scheduling failures. This does not forbid overcommit;
+      # it makes it a ratio someone chose, declared beside the machine envelope in perf-profiles.yml.
+      - name: G30 — declared memory fits the machine the profile describes
+        run: python3 scripts/refactor/memory-budget-lint.py --profile ci-small
+      # G65 is G30's CPU twin, but the caps it bounds are ENFORCED by the kernel on one host (CFS
+      # quota), so an over-subscribed sum is not decoration: on the 4-vCPU macOS engine 47 vCPU of
+      # caps meant every container contended at once with every agent idle (load 145, 2026-09-30).
+      - name: G65 — declared CPU caps fit the machine the profile describes
+        run: python3 scripts/refactor/cpu-budget-lint.py --profile ci-small
+      # G36 — a provider list call that fetches ONE page and never follows nextPageToken reports
+      # everything past that page as ABSENT, with no error. On 2026-08-05 that hid 43,326 of the
+      # client's 78,651 Drive documents; folders holding 17,066 files reported exactly 460.
+      - name: G36 — provider list calls paginate or are explicitly bounded
+        run: python3 scripts/refactor/paginated-list-lint.py --self-test && python3 scripts/refactor/paginated-list-lint.py
+      # G49 — G36's mirror image, on the CLIENT side. SyncBoard.tsx's infinite scroll derived
+      # "is there more?" from `rows.length < total` and fired the next page from a useEffect. A
+      # page returning ZERO rows changes neither side of that comparison, so the effect re-fires
+      # forever against a server answering "none". Caught in review, 2026-08-06, before it shipped.
+      - name: G49 — an auto-advancing pager can be stopped by its own response
+        run: python3 scripts/refactor/stalled-pagination-lint.py --self-test && python3 scripts/refactor/stalled-pagination-lint.py
+      # G37 — SOURCE_ID is documented as the drive file id / gmail message id the pipeline stamped
+      # on ingest (the join key _docs_by_source() reads back). Five live writers (the v1 drive/gmail
+      # processors sync-v3 wires up as the default processor_wf) stamped the watched FOLDER's id or
+      # the SENDER's email instead, collapsing every document from the same folder/sender onto one
+      # SOURCE_ID. Measured on 2026-08-05: 6,250 rows, 579 distinct SOURCE_ID values.
+      - name: G37 — SOURCE_ID is a per-document id, never a folder id or a sender
+        run: python3 scripts/refactor/source-id-lint.py --self-test && python3 scripts/refactor/source-id-lint.py
+      # G38 — 41 live workflows had settings.errorWorkflow pointing at a workflow id that does not
+      # exist (RqAY1Z1i2F7ZaPbe). n8n logs one line and creates ZERO execution rows for a dangling
+      # errorWorkflow — silent, total loss of alerting, invisible in the UI. Live-only drift (the
+      # blueprints never had the bad value), so this gate polices the tree going forward: any
+      # errorWorkflow / executeWorkflow target must name a workflow id that exists in this repo.
+      - name: G38 — errorWorkflow / executeWorkflow targets a workflow that exists
+        run: python3 scripts/refactor/dangling-workflow-ref-lint.py --self-test && python3 scripts/refactor/dangling-workflow-ref-lint.py
+      # G39 — an executeWorkflowTrigger's explicit input schema (jsonExample / "Define below" fields)
+      # silently drops any field not on the list. indoxDocBatchUpsert01.json's trigger was missing
+      # CONNECTION, NEXT_RETRY_AT and RETRY_COUNT — real columns on incoming_documents — so every
+      # caller's retry-scheduling value was discarded before the upsert ever ran (NEXT_RETRY_AT: 0 of
+      # 6,207 rows populated, 2026-08-05).
+      - name: G39 — executeWorkflowTrigger's declared schema matches the table it upserts
+        run: python3 scripts/refactor/trigger-schema-drift-lint.py --self-test && python3 scripts/refactor/trigger-schema-drift-lint.py
+      # G40 — scripts/ui-coverage/seed.sh (bbox ui-map / bbox seed, seeding opt-OUT by default)
+      # upserted apps/indox/blueprint/fixtures/settings.json's 6-entry demo `sync_registry`
+      # straight over a real client's live sync registry, twice, deleting two configured drive
+      # pipes and blanking `connection` on two more (2026-08-05). seed.sh itself is now
+      # insert-only (`on conflict do nothing`), but that only protects a key that already
+      # exists — it does nothing for a brand-new tenant's first, empty seed. This gate is the
+      # complementary check: no demo/QA fixture may carry a live-operational key at all.
+      - name: G40 — a demo/QA fixture never carries a live-operational settings key
+        run: python3 scripts/refactor/fixture-live-key-lint.py --self-test && python3 scripts/refactor/fixture-live-key-lint.py
+      # G58 — G40's sibling from the other direction. G40 stops a fixture OVERWRITING live config;
+      # this stops a fixture CLEANUP deleting live rows. On 2026-08-06 syncV3SourcesTest01's
+      # "Cleanup SQL" deleted 2,432 real client documents: its only prefix guard was bound to the
+      # JOIN PARTNER (`sync_ledger`), never to `incoming_documents`, and the join condition was an
+      # unanchored substring test on an IMAP uid, so fixture uid `12` matched production
+      # `#inbox/120`, `#inbox/128`, `#inbox/1234`. Fourteen sibling cleanups were correct — and
+      # each restated its own prefix list inline, so nothing mechanical separated the fleet from
+      # the fifteenth. scripts/test-fixture-prefixes.yaml is now the single registry of what a
+      # fixture row looks like; this gate is what makes it binding. Its --self-test carries the
+      # incident query verbatim, so the gate is proven against the real defect, not a paraphrase.
+      - name: G58 — an E2E cleanup may only delete its own fixture rows
+        run: python3 scripts/refactor/fixture-delete-scope-lint.py --self-test && python3 scripts/refactor/fixture-delete-scope-lint.py
+      # G41 — a rules-mode switch with no fallbackOutput silently drops any item matching none of its
+      # named cases: no error, no log, no execution row. indoxV2ActionsGlobal01.json's "3a. DOC BASE
+      # Actions Switch" drops extract_invoice_google_ai (plus 4 more of its own decide function's
+      # return values); indoxV2ActionsBS01/GDoc01/Ship01 each drop at least one more of their own.
+      # KNOWN FAILING as of 2026-08-05 — the detector is correct; the 8 underlying drops are not yet
+      # fixed (see ai/context/ERROR-RCA-2026-08-05.md addendum). Left wired per this file's own rule
+      # (GATES.md, "Adding a gate": "a gate that runs nowhere is documentation") rather than hidden
+      # until someone fixes the switches — that is what red CI is for.
+      - name: G41 — switch fallback + decide/switch case coverage
+        run: python3 scripts/refactor/switch-fallback-lint.py --self-test && python3 scripts/refactor/switch-fallback-lint.py
+      # G42 — INDOX-UNIFIED-N8N-SPEC.md §1: exactly one sub-workflow (indoxDataGateway01) may write
+      # public.incoming_documents; every other workflow must call it instead of touching Postgres
+      # directly. As of 2026-08-05, 65 of 66 indox blueprints still write Postgres directly (or via a
+      # direct PostgREST call) — this gate is added in a KNOWN-FAILING state on purpose (Phase 3 BUILDS
+      # the gateway + this gate; Phase 4, tracked separately, REWIRES the 65 direct writers onto it and
+      # is the only thing that can turn this gate green). Left wired red per this file's own rule
+      # (GATES.md, "a gate that runs nowhere is documentation"), exactly like G41 was.
+      # ^ RETIRED 2026-08-07 — the step below is gone, and so is G43's. Both required every
+      # Postgres write / every identity computation to route through `indoxDataGateway01` and
+      # `indoxIdentity01`: workflows an agent lane invented, the owner rejected as "not part of the
+      # existing architecture", which never executed once and were disarmed on 2026-08-07. The
+      # comment block above is kept as the record of what they asserted and why it no longer holds.
+      # Scripts moved to data/_attic_agent_drafts/ alongside the workflows. See GATES.md.
+      # G43 — INDOX-UNIFIED-N8N-SPEC.md §2: one sub-workflow (indoxIdentity01) computes document
+      # identity; nothing else may. Three divergent SHORT_DOC_ID (last-5-alphanumeric) formulas were
+      # confirmed live pre-indoxIdentity01 (INDOX-CODEBASE-MAP-2026-08-05.md §1c), with known collision
+      # sinks '00000' (empty value padded), '61520' (a vendor template repeating one real number),
+      # '22026' (any February-2026 date). KNOWN FAILING as of 2026-08-05 for the same reason as G42 —
+      # the files that compute this locally have not been migrated to call indoxIdentity01 yet
+      # (Phase 4). Left wired red on purpose.
+      # ^ RETIRED 2026-08-07 with G42 above, for the same reason.
+      # G42' (re-pointed, 2026-08-15) — the retired G42 asserted "only indoxDataGateway01 may write",
+      # a rejected design. This one enforces the owner's ACTUAL invariant ("only the state machine
+      # should ever change the line — one upsert at each end of action execution"): every write to
+      # public.incoming_documents must come from a sanctioned writer (the end-of-action batch
+      # upsert, the explicit API verbs, the sync ingest lanes, the failure-path recorder kept by
+      # cleanup #8, or the operator's reset verb). Anything else is the defect class removed on
+      # 2026-08-14: Terminalize Stalled authoring STATUS, errorHandler01 authoring MAX_ITERATIONS,
+      # the NoAct/lock ACTION_LOG stamps. Green at wiring time (19 sanctioned write nodes, 0 violations).
+      - name: G42' — only the state machine writes incoming_documents
+        run: python3 scripts/refactor/incoming-documents-writer-lint.py
+      # G44 — an active:true workflow must own a node n8n's activation cycle can actually use
+      # (webhook/schedule/poller/errorTrigger/executeWorkflowTrigger/...). 2026-08-06: two test/E2E
+      # workflows (indoxV2BSTest01, indoxV2DocBaseTest01 — both manualTrigger-only) were captured
+      # active:true and retried activation forever in docker logs, burying real errors. Fixed in
+      # apps/indox/; KNOWN FAILING as of 2026-08-06 on one instance outside this fix's ownership
+      # boundary — apps/chat/blueprint/n8n/whatsappSendDoc01.json is the same bug, reported not fixed
+      # here (apps/chat is owned elsewhere). Wired anyway, same reasoning as G41/G42/G43.
+      - name: G44 — active workflows own a real activation trigger
+        run: python3 scripts/refactor/dead-activation-lint.py --self-test && python3 scripts/refactor/dead-activation-lint.py
+      # G45 — canvas HEIGHT is execution order, so a loop is never drained before its work runs.
+      # REPLACES the previous G45, which enforced a COMPUTED layout (n8n-layout.py) and was actively
+      # harmful: nodes[].position is not decoration. Verified in the running engine's own source
+      # (n8n 2.17.0, n8n-core/dist/execution-engine/workflow-execute.js), a fan-out's targets are
+      # collected across ALL output indices into one list, sorted DESCENDING by (y, x), then each is
+      # `unshift`ed onto the front of the execution stack which is consumed with `shift` — so the
+      # TOP-MOST target runs FIRST, left-most breaking an exact y tie, and position overrides output
+      # index entirely. Running the old layout tool repo-wide took loop-order violations from 3
+      # (pre-existing) to 55: a splitInBatches loop lane and the edge re-entering the loop landed on
+      # the same row, the x tiebreak put the re-entry first, and every batch was then drained before
+      # any per-batch work ran — while the workflow still reported success. This gate is that
+      # invariant, checked on the file in front of it with no reference layout to drift from.
+      - name: G45 — a loop's work lane runs before the loop is re-entered
+        run: python3 scripts/refactor/n8n-loop-order-lint.py --self-test && python3 scripts/refactor/n8n-loop-order-lint.py
+      # G46 — apps/drive used to resolve a MISSING profile_id/connection_id to whatever connection
+      # this deployment's console happens to be bound to (on this host: a Google service account
+      # with no storage/Shared Drive of its own, refusing every write) instead of refusing the call.
+      # 2026-08-06: that one silent default caused three independent failures found by three
+      # different agents — all four mail registries missing drive_profile_id quarantined 100% of
+      # deposits after 5 attempts; the demo-injection nodes carried no connection_id and would have
+      # written the owner's REAL client Drive; 16 driveApi01 call sites across 5 E2E suites omitted
+      # profile_id, killing 6 of 8 suites with 503s while survivors silently searched the wrong
+      # backend. apps/drive/app.py now REFUSES a §3 canonical op (list/download/upload/move/update/
+      # delete/createFromText — what driveApi01 calls) with neither id present (400, naming what to
+      # pass) instead of silently substituting; this gate is the companion static check that catches
+      # a caller which still omits it before merge. KNOWN FAILING as of 2026-08-06 — 44 call sites
+      # across apps/indox/blueprint/n8n/, apps/chat/blueprint/n8n/whatsappSendDoc01.json and
+      # apps/google-workspace-agent/blueprint/n8n/gwaHealthCheck01.json still omit the id; all are
+      # outside this fix's ownership boundary (apps/drive/** + scripts/refactor/), reported not
+      # fixed here. Wired anyway, same reasoning as G41-G45.
+      - name: G46 — every drive canonical-op call site names an explicit connection
+        run: python3 scripts/refactor/drive-connection-lint.py --self-test && python3 scripts/refactor/drive-connection-lint.py
+      # G47 — n8n's tag_entity had grown to 28 ad hoc, overlapping tags with zero enforcement: 12 of
+      # 82 live workflows carried no tag at all, and nothing said "which app owns this workflow"
+      # without reading the blueprint tree by hand. 2026-08-06: consolidated onto app/role/lifecycle
+      # axes and gave every workflow exactly one APP tag, derived from the blueprint directory that
+      # owns it (never guessed from the name). This is the companion static check: a workflow
+      # committed without its app tag, or moved between app dirs without updating it, fails here.
+      - name: G47 — every n8n workflow blueprint carries its owning app's tag
+        run: python3 scripts/refactor/app-tag-lint.py --self-test && python3 scripts/refactor/app-tag-lint.py
+      # G55 / G67 — two security gates that self-tested and read green but ran only in run-gates.py's
+      # N8N_SET, so GitHub CI never enforced them (found 2026-10-09 by the security completion-audit).
+      - name: G55 — every call site of one endpoint agrees on its credential
+        run: python3 scripts/refactor/endpoint-credential-lint.py --self-test && python3 scripts/refactor/endpoint-credential-lint.py
+      - name: G67 — no unauthenticated webhook reaches a client-table DELETE/TRUNCATE
+        run: python3 scripts/refactor/open-destructive-webhook-lint.py --self-test && python3 scripts/refactor/open-destructive-webhook-lint.py
+      # G48 — the dominant silent-failure shape here, and the one that is a MISSING THIRD VALUE
+      # rather than a single bug: with only "worked" and "failed" available, a branch that SKIPS
+      # has to pick one, and both are lies. `syncV3Main0001`'s lock guard returned {skipped, reason,
+      # note} with no outcome field, so its caller reported "the reconciler built no work unit" and
+      # two proof attempts were abandoned as pipeline failures (#66); the same node silently
+      # debounced the sync board's run button to the scheduler's cadence (#69); and `Release Result`
+      # answered a flat ok:true to a RELEASE that matched zero rows because RELEASE took
+      # <instance>/<pipe> while SCAN took the bare name (#68). A reply must name its outcome.
+      - name: G48 — a skip or no-op never reports success
+        run: python3 scripts/refactor/noop-success-lint.py --self-test && python3 scripts/refactor/noop-success-lint.py
+      # G50 — G48's rule from the other end. G48 makes an n8n reply name its outcome; this makes the
+      # Python reading it listen. `_entry_items` returns `-> tuple[list[dict], list[str]]` and puts
+      # everything it could not determine in that second list; `_move_items` dropped it into
+      # `_notes`, and the surface downstream rendered 2,435 completed documents as 0 with nothing
+      # raised. KNOWN FAILING (2 findings, both owned by another lane) — wired anyway, same
+      # reasoning as G41-G46. `|| true` is deliberately NOT used: see GATES.md.
+      - name: G50 — a caller never silently discards what the callee told it
+        run: python3 scripts/refactor/dropped-signal-lint.py --self-test && python3 scripts/refactor/dropped-signal-lint.py
+      # G52 — a confession turned into a check. Two new Redis nodes (processLock01's renew pair,
+      # task #72) shipped with no `credentials` block while all eleven siblings had one; they
+      # errored on every invocation and the caller carried on, so a fix for a silent no-op was
+      # itself delivered as a silent no-op. n8n's editor fills credentials in from a dropdown, so a
+      # node built in the UI is never wrong and a node written as JSON always can be — and every
+      # blueprint here is written as JSON.
+      - name: G52 — a node that cannot work without credentials must declare them
+        run: python3 scripts/refactor/node-credential-lint.py --self-test && python3 scripts/refactor/node-credential-lint.py
+      # G53 — G48's rule for executeWorkflow. `onError: continueRegularOutput` converts a failure
+      # into ordinary data on the normal output; that is fine only if somebody then reads
+      # `.error`/`.errorMessage`. 27 of 54 such nodes sit in workflows where nothing anywhere does,
+      # including errorHandler01's own GlitchTip call — the component whose job is making failures
+      # visible cannot report its own. KNOWN FAILING (22 after the 5 justified declarations).
+      - name: G53 — a swallowed sub-workflow failure must be read by somebody
+        run: python3 scripts/refactor/swallowed-subcall-lint.py --self-test && python3 scripts/refactor/swallowed-subcall-lint.py
+      # G63 — the n8n push re-seeds env-driven credentials from .env, and an unset-or-empty ${VAR}
+      # used to resolve to "" and be PATCHed in as if it were a value, re-encrypting an EMPTY
+      # secret over a working live credential. `.env` carried `GEMINI_API_KEY=`, so every push
+      # blanked `6mfcsdRaqQ4IdQ8Y` and `Balance Sheet Extractor - v2- shmuel` failed 100% with
+      # "Forbidden - perhaps check your credentials?". The step is instance-global, so a scoped
+      # `bbox n8n <app> push` destroyed an unrelated app's credential. Replaying the shipped
+      # resolver: 20 PATCHes, 5 carrying an empty field.
+      - name: G63 — a push may never blank a live credential
+        run: python3 scripts/refactor/credential-blank-lint.py --self-test && python3 scripts/refactor/credential-blank-lint.py
+      - name: G10 — portability (Linux/Windows/macOS host paths)
+        run: python3 scripts/refactor/portability-lint.py
+      - name: G8 — no registry advertises an app the platform doesn't install
+        run: python3 scripts/refactor/registry-drift-lint.py --self-test && python3 scripts/refactor/registry-drift-lint.py
+      - name: G11 — a fresh clone contains everything the tracked files need
+        run: python3 scripts/refactor/fresh-clone-lint.py
+      - name: G12 — every first-party Python file parses
+        run: python3 scripts/refactor/compile-lint.py
+      - name: G13 — an app shipping automations depends on the automation engine
+        run: python3 scripts/refactor/blueprint-dep-lint.py --strict
+      # G14 — the credential broker's REFUSALS. Everything else here guards structure; this guards
+      # the one behaviour nobody notices when it silently stops working: an app must not be able to
+      # obtain another app's secrets, or one its manifest never declared. Hermetic (identity is
+      # faked), so it needs no docker socket and no vault — hence it can live in this cheap lane.
+      - name: G14 — credential broker refuses what it must
+        run: bash scripts/ci/pip-ensure.sh flask && python3 platform-base/connections/test_broker.py
+      # G16 — the STATUS contract. Every consumer (store UI, bbox, alerting) branches on
+      # `conditions[].reason`, so those strings are an API. The cases that matter most are the ones
+      # a live stack cannot be made to show on demand — an expired OAuth grant, a vanished docker
+      # socket, a deployment that never converged — so they are proven here instead of eyeballed.
+      - name: G16 — app conditions + failure taxonomy hold
+        run: bash scripts/ci/pip-ensure.sh pytest && python3 -m pytest platform-base/app-management/test_conditions.py -q
+      # G17 — the RESOLVER. It decides which apps run, in what order, and which provider satisfies
+      # each capability; everything downstream inherits those three decisions. Until now it was
+      # guarded only by "does the stack come up", which cannot tell a correct resolution from a
+      # wrong one that happened to boot. The refusals matter most: a resolver that silently picks a
+      # provider or silently drops one side of a conflict produces a stack nobody asked for.
+      - name: G17 — the compiler's resolver refuses what it must
+        run: python3 -m pytest platform/manager/test_resolve.py -q
+      # G72 — the tests that live beside a plane are RUN. G14, G16 and G17 above are three of ten
+      # such files; the other seven ran when their author remembered to, and what they hold are
+      # decisions no running stack shows on demand — when the sign-in hook restarts the server and
+      # when it must not, what the readiness probe calls "served", what a bring-up refuses. One had
+      # been passing only inside its own container since it was written. This runs every test
+      # beside a plane that is not already a step of its own; one that needs a package this runner
+      # does not have is named NOT RUN (never counted as a pass).
+      - name: G72 — a test beside a platform plane is run by the gate suite
+        run: bash scripts/ci/pip-ensure.sh flask pytest && python3 scripts/refactor/plane-tests-lint.py --self-test && python3 scripts/refactor/plane-tests-lint.py
+      # G73 — a manifest the compiler refuses is a render that fails on every office that pulls the
+      # commit. `reconcile.py validate` already runs below, before the render; this is the same call
+      # as a GATE, because scripts/ci/gates.sh — what a local run and `bbox baseline` execute — did not
+      # have it, and a commit that broke every render was pushed on a green local run (2026-10-06).
+      - name: G73 — every app manifest is one the compiler accepts
+        run: python3 scripts/refactor/manifest-lint.py --self-test && python3 scripts/refactor/manifest-lint.py
+      # G74 — compose is run by the host AND by every container that brings other containers up, and
+      # each carries its own copy of the plugin. Two versions normalise one file differently, so a
+      # service is one container to the apps screen and another to `bbox run`, and each re-creates
+      # what the other made (three versions among four callers on hp-laptop, 2026-10-06). The host's
+      # compose is the fact and an image that installs the plugin is built with it (ARG + build.args);
+      # the installers name one default; an unpinned install or a moving image tag is a finding.
+      - name: G74 — everyone who runs docker compose runs the same one
+        run: python3 scripts/refactor/compose-pin-lint.py --self-test && python3 scripts/refactor/compose-pin-lint.py
+      # G75 — an issue file is what issues/schema.json says. The files are where a defect is
+      # measured and closed, and programs read them (the hub's plan, a session deciding what is
+      # left): a status spelled `done`, a task with no `done:` — each is a file the next reader takes
+      # at its word or silently skips. The schema said MUST and nothing asked: 62 of 99 files did not
+      # conform (2026-10-06), and all 99 do now. The schema is READ by the gate, not restated in it.
+      - name: G75 — every issue file is one its own schema accepts
+        run: python3 scripts/refactor/issue-file-lint.py --self-test && python3 scripts/refactor/issue-file-lint.py
+      # G76 — "the social networks service is unavailable (ConnectionError)" stood at the top of a
+      # Hebrew screen. `f"<a Hebrew sentence> ({type(e).__name__})"` was the house way to report a
+      # failed call: 57 places in 10 apps (2026-10-07), each printing a Python class name to whoever
+      # was looking when a neighbour was down. The name goes to the log, or to a detail field of its own.
+      - name: G76 — a sentence a person reads never carries an exception's class name
+        run: python3 scripts/refactor/raw-exception-lint.py --self-test && python3 scripts/refactor/raw-exception-lint.py
+      # G77 — the same rule on the other side of the wire: what a SCREEN may not hold. A request helper
+      # that falls back to "HTTP " + status (25 places said "HTTP 502" for a service that was down), the
+      # browser's own confirm / alert / prompt (28 places: English buttons over a Hebrew screen, and no room
+      # for the facts of what is about to be removed), an emoji where an icon belongs.
+      - name: G77 — a screen says it in words, in the page
+        run: python3 scripts/refactor/screen-words-lint.py --self-test && python3 scripts/refactor/screen-words-lint.py
+      # G78 — the UI map's denominator builds, and every app the shell frames has a view in it.
+      # `bbox ui-map` starts by deriving its inventory from the apps' own source, and the inventory
+      # refuses when an app's view model stops matching what it reads. On 2026-10-06 the apps screen
+      # gave its tabs an `icon:` key, the reader counted 0 rows, and the map could not be built on any
+      # office for a day; on an office that does not run every app it could never be built, because the
+      # list of framed tiles was a table kept by hand for one office. This gate had been written for
+      # the first half on 2026-09-29 and was called by nothing. Asks about THIS office's apps; where
+      # nothing was compiled it says NOT CHECKED.
+      - name: G78 — the UI map's denominator builds, and every framed app is in it
+        run: python3 scripts/refactor/embed-coverage-lint.py --self-test && python3 scripts/refactor/embed-coverage-lint.py
+      # G79 — the desktop mode's two bugs, the half that needs no stack. The dock drew one tile per app
+      # in an uncapped row (17 of 40 unreachable at the owner's own width), and a window's three controls
+      # were pinned to ltr inside a right-to-left bar, so the group mirrored and its contents did not.
+      # Static: the dock's capacity is one pure function the dock asks on every width (plus its
+      # arithmetic test), and the stylesheet gives the controls' group no direction of its own. The
+      # MEASURED half (the rendered dock and an opened window, three widths) runs in the live lane.
+      - name: G79 — the desktop's dock asks its budget; a window's controls are not pinned
+        run: python3 scripts/refactor/dock-fit-lint.py
+      # G80 — a name a python file reads is a name it binds. Python meets a name only when its line
+      # runs, so an unbound one survives in the branch that almost never does: five were in the tree
+      # (a mail thread read that was a 500, a refused credential lease reported as a NameError, a
+      # reader that died logging its own handled failure, a gate that crashed without a .env key, a
+      # span push that could never have worked). Read from each file's own symbol table — the
+      # interpreter's resolver, nothing to install. A star import is refused: a file nobody can
+      # judge is where the next one hides.
+      - name: G80 — a name a python file reads is a name it binds
+        run: python3 scripts/refactor/undefined-name-lint.py --self-test && python3 scripts/refactor/undefined-name-lint.py
+      # G81 — every screen is looked at in the window desktop mode opens it in. Every suite and both
+      # maps looked at the classic shell's full frame and were green while the timeline screen had 2
+      # of its window's 530 pixels (the owner, 2026-10-07). The half that needs no stack: flow-qa's
+      # `windows` suite is in the default run, the simulation's builder runs a page's scripts as
+      # script elements (through eval every desktop-mode window was empty), and the two shared
+      # blocks keep their short-frame tiers. The suites themselves are RUN on an office, in the
+      # live lane.
+      - name: G81 — desktop mode's windows are looked at (the suite, the builder and the short tiers are there)
+        run: python3 scripts/refactor/desktop-windows-lint.py --self-test && python3 scripts/refactor/desktop-windows-lint.py
+      # G82 — a screen names no colour of its own. The office has one palette, written once
+      # (platform-base/bina-ui/theme-tokens.css) and stamped into every screen; on the day the owner
+      # asked for it to be the only one, the screens named 2,815 colours of their own in 104 files.
+      # The count is recorded per file and may only fall: a new literal fails, and so does a count
+      # that fell without being recorded (the old ceiling would still stand).
+      - name: G82 — a screen names no colour of its own (one palette, a count that only falls)
+        run: python3 scripts/refactor/palette-lint.py --self-test && python3 scripts/refactor/palette-lint.py
+      # G83 — the console URL is the state of the office, in EVERY app: copy it, open it in another
+      # tab, send it to someone, land on that screen. No protocol in it: the console's tail IS the
+      # app's own URL under its mount, and the shell reads the frame's own navigations (one standard
+      # `navigate` listener, no polling). The gate asks each embedded app to keep its screen in its
+      # own URL. WIRED WHILE RED: the migration is the owner's request of 2026-10-12, tracked as
+      # ui2-044, and the gate itself is the list of what is left.
+      - name: G83 — every app the shell frames keeps its screen in its own URL
+        run: python3 scripts/refactor/embed-route-lint.py --self-test && python3 scripts/refactor/embed-route-lint.py
+      # G86 — AGENTS.md rule 8's enumerator for the `X-authentik-*` identity-header family, and step 0
+      # of `core-006` (authentik -> a Go forward-auth). The family has TEN runtime consumers — seven
+      # readers, four producers/rewriters, one of which is both — where the `identity` capability graph
+      # in the manifests admits THREE (measured 2026-10-09); a swap planned from the graph moves three
+      # files and silently costs the other seven their identity. The gate enumerates them mechanically
+      # (`git grep` over tracked files, file:line, with the file count it scanned), classifies each one
+      # with its reason, and fails when a reader's own manifest does not declare `identity`. Five
+      # readers are waived with a written reason until the migration lands (`--strict` names them).
+      - name: G86 — every consumer of the X-authentik-* header family is enumerated and declares it
+        run: python3 scripts/refactor/identity-header-lint.py --self-test && python3 scripts/refactor/identity-header-lint.py
+      # G84 — the static half of the exposure question the pentest behind `rap-009` answered live, and
+      # the standard is the owner's own exported security session (`ai/context/dgo-security-session.md`,
+      # re-sent 2026-10-09). Its first two rules are the ones the pentest found broken: traefik
+      # publishing `6379`/`15432` on `0.0.0.0` — Docker's port publish bypasses the host firewall, which
+      # the doc says in as many words — and the engine socket read-write in six containers. Every one of
+      # those is a fact of a COMPOSE FILE and nothing in `scripts/refactor/` read one. It runs over the
+      # compose files git tracks (41 files, 91 services, 40 Dockerfiles on 2026-10-09), names the three
+      # it does not read with their reasons, and fails on: a port on anything but the loopback (80/443
+      # is the front door's, and only for the app that DECLARES the `edge` capability), an engine socket
+      # mounted read-write where `:ro` would do, `privileged: true`, and a container left running as
+      # root although its Dockerfile declared a non-root USER. Digest pinning is COUNTED, not enforced:
+      # G15 owns "pinned at all" and its own docstring records that a digest breaks the offline bundle.
+      # GREEN with 5 known red + 8 justified, each printed with its reason on every run; `--strict`
+      # fails on all 13, and a waiver that stops matching anything fails always.
+      - name: G84 — nothing reaches a host interface the security session forbids
+        run: python3 scripts/refactor/exposure-lint.py --self-test && python3 scripts/refactor/exposure-lint.py
+      # G85 — the mirror question, one layer in, and AGENTS.md rule 8's enumerator for it: which ROUTES
+      # of the app plane can a linked office write this office's state through? §9 of the pairing
+      # contract (`ai/context/dgo-pairing-contract.md`, «E — the trust boundary of a paired office»)
+      # says a request that crossed a link cannot write this office's OWN state — and measured
+      # 2026-10-09 (DGO-49), EIGHT of its routes answered a linked caller anyway: `enable` without
+      # `restore`, `disable`, `archive`, `unarchive`, `uninstall`, `move` (the very route §9 names),
+      # `catalog/install` and `POST /api/reconcile`, while the §9 tests asked about two routes and
+      # could not have seen the rest. The routes are read from `app.py` with `ast`; the class is
+      # computed — a call-graph walk to the file's write sinks, plus every write verb, so a new route
+      # is always a candidate — and a route that does not refuse the link is a finding unless it
+      # carries a written justification that fails when stale. GREEN with one (`catalog/preview`,
+      # which writes nothing); `--strict` counts that one as a finding.
+      - name: G85 — every state-writing route of the app plane refuses a caller that came over a link
+        run: python3 scripts/refactor/link-write-guard-lint.py --self-test && python3 scripts/refactor/link-write-guard-lint.py
+      # G18 — a healthcheck must probe the APP, not itself. chat probed a
+      # node:22-slim image with `curl`, which that image does not have, so every check died with
+      # "exec: curl: executable file not found" and the container reported unhealthy forever while
+      # serving 200s. Silent, and only visible on a machine with no warm image cache.
+      - name: G18 — every healthcheck uses a binary its image actually has
+        run: python3 scripts/refactor/healthcheck-lint.py
+      # G19 — a sub-workflow call must actually pass its inputs. An executeWorkflow node below
+      # typeVersion 1.2 that supplies a literal value sends null for EVERY field; the sub-workflow
+      # matches nothing and the call succeeds having done nothing. One such node made the entire
+      # mail-organiser subsystem a no-op while every surrounding check stayed green.
+      - name: G19 — no sub-workflow call silently passes null
+        run: python3 scripts/refactor/workflow-input-lint.py
+      # G64 — `label:` search may not answer a question it could not have answered. Label state is
+      # how this product decides what work exists: the gmail pipes FIND work by searching
+      # `label:<X>` and the Mail Label Engine APPLIES those labels. mailapi passed the query
+      # straight to Gmail's X-GM-RAW, which matches a label NAME, hyphenized — so `label:SYNCED_DOC`
+      # (the KEY every sync_registry row stores) and `label:"<name with spaces>"` BOTH returned
+      # 200 total:0 on a mailbox carrying 15,575 such messages. Zero is also what a drained pipe
+      # returns, which made every "this pipe is empty" conclusion unfalsifiable — one lane nearly
+      # shipped exactly that. Drives GmailBackend.search through a fake IMAP client and asserts the
+      # criterion that reaches the WIRE, not just the helper, because a guard that only exercised
+      # the resolver would stay green if search stopped calling it.
+      - name: G64 — a label search cannot silently return zero
+        run: bash scripts/ci/pip-ensure.sh pytest imapclient flask && python3 -m pytest apps/mail/mailapi/test_label_vocabulary.py -q
+      # G28 — a query against settings/companies/tag_rules must name its instance. Those three carry
+      # a tenancy discriminator, and the one failure mode of that design is a forgotten predicate:
+      # the query still succeeds, it just quietly returns — or overwrites — another client's
+      # configuration. Absence does not show up in a diff, so it is caught here. Its first run found
+      # 26 such nodes, including two written the same week.
+      # G66 — six times in one session a component reported a failure correctly and the layer above
+      # reduced it to something indistinguishable from success: an exit code, a stringified
+      # exception, an empty list, a green PASS. Not one was a missing error message — the error
+      # existed, was accurate, and was destroyed on arrival — which is why review does not catch
+      # these: a diff that swallows an error looks exactly like a diff that handles one. Checks A
+      # (an exception read after its handler unbound it — a guaranteed UnboundLocalError) and C (a
+      # gate that can print PASS on an empty scan) fail at a single instance. B (a broad except
+      # discarding an HTTP error body) sits on a recorded ceiling that may only ever come down.
+      - name: G66 — a failure may not look like a success
+        run: python3 scripts/refactor/unread-error-lint.py --self-test && python3 scripts/refactor/unread-error-lint.py
+      - name: G28 — every tenant-table access names its instance
+        run: python3 scripts/refactor/tenancy-lint.py
+      # G29 — the engine diagram is generated from the workflows, so it cannot quietly stop matching
+      # them. A hand-drawn pipeline picture is a comment: true the day it is written and misleading
+      # forever after — worst exactly when someone is trusting it to debug a live incident.
+      - name: G29 — the drawn engine matches the built engine
+        run: python3 apps/indox/scripts/gen-engine-manifest.py --check
+      # G20 — an app behind SSO must have an identity provider to be behind. `auth: "sso"` attaches
+      # the forwardAuth middleware; the authentik application it asks about comes from the separate
+      # `sso` block, and nothing connected the two. Declare one without the other and the app is
+      # routed, healthy, and 404s every request — with authentik's 404, so it reads like a routing
+      # bug. hello-bina, the app third-party authors copy, shipped that way.
+      - name: G20 — every SSO-gated app has an authentik provider
+        run: python3 scripts/refactor/sso-provider-lint.py
+      # G27 — apps BUNDLE a copy of the design system rather than link it, because an app has to stay
+      # independently installable. The price of that decision is drift, and it was already being paid:
+      # bina-ui.css and the mailview copy carried two different dark palettes for the same token, so
+      # one app in OS-dark and the same app in chosen-dark were two different products — while the
+      # console had no dark palette at all and stayed white around apps that had gone dark. Nothing
+      # failed; it just looked wrong, which is the kind of defect that survives every other gate.
+      - name: G27 — every bundled copy of the theme tokens matches the source
+        run: python3 scripts/refactor/theme-token-lint.py
+      # G15 — a floating tag cannot go in the offline bundle: it makes the artifact irreproducible
+      # (the signature attests to "whatever :latest was that day") and incomplete (anything not
+      # pinned at build time is something the customer's airgapped machine must fetch at run time).
+      # Runs at TAG level; --digests is the stricter level the bundle build needs, and it is blocked
+      # on a renovation workflow. See packaging/README.md.
+      # G21 — a compose file may only route hosts its manifest declares, and router names must be
+      # namespaced. Caught an UNAUTHENTICATED b42.localhost back door into browser42 and a
+      # supabase router collision that made the API host resolve to Studio.
+      # G23 — a fresh install must start the platform and nothing else. hello-bina shipped
+      # enabled (a demo nobody asked for) and portainer shipped `state: archived, by: user` —
+      # a runtime choice committed as a default. Both live in the file the console WRITES, so a
+      # local experiment is one `git add -A` from becoming the shipped default.
+      # G24 — `external: true` is a claim that something else creates the resource. wa_media was
+      # the only external VOLUME in the repo and nothing created it; it existed locally only
+      # because it had been made by hand. A fresh install stopped dead after loading 26 images.
+      - name: G24 — external resources are ones the platform provides
+        run: python3 scripts/refactor/external-resource-lint.py
+      - name: G23 — gallery apps ship disabled
+        run: python3 scripts/refactor/gallery-default-lint.py
+      # ...and (invariant 4) a host the manifest gates with `auth: sso` has no hand-written router
+      # without the forward-auth middleware. The compiler gates every router it emits; a compose that
+      # writes its own labels has to, and two did not: `apitools-local` (the production edge served
+      # apitools to anyone who sent its .localhost Host header) and `browser42-http`, whose rule on a
+      # .localhost office is the same as its gated twin's — which of the two traefik picked decided
+      # whether the automation browser asked for a sign-in. An open path is a line in the manifest
+      # (`auth_exclude`), not three labels down a compose file.
+      - name: G21 — routed hosts are declared, routers are namespaced, an sso host has no open router
+        run: python3 scripts/refactor/route-claim-lint.py --self-test && python3 scripts/refactor/route-claim-lint.py
+      - name: G15 — every third-party image is pinned
+        run: python3 scripts/refactor/image-pin-lint.py --self-test && python3 scripts/refactor/image-pin-lint.py
+
+      # The gates above run against THIS checkout, which the runner has been accumulating state in.
+      # This one clones into a scratch dir with no .env, no .generated and no volumes and proves the
+      # platform stands up from nothing — the "works because my machine has X" class of bug.
+      - name: FRESH MACHINE — a bare clone compiles, renders and gates green
+        run: bash scripts/fresh-machine-check.sh
+      # `dc config` INTERPOLATES the compose files, so it needs a .env even though this job never
+      # starts anything: without it compose aborts on the first required variable
+      # (POSTGRES_PASSWORD), the render step exits 1, and G0/G6 below never run at all.
+      # Random throwaway secrets are fine — nothing here is started or reachable.
+      - name: Generate CI .env (interpolation only — nothing is started in this job)
+        run: |
+          chmod +x scripts/ci-env.sh
+          ./scripts/ci-env.sh
+
+      # portainer binds ./portainer_password.txt — a gitignored deploy-time secret, absent from a
+      # fresh clone. This job starts nothing, but G0 asserts every bind source exists, so the file
+      # has to be there. Run the APP'S OWN hook rather than a third copy of "write portainer's
+      # password": the hook already handles the empty-.env case, the docker-bind-created-a-directory
+      # case, and the trailing-newline bug that makes portainer reject every login. Two hand-rolled
+      # copies of it lived in this file and neither knew any of that.
+      - name: Prepare portainer bind source (the app's own hook)
+        run: bash apps/portainer/hooks/prepare
+
+      - name: render the platform config
+        run: |
+          python3 platform/manager/reconcile.py validate
+          python3 platform/manager/reconcile.py render
+          ./scripts/dc config > /tmp/candidate.yml
+      - name: G0 — every referenced host path exists
+        run: python3 scripts/refactor/paths-exist.py /tmp/candidate.yml
+      - name: G6 — no SSO bypass via colliding router rules
+        run: python3 scripts/refactor/auth-lint.py /tmp/candidate.yml

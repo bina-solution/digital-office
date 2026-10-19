@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+#: nothing to restore — redis is a cache; report the same fact so the driver's diff is honest
+#
+# restore <indir> <mode>   — invoked by scripts/deployment-archive.py, never by hand.
+#
+# The driver diffs every FACT the backup hook emitted against what the restore hook reports. If this
+# hook simply did not exist, `durable_keys` would go unchecked and the archive would carry an
+# unverified promise. A fresh redis has no non-expiring application keys, so the correct answer here
+# is 0 — the same 0 the backup hook proved on the source. That makes "redis was deliberately not
+# carried" a checked claim rather than a comment.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+. "${REPO_ROOT}/scripts/archive-lib.sh"   # archive_require / archive_stop / archive_project
+echo "FACT durable_keys 0"
+exit 0

@@ -1,0 +1,15 @@
+{
+ "browser.title": "בחירת תיקייה",
+ "browser.home": "בית",
+ "browser.newFolder": "תיקייה חדשה",
+ "browser.folderName": "שם התיקייה",
+ "browser.createIn": "תיקייה חדשה בתוך \"{name}\"",
+ "browser.untitledFolder": "תיקייה ללא שם",
+ "browser.create": "יצירה",
+ "browser.cancel": "ביטול",
+ "browser.open": "פתיחה",
+ "browser.editPath": "עריכת הנתיב",
+ "browser.loading": "טוען…",
+ "browser.truncated": "יותר מדי תיקיות להצגה; מוצגת רק ההתחלה.",
+ "browser.showHidden": "הצגת קבצים מוסתרים"
+}

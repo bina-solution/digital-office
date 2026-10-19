@@ -1,0 +1,78 @@
+# yaml-language-server: $schema=./schema.json
+title: 'Duplicate owners and a wrong-premise audit: four self-heal owners, two n8n authoring roots, a backup script that cannot run here — and one absolute claim that turned out to be a misread'
+opened: '2026-09-27'
+category: chore
+severity: low
+status: open
+summary: 'A bounded read-only sweep (1,632 files, ~18 opened) for the class of defect that shaped browser42''s profile loss: an unverified absolute about an ''untouchable'' component, and the duplicated mechanisms that accumulate around one. Findings below, each labelled with how it was verified — including one that the sweep got WRONG, kept here so the audit is not itself an unverified claim.'
+description: |
+  ## Method, and its limits
+  Two grep sweeps (12 absolute-claim phrases → 86 hits; ~14 vendor/upstream phrases → 60+ hits) plus a
+  keyword-frequency sweep (`guard|watchdog|self-heal|snapshot|reconcil|retry|backup`), over 1,632 text
+  files with `node_modules`, `.git`, `.generated`, `ci-artifacts`, `digital-office/`, `attic/`,
+  `legacy/` excluded; ~18 files opened. **Nothing inside a container image was inspected** in that
+  pass, and ~55 of the 86 first-set hits are prose about this system rather than about a third-party
+  component — they were not individually judged.
+
+  ## VD — a finding the sweep got WRONG (kept deliberately)
+  `ai/context/browser42-cli.md` says: *"There is no way to 'just remove the interception': the view is
+  a bitmap, so there is no local field to paste into."* The sweep filed this as a second instance of
+  the cloakserve mistake (an absolute about something inside an image). **That is a misread of the
+  sentence's own argument.** The claim is not "noVNC's JS cannot be patched" — it is "removing the
+  interception does not give the page a paste target, because the far side is a bitmap", which is a
+  statement about where the text would go, not about what may be edited. The cited code exists and
+  does intercept (`stopEvent` in `core/input/keyboard.js`), so the descriptive half is right.
+  Consequence of the misread: none — but it is recorded because an audit that reports only the
+  findings it liked is worth less than the one that shows its discard pile.
+
+  ## V1 — container self-heal has four independent owners (VERIFIED by opening each)
+  `restart:` declared 80× across the compose files; `platform-base/autoheal` (health-based restart);
+  `scripts/ops/machine-health-guard.sh` (+ execution-watchdog); `bbox run` → `ensure_converged` →
+  app-management's reconcile. This is accumulated duplication rather than a false premise, and
+  autoheal's own docstring enumerates the overlap — including why the app-management reconciler is the
+  wrong owner (no timer, and it skips platform-base apps). The 2026-09-27 incident showed the cost of
+  the split from the other side: the browser had **no** autoheal label, so it was restarted by its own
+  in-container watchers and by Docker's restart policy instead, in a loop, while nothing in the
+  platform layer could see it was thrashing.
+
+  ## V2 — a backup script that cannot run on this machine (VERIFIED)
+  `scripts/ops/registry-backup.sh` hardcodes
+  `ROOT=/mnt/c/Users/user/Desktop/personalWorkspace/AutomateOs/deployment-hacohen` and the container
+  `supabase-db-shlomo-laptop`; `grep -rn registry-backup` finds **zero** callers (the only hits are this
+  issue); **13** files under `scripts/ops/` carry the same `/mnt/c/Users/user/...` path (re-counted
+  here, the sweep said nine). The declared backup owner is
+  `apps/*/hooks/backup` + `scripts/deployment-archive.py` (whose docstring says it reads that
+  inventory "rather than keeping its own list"). A script that reads as coverage, cannot execute here,
+  and is not referenced is worse than no script: it answers "do we back this up?" with a yes.
+
+  ## V3 — two authoring roots for one n8n estate (VERIFIED)
+  `apps/*/blueprint/n8n/*.workflow.ts` (89 files) and `platform-base/n8n/workflows/*.workflow.ts` (17
+  files) both author workflows; the second contains a RETIRED duplicate
+  (`indoxApiSupabase01.workflow.ts`: "RETIRED 2026-08-12 – id renamed to indoxApi01") whose md5 differs
+  from the live `apps/indox/blueprint/n8n/indoxApi01.workflow.ts`. Every gate has to glob both
+  (`app-tag-lint`, `tenancy-lint`, `switch-fallback-lint`, `dead-activation-lint`), so drift in one is
+  invisible to the other. Same shape already CONFIRMED for `packaging/check-arch.py`'s hand-typed image
+  list vs `image-pin-lint.py` (`ai/context/review-claims-verdicts.md:96`).
+
+  ## V4 — the same wrong premise, one directory over (VERIFIED, filed separately)
+  `ccr_shadow_bases` collects its base images from `production/*/Dockerfile development/*/Dockerfile`,
+  two directories that no longer exist, and from a `compose config` that contains no `FROM` lines at
+  all — while `bbox run` still reports success. See
+  `issues/ccr-shadow-bases-lost-its-base-list-in-the-layout-refactor.yaml`.
+
+  ## Not checked
+  Anything inside a container image; `ai/context/archive/`, `attic/`, `legacy/`, `digital-office/`; the
+  keyword-hit files under `apps/indox` and `final-indox.md`.
+tasks:
+- text: Give container self-heal ONE owner and delete the rest, or write down per resource which owner is authoritative and why (the browser42 label gap is the test case).
+  done: false
+- text: Delete or repair `scripts/ops/registry-backup.sh` and the 12 siblings with the hardcoded /mnt/c path; a backup inventory must come from apps/*/hooks/backup. PARTLY 2026-10-07 - `registry-backup.sh` is deleted (no caller, could run on one laptop's old checkout path only, and read as backup coverage). The twelve siblings stand, re-counted the same day - all INDOX one-offs of 2026-08-23 (`test_*.sh` x5, `restart_*`, `explain_*`, `dup_*`, `enable_priority_sync_local.sh`, `clear_orphaned_waiting_execs.sh`), three of them with callers - and 40 of the 96 files under scripts/ops name the `shlomo-laptop` deployment by its container names. Sorting which are records and which are tools is INDOX work, on an office that runs it.
+  done: false
+- text: Collapse the two n8n workflow authoring roots (or gate that they cannot diverge), and delete the RETIRED duplicate. DONE 2026-10-07 (7557c5a6) - the RETIRED duplicate `indoxApiSupabase01` left the central blueprint with eleven other dead workflows, and platform-base/n8n/retired-workflows.txt keeps them out (pull never brings a listed id back; G38 fails if one has a blueprint file again). The two roots are not a duplication to collapse - the central one is the n8n app's own blueprint (`app:n8n` - the error handler, the process lock, the reporters) - and what does not belong in it is now one workflow, `indoxApiRouter01`, with its own item (n8n-016). The four gates named in V3 as "having to glob both" were, with a fifth, globbing a file extension neither root has held since 2026-08-16 (35feec17).
+  done: true
+- text: Before the next audit, make the sweep open the referenced thing before filing a finding — VD is the cost of not doing that.
+  done: false
+references:
+- issues/browser42-profile-protection-built-on-an-unverified-premise.yaml — the class this audit was run for
+- issues/ccr-shadow-bases-lost-its-base-list-in-the-layout-refactor.yaml — V4
+- ai/context/review-claims-verdicts.md — the earlier, same-shaped audit of claims

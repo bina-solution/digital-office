@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>התקנת הלשכה הדיגיטלית</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg"/>
+<!-- The shell's own stylesheet: it carries the office's one palette (G27) and the classes the
+     wizard reuses (.wcard, .btn, .pill). install.css adds the wizard's layout and no colour. -->
+<link rel="stylesheet" href="/style.css"/>
+<link rel="stylesheet" href="/install.css"/>
+</head>
+<body class="wiz-body">
+<!-- The first-run wizard. app.py serves this file instead of index.html while the control plane's
+     /api/office carries no installed_at (core-004, DGO-480): welcome → the terms → the office's name,
+     animal and hue (flt-001) → the apps to install, only the AI app checked → the install, followed
+     app by app → the office. NOTHING is installed until «התקנה» is pressed. install.js draws it. -->
+<main class="wiz" id="wizard">
+  <header class="wiz-head">
+    <!-- the mark is a copy of platform-base/bina-ui/brand/mark.html, kept identical by gate G27 -->
+    <div class="brand"><span class="logo"><!-- @bina-brand:start --><svg viewBox="53.57 53.57 892.86 892.86" aria-hidden="true" focusable="false"><rect class="t" x="53.57" y="53.57" width="892.86" height="892.86" rx="196.43"/><rect x="267.32" y="276.79" width="71.25" height="71.25" rx="19.24" class="a"/><rect x="267.32" y="419.29" width="71.25" height="285" rx="19.24" class="m"/><path d="M429.06 276.79H675.59A19.24 19.24 0 0 1 694.82 296.02V685.05A19.24 19.24 0 0 1 675.59 704.29H429.06A19.24 19.24 0 0 1 409.82 685.05V296.02A19.24 19.24 0 0 1 429.06 276.79ZM500.31 348.04A19.24 19.24 0 0 0 481.07 367.27V613.8A19.24 19.24 0 0 0 500.31 633.04H604.34A19.24 19.24 0 0 0 623.57 613.8V367.27A19.24 19.24 0 0 0 604.34 348.04Z" class="m"/><rect x="516.7" y="419.29" width="71.25" height="142.5" rx="19.24" class="a"/></svg><!-- @bina-brand:end --></span><div class="brand-text"><b>הלשכה הדיגיטלית</b><small>התקנה ראשונה</small></div></div>
+    <ol class="wiz-steps" id="steps" aria-label="שלבי ההתקנה">
+      <li data-step="0">ברוכים הבאים</li>
+      <li data-step="1">תנאי שימוש</li>
+      <li data-step="2">הלשכה</li>
+      <li data-step="3">אפליקציות</li>
+      <li data-step="4">התקנה</li>
+    </ol>
+  </header>
+  <section class="wiz-view wcard" id="view" aria-live="polite"></section>
+  <footer class="wiz-foot">
+    <div class="wiz-note" id="note" role="status"></div>
+    <div class="wiz-actions">
+      <button class="btn ghost" id="back" type="button">הקודם</button>
+      <button class="btn" id="next" type="button">הבא</button>
+    </div>
+  </footer>
+</main>
+<script src="/install.js" defer></script>
+</body>
+</html>

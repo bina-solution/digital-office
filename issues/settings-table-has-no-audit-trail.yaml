@@ -1,0 +1,94 @@
+title: public.settings has no updated_at trigger and no audit trail — the column reads stale and has repeatedly misled diagnosis
+opened: 2026-08-06
+category: ops
+severity: medium
+status: open
+summary: >-
+  `public.settings.updated_at` has a DEFAULT but no ON UPDATE trigger, so it never moves after
+  the row is first inserted. Multiple people have now reasoned from it and concluded a config
+  row was unchanged on a day it demonstrably changed several times. Nothing records who wrote a
+  settings value, when, or from where.
+description: |
+  ## Symptom
+
+  `public.settings.updated_at` read `2026-07-30 23:45:11.343711+00` for every `q_v3_%` row
+  throughout 2026-08-06 — a day on which `q_v3_date_base` was written at least twice (its value
+  changed between the 15:56 `JQExV3Base000001` execution and ~20:30, and again after a
+  coordinator `bbox n8n push`/seed later that evening). The column is simply never updated.
+
+  Confirmed directly:
+
+      select tgname from pg_trigger
+       where tgrelid = 'public.settings'::regclass and not tgisinternal;
+      -- (0 rows)
+
+  The platform ships a `public.touch_updated_at()` function (`platform-base/n8n/schema/01_platform.sql`)
+  and other tables attach it. `public.settings` does not.
+
+  ## Why it matters
+
+  This is a config store for a live production pipeline, not a demo table. `sync_registry` alone
+  is the single source of truth for where a real deployment's drive/gmail pipes point — the
+  2026-08-05 incident (an upsert in `scripts/ui-coverage/seed.sh` overwriting a client's live
+  registry, twice) happened here. After that incident the seeder was made insert-only, which
+  prevents a repeat of that specific write, but **it did not add any way to see who wrote what**.
+
+  Concretely, on 2026-08-06 alone:
+
+  - During B5 I concluded "settings unchanged since 2026-07-30" from `updated_at` and had to
+    discard that conclusion after finding a 15:56 execution whose stored request carried a
+    materially different `q_v3_date_base`. The column cost real diagnostic time and pointed the
+    investigation at the wrong component (the apitools build) for a while.
+  - When the live rows turned out to already match a fixture edit made minutes earlier, there
+    was no way to tell from the database whether that was a seed, a workflow `TABLE_UPSERT`, a
+    coordinator push, or a lane writing directly. It had to be reconstructed from n8n execution
+    payloads and out-of-band knowledge of the push cadence.
+
+  With several agent lanes plus a coordinator all able to write this table — via
+  `scripts/ui-coverage/seed.sh`, `indoxApiRouter01`'s `TABLE_UPSERT` (conflict target `key`,
+  DO UPDATE for settings), the BFF's `PUT /config/settings/<key>`, and direct psql — "which of
+  these wrote this value, and when" is currently unanswerable.
+
+  ## Scope note
+
+  This is about *observability*, not about restricting writes. The insert-only discipline in
+  `seed.sh` and gate G40 (`fixture-live-key-lint.py`) already address *unwanted* writes. What is
+  missing is any record of the wanted ones.
+
+  ## Suggested fix
+
+  Minimum, and enough to stop the misleading reads:
+
+      create trigger settings_touch_updated_at
+        before update on public.settings
+        for each row execute function public.touch_updated_at();
+
+  Note this must go in `apps/indox/blueprint/fixtures/schema.sql` (which owns the table and
+  already migrated its primary key to `("instance","key")`), and it is retroactively a lie for
+  every existing row — the current `updated_at` values are insert times, not update times, and
+  should not be trusted for anything before the trigger lands.
+
+  Better, if the appetite exists: a small `settings_audit` table written by the same trigger
+  (instance, key, old_value, new_value, changed_at, and `current_user` / `application_name` so a
+  psql write is distinguishable from an n8n one). The table is tiny and rarely written; the cost
+  is negligible next to a day spent reconstructing provenance from execution payloads.
+
+  ## Provenance
+
+  Found during B5 (`q_v3_date_base` extracting a labelled-range boundary as `DOC_DATE`), while
+  trying to establish whether the live query had changed during the day. Recorded at the
+  coordinator's request after confirming that more than one person had already been misled by
+  this column.
+tasks:
+  - text: Attach public.touch_updated_at() as a BEFORE UPDATE trigger on public.settings in apps/indox/blueprint/fixtures/schema.sql
+    done: false
+  - text: Decide whether to add a settings_audit table capturing old/new value plus current_user and application_name
+    done: false
+  - text: Note in the schema (and anywhere that reads it) that existing updated_at values predating the trigger are insert times, not update times
+    done: false
+references:
+  - apps/indox/blueprint/fixtures/schema.sql
+  - platform-base/n8n/schema/01_platform.sql
+  - scripts/ui-coverage/seed.sh
+  - scripts/refactor/fixture-live-key-lint.py
+  - issues/apitools-query-memo-ignores-region.yaml

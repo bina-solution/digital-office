@@ -1,0 +1,96 @@
+# yaml-language-server: $schema=./schema.json
+title: "scripts/ci-env.sh rewrites .env in place — one run on a live checkout regenerates every secret"
+opened: 2026-09-29
+category: ops
+severity: high
+status: in-progress
+summary: "ci-env.sh ends with `} > .env`. Run to test an edit, it replaced the LIVE .env with a freshly generated one, rotating n8n's encryption key, authentik's secret key, the postgres and redis passwords and every other generated secret — silently, because the command's success looks like a normal status line."
+description: |
+  ## Symptom
+
+  At 04:05 on 2026-09-29 the deployment's `.env` was replaced by a freshly generated one. Nothing
+  failed at that moment — every running container keeps the environment it was created with — so the
+  damage was latent: the NEXT `docker compose up -d` of any service would hand it a different
+  `N8N_ENCRYPTION_KEY` (every stored n8n credential becomes undecryptable), a different
+  `AUTHENTIK_SECRET_KEY`, and passwords the databases were not initialised with.
+
+  ## Root cause
+
+  `scripts/ci-env.sh` is the CI/laptop environment generator. Its last block is
+
+  ```bash
+  } > .env
+  ```
+
+  — it writes, unconditionally, over whatever is there. That is correct for its intended consumer
+  (`bbox run` calls it only when `.env` is MISSING, and the CI lanes start from an empty checkout),
+  and wrong for every other way it can be invoked: it has no output path flag, no `--force`, and no
+  refusal when the target already exists. An agent (me) ran it directly to test an unrelated edit to
+  that file and the shell redirection did the rest.
+
+  ## Blast radius, measured
+
+  * 19 generated secrets were rotated, including `N8N_ENCRYPTION_KEY`, `AUTHENTIK_SECRET_KEY`,
+    `AUTHENTIK_POSTGRES_PASSWORD`, `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, `BROWSER42_MCP_TOKEN`,
+    `SUPABASE_*`.
+  * Hand-set keys that `.env.ex` does not declare were replaced by the generator's defaults or
+    dropped: `ANTHROPIC_API_KEY` and `DEEPSEEK_API_KEY` (the office agent's own model keys),
+    `CONNECTIONS_ROOT_KEY` (the credential vault's root key — losing it makes every stored secret
+    unreadable), `GLITCHTIP_API_TOKEN` and the per-app `*_SENTRY_DSN` values.
+  * Owner-set configuration was reverted to the template defaults: `BUSINESS_NAME`, `COMPANY_SLUG`
+    (which also feeds the mail DKIM selector), `BROWSER42_CPUS`, `PROJECT_PLN_BASE_URL` /
+    `PROJECT_PLN_PROTOCOL`, `SUPABASE_BASE_URL`.
+  * Three containers were created inside the window (by a parallel session, not by this one) and
+    therefore ran with the regenerated values until they were next recreated.
+
+  ## Recovery that worked (keep this, it is the only copy of the procedure)
+
+  A container's environment is a **snapshot of the `.env` it was created from**, so every value that
+  matters can be recovered from containers created BEFORE the overwrite:
+
+  1. take the env of every container (`docker inspect --format '{{json .Config.Env}}'`) that was
+     created before the incident timestamp, running ones first;
+  2. for each generated key, restore the value the containers agree on (a value confirmed by a
+     pre-incident container is, by construction, the old one);
+  3. for every other key, restore only when the container's value cannot be explained by `.env.ex`
+     (that is what distinguishes "the generator's template" from "what the old `.env` carried");
+  4. verify: every generated secret must equal a live container's value, the vault must still decrypt
+     (`GET http://connections:8990/api/instances/<id>/secret`), and `psql`/`redis-cli` must accept the
+     restored passwords.
+
+  This recovered 19/19 generated secrets plus every key above. Verified after the fact: 19/19 match a
+  live container, the vault decrypts, postgres and redis authenticate, and `GET .env` has no key that
+  `.env.ex` declares missing (0 missing, 31 extra — all of them minted by hooks).
+
+  ## What should change
+
+  The generator must not be able to overwrite a live configuration by accident:
+
+  * refuse when the target exists (exit non-zero, name the file) unless `--force` / `CI_ENV_FORCE=1`;
+  * take the destination as an argument, defaulting to `.env.ci`, and let the CI lanes point compose
+    at it explicitly — the only intended consumers are CI and a first-run laptop;
+  * print one line naming the file it wrote when it does write, so the side effect is visible in the
+    transcript of whoever ran it (today's output read "CI .env generated (261 keys)." — true, and no
+    hint that it had just replaced the deployment's own file).
+
+  ## Why it stayed silent
+
+  The script's only output is a success line, and `> .env` truncates before anything is validated.
+  No backup, no `.bak`, no mtime check, and the platform's own `bbox run` never re-reads an existing
+  `.env` — so nothing in the system was in a position to notice.
+tasks:
+  - text: "ci-env.sh: refuse to overwrite an existing .env without an explicit force flag — in place: exit 3 unless CI_ENV_FORCE=1"
+    done: true
+  - text: "ci-env.sh names the file it wrote, in full (`CI .env generated: <path>/.env (N keys).`). A second destination (.env.ci) was DECIDED AGAINST: every compose caller reads `.env`, so another name would have to be handed to each of them in three lanes, and the accident it was meant to prevent is refused at the source"
+    done: true
+  - text: "Add a regression test: run the generator against a fixture .env and assert the file is untouched — step 2 of scripts/fresh-machine-check.sh (CI runs it): a second run must refuse and leave the file byte-identical; passes 2026-10-06"
+    done: true
+  - text: "The recovery procedure is pointed to from ai/context/central-business-system-keys.md (\"When .env is lost or replaced\") - one home for the text, which stays in this issue"
+    done: true
+  - text: "Recreate the containers that were built inside the incident window so they pick up the restored values"
+    done: false
+references:
+  - scripts/ci-env.sh
+  - .env.ex
+  - scripts/lib.sh
+  - ai/context/healthy-baseline.md

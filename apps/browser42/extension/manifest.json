@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "browser42-groups",
+  "version": "1.2.3",
+  "description": "Creates Chrome Tab Groups for browser42 agent sessions, with visible cursors.",
+  "permissions": ["tabGroups", "tabs", "storage", "scripting", "alarms", "offscreen"],
+  "host_permissions": ["<all_urls>"],
+  "background": {"service_worker": "worker-1.2.js"},
+  "content_scripts": [{
+    "matches": ["<all_urls>"],
+    "js": ["cursor.js"],
+    "run_at": "document_start"
+  }]
+}

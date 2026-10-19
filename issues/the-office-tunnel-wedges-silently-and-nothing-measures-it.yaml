@@ -1,0 +1,117 @@
+# yaml-language-server: $schema=./schema.json
+title: "The office tunnel wedges silently: one blackholed source port left it dead for 15 hours, and no screen measures the handshake"
+opened: 2026-10-04
+category: ops
+severity: high
+status: resolved
+summary: "Between `macbook` and `vps1` the WireGuard handshake had been dead for ~15 hours while the tunnel counted its handshakes as sent. Root cause, measured: every packet of the flow sourced from UDP 51820 was dropped on the way out of the home office — the initiations were captured leaving the machine (`192.168.5.15.51820 > 31.97.196.82.51820`, 148 bytes) and the server's tcpdump and ufw counter saw none of them, while 148-byte packets of the same shape from the same machine on other source ports arrived. Re-applying the plan on the same port did not help; `wg set wg0 listen-port 51830` handshook in 10 seconds. Fixed: the dialing side's port is now `DGO_WG_PORT` (default 51820, the pair's dialed port is untouched), rebuilt and re-converged — `link: ok`, delivery ports open, `/api/link` → `up`, vps1 fetches this office's agent through the door (200). Still open: nothing on any screen measures the handshake or names this failure class."
+description: |
+  ## Measured (2026-10-04, ~14:20–18:45 UTC)
+
+  ```
+  curl -s http://dgo-extend:8983/api/link     # vps1: state "down", state_error "ConnectionResetError"
+  docker exec dgo-net-local wg show wg0       # latest handshake: 15 hours ago (keepalive 25s)
+  docker logs --tail 5 dgo-link-local         # "dgo-extend: nothing answers at 10.79.2.2:8983 (timed out)"
+  ```
+
+  The path is not the problem — each probe raised the server's own counter by exactly the number of
+  packets sent (`iptables -L -n -v -x | grep 'udp dpt:51820'`): +30 ephemeral source port, +10 bound
+  to source port 51820, +8 × 148-byte handshake-sized payloads. And the local listener test (the
+  peer's endpoint pointed at a container for 20 s) proved the initiations ARE transmitted:
+  `RX … from ('172.18.0.2', 51820) len 148 type 1`. `tcpdump` on the home machine showed them leaving
+  (`192.168.5.15.51820 > 31.97.196.82.51820`); `tcpdump` on the server saw **zero** of them.
+
+  ## Root cause
+
+  The one flow whose source port was 51820 was being dropped outside the office (a stale NAT
+  binding for that 5-tuple, or a router/ISP rule — both consistent with the evidence; the variable
+  that mattered was the port, not the interface). A fresh container and a fresh `wg0` on the same
+  port reproduced it; `wg set wg0 listen-port 51830` fixed it in 10 seconds.
+
+  ## Fix landed (uncommitted at the time of writing)
+
+  * `apps/dgo-extend/net.py` — `local_listen_port(dial)` reads `DGO_WG_PORT` for the **dialing** side
+    only; the document handed to the far end keeps `WG_PORT`, because that is the address this office
+    dials and the far end's firewall allows it by name. Both branches asserted in the selftest.
+  * `apps/dgo-extend/docker-compose.yml` — `DGO_WG_PORT=${DGO_WG_PORT:-}`.
+  * `.env` — `DGO_WG_PORT=51830`; `.env.ex` documents the knob.
+  * Verified: `./bbox dgo link up vps1` → `link: ok`, `פינג חזר`, delivery
+    `{bina-ds:agent open, dgo-extend open, door open}`, `/api/link` → `state: up` (all apps
+    `ok: true`), and from vps1 `curl -H 'Host: bina.localhost' http://10.79.2.1:9002/` → 200.
+
+  ## Related landmine (still open)
+
+  The declaration's `tunnel.endpoint` is the **name** `staging.digital-office.co.il`, which has no A
+  record (only `*.staging.…` resolves, at any depth). A re-render that resolves it inside a container
+  makes `wg-quick up` fail with `Name or service not known`; the entrypoint logs `wg-quick failed on
+  re-apply` and carries on — the office runs with no tunnel while every screen says the link is up
+  (`ai/context/dgo-extend-azaria-findings.md`). Nothing in `platform/manager/serve.py` or
+  `apps/dgo-extend/*.py` resolves a host before publishing it.
+  ## Second occurrence, and the repair is now automatic (2026-10-06)
+
+  The owner, from vps1's console: "כבר מלא פעמים ככה". The same failure, on the port `DGO_WG_PORT`
+  had moved to three days earlier — **51832** — with the same signature, re-measured end to end:
+
+  ```
+  # the Mac (the dialing office), while the tunnel "sent" everything it had
+  wg show wg2 transfer        → 0 received, 571576 sent
+  wg show wg2 latest-handshakes → 0 (never)
+  # …and the packets DID leave the machine: captured inside the engine's guest network
+  eth0 Out IP 192.168.5.15.42646 > 31.97.196.82.51820: UDP, length 148
+  # …while the server saw only the control packets, on the same port, from the same machine
+  tcpdump -ni any 'udp and host 79.177.165.212'  → 13-byte markers only, 0 of the 148-byte ones
+  # and one port change healed it, in seconds
+  wg set wg2 listen-port 51900 → latest handshake within seconds, 15 KB each way
+  ```
+
+  So the class is structural, not a one-off, and asking a human to notice it is how it ran twice in
+  three days. Landed:
+
+  * `app.rotate_listen_port()` / `app.heal_links()` (`apps/dgo-extend/app.py`): a pair this office
+    DIALS that stays unreachable for `DGO_LINK_HEAL_SECONDS` (180) gets a fresh port of its own —
+    `base + 100*n + slot`, never one the rendered plan holds — recorded in `/data/listen-ports.json`
+    with the "down since" clock, one rotation per `DGO_LINK_HEAL_COOLDOWN` (600 s) and at most
+    `DGO_LINK_HEAL_MAX` (6) per episode. The port the far end LISTENS on is never touched; the far
+    peer needs no Endpoint, because it learns this office's address from the handshake it receives.
+    Run from the projection's own 60-second timer, so an office nobody is watching still heals.
+  * `step_link` (`converge.py`) tries the same repair BEFORE it reports
+    `המנהרה לא מעבירה תנועה`, then re-measures: the link step used to fail and leave the rest of the
+    converge (health, publish) unrun.
+  * `POST /api/link/heal {"office": …}` is the deliberate form (screen, CLI, this session).
+  * Also fixed in passing: `catalog.with_control` no longer keeps the `"*"` wildcard in a port map,
+    which made the FAR delivery plan refuse (`ל„*” אין פורט מספרי`) and left vps1 on a plan days old —
+    the Mac's own `serve:` carries `"*": {}` beside `bina-ds`.
+
+  Verified live: `POST /api/link/heal {"office":"vps1"}` → port 51932, sidecar re-applied, handshake
+  and delivery within ~30 s, `/api/link` → `vps1 up (door true, catalog true)`, and from vps1
+  `https://bina.macbook.console.staging.digital-office.co.il/a/bina/` → **302 to authentik** instead
+  of a `502`.
+
+tasks:
+  - text: "Re-apply the link and verify with `wg show wg0 latest-handshakes` on both ends plus a door probe"
+    done: true
+  - text: "Make the dialing side's listen port configurable (`DGO_WG_PORT`) and persist a working port"
+    done: true
+  - text: "Heal it by itself: a dialed pair that stays unreachable gets a fresh port of this office's own, recorded, with a cooldown (app.heal_links / rotate_listen_port, 2026-10-06)"
+    done: true
+  - text: "Try that repair inside the converge's link step before reporting `המנהרה לא מעבירה תנועה` (2026-10-06)"
+    done: true
+  - text: "Expose the tunnel's measured state (handshake age, endpoint, door reachability, catalog age) in `/api/link` and render it in dgo-extend's own screen — done 2026-10-06 (82413156): the tunnel container writes /tunnel/wg-state.json every 15 s, /api/link serves it as `tunnel`, the linked office's card shows the last handshake, `bbox dgo link status` prints it"
+    done: true
+  - text: "Give `GET /api/tunnel` a consumer and a verdict, not just `{present, bytes}` — done 2026-10-06: the verdict is per pair (`/api/link` -> `verdict: {ok, hop, why}`, from the catalog pull, the measured handshake and this pair's door), read by this app's screen, by the console for every tile of that office, and by the gate (`bbox dgo test 1`, DGO-155); `/api/tunnel` stays what it is, the read-back of what was rendered, inside `/api/link`"
+    done: true
+  - text: "Render `state_error` as a cause class + details instead of the raw class name — done 2026-10-06: the cause class is `verdict.hop` (tunnel / office / door) with its one Hebrew sentence (`verdict.why`, said once in dgo-extend and shown as given by the console); what the pull ended with is a detail after it"
+    done: true
+  - text: "A tunnel endpoint that is a NAME is resolved when the pair is rendered and refused, with the record to add, when it does not resolve — done 2026-10-06 (`net.endpoint_address`; the address is what is written, so no later lookup can fail it; in the renderer's selftest)"
+    done: true
+  - text: "The same for a published router/alias host: it cannot live in the compiler (a compile must not need DNS — offline machines, `.localhost`, CI); it belongs to the step that already asks every published host over HTTP (`converge`'s health step) — done 2026-10-06: `_no_answer` prints a name with no DNS record, a refused connection and a timeout as three different things, where all three were `URLError`"
+    done: true
+  - text: "Re-converge hp-laptop when it returns (its machine refuses SSH on 192.168.16.104:2222) so it learns the new port — obsolete: hp-laptop is a PAIRED office since 2026-10-05 (no SSH between the offices, by the owner's order); the pair carries its own port in its own record"
+    done: true
+references:
+  - ai/context/connection-status-standard.md
+  - ai/context/dgo-remote-apps.md
+  - ai/context/dgo-extend-azaria-findings.md
+  - ai/context/digital-office-network-plan.md
+  - apps/dgo-extend/peers.py
+  - platform/manager/serve.py

@@ -1,0 +1,1602 @@
+{
+  "updatedAt": "2025-11-23T05:19:32.161Z",
+  "createdAt": "2025-11-23T03:25:51.881Z",
+  "id": "TTgW5l6qnQjsLwfM",
+  "name": "Document Management - Optimal",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "incoming-documents/update",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "5e26e5fc-2c50-4481-b2f9-5c8d3c9dffc5",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -96,
+        416
+      ],
+      "webhookId": "26fb15c2-da6d-434b-a055-28460ebcfce9"
+    },
+    {
+      "parameters": {},
+      "id": "60ec85ab-b936-4aa7-b2b5-0c7f274f5935",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        -96,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Standardize Input: Ensure we have a clean array of objects\n// Removes null values and flattens input\n\nconst items = $input.all().map(i => i.json);\n\n// Determine source of data (body or direct)\nconst rawData = items.map(item => item.body || item);\n\nconst cleanData = rawData.map(item => {\n    // Remove null keys to prevent overwriting existing data with nulls\n    return Object.fromEntries(\n        Object.entries(item).filter(([_, v]) => v !== null)\n    );\n});\n\nreturn cleanData.map(item => ({ json: item }));"
+      },
+      "id": "98f4e3a8-4604-4af9-94d2-18e270d915ee",
+      "name": "Standardize Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        368,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "spreadsheet_id",
+              "value": "1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo"
+            },
+            {
+              "name": "sheet_name",
+              "value": "מסמכים נכנסים"
+            },
+            {
+              "name": "sheet_gid",
+              "value": "542119184"
+            },
+            {
+              "name": "lock_key",
+              "value": "incoming_docs_sync"
+            },
+            {
+              "name": "id_column_header",
+              "value": "ID"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "aeb539f4-6ad4-48c8-9450-21bb437f1eee",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        144,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "processLock01",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/processLock01",
+          "cachedResultName": "process_lock"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "PROCESS": "sheet_sync",
+            "KEY": "={{ $json.lock_key }}",
+            "ACTION": "lock"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "b1983df1-2d53-4e13-a024-4d2ee50b5a0b",
+      "name": "Acquire Lock",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        592,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Config').first().json.spreadsheet_id }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $('Config').first().json.sheet_name }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "id": "3a4d2560-e4ed-4c5e-a6c4-c8f034f640db",
+      "name": "Get Current Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.3,
+      "position": [
+        816,
+        256
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "e2knIZpw8YF0QBAB",
+          "name": "Google Sheets person17@example.com"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// --- CONFIGURATION ---\nconst CONFIG = {\n  sheetName: $('Config').first().json.sheet_name,\n  idColumn: $('Config').first().json.id_column_header,\n};\n\n// --- HELPERS ---\nfunction columnToLetter(column) {\n  let letter = '';\n  let temp = column;\n  while (temp >= 0) {\n    letter = String.fromCharCode((temp % 26) + 65) + letter;\n    temp = Math.floor(temp / 26) - 1;\n  }\n  return letter;\n}\n\nfunction generateUniqueId() {\n  return `${Date.now()}${Math.floor(Math.random() * 1000000).toString(36)}`;\n}\n\nfunction sanitize(val) {\n  if (val === null || val === undefined) return '';\n  if (typeof val === 'object') return JSON.stringify(val);\n  return val;\n}\n\n// --- INPUTS ---\nconst currentSheetRows = $('Get Current Sheet').all().map(i => i.json);\nconst incomingItems = $('Standardize Input').all().map(i => i.json);\n\n// --- 1. INDEXING (Optimization: O(N)) ---\n// We build Hash Maps for instant lookups\nconst idIndex = new Map();\nconst companyIndex = new Map();\n\n// Capture Headers from the first row of sheet data\n// Filter out n8n metadata like 'row_number'\nconst headers = Object.keys(currentSheetRows[0] || {}).filter(k => k !== 'row_number');\nconst headerMap = {};\nheaders.forEach((h, i) => headerMap[h] = i);\n\ncurrentSheetRows.forEach(row => {\n  // Primary Index: ID\n  if (row[CONFIG.idColumn]) {\n    idIndex.set(String(row[CONFIG.idColumn]), row);\n  }\n  \n  // Secondary Index: Company + Doc ID\n  if (row['COMPANY_ID'] && row['COMPANY_DOC_ID']) {\n    const key = `${row['COMPANY_ID']}_${row['COMPANY_DOC_ID']}`.toLowerCase();\n    companyIndex.set(key, row);\n  }\n});\n\n// --- 2. PROCESSING ---\nconst batchUpdates = [];\nconst newRows = [];\nconst logs = [];\n\nfor (const item of incomingItems) {\n  let match = null;\n  let matchType = '';\n\n  // Attempt Match A: ID\n  if (item[CONFIG.idColumn]) {\n    match = idIndex.get(String(item[CONFIG.idColumn]));\n    matchType = 'ID';\n  }\n\n  // Attempt Match B: Composite Key\n  if (!match && item['COMPANY_ID'] && item['COMPANY_DOC_ID']) {\n    const key = `${item['COMPANY_ID']}_${item['COMPANY_DOC_ID']}`.toLowerCase();\n    match = companyIndex.get(key);\n    matchType = 'Composite';\n  }\n\n  // Attempt Match C: Hash (Optional fallback)\n  // Add here if needed\n\n  if (match) {\n    // UPDATE EXISTING\n    const rowNumber = match.row_number;\n    let hasChanges = false;\n\n    // Add timestamp to update\n    item['TIMESTAMP'] = new Date().toISOString();\n\n    for (const [key, newVal] of Object.entries(item)) {\n      if (key === CONFIG.idColumn) continue; // Don't update ID\n      if (headerMap[key] === undefined) continue; // Skip unknown columns\n\n      const oldVal = String(sanitize(match[key]));\n      const cleanNewVal = String(sanitize(newVal));\n\n      if (oldVal !== cleanNewVal) {\n        const colLetter = columnToLetter(headerMap[key]);\n        batchUpdates.push({\n          range: `${CONFIG.sheetName}!${colLetter}${rowNumber}`,\n          values: [[sanitize(newVal)]]\n        });\n        hasChanges = true;\n      }\n    }\n    if (hasChanges) logs.push(`Updated Row ${rowNumber} via ${matchType}`);\n  } else {\n    // CREATE NEW\n    if (!item[CONFIG.idColumn]) {\n        item[CONFIG.idColumn] = generateUniqueId();\n    }\n    item['TIMESTAMP'] = new Date().toISOString();\n    \n    // Map object to array based on header order\n    const rowArray = headers.map(h => sanitize(item[h]));\n    newRows.push(rowArray);\n    logs.push(`Created new row with ID ${item[CONFIG.idColumn]}`);\n  }\n}\n\nreturn {\n  json: {\n    stats: {\n      updates: batchUpdates.length,\n      creates: newRows.length,\n      logs\n    },\n    hasUpdates: batchUpdates.length > 0,\n    hasCreates: newRows.length > 0,\n    updatePayload: batchUpdates,\n    createPayload: newRows.length > 0 ? [\n        {\n            range: CONFIG.sheetName,\n            values: newRows\n        }\n    ] : []\n  }\n};"
+      },
+      "id": "33cc63e8-43d8-4145-99c8-7a3ca218a6b6",
+      "name": "Diff Engine (Optimized)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1072,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "0d3c0138-038c-443b-be65-0a86db904a43",
+              "leftValue": "={{ $json.hasUpdates }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "98d65d33-fdff-420d-81e9-04d87936a801",
+      "name": "Has Updates?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1344,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "0d3c0138-038c-443b-be65-0a86db904a43",
+              "leftValue": "={{ $json.hasCreates }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "0e9f541c-28c5-412c-b800-04a26cdd8641",
+      "name": "Has Creates?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1344,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://sheets.googleapis.com/v4/spreadsheets/' + $('Config').first().json.spreadsheet_id + '/values:batchUpdate' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"valueInputOption\": \"RAW\",\n  \"data\": {{ $json.updatePayload.toJsonString() }}\n}",
+        "options": {}
+      },
+      "id": "21bbb6a9-fdfb-4cb2-bd40-8dabcf5e6219",
+      "name": "API Batch Update",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1616,
+        144
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "e2knIZpw8YF0QBAB",
+          "name": "Google Sheets person17@example.com"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://sheets.googleapis.com/v4/spreadsheets/' + $('Config').first().json.spreadsheet_id + '/values/' + $('Config').first().json.sheet_name + ':append' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "valueInputOption",
+              "value": "RAW"
+            },
+            {
+              "name": "insertDataOption",
+              "value": "INSERT_ROWS"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"range\": \"{{ $json.createPayload[0].range }}\",\n  \"values\": {{ $json.createPayload[0].values.toJsonString() }}\n}",
+        "options": {}
+      },
+      "id": "ce0f03c3-8d2a-4e5d-9905-a09409ee8427",
+      "name": "API Batch Append",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1616,
+        384
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "e2knIZpw8YF0QBAB",
+          "name": "Google Sheets person17@example.com"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "processLock01",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/processLock01",
+          "cachedResultName": "process_lock"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "PROCESS": "sheet_sync",
+            "KEY": "={{ $('Config').first().json.lock_key }}",
+            "ACTION": "unlock"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "4e611b93-203c-4990-bb86-a5603d8c2fcc",
+      "name": "Release Lock",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1904,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  \"success\": true,\n  \"updated\": $('Diff Engine (Optimized)').first().json.stats.updates,\n  \"created\": $('Diff Engine (Optimized)').first().json.stats.creates\n} }}",
+        "options": {}
+      },
+      "id": "47567687-ad46-48ef-8ff5-43b391355142",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        2128,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "SPREADSHEET_ID",
+              "value": "1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo"
+            },
+            {
+              "name": "SHEET_NAME",
+              "value": "מסמכים נכנסים"
+            },
+            {
+              "name": "SHEET_GID",
+              "value": "542119184"
+            },
+            {
+              "name": "ID_COLUMN",
+              "value": "ID"
+            }
+          ],
+          "boolean": [
+            {
+              "name": "STRICT_MODE",
+              "value": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "CONFIG",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        1008,
+        -544
+      ],
+      "id": "932e257b-274b-4611-a696-09af8e3b2f52"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Normalize Input\n// Handles Webhook body, Subworkflow items, or Manual input uniformally\n\nlet items = [];\n\n// Check if input is an array or object and normalize\nif (Array.isArray($input.all())) {\n  items = $input.all().map(i => i.json);\n  // If webhook body is wrapped in 'body' key\n  if (items.length === 1 && items[0].body) {\n    items = Array.isArray(items[0].body) ? items[0].body : [items[0].body];\n  }\n}\n\n// 2. Sanitize & Prepare\nconst cleanItems = items.map(item => {\n  // Remove nulls and undefined\n  const clean = Object.fromEntries(\n    Object.entries(item).filter(([_, v]) => v != null)\n  );\n  \n  // Ensure ID is string if exists\n  if (clean.ID) clean.ID = String(clean.ID);\n  \n  // Add processing timestamp\n  clean.TIMESTAMP = new Date().toISOString();\n  \n  // Tag for processing\n  return clean;\n});\n\nreturn cleanItems.map(item => ({ json: item }));"
+      },
+      "name": "Normalize Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1232,
+        -544
+      ],
+      "id": "06703f7d-ce0f-4841-98be-41e32a931611"
+    },
+    {
+      "parameters": {
+        "workflowId": "processLock01",
+        "options": {}
+      },
+      "name": "Acquire Locks",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        1456,
+        -544
+      ],
+      "id": "2d85da7a-6cf2-4ca5-9bee-af23aac720e0",
+      "notes": "In a real batch scenario, locking individual rows sequentially is slow. Ideally, pass an array of IDs to the subworkflow, or lock the batch."
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('CONFIG').first().json.SPREADSHEET_ID }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $('CONFIG').first().json.SHEET_NAME }}",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "name": "Get Current Sheet State",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        1680,
+        -544
+      ],
+      "id": "36a30f76-72c9-40cb-bb9e-f54ee042d902",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "e2knIZpw8YF0QBAB",
+          "name": "Google Sheets person17@example.com"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// CONFIGURATION\nconst CONFIG = $('CONFIG').first().json;\nconst ID_COL = CONFIG.ID_COLUMN;\nconst SHEET_NAME = CONFIG.SHEET_NAME;\n\n// HELPER: Column Index to Letter (0 -> A, 26 -> AA)\nfunction columnToLetter(column) {\n  let letter = '';\n  let temp = column;\n  while (temp >= 0) {\n    letter = String.fromCharCode((temp % 26) + 65) + letter;\n    temp = Math.floor(temp / 26) - 1;\n  }\n  return letter;\n}\n\n// HELPER: Generate ID\nfunction generateUniqueId() {\n  return Date.now().toString(36) + Math.random().toString(36).substr(2);\n}\n\n// 1. INDEX SHEET DATA\nconst sheetRows = $('Get Current Sheet State').all().map(i => i.json);\nconst headers = Object.keys(sheetRows[0] || {}).filter(k => k !== 'row_number');\n\n// Build Header Map (Key -> Column Index)\nconst headerMap = {};\nheaders.forEach((h, i) => headerMap[h] = i);\n\n// Build Row Index (ID -> Row Data)\nconst rowIndex = new Map();\n// Build Secondary Index (CompanyID+DocID -> Row Data) for matching\nconst secondaryIndex = new Map();\n\nsheetRows.forEach(row => {\n  if (row[ID_COL]) rowIndex.set(String(row[ID_COL]), row);\n  \n  // Secondary matching logic based on your previous workflow\n  if (row.COMPANY_ID && row.COMPANY_DOC_ID) {\n    secondaryIndex.set(`${row.COMPANY_ID}_${row.COMPANY_DOC_ID}`, row);\n  }\n});\n\n// 2. PROCESS INPUTS\nconst updates = [];\nconst appends = [];\nconst inputs = $('Normalize Input').all().map(i => i.json);\nconst logs = [];\n\nfor (const item of inputs) {\n  let match = null;\n  let matchType = 'none';\n\n  // Try ID Match\n  if (item[ID_COL] && rowIndex.has(String(item[ID_COL]))) {\n    match = rowIndex.get(String(item[ID_COL]));\n    matchType = 'id';\n  }\n  // Try Secondary Match\n  else if (item.COMPANY_ID && item.COMPANY_DOC_ID) {\n    const key = `${item.COMPANY_ID}_${item.COMPANY_DOC_ID}`;\n    if (secondaryIndex.has(key)) {\n      match = secondaryIndex.get(key);\n      matchType = 'secondary';\n    }\n  }\n  // Try Hash Match (Optional based on previous code)\n  // ...\n\n  if (match) {\n    // --- UPDATE LOGIC ---\n    const rowNum = match.row_number;\n    \n    // Check for actual changes\n    Object.keys(item).forEach(key => {\n      if (key === ID_COL) return; // Don't update ID\n      if (headerMap[key] === undefined) return; // Skip unknown columns\n\n      const oldVal = match[key] == null ? '' : String(match[key]);\n      const newVal = item[key] == null ? '' : String(item[key]);\n\n      if (oldVal !== newVal) {\n        const colLetter = columnToLetter(headerMap[key]);\n        updates.push({\n          range: `${SHEET_NAME}!${colLetter}${rowNum}`,\n          values: [[item[key]]]\n        });\n      }\n    });\n  } else {\n    // --- CREATE LOGIC ---\n    // Generate ID if missing\n    if (!item[ID_COL]) item[ID_COL] = generateUniqueId();\n    \n    // Map item to full row array based on headers\n    const newRow = headers.map(h => item[h] || '');\n    appends.push(newRow);\n  }\n}\n\nreturn {\n  json: {\n    hasUpdates: updates.length > 0,\n    hasAppends: appends.length > 0,\n    updateCount: updates.length,\n    appendCount: appends.length,\n    batchUpdates: updates,\n    appendRows: appends\n  }\n};"
+      },
+      "name": "Compute Differences",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1888,
+        -544
+      ],
+      "id": "c2e64633-f86e-45d0-9ba7-43b9f5b65fc9"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.hasAppends }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "Has Appends?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        2112,
+        -384
+      ],
+      "id": "3fa3c9f7-88e5-4484-b564-4b965f4d99c8"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://sheets.googleapis.com/v4/spreadsheets/' + $('CONFIG').first().json.SPREADSHEET_ID + '/values:batchUpdate' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"valueInputOption\": \"RAW\",\n  \"data\": {{ JSON.stringify($json.batchUpdates) }}\n}",
+        "options": {}
+      },
+      "name": "Execute Batch Update",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        2336,
+        -656
+      ],
+      "id": "69dd3317-d8e9-4835-9fcb-6a6d68038734",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "e2knIZpw8YF0QBAB",
+          "name": "Google Sheets person17@example.com"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://sheets.googleapis.com/v4/spreadsheets/' + $('CONFIG').first().json.SPREADSHEET_ID + '/values/' + $('CONFIG').first().json.SHEET_NAME + ':append' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "valueInputOption",
+              "value": "RAW"
+            },
+            {
+              "name": "insertDataOption",
+              "value": "INSERT_ROWS"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"values\": {{ JSON.stringify($json.appendRows) }}\n}",
+        "options": {}
+      },
+      "name": "Execute Append",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        2336,
+        -368
+      ],
+      "id": "cd3cabd5-e807-4935-a34c-a27b07a0f259",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "e2knIZpw8YF0QBAB",
+          "name": "Google Sheets person17@example.com"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "workflowId": "processLock01",
+        "options": {}
+      },
+      "name": "Release Locks",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        2592,
+        -544
+      ],
+      "id": "646d6828-627b-4a4a-9a67-fc0af49a7640"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"processed\": {{ $('Normalize Input').all().length }},\n  \"updates\": {{ $('Compute Differences').first().json.updateCount }},\n  \"creates\": {{ $('Compute Differences').first().json.appendCount }}\n}",
+        "options": {}
+      },
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        2816,
+        -544
+      ],
+      "id": "41602751-f1e7-4be7-a04d-8e27cf10e3b6"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "mergeByPosition",
+        "options": {}
+      },
+      "name": "Merge Flows",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2,
+      "position": [
+        2816,
+        -688
+      ],
+      "id": "5f51f6fe-8f5a-43d0-8749-a833b448cdba"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "documents/sync",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Webhook1",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        768,
+        -544
+      ],
+      "id": "07d87a69-0e55-4952-8f5a-bc43ffa400a0",
+      "webhookId": "97a4d86b-b6cb-4219-ba46-9227d89ef98c"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.hasUpdates }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "Has Updates?1",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        2112,
+        -640
+      ],
+      "id": "4d3aa083-648e-4ed9-a307-d0ed4c132cde"
+    },
+    {
+      "parameters": {
+        "jsCode": "// =============================================================================\n// PHASE 1: NORMALIZE INPUT\n// Unifies all entry points into consistent array format\n// =============================================================================\n\nconst CONFIG = {\n  ID_COLUMN: 'ID',\n  MATCHING_PRIMARY: ['COMPANY_ID', 'COMPANY_DOC_ID'],\n  MATCHING_SECONDARY: 'HASH'\n};\n\nfunction generateId() {\n  return `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;\n}\n\nfunction generateRequestId() {\n  return `req_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;\n}\n\nfunction cleanObject(obj) {\n  const cleaned = {};\n  for (const [key, value] of Object.entries(obj)) {\n    if (value !== null && value !== undefined) {\n      cleaned[key] = value;\n    }\n  }\n  return cleaned;\n}\n\nfunction getLockKey(item) {\n  // Priority: ID > COMPANY_ID+COMPANY_DOC_ID > HASH\n  if (item[CONFIG.ID_COLUMN]) {\n    return `id:${item[CONFIG.ID_COLUMN]}`;\n  }\n  \n  const hasCompanyKeys = CONFIG.MATCHING_PRIMARY.every(k => \n    item[k] && String(item[k]).toLowerCase() !== 'unknown'\n  );\n  if (hasCompanyKeys) {\n    return `company:${CONFIG.MATCHING_PRIMARY.map(k => item[k]).join('|')}`;\n  }\n  \n  if (item[CONFIG.MATCHING_SECONDARY]) {\n    return `hash:${item[CONFIG.MATCHING_SECONDARY]}`;\n  }\n  \n  // New record with no identifiers - generate temp key\n  return `temp:${generateId()}`;\n}\n\n// --- Main Logic ---\nconst startTime = Date.now();\nconst requestId = generateRequestId();\nconst allInputs = $input.all();\nconst items = [];\nconst lockKeys = [];\nconst errors = [];\n\nfor (const input of allInputs) {\n  let data = input.json;\n  \n  // Handle webhook body wrapper\n  if (data.body && typeof data.body === 'object') {\n    data = data.body;\n  }\n  \n  // Handle array in body\n  const dataArray = Array.isArray(data) ? data : [data];\n  \n  for (const item of dataArray) {\n    if (!item || typeof item !== 'object') {\n      errors.push('Invalid item: not an object');\n      continue;\n    }\n    \n    const cleaned = cleanObject(item);\n    \n    // Add timestamp if missing\n    if (!cleaned.TIMESTAMP) {\n      cleaned.TIMESTAMP = new Date().toISOString();\n    }\n    \n    // Generate lock key\n    const lockKey = getLockKey(cleaned);\n    cleaned._lockKey = lockKey;\n    cleaned._isNew = !cleaned[CONFIG.ID_COLUMN];\n    \n    // Generate ID for new records\n    if (cleaned._isNew) {\n      cleaned._generatedId = generateId();\n    }\n    \n    items.push(cleaned);\n    lockKeys.push(lockKey);\n  }\n}\n\nif (errors.length > 0 && items.length === 0) {\n  throw new Error(`Validation failed: ${errors.join('; ')}`);\n}\n\n// Detect entry point\nconst entryPoint = $input.first().json.headers ? 'webhook' : \n                   $input.first().json.body ? 'webhook' : 'subworkflow';\n\nreturn [{\n  json: {\n    requestId,\n    entryPoint,\n    items,\n    lockKeys: [...new Set(lockKeys)], // Dedupe\n    itemCount: items.length,\n    hasNewRecords: items.some(i => i._isNew),\n    timing: { normalizeMs: Date.now() - startTime },\n    errors: errors.length > 0 ? errors : undefined\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1376,
+        -1376
+      ],
+      "id": "eb73ee8b-bfdd-42ca-8c58-21c3eb815b89",
+      "name": "1. Normalize Input"
+    },
+    {
+      "parameters": {
+        "jsCode": "// =============================================================================\n// PHASE 2: ACQUIRE LOCKS\n// Simple in-memory lock tracking (replace with Redis/DB for production)\n// =============================================================================\n\nconst input = $input.first().json;\nconst lockKeys = input.lockKeys || [];\nconst acquiredLocks = [];\n\n// In production, this would call an external lock service\n// For now, we just track what we need to lock\nfor (const key of lockKeys) {\n  acquiredLocks.push({\n    key,\n    acquiredAt: new Date().toISOString()\n  });\n}\n\nreturn [{\n  json: {\n    ...input,\n    locks: {\n      keys: acquiredLocks,\n      count: acquiredLocks.length,\n      allAcquired: true\n    },\n    timing: {\n      ...input.timing,\n      lockMs: Date.now() - new Date(input.timing?.normalizeMs ? Date.now() - input.timing.normalizeMs : Date.now()).getTime()\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        -1376
+      ],
+      "id": "9a115d6d-40cf-45d3-8fa0-b85b9bfa27a2",
+      "name": "2. Acquire Locks"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 542119184,
+          "mode": "list",
+          "cachedResultName": "מסמכים נכנסים",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo/edit#gid=542119184"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        1776,
+        -1376
+      ],
+      "id": "466d3322-3e4f-42a1-adbb-fd0e9bc18535",
+      "name": "3. Fetch Sheet Data",
+      "executeOnce": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "e2knIZpw8YF0QBAB",
+          "name": "Google Sheets person17@example.com"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// =============================================================================\n// PHASE 4: COMPUTE CHANGES\n// Diff current state vs desired state, prepare operations\n// =============================================================================\n\nconst CONFIG = {\n  SHEET_NAME: 'מסמכים נכנסים',\n  ID_COLUMN: 'ID',\n  MATCHING_PRIMARY: ['COMPANY_ID', 'COMPANY_DOC_ID'],\n  MATCHING_SECONDARY: 'HASH',\n  MAX_BATCH_SIZE: 500\n};\n\n// --- Helper Functions ---\nfunction columnToLetter(col) {\n  let letter = '';\n  let temp = col;\n  while (temp >= 0) {\n    letter = String.fromCharCode((temp % 26) + 65) + letter;\n    temp = Math.floor(temp / 26) - 1;\n  }\n  return letter;\n}\n\nfunction sanitize(value) {\n  if (value === null || value === undefined) return '';\n  if (typeof value === 'object') return JSON.stringify(value);\n  return value;\n}\n\nfunction matchByFields(item, index, fields) {\n  const hasAll = fields.every(f => {\n    const v = item[f];\n    return v && String(v).toLowerCase() !== 'unknown';\n  });\n  if (!hasAll) return null;\n  \n  for (const [key, row] of index.entries()) {\n    const matches = fields.every(f => \n      String(item[f] || '').toLowerCase() === String(row[f] || '').toLowerCase()\n    );\n    if (matches) return { key, row };\n  }\n  return null;\n}\n\n// --- Get Input Data ---\nconst inputData = $('2. Acquire Locks').first().json;\nconst sheetRows = $('3. Fetch Sheet Data').all().map(i => i.json);\nconst items = inputData.items || [];\n\nconst startTime = Date.now();\n\n// --- Build Indexes ---\nif (!sheetRows || sheetRows.length === 0) {\n  throw new Error('Sheet is empty or inaccessible');\n}\n\nconst headers = Object.keys(sheetRows[0]).filter(k => k !== 'row_number');\nconst headerMap = new Map(headers.map((h, i) => [h, i]));\n\nconst byId = new Map();\nconst byCompany = new Map();\nconst byHash = new Map();\n\nfor (const row of sheetRows) {\n  const id = row[CONFIG.ID_COLUMN];\n  if (id) byId.set(String(id), row);\n  \n  const companyKey = CONFIG.MATCHING_PRIMARY.map(k => row[k] || '').join('|').toLowerCase();\n  if (companyKey && !companyKey.includes('unknown')) {\n    byCompany.set(companyKey, row);\n  }\n  \n  const hash = row[CONFIG.MATCHING_SECONDARY];\n  if (hash) byHash.set(String(hash).toLowerCase(), row);\n}\n\n// --- Process Items ---\nconst updates = [];\nconst creates = [];\nconst skipped = [];\nconst errors = [];\n\nlet totalCellChanges = 0;\n\nfor (const item of items) {\n  let foundRow = null;\n  let matchMethod = null;\n  \n  // Try to find existing row\n  const itemId = item[CONFIG.ID_COLUMN];\n  if (itemId) {\n    foundRow = byId.get(String(itemId));\n    matchMethod = 'id';\n  }\n  \n  if (!foundRow) {\n    const companyKey = CONFIG.MATCHING_PRIMARY.map(k => item[k] || '').join('|').toLowerCase();\n    if (companyKey && !companyKey.includes('unknown') && byCompany.has(companyKey)) {\n      foundRow = byCompany.get(companyKey);\n      matchMethod = 'company';\n    }\n  }\n  \n  if (!foundRow && item[CONFIG.MATCHING_SECONDARY]) {\n    const hash = String(item[CONFIG.MATCHING_SECONDARY]).toLowerCase();\n    if (byHash.has(hash)) {\n      foundRow = byHash.get(hash);\n      matchMethod = 'hash';\n    }\n  }\n  \n  // --- UPDATE existing row ---\n  if (foundRow) {\n    const rowNumber = foundRow.row_number;\n    if (!rowNumber) {\n      errors.push({ item, error: 'Missing row_number' });\n      continue;\n    }\n    \n    const changes = [];\n    for (const [field, newValue] of Object.entries(item)) {\n      // Skip internal fields\n      if (field.startsWith('_')) continue;\n      if (field === CONFIG.ID_COLUMN) continue;\n      \n      const colIndex = headerMap.get(field);\n      if (colIndex === undefined) continue;\n      \n      const oldValue = sanitize(foundRow[field]);\n      const newSanitized = sanitize(newValue);\n      \n      if (String(oldValue) === String(newSanitized)) continue;\n      \n      const cellLetter = columnToLetter(colIndex);\n      changes.push({\n        field,\n        oldValue,\n        newValue: newSanitized,\n        cell: `${cellLetter}${rowNumber}`,\n        range: `${CONFIG.SHEET_NAME}!${cellLetter}${rowNumber}`\n      });\n    }\n    \n    if (changes.length === 0) {\n      skipped.push({ \n        id: foundRow[CONFIG.ID_COLUMN], \n        reason: 'no_changes',\n        matchMethod \n      });\n    } else {\n      updates.push({\n        rowNumber,\n        id: foundRow[CONFIG.ID_COLUMN],\n        matchMethod,\n        changes\n      });\n      totalCellChanges += changes.length;\n    }\n  }\n  // --- CREATE new row ---\n  else {\n    const newId = item._generatedId || `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;\n    const rowValues = headers.map(h => {\n      if (h === CONFIG.ID_COLUMN) return newId;\n      return sanitize(item[h]);\n    });\n    \n    creates.push({\n      generatedId: newId,\n      values: rowValues,\n      originalItem: item\n    });\n  }\n}\n\n// --- Validate Batch Size ---\nconst totalOps = updates.reduce((sum, u) => sum + u.changes.length, 0) + creates.length;\nif (totalOps > CONFIG.MAX_BATCH_SIZE) {\n  throw new Error(`Batch too large: ${totalOps} operations exceeds limit of ${CONFIG.MAX_BATCH_SIZE}`);\n}\n\n// --- Prepare API Payloads ---\nconst batchUpdateData = [];\nfor (const update of updates) {\n  for (const change of update.changes) {\n    batchUpdateData.push({\n      range: change.range,\n      values: [[change.newValue]]\n    });\n  }\n}\n\nconst appendData = creates.map(c => c.values);\n\nreturn [{\n  json: {\n    ...inputData,\n    computation: {\n      updates,\n      creates,\n      skipped,\n      errors,\n      stats: {\n        toUpdate: updates.length,\n        toCreate: creates.length,\n        toSkip: skipped.length,\n        cellChanges: totalCellChanges,\n        errors: errors.length\n      }\n    },\n    operations: {\n      hasUpdates: batchUpdateData.length > 0,\n      hasCreates: appendData.length > 0,\n      batchUpdatePayload: {\n        valueInputOption: 'RAW',\n        data: batchUpdateData\n      },\n      appendPayload: {\n        range: CONFIG.SHEET_NAME,\n        values: appendData\n      }\n    },\n    sheetMeta: {\n      headers,\n      rowCount: sheetRows.length,\n      indexedById: byId.size,\n      indexedByCompany: byCompany.size,\n      indexedByHash: byHash.size\n    },\n    timing: {\n      ...inputData.timing,\n      computeMs: Date.now() - startTime\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1968,
+        -1376
+      ],
+      "id": "cde2f9ee-8a20-4f11-89b8-55d1194fd1f1",
+      "name": "4. Compute Changes"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://sheets.googleapis.com/v4/spreadsheets/{{ $('4. Compute Changes').first().json.operations.batchUpdatePayload ? '1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo' : '' }}/values:batchUpdate",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $('4. Compute Changes').first().json.operations.batchUpdatePayload }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2368,
+        -1568
+      ],
+      "id": "6411962b-c351-4150-83cf-ba5ef628857a",
+      "name": "5a. Batch Update",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "e2knIZpw8YF0QBAB",
+          "name": "Google Sheets person17@example.com"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://sheets.googleapis.com/v4/spreadsheets/1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo/values/מסמכים נכנסים:append",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "valueInputOption",
+              "value": "RAW"
+            },
+            {
+              "name": "insertDataOption",
+              "value": "INSERT_ROWS"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"range\": $('4. Compute Changes').first().json.operations.appendPayload.range, \"values\": $('4. Compute Changes').first().json.operations.appendPayload.values } }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2368,
+        -1264
+      ],
+      "id": "a3042126-bc1e-491d-9139-6e36d61384a2",
+      "name": "5b. Append Rows",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "e2knIZpw8YF0QBAB",
+          "name": "Google Sheets person17@example.com"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        2576,
+        -1376
+      ],
+      "id": "5aa5e2a6-8ddc-410c-986b-5e28c49e86f5",
+      "name": "Merge Results"
+    },
+    {
+      "parameters": {
+        "jsCode": "// =============================================================================\n// PHASE 6: RELEASE LOCKS\n// Release all acquired locks\n// =============================================================================\n\nconst computeData = $('4. Compute Changes').first().json;\nconst locks = computeData.locks?.keys || [];\n\n// In production, this would call the lock service to release\n// For now, we just track that we're releasing them\n\nconst releasedLocks = locks.map(lock => ({\n  ...lock,\n  releasedAt: new Date().toISOString()\n}));\n\nreturn [{\n  json: {\n    ...computeData,\n    locks: {\n      ...computeData.locks,\n      released: true,\n      releasedAt: new Date().toISOString()\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2768,
+        -1376
+      ],
+      "id": "6887aaeb-ef61-4df5-ad78-ec7e9137300f",
+      "name": "6. Release Locks"
+    },
+    {
+      "parameters": {
+        "jsCode": "// =============================================================================\n// PHASE 7: FORMAT RESPONSE\n// Create structured response for all entry points\n// =============================================================================\n\nconst data = $input.first().json;\nconst comp = data.computation || {};\nconst stats = comp.stats || {};\nconst timing = data.timing || {};\n\nconst totalTimeMs = Object.values(timing).reduce((a, b) => a + (typeof b === 'number' ? b : 0), 0);\n\nconst response = {\n  success: true,\n  requestId: data.requestId,\n  summary: {\n    processed: data.itemCount || 0,\n    updated: stats.toUpdate || 0,\n    created: stats.toCreate || 0,\n    skipped: stats.toSkip || 0,\n    cellsModified: stats.cellChanges || 0\n  },\n  details: {\n    updates: (comp.updates || []).map(u => ({\n      id: u.id,\n      matchMethod: u.matchMethod,\n      fieldsChanged: u.changes.map(c => c.field)\n    })),\n    creates: (comp.creates || []).map(c => ({\n      id: c.generatedId\n    })),\n    skipped: comp.skipped || []\n  },\n  timing: {\n    ...timing,\n    totalMs: totalTimeMs\n  },\n  meta: {\n    entryPoint: data.entryPoint,\n    timestamp: new Date().toISOString()\n  }\n};\n\n// Add errors if any\nif (comp.errors && comp.errors.length > 0) {\n  response.errors = comp.errors;\n}\n\nreturn [{ json: response }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2976,
+        -1376
+      ],
+      "id": "832b7b05-1a7c-444a-81e5-26f3bf8fe525",
+      "name": "7. Format Response"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "is-webhook",
+              "leftValue": "={{ $('1. Normalize Input').first().json.entryPoint }}",
+              "rightValue": "webhook",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3168,
+        -1376
+      ],
+      "id": "1c0877b1-2863-4634-b64e-31763c30fb13",
+      "name": "Is Webhook?"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        3376,
+        -1472
+      ],
+      "id": "0b4109ad-3211-4a68-826a-4ac94999d981",
+      "name": "Webhook Response"
+    },
+    {
+      "parameters": {
+        "jsCode": "// =============================================================================\n// ERROR HANDLER: Release locks and format error response\n// =============================================================================\n\nconst error = $input.first().json;\nlet computeData = {};\n\ntry {\n  computeData = $('4. Compute Changes').first()?.json || {};\n} catch (e) {\n  try {\n    computeData = $('2. Acquire Locks').first()?.json || {};\n  } catch (e2) {\n    computeData = $('1. Normalize Input').first()?.json || {};\n  }\n}\n\nconst response = {\n  success: false,\n  requestId: computeData.requestId || 'unknown',\n  error: {\n    message: error.message || 'Unknown error',\n    code: error.code || 'INTERNAL_ERROR'\n  },\n  meta: {\n    entryPoint: computeData.entryPoint || 'unknown',\n    timestamp: new Date().toISOString(),\n    locksReleased: true\n  }\n};\n\nreturn [{ json: response }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2768,
+        -1072
+      ],
+      "id": "f1d614ef-7e1a-4f6e-858f-99cbe3f0ab8e",
+      "name": "Error Handler"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 500
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        3376,
+        -1168
+      ],
+      "id": "16d4521f-af35-4966-8270-d2ccf6050f53",
+      "name": "Error Webhook Response"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "is-webhook-error",
+              "leftValue": "={{ $('1. Normalize Input').first().json.entryPoint }}",
+              "rightValue": "webhook",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2976,
+        -1072
+      ],
+      "id": "f6c11130-b5db-4845-ba14-ff17c2623491",
+      "name": "Is Webhook? (Error)"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2368,
+        -1472
+      ],
+      "id": "35ea0da6-d51e-433f-ad4d-dc41bd26df2c",
+      "name": "No Updates"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2368,
+        -1168
+      ],
+      "id": "84a83b8a-1ea0-4b1c-ad18-fddcec7bf481",
+      "name": "No Creates"
+    },
+    {
+      "parameters": {
+        "dataToSave": {
+          "values": [
+            {
+              "key": "requestId",
+              "value": "={{ $json.requestId }}"
+            },
+            {
+              "key": "summary",
+              "value": "={{ JSON.stringify($json.summary) }}"
+            },
+            {
+              "key": "entryPoint",
+              "value": "={{ $json.meta.entryPoint }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executionData",
+      "typeVersion": 1.1,
+      "position": [
+        3168,
+        -1568
+      ],
+      "id": "92142ff0-c705-4280-b172-b1ec80be79ca",
+      "name": "Save Execution Data"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1168,
+        -1568
+      ],
+      "id": "c60a809d-7aa0-4d81-b7c2-d68e72f361af",
+      "name": "CONFIG1"
+    },
+    {
+      "parameters": {
+        "httpMethod": "PUT",
+        "path": "documents/upsert",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        768,
+        -1376
+      ],
+      "id": "4e6e37b1-6c67-4708-bbb7-dfa79b376950",
+      "name": "Webhook2",
+      "webhookId": "doc-upsert-v2"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "has-updates",
+              "leftValue": "={{ $json.operations.hasUpdates }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2176,
+        -1472
+      ],
+      "id": "458c3a6c-985f-48de-95be-06f5686e5629",
+      "name": "Has Updates?2"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "has-creates",
+              "leftValue": "={{ $json.operations.hasCreates }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2176,
+        -1264
+      ],
+      "id": "3a43371b-8acb-41bd-8b52-d5014fa2fe77",
+      "name": "Has Creates?1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// GOOGLE SHEETS UPSERT - COMPLETE UNIFIED PROCESSOR\n// ============================================================================\n// Handles: Single items, Batch items, Updates, Creates (Upserts)\n// Entry: Webhook, Sub-workflow, or Manual trigger\n// ============================================================================\n\n// =========================== CONFIGURATION ===================================\nconst CONFIG = {\n  // Google Sheets\n  spreadsheetId: '1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo',\n  sheetName: 'מסמכים נכנסים',\n  sheetGid: 542119184,\n  \n  // Column settings\n  idColumn: 'ID',\n  matchingPrimary: ['COMPANY_ID', 'COMPANY_DOC_ID'],\n  matchingSecondary: 'HASH',\n  \n  // Limits\n  maxBatchSize: 500,\n  maxRetries: 3,\n  retryDelayMs: 1000,\n  \n  // Behavior\n  strictMode: false,        // If true, stop on first error\n  skipUnchanged: true,      // Skip cells with same value\n  generateTimestamp: true,  // Auto-update TIMESTAMP field\n  \n  // Schema - all allowed columns\n  schema: [\n    'ID', 'NAME', 'COMPANY_ID', 'SHORT_DOC_ID', 'TYPE', 'STATUS',\n    'COMPANY_DOC_ID', 'LINK', 'PURCHASE_ID', 'SHIPMENT_DOC_ID',\n    'LINKED_BS', 'BS_LINE_DATE', 'BS_LINE_AMOUNT', 'SOURCE_TYPE',\n    'SOURCE_ID', 'SOURCE_LINK', 'SIZE', 'HASH', 'TIMESTAMP',\n    'COMPANY_NAME', 'REQUIRED_ACTION', 'BS_EXTRACTED_LINES',\n    'TOTAL_AMOUNT', 'BS_EXTRACTION_VERIFIED', 'BS_LINE_NOTE',\n    'FROM_OFFICE', 'FROM_OFFICE_CHECK', 'BS_LINK_DOCUMENTS_COMPLETED',\n    'SEARCH_IN_DRIVE_COMPLETED', 'PURCHASE_ID_COMPLETED',\n    'SHIPMENT_ID_COMPLETED', 'COMPANY_NAME_COMPLETED',\n    'API_TOOLS_ID_COMPLETED', 'API_TOOLS_ID', 'EMPTY',\n    'BS_EXTRACTED_LINES_COMPLETED', 'BS_EXTRACTION_USE_CACHE',\n    'EX_INVOICE_ID', 'INVOICE_ID_COMPLETED', 'EX_IS_BS_COMPLETED',\n    'EX_IS_BS', 'FIGURE_TYPE_COMPLETED', 'DOUBLE_LINE_CONTEXT',\n    'FIGURE_COMPANY_COMPLETED'\n  ]\n};\n\n// =========================== UTILITIES =======================================\n\nconst utils = {\n  // Generate unique ID\n  generateId() {\n    const ts = Date.now().toString(36);\n    const rand = Math.random().toString(36).substring(2, 10);\n    return `${ts}${rand}`;\n  },\n  \n  // Convert column index to letter (0 = A, 26 = AA)\n  columnToLetter(index) {\n    let letter = '';\n    let temp = index;\n    while (temp >= 0) {\n      letter = String.fromCharCode((temp % 26) + 65) + letter;\n      temp = Math.floor(temp / 26) - 1;\n    }\n    return letter;\n  },\n  \n  // Sanitize value for Sheets API\n  sanitize(value) {\n    if (value === null || value === undefined) return '';\n    if (typeof value === 'object') return JSON.stringify(value);\n    return value;\n  },\n  \n  // Clean object - remove nulls/undefined\n  cleanObject(obj) {\n    return Object.fromEntries(\n      Object.entries(obj).filter(([_, v]) => v !== null && v !== undefined)\n    );\n  },\n  \n  // Sleep helper for retries\n  sleep(ms) {\n    return new Promise(resolve => setTimeout(resolve, ms));\n  },\n  \n  // Create composite key for matching\n  compositeKey(obj, fields) {\n    return fields.map(f => String(obj[f] || '').toLowerCase().trim()).join('|');\n  },\n  \n  // Check if value is empty/unknown\n  isEmpty(value) {\n    return value === undefined || value === null || value === '' || \n           String(value).toLowerCase() === 'unknown';\n  }\n};\n\n// =========================== HTTP CLIENT =====================================\n\nasync function sheetsRequest(endpoint, method = 'GET', body = null, retryCount = 0) {\n  const baseUrl = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}`;\n  const url = `${baseUrl}${endpoint}`;\n  \n  const options = {\n    method,\n    headers: { 'Content-Type': 'application/json' },\n    returnFullResponse: true\n  };\n  \n  if (body) {\n    options.body = JSON.stringify(body);\n  }\n  \n  try {\n    // Use n8n's built-in HTTP helper with OAuth\n    const response = await this.helpers.httpRequestWithAuthentication.call(\n      this,\n      'googleSheetsOAuth2Api',\n      { url, method, body, headers: { 'Content-Type': 'application/json' } }\n    );\n    return { success: true, data: response };\n  } catch (error) {\n    // Retry on 429 or 5xx\n    const status = error.statusCode || error.response?.status;\n    if ((status === 429 || status >= 500) && retryCount < CONFIG.maxRetries) {\n      const delay = CONFIG.retryDelayMs * Math.pow(2, retryCount);\n      console.log(`Retry ${retryCount + 1}/${CONFIG.maxRetries} after ${delay}ms...`);\n      await utils.sleep(delay);\n      return sheetsRequest.call(this, endpoint, method, body, retryCount + 1);\n    }\n    return { success: false, error: error.message, status };\n  }\n}\n\n// =========================== PHASE 1: NORMALIZE ==============================\n\nfunction normalizeInput(inputItems) {\n  const requestId = utils.generateId();\n  const startTime = Date.now();\n  \n  // Collect all items from input\n  let items = [];\n  \n  for (const input of inputItems) {\n    const data = input.json?.body || input.json;\n    if (Array.isArray(data)) {\n      items.push(...data);\n    } else if (data && typeof data === 'object') {\n      items.push(data);\n    }\n  }\n  \n  // Clean and validate each item\n  const cleaned = items.map((item, idx) => {\n    const clean = utils.cleanObject(item);\n    \n    // Add timestamp if configured\n    if (CONFIG.generateTimestamp && !clean.TIMESTAMP) {\n      clean.TIMESTAMP = new Date().toISOString();\n    }\n    \n    // Generate temp ID for tracking new records\n    clean._tempId = clean[CONFIG.idColumn] || `new_${idx}_${utils.generateId()}`;\n    clean._isNew = !clean[CONFIG.idColumn];\n    \n    return clean;\n  });\n  \n  return {\n    items: cleaned,\n    itemCount: cleaned.length,\n    hasNewRecords: cleaned.some(i => i._isNew),\n    requestId,\n    timing: { normalizeMs: Date.now() - startTime }\n  };\n}\n\n// =========================== PHASE 2: FETCH STATE ============================\n\nasync function fetchSheetState() {\n  const startTime = Date.now();\n  \n  // Fetch all data from sheet\n  const endpoint = `/values/${encodeURIComponent(CONFIG.sheetName)}?valueRenderOption=UNFORMATTED_VALUE`;\n  const response = await sheetsRequest.call(this, endpoint);\n  \n  if (!response.success) {\n    throw new Error(`Failed to fetch sheet data: ${response.error}`);\n  }\n  \n  const rows = response.data.values || [];\n  if (rows.length === 0) {\n    throw new Error('Sheet is empty - no headers found');\n  }\n  \n  // First row is headers\n  const headers = rows[0];\n  const headerMap = new Map(headers.map((h, i) => [h, i]));\n  \n  // Validate ID column exists\n  if (!headerMap.has(CONFIG.idColumn)) {\n    throw new Error(`ID column \"${CONFIG.idColumn}\" not found in sheet`);\n  }\n  \n  // Build indexes for fast lookup\n  const byId = new Map();\n  const byCompanyKey = new Map();\n  const byHash = new Map();\n  \n  for (let rowNum = 1; rowNum < rows.length; rowNum++) {\n    const row = rows[rowNum];\n    const rowObj = { _rowNumber: rowNum + 1 }; // 1-indexed for Sheets\n    \n    headers.forEach((header, colIdx) => {\n      rowObj[header] = row[colIdx];\n    });\n    \n    // Index by ID\n    const id = rowObj[CONFIG.idColumn];\n    if (id !== undefined && id !== null && id !== '') {\n      byId.set(String(id), rowObj);\n    }\n    \n    // Index by company composite key\n    const companyKey = utils.compositeKey(rowObj, CONFIG.matchingPrimary);\n    if (companyKey && !CONFIG.matchingPrimary.some(f => utils.isEmpty(rowObj[f]))) {\n      byCompanyKey.set(companyKey, rowObj);\n    }\n    \n    // Index by hash\n    const hash = rowObj[CONFIG.matchingSecondary];\n    if (hash && !utils.isEmpty(hash)) {\n      byHash.set(String(hash).toLowerCase(), rowObj);\n    }\n  }\n  \n  return {\n    headers,\n    headerMap,\n    byId,\n    byCompanyKey,\n    byHash,\n    totalRows: rows.length - 1,\n    timing: { fetchMs: Date.now() - startTime }\n  };\n}\n\n// =========================== PHASE 3: COMPUTE CHANGES ========================\n\nfunction computeChanges(items, state) {\n  const startTime = Date.now();\n  const { headers, headerMap, byId, byCompanyKey, byHash } = state;\n  \n  const updates = [];\n  const creates = [];\n  const skipped = [];\n  const errors = [];\n  const warnings = [];\n  \n  const processedIds = new Set();\n  \n  for (const item of items) {\n    let existingRow = null;\n    let matchMethod = null;\n    \n    // Try to find existing row\n    const itemId = item[CONFIG.idColumn];\n    \n    if (itemId && !utils.isEmpty(itemId)) {\n      // Direct ID lookup\n      existingRow = byId.get(String(itemId));\n      matchMethod = 'id';\n      \n      if (processedIds.has(String(itemId))) {\n        warnings.push(`Duplicate ID \"${itemId}\" in batch - using latest`);\n      }\n      processedIds.add(String(itemId));\n    } else {\n      // Try company key match\n      const companyKey = utils.compositeKey(item, CONFIG.matchingPrimary);\n      if (!CONFIG.matchingPrimary.some(f => utils.isEmpty(item[f]))) {\n        existingRow = byCompanyKey.get(companyKey);\n        if (existingRow) matchMethod = 'company';\n      }\n      \n      // Try hash match\n      if (!existingRow && item[CONFIG.matchingSecondary]) {\n        const hashKey = String(item[CONFIG.matchingSecondary]).toLowerCase();\n        existingRow = byHash.get(hashKey);\n        if (existingRow) matchMethod = 'hash';\n      }\n    }\n    \n    if (existingRow) {\n      // === UPDATE existing row ===\n      const rowNumber = existingRow._rowNumber;\n      const changes = [];\n      \n      for (const [field, newValue] of Object.entries(item)) {\n        // Skip internal fields\n        if (field.startsWith('_')) continue;\n        if (field === CONFIG.idColumn) continue;\n        \n        // Check column exists\n        const colIndex = headerMap.get(field);\n        if (colIndex === undefined) {\n          if (CONFIG.strictMode) {\n            errors.push(`Column \"${field}\" not found for row ${rowNumber}`);\n            break;\n          }\n          warnings.push(`Column \"${field}\" not found - skipping`);\n          continue;\n        }\n        \n        const oldValue = utils.sanitize(existingRow[field]);\n        const sanitizedNew = utils.sanitize(newValue);\n        \n        // Skip if unchanged\n        if (CONFIG.skipUnchanged && String(oldValue) === String(sanitizedNew)) {\n          continue;\n        }\n        \n        const cellRef = `${utils.columnToLetter(colIndex)}${rowNumber}`;\n        changes.push({\n          column: field,\n          colIndex,\n          cell: cellRef,\n          oldValue,\n          newValue: sanitizedNew\n        });\n      }\n      \n      if (changes.length > 0) {\n        updates.push({\n          rowNumber,\n          id: existingRow[CONFIG.idColumn] || item._tempId,\n          matchMethod,\n          changes\n        });\n      } else {\n        skipped.push({\n          id: existingRow[CONFIG.idColumn] || item._tempId,\n          reason: 'no_changes'\n        });\n      }\n    } else {\n      // === CREATE new row ===\n      const newId = utils.generateId();\n      const rowValues = headers.map(header => {\n        if (header === CONFIG.idColumn) return newId;\n        return utils.sanitize(item[header]);\n      });\n      \n      creates.push({\n        tempId: item._tempId,\n        generatedId: newId,\n        values: rowValues\n      });\n    }\n    \n    if (CONFIG.strictMode && errors.length > 0) break;\n  }\n  \n  // Calculate stats\n  const stats = {\n    toUpdate: updates.length,\n    toCreate: creates.length,\n    toSkip: skipped.length,\n    cellChanges: updates.reduce((sum, u) => sum + u.changes.length, 0),\n    matchedById: updates.filter(u => u.matchMethod === 'id').length,\n    matchedByCompany: updates.filter(u => u.matchMethod === 'company').length,\n    matchedByHash: updates.filter(u => u.matchMethod === 'hash').length,\n    errors: errors.length,\n    warnings: warnings.length\n  };\n  \n  return {\n    updates,\n    creates,\n    skipped,\n    errors,\n    warnings,\n    stats,\n    timing: { computeMs: Date.now() - startTime }\n  };\n}\n\n// =========================== PHASE 4: APPLY CHANGES ==========================\n\nasync function applyChanges(changes) {\n  const startTime = Date.now();\n  const results = { updates: null, creates: null };\n  \n  // Validate batch size\n  const totalOps = changes.updates.length + changes.creates.length;\n  if (totalOps > CONFIG.maxBatchSize) {\n    throw new Error(`Total operations (${totalOps}) exceeds limit (${CONFIG.maxBatchSize})`);\n  }\n  \n  // === Apply Updates ===\n  if (changes.updates.length > 0) {\n    const batchData = [];\n    \n    for (const update of changes.updates) {\n      for (const change of update.changes) {\n        batchData.push({\n          range: `${CONFIG.sheetName}!${change.cell}`,\n          values: [[change.newValue]]\n        });\n      }\n    }\n    \n    const updateResponse = await sheetsRequest.call(\n      this,\n      '/values:batchUpdate',\n      'POST',\n      {\n        valueInputOption: 'RAW',\n        data: batchData\n      }\n    );\n    \n    if (!updateResponse.success) {\n      throw new Error(`Batch update failed: ${updateResponse.error}`);\n    }\n    \n    results.updates = {\n      success: true,\n      cellsUpdated: batchData.length,\n      response: updateResponse.data\n    };\n  }\n  \n  // === Apply Creates (Appends) ===\n  if (changes.creates.length > 0) {\n    const appendResponse = await sheetsRequest.call(\n      this,\n      `/values/${encodeURIComponent(CONFIG.sheetName)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,\n      'POST',\n      {\n        values: changes.creates.map(c => c.values)\n      }\n    );\n    \n    if (!appendResponse.success) {\n      throw new Error(`Append failed: ${appendResponse.error}`);\n    }\n    \n    results.creates = {\n      success: true,\n      rowsCreated: changes.creates.length,\n      response: appendResponse.data\n    };\n  }\n  \n  return {\n    results,\n    timing: { applyMs: Date.now() - startTime }\n  };\n}\n\n// =========================== MAIN EXECUTION ==================================\n\nasync function main() {\n  const totalStartTime = Date.now();\n  const timing = {};\n  \n  try {\n    // PHASE 1: Normalize input\n    console.log('Phase 1: Normalizing input...');\n    const normalized = normalizeInput($input.all());\n    Object.assign(timing, normalized.timing);\n    \n    if (normalized.itemCount === 0) {\n      return [{\n        json: {\n          success: true,\n          message: 'No items to process',\n          requestId: normalized.requestId,\n          summary: { updated: 0, created: 0, skipped: 0 }\n        }\n      }];\n    }\n    \n    console.log(`Processing ${normalized.itemCount} item(s)...`);\n    \n    // PHASE 2: Fetch current state\n    console.log('Phase 2: Fetching sheet state...');\n    const state = await fetchSheetState.call(this);\n    Object.assign(timing, state.timing);\n    console.log(`Indexed ${state.totalRows} existing rows`);\n    \n    // PHASE 3: Compute changes\n    console.log('Phase 3: Computing changes...');\n    const changes = computeChanges(normalized.items, state);\n    Object.assign(timing, changes.timing);\n    \n    // Check for errors in strict mode\n    if (changes.errors.length > 0 && CONFIG.strictMode) {\n      throw new Error(`Validation errors:\\n${changes.errors.join('\\n')}`);\n    }\n    \n    console.log(`Updates: ${changes.stats.toUpdate}, Creates: ${changes.stats.toCreate}, Skipped: ${changes.stats.toSkip}`);\n    \n    // PHASE 4: Apply changes\n    if (changes.stats.toUpdate > 0 || changes.stats.toCreate > 0) {\n      console.log('Phase 4: Applying changes...');\n      const applied = await applyChanges.call(this, changes);\n      Object.assign(timing, applied.timing);\n    }\n    \n    // Calculate total timing\n    timing.totalMs = Date.now() - totalStartTime;\n    \n    // Build response\n    const response = {\n      success: true,\n      requestId: normalized.requestId,\n      summary: {\n        processed: normalized.itemCount,\n        updated: changes.stats.toUpdate,\n        created: changes.stats.toCreate,\n        skipped: changes.stats.toSkip,\n        cellsModified: changes.stats.cellChanges\n      },\n      matching: {\n        byId: changes.stats.matchedById,\n        byCompanyKey: changes.stats.matchedByCompany,\n        byHash: changes.stats.matchedByHash\n      },\n      details: {\n        updates: changes.updates.map(u => ({\n          id: u.id,\n          row: u.rowNumber,\n          matchedBy: u.matchMethod,\n          fieldsChanged: u.changes.map(c => c.column)\n        })),\n        creates: changes.creates.map(c => ({\n          tempId: c.tempId,\n          assignedId: c.generatedId\n        })),\n        skipped: changes.skipped\n      },\n      timing,\n      warnings: changes.warnings.length > 0 ? changes.warnings : undefined,\n      errors: changes.errors.length > 0 ? changes.errors : undefined\n    };\n    \n    console.log('\\n=== COMPLETE ===');\n    console.log(`Total time: ${timing.totalMs}ms`);\n    console.log(`Updated: ${changes.stats.toUpdate}, Created: ${changes.stats.toCreate}`);\n    \n    return [{ json: response }];\n    \n  } catch (error) {\n    console.error('FATAL ERROR:', error.message);\n    \n    return [{\n      json: {\n        success: false,\n        error: error.message,\n        errorType: error.name,\n        timing: { ...timing, totalMs: Date.now() - totalStartTime }\n      }\n    }];\n  }\n}\n\n// Execute\nreturn main.call(this);"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1008,
+        -1968
+      ],
+      "id": "79deaa72-f6c7-4028-8987-316dd3becca5",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {},
+      "id": "59a38448-0937-4d73-8f8c-60956be930b8",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        672,
+        -1920
+      ],
+      "disabled": true
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Standardize Input": {
+      "main": [
+        [
+          {
+            "node": "Acquire Lock",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Standardize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Acquire Lock": {
+      "main": [
+        [
+          {
+            "node": "Get Current Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Current Sheet": {
+      "main": [
+        [
+          {
+            "node": "Diff Engine (Optimized)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Batch Update": {
+      "main": [
+        [
+          {
+            "node": "Release Lock",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Batch Append": {
+      "main": [
+        [
+          {
+            "node": "Release Lock",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Release Lock": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CONFIG": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Input": {
+      "main": [
+        [
+          {
+            "node": "Acquire Locks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Acquire Locks": {
+      "main": [
+        [
+          {
+            "node": "Get Current Sheet State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Current Sheet State": {
+      "main": [
+        [
+          {
+            "node": "Compute Differences",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Differences": {
+      "main": [
+        [
+          {
+            "node": "Has Updates?1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Has Appends?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Appends?": {
+      "main": [
+        [
+          {
+            "node": "Execute Append",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Release Locks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Batch Update": {
+      "main": [
+        [
+          {
+            "node": "Release Locks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Append": {
+      "main": [
+        [
+          {
+            "node": "Release Locks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Release Locks": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook1": {
+      "main": [
+        [
+          {
+            "node": "CONFIG",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Updates?1": {
+      "main": [
+        [
+          {
+            "node": "Execute Batch Update",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Release Locks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Normalize Input": {
+      "main": [
+        [
+          {
+            "node": "2. Acquire Locks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Acquire Locks": {
+      "main": [
+        [
+          {
+            "node": "3. Fetch Sheet Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Fetch Sheet Data": {
+      "main": [
+        [
+          {
+            "node": "4. Compute Changes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4. Compute Changes": {
+      "main": [
+        [
+          {
+            "node": "Has Updates?2",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Has Creates?1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5a. Batch Update": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5b. Append Rows": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No Updates": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No Creates": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Results": {
+      "main": [
+        [
+          {
+            "node": "6. Release Locks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6. Release Locks": {
+      "main": [
+        [
+          {
+            "node": "7. Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7. Format Response": {
+      "main": [
+        [
+          {
+            "node": "Is Webhook?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Save Execution Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Webhook?": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Handler": {
+      "main": [
+        [
+          {
+            "node": "Is Webhook? (Error)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Webhook? (Error)": {
+      "main": [
+        [
+          {
+            "node": "Error Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CONFIG1": {
+      "main": [
+        [
+          {
+            "node": "1. Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook2": {
+      "main": [
+        [
+          {
+            "node": "1. Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Updates?2": {
+      "main": [
+        [
+          {
+            "node": "5a. Batch Update",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Updates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Creates?1": {
+      "main": [
+        [
+          {
+            "node": "5b. Append Rows",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Creates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": {
+    "Manual Trigger": [
+      {
+        "json": {
+          "ID": "",
+          "NAME": "HELLO"
+        }
+      }
+    ]
+  },
+  "versionId": "fd3dc93f-1bb4-493d-a65c-6a610e8868f4",
+  "activeVersionId": "fd3dc93f-1bb4-493d-a65c-6a610e8868f4",
+  "versionCounter": 58,
+  "triggerCount": 3,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2025-11-23T03:25:51.881Z",
+      "createdAt": "2025-11-23T03:25:51.881Z",
+      "role": "workflow:owner",
+      "workflowId": "TTgW5l6qnQjsLwfM",
+      "projectId": "EChUnhWXmjrEc3fG",
+      "project": {
+        "updatedAt": "2024-09-26T18:07:08.765Z",
+        "createdAt": "2024-09-26T17:59:24.039Z",
+        "id": "EChUnhWXmjrEc3fG",
+        "name": "Shlomo Bolo <person8@example.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null
+      }
+    }
+  ]
+}

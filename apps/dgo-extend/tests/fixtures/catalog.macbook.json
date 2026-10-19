@@ -1,0 +1,69 @@
+{
+  "office": "macbook",
+  "label": {
+    "he": "המקבוק",
+    "en": "MacBook"
+  },
+  "commit": "0123456789abcdef0123456789abcdef01234567",
+  "generated_at": 1759330000,
+  "apps": [
+    {
+      "alias": "bina",
+      "app": "bina-ds",
+      "title": {
+        "he": "בינה ודעת",
+        "en": "Bina"
+      },
+      "icon": "bot",
+      "group": "ראשי",
+      "desc": "הסוכן של הלשכה",
+      "order": 1,
+      "port": 3080,
+      "module": {
+        "kind": "embedded",
+        "path": "/a/bina/"
+      },
+      "health": "/healthz",
+      "host": "bina.localhost",
+      "api": {
+        "port": 3081,
+        "auth": "bearer:vault:bina-ds"
+      }
+    },
+    {
+      "alias": "drive",
+      "app": "drive",
+      "title": {
+        "he": "דרייב"
+      },
+      "icon": "folder",
+      "group": "עסק",
+      "desc": "קבצים",
+      "order": 12,
+      "port": 8975,
+      "module": {
+        "kind": "embedded",
+        "path": "/a/drive/"
+      },
+      "health": "/healthz"
+    },
+    {
+      "alias": "n8n",
+      "app": "n8n",
+      "title": {
+        "he": "n8n",
+        "en": "n8n"
+      },
+      "icon": "workflow",
+      "group": "אוטומציה",
+      "desc": "אוטומציות",
+      "order": 30,
+      "port": 5678,
+      "module": {
+        "kind": "external",
+        "path": "/"
+      },
+      "health": "/healthz"
+    }
+  ]
+}

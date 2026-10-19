@@ -1,0 +1,49 @@
+{
+  "id": "redis",
+  "title": {
+    "he": "מטמון ותורים",
+    "en": "Redis"
+  },
+  "layer": 1,
+  "kind": "service",
+  "version": "1.0.0",
+  "system": true,
+  "summary": {
+    "he": "מטמון, תורים ונעילות",
+    "en": "Cache, queues and locks"
+  },
+  "capabilities": [
+    {
+      "name": "kv",
+      "type": "protocol",
+      "endpoint": "redis://redis:6379",
+      "required_ops": [
+        "get",
+        "set",
+        "del",
+        "incr",
+        "expire",
+        "publish",
+        "subscribe"
+      ]
+    }
+  ],
+  "use": [],
+  "connections": [
+    {
+      "id": "redis-password",
+      "required": true
+    }
+  ],
+  "compose": "docker-compose.yml",
+  "routing": [],
+  "health": {
+    "structural": "auto"
+  },
+  "data": {
+    "volumes": [
+      "redis_data"
+    ],
+    "on_uninstall": "prompt"
+  }
+}

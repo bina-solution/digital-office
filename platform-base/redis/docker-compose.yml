@@ -1,0 +1,64 @@
+# Config below was layered by production/compose.override.yml before the platform-OS
+# refactor; merged here so this app owns its complete definition.
+services:
+  redis:
+    image: redis:7-alpine
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          # 512M -> 256M, 2026-08-06. Measured high-water 45MiB (~5.7x headroom retained).
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 64M
+    container_name: redis-${DEPLOYMENT_NAME:-bina-deployment}
+    restart: unless-stopped
+    command:
+    - redis-server
+    - --appendonly
+    - 'no'
+    - --save
+    - 300 1 60 1000
+    - --maxmemory
+    - 256mb
+    - --maxmemory-policy
+    - noeviction
+    - --stop-writes-on-bgsave-error
+    - 'yes'
+    - --requirepass
+    - ${REDIS_PASSWORD}
+    - --protected-mode
+    - 'yes'
+    volumes:
+    - redis_data:/data
+    networks:
+    - traefik-network
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    labels:
+    - traefik.enable=true
+    - traefik.tcp.middlewares.redis-ipallowlist.ipallowlist.sourcerange=${DBS_ALLOWED_IPS}
+    - traefik.tcp.routers.redis.rule=HostSNI(`${REDIS_HOST}`)
+    - traefik.tcp.routers.redis.entrypoints=redis
+    - traefik.tcp.routers.redis.service=redis
+    - traefik.tcp.routers.redis.middlewares=redis-ipallowlist
+    - traefik.tcp.routers.redis.tls=true
+    - traefik.tcp.routers.redis.tls.certresolver=myresolver
+    - traefik.tcp.services.redis.loadbalancer.server.port=6379
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - redis-cli -a ${REDIS_PASSWORD} ping | grep PONG
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-5s}
+      retries: 5
+      start_period: 10s
+volumes:
+  redis_data: null
+networks:
+  traefik-network:
+    external: true

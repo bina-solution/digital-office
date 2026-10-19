@@ -1,0 +1,13 @@
+{
+  "name": "@bina/dsh-command-next",
+  "description": "The office's `/next` command: reads every open-work source and asks the agent for the next round, in one prompt",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./package.json": "./package.json"
+  },
+  "license": "MIT"
+}

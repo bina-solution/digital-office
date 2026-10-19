@@ -1,0 +1,132 @@
+# yaml-language-server: $schema=./schema.json
+title: authentik bootstrap races migrations on a cold start, then reports SSO ready with nothing to check
+opened: '2026-08-21'
+severity: high
+status: resolved
+summary: authentik bootstrap races migrations on a cold start, then reports SSO ready with nothing to check
+description: |
+  area: bring-up / authentik / SSO
+
+  ## Context
+
+  Measured on portable-ubuntu (4 cores, contended), 2026-08-21, on a genuinely cold start —
+  `bbox reset --force` had removed authentik_postgres_data, so migrations ran from scratch.
+
+  `./bbox run` failed:
+
+      container authentik-bootstrap-posnet is unhealthy
+      [bbox] [authentik] SSO not ready within 600s
+      [bbox] not all services healthy within 300s
+      === bbox run rc=1 ===
+
+  The bootstrap log shows the sequence:
+
+    1. It queries the tenants table before the migration that creates a column has run:
+
+          psycopg.errors.UndefinedColumn:
+            column authentik_tenants_tenant.impersonation_require_reason does not exist
+          django.db.utils.ProgrammingError: (same)
+
+    2. Blueprint import then fails, three times, and gives up:
+
+          authentik.blueprints.v1.importer: Entry invalid: Serializer errors
+            {'authorization_flow': [ErrorDetail(string='This field may not be null.', code='null')]}
+            ... 'identifiers': {'name': 'Traefik Dashboard Provider'}, 'id': 'provider-traefik'
+          blueprint not applied: custom/zz-generated-apps.yaml status: error   (x3)
+
+       `authorization_flow` is a `Find` lookup. It resolved to null because the default flows it
+       looks for were not imported yet — the same race, one step later.
+
+  It is NOT a version or schema mismatch, which is what the first traceback looks like. Checked
+  directly afterwards:
+
+      select column_name ... where table_name='authentik_tenants_tenant';
+        -> impersonation_require_reason IS present
+      select app,name from django_migrations where app like '%tenant%';
+        -> authentik_tenants|0004_tenant_impersonation_require_reason IS applied
+      543 migrations applied in total
+
+  So the column and its migration both exist. The bootstrap simply got there first. On a fast
+  machine it loses the race harmlessly; on four contended cores it wins and the whole SSO
+  bootstrap is abandoned.
+
+  ## Second defect
+
+  The consequence is worse than a failed import, because of how the health probe degrades.
+
+  With `zz-generated-apps.yaml` unapplied there are no proxy providers, so the outpost serves no
+  hosts, so bootstrap.sh never writes /tmp/outpost-hosts and never mints /tmp/outpost-token.
+  outpost-ready.py then cannot reach the API (no token) and falls back to the host file, which
+  is empty — and an empty host list means every host it was asked to check is served:
+
+      $ docker exec authentik-bootstrap python3 /outpost-ready.py ; echo $?
+      0
+      $ docker exec authentik-bootstrap cat /tmp/outpost-hosts   # empty
+      $ docker exec authentik-bootstrap sh -c '[ -s /tmp/outpost-token ]' ; echo $?
+      1
+
+  A probe whose whole purpose is "SSO is ready" returns success when it has been given nothing
+  to verify. Its own docstring argues the opposite case at length — "A red light over a working
+  system is not a cosmetic bug; it is the one failure that discredits every OTHER light" — and
+  this is that sentence's mirror image: a green light over a system that never configured.
+
+  This is exactly the defect class G48 (noop-success-lint) exists for: "a skip/no-op never
+  reports success — the reply must name its outcome". G48 currently inspects nothing (see
+  gates-dead-after-workflow-ts-migration.yaml), so it could not have caught it.
+
+  ## Fix
+
+  1. bootstrap must not start applying blueprints until migrations are done. authentik ships
+     `ak migrate` / the worker performs migrations; the bootstrap should gate on the migration
+     state (or simply retry the whole import with backoff until it succeeds, rather than three
+     fixed attempts then giving up permanently).
+  2. outpost-ready.py must distinguish "zero hosts because nothing is gated" from "zero hosts
+     because I could not find out". No token AND no cached host file is the second case and must
+     exit non-zero, naming which. An empty list is only a pass when it was actually derived.
+  3. `bbox run`'s 600s SSO allowance is not the problem and should not be raised — the bootstrap
+     had already given up long before the timeout.
+
+  ## Related
+
+  Separately noticed while diagnosing this: all three authentik containers run the FLOATING tag
+  `ghcr.io/goauthentik/server:2024.12`, so a fresh install pulls whatever that tag points at
+  today (2024.12.5 here, digest 717323d6...). G15 image-pin-lint passed, so it does not consider
+  a minor-version tag unpinned. Worth deciding deliberately: a floating tag means two fresh
+  installs a month apart are not the same deployment.
+
+  ## Update 2026 10 06
+
+  Measured again on a genuinely empty database (a throwaway authentik beside the hp-laptop office:
+  same images, that office's blueprints, 27 gated hosts), after the sign-in changes of that day.
+
+  * The race in `context` is still there and still loses harmlessly: the sentinel started four
+    times in the first two and a half minutes ("authorization_flow may not be null" — authentik's
+    own flows not imported yet), then applied on attempt 1 and reached "all 27 gated hosts served"
+    316 s after its start. Fix item 1 as written ("retry the whole import … rather than three fixed
+    attempts then giving up permanently") is what happens: it exits and docker starts it again
+    until authentik accepts the blueprints.
+  * `second_defect` cannot happen any more, by construction. The probe no longer gets its host list
+    from the API with a token the bootstrap mints (nor from a file the bootstrap writes): it reads
+    the hosts the COMPILED blueprint states it gates. A blueprint that was never applied therefore
+    reads "not served" for every host it declares, and a missing or list-less blueprint reads
+    "unknown" (exit 2) with the reason — never "ready"
+    (`platform-base/authentik/test_outpost_ready.py`: the four ways of having nothing to ask about).
+  * And the run ended WITHOUT a restart of the sign-in server, which on a `.localhost` office it
+    could not before: the outpost used to freeze on its second refresh
+    (`ai/context/platform-os-release-plan.md` G7.3).
+  * The floating image tag in `related` was decided where it belongs (checked 2026-10-07). G15
+    `image-pin-lint` enforces its TAG level - no tag-less image, no `:latest` and friends; 28
+    references pass - and `packaging/README.md` withdrew digest pinning in the compose files on
+    purpose: `docker load` carries tags and not digests, so a digest reference reaches for a
+    registry on a machine that has none. Tags ship in compose; the bundle's signed manifest
+    records the digest of every image. What an install from a registry gets inside `2024.12`
+    still moves - by that decision, not by oversight.
+
+  Resolved 2026-10-07. The probe's own tests: 13 of 13 (`test_outpost_ready.py`).
+tasks:
+- text: "The race loses harmlessly: a sentinel authentik refuses exits and is started again until the blueprints are accepted (measured on an empty database: all 27 gated hosts served 316 s after its start)"
+  done: true
+- text: "The probe cannot say ready over nothing: its hosts are the compiled blueprint's, and a missing or list-less blueprint is exit 2 with the reason (test_outpost_ready.py)"
+  done: true
+- text: "The floating tag: decided - G15 enforces the tag level, digests live in the bundle's signed manifest (packaging/README.md)"
+  done: true

@@ -1,0 +1,29 @@
+title: gmail backend toggle is a codebase constant (n8n blocks $env in expressions)
+status: closed  # 2026-07-30 triage: STALE — the mechanism is gone. platform-base/n8n/hooks/push:15-19 records that GMAIL_BACKEND was removed (contract 4): gmailApiRouter01 calls the mail service unconditionally and the account is the service's active connection. Push-time `const BACKEND` substitution survives only for INDOX_DATA_BACKEND.
+created: 2026-06-22
+priority: low
+context: |
+  The "gmail api" router (gmailApiRouter01) switches Gmail ops between the IMAP/SMTP
+  service backend and the Gmail-API (OAuth) backend. The intended design was an env
+  toggle ({{$env.INDOX_GMAIL_BACKEND}}), but this n8n denies env-var access inside
+  node expressions by default (N8N_BLOCK_ENV_ACCESS_IN_NODE) — verified: a Switch on
+  $env throws "access to env vars denied", and process.env is also scrubbed in Code
+  nodes. (The previously-documented INDOX_DATA_BACKEND env toggle is likewise not
+  actually wired into any workflow.)
+
+  Current mechanism: the router has a "Pick Backend" Code node with a constant
+  `const BACKEND = 'imap'` ('imap' | 'oauth'). To switch backends: edit that line and
+  `bbox n8n push`. This is configurable-via-codebase and needs no security change.
+action: |
+  If a runtime env toggle (no push) is wanted, EITHER:
+    a) set N8N_BLOCK_ENV_ACCESS_IN_NODE=false on the n8n container + workers and add
+       INDOX_GMAIL_BACKEND to .env, then change "Pick Backend" to read
+       {{$env.INDOX_GMAIL_BACKEND || 'imap'}}. TRADE-OFF: this exposes ALL n8n env
+       (incl. DB password, N8N_ENCRYPTION_KEY) to any workflow expression — weigh
+       against the existing hardening posture before enabling; OR
+    b) store the toggle as an n8n instance Variable ($vars.INDOX_GMAIL_BACKEND) if the
+       variables feature is available, and read it in "Pick Backend".
+why_deferred: |
+  The codebase-constant toggle fully works and defaults to the target backend (imap).
+  A no-push runtime toggle is a convenience, not a blocker, and the env option loosens
+  security — left as a deliberate decision rather than flipped silently.

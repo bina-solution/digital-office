@@ -1,0 +1,211 @@
+name: images
+
+# The first-party images, BUILT ONCE here and pulled everywhere else (DGO-41, decision 12).
+#
+# WHO DOES WHAT
+#   * a FRESH CLONE BUILDS. `./bbox run` passes `--build` deliberately (bbox says why: a redeploy
+#     must never keep serving the image of a Dockerfile that has moved), so this workflow is not on
+#     anybody's critical path — it is what makes pulling *possible*.
+#   * a machine that must NOT compile PULLS: `BBOX_PREBUILT=1 ./bbox run`, or
+#     `OVERLAYS=platform/profiles/ci-images.yml ./scripts/dc up -d --no-build`, or a plain
+#     `./scripts/dc up -d`. Every app compose names the published image beside its `build:` with
+#     `pull_policy: missing`, so an image that is not present locally is fetched and one that is, is
+#     used as it is. `console` is the one app still outside that: its compose names the local tag
+#     `deployment-hacohen-console`, so it keeps building.
+#   * a DEVELOPER does nothing differently: edit, `./bbox run`, the `build:` fallback compiles.
+#
+# WHICH TAG IS WHICH — `IMAGE_TAG` in .env picks one (`.env.ex` defaults it to `latest`):
+#   :<git sha>   exactly this commit. Pin it when a deployment must not move under itself; a
+#                dgo-extend declaration's `source.commit` names the same fact.
+#   :<branch>    that branch's head, sanitised (`/` is not legal in a tag) — e.g. `:dgo`.
+#   :latest      what a deployment gets when it names no tag. Only `dgo` can trigger this workflow
+#                today — `main` predates this file — so `latest` is one line's head, not a mixture.
+#                A branch added to `on.push.branches` below should get its own tag before `latest`
+#                is relied on there.
+#
+# WHICH IMAGES ARE FIRST-PARTY, AND WITH WHAT COUNT (counted 2026-10-09)
+#   35 services in this repository build an image — a service declaring `build:`, which is the same
+#   definition `./scripts/first-party-images` asks of the compiled config. 20 of them are published
+#   here: one per app directory, discovered by that app's own Dockerfile and pushed under the name
+#   its compose already gives it. The other 15, each with its reason:
+#     sites-render            a SECOND Dockerfile beside the app's (`Dockerfile.render`), so the
+#                             one-image-per-app discovery would publish `sites` twice.
+#     mail ×2, browser42 ×4, openhands ×3
+#                             build contexts BELOW the app root (`./mailapi`, `./agent-proxy`), which
+#                             the same discovery never sees.
+#     apitools, n8n           already published CONTENT-ADDRESSED by indox-e2e.yml and
+#                             local-hebrew-doc-ex.yml (apitools by script hash, n8n by tree hash +
+#                             N8N_VERSION). n8n additionally names `binaos/n8n` — not a repository
+#                             this repo owns, so its service cannot be renamed here at all.
+#     indox, chat, autoheal   name nothing a registry has (`incoming-documents-local:latest`, and
+#                             nothing at all) — they join the set by naming one, not by being added
+#                             to the matrix.
+#   Third-party images are NOT rebuilt: 28 image references carry no `build:` anywhere (gate G15
+#   counts them), and a rebuilt upstream image is a fork of somebody else's release cadence.
+#
+# Nothing here is reachable from a deployment: this job only pushes. Verifying it is a `docker pull`
+# plus the overlay (README, "Prebuilt images").
+
+on:
+  push:
+    branches: [main, dgo]
+    paths:
+      - 'apps/**'
+      - 'platform-base/**'
+      - 'platform/profiles/ci-images.yml'
+      - '.github/workflows/images.yml'
+  workflow_dispatch:
+    inputs:
+      apps:
+        description: "Space-separated app ids to build (empty = the whole image set)"
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: images-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # A literal, in lowercase, on purpose: `${{ github.repository_owner }}` carries the account's own
+  # casing (`solomonBoltin`), and docker's reference grammar has no uppercase in the path —
+  # `docker image inspect ghcr.io/SolomonBoltin/digital-office/git:latest` answers
+  # "invalid reference format: repository name (SolomonBoltin/digital-office/git) must be lowercase".
+  # It is also what every compose file writes, so CI and the composes name the same thing by hand
+  # rather than by agreement.
+  REG: ghcr.io/solomonboltin/digital-office
+
+jobs:
+  # The matrix is computed, not hand-listed: an app joins the image set by being an APP — it has the
+  # app.json the platform reads — and by carrying the Dockerfile that image is built from. Anything
+  # else (a source directory with a Dockerfile and no manifest, an app whose images live below its
+  # root) is outside for a reason recorded in the header above, and `platform-base/forward-auth` is
+  # the directory that rule deliberately leaves out.
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      apps: ${{ steps.set.outputs.apps }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: set
+        name: Which apps have an image
+        env:
+          # `github.event.inputs` rather than `inputs`: the latter is documented for dispatch and
+          # reusable workflows only, and this step also runs on a plain push, where it must simply
+          # be empty. `${WANT:-}` for the same reason — an unset variable must not trip `set -u`.
+          WANT: ${{ github.event.inputs.apps }}
+        run: |
+          set -euo pipefail
+          skip="apitools n8n indox chat autoheal"
+          list=""
+          for d in apps/*/ platform-base/*/; do
+            id="$(basename "$d")"
+            [ -f "$d/app.json" ] || continue
+            [ -f "$d/Dockerfile" ] || continue
+            case " $skip " in *" $id "*) continue;; esac
+            list="$list $id"
+          done
+          list="${list# }"
+          # A dispatch may narrow the set, and a name that is not in it is an ERROR: a filter that
+          # silently builds everything (or nothing) is worse than no filter at all.
+          if [ -n "${WANT:-}" ]; then
+            keep=""
+            for id in ${WANT:-}; do
+              case " $list " in
+                *" $id "*) keep="$keep $id" ;;
+                *) echo "::error::$id is not in the image set (${list// /, })" >&2; exit 1 ;;
+              esac
+            done
+            list="${keep# }"
+          fi
+          [ -n "$list" ] || { echo "::error::read ZERO apps, so nothing would have been built" >&2; exit 1; }
+          json="[$(printf '"%s",' $list | sed 's/,$//')]"
+          echo "apps=$json" >> "$GITHUB_OUTPUT"
+          echo "image set ($(printf '%s\n' $list | wc -l)): ${list// /, }"
+
+      - name: The overlay names the same set
+        # platform/profiles/ci-images.yml is the opt-in "pull instead of build" path the README
+        # documents, and its service list is hand-written — so the two drift the day an app is added.
+        # They drifted: `archify` was in the matrix and missing there. Compared here so the next one
+        # fails loudly instead of quietly rebuilding on every machine that opted in.
+        run: |
+          set -euo pipefail
+          grep -oE '^ +image: ghcr\.io/solomonboltin/digital-office/[a-z0-9-]+' platform/profiles/ci-images.yml \
+            | sed 's|.*/||' | sort -u > /tmp/overlay.txt
+          echo '${{ steps.set.outputs.apps }}' | tr -d '[]"' | tr ',' '\n' | sed '/^$/d' | sort -u > /tmp/matrix.txt
+          if ! diff -u /tmp/overlay.txt /tmp/matrix.txt; then
+            echo "::error file=platform/profiles/ci-images.yml::the overlay and the image matrix disagree (above)" >&2
+            exit 1
+          fi
+          echo "overlay and matrix agree: $(wc -l < /tmp/matrix.txt) image(s)"
+
+  build:
+    needs: plan
+    if: needs.plan.outputs.apps != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJson(needs.plan.outputs.apps) }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: tag
+        name: The moving branch tag
+        # `github.ref_name` is sanitised: a branch may contain `/` (`claude/…`) and a tag may not.
+        run: echo "branch=$(printf '%s' '${{ github.ref_name }}' | tr '/' '-')" >> "$GITHUB_OUTPUT"
+
+      # An app's build context is its own directory: every Dockerfile in this repo copies from its
+      # app root, so the context is `apps/<id>` (or `platform-base/<id>`) — a repo-root context
+      # would ship the whole checkout to the daemon for every image.
+      - id: ctx
+        name: The build context
+        run: |
+          if [ -d "apps/${{ matrix.app }}" ]; then
+            echo "dir=apps/${{ matrix.app }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "dir=platform-base/${{ matrix.app }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build and push ${{ matrix.app }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ steps.ctx.outputs.dir }}
+          push: true
+          tags: |
+            ${{ env.REG }}/${{ matrix.app }}:${{ github.sha }}
+            ${{ env.REG }}/${{ matrix.app }}:${{ steps.tag.outputs.branch }}
+            ${{ env.REG }}/${{ matrix.app }}:latest
+          cache-from: type=registry,ref=${{ env.REG }}/${{ matrix.app }}:buildcache
+          cache-to: type=registry,ref=${{ env.REG }}/${{ matrix.app }}:buildcache,mode=max
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+  summary:
+    needs: [plan, build]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: What was published
+        env:
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          b="$(printf '%s' "$BRANCH" | tr '/' '-')"
+          echo "### Images" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`${{ github.sha }}\` (\`$BRANCH\`) → \`${{ env.REG }}/<app>:<${{ github.sha }}>\`, \`:$b\`, \`:latest\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Pull one: \`docker pull ${{ env.REG }}/git:${{ github.sha }}\`" >> "$GITHUB_STEP_SUMMARY"

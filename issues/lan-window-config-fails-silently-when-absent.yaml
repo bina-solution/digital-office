@@ -1,0 +1,136 @@
+# yaml-language-server: $schema=./schema.json
+title: the LAN window depends on config that fails SILENTLY when absent, and lived only in a working tree
+opened: '2026-08-24'
+severity: high
+status: resolved
+summary: the LAN window depends on config that fails SILENTLY when absent, and lived only in a working tree
+description: |
+  area: platform bring-up / traefik / reproducibility
+
+  ## Context
+
+  `platform-base/traefik/config/remote-access.yaml` is what makes a bbox console reachable from
+  another machine: it adds an `auth3.localhost` router pointing at `authentik-server@docker` so the
+  SSO redirect lands on a hostname the remote machine can also resolve.
+
+  IT WAS NEVER COMMITTED. Not gitignored - `git check-ignore` matches no rule - just never added,
+  while BOTH of its siblings in that directory (`authentik-forwardauth.yaml`,
+  `traefik-dynamic.yaml`) are tracked. So the working window existed only in one working tree on one
+  machine, and `git clean -fd` would have removed it with no trace of what it had contained.
+
+  THE FAILURE MODE IS THE EXPENSIVE PART, and it is independent of how the file ships. Without it, a
+  clean clone does not fail at bring-up. Traefik starts, every container reports healthy, the
+  console3 router resolves - and then the host answers a bare 404 with `X-Powered-By: authentik`,
+  because authentik's outpost matches providers by `external_host` and nothing claimed that
+  hostname. Traefik has the route; the auth layer has never heard of it. Everything green, one 404,
+  no log line naming the cause. That is a day of someone's time, and the file's own header exists
+  because it already cost one.
+
+  THIS IS THE THIRD INSTANCE OF ONE PATTERN IN A SINGLE DAY - load-bearing state held only in a
+  working tree or an unattached volume, invisible to every test because the tests run on the machine
+  that already has it:
+    1. `platform-os-net_network-state` - dangling docker volume holding a live WireGuard private
+       key, one `docker volume prune` from unrecoverable.
+    2. this file - untracked, one `git clean -fd` from gone.
+    3. `platform-os-net/apps/network/app.json` - the fix that closed phase 1, still uncommitted;
+       `reconcile.py render` reads the WORKING TREE, so a `git checkout --` there silently reverts
+       it and the next render restores the broken objects.
+  None of the three would be caught by a test suite. All three are caught by asking "would a clean
+  clone on a clean machine reproduce this?", which is the question phase 2 is actually about.
+
+  ## Action
+
+  - DECISION (reviewer's): how the file ships.
+      (a) as-is - simplest, and gives EVERY deployment an auth3 router. It points at authentik with
+          no forward-auth middleware, which is correct for a login service (gating it behind its own
+          auth is an infinite redirect) but is still an unauthenticated hostname on hosts that never
+          asked for a remote window.
+      (b) GENERATED at bring-up from `.env` when AUTH_EXTERNAL_URL differs from AUTHENTIK_BASE_URL.
+          This is the option that actually satisfies phase 2 - clean clone + same .env reproduces
+          the window - and matches how this repo already treats derived config. Traefik's file
+          provider does no env interpolation, so (b) is a change to the bring-up path rather than to
+          this file.
+  - REQUIRED WHICHEVER WINS, and currently missing from both: fail LOUDLY when the window is
+    configured but unrendered. If AUTH_EXTERNAL_URL names a host that no router serves, bring-up
+    should say so by name and refuse, instead of coming up green and 404ing at first login. The
+    check is cheap - compare the hostnames `.env` declares against the routers traefik actually
+    loaded - and it converts the most expensive failure here into a startup message.
+  - Already done: the file is committed on `claude/release-verification-20260822` so it is no longer
+    one command from gone. That preserves it; it does not decide (a) vs (b), and it does not close
+    the loud-failure gap.
+
+  ## Evidence
+
+  - 2026-08-24 git check-ignore: no rule matches remote-access.yaml; git ls-files shows both siblings tracked
+  - the file's own header records the 404-from-authentik incident that produced it
+  - reproducibility audit of the portable box: this was the ONLY load-bearing untracked file; the other deltas were one test fixture and two extraction-draw PNGs
+
+  ## Where it stands (2026-10-07, hp-laptop, branch dgo-pair)
+
+  Both halves of the title were checked against the tree, and neither is what it was.
+
+  "LIVED ONLY IN A WORKING TREE" is over. The file was tracked on 2026-08-24 (913347d6) and removed
+  on purpose on 2026-09-02 (f44c8dee, "remote-access.yaml gone") together with the window it
+  served: a second machine reaches an office through the link plane now (apps/dgo-extend), whose
+  routers are generated into `platform-base/traefik/config/zz-serve.yaml` from declared state.
+  No configuration in the tree names `auth3.localhost` any more (it survives as a fixture in two
+  gates' self-tests), so there is no (a)-or-(b) left to decide.
+
+  "FAILS SILENTLY" had two halves:
+
+  - The OUTPOST half - the 404 with `X-Powered-By: authentik` that cost the day - is asked on every
+    bring-up and after every compile: `platform-base/authentik/outpost-ready.py` asks the outpost
+    about every host the compiled blueprint gates, and `platform-base/authentik/hooks/refresh`
+    waits, re-applies, restarts the server, and says in red what is still not served. It is also
+    the sentinel's healthcheck, so `up --wait` blocks on it.
+  - The ROUTER half - a host `.env` declares for sign-in that no router serves - had a check (G70,
+    `scripts/refactor/declared-host-routing-lint.py`, 38d63455) and the check had three defects of
+    its own, found here:
+      1. NOTHING RAN IT. Its home was `run-gates.py --live`, and no script, hook, workflow or
+         `bbox` verb invokes `--live`. Six weeks of a gate that was never asked.
+      2. IT PASSED WITHOUT LOOKING ON A PORTED OFFICE. A value with a port was skipped, and on an
+         office whose edge is not on :80 (every macOS engine) both keys end in `:8080` - so it
+         compared nothing and printed PASS.
+      3. ITS HINT NAMED THE DELETED FILE as the shape to copy.
+
+  ## The fix
+
+  - G70 asks about the hostname of a `host[:port]` value (traefik matches Host() without the port,
+    and the compiler renders every rule that way); a `.env` that declares nothing under the two
+    keys is a FAIL, like a scan that found no router; one `docker inspect` for all containers
+    instead of one each (6.3 s -> 0.4 s on this office's 45); `--quiet` says nothing on a pass; the
+    hint says where a router's host really comes from.
+  - `bbox run` asks it at the end of a whole-stack bring-up (said, not fatal: the office is up
+    either way; a targeted `bbox run <svc>` is not asked).
+  - `bbox baseline` scores it in P3 (first as `P3 declared-hosts`; the same day the whole live lane
+    got that one line, `P3 live-gates`), beside the other questions only a running
+    stack can answer.
+
+  ## Measured
+
+      this office (console.localhost, auth.localhost)        PASS  2 declared, 31 served   0.4 s
+      the same two behind :8080                              PASS  2 declared (was: 0 declared, PASS)
+      AUTH_EXTERNAL_URL=auth3.localhost                      FAIL  auth3.localhost declared by AUTH_EXTERNAL_URL
+      AUTH_EXTERNAL_URL=auth3.localhost:8080                 FAIL  the same finding (was: PASS)
+      neither key declared                                   FAIL  nothing was compared
+      no router found                                        FAIL  nothing was compared
+
+  through `main()` itself, against the routers the live edge had; `bbox`'s line and `baseline`'s
+  block were each run as written (silent / `crit [P3 declared-hosts] [pass]`), and with a failing
+  answer the baseline scores `declared in .env, served by NO router:` and the host on its own line.
+  Self-test 13/13.
+
+  ## Not done here
+
+  The other three gates in `run-gates.py`'s LIVE_SET (G61 published-drift, G69 declared-db-objects,
+  dock-fit) are in the same position G70 was: listed, self-tested, and asked by nothing. What they
+  say on a fresh machine has not been measured, so they were not wired blind - hub item eng-041.
+tasks:
+- text: "The outpost half: every gated host of a render is asked for on every bring-up and after every compile (outpost-ready.py + authentik hooks/refresh), and an unserved one is said in red"
+  done: true
+- text: "G70 asks a ported office too (hostname of host:port), and a .env that declares nothing in scope is a FAIL"
+  done: true
+- text: "G70 has callers: `bbox run` (whole-stack, said not fatal) and `bbox baseline` P3 (the live-gates line)"
+  done: true
+- text: "G70's hint no longer names the deleted remote-access.yaml"
+  done: true

@@ -1,0 +1,1050 @@
+# INDOX demo blueprint — single source for `bbox indox demo run large`
+# companies + per-sync docs (md5 cache_key) + ai_cache (frozen extractions) + settings. Applied via the indox API.
+name: large
+description: 30x5 demo — 30 docs per sync, all companies
+per_sync: 30
+companies:
+- id: '510003320'
+  name: חומרי בנין ו
+- id: '510520687'
+  name: פזקר
+- id: '510560246'
+  name: איקן מפעל לי
+- id: '510605959'
+  name: בניאס
+- id: '510711716'
+  name: שריזלי
+- id: '510818859'
+  name: נוימן
+- id: '511020471'
+  name: סבח
+- id: '511022493'
+  name: ארכה
+- id: '511027419'
+  name: יחזקאל אהרון
+- id: '511061780'
+  name: מסגריית שטיל
+- id: '511200180'
+  name: ע.ד.א פלסט
+- id: '511212615'
+  name: איטונג
+- id: '511301129'
+  name: אגן
+- id: '511429698'
+  name: משווקי הצפון
+- id: '511581084'
+  name: אורבונד
+- id: '511634388'
+  name: דלתות תייר
+- id: '511690935'
+  name: אצ חומרי איטום
+- id: '511744898'
+  name: לוירון
+- id: '512069865'
+  name: קמחי כלי ע
+- id: '512093170'
+  name: י.ש קרטון מו
+- id: '512396276'
+  name: טסה
+- id: '512525940'
+  name: פלמרכז הפצה
+- id: '512643859'
+  name: מילסטון
+- id: '513105494'
+  name: דיאור
+- id: '513327064'
+  name: פל ים
+- id: '513381830'
+  name: כהן פור
+- id: '513498345'
+  name: פולירן
+- id: '513905851'
+  name: נטו אספקה
+- id: '514194612'
+  name: איש הכול ירוק
+- id: '514291418'
+  name: בי גי
+- id: '514380393'
+  name: עטרות בטון
+- id: '514454446'
+  name: חופית קיבוץ כנרת
+- id: '514488782'
+  name: כרמל פלור
+- id: '514697606'
+  name: טיח הארץ
+- id: '514745819'
+  name: סימנט אי.אס.
+- id: '514772342'
+  name: דור רפאל
+- id: '514779065'
+  name: רוזנפלד
+- id: '514905041'
+  name: שק בטון
+- id: '514930718'
+  name: פלסאון
+- id: '514947746'
+  name: ענבל
+- id: '515218279'
+  name: סוליד יציקות
+- id: '515463354'
+  name: וויז אלקטריק
+- id: '515672863'
+  name: נוברנד-פלס
+- id: '516009677'
+  name: זלמן סחר
+- id: '516245529'
+  name: ארקו
+- id: '516386919'
+  name: פרקט פוריו
+- id: '516431434'
+  name: מבנה דרום חדש
+- id: '516587961'
+  name: אונת סימנט
+- id: '516618881'
+  name: אסיף סחר עץ
+- id: '516620499'
+  name: לכ כלי עבודה
+- id: '516711157'
+  name: מוראל
+- id: '520037532'
+  name: נירלט צבעים
+- id: '570038158'
+  name: חוליות זרימה
+- id: '570042077'
+  name: מבנה דרום
+- id: '570043745'
+  name: כפר מנחם
+- id: '570045310'
+  name: מצרפלס
+- id: '570047217'
+  name: פוליביד
+syncs:
+  gmail-doc:
+  - name: yhzkal-ahrvn-5.pdf
+    path: demo-docs/invoice/files/yhzkal-ahrvn-5.pdf
+    company_id: '511027419'
+    type: INVOICE
+    md5: 823e0de0372e5436cd39b9830109d1d6
+    cache_key: invoice:823e0de0372e5436cd39b9830109d1d6
+  - name: dltvt-tyyr-2.pdf
+    path: demo-docs/invoice/files/dltvt-tyyr-2.pdf
+    company_id: '511634388'
+    type: INVOICE
+    md5: c40e7d950aa2a0b6b82b1aca41a84bfd
+    cache_key: invoice:c40e7d950aa2a0b6b82b1aca41a84bfd
+  - name: bnyas-2.pdf
+    path: demo-docs/invoice/files/bnyas-2.pdf
+    company_id: '510605959'
+    type: INVOICE
+    md5: ae3094df564f2746412502dcf5ef95cd
+    cache_key: invoice:ae3094df564f2746412502dcf5ef95cd
+  - name: bnyas-3.pdf
+    path: demo-docs/invoice/files/bnyas-3.pdf
+    company_id: '510605959'
+    type: INVOICE
+    md5: bc7d2d6157c9692c0080f6fd4131e477
+    cache_key: invoice:bc7d2d6157c9692c0080f6fd4131e477
+  - name: shryzly-3.pdf
+    path: demo-docs/invoice/files/shryzly-3.pdf
+    company_id: '510711716'
+    type: INVOICE
+    md5: f415ce48ba3282ae6710d4587aa9bd22
+    cache_key: invoice:f415ce48ba3282ae6710d4587aa9bd22
+  - name: tsh-1.jpg
+    path: demo-docs/invoice/files/tsh-1.jpg
+    company_id: '512396276'
+    type: INVOICE
+    md5: bc2555f864c12bdfee9fee6613757841
+    cache_key: invoice:bc2555f864c12bdfee9fee6613757841
+  - name: zlmn-shr-1.pdf
+    path: demo-docs/invoice/files/zlmn-shr-1.pdf
+    company_id: '516009677'
+    type: INVOICE
+    md5: 1ba289816ff17cda223412aea3149194
+    cache_key: invoice:1ba289816ff17cda223412aea3149194
+  - name: zlmn-shr-2.pdf
+    path: demo-docs/invoice/files/zlmn-shr-2.pdf
+    company_id: '516009677'
+    type: INVOICE
+    md5: 5c00b49e11a788ac749e4f7fbfd4ca97
+    cache_key: invoice:5c00b49e11a788ac749e4f7fbfd4ca97
+  - name: avnt-symnt-3.pdf
+    path: demo-docs/invoice/files/avnt-symnt-3.pdf
+    company_id: '516587961'
+    type: INVOICE
+    md5: 0641c637e4f6f8a8e5e4ed64a571df61
+    cache_key: invoice:0641c637e4f6f8a8e5e4ed64a571df61
+  - name: avrbvnd-1.jpg
+    path: demo-docs/invoice/files/avrbvnd-1.jpg
+    company_id: '511581084'
+    type: INVOICE
+    md5: d52c9b543e5d98a5f76ad789dc41e2af
+    cache_key: invoice:d52c9b543e5d98a5f76ad789dc41e2af
+  - name: mylstvn-1.jpg
+    path: demo-docs/invoice/files/mylstvn-1.jpg
+    company_id: '512643859'
+    type: INVOICE
+    md5: 8f936abfe9d35044796000114ee609d2
+    cache_key: invoice:8f936abfe9d35044796000114ee609d2
+  - name: mtsrpls-1.pdf
+    path: demo-docs/invoice/files/mtsrpls-1.pdf
+    company_id: '570045310'
+    type: INVOICE
+    md5: 20ca8453202c49d5371ba8419cf5c954
+    cache_key: invoice:20ca8453202c49d5371ba8419cf5c954
+  - name: avnt-symnt-4.pdf
+    path: demo-docs/invoice/files/avnt-symnt-4.pdf
+    company_id: '516587961'
+    type: INVOICE
+    md5: f53c1eab9e3c73842f22f31df6d767d7
+    cache_key: invoice:f53c1eab9e3c73842f22f31df6d767d7
+  - name: msgryyt-shtyl-3.pdf
+    path: demo-docs/invoice/files/msgryyt-shtyl-3.pdf
+    company_id: '511061780'
+    type: INVOICE
+    md5: 0a36eefd0724c7f8fdd3e99bb32815b2
+    cache_key: invoice:0a36eefd0724c7f8fdd3e99bb32815b2
+  - name: dvr-rpal-4.pdf
+    path: demo-docs/invoice/files/dvr-rpal-4.pdf
+    company_id: '514772342'
+    type: INVOICE
+    md5: eb1870f5dddde7fc61befa421e375dfd
+    cache_key: invoice:eb1870f5dddde7fc61befa421e375dfd
+  - name: msgryyt-shtyl-4.pdf
+    path: demo-docs/invoice/files/msgryyt-shtyl-4.pdf
+    company_id: '511061780'
+    type: INVOICE
+    md5: b193ef4e0d99abd7abec6f3b192f5355
+    cache_key: invoice:b193ef4e0d99abd7abec6f3b192f5355
+  - name: ysh-krtvn-1.pdf
+    path: demo-docs/invoice/files/ysh-krtvn-1.pdf
+    company_id: '512093170'
+    type: INVOICE
+    md5: 7f301add0e04378a9794a355e6a8e622
+    cache_key: invoice:7f301add0e04378a9794a355e6a8e622
+  - name: nyrlt-tsb-ym-4.pdf
+    path: demo-docs/invoice/files/nyrlt-tsb-ym-4.pdf
+    company_id: '520037532'
+    type: INVOICE
+    md5: 7893aebed641e1276aa97a3bb214b4dc
+    cache_key: invoice:7893aebed641e1276aa97a3bb214b4dc
+  - name: ysh-krtvn-4.pdf
+    path: demo-docs/invoice/files/ysh-krtvn-4.pdf
+    company_id: '512093170'
+    type: INVOICE
+    md5: b6562a2de2b759061ca882211c3935ec
+    cache_key: invoice:b6562a2de2b759061ca882211c3935ec
+  - name: nvbrnd-pls-4.pdf
+    path: demo-docs/invoice/files/nvbrnd-pls-4.pdf
+    company_id: '515672863'
+    type: INVOICE
+    md5: cfd76c0a98c1dd48d3354f8c535a3d6e
+    cache_key: invoice:cfd76c0a98c1dd48d3354f8c535a3d6e
+  - name: vvyz-alktryk-4.pdf
+    path: demo-docs/invoice/files/vvyz-alktryk-4.pdf
+    company_id: '515463354'
+    type: INVOICE
+    md5: 48be7ee8c43699bfe2b0ccfbe0c61e74
+    cache_key: invoice:48be7ee8c43699bfe2b0ccfbe0c61e74
+  - name: avnt-symnt-2.pdf
+    path: demo-docs/invoice/files/avnt-symnt-2.pdf
+    company_id: '516587961'
+    type: INVOICE
+    md5: b27d0c590ca102373650cbff72272ffe
+    cache_key: invoice:b27d0c590ca102373650cbff72272ffe
+  - name: pl-ym-5.pdf
+    path: demo-docs/invoice/files/pl-ym-5.pdf
+    company_id: '513327064'
+    type: INVOICE
+    md5: 5ca496c4d26f26d38b063b4b227878fb
+    cache_key: invoice:5ca496c4d26f26d38b063b4b227878fb
+  - name: dvr-rpal-5.pdf
+    path: demo-docs/invoice/files/dvr-rpal-5.pdf
+    company_id: '514772342'
+    type: INVOICE
+    md5: 31bc37b122d2ab5ecff500eebaacfbc9
+    cache_key: invoice:31bc37b122d2ab5ecff500eebaacfbc9
+  - name: avnt-symnt-5.pdf
+    path: demo-docs/invoice/files/avnt-symnt-5.pdf
+    company_id: '516587961'
+    type: INVOICE
+    md5: c74490ec7e532c66442660423b686947
+    cache_key: invoice:c74490ec7e532c66442660423b686947
+  - name: ysh-krtvn-5.pdf
+    path: demo-docs/invoice/files/ysh-krtvn-5.pdf
+    company_id: '512093170'
+    type: INVOICE
+    md5: 4c38c39b2141d05a82ef3f7216c2d8be
+    cache_key: invoice:4c38c39b2141d05a82ef3f7216c2d8be
+  - name: mvral-2.pdf
+    path: demo-docs/invoice/files/mvral-2.pdf
+    company_id: '516711157'
+    type: INVOICE
+    md5: 8b2826fe6a14517daea14497bbbe0bc9
+    cache_key: invoice:8b2826fe6a14517daea14497bbbe0bc9
+  - name: mvral-4.pdf
+    path: demo-docs/invoice/files/mvral-4.pdf
+    company_id: '516711157'
+    type: INVOICE
+    md5: cc5a772548b3116c93ec10cab85d4e67
+    cache_key: invoice:cc5a772548b3116c93ec10cab85d4e67
+  - name: prkt-pvryv-2.pdf
+    path: demo-docs/invoice/files/prkt-pvryv-2.pdf
+    company_id: '516386919'
+    type: INVOICE
+    md5: 45c7efed5a01ab9dd50fe8e2b4407e4f
+    cache_key: invoice:45c7efed5a01ab9dd50fe8e2b4407e4f
+  - name: dvr-rpal-2.pdf
+    path: demo-docs/invoice/files/dvr-rpal-2.pdf
+    company_id: '514772342'
+    type: INVOICE
+    md5: e10e3f0c2f4255c8171ba0095e4acd6d
+    cache_key: invoice:e10e3f0c2f4255c8171ba0095e4acd6d
+  gmail-link:
+  - name: ysh-krtvn-2.pdf
+    path: demo-docs/invoice/files/ysh-krtvn-2.pdf
+    company_id: '512093170'
+    type: INVOICE
+    md5: f49865ff102736f43972d9d0e19431c0
+    cache_key: invoice:f49865ff102736f43972d9d0e19431c0
+  - name: vvyz-alktryk-2.pdf
+    path: demo-docs/invoice/files/vvyz-alktryk-2.pdf
+    company_id: '515463354'
+    type: INVOICE
+    md5: cabc2c3e4d592a6f414318c0a1731c83
+    cache_key: invoice:cabc2c3e4d592a6f414318c0a1731c83
+  - name: ysh-krtvn-3.pdf
+    path: demo-docs/invoice/files/ysh-krtvn-3.pdf
+    company_id: '512093170'
+    type: INVOICE
+    md5: ca1b7a3a208e45380e59de83d5d32bef
+    cache_key: invoice:ca1b7a3a208e45380e59de83d5d32bef
+  - name: mvral-3.pdf
+    path: demo-docs/invoice/files/mvral-3.pdf
+    company_id: '516711157'
+    type: INVOICE
+    md5: c6a9ecbc0401fe33e6200101be91dd36
+    cache_key: invoice:c6a9ecbc0401fe33e6200101be91dd36
+  - name: hvpyt-kybvts-khnrt-2.pdf
+    path: demo-docs/invoice/files/hvpyt-kybvts-khnrt-2.pdf
+    company_id: '514454446'
+    type: INVOICE
+    md5: 29e44e4d766f484b972746929c5055b4
+    cache_key: invoice:29e44e4d766f484b972746929c5055b4
+  - name: dvr-rpal-3.pdf
+    path: demo-docs/invoice/files/dvr-rpal-3.pdf
+    company_id: '514772342'
+    type: INVOICE
+    md5: 88c655f3f6fed2b462b17b4b25cf439e
+    cache_key: invoice:88c655f3f6fed2b462b17b4b25cf439e
+  - name: khrml-plvr-5.pdf
+    path: demo-docs/invoice/files/khrml-plvr-5.pdf
+    company_id: '514488782'
+    type: INVOICE
+    md5: a5e87cb11ac9e39a0c42a95dd0625d54
+    cache_key: invoice:a5e87cb11ac9e39a0c42a95dd0625d54
+  - name: khrml-plvr-3.pdf
+    path: demo-docs/invoice/files/khrml-plvr-3.pdf
+    company_id: '514488782'
+    type: INVOICE
+    md5: d1f908397d80c93e63c854dd95aad5b1
+    cache_key: invoice:d1f908397d80c93e63c854dd95aad5b1
+  - name: khpr-mnhm-1.pdf
+    path: demo-docs/invoice/files/khpr-mnhm-1.pdf
+    company_id: '570043745'
+    type: INVOICE
+    md5: 3bec048fb112582cc04bf86dab16a231
+    cache_key: invoice:3bec048fb112582cc04bf86dab16a231
+  - name: pvlybyd-1.pdf
+    path: demo-docs/invoice/files/pvlybyd-1.pdf
+    company_id: '570047217'
+    type: INVOICE
+    md5: b44ffa943f5713f543cd378e2b34c0e1
+    cache_key: invoice:b44ffa943f5713f543cd378e2b34c0e1
+  - name: mylstvn-5.pdf
+    path: demo-docs/invoice/files/mylstvn-5.pdf
+    company_id: '512643859'
+    type: INVOICE
+    md5: 2ef978b2eb9aa95ab8ce26b1151cfd23
+    cache_key: invoice:2ef978b2eb9aa95ab8ce26b1151cfd23
+  - name: bnyas-5.pdf
+    path: demo-docs/invoice/files/bnyas-5.pdf
+    company_id: '510605959'
+    type: INVOICE
+    md5: f8a0c26ed4254d6f57c61b8081eb7cad
+    cache_key: invoice:f8a0c26ed4254d6f57c61b8081eb7cad
+  - name: khrml-plvr-4.pdf
+    path: demo-docs/invoice/files/khrml-plvr-4.pdf
+    company_id: '514488782'
+    type: INVOICE
+    md5: 2c81524c5491eea1596a379579efdad1
+    cache_key: invoice:2c81524c5491eea1596a379579efdad1
+  - name: mvral-5.pdf
+    path: demo-docs/invoice/files/mvral-5.pdf
+    company_id: '516711157'
+    type: INVOICE
+    md5: 21c6c1a5c7ef3f470fcbf1400189a29a
+    cache_key: invoice:21c6c1a5c7ef3f470fcbf1400189a29a
+  - name: mvral-1.pdf
+    path: demo-docs/invoice/files/mvral-1.pdf
+    company_id: '516711157'
+    type: INVOICE
+    md5: 336803cb2baf4ddbb0c4cff3005edbda
+    cache_key: invoice:336803cb2baf4ddbb0c4cff3005edbda
+  - name: aykn-mp-l-ly-3.pdf
+    path: demo-docs/invoice/files/aykn-mp-l-ly-3.pdf
+    company_id: '510560246'
+    type: INVOICE
+    md5: a63110641c9c4e5d0716bfb09ca9c557
+    cache_key: invoice:a63110641c9c4e5d0716bfb09ca9c557
+  - name: hvpyt-kybvts-khnrt-5.pdf
+    path: demo-docs/invoice/files/hvpyt-kybvts-khnrt-5.pdf
+    company_id: '514454446'
+    type: INVOICE
+    md5: 1ba9e69d6fbcb9b3bf1d1e8e6a18739a
+    cache_key: invoice:1ba9e69d6fbcb9b3bf1d1e8e6a18739a
+  - name: agn-3.pdf
+    path: demo-docs/invoice/files/agn-3.pdf
+    company_id: '511301129'
+    type: INVOICE
+    md5: c002271f87774fab6fd8a39cde1ddb1a
+    cache_key: invoice:c002271f87774fab6fd8a39cde1ddb1a
+  - name: aykn-mp-l-ly-2.pdf
+    path: demo-docs/invoice/files/aykn-mp-l-ly-2.pdf
+    company_id: '510560246'
+    type: INVOICE
+    md5: b0c392daaa6cf788d5c8840c1505fff4
+    cache_key: invoice:b0c392daaa6cf788d5c8840c1505fff4
+  - name: aykn-mp-l-ly-1.pdf
+    path: demo-docs/invoice/files/aykn-mp-l-ly-1.pdf
+    company_id: '510560246'
+    type: INVOICE
+    md5: 97642cb23d74a429fbe318e0aeb84bcf
+    cache_key: invoice:97642cb23d74a429fbe318e0aeb84bcf
+  - name: aykn-mp-l-ly-5.pdf
+    path: demo-docs/invoice/files/aykn-mp-l-ly-5.pdf
+    company_id: '510560246'
+    type: INVOICE
+    md5: c1852ecd4d607f017f4ec11d73240e43
+    cache_key: invoice:c1852ecd4d607f017f4ec11d73240e43
+  - name: arkv-5.pdf
+    path: demo-docs/invoice/files/arkv-5.pdf
+    company_id: '516245529'
+    type: INVOICE
+    md5: ed77124a0c118f990318e72774a306e9
+    cache_key: invoice:ed77124a0c118f990318e72774a306e9
+  - name: arkhh-4.pdf
+    path: demo-docs/invoice/files/arkhh-4.pdf
+    company_id: '511022493'
+    type: INVOICE
+    md5: 777ab556d473688388360eebd7c9883f
+    cache_key: invoice:777ab556d473688388360eebd7c9883f
+  - name: nbl-2.pdf
+    path: demo-docs/invoice/files/nbl-2.pdf
+    company_id: '514947746'
+    type: INVOICE
+    md5: be1cfb2a85650e68445577bfd0a60288
+    cache_key: invoice:be1cfb2a85650e68445577bfd0a60288
+  - name: khpr-mnhm-5.pdf
+    path: demo-docs/invoice/files/khpr-mnhm-5.pdf
+    company_id: '570043745'
+    type: INVOICE
+    md5: 0aee9ce9d8573d5c8654ffae2e8a255f
+    cache_key: invoice:0aee9ce9d8573d5c8654ffae2e8a255f
+  - name: khpr-mnhm-2.pdf
+    path: demo-docs/invoice/files/khpr-mnhm-2.pdf
+    company_id: '570043745'
+    type: INVOICE
+    md5: e20ea26fd201d5fba0ba3e811ba91c97
+    cache_key: invoice:e20ea26fd201d5fba0ba3e811ba91c97
+  - name: hvlyvt-zrymh-4.pdf
+    path: demo-docs/invoice/files/hvlyvt-zrymh-4.pdf
+    company_id: '570038158'
+    type: INVOICE
+    md5: 96e0e51ea22a5336cf10f2e933c72dc1
+    cache_key: invoice:96e0e51ea22a5336cf10f2e933c72dc1
+  - name: khpr-mnhm-3.pdf
+    path: demo-docs/invoice/files/khpr-mnhm-3.pdf
+    company_id: '570043745'
+    type: INVOICE
+    md5: 870e7729ad8986e9048cc889568d5a87
+    cache_key: invoice:870e7729ad8986e9048cc889568d5a87
+  - name: pvlybyd-3.pdf
+    path: demo-docs/invoice/files/pvlybyd-3.pdf
+    company_id: '570047217'
+    type: INVOICE
+    md5: 83010bc249ea352f7708da0ef618eadb
+    cache_key: invoice:83010bc249ea352f7708da0ef618eadb
+  - name: pvlybyd-4.pdf
+    path: demo-docs/invoice/files/pvlybyd-4.pdf
+    company_id: '570047217'
+    type: INVOICE
+    md5: 26a6312795d3732705b37b645bf2772d
+    cache_key: invoice:26a6312795d3732705b37b645bf2772d
+  drive-gdoc:
+  - name: khpr-mnhm-4.pdf
+    path: demo-docs/invoice/files/khpr-mnhm-4.pdf
+    company_id: '570043745'
+    type: INVOICE
+    md5: 3f2289df10df138c63cef80a4582d15b
+    cache_key: invoice:3f2289df10df138c63cef80a4582d15b
+  - name: dvr-rpal-1.pdf
+    path: demo-docs/invoice/files/dvr-rpal-1.pdf
+    company_id: '514772342'
+    type: INVOICE
+    md5: b6281d7fc136e52db6e39f9b00e01edd
+    cache_key: invoice:b6281d7fc136e52db6e39f9b00e01edd
+  - name: mbnh-drvm-hdsh-4.pdf
+    path: demo-docs/invoice/files/mbnh-drvm-hdsh-4.pdf
+    company_id: '516431434'
+    type: INVOICE
+    md5: 9ecb9ab943c6eca9a38aede1efcd4663
+    cache_key: invoice:9ecb9ab943c6eca9a38aede1efcd4663
+  - name: bnyas-1.pdf
+    path: demo-docs/invoice/files/bnyas-1.pdf
+    company_id: '510605959'
+    type: INVOICE
+    md5: 277d897e8c74d21e61ce64ceef03ff80
+    cache_key: invoice:277d897e8c74d21e61ce64ceef03ff80
+  - name: hvpyt-kybvts-khnrt-1.pdf
+    path: demo-docs/invoice/files/hvpyt-kybvts-khnrt-1.pdf
+    company_id: '514454446'
+    type: INVOICE
+    md5: 94419e007b1fa406dd2071714e97a055
+    cache_key: invoice:94419e007b1fa406dd2071714e97a055
+  - name: hvpyt-kybvts-khnrt-3.pdf
+    path: demo-docs/invoice/files/hvpyt-kybvts-khnrt-3.pdf
+    company_id: '514454446'
+    type: INVOICE
+    md5: c10c9a79105024f6ac8d207124166891
+    cache_key: invoice:c10c9a79105024f6ac8d207124166891
+  - name: hvpyt-kybvts-khnrt-4.pdf
+    path: demo-docs/invoice/files/hvpyt-kybvts-khnrt-4.pdf
+    company_id: '514454446'
+    type: INVOICE
+    md5: bc0f781b24e37261c5fd75683d2b221b
+    cache_key: invoice:bc0f781b24e37261c5fd75683d2b221b
+  - name: aykn-mp-l-ly-4.pdf
+    path: demo-docs/invoice/files/aykn-mp-l-ly-4.pdf
+    company_id: '510560246'
+    type: INVOICE
+    md5: c8ff3256b222296358df1d44958d816a
+    cache_key: invoice:c8ff3256b222296358df1d44958d816a
+  - name: arkhh-5.pdf
+    path: demo-docs/invoice/files/arkhh-5.pdf
+    company_id: '511022493'
+    type: INVOICE
+    md5: 748c247da6b0cfa39b442785649e1bcd
+    cache_key: invoice:748c247da6b0cfa39b442785649e1bcd
+  - name: pvlybyd-2.pdf
+    path: demo-docs/invoice/files/pvlybyd-2.pdf
+    company_id: '570047217'
+    type: INVOICE
+    md5: fbf9ad0a587ef2383b8b04d23a1bb0f2
+    cache_key: invoice:fbf9ad0a587ef2383b8b04d23a1bb0f2
+  - name: pvlybyd-5.pdf
+    path: demo-docs/invoice/files/pvlybyd-5.pdf
+    company_id: '570047217'
+    type: INVOICE
+    md5: 56387b8a2981bb8f24e59207e3a4918a
+    cache_key: invoice:56387b8a2981bb8f24e59207e3a4918a
+  - name: symnt-ay-as-2.pdf
+    path: demo-docs/invoice/files/symnt-ay-as-2.pdf
+    company_id: '514745819'
+    type: INVOICE
+    md5: f666742a374bd5bfc29e9020663b901e
+    cache_key: invoice:f666742a374bd5bfc29e9020663b901e
+  - name: mbnh-drvm-hdsh-1.jpg
+    path: demo-docs/invoice/files/mbnh-drvm-hdsh-1.jpg
+    company_id: '516431434'
+    type: INVOICE
+    md5: d9e922b1c5eaba8521ff491b62826132
+    cache_key: invoice:d9e922b1c5eaba8521ff491b62826132
+  - name: symnt-ay-as-4.pdf
+    path: demo-docs/invoice/files/symnt-ay-as-4.pdf
+    company_id: '514745819'
+    type: INVOICE
+    md5: f458aa99f3e7a44a67b1fc5343944412
+    cache_key: invoice:f458aa99f3e7a44a67b1fc5343944412
+  - name: arkhh-3.pdf
+    path: demo-docs/invoice/files/arkhh-3.pdf
+    company_id: '511022493'
+    type: INVOICE
+    md5: 89eeb4ebe8a619495113003a08f7d5bd
+    cache_key: invoice:89eeb4ebe8a619495113003a08f7d5bd
+  - name: vvyz-alktryk-3.pdf
+    path: demo-docs/invoice/files/vvyz-alktryk-3.pdf
+    company_id: '515463354'
+    type: INVOICE
+    md5: 4de4853959693b86141cc983e5270bd5
+    cache_key: invoice:4de4853959693b86141cc983e5270bd5
+  - name: nbl-5.pdf
+    path: demo-docs/invoice/files/nbl-5.pdf
+    company_id: '514947746'
+    type: INVOICE
+    md5: 9bdd443c91177cd4a753cd96ed4e9d3a
+    cache_key: invoice:9bdd443c91177cd4a753cd96ed4e9d3a
+  - name: nbl-1.pdf
+    path: demo-docs/invoice/files/nbl-1.pdf
+    company_id: '514947746'
+    type: INVOICE
+    md5: 10333e12643d7ae10b82ddfbb8b1a072
+    cache_key: invoice:10333e12643d7ae10b82ddfbb8b1a072
+  - name: nbl-4.pdf
+    path: demo-docs/invoice/files/nbl-4.pdf
+    company_id: '514947746'
+    type: INVOICE
+    md5: b561516a4d27ca246524dbcbf3deedb0
+    cache_key: invoice:b561516a4d27ca246524dbcbf3deedb0
+  - name: nbl-3.pdf
+    path: demo-docs/invoice/files/nbl-3.pdf
+    company_id: '514947746'
+    type: INVOICE
+    md5: ad49de65cef6356a80a8db0f7c215bd9
+    cache_key: invoice:ad49de65cef6356a80a8db0f7c215bd9
+  - name: hvlyvt-zrymh-1.pdf
+    path: demo-docs/invoice/files/hvlyvt-zrymh-1.pdf
+    company_id: '570038158'
+    type: INVOICE
+    md5: 4edab3014acfd1dceee8aebaae292f10
+    cache_key: invoice:4edab3014acfd1dceee8aebaae292f10
+  - name: hvlyvt-zrymh-2.pdf
+    path: demo-docs/invoice/files/hvlyvt-zrymh-2.pdf
+    company_id: '570038158'
+    type: INVOICE
+    md5: 7204a22260c3e8b60cb3e2560ca93473
+    cache_key: invoice:7204a22260c3e8b60cb3e2560ca93473
+  - name: hvlyvt-zrymh-3.pdf
+    path: demo-docs/invoice/files/hvlyvt-zrymh-3.pdf
+    company_id: '570038158'
+    type: INVOICE
+    md5: 5bed6803d9e803401035260fcf43feba
+    cache_key: invoice:5bed6803d9e803401035260fcf43feba
+  - name: symnt-ay-as-3.pdf
+    path: demo-docs/invoice/files/symnt-ay-as-3.pdf
+    company_id: '514745819'
+    type: INVOICE
+    md5: 1d3605ce2ea65d1459977be9da5fedc4
+    cache_key: invoice:1d3605ce2ea65d1459977be9da5fedc4
+  - name: khrml-plvr-2.pdf
+    path: demo-docs/invoice/files/khrml-plvr-2.pdf
+    company_id: '514488782'
+    type: INVOICE
+    md5: 65612439ce250cbeea761b52a5778e0e
+    cache_key: invoice:65612439ce250cbeea761b52a5778e0e
+  - name: yhzkal-ahrvn-1.jpg
+    path: demo-docs/invoice/files/yhzkal-ahrvn-1.jpg
+    company_id: '511027419'
+    type: INVOICE
+    md5: 385418f4638f881f99663028c0cd8780
+    cache_key: invoice:385418f4638f881f99663028c0cd8780
+  - name: msgryyt-shtyl-2.pdf
+    path: demo-docs/invoice/files/msgryyt-shtyl-2.pdf
+    company_id: '511061780'
+    type: INVOICE
+    md5: b461d71dd5c55c3b0a65261445ceb461
+    cache_key: invoice:b461d71dd5c55c3b0a65261445ceb461
+  - name: zlmn-shr-3.pdf
+    path: demo-docs/invoice/files/zlmn-shr-3.pdf
+    company_id: '516009677'
+    type: INVOICE
+    md5: e32f203165a1843716e4af050-000-0015
+    cache_key: invoice:e32f203165a1843716e4af050-000-0015
+  - name: msgryyt-shtyl-5.pdf
+    path: demo-docs/invoice/files/msgryyt-shtyl-5.pdf
+    company_id: '511061780'
+    type: INVOICE
+    md5: dd885ac76ad3582b1416a6d504c9c79b
+    cache_key: invoice:dd885ac76ad3582b1416a6d504c9c79b
+  - name: mtsrpls-5.pdf
+    path: demo-docs/invoice/files/mtsrpls-5.pdf
+    company_id: '570045310'
+    type: INVOICE
+    md5: 0c7e9c320b10443b63026a59b9385598
+    cache_key: invoice:0c7e9c320b10443b63026a59b9385598
+  gmail-bs:
+  - name: tvrndv-3.xlsx
+    path: demo-docs/balance_sheet/files/tvrndv-3.xlsx
+    company_id: '510520687'
+    type: BALANCE_SHEET
+    md5: d733bb86334dad4f4dfad60ad26359ff
+    cache_key: bs:d733bb86334dad4f4dfad60ad26359ff
+  - name: ysh-krtvn-5.xlsx
+    path: demo-docs/balance_sheet/files/ysh-krtvn-5.xlsx
+    company_id: '512093170'
+    type: BALANCE_SHEET
+    md5: 00d996ce5341c3ec09dfb3fdad83e0d3
+    cache_key: bs:00d996ce5341c3ec09dfb3fdad83e0d3
+  - name: plsavn-5.xlsx
+    path: demo-docs/balance_sheet/files/plsavn-5.xlsx
+    company_id: '514930718'
+    type: BALANCE_SHEET
+    md5: fe8bf4e0e0aac213372159b22a361cbc
+    cache_key: bs:fe8bf4e0e0aac213372159b22a361cbc
+  - name: nvymn-5.xlsx
+    path: demo-docs/balance_sheet/files/nvymn-5.xlsx
+    company_id: '510818859'
+    type: BALANCE_SHEET
+    md5: 86213139efba52199a85632c32a5914f
+    cache_key: bs:86213139efba52199a85632c32a5914f
+  - name: aytvng-5.xlsx
+    path: demo-docs/balance_sheet/files/aytvng-5.xlsx
+    company_id: '511212615'
+    type: BALANCE_SHEET
+    md5: 2eec3c36d6fc5faff53ec6d6f4516534
+    cache_key: bs:2eec3c36d6fc5faff53ec6d6f4516534
+  - name: rvznpld-3.xlsx
+    path: demo-docs/balance_sheet/files/rvznpld-3.xlsx
+    company_id: '514779065'
+    type: BALANCE_SHEET
+    md5: e02b02f3820eedbbc4af0f92e3a04fc4
+    cache_key: bs:e02b02f3820eedbbc4af0f92e3a04fc4
+  - name: rvznpld-2.xlsx
+    path: demo-docs/balance_sheet/files/rvznpld-2.xlsx
+    company_id: '514779065'
+    type: BALANCE_SHEET
+    md5: 0c37af35b601040714cd3e6b6b2a0e70
+    cache_key: bs:0c37af35b601040714cd3e6b6b2a0e70
+  - name: m-trvt-b-1.jpg
+    path: demo-docs/balance_sheet/files/m-trvt-b-1.jpg
+    company_id: '514380393'
+    type: BALANCE_SHEET
+    md5: 354144ca2acb4b81cd5a762e50b613d6
+    cache_key: bs:354144ca2acb4b81cd5a762e50b613d6
+  - name: nvymn-4.xlsx
+    path: demo-docs/balance_sheet/files/nvymn-4.xlsx
+    company_id: '510818859'
+    type: BALANCE_SHEET
+    md5: 1550bf54688dac6976c1f78fa3fd5366
+    cache_key: bs:1550bf54688dac6976c1f78fa3fd5366
+  - name: vvyz-alktryk-1.pdf
+    path: demo-docs/balance_sheet/files/vvyz-alktryk-1.pdf
+    company_id: '515463354'
+    type: BALANCE_SHEET
+    md5: d4e0e3a283d0af2ed7e9ce632347c61a
+    cache_key: bs:d4e0e3a283d0af2ed7e9ce632347c61a
+  - name: vvyz-alktryk-2.pdf
+    path: demo-docs/balance_sheet/files/vvyz-alktryk-2.pdf
+    company_id: '515463354'
+    type: BALANCE_SHEET
+    md5: 7e8f23e966e7d88e2045aac777529a3f
+    cache_key: bs:7e8f23e966e7d88e2045aac777529a3f
+  - name: ntv-aspkh-1.pdf
+    path: demo-docs/balance_sheet/files/ntv-aspkh-1.pdf
+    company_id: '513905851'
+    type: BALANCE_SHEET
+    md5: 82bec60d34f1e9452f123ccbd7024cff
+    cache_key: bs:82bec60d34f1e9452f123ccbd7024cff
+  - name: ntv-aspkh-2.pdf
+    path: demo-docs/balance_sheet/files/ntv-aspkh-2.pdf
+    company_id: '513905851'
+    type: BALANCE_SHEET
+    md5: 895c39e40d211afe7281e755dfcfdc74
+    cache_key: bs:895c39e40d211afe7281e755dfcfdc74
+  - name: ntv-aspkh-3.pdf
+    path: demo-docs/balance_sheet/files/ntv-aspkh-3.pdf
+    company_id: '513905851'
+    type: BALANCE_SHEET
+    md5: 588265571a80e68a9d4e2a10990670ec
+    cache_key: bs:588265571a80e68a9d4e2a10990670ec
+  - name: zlmn-shr-3.pdf
+    path: demo-docs/balance_sheet/files/zlmn-shr-3.pdf
+    company_id: '516009677'
+    type: BALANCE_SHEET
+    md5: 0e8d381f174bd1488d24801948326220
+    cache_key: bs:0e8d381f174bd1488d24801948326220
+  - name: aysh-hkhvl-yrvk-2.pdf
+    path: demo-docs/balance_sheet/files/aysh-hkhvl-yrvk-2.pdf
+    company_id: '514194612'
+    type: BALANCE_SHEET
+    md5: 8cabccdaec3189ea50045e68b83c463a
+    cache_key: bs:8cabccdaec3189ea50045e68b83c463a
+  - name: tyh-harts-2.pdf
+    path: demo-docs/balance_sheet/files/tyh-harts-2.pdf
+    company_id: '514697606'
+    type: BALANCE_SHEET
+    md5: 241e98a747abfe968614021c00e183c3
+    cache_key: bs:241e98a747abfe968614021c00e183c3
+  - name: aysh-hkhvl-yrvk-3.pdf
+    path: demo-docs/balance_sheet/files/aysh-hkhvl-yrvk-3.pdf
+    company_id: '514194612'
+    type: BALANCE_SHEET
+    md5: 19676d2450d61cd963b000299ddad0d7
+    cache_key: bs:19676d2450d61cd963b000299ddad0d7
+  - name: aysh-hkhvl-yrvk-1.pdf
+    path: demo-docs/balance_sheet/files/aysh-hkhvl-yrvk-1.pdf
+    company_id: '514194612'
+    type: BALANCE_SHEET
+    md5: 484744cd882ffd4802edda6d2abe822e
+    cache_key: bs:484744cd882ffd4802edda6d2abe822e
+  - name: asyp-shr-ts-4.pdf
+    path: demo-docs/balance_sheet/files/asyp-shr-ts-4.pdf
+    company_id: '516618881'
+    type: BALANCE_SHEET
+    md5: ae6aca88133b15b884454e4d8a6da8b4
+    cache_key: bs:ae6aca88133b15b884454e4d8a6da8b4
+  - name: asyp-shr-ts-5.pdf
+    path: demo-docs/balance_sheet/files/asyp-shr-ts-5.pdf
+    company_id: '516618881'
+    type: BALANCE_SHEET
+    md5: 846cb06e1668e7130b6ab89b1388e35d
+    cache_key: bs:846cb06e1668e7130b6ab89b1388e35d
+  - name: asyp-shr-ts-2.pdf
+    path: demo-docs/balance_sheet/files/asyp-shr-ts-2.pdf
+    company_id: '516618881'
+    type: BALANCE_SHEET
+    md5: 2d695d3f04c1539e131e22c494b96f39
+    cache_key: bs:2d695d3f04c1539e131e22c494b96f39
+  - name: asyp-shr-ts-3.pdf
+    path: demo-docs/balance_sheet/files/asyp-shr-ts-3.pdf
+    company_id: '516618881'
+    type: BALANCE_SHEET
+    md5: 6b7b14fe7d204f4512d7b0c785b674f1
+    cache_key: bs:6b7b14fe7d204f4512d7b0c785b674f1
+  - name: asyp-shr-ts-1.pdf
+    path: demo-docs/balance_sheet/files/asyp-shr-ts-1.pdf
+    company_id: '516618881'
+    type: BALANCE_SHEET
+    md5: c8e545bdeab4c9cd6ba73db8b3c0b846
+    cache_key: bs:c8e545bdeab4c9cd6ba73db8b3c0b846
+  - name: tyh-harts-4.pdf
+    path: demo-docs/balance_sheet/files/tyh-harts-4.pdf
+    company_id: '514697606'
+    type: BALANCE_SHEET
+    md5: e88a1a8b9de1a204bc30f2342662a255
+    cache_key: bs:e88a1a8b9de1a204bc30f2342662a255
+  - name: hvmry-bnyn-v-4.pdf
+    path: demo-docs/balance_sheet/files/hvmry-bnyn-v-4.pdf
+    company_id: '510003320'
+    type: BALANCE_SHEET
+    md5: 3d142ebac8f3f36c2116948b5e7cffc0
+    cache_key: bs:3d142ebac8f3f36c2116948b5e7cffc0
+  - name: tyh-harts-3.pdf
+    path: demo-docs/balance_sheet/files/tyh-harts-3.pdf
+    company_id: '514697606'
+    type: BALANCE_SHEET
+    md5: 8578a7ec3c3c3a02055cf896bbed459f
+    cache_key: bs:8578a7ec3c3c3a02055cf896bbed459f
+  - name: hvmry-bnyn-v-1.pdf
+    path: demo-docs/balance_sheet/files/hvmry-bnyn-v-1.pdf
+    company_id: '510003320'
+    type: BALANCE_SHEET
+    md5: 8b29d4cd478c44e9863f59eb25cafb05
+    cache_key: bs:8b29d4cd478c44e9863f59eb25cafb05
+  - name: mshvvky-htspvn-4.pdf
+    path: demo-docs/balance_sheet/files/mshvvky-htspvn-4.pdf
+    company_id: '511429698'
+    type: BALANCE_SHEET
+    md5: 483fd7d0238dfaff3f53940a095ee49f
+    cache_key: bs:483fd7d0238dfaff3f53940a095ee49f
+  - name: khhn-pvr-2.pdf
+    path: demo-docs/balance_sheet/files/khhn-pvr-2.pdf
+    company_id: '513381830'
+    type: BALANCE_SHEET
+    md5: e5e930b43e9d196f1d298a0735def496
+    cache_key: bs:e5e930b43e9d196f1d298a0735def496
+  drive-bs:
+  - name: hvmry-bnyn-v-2.pdf
+    path: demo-docs/balance_sheet/files/hvmry-bnyn-v-2.pdf
+    company_id: '510003320'
+    type: BALANCE_SHEET
+    md5: 94c560363c3ffdede2305acdef04d191
+    cache_key: bs:94c560363c3ffdede2305acdef04d191
+  - name: khhn-pvr-1.pdf
+    path: demo-docs/balance_sheet/files/khhn-pvr-1.pdf
+    company_id: '513381830'
+    type: BALANCE_SHEET
+    md5: 5dff6c91aeb76c38b1fec061ce0e31a9
+    cache_key: bs:5dff6c91aeb76c38b1fec061ce0e31a9
+  - name: mshvvky-htspvn-3.pdf
+    path: demo-docs/balance_sheet/files/mshvvky-htspvn-3.pdf
+    company_id: '511429698'
+    type: BALANCE_SHEET
+    md5: acf1759cdda93e14c5b9674bd54bc0d0
+    cache_key: bs:acf1759cdda93e14c5b9674bd54bc0d0
+  - name: hvmry-bnyn-v-3.pdf
+    path: demo-docs/balance_sheet/files/hvmry-bnyn-v-3.pdf
+    company_id: '510003320'
+    type: BALANCE_SHEET
+    md5: 5e3faf863dc15cb72b642d2c82ff342e
+    cache_key: bs:5e3faf863dc15cb72b642d2c82ff342e
+  - name: khhn-pvr-4.pdf
+    path: demo-docs/balance_sheet/files/khhn-pvr-4.pdf
+    company_id: '513381830'
+    type: BALANCE_SHEET
+    md5: d866400a9e5c868f7c662be50f28fd6c
+    cache_key: bs:d866400a9e5c868f7c662be50f28fd6c
+  - name: khhn-pvr-3.pdf
+    path: demo-docs/balance_sheet/files/khhn-pvr-3.pdf
+    company_id: '513381830'
+    type: BALANCE_SHEET
+    md5: e92d3844f7eae44b3b411dfcfc341c18
+    cache_key: bs:e92d3844f7eae44b3b411dfcfc341c18
+  - name: khhn-pvr-5.pdf
+    path: demo-docs/balance_sheet/files/khhn-pvr-5.pdf
+    company_id: '513381830'
+    type: BALANCE_SHEET
+    md5: a2f45e37b12a73dad0c7339348618e8d
+    cache_key: bs:a2f45e37b12a73dad0c7339348618e8d
+  - name: lkh-khly-bvdh-2.pdf
+    path: demo-docs/balance_sheet/files/lkh-khly-bvdh-2.pdf
+    company_id: '516620499'
+    type: BALANCE_SHEET
+    md5: 9ed7c9bdd8b874da21139591a3a1bd97
+    cache_key: bs:9ed7c9bdd8b874da21139591a3a1bd97
+  - name: shryzly-2.pdf
+    path: demo-docs/balance_sheet/files/shryzly-2.pdf
+    company_id: '510711716'
+    type: BALANCE_SHEET
+    md5: 0d48ed0444db9975af00e3e46e2b2bf1
+    cache_key: bs:0d48ed0444db9975af00e3e46e2b2bf1
+  - name: yhzkal-ahrvn-3.pdf
+    path: demo-docs/balance_sheet/files/yhzkal-ahrvn-3.pdf
+    company_id: '511027419'
+    type: BALANCE_SHEET
+    md5: 5f41fed6b526a0c4d0546fe0b38b5cf9
+    cache_key: bs:5f41fed6b526a0c4d0546fe0b38b5cf9
+  - name: shryzly-3.pdf
+    path: demo-docs/balance_sheet/files/shryzly-3.pdf
+    company_id: '510711716'
+    type: BALANCE_SHEET
+    md5: 75f120db6e9bec05096de84bed82df86
+    cache_key: bs:75f120db6e9bec05096de84bed82df86
+  - name: yhzkal-ahrvn-2.pdf
+    path: demo-docs/balance_sheet/files/yhzkal-ahrvn-2.pdf
+    company_id: '511027419'
+    type: BALANCE_SHEET
+    md5: c886c651ed105d5b8fcbb5671959a264
+    cache_key: bs:c886c651ed105d5b8fcbb5671959a264
+  - name: ats-hvmry-aytvm-1.jpg
+    path: demo-docs/balance_sheet/files/ats-hvmry-aytvm-1.jpg
+    company_id: '511690935'
+    type: BALANCE_SHEET
+    md5: 45d70bc0bd6534ad486c1a254bfc8ca8
+    cache_key: bs:45d70bc0bd6534ad486c1a254bfc8ca8
+  - name: nvymn-3.png
+    path: demo-docs/balance_sheet/files/nvymn-3.png
+    company_id: '510818859'
+    type: BALANCE_SHEET
+    md5: 8e05082f9aced87d2f85c8ee1ecd66ae
+    cache_key: bs:8e05082f9aced87d2f85c8ee1ecd66ae
+  - name: zlmn-shr-2.pdf
+    path: demo-docs/balance_sheet/files/zlmn-shr-2.pdf
+    company_id: '516009677'
+    type: BALANCE_SHEET
+    md5: 23ffc26fbd9349af19aeb1df307c5b20
+    cache_key: bs:23ffc26fbd9349af19aeb1df307c5b20
+  - name: plmrkhz-hptsh-4.pdf
+    path: demo-docs/balance_sheet/files/plmrkhz-hptsh-4.pdf
+    company_id: '512525940'
+    type: BALANCE_SHEET
+    md5: 4039116819934550a2ec8dae31d6454d
+    cache_key: bs:4039116819934550a2ec8dae31d6454d
+  - name: yhzkal-ahrvn-1.pdf
+    path: demo-docs/balance_sheet/files/yhzkal-ahrvn-1.pdf
+    company_id: '511027419'
+    type: BALANCE_SHEET
+    md5: 377cadd71e94734f382d1f2b69328775
+    cache_key: bs:377cadd71e94734f382d1f2b69328775
+  - name: ntv-aspkh-4.pdf
+    path: demo-docs/balance_sheet/files/ntv-aspkh-4.pdf
+    company_id: '513905851'
+    type: BALANCE_SHEET
+    md5: 890380b633fa33e8710006a5981246ba
+    cache_key: bs:890380b633fa33e8710006a5981246ba
+  - name: yhzkal-ahrvn-4.pdf
+    path: demo-docs/balance_sheet/files/yhzkal-ahrvn-4.pdf
+    company_id: '511027419'
+    type: BALANCE_SHEET
+    md5: 80f8fc25eb7b5cf30edd1907aaae523c
+    cache_key: bs:80f8fc25eb7b5cf30edd1907aaae523c
+  - name: yhzkal-ahrvn-5.pdf
+    path: demo-docs/balance_sheet/files/yhzkal-ahrvn-5.pdf
+    company_id: '511027419'
+    type: BALANCE_SHEET
+    md5: a87ff70f74badd9c0b4f039379ea633e
+    cache_key: bs:a87ff70f74badd9c0b4f039379ea633e
+  - name: ats-hvmry-aytvm-3.png
+    path: demo-docs/balance_sheet/files/ats-hvmry-aytvm-3.png
+    company_id: '511690935'
+    type: BALANCE_SHEET
+    md5: 027e2ee4a1a7f9269b044929af5963a4
+    cache_key: bs:027e2ee4a1a7f9269b044929af5963a4
+  - name: ats-hvmry-aytvm-2.png
+    path: demo-docs/balance_sheet/files/ats-hvmry-aytvm-2.png
+    company_id: '511690935'
+    type: BALANCE_SHEET
+    md5: 87aa5429a31af71f919469bead71cb1e
+    cache_key: bs:87aa5429a31af71f919469bead71cb1e
+  - name: svlyd-ytsykvt-2.pdf
+    path: demo-docs/balance_sheet/files/svlyd-ytsykvt-2.pdf
+    company_id: '515218279'
+    type: BALANCE_SHEET
+    md5: 574d0c22295c988622fccab9c61ca65f
+    cache_key: bs:574d0c22295c988622fccab9c61ca65f
+  - name: m-trvt-b-2.pdf
+    path: demo-docs/balance_sheet/files/m-trvt-b-2.pdf
+    company_id: '514380393'
+    type: BALANCE_SHEET
+    md5: de8f2035036e1c0296d4de1744c055e1
+    cache_key: bs:de8f2035036e1c0296d4de1744c055e1
+  - name: zlmn-shr-1.pdf
+    path: demo-docs/balance_sheet/files/zlmn-shr-1.pdf
+    company_id: '516009677'
+    type: BALANCE_SHEET
+    md5: b29a918c88aff6ae1cc5010f17e74a30
+    cache_key: bs:b29a918c88aff6ae1cc5010f17e74a30
+  - name: shk-btvn-5.pdf
+    path: demo-docs/balance_sheet/files/shk-btvn-5.pdf
+    company_id: '514905041'
+    type: BALANCE_SHEET
+    md5: a5e054b201a91fc2f665b3346b42c05f
+    cache_key: bs:a5e054b201a91fc2f665b3346b42c05f
+  - name: lvyrvn-3.pdf
+    path: demo-docs/balance_sheet/files/lvyrvn-3.pdf
+    company_id: '511744898'
+    type: BALANCE_SHEET
+    md5: 40dc745a71993e0657f59e7493fe04ca
+    cache_key: bs:40dc745a71993e0657f59e7493fe04ca
+  - name: lvyrvn-5.pdf
+    path: demo-docs/balance_sheet/files/lvyrvn-5.pdf
+    company_id: '511744898'
+    type: BALANCE_SHEET
+    md5: e706a37a2c0316a156b15ab3e19405eb
+    cache_key: bs:e706a37a2c0316a156b15ab3e19405eb
+  - name: plmrkhz-hptsh-2.pdf
+    path: demo-docs/balance_sheet/files/plmrkhz-hptsh-2.pdf
+    company_id: '512525940'
+    type: BALANCE_SHEET
+    md5: 022f1275a7954a1e03f8cb7673080a3b
+    cache_key: bs:022f1275a7954a1e03f8cb7673080a3b
+  - name: msgryyt-shtyl-3.pdf
+    path: demo-docs/balance_sheet/files/msgryyt-shtyl-3.pdf
+    company_id: '511061780'
+    type: BALANCE_SHEET
+    md5: 56c149dfe639d3362bcb228752573034
+    cache_key: bs:56c149dfe639d3362bcb228752573034
+settings:
+  demo_inject_count: 30
+ai_cache:
+- cache_key: invoice:0aee9ce9d8573d5c8654ffae2e8a255f
+  kind: invoice
+  value: '{"data":{"AI_COMPANY_ID":"570043745","AI_DOC_ID":"SI256006146","AI_DOC_DATE":"30/10/2025","AI_DOC_AMOUNT":"876.15","AI_SHIPMENT_IDS":["SH25006357"],"AI_ORDER_IDS":"PO25009686","AI_TYPE":"INVOICE"},"success":true,"processedAt":"2026-06-28T13:32:50.319Z","evalMetadata":{},"fullResponse":{}}'
+- cache_key: invoice:3bec048fb112582cc04bf86dab16a231
+  kind: invoice
+  value: '{"data":{"AI_COMPANY_ID":"570043745","AI_DOC_ID":"SI256004574","AI_DOC_DATE":"30/07/2025","AI_DOC_AMOUNT":"-2861.50","AI_SHIPMENT_IDS":["RT25000225"],"AI_ORDER_IDS":"","AI_TYPE":"INVOICE"},"success":true,"processedAt":"2026-06-28T13:30:51.681Z","evalMetadata":{},"fullResponse":{}}'
+- cache_key: invoice:ad49de65cef6356a80a8db0f7c215bd9
+  kind: invoice
+  value: '{"data":{"AI_COMPANY_ID":"514947746","AI_DOC_ID":"SI256000443","AI_DOC_DATE":"30/06/2025","AI_DOC_AMOUNT":"3403.00","AI_SHIPMENT_IDS":["SH25000583","SH25000586","SH25000623","SH25000644","SH25000645"],"AI_ORDER_IDS":"930","AI_TYPE":"INVOICE"},"success":true,"processedAt":"2026-06-28T13:34:49.606Z","evalMetadata":{},"fullResponse":{}}'
+- cache_key: invoice:c002271f87774fab6fd8a39cde1ddb1a
+  kind: invoice
+  value: '{"data":{"AI_COMPANY_ID":"511301129","AI_DOC_ID":"SI256001661","AI_DOC_DATE":"22/04/2025","AI_DOC_AMOUNT":"65,106.00","AI_SHIPMENT_IDS":["SH25002022","SH25002024"],"AI_ORDER_IDS":"3705","AI_TYPE":"INVOICE"},"success":true,"processedAt":"2026-06-28T13:29:03.854Z","evalMetadata":{},"fullResponse":{}}'
+- cache_key: invoice:777ab556d473688388360eebd7c9883f
+  kind: invoice
+  value: '{"data":{"AI_COMPANY_ID":"511022493","AI_DOC_ID":"20352500552","AI_DOC_DATE":"11/12/2025","AI_DOC_AMOUNT":"-395.00","AI_SHIPMENT_IDS":[],"AI_ORDER_IDS":"","AI_TYPE":"INVOICE"},"success":true,"processedAt":"2026-06-28T13:28:39.769Z","evalMetadata":{},"fullResponse":{}}'
+- cache_key: invoice:89eeb4ebe8a619495113003a08f7d5bd
+  kind: invoice
+  value: '{"data":{"AI_COMPANY_ID":"511022493","AI_DOC_ID":"20342503040","AI_DOC_DATE":"29/05/2025","AI_DOC_AMOUNT":"849.00","AI_SHIPMENT_IDS":["M5125032502"],"AI_ORDER_IDS":"PO25005306","AI_TYPE":"INVOICE"},"success":true,"processedAt":"2026-06-28T13:30:27.718Z","evalMetadata":{},"fullResponse":{}}'
+- cache_key: invoice:b6562a2de2b759061ca882211c3935ec
+  kind: invoice
+  value: '{"data":{"AI_COMPANY_ID":"512093170","AI_DOC_ID":"SI266000818","AI_DOC_DATE":"14/01/2026","AI_DOC_AMOUNT":"2662.00","AI_SHIPMENT_IDS":["SH26000835"],"AI_ORDER_IDS":"26000355","AI_TYPE":"INVOICE"},"success":true,"processedAt":"2026-06-28T13:29:29.146Z","evalMetadata":{},"fullResponse":{}}'

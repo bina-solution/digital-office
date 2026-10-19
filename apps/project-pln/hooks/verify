@@ -1,0 +1,155 @@
+#!/usr/bin/env bash
+#: project-pln — assert the instance is one a person can actually USE, not merely one that is up
+#
+# verify — Plane's own post-bring-up assertion, invoked generically by `run_app_hooks verify`
+# (`bbox baseline` P6); nothing outside this folder knows what Plane needs to be usable.
+#
+# A running container is not a working office product, and Plane is the extreme case: it can be
+# perfectly healthy while refusing every sign-in (`Instance.is_setup_done` false), and healthy again
+# while offering an empty workspace with no project to click on. `hooks/onboard` is what fixes both,
+# so what this asserts is exactly what that hook promises:
+#
+#   1. the API answers through the container     — the app is really serving
+#   2. the declared state is in the database     — owner, workspace, project, states, membership
+#   3. the owner can SIGN IN with the password in .env — the end of the story, and the only check
+#      that would have caught the original problem (a green container, a login screen, and no way in)
+#
+# The password is read from .env, used, and never printed — not in the message, not on failure.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # say/ok/bad/warn, cn, dcx, read_env
+
+SVC=project-pln
+HOSTHDR="$(read_env PROJECT_PLN_BASE_URL)"; HOSTHDR="${HOSTHDR:-plane.localhost:8080}"
+MANAGE="python3 /app/backend/manage.py"
+FAILED=0
+
+# ── 1. is it serving? ───────────────────────────────────────────────────────────────────────────
+CODE="$(dcx exec -T "${SVC}" sh -c 'curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1/api/instances/' 2>/dev/null | tr -d '\r' | tail -1)"
+if [ "${CODE}" = "200" ]; then
+  ok "project-pln-api — /api/instances/ answers 200 inside the container"
+else
+  bad "project-pln-api — /api/instances/ answered '${CODE:-nothing}' (expected 200)"
+  FAILED=1
+fi
+
+# ── 1b. is a sign-in answered on the host that was ASKED? ───────────────────────────────────────
+# Every answer of a sign-in is a redirect, and a browser sent to another host than the one it is on
+# has left its new session behind (Caddyfile, `asked`). Asked with no credentials at all: a provider
+# callback that carries no state is refused with the same redirect a sign-in ends in.
+ASKED="https://plane.asked.test:8443"
+WENT="$(dcx exec -T "${SVC}" sh -c "curl -s -o /dev/null -w '%{redirect_url}' -H 'X-Forwarded-Proto: ${ASKED%%://*}' -H 'X-Forwarded-Host: ${ASKED#*://}' http://127.0.0.1/auth/google/callback/" 2>/dev/null | tr -d '\r' | tail -1)"
+case "${WENT}" in
+  "${ASKED}/"*) ok "project-pln-origin — a sign-in is answered on the host the browser asked" ;;
+  *) bad "project-pln-origin — a sign-in asked on ${ASKED} was answered on '${WENT:-nothing}': a framed window leaves its host and loses the session"
+     FAILED=1 ;;
+esac
+
+# ── 2. the declared state ───────────────────────────────────────────────────────────────────────
+STATE="$(dcx exec -T "${SVC}" ${MANAGE} shell -c '
+import json
+from plane.db.models import User, Workspace, Project, State, Label, Profile, ProjectMember, WorkspaceMember
+from plane.license.models import Instance, InstanceAdmin
+i = Instance.objects.first()
+ws = Workspace.objects.first()
+p = Project.objects.first()
+print("STATE|" + json.dumps({
+    "setup_done": bool(i and i.is_setup_done),
+    "telemetry": bool(i and i.is_telemetry_enabled),
+    # user__isnull=False on purpose: a deleted user leaves its admin row behind (`SET_NULL`), and a
+    # row pointing at nobody is not an administrator — counting it would pass an instance that has
+    # no one able to sign in.
+    "admins": InstanceAdmin.objects.filter(user__isnull=False).count(),
+    "dangling_admins": InstanceAdmin.objects.filter(user__isnull=True).count(),
+    "users": User.objects.count(),
+    "workspaces": Workspace.objects.count(),
+    "projects": Project.objects.count(),
+    # The DECLARED objects by name, not a count of everything: this office gained a second workspace
+    # and a plan project (DGO), and a gate that calls growth a failure is a gate nobody keeps.
+    "declared_ws": Workspace.objects.filter(slug="bina").exists(),
+    "declared_project": Project.objects.filter(identifier="GEN").exists(),
+    "owner_is_member": WorkspaceMember.objects.filter(ws_slug="bina").exists()
+                       if False else WorkspaceMember.objects.filter(workspace__slug="bina").exists(),
+    "onboarded": bool(Profile.objects.filter(is_onboarded=True).first()),
+    "workspace": ws.slug if ws else None,
+    "identifier": p.identifier if p else None,
+}))' 2>/dev/null | tr -d '\r' | sed -n 's/^STATE|//p' | tail -1)"
+
+if [ -z "${STATE}" ]; then
+  bad "project-pln-bootstrap — could not read the instance state (is the database migrated?)"
+  FAILED=1
+else
+  printf '%s' "${STATE}" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+need = {"setup_done": True, "admins": 1, "declared_ws": True, "declared_project": True,
+        "owner_is_member": True, "onboarded": True, "telemetry": False}
+wrong = {k: d.get(k) for k, v in need.items() if d.get(k) != v}
+if not d.get("workspace") or not d.get("identifier"):
+    wrong["workspace/project"] = None
+detail = "workspaces=%s projects=%s states=%s users=%s admins=%s" % (
+    d.get("workspaces"), d.get("projects"), d.get("states"), d.get("users"), d.get("admins"))
+if d.get("dangling_admins"):
+    # Plane SET_NULL residue from deleting an admin user. Leftover rows are worth naming and are
+    # NOT a failure: deleting a user is a legitimate operation, and the live owner is unaffected.
+    detail += " (%s admin row(s) point at a deleted user)" % d["dangling_admins"]
+print("OK|" + detail if not wrong else "NO|" + detail + " — wrong: " + json.dumps(wrong))
+' > /tmp/pln-verify.$$ 2>/dev/null
+  if grep -q '^OK|' /tmp/pln-verify.$$; then
+    ok "project-pln-bootstrap — declared state in place ($(sed 's/^OK|//' /tmp/pln-verify.$$))"
+  else
+    bad "project-pln-bootstrap — $(sed 's/^NO|//' /tmp/pln-verify.$$)"
+    FAILED=1
+  fi
+  rm -f /tmp/pln-verify.$$
+fi
+
+# ── 3. can the owner sign in? (the promise, end to end) ─────────────────────────────────────────
+EMAIL="$(read_env PLANE_OWNER_EMAIL)"; EMAIL="${EMAIL:-$(read_env N8N_OWNER_EMAIL)}"
+PASSWORD="$(read_env PLANE_OWNER_PASSWORD)"
+if [ -z "${EMAIL}" ]; then
+  bad "project-pln-login — no PLANE_OWNER_EMAIL (or N8N_OWNER_EMAIL) in .env, so nobody can be handed this instance"
+  FAILED=1
+elif [ -z "${PASSWORD}" ]; then
+  bad "project-pln-login — no PLANE_OWNER_PASSWORD in .env; run ./bbox project-pln onboard"
+  FAILED=1
+else
+  # The session that a browser would get, obtained the way the page obtains it: a CSRF token, then
+  # the form. `error_code` in the redirect IS the failure (Plane reports "wrong password" and
+  # "instance not configured" the same way: a 302 back to the sign-in page).
+  LOGIN="$(dcx exec -T -e PLANE_CHECK_EMAIL="${EMAIL}" -e PLANE_CHECK_PASSWORD="${PASSWORD}" -e PLANE_CHECK_HOST="${HOSTHDR}" "${SVC}" sh -c '
+    set -e
+    jar="$(mktemp)"
+    tok="$(curl -s -c "$jar" -H "Host: $PLANE_CHECK_HOST" http://127.0.0.1/auth/get-csrf-token/ | sed -n "s/.*\"csrf_token\":\"\([^\"]*\)\".*/\1/p")"
+    [ -n "$tok" ] || { echo "NO_CSRF"; exit 0; }
+    curl -s -b "$jar" -c "$jar" -o /dev/null -w "%{http_code} %{redirect_url}" -X POST \
+      http://127.0.0.1/auth/sign-in/ -H "Host: $PLANE_CHECK_HOST" -H "Referer: http://$PLANE_CHECK_HOST/" \
+      --data-urlencode "email=$PLANE_CHECK_EMAIL" --data-urlencode "password=$PLANE_CHECK_PASSWORD" \
+      --data-urlencode "csrfmiddlewaretoken=$tok"
+    rm -f "$jar"' 2>/dev/null | tr -d '\r' | tail -1)"
+  unset PASSWORD
+  # `error_code` FIRST. Plane answers a refused sign-in and a successful one the same way — a 302
+  # back to the app — so matching "302" first calls an instance that refuses everyone a pass. (Found
+  # by making this check fail on purpose: as written, it did not fail.)
+  case "${LOGIN}" in
+    *error_code*)
+      if [ "${PLANE_OWNER_SET_PASSWORD:-$(read_env PLANE_OWNER_SET_PASSWORD)}" != "1" ]; then
+        # The owner registered himself and keeps his own credentials (DGO-13): this deployment cannot
+        # prove a sign-in it does not hold the password for, and calling that a failure would train
+        # everyone to ignore the gate. The door that IS verifiable is the office SSO (DGO-11).
+        warn "project-pln-login — ${EMAIL} keeps his own password (not verified here); the office SSO is the door"
+        exit "${FAILED}"
+      fi
+      # The code is numeric (5065) and the human-readable half is error_message; name the latter.
+      bad "project-pln-login — ${EMAIL} cannot sign in: the instance refused the credentials ($(printf '%s' "${LOGIN}" | sed -n 's/.*error_message=\([A-Z_]*\).*/\1/p'))"
+      FAILED=1 ;;
+    "302 "*)                        # 302 with no error_code — a real session
+      ok "project-pln-login — ${EMAIL} signs in (302 to the app)" ;;
+    *)
+      bad "project-pln-login — sign-in for ${EMAIL} answered '${LOGIN}' (expected 302)"
+      FAILED=1 ;;
+  esac
+fi
+
+exit "${FAILED}"

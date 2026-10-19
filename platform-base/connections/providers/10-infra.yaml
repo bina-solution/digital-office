@@ -1,0 +1,117 @@
+# Provider catalog — INFRA & EDGE. One entry per connection/secret; adding a connection = adding
+# an entry here (no code). Fields:
+#   id/title/kind      kind ∈ text-secret | password | app-password | oauth-client | oauth-grant |
+#                      sa-key | qr-session | derived | cert | config
+#   env                the .env key(s) that seed the vault (friction-free first boot)
+#   consumers          services that require it (mirrored in manifests/)
+#   now                EXACTLY how it is implemented today (the thing this service replaces)
+#   probe              how health is verified (green = actually works, not merely set)
+#   wizard             what the install screen shows when missing
+
+- id: traefik-acme-email
+  title: Let's Encrypt registration email
+  kind: config
+  env: TRAEFIK_ACME_EMAIL
+  # consumers: DERIVED from each app\'s connections[] (see catalog()) — do not author
+  now: ".env -> traefik command flag (certificatesresolvers.myresolver.acme.email)"
+  probe: {type: present}
+  wizard: "text field (base settings step)"
+
+# `portainer-admin` used to be declared here. It is a secret that exists only because a
+# layer-3 app exists, so authoring it in this layer-1 catalog was a base app naming an
+# installable one — the last item of gate G9. It now lives in apps/portainer/app.json under
+# contributes.connection_providers and is compiled into the registry this app already mounts,
+# so archiving or uninstalling portainer takes the secret out of the catalog with it.
+
+- id: redis-password
+  automint: {type: password, chars: 24}
+  title: Redis password
+  kind: password
+  env: REDIS_PASSWORD
+  # consumers: DERIVED from each app\'s connections[] (see catalog()) — do not author
+  now: "plain env -> redis --requirepass; ALSO reseeded into n8n cred 'Redis Local Account'
+        (BoJE1odVZ6MBcpax) by blueprint credential_overrides on bbox n8n push; authentik and
+        any-concurrency read it from env directly."
+  probe: {type: redis, host: redis, port: 6379}
+  wizard: "auto-mint"
+
+- id: dbs-allowed-ips
+  title: TCP DB/Redis entrypoint IP allowlist
+  kind: config
+  env: DBS_ALLOWED_IPS
+  # consumers: DERIVED from each app\'s connections[] (see catalog()) — do not author
+  now: "literal operator IPs in .env -> traefik ipallowlist middleware on :5432/:6379 (Hacohen-locked)"
+  probe: {type: present}
+  wizard: "text field (advanced)"
+
+- id: authentik-secret-key
+  automint: {type: hex, bytes: 50}
+  title: Authentik Django secret key
+  kind: text-secret
+  env: AUTHENTIK_SECRET_KEY
+  # consumers: DERIVED from each app\'s connections[] (see catalog()) — do not author
+  impact: [authentik, homepage]
+  rotate_warn: "החלפת המפתח תנתק את כל ההפעלות (sessions) הקיימות ותדרוש הפעלה מחדש של authentik‑server + worker. כל ה‑*.localhost המוגנים ב‑SSO ינותקו עד להפעלה מחדש."
+  now: "plain env -> authentik server/worker/bootstrap; also the homepage widget key.
+        Footgun: must be clean hex >=50 chars, NO trailing newline (a CR breaks the outpost)."
+  probe: {type: http, url: "http://authentik-server:9000/-/health/live/"}
+  wizard: "auto-mint (openssl rand -hex 50 equivalent)"
+
+- id: authentik-postgres-password
+  automint: {type: password, chars: 24}
+  title: Authentik Postgres password
+  kind: password
+  env: AUTHENTIK_POSTGRES_PASSWORD
+  # consumers: DERIVED from each app\'s connections[] (see catalog()) — do not author
+  now: "plain env -> authentik-postgres + authentik server/worker"
+  # authentik-postgres sits on the isolated authentik-internal network (connections can't reach it).
+  # A DB password's real health = the service that uses it is healthy: authentik's readiness check
+  # covers DB connectivity, and authentik-server IS reachable on traefik-network.
+  probe: {type: http, url: "http://authentik-server:9000/-/health/ready/"}
+  wizard: "auto-mint"
+
+- id: authentik-bootstrap
+  automint: {type: password, chars: 24}
+  title: Authentik akadmin bootstrap (password + API token)
+  kind: password
+  pillar: app-password
+  app: {name: Authentik, url_env: AUTHENTIK_BASE_URL, user_env: AUTHENTIK_BOOTSTRAP_USER}
+  env: AUTHENTIK_BOOTSTRAP_PASSWORD
+  envs_extra: [AUTHENTIK_BOOTSTRAP_USER, AUTHENTIK_BOOTSTRAP_TOKEN, AUTHENTIK_BOOTSTRAP_EMAIL]
+  # consumers: DERIVED from each app\'s connections[] (see catalog()) — do not author
+  now: "env consumed by authentik-worker on first boot (creates akadmin); bootstrap.sh applies
+        blueprints/deployment-apps.yaml and blocks until the outpost serves every gated host."
+  probe: {type: http, url: "http://authentik-server:9000/-/health/ready/"}
+  wizard: "human login: set once in wizard form; token auto-minted"
+
+- id: authentik-google-login
+  title: Google social login for Authentik (optional)
+  kind: oauth-client
+  env: GOOGLE_OAUTH_CLIENT_ID
+  envs_extra: [GOOGLE_OAUTH_CLIENT_SECRET]
+  # consumers: DERIVED from each app\'s connections[] (see catalog()) — do not author
+  optional: true
+  now: "MANUAL admin config inside the Authentik UI after first login — not blueprint-applied"
+  probe: {type: present}
+  wizard: "'Connect Google login' button (oauth-client paste + test)"
+
+- id: browser42-mcp-token
+  automint: {type: hex, bytes: 32}
+  title: browser42 /mcp bearer token
+  kind: text-secret
+  env: BROWSER42_MCP_TOKEN
+  # consumers: DERIVED from each app\'s connections[] (see catalog()) — do not author
+  now: "plain env -> browser42-caddy enforces Bearer on /mcp (fail-closed; no SSO possible for MCP clients)"
+  probe: {type: present}
+  wizard: "auto-mint"
+
+- id: browser42-state-passphrase
+  title: browser42 encrypted state-dump passphrase
+  kind: password
+  env: BROWSER42_STATE_PASSPHRASE
+  # consumers: DERIVED from each app\'s connections[] (see catalog()) — do not author
+  optional: true
+  now: "per-host env; encrypts/decrypts `bbox b42 dump/load` tarballs of the Chromium profile
+        (Google logins live in there — this is a de-facto credential store today)"
+  probe: {type: present}
+  wizard: "set once; used by onboarding to restore browser logins"

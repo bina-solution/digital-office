@@ -1,0 +1,354 @@
+#!/bin/bash
+# storage-report — Generate a detailed storage analysis report
+# Usage: ./scripts/storage-report [--save]
+#   --save  Write report to ai/context/storage-report-YYYY-MM-DD.txt
+
+set -euo pipefail
+
+DEPLOY_DIR="/root/deployment-hacohen"
+REPORT_DATE=$(date +%Y-%m-%d)
+HOSTNAME=$(hostname)
+SAVE=false
+
+for arg in "$@"; do
+  case "$arg" in
+    --save) SAVE=true ;;
+  esac
+done
+
+# --- helpers ---
+hr() {
+  printf '=%.0s' {1..80}; echo
+}
+indent() { sed 's/^/  /'; }
+human() {
+  # Convert bytes to human-readable (no bc dependency)
+  local b=${1:-0}
+  b=${b%%[!0-9]*}  # strip non-numeric
+  b=${b:-0}
+  if   (( b >= 1073741824 )); then awk "BEGIN{printf \"%.1f GB\", $b/1073741824}"
+  elif (( b >= 1048576 ));    then awk "BEGIN{printf \"%.0f MB\", $b/1048576}"
+  elif (( b >= 1024 ));       then awk "BEGIN{printf \"%.0f KB\", $b/1024}"
+  else                             printf "%d B" "$b"
+  fi
+}
+
+# --- collect data ---
+collect() {
+
+# 1. Disk overview
+DISK_LINE=$(df / | tail -1)
+DISK_TOTAL_KB=$(echo "$DISK_LINE" | awk '{print $2}')
+DISK_USED_KB=$(echo "$DISK_LINE" | awk '{print $3}')
+DISK_FREE_KB=$(echo "$DISK_LINE" | awk '{print $4}')
+DISK_PCT=$(echo "$DISK_LINE" | awk '{print $5}' | tr -d '%')
+DISK_TOTAL_H=$(df -h / | tail -1 | awk '{print $2}')
+DISK_USED_H=$(df -h / | tail -1 | awk '{print $3}')
+DISK_FREE_H=$(df -h / | tail -1 | awk '{print $4}')
+
+# Swap
+SWAP_LINE=$(free | grep Swap)
+SWAP_TOTAL_KB=$(echo "$SWAP_LINE" | awk '{print $2}')
+SWAP_USED_KB=$(echo "$SWAP_LINE" | awk '{print $3}')
+SWAP_TOTAL_H=$(free -h | grep Swap | awk '{print $2}')
+SWAP_USED_H=$(free -h | grep Swap | awk '{print $3}')
+
+# Status emoji
+if   (( DISK_PCT >= 95 )); then DISK_STATUS="🔴🔴 EMERGENCY — disk almost FULL, services at imminent risk of failure"
+elif (( DISK_PCT >= 90 )); then DISK_STATUS="🔴 CRITICAL — urgent cleanup needed"
+elif (( DISK_PCT >= 80 )); then DISK_STATUS="🟡 WARNING — disk space getting low"
+else                             DISK_STATUS="🟢 OK"
+fi
+
+# 2. Docker system df
+DOCKER_DF=$(docker system df 2>/dev/null || echo "DOCKER_UNAVAILABLE")
+DOCKER_DF_V=$(docker system df -v 2>/dev/null || echo "DOCKER_UNAVAILABLE")
+
+if [[ "$DOCKER_DF" != "DOCKER_UNAVAILABLE" ]]; then
+  # Parse docker system df output — normalize "Local Volumes" and "Build Cache" to single words
+  DOCKER_DF_NORM=$(echo "$DOCKER_DF" | sed 's/Local Volumes/LocalVolumes/;s/Build Cache/BuildCache/')
+
+  IMAGES_TOTAL=$(echo "$DOCKER_DF_NORM" | awk '/^Images/{print $2}')
+  IMAGES_ACTIVE=$(echo "$DOCKER_DF_NORM" | awk '/^Images/{print $3}')
+  IMAGES_SIZE=$(echo "$DOCKER_DF_NORM" | awk '/^Images/{print $4}')
+  IMAGES_RECLAIMABLE=$(echo "$DOCKER_DF_NORM" | awk '/^Images/{print $5}')
+
+  CONTAINERS_TOTAL=$(echo "$DOCKER_DF_NORM" | awk '/^Containers/{print $2}')
+  CONTAINERS_ACTIVE=$(echo "$DOCKER_DF_NORM" | awk '/^Containers/{print $3}')
+  CONTAINERS_SIZE=$(echo "$DOCKER_DF_NORM" | awk '/^Containers/{print $4}')
+  CONTAINERS_RECLAIMABLE=$(echo "$DOCKER_DF_NORM" | awk '/^Containers/{print $5}')
+
+  VOLUMES_TOTAL=$(echo "$DOCKER_DF_NORM" | awk '/^LocalVolumes/{print $2}')
+  VOLUMES_ACTIVE=$(echo "$DOCKER_DF_NORM" | awk '/^LocalVolumes/{print $3}')
+  VOLUMES_SIZE=$(echo "$DOCKER_DF_NORM" | awk '/^LocalVolumes/{print $4}')
+  VOLUMES_RECLAIMABLE=$(echo "$DOCKER_DF_NORM" | awk '/^LocalVolumes/{print $5}')
+
+  CACHE_ENTRIES=$(echo "$DOCKER_DF_NORM" | awk '/^BuildCache/{print $2}')
+  CACHE_SIZE=$(echo "$DOCKER_DF_NORM" | awk '/^BuildCache/{print $4}')
+  CACHE_RECLAIMABLE_DF=$(echo "$DOCKER_DF_NORM" | awk '/^BuildCache/{print $5}')
+fi
+
+# 3. Top images by size
+TOP_IMAGES=$(docker images --format '{{.Repository}}:{{.Tag}}\t{{.Size}}\t{{.ID}}' 2>/dev/null | sort -t$'\t' -k2 -h -r | head -15 || true)
+
+# 4. Container writable layer sizes (running + stopped)
+CONTAINER_SIZES=""
+if command -v docker &>/dev/null; then
+  CONTAINER_SIZES=$(docker ps -a --format '{{.Names}}\t{{.Status}}' 2>/dev/null | while IFS=$'\t' read -r name status; do
+    size=$(docker inspect "$name" --format '{{.SizeRw}}' 2>/dev/null || echo "0")    # Handle <nil>, empty, or non-numeric
+    size=$(echo "$size" | grep -oP '^[0-9]+' || echo "0")    size=${size:-0}
+    if (( size > 1048576 )); then  # >1MB
+      echo -e "${size}\t${name}\t${status}"
+    fi
+  done | sort -rn || true)
+fi
+
+# 5. Stopped containers
+STOPPED_CONTAINERS=$(docker ps -a --filter "status=exited" --format '{{.Names}}\t{{.Status}}\t{{.Image}}' 2>/dev/null || true)
+
+# 6. Dangling images
+DANGLING_IMAGES=$(docker images -f "dangling=true" --format '{{.ID}}\t{{.Size}}' 2>/dev/null || true)
+DANGLING_COUNT=$(echo "$DANGLING_IMAGES" | grep -c . 2>/dev/null || echo "0")
+[[ -z "$DANGLING_IMAGES" ]] && DANGLING_COUNT=0
+
+# 7. Orphaned volumes
+ALL_VOLUMES=$(docker volume ls -q 2>/dev/null || true)
+ACTIVE_VOLUMES=$(docker ps -q 2>/dev/null | xargs -r docker inspect --format '{{range .Mounts}}{{.Name}} {{end}}' 2>/dev/null | tr ' ' '\n' | sort -u || true)
+ORPHANED_VOLUMES=""
+ORPHANED_VOLUME_COUNT=0
+ORPHANED_VOLUME_SIZE=0
+if [[ -n "$ALL_VOLUMES" ]]; then
+  while IFS= read -r vol; do
+    [[ -z "$vol" ]] && continue
+    if ! echo "$ACTIVE_VOLUMES" | grep -qx "$vol"; then
+      vol_mp=$(docker volume inspect "$vol" --format '{{.Mountpoint}}' 2>/dev/null || echo "")
+      if [[ -n "$vol_mp" && -d "$vol_mp" ]]; then
+        vol_bytes=$(du -sb "$vol_mp" 2>/dev/null | awk '{print $1}' || echo "0")
+      else
+        vol_bytes=0
+      fi
+      ORPHANED_VOLUMES+="${vol_bytes}\t${vol}\n"
+      ORPHANED_VOLUME_COUNT=$((ORPHANED_VOLUME_COUNT + 1))
+      ORPHANED_VOLUME_SIZE=$((ORPHANED_VOLUME_SIZE + vol_bytes))
+    fi
+  done <<< "$ALL_VOLUMES"
+fi
+
+# 8. Workspace analysis
+WORKSPACE_DIRS=$(du -sb "$DEPLOY_DIR"/*/ 2>/dev/null | sort -rn || true)
+WORKSPACE_TOTAL=$(du -sb "$DEPLOY_DIR" 2>/dev/null | awk '{print $1}' || echo "0")
+
+# 9. APITools storage breakdown (if exists)
+APITOOLS_STORAGE_DIRS=""
+if [[ -d "$DEPLOY_DIR/apitools/storage" ]]; then
+  APITOOLS_STORAGE_DIRS=$(du -sb "$DEPLOY_DIR/apitools/storage"/*/ 2>/dev/null | sort -rn || true)
+  APITOOLS_STORAGE_TOTAL=$(du -sb "$DEPLOY_DIR/apitools/storage" 2>/dev/null | awk '{print $1}' || echo "0")
+fi
+
+# 10. System logs breakdown
+SYSLOG_DIRS=""
+if [[ -d "$DEPLOY_DIR/development/system-logs" ]]; then
+  SYSLOG_DIRS=$(du -sb "$DEPLOY_DIR/development/system-logs"/*/ 2>/dev/null | sort -rn || true)
+  SYSLOG_TOTAL=$(du -sb "$DEPLOY_DIR/development/system-logs" 2>/dev/null | awk '{print $1}' || echo "0")
+fi
+
+# 11. System areas
+VSCODE_SIZE=$(du -sb /root/.vscode-server 2>/dev/null | awk '{print $1}' || echo "0")
+VARLOG_SIZE=$(du -sb /var/log 2>/dev/null | awk '{print $1}' || echo "0")
+JOURNAL_SIZE=$(journalctl --disk-usage 2>/dev/null | grep -oP '[\d.]+[GMKB]+' || echo "unknown")
+APTCACHE_SIZE=$(du -sb /var/cache/apt 2>/dev/null | awk '{print $1}' || echo "0")
+APITOOLS_LOGS_SIZE=$(du -sb "$DEPLOY_DIR/apitools/logs" 2>/dev/null | awk '{print $1}' || echo "0")
+
+# 12. Old file analysis
+old_file_stats() {
+  local dir=$1 days=$2
+  if [[ -d "$dir" ]]; then
+    local count size_line
+    count=$(find "$dir" -type f -mtime +"$days" 2>/dev/null | wc -l)
+    if (( count > 0 )); then
+      size_line=$(find "$dir" -type f -mtime +"$days" -exec du -cb {} + 2>/dev/null | tail -1 | awk '{print $1}')
+    else
+      size_line=0
+    fi
+    echo "${count} ${size_line}"
+  else
+    echo "0 0"
+  fi
+}
+
+# APITools storage old files (>14 days, >30 days)
+if [[ -d "$DEPLOY_DIR/apitools/storage" ]]; then
+  APITOOLS_OLD14=$(old_file_stats "$DEPLOY_DIR/apitools/storage" 14)
+  APITOOLS_OLD30=$(old_file_stats "$DEPLOY_DIR/apitools/storage" 30)
+  # Per-subdirectory breakdown for 14-day
+  APITOOLS_OLD14_BREAKDOWN=""
+  for subdir in "$DEPLOY_DIR/apitools/storage"/*/; do
+    [[ -d "$subdir" ]] || continue
+    stats=$(old_file_stats "$subdir" 14)
+    count=$(echo "$stats" | awk '{print $1}')
+    bytes=$(echo "$stats" | awk '{print $2}')
+    if (( count > 0 )); then
+      APITOOLS_OLD14_BREAKDOWN+="$(basename "$subdir")\t${count}\t${bytes}\n"
+    fi
+  done
+fi
+
+# System logs old files (>3 days)
+SYSLOGS_OLD3="0 0"
+if [[ -d "$DEPLOY_DIR/development/system-logs" ]]; then
+  SYSLOGS_OLD3=$(old_file_stats "$DEPLOY_DIR/development/system-logs" 3)
+fi
+
+# 13. Docker volume sizes (from docker system df -v)
+VOLUME_SIZES=$(echo "$DOCKER_DF_V" 2>/dev/null | awk '/VOLUME NAME/{found=1; next} found{print}' | grep -v '^$' | awk '{print $NF"\t"$1}' 2>/dev/null | sort -t$'\t' -k1 -h -r || true)
+
+# 14. Build cache details (already parsed above as CACHE_RECLAIMABLE_DF)
+
+# 15. Running images (for unused image detection)
+RUNNING_IMAGES=$(docker ps --format '{{.Image}}' 2>/dev/null | sort -u || true)
+
+}
+
+# --- generate report ---
+report() {
+
+# Compute old file stats for recommendations
+sl3_count=$(echo "$SYSLOGS_OLD3" | awk '{print $1}')
+sl3_bytes=$(echo "$SYSLOGS_OLD3" | awk '{print $2}')
+a14_count=0; a14_bytes=0
+if [[ -n "${APITOOLS_OLD14:-}" ]]; then
+  a14_count=$(echo "$APITOOLS_OLD14" | awk '{print $1}')
+  a14_bytes=$(echo "$APITOOLS_OLD14" | awk '{print $2}')
+fi
+
+echo "STORAGE REPORT — $HOSTNAME — $REPORT_DATE"
+echo "────────────────────────────────────────────"
+echo
+echo "DISK: ${DISK_USED_H}/${DISK_TOTAL_H} (${DISK_PCT}%) — Free: ${DISK_FREE_H} — Swap: ${SWAP_USED_H}/${SWAP_TOTAL_H} — $DISK_STATUS"
+echo
+
+# --- Docker summary ---
+if [[ "$DOCKER_DF" != "DOCKER_UNAVAILABLE" ]]; then
+  echo "DOCKER:"
+  printf "  Images:      %3s (%s active)  %8s   reclaimable: %s\n" "$IMAGES_TOTAL" "$IMAGES_ACTIVE" "$IMAGES_SIZE" "$IMAGES_RECLAIMABLE"
+  printf "  Containers:  %3s (%s active)  %8s   reclaimable: %s\n" "$CONTAINERS_TOTAL" "$CONTAINERS_ACTIVE" "$CONTAINERS_SIZE" "$CONTAINERS_RECLAIMABLE"
+  printf "  Volumes:     %3s (%s active)  %8s   reclaimable: %s\n" "$VOLUMES_TOTAL" "$VOLUMES_ACTIVE" "$VOLUMES_SIZE" "$VOLUMES_RECLAIMABLE"
+  printf "  Build Cache: %3s entries      %8s   reclaimable: %s\n" "$CACHE_ENTRIES" "$CACHE_SIZE" "$CACHE_RECLAIMABLE_DF"
+
+  # Bloated container writable layers
+  if [[ -n "$CONTAINER_SIZES" ]]; then
+    echo "  Writable Layers (>1 MB):"
+    echo "$CONTAINER_SIZES" | while IFS=$'\t' read -r bytes name status; do
+      printf "    %-42s %s\n" "$name" "$(human "$bytes")"
+    done
+  fi
+
+  # Stopped containers
+  if [[ -n "$STOPPED_CONTAINERS" ]]; then
+    echo "  Stopped:"
+    echo "$STOPPED_CONTAINERS" | while IFS=$'\t' read -r name status image; do
+      printf "    %-42s %s\n" "$name" "$status"
+    done
+  fi
+
+  echo
+fi
+
+# --- Workspace top dirs (only >50 MB) ---
+echo "WORKSPACE ($DEPLOY_DIR):"
+if [[ -n "$WORKSPACE_DIRS" ]]; then
+  echo "$WORKSPACE_DIRS" | while IFS=$'\t' read -r bytes dir; do
+    (( bytes < 52428800 )) && continue  # skip <50 MB
+    printf "  %-42s %s\n" "$(basename "$dir")/" "$(human "$bytes")"
+  done
+fi
+printf "  %-42s %s\n" "TOTAL" "$(human "$WORKSPACE_TOTAL")"
+
+# APITools storage sub-breakdown (only if exists and >50 MB items)
+if [[ -n "$APITOOLS_STORAGE_DIRS" ]]; then
+  echo "  apitools/storage/:"
+  echo "$APITOOLS_STORAGE_DIRS" | while IFS=$'\t' read -r bytes dir; do
+    (( bytes < 52428800 )) && continue
+    printf "    %-40s %s\n" "$(basename "$dir")/" "$(human "$bytes")"
+  done
+fi
+
+# System logs (only >1 MB)
+if [[ -n "$SYSLOG_DIRS" ]]; then
+  echo "  development/system-logs/:"
+  echo "$SYSLOG_DIRS" | while IFS=$'\t' read -r bytes dir; do
+    (( bytes < 1048576 )) && continue
+    printf "    %-40s %s\n" "$(basename "$dir")/" "$(human "$bytes")"
+  done
+fi
+echo
+
+# --- Reclaimable / orphaned ---
+echo "RECLAIMABLE:"
+printf "  Dangling images:   %d\n" "$DANGLING_COUNT"
+printf "  Orphaned volumes:  %d (~%s)\n" "$ORPHANED_VOLUME_COUNT" "$(human "$ORPHANED_VOLUME_SIZE")"
+printf "  Old logs >3d:      %s files, %s\n" "$sl3_count" "$(human "${sl3_bytes:-0}")"
+printf "  Old apitools >14d: %s files, %s\n" "$a14_count" "$(human "${a14_bytes:-0}")"
+echo
+
+# --- Top volumes (>100 MB) ---
+if [[ -n "$VOLUME_SIZES" ]]; then
+  echo "TOP VOLUMES:"
+  echo "$VOLUME_SIZES" | head -8 | while IFS=$'\t' read -r size name; do
+    orphan=""
+    if [[ -n "$ORPHANED_VOLUMES" ]] && echo -e "$ORPHANED_VOLUMES" | grep -q "$name" 2>/dev/null; then
+      orphan=" ⚠ orphan"
+    fi
+    printf "  %-50s %8s%s\n" "$name" "$size" "$orphan"
+  done
+  echo
+fi
+
+# --- Cleanup recommendations (compact) ---
+echo "CLEANUP:"
+REC_NUM=0
+
+if [[ "$DOCKER_DF" != "DOCKER_UNAVAILABLE" && -n "$IMAGES_RECLAIMABLE" && "$IMAGES_RECLAIMABLE" != "0B" ]]; then
+  REC_NUM=$((REC_NUM+1)); printf "  %d. Images reclaimable: %-16s  docker image prune -f\n" "$REC_NUM" "$IMAGES_RECLAIMABLE"
+fi
+if [[ -n "$STOPPED_CONTAINERS" ]]; then
+  REC_NUM=$((REC_NUM+1)); printf "  %d. Stopped containers                docker container prune -f\n" "$REC_NUM"
+fi
+if (( ORPHANED_VOLUME_COUNT > 0 )); then
+  REC_NUM=$((REC_NUM+1)); printf "  %d. Orphaned volumes: %-15s  docker volume prune -f\n" "$REC_NUM" "$(human "$ORPHANED_VOLUME_SIZE")"
+fi
+if [[ "$CACHE_SIZE" != "0B" && -n "$CACHE_SIZE" ]]; then
+  REC_NUM=$((REC_NUM+1)); printf "  %d. Build cache: %-19s  docker builder prune -f\n" "$REC_NUM" "$CACHE_SIZE"
+fi
+if (( sl3_count > 0 )); then
+  REC_NUM=$((REC_NUM+1)); printf "  %d. Old logs >3d: %-18s  find .../development/system-logs -mtime +3 -delete\n" "$REC_NUM" "$(human "${sl3_bytes:-0}")"
+fi
+if (( a14_count > 0 )); then
+  REC_NUM=$((REC_NUM+1)); printf "  %d. Old apitools >14d: %-14s  find .../apitools/storage -mtime +14 -delete\n" "$REC_NUM" "$(human "${a14_bytes:-0}")"
+fi
+if (( APTCACHE_SIZE > 1048576 )); then
+  REC_NUM=$((REC_NUM+1)); printf "  %d. APT cache: %-20s  apt-get clean\n" "$REC_NUM" "$(human "$APTCACHE_SIZE")"
+fi
+if (( DANGLING_COUNT > 0 )); then
+  REC_NUM=$((REC_NUM+1)); printf "  %d. Dangling images: %d              docker image prune -f\n" "$REC_NUM" "$DANGLING_COUNT"
+fi
+if (( REC_NUM == 0 )); then
+  echo "  (nothing to clean)"
+fi
+
+}
+
+# --- main ---
+echo "Collecting storage data..." >&2
+collect
+echo "Generating report..." >&2
+
+if $SAVE; then
+  OUTPUT_FILE="$DEPLOY_DIR/ai/context/storage-report-${REPORT_DATE}.txt"
+  report > "$OUTPUT_FILE"
+  echo "Report saved to: $OUTPUT_FILE" >&2
+  echo "Also printing to stdout..." >&2
+  cat "$OUTPUT_FILE"
+else
+  report
+fi

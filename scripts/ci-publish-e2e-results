@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# Publish the e2e battery's outcome into the REPO so every run leaves a reviewable trace:
+#   .ci-cd/indox-e2e/latest/results.txt          — per-suite verdict lines (from battery.log)
+#   .ci-cd/indox-e2e/latest/results.junit.xml    — the JUnit the CLI wrote
+#   .ci-cd/indox-e2e/latest/incoming_documents.csv — FINAL indox table state, ALL rows
+# Called with `if: always()` after the battery step; never fails the build (no set -e).
+# Requires: permissions.contents=write on the job; DEPLOYMENT_NAME arg (default ci).
+set -u
+DN="${1:-ci}"
+OUT=".ci-cd/indox-e2e/latest"
+mkdir -p "${OUT}"
+
+if ! grep -E "\[indox-test\].*(✅|❌|WEDGED|STALLED)" ci-artifacts/battery.log > "${OUT}/results.txt" 2>/dev/null; then
+  # No battery means an EARLIER step failed, and "battery step likely never ran" is a true
+  # statement that helps nobody: the reason lives in the Actions log, which whoever reads
+  # .ci-cd/ later — or from another machine — cannot get at. Put the reason where they are
+  # already looking. This lane has published that same useless line on every recent run.
+  {
+    echo "no battery.log — an earlier step failed. What it left behind:"
+    echo
+    if [ -f ci-artifacts/n8n-push.log ]; then
+      echo "── n8n push (last 25 lines) ──"
+      tail -25 ci-artifacts/n8n-push.log
+    else
+      echo "── n8n push produced no log, so it never started either"
+      echo "   (the failure is in image pull or stack bring-up, before it)"
+    fi
+    echo
+    echo "── containers ──"
+    docker ps -a --format '{{.Names}}\t{{.Status}}' 2>/dev/null | sort || echo "(docker unreachable)"
+  } > "${OUT}/results.txt"
+fi
+cp -f ci-artifacts/*.junit.xml "${OUT}/results.junit.xml" 2>/dev/null || true
+
+docker exec "supabase-db-${DN}" psql -U postgres -d postgres \
+  -c "\copy (SELECT * FROM incoming_documents ORDER BY \"ID\") TO STDOUT WITH CSV HEADER" \
+  > "${OUT}/incoming_documents.csv" 2>/dev/null \
+  || echo "export failed — supabase-db-${DN} unreachable" > "${OUT}/incoming_documents.csv"
+
+# concurrency-layout review artifacts (PNG + textual 1h timeline) — per-version traceability
+python3 -m pip install --quiet pillow 2>/dev/null || true
+python3 scripts/ci-concurrency-report "${DN}" "${OUT}" 1 || true
+
+{
+  echo "run: #${GITHUB_RUN_NUMBER:-?} ${GITHUB_SHA:-?} (${GITHUB_REF_NAME:-?})"
+  echo "rows: $(python3 -c "import csv,sys;print(sum(1 for _ in csv.reader(open('${OUT}/incoming_documents.csv',encoding='utf-8')))-1)" 2>/dev/null || echo '?') (CSV records; cells may be multiline)"
+  cat "${OUT}/results.txt"
+} > "${OUT}/summary.txt"
+
+git config user.name  "github-actions[bot]"
+git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+# The branch usually advances during a 30-min run, and the runner checkout is SHALLOW
+# (no merge base for rebase). So: park the generated files OUTSIDE the tree (a plain
+# checkout refuses to move onto a tip whose last publish commit touches the same paths),
+# force-checkout the CURRENT tip, restore the files, commit on top, push. Retry on race.
+REF="${GITHUB_REF_NAME:-}"
+STASH="$(mktemp -d)"; cp -r "${OUT}/." "${STASH}/"
+for attempt in 1 2; do
+  git fetch origin "${REF}" 2>/dev/null || true
+  git checkout -f -B _publish FETCH_HEAD || { echo "[publish-e2e] checkout failed"; break; }
+  mkdir -p "${OUT}"; cp -rf "${STASH}/." "${OUT}/"
+  git add -f "${OUT}"
+  if git diff --cached --quiet; then
+    echo "[publish-e2e] nothing changed — skipping commit"
+    exit 0
+  fi
+  git commit -m "ci(indox-e2e): publish run #${GITHUB_RUN_NUMBER:-?} results + final table CSV [skip ci]" >/dev/null
+  if git push origin "_publish:${REF}"; then
+    echo "[publish-e2e] published to ${REF}"
+    exit 0
+  fi
+  echo "[publish-e2e] push raced (attempt ${attempt}) — refetching tip"
+done
+echo "[publish-e2e] push skipped after retries — artifacts still uploaded."

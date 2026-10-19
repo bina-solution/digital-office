@@ -1,0 +1,65 @@
+# yaml-language-server: $schema=./schema.json
+title: An n8n worker can wedge at 99% CPU holding zero jobs, spinning on Bull "Missing key for job" errors, after its task-runner sidecar goes unresponsive. Self-resolving, but it silently halves drain capacity while it lasts.
+opened: '2026-08-11'
+severity: medium
+status: open
+summary: |-
+  n8n-worker-2-shlomo-laptop reported "Up 2 hours (unhealthy)" while consuming 98.65% CPU. Its own liveness probe was explicit:
+    "liveness: WEDGED wait=3342 mine=0/8 :: free slots (0/8) and no progress for 525s (> 240s)
+     while 3342 jobs wait"
+  It held ZERO of its eight slots, made no progress for 8+ minutes across consecutive probes, and burned a full core doing nothing. Worker-1 was healthy and clean throughout.
+description: |
+  id: indox-worker-wedge-missing-key-2026-08-11
+  As first recorded — opened: 2026-08-11T07:45Z · severity: medium-recurring · status: DIAGNOSED-SELF-RESOLVED-WILL-RECUR
+
+  ## The chain
+
+  ```yaml
+  1: The worker's TASK-RUNNER SIDECAR goes unresponsive -- 'Connection to task broker closed unexpectedly', and 368 'Offer expired - not accepted within validity window' events counted since 19:41 the previous day.
+  2: Its in-flight jobs stall.
+  3: 'maxStalledCount is HARDCODED 0 in n8n 2.x (dist/scaling/scaling.service.js:89), so a stalled job FAILS IMMEDIATELY with zero retries. Log confirms: ''Error: job stalled more than maxStalledCount (execution 1235492)''.'
+  4: removeOnFail:true (present in the job opts) deletes the job hash from Redis.
+  5: The worker then tries to finalise jobs whose hashes are gone -> 'Missing key for job N failed', repeatedly.
+  6: It spins on those errors at ~99% CPU with mine=0/8. Wedged.
+  ```
+
+  ## Evidence
+
+  ```yaml
+  missing_key_occurrences:
+    n8n-worker-2: 18
+    n8n-worker-1: 0
+    remote r1..r5: 0 each (they show connection churn -- 8 to 43 events -- but ZERO key errors)
+  conclusion: The remote workers are NOT the cause. I hypothesised that their tunnelled-Redis instability was handing jobs to two consumers and triggering this; that hypothesis is REFUTED -- they produce zero Missing key errors. The fault is local to the worker's own runner sidecar.
+  ```
+
+  ## Cost while wedged
+
+  Half of local drain capacity. A local worker does ~1,264 jobs/hr against a remote worker's ~333, so losing one local worker is worth more than losing all five remote ones. The Bull backlog grew (3,320 -> 3,407) during the wedge and throughput tracked the recovery: 195 -> 203 -> 218 -> 229 -> 243/hr as worker-2 came back.
+
+  ## Resolution
+
+  SELF-RESOLVED. Bull's stalled-check eventually cleared the poisoned jobs and the worker returned to healthy without intervention, roughly 30 minutes after the wedge was first observed.
+
+  ## The restart trap worth recording
+
+  While mine=0/8 a restart is FREE -- the worker holds nothing, so nothing is destroyed. That is the ONLY window in which restarting an n8n worker is safe here; at any other time it permanently kills every execution it holds (maxStalledCount:0, ~16 executions per event, measured). So any remediation script MUST re-check `mine=0/` and `WEDGED` immediately before acting and abort otherwise -- a restart that was safe five minutes ago can be destructive now. scratchpad/fixworker2.sh does this.
+
+  ## Detection
+
+  The liveness probe already detects it correctly and marks the container unhealthy. Nothing consumes that signal. A watchdog that restarts a worker ONLY while it reports both WEDGED and mine=0/N would turn a ~30-minute capacity halving into a ~30-second one, with zero risk to live work.
+
+  ## Likely root cause found 2026-08-11t08:00z
+
+  ```yaml
+  evidence: |
+    [Tue Aug 11 10:38:10 2026] Memory cgroup out of memory: Killed process 1428912 (MainThread)
+      total-vm:21687344kB  anon-rss:2046632kB  file-rss:17772kB
+  reading: This is a CGROUP OOM (a container hitting its own limit), not a host-wide one. anon-rss of 2,046,632kB is ~1.95GiB -- precisely the n8n worker's 2GiB container limit. So an n8n WORKER was killed by exceeding its own memory ceiling.
+  which_completes_the_chain: worker killed at its 2GiB limit -> its in-flight jobs stall -> maxStalledCount:0 fails them instantly with zero retries -> removeOnFail deletes the job hashes -> the worker spins on "Missing key for job" -> wedged at 99% CPU with mine=0/8. The unresponsive task runner was probably a SYMPTOM of the memory kill rather than its cause.
+  deliberately_not_fixed: Raising the worker memory limit is NOT the answer. perf-profiles.yml pins these values because of documented OOM history, and the host is already ~4.5GB into swap with 39 containers whose limits sum to ~31GB on a 9.95GB box. Raising one limit would trade this failure for a worse, host-wide one. The real fix is reducing per-worker memory demand -- which is the same per-document execution cost problem tracked in the consolidated issue.
+  ```
+
+  ## Open question
+
+  Why the task runner goes unresponsive in the first place. 'Offer expired - not accepted within validity window' appears on worker-1 too but does not tip it into the failure mode. Worker-2 was RECREATED at 05:16:50 (RestartCount 0 with a fresh StartedAt) while worker-1 has run since 02:17:15 -- whether the recreation is related is untested.

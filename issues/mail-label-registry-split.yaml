@@ -1,0 +1,49 @@
+# yaml-language-server: $schema=./schema.json
+title: Two disagreeing label registries — the engine labels with one vocabulary, sync searches the other, gmail pickup finds 0 forever
+opened: '2026-08-06'
+severity: high
+status: resolved
+summary: Two disagreeing label registries — the engine labels with one vocabulary, sync searches the other, gmail pickup finds 0 forever
+description: |
+  component: apps/mail (mailapi /organizer/settings) vs public.tag_rules
+
+  ## Context
+
+  There are two label registries and they disagree on the two labels that drive document pickup:
+
+    KEY          public.tag_rules (what INDOX sync searches)   mailapi /organizer/settings (what the
+                                                               Mail Label Engine applies)
+    DOC_TO_SYNC  "אינדוקס - מסמכים כללי - לטיפול"                "לטיפול-אוטומציה-שמירת-מסמכים"
+    SYNCED_DOC   "אינדוקס - מסמכים כללי - טופל"                  "אוטומציה-שמירת-מסמכים-טופל"
+
+  The engine labels an incoming mail with the organizer vocabulary; the sync's label-scoped
+  search queries the tag_rules vocabulary; the search returns 0, forever. Reproduced on every
+  run of the mail_organizer suite (e.g. exec 177470, 2026-08-06):
+
+    DOC_TO_SYNC label "אינדוקס - מסמכים כללי - לטיפול" NOT applied
+    (labels=["תוויות-טופל","לטיפול-אוטומציה-שמירת-מסמכים","UNREAD"])
+    label-scoped sync search listed 0 (want 1) · unit delivered 0 (want 1)
+
+  Which vocabulary is authoritative was measured against the local mailbox (337 messages,
+  read-only, 2026-08-06): tag_rules names carry 150 + 83 messages; the organizer's SYNCED name
+  carries 0 and its DOC_TO_SYNC name first appears 2026-08-05 — when that registry took over.
+  CAVEAT: this deployment's corpus is two days of local test traffic (GMAIL_IMAP_MODE=local,
+  three local.test boxes). The client's real Gmail mailbox is the decisive read and is not
+  reachable from this host; the tiebreaker chosen by the coordinator — "whatever is physically
+  on the client's messages wins" — still needs that measurement before the losing registry is
+  corrected.
+
+  The suite that proves this is the mail app's own: `bbox mail test`
+  (apps/mail/blueprint/n8n/mailOrgTest00001.json, runner apps/mail/hooks/test). It is the ONLY
+  lane that appends UNLABELLED mail — every INDOX gmail lane injects mail already carrying its
+  to_sync label, so a labelling outage leaves those green. Moved out of `bbox indox test` on
+  2026-08-06 (owner decision): a mail product defect must not score against the INDOX battery.
+  The INDOX-side half — documents from labelled mail arrive in INDOX — stays covered by
+  sync_sources' gmail-doc/gmail-bs/gmail-link and proc-gmail-* lanes.
+
+  ## Fix
+
+  1. Take the definitive vocabulary reading from the client's real Gmail mailbox (read-only).
+  2. Correct the LOSING registry to the winner's names — one vocabulary, one owner.
+  3. Re-run `bbox mail test`: the label-engine lane goes green only when the engine applies the
+     same name the sync searches.

@@ -1,0 +1,215 @@
+# apps/supabase — Supabase ON TOP of the platform database. A gallery app.
+#
+# The db itself is layer-1 chassis (platform-base/postgres). This app is everything supabase adds
+# around it: kong (the API gateway with its own JWT auth), postgrest (data-api), the storage API
+# (object-storage), and Studio + postgres-meta (the table view). Install it from the gallery to
+# browse the database; uninstall it and every consumer of plain `sql` keeps working, because they
+# talk to `supabase-db` directly, not through anything here.
+#
+# `storage` keeps its depends_on db (service_healthy): compose merges all included files into one
+# project, and the layer-1 db service is always present when this app renders.
+services:
+  rest:
+    container_name: supabase-rest-${DEPLOYMENT_NAME:-bina-deployment}
+    image: postgrest/postgrest:v14.8
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { cpus: '0.3', memory: 256M }
+    depends_on:
+      db: { condition: service_healthy }
+    environment:
+      PGRST_DB_URI: postgres://authenticator:${SUPABASE_DB_PASSWORD}@supabase-db:5432/${SUPABASE_DB_NAME:-postgres}
+      PGRST_DB_SCHEMAS: ${SUPABASE_PGRST_DB_SCHEMAS:-public,storage,graphql_public}
+      PGRST_DB_MAX_ROWS: ${SUPABASE_PGRST_DB_MAX_ROWS:-1000}
+      PGRST_DB_EXTRA_SEARCH_PATH: public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: ${SUPABASE_JWT_SECRET}
+      PGRST_DB_USE_LEGACY_GUCS: 'false'
+      PGRST_APP_SETTINGS_JWT_SECRET: ${SUPABASE_JWT_SECRET}
+      PGRST_APP_SETTINGS_JWT_EXP: ${SUPABASE_JWT_EXPIRY:-3600}
+    command: [postgrest]
+    networks: [supabase-net]
+  storage:
+    # RAISED 256M -> 512M below, 2026-08-06 — measured high-water was 256MiB, exactly 100% of the
+    # limit. Same reasoning as platform-base/machine: a container pinned at its ceiling is a latent
+    # OOM kill, and an OOM-killed container is indistinguishable from the daemon-restart orphaning
+    # this pass is meant to stop.
+    container_name: supabase-storage-${DEPLOYMENT_NAME:-bina-deployment}
+    image: supabase/storage-api:v1.48.26
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { cpus: '0.3', memory: 512M }
+    depends_on:
+      db: { condition: service_healthy }
+      rest: { condition: service_started }
+    healthcheck:
+      test: [CMD, wget, --no-verbose, --tries=1, --spider, 'http://storage:5000/status']
+      timeout: ${HEALTHCHECK_TIMEOUT:-5s}
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      retries: 3
+      start_period: 10s
+    environment:
+      ANON_KEY: ${SUPABASE_ANON_KEY}
+      SERVICE_KEY: ${SUPABASE_SERVICE_KEY}
+      POSTGREST_URL: http://rest:3000
+      AUTH_JWT_SECRET: ${SUPABASE_JWT_SECRET}
+      DATABASE_URL: postgres://supabase_storage_admin:${SUPABASE_DB_PASSWORD}@supabase-db:5432/${SUPABASE_DB_NAME:-postgres}
+      STORAGE_PUBLIC_URL: ${SUPABASE_PROTOCOL:-https}://${SUPABASE_BASE_URL}
+      REQUEST_ALLOW_X_FORWARDED_PATH: 'true'
+      FILE_SIZE_LIMIT: ${SUPABASE_FILE_SIZE_LIMIT:-52428800}
+      STORAGE_BACKEND: file
+      FILE_STORAGE_BACKEND_PATH: /var/lib/storage
+      TENANT_ID: stub
+      REGION: stub
+      GLOBAL_S3_BUCKET: stub
+      ENABLE_IMAGE_TRANSFORMATION: 'false'
+    volumes:
+    - supabase_storage_data:/var/lib/storage:z
+    # traefik-network: n8n's 'drive api - local' backend stores/serves bytes here, and traefik
+    # routes drive.localhost file links to the public bucket (see compose.override.yml labels).
+    networks: [supabase-net, traefik-network]
+  kong:
+    # RAISED 512M -> 768M below, 2026-08-06. Under proof-#5 load kong peaked at 455MiB — 88% of
+    # its 512M ceiling — where the earlier idle sample said 379MiB and looked comfortable. kong is
+    # ON the document path (incoming-documents reaches its data through it; see .env
+    # INCOMING_DOCS_SUPABASE_URL), so an OOM here stops the pipeline outright.
+    #
+    # THE CEILING WAS NEVER THE PROBLEM; THE WORKER COUNT WAS. kong's default is
+    # `worker_processes auto` — one nginx worker per HOST core, whatever this container's 0.5-CPU
+    # cap says — and each holds its own LuaJIT VM: measured 2026-10-07 on hp-laptop (6 cores),
+    # 6 workers at 81-84 MB each, 480 MiB of the 768 with no traffic. On the 8-core server that is
+    # ~670 MiB at rest, and it sat pinned at 767/768 with a worker OOM-killed every 30-40 minutes
+    # (34 times in one boot, 2026-09-03) — each kill dropping the requests in flight on the
+    # document path. Raising the limit again would have bought one more core's worth. Two workers
+    # are more than half a CPU can use, and make the footprint the same on every machine.
+    container_name: supabase-kong-${DEPLOYMENT_NAME:-bina-deployment}
+    image: kong/kong:3.9.1
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { cpus: '0.5', memory: 768M }
+    depends_on:
+      rest: { condition: service_started }
+    volumes:
+    - ./volumes/api/kong.yml:/home/kong/temp.yml:ro,z
+    - ./volumes/api/kong-entrypoint.sh:/home/kong/kong-entrypoint.sh:ro,z
+    environment:
+      KONG_DATABASE: 'off'
+      KONG_DECLARATIVE_CONFIG: /usr/local/kong/kong.yml
+      KONG_DNS_ORDER: LAST,A,CNAME
+      KONG_DNS_NOT_FOUND_TTL: 1
+      KONG_PLUGINS: request-transformer,cors,key-auth,acl,basic-auth,request-termination,ip-restriction,post-function
+      KONG_NGINX_WORKER_PROCESSES: '2'
+      KONG_NGINX_PROXY_PROXY_BUFFER_SIZE: 160k
+      KONG_NGINX_PROXY_PROXY_BUFFERS: 64 160k
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY}
+      DASHBOARD_USERNAME: ${SUPABASE_DASHBOARD_USERNAME:-supabase}
+      DASHBOARD_PASSWORD: ${SUPABASE_DASHBOARD_PASSWORD:-supabase}
+    entrypoint: /home/kong/kong-entrypoint.sh
+    networks:
+      supabase-net: { aliases: [api-gw] }
+      traefik-network: { aliases: [supabase-kong] }
+    labels:
+    - traefik.enable=true
+    # supabase API gateway (storage/rest/auth) ג€” own JWT auth, no authentik middleware.
+    - traefik.http.routers.supabase-api.rule=Host(`${SUPABASE_BASE_URL}`)
+    - traefik.http.routers.supabase-api.entrypoints=web
+    - traefik.http.routers.supabase-api.service=supabase-api
+    # The port-less twin every other host has. On a Mac SUPABASE_BASE_URL is `supabase.localhost:8080`
+    # and traefik v3 matches Host() without the request port, so the router above never matches
+    # there; STORAGE_PUBLIC_URL / SUPABASE_PUBLIC_URL still point browsers at that host (gate G21,
+    # invariant 3, 2026-09-30). Same service, same (absent) middleware: kong's own JWT auth applies.
+    - traefik.http.routers.supabase-local.rule=Host(`supabase.localhost`)
+    - traefik.http.routers.supabase-local.entrypoints=web
+    - traefik.http.routers.supabase-local.service=supabase-api
+    - traefik.http.services.supabase-api.loadbalancer.server.port=8000
+    - traefik.docker.network=traefik-network
+  meta:
+    # 512M -> 256M, 2026-08-06. The pre-fix sample said 199MiB; the post-converge sample on the
+    # fixed system says 101MiB, so 256M is ~2.5x. UI-only (Studio's backend), not on the document
+    # path — cut with `studio` to bring the declared sum under 2.5x and revert the overcommit raise.
+    container_name: supabase-meta-${DEPLOYMENT_NAME:-bina-deployment}
+    image: supabase/postgres-meta:v0.96.3
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { cpus: '0.5', memory: 256M }
+    environment:
+      PG_META_PORT: 8080
+      PG_META_DB_HOST: supabase-db
+      PG_META_DB_PORT: 5432
+      PG_META_DB_NAME: ${SUPABASE_DB_NAME:-postgres}
+      PG_META_DB_USER: supabase_admin
+      PG_META_DB_PASSWORD: ${SUPABASE_DB_PASSWORD}
+      CRYPTO_KEY: ${SUPABASE_COOKIE_KEY}
+    networks: [supabase-net]
+  studio:
+    # 512M -> 384M, 2026-08-06. Post-converge sampled peak 189MiB (2.0x headroom). Studio is the
+    # UI over supabase; nothing on the document path calls it. Cut alongside `meta` specifically to
+    # bring the declared sum back under a 2.5x budget, so the earlier overcommit raise to 3.0 could
+    # be reverted rather than left standing as a moved goalpost.
+    container_name: supabase-studio-${DEPLOYMENT_NAME:-bina-deployment}
+    image: supabase/studio:2026.04.08-sha-205cbe7
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { cpus: '0.3', memory: 384M }
+    depends_on:
+      meta: { condition: service_started }
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - node -e "fetch('http://localhost:3000/api/platform/profile').then((r)=>{if(r.status!==200)throw new Error(r.status)})"
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      retries: 3
+    environment:
+      HOSTNAME: 0.0.0.0
+      STUDIO_PG_META_URL: http://meta:8080
+      POSTGRES_PORT: 5432
+      POSTGRES_HOST: supabase-db
+      POSTGRES_DB: ${SUPABASE_DB_NAME:-postgres}
+      POSTGRES_PASSWORD: ${SUPABASE_DB_PASSWORD}
+      PG_META_CRYPTO_KEY: ${SUPABASE_COOKIE_KEY}
+      PGRST_DB_SCHEMAS: ${SUPABASE_PGRST_DB_SCHEMAS:-public,storage,graphql_public}
+      DEFAULT_ORGANIZATION_NAME: ${SUPABASE_STUDIO_ORG:-INDOX}
+      DEFAULT_PROJECT_NAME: ${SUPABASE_STUDIO_PROJECT:-INDOX}
+      OPENAI_API_KEY: ''
+      SUPABASE_URL: http://kong:8000
+      # public API url = KONG (storage/v1 TUS uploads etc.), NOT studio itself
+      SUPABASE_PUBLIC_URL: ${SUPABASE_PROTOCOL:-https}://${SUPABASE_BASE_URL}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY}
+      AUTH_JWT_SECRET: ${SUPABASE_JWT_SECRET}
+      NEXT_PUBLIC_ENABLE_LOGS: 'false'
+      NEXT_ANALYTICS_BACKEND_PROVIDER: postgres
+    networks:
+      supabase-net: null
+      traefik-network: null
+    labels:
+    - traefik.enable=true
+    - traefik.docker.network=traefik-network
+    - traefik.http.routers.supabase-studio-local.rule=Host(`supabase-studio.localhost`)
+    - traefik.http.routers.supabase-studio-local.entrypoints=web
+    - traefik.http.routers.supabase-studio-local.service=supabase-studio
+    - traefik.http.routers.supabase-studio-local.middlewares=authentik@file
+    - traefik.http.routers.supabase-studio-http.rule=Host(`${SUPABASE_STUDIO_BASE_URL}`)
+    - traefik.http.routers.supabase-studio-http.entrypoints=web
+    - traefik.http.routers.supabase-studio-http.service=supabase-studio
+    - traefik.http.routers.supabase-studio-http.middlewares=authentik@file
+    - traefik.http.routers.supabase-studio-https.rule=Host(`${SUPABASE_STUDIO_BASE_URL}`)
+    - traefik.http.routers.supabase-studio-https.entrypoints=websecure
+    - traefik.http.routers.supabase-studio-https.tls=true
+    - traefik.http.routers.supabase-studio-https.tls.certresolver=myresolver
+    - traefik.http.routers.supabase-studio-https.service=supabase-studio
+    - traefik.http.routers.supabase-studio-https.middlewares=authentik@file
+    - traefik.http.services.supabase-studio.loadbalancer.server.port=3000
+volumes:
+  supabase_storage_data: null
+networks:
+  supabase-net: null
+  traefik-network:
+    external: true

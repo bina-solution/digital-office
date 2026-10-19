@@ -1,0 +1,479 @@
+# yaml-language-server: $schema=./schema.json
+title: Two-day verdict 2026-08-08 11:00 -> 2026-08-10 11:31 UTC — what changed, what it did to throughput, and what is still unproven
+opened: '2026-08-10'
+category: performance
+severity: high
+status: open
+summary: 'Read-only reconstruction of the last 48h across the codebase/workflow changelog and the concurrency timeline, correlated. Headline: COMPLETED was flat for THIRTEEN hours (2026-08-09 21:15 -> 2026-08-10 10:05 UTC), not eight; the three overnight `Get Changed Docs` fairness rewrites (01:08/01:54/02:06) produced ZERO completions in the eight hours that followed; the 09:00 execution-throughput recovery cannot be attributed to any change because no change landed between 04:17:34 and 09:40:05; completions restarted inside a five-minute window (10:02:30-10:07:09) containing four separate changes and CANNOT be attributed to one of them. Deploy churn is confirmed as an active harm, not a suspicion: every single "Workflow is not active and cannot be executed" spike in the worker logs lands exactly on an import/activate timestamp. The current COMPLETED rate is 47/hr and TYPED is at ZERO.'
+description: |
+  As first recorded — category: throughput · status: analysis-only
+
+  SCOPE AND METHOD.
+
+  Window: 2026-08-08 11:05 UTC -> 2026-08-10 11:31 UTC. All times UTC unless marked IDT.
+  Both databases run TimeZone=UTC (verified: `select now(), current_setting('TimeZone')` on
+  supabase-db-shlomo-laptop -> UTC, and on n8n-postgres-shlomo-laptop -> Etc/UTC). Host
+  `dmesg -T` prints IDT (UTC+3); repo file mtimes are IDT. Both are converted below.
+
+  THREE MEASUREMENT CONSTRAINTS FOUND FIRST, BECAUSE THEY BOUND EVERY CLAIM THAT FOLLOWS.
+
+  (1) THE GIT CHANGELOG IS EMPTY. There are ZERO commits in the last five days.
+      `git log --since='5 days ago'` returns nothing; HEAD is 73cd73b7 dated 2026-08-05T08:25:02
+      on branch platform-os-refactor. Everything that happened in these 48 hours is
+      UNCOMMITTED: `git diff HEAD --shortstat` = 201 files changed, 25,743 insertions(+),
+      12,165 deletions(-), plus 202 untracked files (`git ls-files --others --exclude-standard
+      | wc -l`). The repo-side changelog below is therefore reconstructed from file mtimes
+      (`find . -type f -newermt '2026-08-08 11:00' -printf '%TY-%Tm-%Td %TH:%TM %p\n'`), not
+      from commits. This is itself a finding: there is no reviewable history for two days of
+      work by many lanes.
+
+  (2) THE EXECUTION TIMELINE CANNOT COVER 48 HOURS. n8n retains only 36,751 executions and the
+      OLDEST is 2026-08-10 07:21.
+        select min("startedAt"), max("startedAt"), count(*) from execution_entity;
+        -> 2026-08-10 07:21 | 2026-08-10 11:08 | 36751
+      Cause is retention config, not a gap in activity:
+        docker -H unix:///run/bbox-docker.sock exec n8n-shlomo-laptop sh -c 'env | grep EXECUTIONS'
+        -> N8N_EXECUTIONS_DATA_PRUNE=true, N8N_EXECUTIONS_DATA_PRUNE_MAX_COUNT=2000,
+           N8N_EXECUTIONS_DATA_MAX_AGE=168, EXECUTIONS_MODE=queue
+      MAX_COUNT=2000 is doing the pruning, not MAX_AGE=168h. So per-hour executions/errors/p50/p99
+      exist ONLY from 07:21 today. Any claim about execution concurrency before 07:21 is
+      unavailable from n8n and is not made here.
+
+  (3) BOTH OBVIOUS COMPLETION CLOCKS ARE UNUSABLE, AS BRIEFED — CONFIRMED, WITH NUMBERS.
+      * updated_at is a "last touched" stamp, not an event time. `touch_updated_at()` is
+        `begin new."updated_at" = now(); return new; end` on BEFORE UPDATE FOR EACH ROW, so every
+        step rewrites it. The mass rewrite is real and locatable:
+          select to_char(date_trunc('hour',updated_at),'MM-DD HH24'), count(*)
+          from incoming_documents where updated_at > now() - interval '48 hours' group by 1;
+          -> 08-09 14 | 4624      (next largest bucket is 08-09 23 | 2149)
+        4,624 rows share the 08-09 14:00 hour. That is the ~4,500 the brief warned about, and it
+        coincides with the 14:36:50 mass re-import.
+      * The ACTION_LOG stamp covers only 23% of completed rows:
+          select count(*) filter (where "STATUS"='COMPLETED'),
+                 count(*) filter (where "STATUS"='COMPLETED' and "ACTION_LOG" ~ 'STATUS COMPLETED, [0-9]{13}')
+          from incoming_documents;   -> 6274 | 1464       (23.3%)
+        Note the marker is the literal `STATUS COMPLETED`, NOT `mark_completed` — a search for
+        `mark_completed` returns 0 rows. Format is `<label>, <epoch_ms>, <execution_id>`, e.g.
+        `STATUS COMPLETED, 1786287786680, 466098`.
+
+      SO THE TWO CLOCKS ARE USED FOR DIFFERENT JOBS, AND NEITHER IS USED FOR THE OTHER'S JOB:
+        LEVEL and RATE come from `count(*) filter (where "STATUS"='COMPLETED')` sampled at two
+        wall-clock times (the delta method the brief asked for).
+        SHAPE (which hour did work happen in) comes from the anchored ACTION_LOG regex
+        `'STATUS COMPLETED, ([0-9]{13})'`, deduplicated to the FIRST stamp per document.
+        The shape series UNDERCOUNTS by construction (23% coverage) and is never used to state a
+        rate. Where the two disagree, the count delta wins and the disagreement is stated.
+        A generic `[0-9]{13}` regex is NOT safe — it matches document IDs and yields garbage
+        (max came back as 09-29 07:40, a date that does not exist yet). Only the anchored form
+        is used.
+
+  ── THE FLAT LINE: 13 HOURS, NOT 8 ───────────────────────────────────────────────────────
+  First-completion stamps per hour (anchored regex, min stamp per doc):
+    08-09 15 -> 301,  16 -> 127,  17 -> 24,  18 -> 0,  19 -> 0,  20 -> 42,  21 -> 10,
+    08-09 22 -> 0, 23 -> 0, 08-10 00 -> 0, 01 -> 0, 02 -> 1, 03 -> 0, 04 -> 1,
+    05 -> 0, 06 -> 0, 07 -> 0, 08 -> 0, 09 -> 0, 10 -> 36(first)/40(last), 11 -> 7(last only)
+  The last real completion before the stall is in the 08-09 21:00 hour; the live
+  `Get Changed Docs` node comment independently records "COMPLETED/hr -> 0 (last stamp 21:15)".
+  The first completion after it is at 10:05-10:10 on 08-10 (5-minute bucket). That is
+  13 hours of flat line with two strays (02:xx, 04:xx), NOT the ~8 hours in the brief.
+
+  The LEVEL is corroborated by an independent snapshot from another lane:
+  issues/n8n-error-census-2026-08-09.yaml records COMPLETED "has not moved from 6,243 for over
+  two hours" at ~23:00 on 08-09. Measured now: 6,272 at 11:07:49 and 6,278 at 11:30:58. So
+  6,243 -> ~6,231 -> 6,278: flat overnight (it actually DIPPED slightly, as rows left COMPLETED
+  for DOUBLE/MERGED), then a burst. The brief's "~6,225" is inside this range.
+
+  ── THE CURRENT RATE IS 47/HR, AND TYPED IS ZERO ─────────────────────────────────────────
+  Two snapshots 152 seconds apart:
+    11:28:26.929  COMPLETED 6276 | TYPED 9171 | TO_EXTRACT 6611
+    11:30:58.941  COMPLETED 6278 | TYPED 9171 | TO_EXTRACT 6608
+  +2 COMPLETED in 152s = 47.4/hr, which matches the briefed "~50/hr".
+  TYPED did not move AT ALL. The typing pipeline is at zero right now, and the
+  `AI values (DOC BASE)` first-stamp series says it has been near zero since 08-09 21:00
+  (231/hr at the 08-09 15:00 and 16:00 peak; 5, 2, 0, 0, 2, 7, 4 for 08-10 05,06,07,08,09,10,11).
+  Of the 1,529 documents created today, 920 carry a TYPE and ZERO have reached COMPLETED:
+    select count(*), count(*) filter (where "TYPE" is not null and "TYPE"<>''),
+           count(*) filter (where "STATUS"='COMPLETED')
+    from incoming_documents where created_at >= '2026-08-10 00:00:00+00';   -> 1529 | 920 | 0
+  Every completion in the 10:00 recovery burst was an OLD document. Nothing ingested today has
+  finished.
+
+  ── THE SIX `Get Changed Docs` REWRITES (the brief says three; there are six) ─────────────
+    select h."versionId", h."createdAt", md5(n::text), length(n::text)
+    from workflow_history h, jsonb_array_elements(h.nodes::jsonb) n
+    where h."workflowId"='indoxApiSupabase01' and n->>'name' ilike '%Get Changed Docs%'
+    order by h."createdAt";
+  md5 of the node body is constant (92c36c23, 3628 chars) for every one of the 16 re-imports
+  from 08-09 11:45 through 08-09 23:21, then changes six times:
+    v1  08-10 01:08:56  ad13078e  7232   replaces `order by updated_at asc limit 40`
+    v2  08-10 01:54:42  5b74bdf3  7972   "fixes the SECOND plug, which v1 ..."
+    v3  08-10 02:06:41  53cd3b9a  9350
+    v4  08-10 09:49:10  1c75df8b 12117   finisher slice: s_fin/s_live/s_new/s_old/s_adj,
+                                          EACH capped `where rn <= 40`, jitter floor(epoch/30)
+    v5  08-10 10:05:17  eb1231c5 15266   ADDS s_burst `rn * 1.0 - 1000.0` and s_stale
+    v6  08-10 10:24:23  5f4b1923 16261   jitter floor(epoch/30) -> floor(epoch/120)
+  The live "Poll Line Changes" scheduleTrigger is now `minutesInterval: 2`, so the 30s -> 2m
+  change is real in both the trigger and the query's jitter bucket.
+
+  THE DEFECT INTRODUCED BY v5. Every other slice is guarded `where rn <= 40`. `s_burst` is not,
+  and its key starts at -1000, so it sorts ahead of everything and can consume the entire
+  `limit 40` window by itself. The consequence is measurable as extreme re-work:
+    select date_trunc('hour', to_timestamp(m[1]::bigint/1000.0)), count(*), count(distinct "ID")
+    from incoming_documents d, regexp_matches(d."ACTION_LOG",'Extract Base Doc, ([0-9]{13})','g') m
+    group by 1;
+  events / distinct docs / events-per-doc:
+    08-09 09..17  -> 1.00 to 1.10       (healthy baseline)
+    08-10 01      -> 1130 / 124  = 9.11  (v1 hour)
+    08-10 04      ->  662 / 134  = 4.94
+    08-10 09      ->  341 /  70  = 4.87
+    08-10 10      -> 2411 /  37  = 65.16 (v5 hour)
+  65 base extractions per document. ~98% of the work in the 10:00 hour was redundant.
+
+  ── DEPLOY CHURN IS CONFIRMED HARM, NOT A SUSPICION ──────────────────────────────────────
+  82 distinct publish batches in 48h (`select "createdAt", count(*) from workflow_history
+  where "createdAt" > now() - interval '48 hours' group by 1`), including SIXTEEN full-blueprint
+  re-imports of 63-81 workflows each between 08-09 11:45:22 and 08-09 14:36:50 — roughly 1,100
+  workflow writes in under three hours.
+
+  The "Workflow is not active and cannot be executed" error is real (72 error executions contain
+  the string), but the brief's framing is WRONG in an important way. It is not a persistent stale
+  publish state that was repaired at 10:00-10:07. It is TRANSIENT and IMPORT-INDUCED, it recurs on
+  every publish, and it recurred AFTER the supposed repair. Timestamped from the worker logs
+  (`docker logs n8n-worker-2-shlomo-laptop --timestamps | grep -i "not active" | cut -c1-16 | uniq -c`):
+    09:49 x11, 09:50 x1, 10:05 x36, 10:06 x18, 10:07 x1, 10:24 x32, 11:20 x2
+  and on worker-1 (log survives back to 08-06):
+    08-09 13:15 x5, 13:22 x10, 13:34 x20, 13:45 x5, 14:08 x5, 14:36 x4,
+    08-10 01:09 x5, 03:07 x4, 04:14 x32, 04:16 x4
+  EVERY ONE of those minutes is an import/activate timestamp from workflow_history. There is not a
+  single "not active" spike that does not coincide with a publish. The 10:05/10:06/10:07 burst is
+  caused BY the activate operations, not cured by them — and 10:24 and 11:20 prove the condition
+  was still being re-created after the "repair".
+
+  ── WHAT RESTARTED THROUGHPUT AT 09:00 — NOTHING WE DID ──────────────────────────────────
+  Executions per 10 minutes (execution_entity):
+    07:20-08:30  10, 2, 32, 34, 6, 156, 5, (08:30 bucket absent = zero)   ALL with 0 successes
+    08:40  14 (10 ok, 4 err)      <- first successes of the day
+    08:50  60 (2 ok, 52 err)      <- error storm as the wedged calls fail
+    09:00  3086 (2949 ok)         <- recovery
+  The wedge is visible as executions that entered `running` and never left. 289 executions of
+  Incoming Documents v2 and 234 of indox-v2 Actions — DOC BASE are STILL in status='running',
+  oldest 07:21, and were never reaped.
+  NO WORKFLOW OR SETTING CHANGE LANDED BETWEEN 04:17:34 AND 09:40:05. The gap in
+  workflow_history is unambiguous. Therefore the 09:00 recovery is NOT attributable to any
+  change in this changelog. The most likely mechanism is runtime: three global OOM kills of the
+  apitools gunicorn workers at 07:27, 08:30 and 08:32 (dmesg IDT 10:27:06, 11:30:09, 11:32:13,
+  all `global_oom` / CONSTRAINT_NONE) released the calls the wedged executions were blocked on,
+  which then failed (the 08:44-08:59 error burst) and let the queue drain. That mechanism is
+  PLAUSIBLE BUT UNPROVEN and is recorded as such.
+  A FOURTH OOM kill not in the brief: dmesg IDT 12:28:47 = 09:28 UTC, `CONSTRAINT_MEMCG`
+  (container-limited, not global), again killing apitools gunicorn.
+  Both apitools and incoming-documents report `OOMKilled=true` with `RestartCount=0` — the
+  gunicorn CHILDREN were killed, PID 1 survived, which is exactly why Docker went on reporting
+  the containers healthy.
+
+  ── CORRECTIONS TO TWO BRIEFED LANDMARKS ─────────────────────────────────────────────────
+  * "n8n-worker-1 wedged from 08:19 until restarted ~10:29, Docker reported it healthy" —
+    CONFIRMED. `docker inspect n8n-worker-1-shlomo-laptop` StartedAt = 2026-08-10T10:29:23.795Z,
+    RestartCount=0, health=healthy. But note the wedge starts EARLIER than 08:19: the first
+    never-finishing executions start at 07:21.
+  * "BaseDocEx01 / Select Base pairing fix at ~10:28" — MISATTRIBUTED. Diffing the 03:53:12 and
+    10:28:40 versions node by node, the ONLY delta is that `Lock Map Set (retry scope)` was
+    ADDED. `Select Base` is byte-identical across the two (md5 ac865430dfdc6837af895378ee85d535,
+    9029 chars, both versions). The `Select Base` rewrite actually landed at 03:53:12
+    (b2a41061 6787 chars -> ac865430 9029 chars). The added node is a Redis dead-letter scope
+    publisher whose own note says BaseDocEx01 "is the largest single error source in the fleet
+    (532 errors/hour, all 'Upload+OCR timed out')".
+    The pairing RISK is nonetheless real and STILL LIVE: `Call JQExV3 Base` reads
+    `$('Upload+OCR').item.json.file_id` (paired lookup) and `Merge Local + AI (Base)` uses
+    `combineByPosition`; the new node even encodes the doubt, setting its value to
+    `{{ $input.all().length === 1 ? $json.ID : '' }}` — i.e. it only trusts identity when the
+    batch is exactly one item. Unfixed, and not what shipped at 10:28.
+
+  ── THE invoice_extractor 404 IS THE BEST-EVIDENCED SINGLE CAUSE OF THE TYPE STALL ───────
+  `Extract Base via Webhook` in BaseDocEx01 POSTs to http://n8n:5678/webhook/invoice_extractor
+  with `onError: continueRegularOutput` — so a 404 is swallowed and the branch returns nothing.
+  indoxV2ExtractInvoiceGemini01 (the workflow that owns that webhook path) has its FIRST
+  execution of the entire retained window at 10:58:
+    select min("startedAt"), count(*) from execution_entity
+    where "workflowId"='indoxV2ExtractInvoiceGemini01';   -> 10:58 | 20
+  Meanwhile base extraction was running all night at 1 event per document
+  (08-10 02 -> 122/122, 03 -> 84/84, 05 -> 40/40, 06 -> 48/48, 07 -> 143/143, 08 -> 293/293)
+  while `AI values (DOC BASE)` first-stamps were 0-5 per hour. That is the exact signature of a
+  leg that runs, silently gets nothing back, and lets the document through untyped. The webhook
+  is registered NOW (`select "webhookPath", method, "workflowId" from webhook_entity` ->
+  invoice_extractor | POST | indoxV2ExtractInvoiceGemini01).
+
+  ── SETTINGS AND SCHEMA ──────────────────────────────────────────────────────────────────
+  Only ONE public.settings row changed in the 48h window:
+    select key, updated_at from settings where updated_at > now() - interval '5 days'
+      order by updated_at desc;
+    -> sync_registry | 2026-08-09 23:54:48.134586+00
+  Explicitly NOT changed, contrary to the brief's suspicion: `indox_execution_mode` is still
+  "all-in-one" with updated_at 2026-07-30 23:45:11, and `activePrioritySync` is still false with
+  the same 07-30 timestamp. Neither has been touched in eleven days.
+
+  Triggers on incoming_documents (5, none internal): trg_incdoc_action_log_append,
+  trg_incdoc_mirror_warehouse_upd, trg_incdoc_mirror_warehouse_ins, trg_incdoc_touch,
+  trg_stats_dirty. The append-only one is new: scripts/ops/migrations/
+  2026-08-10_action_log_append_only.sql, mtime 13:31 IDT = 10:31 UTC today. Its own header
+  records the defect it fixes — ~40 router "Build:" nodes rebuild the row with
+  includeOtherFields:false and write '' back over ACTION_LOG, erasing one-shot loop breakers;
+  "only 8 of 380 rows in the retry cohort still carried the marker; 322 of them sat at
+  EXTRACTION_FAILED with an ACTION_LOG of ~2 characters, re-entering extract_base_doc on every
+  sweep forever."
+  CAVEAT THAT AFFECTS EVERY MEASUREMENT ABOVE: the trigger has been live only since ~10:31, so
+  ACTION_LOG history BEFORE 10:31 was still erasable by those writers. That is the most likely
+  reason stamp coverage is only 23%, and it means the shape series undercounts EARLIER hours
+  more than later ones. It also caps the column at 6,000 chars with a trimmed middle
+  (`left(merged,1500) || ' ...[trimmed]... ' || right(merged,4000)`), so very long logs lose
+  their middle — currently 0 rows are affected.
+
+  ── ONE NEW WORKFLOW IN 48 HOURS ─────────────────────────────────────────────────────────
+    select id, name, active, "createdAt" from workflow_entity
+    where "createdAt" > now() - interval '48 hours';
+    -> indoxV2TailDrain01 | indox-v2 Tail Drainer (gated backfill) | t | 2026-08-10 09:40:05
+  Schedule trigger `minutesInterval: 5`. It has run 13 times since 10:01, of which 2 succeeded
+  and 8 are still stuck in `running`. It is not yet doing useful work.
+
+  ## Updated
+
+  ```yaml
+  2026-08-10
+  ...
+  ```
+
+  ## Concurrency timeline
+
+  ```yaml
+  note: |
+    Executions/errors/p50/p99 exist only from 2026-08-10 07:21 (see constraint 2). Per-hour rows below are from execution_entity; COMPLETED and TYPED columns are the ACTION_LOG shape series (undercounts; see method) except where a count-delta is quoted.
+  query: |
+    select to_char(date_trunc('hour', "startedAt" at time zone 'UTC'),'MM-DD HH24') hr,
+           count(*) started,
+           count(*) filter (where status='success') ok,
+           count(*) filter (where status in ('error','crashed')) err,
+           count(distinct "workflowId") wfs,
+           percentile_cont(0.5) within group (order by extract(epoch from ("stoppedAt"-"startedAt"))) p50_s,
+           percentile_cont(0.99) within group (order by extract(epoch from ("stoppedAt"-"startedAt"))) p99_s
+    from execution_entity where "startedAt" > now() - interval '48 hours' group by 1 order by 1;
+  hours:
+  - hr: 08-10 07
+    started: 78
+    ok: 0
+    err: 0
+    wfs: 2
+    p50_s: null
+    p99_s: null
+    completed: 0
+    typed: 0
+  - hr: 08-10 08
+    started: 241
+    ok: 12
+    err: 56
+    wfs: 12
+    p50_s: 3382.91
+    p99_s: 3726.69
+    completed: 0
+    typed: 0
+  - hr: 08-10 09
+    started: 13588
+    ok: 11808
+    err: 1237
+    wfs: 33
+    p50_s: 26.65
+    p99_s: 3188.69
+    completed: 0
+    typed: 2
+  - hr: 08-10 10
+    started: 17845
+    ok: 15628
+    err: 794
+    wfs: 37
+    p50_s: 15.27
+    p99_s: 477.97
+    completed: 36
+    typed: 7
+  - hr: 08-10 11
+    started: 2472
+    ok: 2097
+    err: 20
+    wfs: 29
+    p50_s: 14.29
+    p99_s: 240.08
+    completed: 0
+    typed: 4
+  ten_minute_errors: 09:00 112 | 09:10 152 | 09:20 159 | 09:30 183 | 09:40 294 | 09:50 337 | 10:00 261 | 10:10 156 | 10:20 126 | 10:30 126 | 10:40 82 | 10:50 41 | 11:00 26
+  five_minute_first_completions: 10:05 1 | 10:10 3 | 10:15 8 | 10:20 5 | 10:25 5 | 10:30 3 | 10:35 5 | 10:40 5 | 10:45 4 | 10:50 2 | then NONE until a single one at 11:16:05
+  ```
+
+  ## Verdict
+
+  ```yaml
+  - change: 16 full-blueprint re-imports (63-81 workflows each), 08-09 11:45:22 -> 14:36:50; 82 publish batches over the 48h
+    what_it_was: Repeated whole-fleet `import` pushes, ~1,100 workflow writes in under 3 hours
+    evidence: |
+      select to_char("createdAt",'YYYY-MM-DD HH24:MI:SS'), count(*), string_agg(distinct authors,',')
+      from workflow_history where "createdAt" > now() - interval '48 hours' group by 1 order by 1;
+      docker logs n8n-worker-1-shlomo-laptop --timestamps | grep -i "not active" | cut -c1-16 | sort | uniq -c
+    measured: Every 'not active' spike coincides with an import minute (08-09 13:15/13:22/13:34/13:45/14:08/14:36; 08-10 01:09/03:07/04:14/04:16/09:49/10:05/10:06/10:07/10:24/11:20). 72 error executions carry the string. The 14:36:50 re-import is also the hour in which 4,624 rows had updated_at rewritten.
+    effect_completed: not separable per-import, but zero completions across the whole 08-09 22:00 -> 08-10 09:59 stretch that these preceded
+    effect_typed: no measurable gain
+    effect_errors: direct cause of discrete error bursts, up to 36 in a single minute (10:05)
+    verdict: HURT
+    confidence: high
+  - change: '`Get Changed Docs` v1/v2/v3 — pickup fairness (01:08:56, 01:54:42, 02:06:41)'
+    what_it_was: Replaced `order by updated_at asc limit 40` with a multi-slice weighted pick. Diagnosis in the node comment is well-evidenced and correct.
+    evidence: first-completion series per hour; Extract Base Doc events vs distinct docs per hour
+    measured: 'COMPLETED/hr for the eight hours after v3: 02 -> 1, 03 -> 0, 04 -> 1, 05 -> 0, 06 -> 0, 07 -> 0, 08 -> 0, 09 -> 0. Churn in the v1 hour: 1,130 Extract Base Doc events over 124 docs (9.11x).'
+    effect_completed: 0/hr before, 0.25/hr after — no change
+    effect_typed: AI values (DOC BASE) first-stamps 0,0,0,5,2,0,0,2 for hours 01-09 — no change
+    effect_errors: not measurable (no execution data before 07:21)
+    verdict: NO EFFECT
+    confidence: high
+    note: The fix addressed a real starvation defect but did not move the outcome, because a second blocker (the invoice_extractor 404) was downstream of it and unaddressed.
+  - change: Execution-throughput recovery at ~08:55-09:00
+    what_it_was: Not a change. No workflow, setting or schema edit landed between 04:17:34 and 09:40:05.
+    evidence: workflow_history gap 04:17:34 -> 09:40:05; executions/10min 08:50 = 60 -> 09:00 = 3,086; dmesg -T global OOM kills at IDT 10:27:06 / 11:30:09 / 11:32:13 = UTC 07:27 / 08:30 / 08:32
+    measured: executions/hr 241 (08:00) -> 13,588 (09:00); still 0 completions and ~2 typings in the whole 09:00 hour
+    effect_completed: none — zero completions in the 09:00 hour despite 11,808 successful executions
+    effect_typed: 2 documents
+    effect_errors: errors/hr rose 56 -> 1,237 (volume-driven)
+    verdict: UNPROVEN
+    confidence: high
+    note: UNATTRIBUTABLE to any change by construction. The OOM-release mechanism is plausible and consistent with the 08:44-08:59 error burst, but is not proven.
+  - change: '`Get Changed Docs` v4 — finisher slice (09:49:10), and indoxV2TailDrain01 created (09:40:05)'
+    what_it_was: Five capped slices s_fin/s_live/s_new/s_old/s_adj, each `rn <= 40`; plus a new every-5-min gated backfill workflow
+    evidence: errors/10min; BaseDocEx01 per-10min error rate; first-completion series
+    measured: errors/10min 183 (09:30) -> 294 (09:40) -> 337 (09:50), the day's peak. BaseDocEx01 error rate 71/200 = 36% (09:30) -> 170/382 = 44.5% (09:50). Completions still zero. 'not active' x12 at 09:49-09:50.
+    effect_completed: 0 -> 0
+    effect_typed: no measurable gain
+    effect_errors: +154 per 10 min across the deploy window
+    verdict: HURT
+    confidence: medium
+    note: The two changes are 9 minutes apart and share the measurement window; the error rise cannot be split between them, and part of it is the publish itself (see deploy churn).
+  - change: 10:01:47-10:07:09 cluster — indoxV2ActionsBS01 activate (10:02:30), `Get Changed Docs` v5 burst priority (10:05:17), indoxV2ActionsGDoc01 activate (10:05:45), import (10:06:32), indoxV2ActionsShip01 activate (10:07:09)
+    what_it_was: Four-to-five separate changes inside five minutes
+    evidence: five_minute_first_completions; workflow_entity updatedAt; workflow_history
+    measured: First completion since 08-09 21:15 lands in the 10:05-10:10 bucket. 41 first-completions follow between 10:05 and 10:52.
+    effect_completed: 0/hr -> ~47/hr
+    effect_typed: 7 documents in the 10:00 hour vs 0-2/hr before — marginal
+    effect_errors: '''not active'' x55 at 10:05-10:07; errors/10min 337 -> 261 -> 156'
+    verdict: HELPED (aggregate)
+    confidence: high_for_the_cluster / none_for_any_single_member
+    note: THIS IS THE ANSWER TO 'what started the recovery' AND IT IS NOT ATTRIBUTABLE FURTHER. Four changes landed inside the five minutes preceding the first completion in thirteen hours. The activations and the burst-priority query are equally consistent with the data. Splitting them requires a clean window that does not exist.
+  - change: '`s_burst` slice introduced by v5 (10:05:17)'
+    what_it_was: A priority slice keyed `rn * 1.0 - 1000.0` with NO `rn <= 40` guard, unlike every other slice in the same query
+    evidence: |
+      select right(replace(n->'parameters'->>'query',chr(10),' '),700) from workflow_history h,
+        jsonb_array_elements(h.nodes::jsonb) n where h."workflowId"='indoxApiSupabase01'
+        and n->>'name' ilike '%Get Changed Docs%' and h."createdAt" > '2026-08-10 09:00:00+00';
+      -- plus the Extract Base Doc events/distinct-docs churn query
+    measured: 'Extract Base Doc in the 10:00 hour: 2,411 events over 37 distinct documents = 65.16 per document, against a 1.00-1.35 baseline all through 08-09.'
+    effect_completed: the same hour produced only ~40 first-completions
+    effect_typed: '7'
+    effect_errors: BaseDocEx01 volume spiked to 624 executions/10min at 10:10
+    verdict: HURT
+    confidence: high
+    note: Unbounded priority slice. ~98% of the base-extraction work in that hour was redundant re-picks of the same 37 rows.
+  - change: '`Get Changed Docs` v6 — poll 30s -> 2 minutes (10:24:23)'
+    what_it_was: scheduleTrigger minutesInterval 2, and jitter bucket floor(epoch/30) -> floor(epoch/120)
+    evidence: errors/10min series; five_minute_first_completions; live trigger params
+    measured: errors/10min 126 (10:20) -> 126 (10:30) -> 82 (10:40) -> 41 (10:50) -> 26 (11:00). First-completions/5min 5,3,5,5,4,2 then zero after 10:52.
+    effect_completed: declining through the window and then zero, but see note
+    effect_typed: no measurable gain
+    effect_errors: -100 per 10 min over the following 40 minutes
+    verdict: UNPROVEN
+    confidence: low
+    note: 'Confounded three ways inside six minutes: BaseDocEx01 re-import at 10:28:40, worker-1 restart at 10:29:23, and the natural exhaustion of the burst cohort. The error decline is real; attributing it to the poll interval is not currently supportable.'
+  - change: BaseDocEx01 re-import (10:28:40) — `Lock Map Set (retry scope)` added
+    what_it_was: A Redis node publishing n8n.exec.<id>.docmap so failures reach errorHandler01's dead-letter gate. NOT a Select Base change.
+    evidence: |
+      -- node-by-node md5 diff of the 03:53:12 and 10:28:40 versions
+      with v as (select h."createdAt" ca, n->>'name' nm, md5(n::text) m from workflow_history h,
+        jsonb_array_elements(h.nodes::jsonb) n where h."workflowId"='BaseDocEx01'
+        and h."createdAt" > '2026-08-10 03:00:00+00') ...
+      -> single row: Lock Map Set (retry scope) | ADDED
+      -- Select Base md5 ac865430dfdc6837af895378ee85d535 / 9029 chars in BOTH versions
+    measured: BaseDocEx01 error rate 56/499 = 11% (10:20) -> 35/360 = 10% (10:30) -> 20/277 = 7% (10:40), but its execution volume also collapsed 624 -> 27 per 10 min by 11:00.
+    effect_completed: no separable effect
+    effect_typed: no separable effect
+    effect_errors: falling, but volume fell with it
+    verdict: UNPROVEN
+    confidence: low
+    note: 'Landed 43 seconds before the worker-1 restart. Also corrects the record: the Select Base rewrite was 03:53:12, and the API_TOOLS_ID pairing risk is still live and unfixed.'
+  - change: n8n-worker-1 restart (10:29:23)
+    what_it_was: Container restart of a worker that had been wedged since 07:21 while reporting healthy
+    evidence: docker inspect StartedAt 2026-08-10T10:29:23.795Z, RestartCount=0, health=healthy; 289 + 234 executions still in status='running' with oldest 07:21
+    measured: executions/10min 2,495 (10:20) -> 3,733 (10:30) -> 5,040 (10:40); errors/10min 126 -> 126 -> 82
+    effect_completed: no step change visible — first-completions were already running at 3-5 per 5 min before and after
+    effect_typed: no measurable gain
+    effect_errors: declining
+    verdict: UNPROVEN
+    confidence: low
+    note: 'Confounded with v6 and the BaseDocEx01 import inside the same five minutes. Separately: the 523 zombie executions were never reaped and still sit in `running`.'
+  - change: invoice_extractor webhook back in service (~10:56-10:58)
+    what_it_was: indoxV2ExtractInvoiceGemini01's POST webhook, into which both AI-extraction legs had been posting a silent 404
+    evidence: |
+      select min("startedAt"), count(*) from execution_entity where "workflowId"='indoxV2ExtractInvoiceGemini01';
+      -> 2026-08-10 10:58 | 20        (zero executions in the entire retained window before that)
+      -- BaseDocEx01 'Extract Base via Webhook' -> http://n8n:5678/webhook/invoice_extractor,
+      --   onError: continueRegularOutput  (so the 404 was swallowed)
+    measured: 18 of 20 runs succeeded after 10:58. But TYPED is 9,171 at both 11:28:26 and 11:30:58 — unchanged.
+    effect_completed: not yet separable
+    effect_typed: 0 in the 152s snapshot window; 4 in the 11:00 hour by ACTION_LOG
+    effect_errors: no rise
+    verdict: UNPROVEN
+    confidence: medium
+    note: The mechanism is well-evidenced and the leg is demonstrably running again for the first time today, but it has been live for ~33 minutes and has not yet moved the TYPED counter. This is the single most valuable thing to measure in a clean window.
+  - change: ACTION_LOG append-only trigger (~10:31)
+    what_it_was: scripts/ops/migrations/2026-08-10_action_log_append_only.sql — trg_incdoc_action_log_append, BEFORE UPDATE FOR EACH ROW
+    evidence: pg_get_functiondef(incdoc_action_log_append); file mtime 13:31 IDT = 10:31 UTC
+    measured: 'Not a throughput change. Its stated target: only 8 of 380 rows in the retry cohort still carried their loop-breaker marker; 322 sat at EXTRACTION_FAILED re-entering extract_base_doc every sweep.'
+    effect_completed: none expected, none observed
+    effect_typed: none expected, none observed
+    effect_errors: none observed
+    verdict: NO EFFECT (on throughput; correctness fix)
+    confidence: high
+    note: Two side effects worth knowing. It is the reason ACTION_LOG can be trusted as a timeline FROM 10:31 ONWARD, and it caps the column at 6,000 chars with a trimmed middle (0 rows affected so far).
+  - change: Three global OOM kills (07:27, 08:30, 08:32) + a fourth cgroup OOM (09:28)
+    what_it_was: apitools gunicorn workers killed by the host OOM killer; PID 1 survived so Docker kept reporting healthy
+    evidence: dmesg -T | grep -i 'oom-kill' -> IDT 10:27:06, 11:30:09, 11:32:13 (global_oom/CONSTRAINT_NONE) and 12:28:47 (CONSTRAINT_MEMCG); docker inspect apitools -> OOMKilled=true, RestartCount=0
+    measured: 'Upload Doc To API TOOLS: 696 errors across 4,310 executions in 09:00-11:15. The 07:21-08:19 wedge sits inside this window.'
+    effect_completed: zero completions across the whole period
+    effect_typed: near zero
+    effect_errors: the dominant error source of the morning
+    verdict: HURT
+    confidence: high
+    note: The fourth kill at 09:28 UTC is not in the briefed landmark list.
+  - change: sync_registry setting update (08-09 23:54:48)
+    what_it_was: The only public.settings row changed in 48h
+    evidence: select key, updated_at from settings where updated_at > now() - interval '5 days' order by updated_at desc
+    measured: Sits inside the flat line with no discontinuity around it. sync_ledger deliveries/hr 1,408 (23:00) -> 498 (00:00) -> 522 (01:00), a decline already underway.
+    effect_completed: 0 -> 0
+    effect_typed: 0 -> 0
+    effect_errors: not measurable (no execution data)
+    verdict: UNPROVEN
+    confidence: low
+    note: indox_execution_mode ('all-in-one') and activePrioritySync (false) were NOT changed — both still carry updated_at 2026-07-30 23:45:11.
+  ```
+
+  ## Still unproven needs clean window
+
+  - THE 10:02-10:07 CLUSTER. Four changes, five minutes, one outcome. Nothing in the data can say whether the recovery came from re-activating BS/GDoc/Ship or from the v5 burst slice. A clean window means: change ONE of them, hold everything else, and watch COMPLETED count deltas for a full hour.
+  - THE invoice_extractor REPAIR. Live for ~33 minutes at the time of writing and TYPED has not moved (9,171 at 11:28:26 and again at 11:30:58). This is the highest-value measurement outstanding: base extraction has been running at 1 event per document all night while the AI leg silently 404'd, so if typing does not recover now, the 404 was not the whole story.
+  - THE 30s -> 2m POLL. Confounded by the worker restart and the BaseDocEx01 import within six minutes. Needs an hour where it is the only variable.
+  - WHETHER THE 10:00 BURST IS THROUGHPUT OR TAIL-DRAIN. All ~41 completions were OLD documents; of 1,529 created today, ZERO have completed. Until a document ingested today completes, 47/hr is backlog drain, not pipeline throughput.
+  - THE BaseDocEx01 API_TOOLS_ID PAIRING RISK. Still live (`$('Upload+OCR').item.json.file_id` plus combineByPosition). Never fixed, and the 10:28 deploy that was believed to fix it did not touch Select Base.
+  - THE 523 ZOMBIE EXECUTIONS. 289 Incoming Documents v2 + 234 indox-v2 Actions — DOC BASE still in status='running' with oldest 07:21, never reaped by the worker restart. Unknown whether they still hold doc_step locks.
+
+  ## Recommendations not actioned this lane
+
+  - Cap `s_burst` with `where rn <= 40` like every other slice in the same query — it is the only unbounded one and it produced 65 base extractions per document.
+  - Stop full-fleet re-imports. 82 publish batches in 48h, and every 'not active' burst maps to one. Publish only changed workflows.
+  - Commit. 201 modified files and 202 untracked files across two days with zero commits means no lane can diff its own change against another's.
+  - Raise N8N_EXECUTIONS_DATA_PRUNE_MAX_COUNT — 2000 is why the concurrency timeline cannot reach further back than 07:21 and why this verdict has a 4-hour execution window instead of 48.
+references:
+- issues/n8n-error-census-2026-08-09.yaml — independent COMPLETED=6,243 snapshot at ~23:00 on 08-09, and the 'COMPLETION HAS FLATLINED' handoff note that this verdict answers
+- scripts/ops/migrations/2026-08-10_action_log_append_only.sql — the append-only trigger and its measured justification
+- apps/indox/blueprint/n8n/BaseDocEx01.json (mtime 13:31 IDT = 10:31 UTC) — the 10:28:40 import source
+- 'live n8n: workflow_history for indoxApiSupabase01 (23 versions in 48h, 6 semantic) and BaseDocEx01 (18 versions, 4 semantic)'

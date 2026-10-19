@@ -1,0 +1,1032 @@
+{
+  "views": [
+    {
+      "app": "console",
+      "id": "dashboard",
+      "title": "לוח בקרה",
+      "kind": "hash",
+      "tier": "first_party",
+      "source": "development/console/modules.yaml:dashboard",
+      "url": "/#/",
+      "group": "ראשי",
+      "auth": "authentik",
+      "host_env": "CONSOLE_BASE_URL",
+      "host_local": "console.localhost"
+    },
+    {
+      "app": "console",
+      "id": "apps",
+      "title": "אפליקציות",
+      "kind": "hash",
+      "tier": "first_party",
+      "source": "development/console/modules.yaml:apps",
+      "url": "/#/m/apps",
+      "group": "תשתית",
+      "auth": "authentik",
+      "host_env": "CONSOLE_BASE_URL",
+      "host_local": "console.localhost"
+    },
+    {
+      "app": "console",
+      "id": "install",
+      "title": "מסך התקנה",
+      "kind": "hash",
+      "tier": "first_party",
+      "source": "development/console/modules.yaml:install",
+      "url": "/#/m/install",
+      "group": "הגדרות",
+      "auth": "authentik",
+      "host_env": "CONSOLE_BASE_URL",
+      "host_local": "console.localhost"
+    },
+    {
+      "app": "my-docs",
+      "id": "dash",
+      "title": "לוח בקרה",
+      "kind": "dom-state",
+      "tier": "first_party",
+      "source": "production/my-docs/static/app.js:VIEWS",
+      "steps": [
+        {
+          "frame_click": ".side nav a[data-view=\"dash\"]"
+        }
+      ],
+      "auth": "authentik",
+      "framed": true,
+      "group": "עסק",
+      "console_module": "pinkas",
+      "url": "/#/m/pinkas",
+      "host_override": "console",
+      "host_env": "CONSOLE_BASE_URL",
+      "host_local": "console.localhost"
+    },
+    {
+      "app": "my-docs",
+      "id": "docs",
+      "title": "מסמכים",
+      "kind": "dom-state",
+      "tier": "first_party",
+      "source": "production/my-docs/static/app.js:VIEWS",
+      "steps": [
+        {
+          "frame_click": ".side nav a[data-view=\"docs\"]"
+        }
+      ],
+      "auth": "authentik",
+      "framed": true,
+      "group": "עסק",
+      "console_module": "pinkas",
+      "url": "/#/m/pinkas",
+      "host_override": "console",
+      "host_env": "CONSOLE_BASE_URL",
+      "host_local": "console.localhost"
+    },
+    {
+      "app": "my-docs",
+      "id": "customers",
+      "title": "לקוחות",
+      "kind": "dom-state",
+      "tier": "first_party",
+      "source": "production/my-docs/static/app.js:VIEWS",
+      "steps": [
+        {
+          "frame_click": ".side nav a[data-view=\"customers\"]"
+        }
+      ],
+      "auth": "authentik",
+      "framed": true,
+      "group": "עסק",
+      "console_module": "pinkas",
+      "url": "/#/m/pinkas",
+      "host_override": "console",
+      "host_env": "CONSOLE_BASE_URL",
+      "host_local": "console.localhost"
+    },
+    {
+      "app": "my-docs",
+      "id": "items",
+      "title": "פריטים",
+      "kind": "dom-state",
+      "tier": "first_party",
+      "source": "production/my-docs/static/app.js:VIEWS",
+      "steps": [
+        {
+          "frame_click": ".side nav a[data-view=\"items\"]"
+        }
+      ],
+      "auth": "authentik",
+      "framed": true,
+      "group": "עסק",
+      "console_module": "pinkas",
+      "url": "/#/m/pinkas",
+      "host_override": "console",
+      "host_env": "CONSOLE_BASE_URL",
+      "host_local": "console.localhost"
+    },
+    {
+      "app": "my-docs",
+      "id": "settings",
+      "title": "הגדרות עסק",
+      "kind": "dom-state",
+      "tier": "first_party",
+      "source": "production/my-docs/static/app.js:VIEWS",
+      "steps": [
+        {
+          "frame_click": ".side nav a[data-view=\"settings\"]"
+        }
+      ],
+      "auth": "authentik",
+      "framed": true,
+      "group": "עסק",
+      "console_module": "pinkas",
+      "url": "/#/m/pinkas",
+      "host_override": "console",
+      "host_env": "CONSOLE_BASE_URL",
+      "host_local": "console.localhost"
+    },
+    {
+      "app": "connections",
+      "id": "app-password",
+      "title": "סיסמאות אפליקציות",
+      "kind": "dom-state",
+      "tier": "first_party",
+      "source": "development/connections/ui.html:PILLARS",
+      "steps": [
+        {
+          "frame_click": "button[onclick=\"setTab('app-password')\"]"
+        }
+      ],
+      "auth": "authentik",
+      "framed": true,
+      "group": "הגדרות",
+      "console_module": "connections",
+      "url": "/#/m/connections",
+      "host_override": "console",
+      "host_env": "CONSOLE_BASE_URL",
+      "host_local": "console.localhost"
+    },
+    {
+      "app": "connections",
+      "id": "auth",
+      "title": "חיבורי אימות",
+      "kind": "dom-state",
+      "tier": "first_party",
+      "source": "development/connections/ui.html:PILLARS",
+      "steps": [
+        {
+          "frame_click": "button[onclick=\"setTab('auth')\"]"
+        }
+      ],
+      "auth": "authentik",
+      "framed": true,
+      "group": "הגדרות",
+      "console_module": "connections",
+      "url": "/#/m/connections",
+      "host_override": "console",
+      "host_env": "CONSOLE_BASE_URL",
+      "host_local": "console.localhost"
+    },
+    {
+      "app": "connections",
+      "id": "infra",
+      "title": "סודות מערכת",
+      "kind": "dom-state",
+      "tier": "first_party",
+      "source": "development/connections/ui.html:PILLARS",
+      "steps": [
+        {
+          "frame_click": "button[onclick=\"setTab('infra')\"]"
+        }
+      ],
+      "auth": "authentik",
+      "framed": true,
+      "group": "הגדרות",
+      "console_module": "connections",
+      "url": "/#/m/connections",
+      "host_override": "console",
+      "host_env": "CONSOLE_BASE_URL",
+      "host_local": "console.localhost"
+    },
+    {
+      "app": "incoming-documents",
+      "id": "root",
+      "title": "DashboardPage",
+      "kind": "route",
+      "tier": "first_party",
+      "source": "development/incoming-documents/app/webapp/src/App.tsx:/",
+      "url": "/#/m/incoming",
+      "auth": "authentik",
+      "framed": true,
+      "group": "עסק",
+      "console_module": "incoming",
+      "steps": [],
+      "host_override": "console",
+      "host_env": "CONSOLE_BASE_URL",
+      "host_local": "console.localhost"
+    },
+    {
+      "app": "incoming-documents",
+      "id": "repos",
+      "title": "RepoListPage",
+      "kind": "route",
+      "tier": "first_party",
+      "source": "development/incoming-documents/app/webapp/src/App.tsx:/repos",
+      "url": "/#/m/incoming",
+      "auth": "authentik",
+      "framed": true,
+      "group": "עסק",
+      "console_module": "incoming",
+      "steps": [
+        {
+          "frame_src": "/a/incoming/repos"
+        }
+      ],
+      "host_override": "console",
+      "host_env": "CONSOLE_BASE_URL",
+      "host_local": "console.localhost"
+    },
+    {
+      "app": "incoming-documents",
+      "id": "sync",
+      "title": "SyncStatePage",
+      "kind": "route",
+      "tier": "first_party",
+      "source": "development/incoming-documents/app/webapp/src/App.tsx:/sync",
+      "url": "/#/m/incoming",
+      "auth": "authentik",
+      "framed": true,
+      "group": "עסק",
+      "console_module": "incoming",
+      "steps": [
+        {
+          "frame_src": "/a/incoming/sync"
+        }
+      ],
+      "host_override": "console",
+      "host_env": "CONSOLE_BASE_URL",
+      "host_local": "console.localhost"
+    },
+    {
+      "app": "incoming-documents",
+      "id": "settings",
+      "title": "SettingsPage",
+      "kind": "route",
+      "tier": "first_party",
+      "source": "development/incoming-documents/app/webapp/src/App.tsx:/settings",
+      "url": "/#/m/incoming",
+      "auth": "authentik",
+      "framed": true,
+      "group": "עסק",
+      "console_module": "incoming",
+      "steps": [
+        {
+          "frame_src": "/a/incoming/settings"
+        }
+      ],
+      "host_override": "console",
+      "host_env": "CONSOLE_BASE_URL",
+      "host_local": "console.localhost"
+    },
+    {
+      "app": "incoming-documents",
+      "id": "tests",
+      "title": "TestsPage",
+      "kind": "route",
+      "tier": "first_party",
+      "source": "development/incoming-documents/app/webapp/src/App.tsx:/tests",
+      "url": "/#/m/incoming",
+      "auth": "authentik",
+      "framed": true,
+      "group": "עסק",
+      "console_module": "incoming",
+      "steps": [
+        {
+          "frame_src": "/a/incoming/tests"
+        }
+      ],
+      "host_override": "console",
+      "host_env": "CONSOLE_BASE_URL",
+      "host_local": "console.localhost"
+    },
+    {
+      "app": "incoming-documents",
+      "id": "extraction",
+      "title": "ExtractionPage",
+      "kind": "route",
+      "tier": "first_party",
+      "source": "development/incoming-documents/app/webapp/src/App.tsx:/extraction",
+      "url": "/#/m/incoming",
+      "auth": "authentik",
+      "framed": true,
+      "group": "עסק",
+      "console_module": "incoming",
+      "steps": [
+        {
+          "frame_src": "/a/incoming/extraction"
+        }
+      ],
+      "host_override": "console",
+      "host_env": "CONSOLE_BASE_URL",
+      "host_local": "console.localhost"
+    },
+    {
+      "app": "incoming-documents",
+      "id": "extraction-:type-:name",
+      "title": "ExtractionDocPage",
+      "kind": "route",
+      "tier": "first_party",
+      "source": "development/incoming-documents/app/webapp/src/App.tsx:/extraction/:type/:name",
+      "url": "/#/m/incoming",
+      "auth": "authentik",
+      "framed": true,
+      "group": "עסק",
+      "console_module": "incoming",
+      "steps": [
+        {
+          "frame_src": "/a/incoming/extraction/:type/:name"
+        }
+      ],
+      "host_override": "console",
+      "host_env": "CONSOLE_BASE_URL",
+      "host_local": "console.localhost"
+    },
+    {
+      "app": "incoming-documents",
+      "id": "repos-:repo",
+      "title": "RepoDetailPage",
+      "kind": "route",
+      "tier": "first_party",
+      "source": "development/incoming-documents/app/webapp/src/App.tsx:/repos/:repo",
+      "url": "/#/m/incoming",
+      "auth": "authentik",
+      "framed": true,
+      "group": "עסק",
+      "console_module": "incoming",
+      "steps": [
+        {
+          "frame_src": "/a/incoming/repos/:repo"
+        }
+      ],
+      "host_override": "console",
+      "host_env": "CONSOLE_BASE_URL",
+      "host_local": "console.localhost"
+    },
+    {
+      "app": "incoming-documents",
+      "id": "repos-:repo-documents",
+      "title": "DocumentBrowserPage",
+      "kind": "route",
+      "tier": "first_party",
+      "source": "development/incoming-documents/app/webapp/src/App.tsx:/repos/:repo/documents",
+      "url": "/#/m/incoming",
+      "auth": "authentik",
+      "framed": true,
+      "group": "עסק",
+      "console_module": "incoming",
+      "steps": [
+        {
+          "frame_src": "/a/incoming/repos/:repo/documents"
+        }
+      ],
+      "host_override": "console",
+      "host_env": "CONSOLE_BASE_URL",
+      "host_local": "console.localhost"
+    },
+    {
+      "app": "incoming-documents",
+      "id": "repos-:repo-documents-:id",
+      "title": "DocumentDetailPage",
+      "kind": "route",
+      "tier": "first_party",
+      "source": "development/incoming-documents/app/webapp/src/App.tsx:/repos/:repo/documents/:id",
+      "url": "/#/m/incoming",
+      "auth": "authentik",
+      "framed": true,
+      "group": "עסק",
+      "console_module": "incoming",
+      "steps": [
+        {
+          "frame_src": "/a/incoming/repos/:repo/documents/:id"
+        }
+      ],
+      "host_override": "console",
+      "host_env": "CONSOLE_BASE_URL",
+      "host_local": "console.localhost"
+    },
+    {
+      "app": "incoming-documents",
+      "id": "repos-:repo-tail",
+      "title": "KafkaTailPage",
+      "kind": "route",
+      "tier": "first_party",
+      "source": "development/incoming-documents/app/webapp/src/App.tsx:/repos/:repo/tail",
+      "url": "/#/m/incoming",
+      "auth": "authentik",
+      "framed": true,
+      "group": "עסק",
+      "console_module": "incoming",
+      "steps": [
+        {
+          "frame_src": "/a/incoming/repos/:repo/tail"
+        }
+      ],
+      "host_override": "console",
+      "host_env": "CONSOLE_BASE_URL",
+      "host_local": "console.localhost"
+    },
+    {
+      "app": "mailview",
+      "id": "inbox",
+      "title": "מייל — תיבה נכנסת",
+      "kind": "route",
+      "tier": "first_party",
+      "source": "production/mailview/static/app.js",
+      "url": "/#/m/mail",
+      "auth": "authentik",
+      "framed": true,
+      "group": "עסק",
+      "console_module": "mail",
+      "steps": [],
+      "host_override": "console",
+      "host_env": "CONSOLE_BASE_URL",
+      "host_local": "console.localhost"
+    },
+    {
+      "app": "mailview",
+      "id": "label",
+      "title": "מייל — תווית",
+      "kind": "route",
+      "tier": "first_party",
+      "source": "production/mailview/static/app.js",
+      "url": "/#/m/mail",
+      "auth": "authentik",
+      "framed": true,
+      "group": "עסק",
+      "console_module": "mail",
+      "steps": [
+        {
+          "frame_src": "/a/mailview/label/{label}"
+        }
+      ],
+      "host_override": "console",
+      "host_env": "CONSOLE_BASE_URL",
+      "host_local": "console.localhost"
+    },
+    {
+      "app": "mailview",
+      "id": "message",
+      "title": "מייל — קריאת הודעה",
+      "kind": "route",
+      "tier": "first_party",
+      "source": "production/mailview/static/app.js",
+      "url": "/#/m/mail",
+      "auth": "authentik",
+      "framed": true,
+      "group": "עסק",
+      "console_module": "mail",
+      "steps": [
+        {
+          "frame_src": "/a/mailview/message/{id}"
+        }
+      ],
+      "host_override": "console",
+      "host_env": "CONSOLE_BASE_URL",
+      "host_local": "console.localhost"
+    },
+    {
+      "app": "drive",
+      "id": "root",
+      "title": "דרייב — שורש",
+      "kind": "route",
+      "tier": "first_party",
+      "source": "production/drive/static/app.js",
+      "url": "/#/m/drive",
+      "auth": "authentik",
+      "framed": true,
+      "group": "עסק",
+      "console_module": "drive",
+      "steps": [],
+      "host_override": "console",
+      "host_env": "CONSOLE_BASE_URL",
+      "host_local": "console.localhost"
+    },
+    {
+      "app": "drive",
+      "id": "folder",
+      "title": "דרייב — תיקייה",
+      "kind": "route",
+      "tier": "first_party",
+      "source": "production/drive/static/app.js",
+      "url": "/#/m/drive",
+      "auth": "authentik",
+      "framed": true,
+      "group": "עסק",
+      "console_module": "drive",
+      "steps": [
+        {
+          "frame_src": "/a/drive/folder/{folder}"
+        }
+      ],
+      "host_override": "console",
+      "host_env": "CONSOLE_BASE_URL",
+      "host_local": "console.localhost"
+    },
+    {
+      "app": "drive",
+      "id": "file",
+      "title": "דרייב — תצוגת קובץ",
+      "kind": "route",
+      "tier": "first_party",
+      "source": "production/drive/static/app.js",
+      "url": "/#/m/drive",
+      "auth": "authentik",
+      "framed": true,
+      "group": "עסק",
+      "console_module": "drive",
+      "steps": [
+        {
+          "frame_src": "/a/drive/folder/{folder}/file/{file}"
+        }
+      ],
+      "host_override": "console",
+      "host_env": "CONSOLE_BASE_URL",
+      "host_local": "console.localhost"
+    },
+    {
+      "app": "wadmin",
+      "id": "login",
+      "title": "בוט ווצאפ — התחברות",
+      "kind": "route",
+      "tier": "first_party",
+      "source": "production/whatsapp-hacohanim/src/api/api.js",
+      "url": "/#/m/whatsapp",
+      "auth": "authentik",
+      "framed": true,
+      "group": "עסק",
+      "console_module": "whatsapp",
+      "steps": [
+        {
+          "frame_src": "/a/wadmin/login"
+        }
+      ],
+      "host_override": "console",
+      "host_env": "CONSOLE_BASE_URL",
+      "host_local": "console.localhost"
+    },
+    {
+      "app": "wadmin",
+      "id": "dashboard",
+      "title": "בוט ווצאפ — לוח בקרה",
+      "kind": "route",
+      "tier": "first_party",
+      "source": "production/whatsapp-hacohanim/src/api/api.js",
+      "url": "/#/m/whatsapp",
+      "auth": "authentik",
+      "framed": true,
+      "group": "עסק",
+      "console_module": "whatsapp",
+      "steps": [],
+      "host_override": "console",
+      "host_env": "CONSOLE_BASE_URL",
+      "host_local": "console.localhost"
+    },
+    {
+      "app": "wadmin",
+      "id": "connect",
+      "title": "בוט ווצאפ — connect",
+      "kind": "dom-state",
+      "tier": "first_party",
+      "source": "production/whatsapp-hacohanim/src/api/ui/index.ejs",
+      "url": "/#/m/whatsapp",
+      "steps": [
+        {
+          "frame_click": "a[href=\"#connect\"]"
+        }
+      ],
+      "auth": "authentik",
+      "framed": true,
+      "group": "עסק",
+      "console_module": "whatsapp",
+      "host_override": "console",
+      "host_env": "CONSOLE_BASE_URL",
+      "host_local": "console.localhost"
+    },
+    {
+      "app": "wadmin",
+      "id": "actions",
+      "title": "בוט ווצאפ — actions",
+      "kind": "dom-state",
+      "tier": "first_party",
+      "source": "production/whatsapp-hacohanim/src/api/ui/index.ejs",
+      "url": "/#/m/whatsapp",
+      "steps": [
+        {
+          "frame_click": "a[href=\"#actions\"]"
+        }
+      ],
+      "auth": "authentik",
+      "framed": true,
+      "group": "עסק",
+      "console_module": "whatsapp",
+      "host_override": "console",
+      "host_env": "CONSOLE_BASE_URL",
+      "host_local": "console.localhost"
+    },
+    {
+      "app": "wadmin",
+      "id": "users",
+      "title": "בוט ווצאפ — users",
+      "kind": "dom-state",
+      "tier": "first_party",
+      "source": "production/whatsapp-hacohanim/src/api/ui/index.ejs",
+      "url": "/#/m/whatsapp",
+      "steps": [
+        {
+          "frame_click": "a[href=\"#users\"]"
+        }
+      ],
+      "auth": "authentik",
+      "framed": true,
+      "group": "עסק",
+      "console_module": "whatsapp",
+      "host_override": "console",
+      "host_env": "CONSOLE_BASE_URL",
+      "host_local": "console.localhost"
+    },
+    {
+      "app": "wadmin",
+      "id": "settings",
+      "title": "בוט ווצאפ — settings",
+      "kind": "dom-state",
+      "tier": "first_party",
+      "source": "production/whatsapp-hacohanim/src/api/ui/index.ejs",
+      "url": "/#/m/whatsapp",
+      "steps": [
+        {
+          "frame_click": "a[href=\"#settings\"]"
+        }
+      ],
+      "auth": "authentik",
+      "framed": true,
+      "group": "עסק",
+      "console_module": "whatsapp",
+      "host_override": "console",
+      "host_env": "CONSOLE_BASE_URL",
+      "host_local": "console.localhost"
+    },
+    {
+      "app": "machine",
+      "id": "main",
+      "title": "מכונה — מדדי מארח ו-Docker",
+      "kind": "route",
+      "tier": "first_party",
+      "source": "production/machine/static/index.html",
+      "url": "/#/m/machine",
+      "auth": "authentik",
+      "framed": true,
+      "group": "תשתית",
+      "console_module": "machine",
+      "steps": [],
+      "host_override": "console",
+      "host_env": "CONSOLE_BASE_URL",
+      "host_local": "console.localhost"
+    },
+    {
+      "app": "notifications",
+      "id": "main",
+      "title": "התראות — מרכז התראות",
+      "kind": "route",
+      "tier": "first_party",
+      "source": "production/notifications/static/index.html",
+      "url": "/#/m/alerts",
+      "auth": "authentik",
+      "framed": true,
+      "group": "תשתית",
+      "console_module": "alerts",
+      "steps": [],
+      "host_override": "console",
+      "host_env": "CONSOLE_BASE_URL",
+      "host_local": "console.localhost"
+    },
+    {
+      "app": "any-concurrency",
+      "id": "main",
+      "title": "כל מקביל — ציר-זמן מקביליות",
+      "kind": "route",
+      "tier": "first_party",
+      "source": "production/any-concurrency/static/index.html",
+      "url": "/#/m/concurrency",
+      "auth": "authentik",
+      "framed": true,
+      "group": "תשתית",
+      "console_module": "concurrency",
+      "steps": [],
+      "host_override": "console",
+      "host_env": "CONSOLE_BASE_URL",
+      "host_local": "console.localhost"
+    },
+    {
+      "app": "feature-validation",
+      "id": "main",
+      "title": "אימות מערכת — לוח בדיקות",
+      "kind": "route",
+      "tier": "first_party",
+      "source": "development/feature-validation/api/dashboard.html",
+      "url": "/#/m/validation",
+      "auth": "authentik",
+      "framed": true,
+      "group": "תשתית",
+      "console_module": "validation",
+      "steps": [],
+      "host_override": "console",
+      "host_env": "CONSOLE_BASE_URL",
+      "host_local": "console.localhost"
+    },
+    {
+      "app": "homepage",
+      "id": "main",
+      "title": "Homepage — לוח שירותים",
+      "kind": "route",
+      "tier": "first_party",
+      "source": "manifest.yaml:single_view",
+      "url": "/",
+      "auth": "authentik",
+      "host_env": "HOMEPAGE_BASE_URL",
+      "host_local": "home.localhost"
+    },
+    {
+      "app": "browser42",
+      "id": "main",
+      "title": "Browser42 — תצוגת דפדפן חי",
+      "kind": "route",
+      "tier": "first_party",
+      "source": "manifest.yaml:single_view",
+      "url": "/view/",
+      "auth": "authentik",
+      "host_env": "BROWSER42_BASE_URL",
+      "host_local": "browser42.localhost"
+    },
+    {
+      "app": "n8n",
+      "id": "workflows",
+      "title": "n8n — Workflows",
+      "kind": "route",
+      "tier": "third_party",
+      "source": "manifest.yaml:third_party_screens",
+      "url": "/home/workflows",
+      "auth": "own",
+      "host_env": "N8N_BASE_URL",
+      "host_local": "n8n.localhost"
+    },
+    {
+      "app": "n8n",
+      "id": "executions",
+      "title": "n8n — Executions",
+      "kind": "route",
+      "tier": "third_party",
+      "source": "manifest.yaml:third_party_screens",
+      "url": "/home/executions",
+      "auth": "own",
+      "host_env": "N8N_BASE_URL",
+      "host_local": "n8n.localhost"
+    },
+    {
+      "app": "n8n",
+      "id": "credentials",
+      "title": "n8n — Credentials",
+      "kind": "route",
+      "tier": "third_party",
+      "source": "manifest.yaml:third_party_screens",
+      "url": "/home/credentials",
+      "auth": "own",
+      "host_env": "N8N_BASE_URL",
+      "host_local": "n8n.localhost"
+    },
+    {
+      "app": "portainer",
+      "id": "dashboard",
+      "title": "Portainer — Dashboard",
+      "kind": "route",
+      "tier": "third_party",
+      "source": "manifest.yaml:third_party_screens",
+      "url": "/#!/home",
+      "auth": "own",
+      "host_env": "PORTAINER_BASE_URL",
+      "host_local": "portainer.localhost"
+    },
+    {
+      "app": "portainer",
+      "id": "containers",
+      "title": "Portainer — Containers",
+      "kind": "route",
+      "tier": "third_party",
+      "source": "manifest.yaml:third_party_screens",
+      "url": "/#!/1/docker/containers",
+      "auth": "own",
+      "host_env": "PORTAINER_BASE_URL",
+      "host_local": "portainer.localhost"
+    },
+    {
+      "app": "glitchtip",
+      "id": "issues",
+      "title": "GlitchTip — Issues",
+      "kind": "route",
+      "tier": "third_party",
+      "source": "manifest.yaml:third_party_screens",
+      "url": "/",
+      "auth": "own",
+      "host_env": "GLITCHTIP_BASE_URL",
+      "host_local": "glitchtip.localhost"
+    },
+    {
+      "app": "authentik",
+      "id": "login",
+      "title": "Authentik — Login",
+      "kind": "route",
+      "tier": "third_party",
+      "source": "manifest.yaml:third_party_screens",
+      "url": "/if/flow/default-authentication-flow/",
+      "auth": "none",
+      "host_env": "AUTH_BASE_URL",
+      "host_local": "auth.localhost"
+    },
+    {
+      "app": "authentik",
+      "id": "admin",
+      "title": "Authentik — Admin",
+      "kind": "route",
+      "tier": "third_party",
+      "source": "manifest.yaml:third_party_screens",
+      "url": "/if/admin/",
+      "auth": "none",
+      "host_env": "AUTH_BASE_URL",
+      "host_local": "auth.localhost"
+    },
+    {
+      "app": "supabase-studio",
+      "id": "tables",
+      "title": "Supabase Studio — Tables",
+      "kind": "route",
+      "tier": "third_party",
+      "source": "manifest.yaml:third_party_screens",
+      "url": "/",
+      "auth": "authentik",
+      "host_env": "SUPABASE_STUDIO_BASE_URL",
+      "host_local": "supabase-studio.localhost"
+    },
+    {
+      "app": "redisinsight",
+      "id": "databases",
+      "title": "RedisInsight — Databases",
+      "kind": "route",
+      "tier": "third_party",
+      "source": "manifest.yaml:third_party_screens",
+      "url": "/",
+      "auth": "authentik",
+      "host_env": "REDISINSIGHT_BASE_URL",
+      "host_local": "redisinsight.localhost"
+    },
+    {
+      "app": "console",
+      "id": "state-palette",
+      "title": "המרכז — חיפוש מהיר",
+      "kind": "state",
+      "tier": "first_party",
+      "source": "manifest.yaml:states",
+      "url": "#/",
+      "steps": [
+        {
+          "click": "#paletteBtn"
+        }
+      ],
+      "auth": "authentik",
+      "host_env": "CONSOLE_BASE_URL",
+      "host_local": "console.localhost"
+    },
+    {
+      "app": "console",
+      "id": "state-rail-collapsed",
+      "title": "המרכז — תפריט מכווץ",
+      "kind": "state",
+      "tier": "first_party",
+      "source": "manifest.yaml:states",
+      "url": "#/",
+      "steps": [
+        {
+          "click": "#railToggle"
+        }
+      ],
+      "auth": "authentik",
+      "host_env": "CONSOLE_BASE_URL",
+      "host_local": "console.localhost"
+    },
+    {
+      "app": "console",
+      "id": "state-wizard-provider",
+      "title": "אשף חיבור — בחירת ספק",
+      "kind": "state",
+      "tier": "first_party",
+      "source": "manifest.yaml:states",
+      "url": "#/m/drive",
+      "steps": [
+        {
+          "click": "#acctBar button"
+        }
+      ],
+      "auth": "authentik",
+      "host_env": "CONSOLE_BASE_URL",
+      "host_local": "console.localhost"
+    },
+    {
+      "app": "drive",
+      "id": "state-trash",
+      "title": "דרייב — סל מיחזור",
+      "kind": "state",
+      "tier": "first_party",
+      "source": "manifest.yaml:states",
+      "url": "/#/m/drive",
+      "auth": "authentik",
+      "framed": true,
+      "group": "עסק",
+      "console_module": "drive",
+      "steps": [
+        {
+          "frame_src": "/a/drive/trash"
+        }
+      ],
+      "host_override": "console",
+      "host_env": "CONSOLE_BASE_URL",
+      "host_local": "console.localhost"
+    },
+    {
+      "app": "drive",
+      "id": "state-search",
+      "title": "דרייב — חיפוש",
+      "kind": "state",
+      "tier": "first_party",
+      "source": "manifest.yaml:states",
+      "url": "/#/m/drive",
+      "auth": "authentik",
+      "framed": true,
+      "group": "עסק",
+      "console_module": "drive",
+      "steps": [
+        {
+          "frame_src": "/a/drive/search?q=doc"
+        }
+      ],
+      "host_override": "console",
+      "host_env": "CONSOLE_BASE_URL",
+      "host_local": "console.localhost"
+    },
+    {
+      "app": "mailview",
+      "id": "state-attention",
+      "title": "מייל — דורש טיפול",
+      "kind": "state",
+      "tier": "first_party",
+      "source": "manifest.yaml:states",
+      "url": "/#/m/mail",
+      "auth": "authentik",
+      "framed": true,
+      "group": "עסק",
+      "console_module": "mail",
+      "steps": [
+        {
+          "frame_src": "/a/mailview/attention"
+        }
+      ],
+      "host_override": "console",
+      "host_env": "CONSOLE_BASE_URL",
+      "host_local": "console.localhost"
+    },
+    {
+      "app": "mailview",
+      "id": "state-search",
+      "title": "מייל — חיפוש",
+      "kind": "state",
+      "tier": "first_party",
+      "source": "manifest.yaml:states",
+      "url": "/#/m/mail",
+      "auth": "authentik",
+      "framed": true,
+      "group": "עסק",
+      "console_module": "mail",
+      "steps": [
+        {
+          "frame_src": "/a/mailview/?q=חשבונית"
+        }
+      ],
+      "host_override": "console",
+      "host_env": "CONSOLE_BASE_URL",
+      "host_local": "console.localhost"
+    }
+  ],
+  "errors": [],
+  "totals": {
+    "all": 57,
+    "first_party": 47,
+    "third_party": 10,
+    "apps": 19
+  }
+}

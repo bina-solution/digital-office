@@ -1,0 +1,92 @@
+# app-management — the platform control plane (layer 1).
+#
+# Owns the whole app lifecycle: catalog + status (this stage), and enable / disable / uninstall
+# with real apply (later stages). Traefik/SSO labels are emitted by reconcile from app.json
+# routing[] (same as machine/console), so none live here.
+#
+# Two privileged mounts, because a control plane manages the stack it runs inside:
+#   - the repo, so it can read every app.json + platform.state.yaml and (later) edit state +
+#     invoke the compiler. The compose `include:` resolves this relative path against THIS file's
+#     dir, exactly like authentik's blueprints mount, so it lands on the host repo on every OS.
+#   - the docker socket, to read live container state (and, in the apply stage, to bring the
+#     compiled desired-state up). rw because applying creates/removes containers — this is the same
+#     root-equivalent trust Portainer takes for a control plane. It is a layer-1 core app, not an
+#     installable third-party one.
+services:
+  app-management:
+    # The image CI publishes for this commit (DGO-41). `pull_policy: missing` means it is
+    # fetched only when it is not here already, so a checkout that has built it is untouched;
+    # the `build:` below stays as the fallback. Needs the GHCR package readable — a package made
+    # from a private repo is private, so `docker login ghcr.io` on a machine that must pull.
+    image: ghcr.io/solomonboltin/digital-office/app-management:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # THE COMPOSE IN THIS IMAGE IS THE HOST'S (scripts/lib.sh exports its version). A container's
+        # identity is the hash of what compose made of its service, and two versions of compose
+        # make two things of one file — so an image that brings containers up with another compose
+        # than the host's re-creates what `bbox run` made, and the other way round. The host's
+        # binary is the one fact; nothing has to be installed, downgraded or held to match a number
+        # written here (the default is what the installers install — gate G74).
+        COMPOSE_VERSION: ${BBOX_COMPOSE_VERSION:-2.40.3}
+    container_name: app-management-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: app-management
+    restart: unless-stopped
+    environment:
+      - SENTRY_DSN=${APP_MANAGEMENT_SENTRY_DSN:-}
+      - DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-bina-deployment}
+      # the compose project the stack runs under (container labels carry it); used to map
+      # service -> container. reconcile applies with --project-directory <repo>, so the project
+      # name is the repo dir basename.
+      - COMPOSE_PROJECT=${COMPOSE_PROJECT_NAME:-deployment-hacohen}
+      # SAME PATH IN AND OUT. The repo is mounted at the absolute path it has on the host, not at
+      # /repo, because this service RUNS COMPOSE (scripts/dc) to bring apps up. Compose resolves a
+      # relative bind source against the compose file's directory and the DAEMON resolves the
+      # result — so from a container holding the repo at /repo, compose emits /repo/apps/<id>/...
+      # to a daemon with no /repo, and docker creates it as a DIRECTORY. Measured: portainer got a
+      # directory where its admin-password file belongs and crash-looped on "could not get the
+      # contents of the file", with a phantom /repo tree left on the host.
+      # BBOX_REPO_HOST is exported by scripts/lib.sh, so every entry point supplies it.
+      - REPO_DIR=${BBOX_REPO_HOST:-/repo}
+      # THE HOST'S FACTS, for the compose this service runs. In here the socket is at
+      # /var/run/docker.sock and the zone is UTC — a container's own, and wrong for what it compiles
+      # into OTHER containers: brought up from the apps screen, 8 services got a different socket
+      # source and 11 a different zone than `bbox run` gives them, and each side re-created what the
+      # other had made (measured 2026-10-06). Whoever creates this container hands it the two facts
+      # — it was handed them the same way, or it is the host — and scripts/lib.sh compiles with them
+      # (`_dcx_run`, `host_tz`). Every service that BRINGS CONTAINERS UP carries these two lines,
+      # and is built with the host's compose (`build.args` above).
+      - BBOX_HOST_DOCKER_SOCK=${BBOX_DOCKER_SOCK:-/var/run/docker.sock}
+      - BBOX_HOST_TZ=${TZ:-UTC}
+    volumes:
+      - ../../:${BBOX_REPO_HOST:-/repo}
+      # Project socket on the host side — see the note in platform-base/traefik/docker-compose.yml.
+      # This one MUTATES containers, so the wrong engine is worse than a bad read.
+      - ${BBOX_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock
+    networks:
+      - traefik-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.05'
+          memory: 64M
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://localhost:8080/healthz',timeout=3).status==200 else 1)"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-5s}
+      retries: 5
+      start_period: 15s
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+
+networks:
+  traefik-network:
+    external: true

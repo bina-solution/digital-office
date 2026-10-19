@@ -1,0 +1,3 @@
+secure n8n webhooks (check if has auth, if storong, make sure)
+full incoming / outgoing trafic objervability / mangment / ruling 
+update env variables and secrets 

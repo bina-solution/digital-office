@@ -1,0 +1,67 @@
+# yaml-language-server: $schema=./schema.json
+title: 'A stale `credsStore: desktop.exe` in ~/.docker/config.json makes every container rebuild that resolves a registry image fail with "error getting credentials"'
+opened: '2026-08-10'
+severity: medium
+status: resolved
+summary: '`/home/shlomo/.docker/config.json` contains `{"credsStore": "desktop.exe"}` — a leftover from Docker Desktop, which is not used on this machine (the stack runs on the project''s own Docker CE inside WSL). The helper binary `docker-credential-desktop` does not exist on PATH in WSL, so the docker CLI cannot execute it and any build step that resolves an image from a registry dies before it starts.'
+description: |
+  id: docker-credsstore-blocks-rebuilds · area: local dev environment / WSL docker
+
+  ## Symptom
+
+  failed to solve: error getting credentials - err: exit status 1, out: ``
+     at: FROM node:20-alpine AS webapp-builder
+
+  It reads as a build failure. It is not — the Dockerfile is fine and the registry is
+  reachable. Nothing is wrong with the image or the network.
+
+  ## Reproduced 2026-08-10
+
+  ```yaml
+  command: docker compose -f .generated/compose.yml -f .generated/routing.override.yml -f .generated/connections.override.yml --project-directory . up -d --no-deps --build incoming-documents
+  result: failed at the first FROM; no container was replaced
+  side_effects: none — neighbours' StartedAt and RestartCount were identical before and after
+  why_it_did_not_bite_sooner: Builds whose base images are already in the local image store do not need to resolve anything, so they succeed. `python:3.12-slim` and `incoming-documents-local:latest` are present; `node:20-alpine` (the webapp builder stage) is not. So the failure is intermittent by image, which makes it look unrelated to configuration.
+  ```
+
+  ## Blast radius
+
+  Any agent, lane, or human rebuilding ANY container whose Dockerfile references a base image not already cached locally. It is not specific to incoming-documents.
+
+  ## Workaround used
+
+  Point DOCKER_CONFIG at a scratch directory holding an empty config, so no credential store is consulted:
+      mkdir -p /tmp/dockercfg && printf '{}' > /tmp/dockercfg/config.json
+      export DOCKER_CONFIG=/tmp/dockercfg
+  The base images in this repo are public and need no authentication. This deliberately does NOT edit the user's real config.
+
+  ## Recommended fix
+
+  Remove the `credsStore` key from ~/.docker/config.json. It names a helper that cannot run in this environment, and there are no stored credentials it could usefully return — Docker Desktop is not the engine here. This is the user's own config file, so it is their call rather than something an agent should silently rewrite; the DOCKER_CONFIG workaround above is sufficient and non-invasive in the meantime.
+
+  ## Related
+
+  The project deliberately never uses Docker Desktop on Windows — bbox.cmd hands off to WSL and uses the project's own Docker CE (see ai/context/running-on-wsl.md). The stale credsStore is residue from a Desktop install and contradicts that design.
+
+  ## Resolved, 2026-10-07 (branch dgo-pair)
+
+  The workaround above is what the CLI does by itself now, for this case and only for it.
+  `scripts/lib.sh` (`docker_creds_guard`, run when the library is loaded — so by `bbox`, by
+  `scripts/dc` and by every hook) reads ONE key of the user's docker client config, the name of the
+  credential helper, and looks for that program on PATH. When it is not there, the process is pointed
+  at an empty client config of the project's own (`data/.docker-client`, ignored by git) and says so
+  once on stderr. The user's file is not edited — that stays their call, as this record says.
+
+  Left exactly as they are: a helper that exists (Docker Desktop on a Mac, a keychain helper), a
+  config that names none, and a `DOCKER_CONFIG` somebody set.
+
+  Held by `scripts/fresh-machine-check.sh`, step 5b, hermetically — three homes of its own and a
+  helper name no machine has:
+
+      missing helper   -> DOCKER_CONFIG = <checkout>/data/.docker-client   (config.json: {})
+      no helper named  -> unchanged
+      helper present   -> unchanged
+      explicit config  -> unchanged
+
+  hp-laptop itself has no such config file today (checked by name only), so the case was reproduced
+  with the fixture, not with this machine's own configuration.

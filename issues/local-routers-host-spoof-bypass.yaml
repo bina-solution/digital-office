@@ -1,0 +1,62 @@
+# yaml-language-server: $schema=./schema.json
+title: "*.localhost (-local) routers bypass auth via spoofed Host header on the public edge"
+opened: "2026-06-16"
+category: security
+severity: high
+status: resolved
+summary: "The open `-local` routers match by Host header only (no source-IP limit); on the VPS, `curl -H 'Host: app.localhost' http://<vps-ip>/` reaches apps unauthenticated."
+
+description: |
+  ## Symptom / risk
+  Every service has a `<app>-local` router `Host(\`app.localhost\`)` on the `web`
+  entrypoint with no `ipallowlist`. Traefik's `web` entrypoint binds 0.0.0.0, so on
+  the public VPS an attacker can send `Host: app.localhost` to `http://<vps-ip>/`
+  and hit the OPEN router, bypassing the Authentik that protects the public domain.
+
+  ## Progress this session
+  The 5 Authentik-gated dashboard apps' `-local` routers now carry
+  `middlewares=authentik` (machine, homepage, redisinsight, traefik, any-concurrency),
+  so those are gated in BOTH environments (closes the bypass for them). STILL OPEN:
+  the `-local` routers of self-auth apps (portainer, n8n, glitchtip, apitools,
+  wadmin, browser42) and any others — reachable via Host spoof on the VPS.
+
+  ## Fix options
+  1. **ipallowlist** on all remaining `-local` routers (loopback + RFC1918) — mirrors
+     the existing `db-ipallowlist`/`redis-ipallowlist` pattern. Simple, dependency-free,
+     closes the bypass without touching auth. Recommended for the self-auth apps.
+  2. Or disable the `-local` routers on the VPS profile entirely (entrypoint toggle).
+
+  ## Where it stands (2026-10-07, hp-laptop, branch dgo-pair) - closed by a different rule than planned
+
+  The ipallowlist was never built, and is no longer what closes this. What does:
+
+  - EVERY router of a host the manifest gates with `auth: sso` carries the forward-auth
+    middleware - `-local`, `-http` and `-https` alike. The compiler does it for the routers it
+    emits; for hand-written labels G21 invariant 4 refuses anything else (2026-10-07; it found one
+    such router on its first run, `browser42-http`, and that is closed). So a spoofed
+    `Host: app.localhost` on the public address reaches the sign-in, exactly like the public name.
+  - The four routers the 2026-07-30 triage left open - n8n, glitchtip, portainer, authentik - are
+    `auth: none` hosts: apps with a login of their own (and the identity provider itself). Their
+    `-local` router leads to the same door as their public name; there is no authentik in front
+    of either to go around.
+  - Read off every compose file: 20 services write their own routers, and on none of them does a
+    whole-host router carry a different set of middlewares from its twins.
+
+  Measured from outside, unauthenticated, one GET each with a `.localhost` Host header at the
+  public address:
+
+      console.localhost    302 -> the office's sign-in
+      apitools.localhost   302 -> the office's sign-in
+      drive.localhost      302 -> the office's sign-in
+      machine.localhost    302 -> the office's sign-in
+      browser42.localhost  404    (not routed on that office)
+      nobody-declared      404    (the control)
+
+tasks:
+  - { text: "Every router of an auth:sso host carries the forward-auth middleware - the compiler for what it emits, G21 invariant 4 for hand-written labels", done: true }
+  - { text: "DECIDED AGAINST the local-only ipallowlist: with sign-in on every router of a gated host there is nothing left for it to close, and an auth:none app's -local router is the same door as its public name", done: true }
+  - { text: "Verified from outside: a .localhost Host header at the public address reaches the sign-in for the gated hosts tried (4 of 4), 404 for a host that is not routed", done: true }
+
+references:
+  - production/compose.override.yml
+  - compose.yml

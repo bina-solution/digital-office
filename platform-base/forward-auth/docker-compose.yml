@@ -1,0 +1,78 @@
+# forward-auth — the office's identity service as ONE Go binary (core-006).
+#
+# WHY IT IS DECLARED BEFORE IT IS USED. Nothing in the running edge points at this service: the
+# forwardAuth middleware in platform-base/traefik/config/authentik-forwardauth.yaml still addresses
+# `authentik-server:9000`, and that is the deliberate order — the service comes up, proves it reads
+# authentik's own password hashes and accepts the sessions authentik minted, and only then does step 6
+# move the middleware's `address` to it. Until that edit, a container here authenticates nobody.
+#
+# It exists in the render because the window's own procedure starts with `./scripts/dc up -d
+# forward-auth` (ai/context/core-go-forward-auth.md §6.6), and a service the compiler does not know
+# resolves to NOTHING: `dc up -d forward-auth` is the silent no-op the office warns about — exit 0,
+# no container, and the next step measures whatever was there before.
+#
+# PORT 9078, not the binary's default 9000: `authentik-server` already answers on 9000 in this
+# network, and one port per service is how this office's addresses stay readable. The image's own
+# HEALTHCHECK probes its compiled-in :9000, so the healthcheck is overridden here to the port this
+# container actually listens on — otherwise the container is healthy only by accident, or unhealthy
+# forever and restarted by autoheal.
+#
+# THE PREP FILES ARE NOT IN THE REPOSITORY. The users file (password hashes from authentik's own
+# database) and — during the migration only — the sessions snapshot live in `/tmp/forward-auth` on
+# the host, `chmod 600` and owned by 65534 (the uid the image runs as: `scratch` has no /etc/passwd,
+# and a service whose whole job is deciding who may enter does not run as root). The host directory
+# itself is mode 711: traversal for the container's uid, no listing. A file at 600 root-owned is
+# unreadable by the container, and the service refuses to start without a users file — measured
+# shape, not a guess: `loadUsers` returns the read error, `main` fatal-logs it.
+services:
+  forward-auth:
+    # The image CI publishes for this commit (DGO-41). `pull_policy: missing` means it is fetched
+    # only when it is not here already, so a checkout that has built it is untouched; the `build:`
+    # below stays as the fallback.
+    image: ghcr.io/solomonboltin/digital-office/forward-auth:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: forward-auth-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: forward-auth
+    restart: unless-stopped
+    environment:
+      # Required, and there is no default for any of the three: a service that starts without a
+      # signing key signs every session with an empty one (see the binary's own message).
+      - FORWARD_AUTH_SECRET=${FORWARD_AUTH_SECRET:-}
+      # Where a BROWSER reaches this service. Never derived from a request — a redirect target built
+      # from a header is an open redirect.
+      - FORWARD_AUTH_EXTERNAL_URL=${FORWARD_AUTH_EXTERNAL_URL:-http://auth.${DEPLOYMENT_DOMAIN:-localhost}}
+      # Which hosts this office serves: the bound on every return-to URL. `.localhost` = every host
+      # under it; the domain itself is added separately when the edge carries one.
+      - FORWARD_AUTH_ALLOWED_HOSTS=${FORWARD_AUTH_ALLOWED_HOSTS:-.${DEPLOYMENT_DOMAIN:-localhost}}
+      - FORWARD_AUTH_USERS_FILE=/etc/forward-auth/users
+      - FORWARD_AUTH_LISTEN=:9078
+      # THE MIGRATION PAIR, both-or-neither, and EMPTY IS OFF (the binary's own rule): the first
+      # verifies authentik's cookie, the second names which of its sessions are still live. The
+      # window sets both in .env for the length of the migration and recreates this one container.
+      - FORWARD_AUTH_LEGACY_SECRET=${FORWARD_AUTH_LEGACY_SECRET:-}
+      - FORWARD_AUTH_LEGACY_SESSIONS=${FORWARD_AUTH_LEGACY_SESSIONS:-}
+      - TZ=${TZ:-Asia/Jerusalem}
+    volumes:
+      # The prep files, read-only, at the path the binary reads once at boot. On the HOST, OUTSIDE
+      # the checkout — they are secrets (password hashes, session ids) and must never enter git.
+      # `/var/lib`, not `/tmp`: measured 2026-10-10 — the host's /tmp was wiped, the users file went
+      # with it, and the service crash-looped (the file is required to boot), taking the office's
+      # notifications with it until somebody noticed. Secrets a service boots on do not live in a
+      # directory the machine is free to empty.
+      - /var/lib/forward-auth:/etc/forward-auth:ro
+    networks:
+      - traefik-network
+    healthcheck:
+      # The image's own probe, pointed at the port this container listens on.
+      test: ["CMD", "/forward-auth", "-health", "http://127.0.0.1:9078/healthz"]
+      interval: 30s
+      timeout: 5s
+      start_period: 5s
+      retries: 3
+
+networks:
+  traefik-network:
+    external: true

@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+set -euo pipefail
+export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
+# n8n-status — read-only health/drift report for the n8n blueprint vs the live instance.
+#   - encryption-key fingerprint match (blueprint vs instance)
+#   - workflows: blueprint files vs live DB count; active/published parity
+#   - credentials: total, env-managed (credential_overrides), OAuth (bootstrapped)
+#   - git drift: uncommitted blueprint changes
+# Usage: scripts/n8n-status [--brief]    (--brief: 2-line summary for `bbox status`)
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # read_env, DN, N8N_CONTAINER/PG_CONTAINER, colors, ok/warn/bad, running, pgq
+N8N="${N8N_CONTAINER}"; PG="${PG_CONTAINER}"
+N8N_DIR="${REPO_ROOT}/apps/n8n"; WF_DIR="${N8N_DIR}/blueprint/n8n"; BP="${N8N_DIR}/blueprint.yml"
+BRIEF=0; [ "${1:-}" = "--brief" ] && BRIEF=1
+
+running "${N8N}" || { echo "${cr}n8n not running${c0} (${N8N}) — 'bbox run'"; exit 1; }
+
+# --- counts ---
+# Count what push would actually stage: the ENABLED apps' blueprint dirs (reconcile.py is the
+# same source of truth the push hook uses — a disabled gallery app's workflows are deliberately
+# absent live and must not read as drift). Blueprints are CODE (*.workflow.ts) since the
+# 2026-08-16 flip; legacy *.json is still counted so a mid-migration checkout reads true.
+WF_FILES=$( { ( cd "${REPO_ROOT}" && python3 platform/manager/reconcile.py blueprints 2>/dev/null | tr -d '\r' | cut -f2 ) \
+              | while IFS= read -r _rel; do
+                  [ -n "${_rel}" ] && find "${REPO_ROOT}/${_rel}" -maxdepth 1 \( -name '*.workflow.ts' -o -name '*.json' \) 2>/dev/null
+                done; } \
+            | sed 's/\.workflow\.ts$//; s/\.json$//' | sort -u | wc -l | tr -d ' ')
+WF_LIVE=$(pgq "select count(*) from workflow_entity;"); WF_LIVE=${WF_LIVE:-?}
+ACT_LIVE=$(pgq "select count(*) from workflow_entity where active=true;"); ACT_LIVE=${ACT_LIVE:-?}
+PUB_LIVE=$(pgq "select count(*) from workflow_entity where active=true and \"activeVersionId\" is not null;"); PUB_LIVE=${PUB_LIVE:-?}
+CRED_LIVE=$(pgq "select count(*) from credentials_entity;"); CRED_LIVE=${CRED_LIVE:-?}
+OVR=$(sed -n '/^credential_overrides:/,$p' "${BP}" 2>/dev/null | grep -cE '^[[:space:]]{2}[A-Za-z0-9_-]+:[[:space:]]*\{' || true)
+TAGS_LIVE=$(pgq "select count(*) from tag_entity;"); TAGS_LIVE=${TAGS_LIVE:-?}
+
+# --- key fingerprint ---
+# WHAT IS COMPARED, AND WHY NOT THE BLUEPRINT'S COMMITTED VALUE. `encryption_key_fingerprint:` in
+# blueprint.yml is the fingerprint of the key the TEMPLATE ships (.env.ex). A committed value can
+# only ever describe ONE deployment: an office whose .env was generated — every fresh install — has
+# a different key, so it read "DRIFT" forever while the fact that matters was fine. That fact is
+# whether the RUNNING instance can still decrypt its credentials after the next boot, i.e. whether
+# it matches the key the stack starts with — .env's. Measured on hp 2026-10-09: instance
+# 7baad35cb7d9bfbe = .env 7baad35cb7d9bfbe (consistent), blueprint 77aee1e843d268cd (the
+# template's), reported as drift with nothing wrong.
+KEY="$(docker exec "${N8N}" printenv N8N_ENCRYPTION_KEY 2>/dev/null | tr -d '\r' || true)"
+_fp() { printf '%s' "$1" | { command -v sha256sum >/dev/null 2>&1 && sha256sum || shasum -a 256; } | cut -c1-16; }
+FP_HAVE="$(_fp "${KEY}")"
+FP_ENV="$(_fp "$(read_env N8N_ENCRYPTION_KEY 2>/dev/null || true)")"
+FP_TPL="$(grep -E '^encryption_key_fingerprint:' "${BP}" 2>/dev/null | sed -E 's/.*"(.*)".*/\1/')"
+
+# --- git drift ---
+DRIFT=$(cd "${REPO_ROOT}" && git status --short -- apps/n8n 2>/dev/null | grep -c . || true)
+
+# --- CO-OP SYNC (live is the source of truth; humans edit the UI, agents edit code) ---------
+# The push cache records each workflow's live versionId at last pull/push. A LIVE versionId
+# that differs means a human (or another agent) changed it since — the agent must PULL before
+# editing. Reported per app, by name, because "3 stale" is not actionable and "which three" is.
+PUB_MISMATCH=$(pgq "select count(*) from workflow_entity where active=true and (\"activeVersionId\" is null or \"versionId\"<>\"activeVersionId\");"); PUB_MISMATCH=${PUB_MISMATCH:-?}
+CACHE_DIR="${N8N_DIR}/.push-cache"
+PULL_NEEDED=""
+if ls "${CACHE_DIR}"/*.tsv >/dev/null 2>&1; then
+  # updatedAt-epoch-ms, matching the push-cache's base column (versionId is stable across
+  # saves on n8n 2.17 — measured — so it cannot detect edits)
+  _live_vids="$(pgq 'select id||chr(9)||coalesce(((extract(epoch from "updatedAt")*1000)::bigint)::text,'"'"''"'"') from workflow_entity')"
+  for _c in "${CACHE_DIR}"/*.tsv; do
+    _app="$(basename "${_c}" .tsv)"
+    _stale="$(awk -F'\t' 'NR==FNR{live[$1]=$2;next} { if(($2 in live) && live[$2]!=$3) print $2 }' \
+              <(printf '%s\n' "${_live_vids}") "${_c}" 2>/dev/null | tr '\n' ' ')"
+    [ -n "${_stale// /}" ] && PULL_NEEDED="${PULL_NEEDED}${_app}: ${_stale}
+"
+  done
+fi
+
+if [ "${BRIEF}" = "1" ]; then
+  keymark="${cg}key✓${c0}"; [ "${FP_ENV}" != "${FP_HAVE}" ] && keymark="${cy}key-drift${c0}"
+  driftmark="${cg}clean${c0}"; [ "${DRIFT}" -gt 0 ] 2>/dev/null && driftmark="${cy}${DRIFT} uncommitted${c0}"
+  syncmark="${cg}synced${c0}"; [ -n "${PULL_NEEDED}" ] && syncmark="${cy}pull needed$(printf '%s' "${PULL_NEEDED}" | grep -c .) app(s)${c0}"
+  echo "  n8n: ${WF_LIVE} wf (${ACT_LIVE} active/${PUB_LIVE} published) · ${CRED_LIVE} creds · ${keymark} · blueprint ${driftmark} · ${syncmark}"
+  exit 0
+fi
+
+echo "n8n status — ${DN}"
+echo "[workflows]"
+[ "${WF_FILES}" = "${WF_LIVE}" ] && ok "blueprint ${WF_FILES} == live ${WF_LIVE}" || warn "blueprint ${WF_FILES} vs live ${WF_LIVE} (drift)"
+[ "${ACT_LIVE}" = "${PUB_LIVE}" ] && ok "active=${ACT_LIVE}, all published (activeVersionId set)" || bad "active=${ACT_LIVE} but only ${PUB_LIVE} published — run 'bbox n8n push'"
+echo "[credentials]"
+ok "live=${CRED_LIVE}  ·  env-managed (credential_overrides)=${OVR}  ·  OAuth bootstrapped=$(pgq "select count(*) from credentials_entity where type like '%OAuth2%' or type='gmailOAuth2';")"
+echo "[encryption key]"
+_tplnote=""; [ -n "${FP_TPL}" ] && _tplnote="; the template ships ${FP_TPL} instead"
+if [ -z "${FP_ENV}" ]; then
+  warn "no N8N_ENCRYPTION_KEY in .env — cannot tell which key the next boot uses"
+elif [ "${FP_ENV}" = "${FP_HAVE}" ]; then
+  ok "instance matches .env (${FP_HAVE})${_tplnote}"
+else
+  warn "DRIFT: .env=${FP_ENV} instance=${FP_HAVE} → the instance holds credentials encrypted with another key: the next boot cannot decrypt them, OAuth needs re-auth, env-managed creds reseed on push"
+fi
+echo "[git]"
+[ "${DRIFT}" -gt 0 ] 2>/dev/null && warn "${DRIFT} uncommitted change(s) under apps/n8n — 'git status' / commit" || ok "blueprint committed (no drift)"
+echo "[tags] live=${TAGS_LIVE}"
+echo "[sync] live is the source of truth — pull before editing, push right after"
+[ "${PUB_MISMATCH}" != "0" ] && warn "${PUB_MISMATCH} active workflow(s) run an OLDER published version than their latest draft — 'bbox n8n push <app> <wfId>' publishes the draft"
+if [ -n "${PULL_NEEDED}" ]; then
+  printf '%s' "${PULL_NEEDED}" | while IFS= read -r _l; do
+    [ -n "${_l}" ] && warn "changed LIVE since last sync — ${_l% } → 'bbox n8n pull ${_l%%:*} <wfId>' before editing"
+  done
+else
+  ok "code matches the last-synced live versions (no UI edits since)"
+fi

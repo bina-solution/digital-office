@@ -1,0 +1,37 @@
+title: gmail-imap throughput bottlenecks under high load (single connection + label-search scaling)
+status: resolved  # 2026-07-30 triage: FIXED — both bottlenecks are implemented in apps/mail/mailapi/app.py: APPENDUID labelling (:828-833, replaces the O(n) Message-ID search) and a fixed-size read pool separate from the write lock (:67 GMAIL_IMAP_READ_POOL=10, :333/:353-374).
+created: 2026-06-22
+priority: high
+context: |
+  First clean-start high-load INDOX verification on the new IMAP backend (target: 100 docs/type/source
+  → all COMPLETED in 10 min, zero errors). Injection of 400 docs (100 each invoice/BS/shipment/unknown)
+  via the no-quota IMAP /append path WORKS (the migration unblocked high-load injection — impossible
+  before due to Gmail messages.insert rate limits). But the run surfaced throughput bottlenecks that
+  prevent meeting the 10-min bar:
+
+  1. SINGLE LOCKED IMAP CONNECTION. gmail-imap holds one IMAPClient guarded by a threading.Lock (by
+     design — imapclient is stateful, Gmail caps simultaneous IMAP conns). Every op (inject /append,
+     scanner /search, downloader /message+attachments, /labels add/remove) serializes on that one lock.
+     During the 400-doc injection, appends monopolized the connection: ~66 appends vs 1 scanner /search
+     per 3 min — scanners were STARVED, so supabase processing barely started while injection ran.
+  2. /append LABEL-ADD SCALES O(n) WITH INBOX SIZE. After APPEND, /append finds the new message by
+     `search(["HEADER","Message-ID",mid])` in the folder, then adds labels. As INBOX fills, that search
+     gets slower → injection decelerated from ~66/3min to ~14/3min (≈250/400 after ~10 min, still going).
+  3. HOST MEMORY PRESSURE. Under the combined injection+processing load the Docker Desktop engine
+     (~8GB) returned 500s on the API (see [[stack-memory-pressure-flakiness]]) — destabilizing probes
+     and processing. Same root cause as the browser42 slowness + BS-sync GDrive-trigger DNS flakes.
+action: |
+  - /append: label via the APPENDUID returned by the IMAP APPEND (RFC 4315 UIDPLUS) instead of a
+    Message-ID search — O(1) per doc, removes the INBOX-size slowdown. imapclient append() returns the
+    UID when the server supports UIDPLUS (Gmail does). Apply labels to that uid directly.
+  - Add a small READ connection pool (or a second IMAPClient) for /search + /message so scanners and
+    downloaders are not starved behind injection/label writes. Keep writes on the single locked conn.
+    (Gmail allows up to ~15 simultaneous IMAP connections per account — a pool of 3-4 is safe.)
+  - For verification runs: inject as a separate burst, then let scanners drain — don't overlap heavy
+    injection with processing on the shared connection. Or throttle injection.
+  - Host: run the low-memory-mode runbook (ai/context/low-memory-mode.md) and/or give Docker more RAM
+    before high-load runs so the engine doesn't 500.
+why_deferred: |
+  The IMAP layer is FUNCTIONALLY correct (earlier verified: scanners/downloaders/label-engine all
+  process docs through it with 0 errors). These are PERFORMANCE/throughput issues that only appear at
+  100s-of-docs scale and block the 10-min high-load bar. Fixing #1 and #2 is the path to meeting it.

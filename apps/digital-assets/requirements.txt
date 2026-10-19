@@ -1,0 +1,9 @@
+# digital-assets — the store is SQLite (stdlib); Pillow for image metadata and thumbnails; cairosvg
+# (with libcairo2 from the image) to turn an SVG logo into the PNG every social platform requires.
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+requests==2.32.3
+PyYAML==6.0.2
+python-multipart==0.0.20
+Pillow==11.0.0
+cairosvg==2.7.1

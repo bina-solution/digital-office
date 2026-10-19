@@ -1,0 +1,953 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>מכונה</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230e9f6e'/%3E%3Cpath d='M8 9h16v14H8z' fill='%23eafaf3'/%3E%3Cpath d='M11 12h10v2H11zm0 4h7v2h-7z' fill='%23087f57'/%3E%3C/svg%3E">
+<style>
+/* ── what is this screen's own: radii and type. The colours are the office's palette, in the
+      generated block below — nothing here writes one. ── */
+:root{--radius:16px;--radius-sm:9px;--radius-pill:999px;
+--font:"Segoe UI",system-ui,-apple-system,"Noto Sans Hebrew","Assistant",Arial,sans-serif;
+--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+/* @bina-theme-tokens:start */
+/* OLIVE GROVE — the one palette of the office (the owner, 2026-10-07 · DGO-450). Four hues, sampled
+   from his mock-up, and the ground they stand on. A screen never writes a colour: it names one of
+   these. Each hue is the colour itself (a FILL — a button, a bar, a dot), «-d» for text and thin
+   lines on the ground (4.5:1 or more), «-soft» and «-line» for a tint and its hairline, and «-ink»
+   for what is written ON the fill. The role names every screen already uses point at them:
+   (no backtick in this block: one of its copies lives inside a script's template string)
+     olive  the brand and the main action · what is well, what is done
+     sky    what is in motion, what only informs · a link
+     lime   look here — a warning, something waiting
+     plum   a person must act — a failure, a removal, the one final action
+   Contrast, measured (WCAG): ink on the ground 13.7 · muted 4.65 · light text on olive 5.51 and on
+   plum 9.54 · ink on lime 6.88 · its ink on sky 6.32 · sky-d 4.61 · lime-d 4.70 · violet 5.32 ·
+   on the desk: its ink 6.32 (dark: 13.96), and 11.2 where the sky pales (dark: 5.12). */
+:root,:root[data-theme="light"]{
+  color-scheme:light;
+  accent-color:var(--accent);   /* the browser's OWN controls - a checkbox, a radio, a range, a progress bar - on both grounds: said once, here (it was said for eight single controls, and every other one was the browser's blue) */
+  --bg:#f3f5f7; --surface:#fff; --surface-2:#f9fafb; --ink:#1f2a17; --muted:#6a7068; --line:#dcdfde;
+  --olive:#56693f; --olive-d:#475734; --olive-soft:#e7eae4; --olive-line:#bfc6b6; --olive-ink:#f3f5f7;
+  --sky:#7baae3; --sky-d:#2a6fc4; --sky-soft:#edf3fb; --sky-line:#cddff4; --sky-ink:#13263f;
+  --lime:#a9b84c; --lime-d:#69732e; --lime-soft:#f3f5e6; --lime-line:#dee4bb; --lime-ink:#1f2a17;
+  --plum:#5b3349; --plum-d:#4a303b; --plum-soft:#e8e2e6; --plum-line:#c1b1ba; --plum-ink:#f3f5f7;
+  --accent:var(--olive); --accent-d:var(--olive-d); --accent-soft:var(--olive-soft); --accent-ink:var(--olive-ink);
+  --blue:var(--sky-d); --amber:var(--lime-d); --red:var(--plum);
+  --violet:#7c5c6d;   /* plum, lifted a fifth toward white: someone has to look — nothing has failed */
+  --ok:var(--olive); --warn:var(--lime-d); --danger:var(--plum); --info:var(--sky-d);
+  --ok-soft:var(--olive-soft); --warn-soft:var(--lime-soft); --danger-soft:var(--plum-soft); --info-soft:var(--sky-soft);
+  --red-soft:var(--plum-soft); --amber-soft:var(--lime-soft); --blue-soft:var(--sky-soft); --violet-soft:var(--plum-soft);
+  --side:var(--olive); --side-ink:#f3f5f7; --side-mut:#dce1da; --side-line:#788765;
+  --desk:var(--sky); --desk-ink:var(--sky-ink);   /* desktop mode's ground is the sky (the owner, DGO-452), and what is written straight on it */
+  --scrim:rgba(31,42,23,.5);                      /* what dims a screen behind a pop-up */
+  --shadow:0 1px 3px rgba(31,42,23,.08),0 6px 24px rgba(31,42,23,.06);
+  --shadow-lg:0 20px 60px rgba(31,42,23,.28);
+  /* ONE COLOUR AND ONE ANIMAL PER OFFICE (the owner, 2026-10-09 · flt-002). When offices are linked,
+     a person reads WHICH office a thing belongs to without opening it, so each office gets a hue of
+     its own. The hue is an IDENTITY and never a health state: an office that stopped answering keeps
+     its colour, and the quiet mark is the one that says "not answering". Each is an ALIAS of the
+     palette's own hue — no fourth value is invented, and because the ground re-points the hue, the
+     office mark follows the ground by itself. Each office's animal (elephant, deer, eagle) is a
+     glyph of bina-icons.js. */
+  --office-hp:var(--muted);   /* hp · elephant — grey: the heavy laptop at home, in the palette's own grey */
+  --office-mac:var(--lime);   /* macbook · deer — yellow: the palette has one yellow and it is lime. A FILL, so what is written ON it is --lime-ink, never this */
+  --office-vps:var(--sky-d);  /* vps · eagle — deep sky blue, «the eagle in the clouds». THE OWNER'S OWN CHOICE (2026-10-09, in writing: vps = נשר + כחול-שמיים) — this line is the colour he picked, not a default kept for him */
+}
+
+/* ── A LINKED OFFICE'S MARK, BY NAME (flt-004) ───────────────────────────────────────────────
+   The link carries a NAME — mark: {color, animal} in the catalog, from the office's own identity
+   — and never a value: the office that DRAWS a linked tile owns the pixels, so it paints the name
+   with its own palette. These seven rules are that translation, one per family above; a screen sets
+   data-office-hue="lime" and paints var(--office-hue).
+   A name this file does not know paints nothing, which is why the vocabulary in
+   apps/dgo-extend/identity.py may only name families that exist here — and why --red and --ok
+   are not among them: they mean «danger» and «it is well» on every screen in the office. */
+[data-office-hue="grey"]   { --office-hue:var(--muted); }
+[data-office-hue="lime"]   { --office-hue:var(--lime); }
+[data-office-hue="sky"]    { --office-hue:var(--sky-d); }
+[data-office-hue="olive"]  { --office-hue:var(--olive-d); }
+[data-office-hue="plum"]   { --office-hue:var(--plum); }
+[data-office-hue="blue"]   { --office-hue:var(--blue); }
+[data-office-hue="violet"] { --office-hue:var(--violet); }
+/* the dark ground is the same four hues on the palette's own ink, and the SAME legend. Olive on that
+   ink is 2.5:1, so its text step there is olive LIFTED — its own hue and saturation, lighter (7.14
+   on a card, 4.82 on its own tint) — and the brand, the main action and «it is well» take that step.
+   Lime stays «look here» and the sky «in motion», as on the light ground: were lime the accent here
+   (it was, for a day), a warning, a selection and «it is well» were one colour. Each «-d» on its
+   own «-soft» there, measured: olive 4.82 · sky 4.62 · lime 4.63 · plum 4.71. */
+@media (prefers-color-scheme:dark){
+  :root{ color-scheme:dark;
+         --bg:#141b0f; --surface:#1f2a17; --surface-2:#192213; --ink:#f3f5f7; --muted:#a2a8a2; --line:#414a3b;
+         --olive-d:#a5ba8c; --olive-soft:#384629; --olive-line:#56693f;
+         --sky-d:#7baae3; --sky-soft:#2e3f38; --sky-line:#4d6a8c;
+         --lime-d:#a9b84c; --lime-soft:#3b4622; --lime-line:#69732e;
+         --plum-d:#ad99a4; --plum-soft:#402f33; --plum-line:#7c5c6d;
+         --accent:var(--olive-d); --accent-ink:var(--surface);
+         --red:#ad99a4; --violet:#bdadb6; --danger:#ad99a4; --ok:var(--olive-d); --side:var(--surface);
+         --desk:var(--sky-ink); --desk-ink:var(--ink); --scrim:rgba(0,0,0,.6);
+         --shadow:0 1px 3px rgba(0,0,0,.4),0 6px 24px rgba(0,0,0,.3);
+         --shadow-lg:0 20px 60px rgba(0,0,0,.55); }
+}
+:root[data-theme="midnight"]{
+  color-scheme:dark;
+  --bg:#141b0f; --surface:#1f2a17; --surface-2:#192213; --ink:#f3f5f7; --muted:#a2a8a2; --line:#414a3b;
+  --olive-d:#a5ba8c; --olive-soft:#384629; --olive-line:#56693f;
+  --sky-d:#7baae3; --sky-soft:#2e3f38; --sky-line:#4d6a8c;
+  --lime-d:#a9b84c; --lime-soft:#3b4622; --lime-line:#69732e;
+  --plum-d:#ad99a4; --plum-soft:#402f33; --plum-line:#7c5c6d;
+  --accent:var(--olive-d); --accent-ink:var(--surface);
+  --red:#ad99a4; --violet:#bdadb6; --danger:#ad99a4; --ok:var(--olive-d); --side:var(--surface);
+  --desk:var(--sky-ink); --desk-ink:var(--ink); --scrim:rgba(0,0,0,.6);
+  --shadow:0 1px 3px rgba(0,0,0,.4),0 6px 24px rgba(0,0,0,.3);
+  --shadow-lg:0 20px 60px rgba(0,0,0,.55);
+}
+/* THE KEYBOARD'S RING - what the browser draws around the stop the keyboard is on, in the palette, wherever
+   a part draws none of its own. It has no specificity at all (:where), so any rule of a part wins. Two
+   screens said this for themselves; on the others nearly every stop wore the browser's ring (DGO-455).
+   A field keeps the offset it has - fourteen rules draw a field's own outline and say no offset. An area
+   (a scroll box, a table) takes the ring inside, where nothing clips it; a control takes it outside,
+   where a filled button does not hide it. */
+:where(:focus-visible){outline:2px solid var(--accent)}
+:where(:focus-visible:not(a,button,summary,[role=button],input,select,textarea)){outline-offset:-2px}
+:where(a,button,summary,[role=button]):focus-visible{outline-offset:2px}
+/* HEBREW AT A HEAVY WEIGHT - on Windows, where the first family of --font is installed. "Segoe UI" has its
+   Hebrew in Light, Regular, Semibold and Bold. Asked for 800 or 900 the browser takes the family's Black
+   face, which has none, and so has every family after it - so the Hebrew of every title at 800 was drawn in
+   the system's last-resort serif, thin, beside Latin in Black: «חשבונות ומראות» at 20px is 150px wide at 700
+   and 120px at 800 (Chrome 154; the screens ask for 800 in 167 places, the question's title among them).
+   These faces give the family's HEBREW RANGE the faces that have it. A family a sheet names is no longer the
+   system's for those characters, so every weight and both styles are named, each as the system resolves it:
+   measured, only upright 800 and 900 change. Any other character is not theirs and goes on to the next
+   family the screen names - system-ui in --font, on Windows the same faces, Black included - which is why
+   G27 asks that system-ui follows wherever a screen names this family itself. Where the family is not
+   installed nothing here resolves and nothing changes. */
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Light");font-weight:100 300;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI");font-weight:400;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Semibold");font-weight:500 600;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Bold");font-weight:700 900;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Light Italic");font-weight:100 300;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Italic");font-weight:400;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Semibold Italic");font-weight:500 600;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Bold Italic");font-weight:700 900;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+/* @bina-theme-tokens:end */
+*{box-sizing:border-box}html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--font);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.mono{font-family:var(--mono)}
+.num{direction:ltr;unicode-bidi:isolate;font-variant-numeric:tabular-nums}
+
+/* page shell — fill the width like the console content area (was max-width:1080 → under-filled) */
+.wrap{width:100%;max-width:1440px;margin:0 auto;padding:22px 26px 44px}
+
+/* cards */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px;box-shadow:var(--shadow);margin-bottom:16px}
+.card>h3{margin:0 0 12px;font-size:15px;font-weight:700;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.cols{display:grid;gap:16px;margin-bottom:16px}
+.cols-7-5{grid-template-columns:1.55fr 1fr}
+.cols .card{margin-bottom:0}
+@media (max-width:900px){.cols-7-5{grid-template-columns:1fr}}
+
+/* KPI tiles — spanning strip (auto-fit fills width, 2026 metric-strip pattern) */
+/* Five tiles are 5, or 3 + 2 filling the row, or 2 + 2 + one wide: `auto-fit` left a hole at three
+   columns and stacked them one a row on a phone — 530px before any content. */
+.tiles{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px;margin-bottom:16px}
+@media (max-width:1000px){.tiles{grid-template-columns:repeat(6,minmax(0,1fr))}
+  .tile{grid-column:span 2}.tile:nth-child(n+4){grid-column:span 3}}
+@media (max-width:560px){.tiles{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .tile,.tile:nth-child(n+4){grid-column:auto}.tile:last-child{grid-column:1/-1}}
+/* a short frame (a window in desktop mode): the five readings are compact — the number, its
+   chips, a thin chart — so the first screenful is the machine, not two and a half tiles of it */
+@media (max-height:699px){
+  .tiles{gap:8px;margin-bottom:10px}
+  .tiles .tile{padding:8px 10px}
+  .tiles .pg-kpi-v{font-size:20px;line-height:24px;margin-top:0}
+  .tile .spark{height:20px;margin-top:4px}
+  .tile .bar{margin-top:6px}
+  .tile .chip{font-size:10.5px;padding:1px 7px}
+}
+/* the tile is the office's (.pg-kpi); this screen adds a chip beside the number and a chart under it */
+.tile .thead{display:flex;justify-content:space-between;align-items:flex-start;gap:6px 8px;flex-wrap:wrap}
+.tile .chip{font-size:11px;font-weight:700;color:var(--muted);background:var(--surface-2);border:1px solid var(--line);border-radius:var(--radius-pill);padding:2px 9px;white-space:nowrap}
+.tile .chip.ok{background:var(--accent-soft);border-color:var(--olive-line);color:var(--accent-d)}
+.tile .chip.warn{background:var(--warn-soft);border-color:var(--lime-line);color:var(--amber)}
+.tile .chip.bad{background:var(--danger-soft);border-color:var(--plum-line);color:var(--red)}
+.tile .spark{width:100%;height:34px;display:block;margin-top:10px}
+.bar{width:100%;height:7px;border-radius:5px;background:var(--surface-2);overflow:hidden;margin-top:11px;border:1px solid var(--line)}
+.fill{height:100%;background:var(--blue);width:0%;transition:width .35s ease}
+.fill.green{background:var(--accent)}.fill.yellow{background:var(--amber)}.fill.red{background:var(--red)}
+
+/* skeleton shimmer (initial load) */
+.skel{color:transparent!important;background:linear-gradient(90deg,var(--surface-2) 25%,var(--line) 37%,var(--surface-2) 63%);
+      background-size:400% 100%;animation:shimmer 1.3s infinite;border-radius:6px}
+@keyframes shimmer{0%{background-position:100% 0}100%{background-position:-100% 0}}
+
+/* key/value blocks */
+.kv{display:grid;grid-template-columns:minmax(110px,170px) 1fr;gap:9px 12px;font-size:13px}
+.kv .k{color:var(--muted)}
+.kv .v{min-width:0;overflow-wrap:anywhere}
+
+/* resource chart */
+.chart-wrap{position:relative}
+canvas#resourceChart{display:block;width:100%;height:230px}
+.legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:6px}
+.legend .li{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.legend .sw{width:11px;height:3px;border-radius:2px}
+.legend b{color:var(--ink);font-variant-numeric:tabular-nums;margin-inline-start:2px;direction:ltr;unicode-bidi:isolate}
+.chart-tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--surface);font-size:11px;padding:6px 9px;border-radius:7px;
+           white-space:nowrap;opacity:0;transition:opacity .1s;transform:translate(-50%,-115%);z-index:5;box-shadow:var(--shadow-lg)}
+.chart-tip .r{display:block}
+
+/* table */
+.tableWrap{overflow:auto;max-height:560px;border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+.table{width:100%;border-collapse:collapse;background:var(--surface);font-size:13px;min-width:960px}
+.table th,.table td{padding:10px 13px;text-align:start;border-bottom:1px solid var(--line);white-space:nowrap;vertical-align:middle}
+.table th{background:var(--surface-2);color:var(--muted);font-weight:600;font-size:11px;letter-spacing:.04em;position:sticky;top:0;z-index:1}
+.table th.sortable{cursor:pointer;user-select:none}
+.table th.sortable:hover{color:var(--ink)}
+.table th .ind{color:var(--accent-d);font-weight:800;margin-inline-start:3px}
+.table tr:last-child td{border-bottom:none}
+.table tbody tr:hover td{background:var(--surface-2)}
+.table td.name{font-weight:600}
+.status{font-size:11px;padding:2px 9px;border-radius:var(--radius-pill);border:1px solid var(--line);background:var(--surface-2);color:var(--muted);font-weight:700;display:inline-block}
+.status.running,.status.healthy{color:var(--accent-d);border-color:var(--olive-line);background:var(--accent-soft)}
+.status.unhealthy,.status.exited,.status.dead{color:var(--red);border-color:var(--plum-line);background:var(--danger-soft)}
+.status.starting,.status.restarting{color:var(--blue);border-color:var(--sky-line);background:var(--info-soft)}
+.minibar{display:inline-block;width:52px;height:6px;border-radius:4px;background:var(--surface-2);border:1px solid var(--line);overflow:hidden;vertical-align:middle;margin-inline-start:7px}
+.minibar>i{display:block;height:100%;background:var(--blue)}
+.minibar>i.green{background:var(--accent)}.minibar>i.yellow{background:var(--amber)}.minibar>i.red{background:var(--red)}
+
+/* storage bars */
+.pathBar{display:grid;grid-template-columns:minmax(130px,190px) 1fr minmax(70px,90px);gap:12px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line);font-size:12px}
+.pathBar:last-child{border-bottom:0}
+.pathName{color:var(--ink);overflow:hidden;text-overflow:ellipsis;font-weight:600}
+/* (a path reads left to right, under its name: in the page's direction its first slash was drawn at its END -
+   «var/lib/docker/») */
+.path{color:var(--muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;margin-top:2px;font-family:var(--mono);direction:ltr;text-align:end}
+
+/* cleanup actions */
+.actions-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
+.action{background:var(--surface-2);border:1px solid var(--line);border-radius:var(--radius-sm);padding:12px;display:grid;gap:8px;align-content:start}
+.action b{font-size:13px}
+.action p{margin:0;color:var(--muted);font-size:11px;line-height:1.4}
+.action button{background:var(--accent);color:var(--accent-ink);font-weight:700;border:none;border-radius:var(--radius-sm);padding:7px 10px;font-family:inherit;font-size:12px;cursor:pointer}
+.action button:hover:not(:disabled){background:var(--accent-d)}
+.action button:disabled{background:var(--surface);border:1px solid var(--line);color:var(--muted);cursor:not-allowed}
+.risk-low{color:var(--accent-d);font-weight:700}.risk-medium{color:var(--amber);font-weight:700}.risk-high{color:var(--red);font-weight:700}
+
+/* buttons + misc */
+.btn{background:var(--surface);color:var(--ink);font-weight:600;border:1px solid var(--line);border-radius:var(--radius-sm);height:30px;padding:0 12px;cursor:pointer;font-family:inherit;font-size:13px;transition:border-color .12s,color .12s;display:inline-flex;align-items:center;gap:6px}
+.btn svg{width:14px;height:14px;flex:none}
+.btn:hover{border-color:var(--accent);color:var(--accent-d)}
+.btn:disabled{opacity:.6;cursor:default}
+.pill{padding:3px 10px;border-radius:var(--radius-pill);font-size:11px;font-weight:700;white-space:nowrap;display:inline-block;background:var(--surface-2);border:1px solid var(--line);color:var(--muted)}
+.pill.warn{background:var(--warn-soft);border-color:var(--lime-line);color:var(--amber)}
+.toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+input,select{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-family:inherit;font-size:12px;color:var(--ink)}
+input:focus,select:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
+.toolbar input{min-width:150px}
+.small{font-size:11px;color:var(--muted)}
+.muted{color:var(--muted)}
+/* bina-table cell add-ons (the grid replaces .table for containers) */
+/* A service's name is a left-to-right token in a right-to-left cell. As plain text, a name longer
+   than its column lost its BEGINNING («wser42-task-watchdog») with nothing to say so; as a token it
+   keeps its beginning and ends in «…», and the whole name is in its tooltip. */
+.bina-table .svc-name{display:block;font-weight:600;direction:ltr;text-align:end;overflow:hidden;text-overflow:ellipsis}
+.bina-table .pair{display:inline-flex;align-items:baseline;gap:7px}
+
+/* @bina-page:start */
+.pg{
+  --pg-max:1180px;
+  width:100%;
+  max-width:var(--pg-max);
+  margin:0 auto;
+  padding:20px 24px 48px;
+  box-sizing:border-box;
+}
+/* the header: title block at the start, actions at the end. It wraps rather than shrinking,
+   which is what keeps a long action row off the title on a narrow screen. */
+.pg-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:16px;
+  flex-wrap:wrap;
+  margin-bottom:18px;
+  padding-bottom:14px;
+  border-bottom:1px solid var(--line);
+}
+.pg-head h1{
+  margin:0;
+  font-size:22px;
+  line-height:30px;
+  font-weight:700;
+  letter-spacing:-.01em;
+  color:var(--ink);
+}
+.pg-sub{margin-top:3px;color:var(--muted);font-size:13px;line-height:20px;max-width:70ch}
+.pg-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-inline-start:auto}
+
+/* the live chip. One chip, everywhere: a dot that beats while the number is fresh, and that
+   stops dead when it is not — a still dot is the whole signal that the figure is old. */
+.pg-live{
+  display:inline-flex;align-items:center;gap:7px;
+  font-size:12.5px;line-height:18px;font-weight:700;white-space:nowrap;
+  color:var(--accent-d);
+  background:var(--accent-soft);
+  border-radius:999px;
+  padding:4px 11px;
+  border:0;font-family:inherit;          /* the chip is a <button> where it pauses the refresh */
+}
+button.pg-live{cursor:pointer}
+.pg-live[data-stale="1"]{color:var(--amber);background:var(--warn-soft)}
+.pg-live .beat{width:9px;height:9px;border-radius:50%;background:currentColor;flex:none;animation:pg-beat 1.6s infinite}
+.pg-live[data-stale="1"] .beat{animation:none}
+@keyframes pg-beat{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 45%,transparent)}70%{box-shadow:0 0 0 9px transparent}100%{box-shadow:0 0 0 0 transparent}}
+
+/* the card. `> h2/h3` is the card's own title; an app that puts a toolbar in it uses .pg-cardhead */
+.pg-card{
+  box-sizing:border-box;
+  background:var(--surface);
+  border:1px solid var(--line);
+  border-radius:14px;
+  padding:16px 18px;
+  box-shadow:var(--shadow);
+  margin-bottom:16px;
+}
+.pg-card>h2,.pg-card>h3{margin:0 0 10px;font-size:15px;line-height:22px;font-weight:700;color:var(--ink)}
+.pg-cardhead{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.pg-cardhead>h2,.pg-cardhead>h3{margin:0;font-size:15px;line-height:22px;font-weight:700}
+.pg-cardhead .pg-actions{margin-inline-start:auto}
+.pg-hint{color:var(--muted);font-size:12px;line-height:18px;font-weight:400}
+.pg-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pg-note{color:var(--muted);font-size:12.5px;line-height:19px}
+.pg-empty{padding:18px 4px;color:var(--muted);font-size:13px}
+
+/* ── the KPI tile: the one number a screen leads with ─────────────────────────────
+   Four of these screens drew it four ways — 26, 28 and 30px numbers, three paddings, with and
+   without a shadow (measured 2026-10-06). One tile: a 12.5px label over a 26px tabular number.
+   A state is said twice — the number's colour and a 3px bar on the reading edge — through
+   `data-state`, in the product's legend; a zero is not a state, so a screen leaves the attribute
+   off and adds `is-zero`. The legend is the palette's: what waits is lime, what is in motion is
+   sky, what is done is olive, what failed is plum, what needs a person is plum lifted. What a
+   screen adds of its own (a chip, a sparkline, a sub-line) goes inside the tile; how many tiles
+   share a row is the screen's (`--pg-kpi-cols`), so that no row ends in a lone one. */
+.pg-kpis{display:grid;grid-template-columns:repeat(var(--pg-kpi-cols,4),minmax(0,1fr));gap:12px}
+.pg-kpi{position:relative;min-width:0;overflow:hidden;background:var(--surface);
+  border:1px solid var(--line);border-radius:14px;padding:14px 16px;
+  box-shadow:var(--shadow)}
+.pg-kpi-k{display:block;color:var(--muted);font-size:12.5px;line-height:18px;font-weight:600}
+/* `fit-content`: the number sits under its label at the page's reading edge even when it is an
+   LTR token (`.num`) — as a full-width block its own direction sent it to the far side. */
+.pg-kpi-v{display:block;width:fit-content;max-width:100%;margin-top:4px;font-size:26px;line-height:30px;
+  font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums;white-space:nowrap}
+.pg-kpi-v small{font-size:13px;font-weight:700;letter-spacing:0;margin-inline-start:4px;color:var(--muted)}
+.pg-kpi.is-zero .pg-kpi-v{color:var(--muted)}
+.pg-kpi[data-state]::after{content:"";position:absolute;inset-block:0;inset-inline-start:0;width:3px;background:var(--pg-kpi-c)}
+.pg-kpi[data-state] .pg-kpi-v{color:var(--pg-kpi-c)}
+.pg-kpi[data-state=todo]{--pg-kpi-c:var(--amber)}
+.pg-kpi[data-state=running]{--pg-kpi-c:var(--blue)}
+.pg-kpi[data-state=done]{--pg-kpi-c:var(--accent-d)}
+.pg-kpi[data-state=failed]{--pg-kpi-c:var(--red)}
+.pg-kpi[data-state=person]{--pg-kpi-c:var(--violet)}
+
+/* touch: the header's controls are the ones a phone reaches for first */
+@media (pointer:coarse){
+  .pg-actions .btn,.pg-actions button,.pg-actions a.btn{min-height:44px}
+}
+@media (max-width:640px){
+  .pg{padding:14px 12px 40px}
+  .pg-head{gap:10px;margin-bottom:14px}
+  .pg-head h1{font-size:19px;line-height:26px}
+  .pg-card{padding:14px;border-radius:12px}
+  .pg-actions{margin-inline-start:0;width:100%}
+}
+/* ── a SHORT frame: a window in desktop mode ─────────────────────────────────────
+   Desktop mode opens an app in a window of about 580 × 530, and a person halves and quarters it.
+   A page laid out for a tall frame spent that whole window on its own heading: at 640 × 330 five
+   of the office's screens showed their title, their sentence, their buttons and four tiles — and
+   none of what they are for (photographed 2026-10-07). In a short frame the heading is ONE line:
+   the window's bar already names the app, so the sentence under the title steps aside (a line
+   that reports something — `data-live` — stays), and the room is the content's. */
+@media (max-height:699px){
+  .pg{padding-block-start:10px}
+  .pg-head{gap:8px;margin-bottom:10px;padding-bottom:8px;align-items:center}
+  .pg-head h1{font-size:17px;line-height:24px}
+  .pg-sub:not([data-live]){display:none}
+  .pg-actions{width:auto;margin-inline-start:auto;gap:6px}
+  .pg-actions .btn,.pg-actions button,.pg-actions a.btn{padding:4px 9px;font-size:12px}
+}
+/* …and in the SMALLEST window — its corner dragged in as far as it goes, 380 × 224 of page — a
+   title over a row of buttons was 88px of it. The window's bar already says the screen's name,
+   so where the heading has actions the title steps aside and they are its one line. A title
+   that names a VIEW (`data-view`) stays: the bar says the app, not where in it. */
+@media (max-height:699px) and (max-width:430px){
+  .pg-head:not([data-view]):has(.pg-actions) h1{display:none}
+  .pg-actions{margin-inline-start:0}
+  /* …and a line that reports (`data-live`) shares that line with them, as far as it fits */
+  .pg-head:has(.pg-sub[data-live]){flex-wrap:nowrap}
+  .pg-head>:first-child:has(.pg-sub[data-live]){flex:1 1 0;min-width:0}
+  .pg-sub[data-live]{margin-top:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pg-head:has(.pg-sub[data-live]) .pg-actions{flex:none;flex-wrap:nowrap}
+}
+/* …and there, and at a phone's width, the leading numbers are one STRIP rather than tiles: a
+   hairline grid, key over value, in the columns the screen declares (`--pg-kpi-cols`). Four tiles
+   were 184px of a 530px window, before the first row of what they count. */
+@media (max-height:699px),(max-width:700px){
+  .pg-kpis{gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .pg-kpis>.pg-kpi{border:0;border-radius:0;box-shadow:none;padding:5px 8px}
+  .pg-kpis .pg-kpi-k{font-size:10.5px;line-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pg-kpis .pg-kpi-v{margin-top:0;font-size:17px;line-height:22px}
+  .pg-kpis .pg-kpi-v small{font-size:10.5px;margin-inline-start:3px}
+}
+@media (prefers-reduced-motion:reduce){
+  .pg-live .beat{animation:none}
+}
+/* @bina-page:end */
+</style>
+<link rel="stylesheet" href="static/vendor/bina-table.css">
+</head>
+<body>
+<div class="pg">
+  <header class="pg-head">
+    <div>
+      <h1>מכונה</h1>
+      <div class="pg-sub">מדדי המחשב והמכולות בזמן אמת</div>
+    </div>
+    <div class="pg-actions">
+      <span class="pg-live" id="freshness"><span class="beat"></span><span id="freshLabel">מתחבר…</span></span>
+      <button class="btn" id="refreshBtn" title="קריאה מחודשת של המדדים עכשיו"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7M21 4v4h-4"/></svg>רענון</button>
+    </div>
+  </header>
+
+  <!-- KPI tiles: cpu · memory · storage · network · containers -->
+  <div class="tiles" id="tiles">
+    <div class="tile pg-kpi" data-k="cpu"><div class="thead"><div><div class="pg-kpi-k">מעבד</div><div class="pg-kpi-v skel" id="cpuValue">00%</div></div><span class="chip" id="loadValue">עומס -</span></div><canvas class="spark" id="sparkCpu"></canvas></div>
+    <div class="tile pg-kpi" data-k="mem"><div class="thead"><div><div class="pg-kpi-k">זיכרון</div><div class="pg-kpi-v skel" id="ramValue">00%</div></div><span class="chip" id="ramSize">-</span><span class="chip" id="hostMem" hidden></span></div><canvas class="spark" id="sparkMem"></canvas></div>
+    <div class="tile pg-kpi" data-k="disk"><div class="thead"><div><div class="pg-kpi-k">אחסון</div><div class="pg-kpi-v skel" id="diskValue">00%</div></div><span class="chip" id="diskFree">-</span></div><div class="bar"><div class="fill" id="diskFill"></div></div></div>
+    <div class="tile pg-kpi" data-k="net"><div class="thead"><div><div class="pg-kpi-k">רשת · הורדה</div><div class="pg-kpi-v skel" id="netValue">0</div></div><span class="chip" id="netTx">-</span></div><canvas class="spark" id="sparkNet"></canvas></div>
+    <div class="tile pg-kpi" data-k="cont"><div class="thead"><div><div class="pg-kpi-k">מכולות</div><div class="pg-kpi-v skel" id="containerValue">0/0</div></div><span class="chip" id="unhealthyValue">-</span></div><div class="bar"><div class="fill" id="containerFill"></div></div></div>
+  </div>
+
+  <div class="cols cols-7-5">
+    <div class="card">
+      <h3>גרף משאבים <span class="legend" id="chartLegend"></span></h3>
+      <div class="chart-wrap">
+        <canvas id="resourceChart"></canvas>
+        <div class="chart-tip" id="chartTip"></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>פרטי מכונה</h3>
+      <div class="kv" id="machineInfo"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>שירותים פעילים</h3>
+    <div id="containersGrid"></div>
+  </div>
+
+  <div class="cols cols-7-5">
+    <div class="card">
+      <h3>סקירת אחסון <span class="small" id="storageStamp">מטמון</span></h3>
+      <div id="storageBars"></div>
+    </div>
+    <div class="card">
+      <h3>אחסון Docker</h3>
+      <div class="kv" id="dockerStorage"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>אפשרויות ניקוי אחסון <span class="small" id="cleanupNote">הרצה מושבתת כברירת מחדל</span></h3>
+    <div class="actions-grid" id="cleanupActions"></div>
+  </div>
+</div>
+<script src="static/vendor/bina-table.js"></script>
+<script>
+const fmtBytes = (n) => {
+  if (!Number.isFinite(n) || n <= 0) return "0 B";
+  const u = ["B","KB","MB","GB","TB"]; let i=0,v=n;
+  while (v>=1024 && i<u.length-1){v/=1024;i++;}
+  return `${v>=10||i===0?v.toFixed(0):v.toFixed(1)} ${u[i]}`;
+};
+const fmtRate = (n) => fmtBytes(n) + "/s";
+const pct = (n) => Number.isFinite(n) ? `${n.toFixed(n>=10?0:1)}%` : "—";
+const el = (id) => document.getElementById(id);
+const STATUS_HE = {running:"פועל",exited:"הסתיים",created:"נוצר",restarting:"מופעל מחדש",paused:"מושהה",dead:"מת",removing:"מוסר"};
+const HEALTH_HE = {healthy:"תקין",unhealthy:"לא תקין",starting:"מתחיל"};
+const RISK_HE = {low:"נמוך",medium:"בינוני",high:"גבוה"};
+// A chart names no colour of its own: its lines are the palette's four hues in their line step,
+// read where they are written (the theme block), and its axis is the page's hairline and muted ink.
+const tok = n => getComputedStyle(document.documentElement).getPropertyValue("--" + n).trim();
+const COLORS = {cpu:tok("sky-d"),mem:tok("olive-d"),disk:tok("plum-d"),net:tok("lime-d")};
+let latest=null, cleanupOptions=[], refreshInFlight=false;
+
+// A refresh that failed is not a sign-out. The service did not answer, or answered what is not its overview: the
+// chip says so and stops beating, the numbers on the screen stay as they were (old - and the chip is what says
+// it), and the next round asks again. Every failure used to send the whole frame to the office's entry
+// (`/?login=…`) as if the session had ended: a service that restarted, or one render that threw, put the console
+// inside its own tile. An answer that IS a redirect to the sign-in is still followed (refresh() does that).
+function unheard(){
+  el("freshness").dataset.stale="1"; el("freshLabel").textContent="אין תשובה מהשירות";
+  // with nothing read yet the placeholders stop shimmering: over their stand-in "00%" they said "any moment now" for good
+  if(!latest) document.querySelectorAll(".skel").forEach(n=>{ n.textContent="—"; n.classList.remove("skel"); });
+}
+// A number with its unit — or any Latin value — is ONE left-to-right token inside the Hebrew line.
+// Written bare it was reordered by the line: "KB 84", "GB / 9.7 GB 6.9", "6 11 · ליבותth Gen Intel".
+const N = (v) => `<span class="num">${eh(String(v))}</span>`;
+// ONE IS SAID AS ONE. A count was the number and the plural whatever the number — «1 לא תקינות» on the tile of
+// the containers (read on a running office, 2026-10-10), «1 ליבות», «1 רשומות». A count of one is its own
+// sentence, which only the place that says it knows; any other is the number and the plural.
+const one = (n, single, many) => (Number(n) === 1 ? single : `${N(n)} ${many}`);
+// How long ago, in the unit a person would say (it used to count raw seconds: "לפני 7353ש׳").
+const ago = (s) => s<90 ? `לפני ${Math.round(s)} שנ׳` : s<5400 ? `לפני ${Math.round(s/60)} דק׳` : `לפני ${Math.round(s/3600)} שע׳`;
+function tone(v){ return v>=90?"red":v>=75?"yellow":"green"; }
+
+// A tile's bar says a STATE, in the colours the table's bars use (green · amber from 75% · red from
+// 90%). The state is a load's by default; the share of containers that run is not a load — that
+// tile turned amber at 83% running, and would have turned red with every container up, beside a
+// chip that said «כולן תקינות» — so its caller names the state.
+function setFill(id,value,state){
+  const node=el(id); const v=Math.max(0,Math.min(100,Number(value)||0));
+  node.style.width=`${v}%`; node.className="fill "+(state||tone(v));
+}
+
+/* ── hi-DPI helpers ──────────────────────────────────────────────────────── */
+function fitCanvas(cv,cssH){
+  const dpr=window.devicePixelRatio||1;
+  const w=cv.clientWidth||cv.parentElement.clientWidth;
+  cv.width=Math.round(w*dpr); cv.height=Math.round(cssH*dpr);
+  const ctx=cv.getContext("2d"); ctx.setTransform(dpr,0,0,dpr,0,0);
+  return {ctx,w,h:cssH};
+}
+
+/* sparkline (last N points of one series, 0..max) */
+function drawSpark(id,series,color,max){
+  const cv=el(id); if(!cv) return;
+  const {ctx,w,h}=fitCanvas(cv,34);
+  ctx.clearRect(0,0,w,h);
+  if(series.length<2){return;}
+  const mx=max||Math.max(1,...series);
+  // Time runs left to right — the oldest sample at the left, now at the right — as on the
+  // office's other charts (כל מקביל). These two ran the other way, and the dot that marks «now»
+  // sat on the OLDEST sample.
+  const last=series.length-1;
+  const X=i=> 2 + i*(w-4)/last;
+  const Y=v=> h-2 - (Math.max(0,Math.min(mx,v))/mx)*(h-5);
+  ctx.beginPath();
+  series.forEach((v,i)=>{ const x=X(i),y=Y(v); i===0?ctx.moveTo(x,y):ctx.lineTo(x,y); });
+  // area fill
+  ctx.lineTo(X(last),h); ctx.lineTo(X(0),h); ctx.closePath();
+  ctx.fillStyle=color+"22"; ctx.fill();
+  // line
+  ctx.beginPath();
+  series.forEach((v,i)=>{ const x=X(i),y=Y(v); i===0?ctx.moveTo(x,y):ctx.lineTo(x,y); });
+  ctx.strokeStyle=color; ctx.lineWidth=1.5; ctx.lineJoin="round"; ctx.stroke();
+  // head dot: now
+  ctx.beginPath(); ctx.arc(X(last),Y(series[last]),2.2,0,7); ctx.fillStyle=color; ctx.fill();
+}
+
+/* main resource area-chart from server history (cpu/mem/disk %, net normalised) */
+let chartGeom=null;
+function drawChart(history){
+  const cv=el("resourceChart");
+  const {ctx,w,h}=fitCanvas(cv,230);
+  ctx.clearRect(0,0,w,h);
+  const padB=18,padT=8;
+  ctx.direction="ltr";
+  // grid
+  ctx.strokeStyle=tok("line"); ctx.lineWidth=1;
+  for(let i=0;i<=4;i++){ const y=padT+(h-padB-padT)*i/4; ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke(); }
+  ctx.fillStyle=tok("muted"); ctx.font="10px system-ui"; ctx.textAlign="left";
+  [100,75,50,25,0].forEach((p,i)=>{ const y=padT+(h-padB-padT)*i/4; ctx.fillText(p+"%",3,y+ (i===0?9:-2)); });
+  const n=history.length;
+  if(n<2){ ctx.fillStyle=tok("muted"); ctx.font="12px system-ui"; ctx.textAlign="center"; ctx.fillText("אוסף נתונים…",w/2,h/2); chartGeom=null; return; }
+  // net normalised to its own max so it shares the 0..100 canvas
+  const netMax=Math.max(1,...history.map(r=>Math.max(r.rx||0,r.tx||0)));
+  const Y=v=> (padT) + (1-Math.max(0,Math.min(100,v))/100)*(h-padB-padT);
+  const px=i=> 2 + i*(w-4)/(n-1);   // index 0 is the oldest sample: at the left (see drawSpark)
+  const series=[["cpu",COLORS.cpu],["mem",COLORS.mem],["disk",COLORS.disk]];
+  for(const [key,color] of series){
+    ctx.beginPath();
+    history.forEach((r,i)=>{ const x=px(i),y=Y(r[key]||0); i===0?ctx.moveTo(x,y):ctx.lineTo(x,y); });
+    ctx.strokeStyle=color; ctx.lineWidth=2; ctx.lineJoin="round"; ctx.stroke();
+    // soft area under cpu only (keeps it readable)
+    if(key==="cpu"){ ctx.lineTo(px(n-1),h-padB); ctx.lineTo(px(0),h-padB); ctx.closePath(); ctx.fillStyle=color+"14"; ctx.fill(); }
+  }
+  // net (dashed, normalised)
+  ctx.setLineDash([4,3]); ctx.beginPath();
+  history.forEach((r,i)=>{ const x=px(i),y=Y((Math.max(r.rx||0,r.tx||0)/netMax)*100); i===0?ctx.moveTo(x,y):ctx.lineTo(x,y); });
+  ctx.strokeStyle=COLORS.net; ctx.lineWidth=1.5; ctx.stroke(); ctx.setLineDash([]);
+  // the time axis, the way the lines are drawn: the oldest sample at the left, now at the right
+  const hm=r=>new Date(r.t*1000).toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit'});
+  ctx.fillStyle=tok("muted"); ctx.font="10px system-ui";
+  ctx.textAlign="left"; ctx.fillText(hm(history[0]),3,h-4);
+  ctx.textAlign="right"; ctx.fillText(hm(history[n-1]),w-3,h-4);
+  chartGeom={px,n,history,netMax,h,padB};
+}
+
+function onChartMove(ev){
+  if(!chartGeom){ el("chartTip").style.opacity=0; return; }
+  const cv=el("resourceChart"), rect=cv.getBoundingClientRect();
+  const x=ev.clientX-rect.left;
+  const {px,n,history,netMax}=chartGeom;
+  let best=0,bd=1e9;
+  for(let i=0;i<n;i++){ const d=Math.abs(px(i)-x); if(d<bd){bd=d;best=i;} }
+  const r=history[best], tip=el("chartTip");
+  const t=new Date(r.t*1000).toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  tip.innerHTML=`<b>${t}</b><span class="r">מעבד ${N(pct(r.cpu))} · זיכרון ${N(pct(r.mem))}</span><span class="r">אחסון ${N(pct(r.disk))}</span><span class="r">הורדה ${N(fmtRate(r.rx))} · העלאה ${N(fmtRate(r.tx))}</span>`;
+  tip.style.left=px(best)+"px"; tip.style.top=(chartGeom.h*0.28)+"px"; tip.style.opacity=1;
+}
+
+function renderChart(data){
+  const hist=data.history||[];
+  drawChart(hist);
+  const nr=data.net_rate||{rx:0,tx:0};
+  el("chartLegend").innerHTML=[
+    ["מעבד",COLORS.cpu,pct(data.cpu.percent)],["זיכרון",COLORS.mem,pct(data.memory.percent)],
+    ["אחסון",COLORS.disk,pct(data.storage.root.percent)],["רשת",COLORS.net,fmtRate(Math.max(nr.rx,nr.tx))]
+  ].map(([k,c,v])=>`<span class="li"><span class="sw" style="background:${c}"></span>${k}<b>${v}</b></span>`).join("");
+  // tile sparklines from the same history
+  drawSpark("sparkCpu",hist.map(r=>r.cpu),COLORS.cpu,100);
+  drawSpark("sparkMem",hist.map(r=>r.mem),COLORS.mem,100);
+  drawSpark("sparkNet",hist.map(r=>Math.max(r.rx||0,r.tx||0)),COLORS.net);
+}
+
+function unskel(){ document.querySelectorAll(".skel").forEach(n=>n.classList.remove("skel")); }
+
+function renderFreshness(data){
+  const age=data.cache_age_s ?? 0, f=el("freshness");
+  const stale=age>40;
+  f.dataset.stale = stale ? "1" : "0";   // the shared chip's attribute (bina-page.css)
+  el("freshLabel").textContent = age<12 ? "חי" : "עודכן " + ago(age);
+}
+
+function renderInfo(data){
+  const up=data.host.uptime_seconds, upTxt = up? (up>=86400?one((up/86400).toFixed(1),"יום אחד","ימים"):one((up/3600).toFixed(1),"שעה אחת","שעות")) : "-";
+  el("machineInfo").innerHTML=[
+    ["שם מארח",N(data.host.hostname)],["מערכת הפעלה",N(data.host.os)],["ליבה",N(data.host.kernel)],["ארכיטקטורה",N(data.host.architecture)],
+    ["מעבד",`${one(data.cpu.cores,"ליבה אחת","ליבות")} · ${N(data.cpu.model)}`],["עומס",N(`${data.cpu.load1} / ${data.cpu.load5} / ${data.cpu.load15}`)],["זמן פעילות",upTxt]
+  ].map(([k,v])=>`<div class="k">${k}</div><div class="v">${v||"-"}</div>`).join("");
+}
+
+function renderMetrics(data){
+  const cpu=data.cpu.percent;
+  el("cpuValue").innerHTML=N(pct(cpu)); el("loadValue").innerHTML=`עומס ${N(data.cpu.load1??"-")}`;
+  el("ramValue").innerHTML=N(pct(data.memory.percent));
+  el("ramSize").innerHTML=N(`${fmtBytes(data.memory.used)} / ${fmtBytes(data.memory.total)}`);
+  // …and the machine UNDER the VM, when a host-side part of the office reports it: the figure above
+  // is the VM's own, and the VM is the last to know that its host has run out.
+  const h=data.vm_host, hm=el("hostMem");
+  hm.hidden=!h;
+  if(h){
+    hm.className="chip"+(h.short?" bad":"");
+    hm.innerHTML=`המחשב: ${N(fmtBytes(h.mem_free))} פנוי`;
+    hm.title=`זיכרון פנוי במחשב שמריץ את הלשכה, מתוך ${fmtBytes(h.mem_total)} · נמדד ${ago(h.age_s)}.`
+      +(h.short?" כמעט לא נשאר: כשהוא אוזל, הלשכה כולה מפסיקה לענות.":"");
+  }
+  const disk=data.storage.root;
+  el("diskValue").innerHTML=N(pct(disk.percent)); el("diskFree").innerHTML=`${N(fmtBytes(disk.free))} פנוי`; setFill("diskFill",disk.percent);
+  const nr=data.net_rate||{rx:0,tx:0};
+  el("netValue").innerHTML=N(fmtRate(nr.rx));
+  el("netTx").innerHTML=`העלאה ${N(fmtRate(nr.tx))}`;
+  const total=data.docker.containers_total||1;
+  el("containerValue").innerHTML=N(`${data.docker.containers_running}/${data.docker.containers_total}`);
+  el("unhealthyValue").innerHTML=data.docker.containers_unhealthy?one(data.docker.containers_unhealthy,"אחת לא תקינה","לא תקינות"):"כולן תקינות";
+  el("unhealthyValue").className=`chip ${data.docker.containers_unhealthy?"bad":"ok"}`;
+  setFill("containerFill",data.docker.containers_running/total*100,data.docker.containers_unhealthy?"red":"green");
+}
+
+// ── containers table: bina-table (the platform-standard grid) ────────────
+// Live view refreshed every 5s via setData(); search + status quick-filter
+// chips + sorting come from the grid. Rows are FLATTENED (memory.used →
+// mem_used…) so sort/search/export all see plain values.
+const eh = BinaTable.escapeHtml;
+function flatContainers(data){
+  return (data.containers||[]).map(c => ({
+    name: c.name, status: c.status, health: c.health || '',
+    cpu_percent: c.cpu_percent || 0,
+    mem_used: (c.memory && c.memory.used) || 0,
+    mem_pct: (c.memory && c.memory.percent) || 0,
+    net_rx: (c.net && c.net.rx) || 0, net_tx: (c.net && c.net.tx) || 0,
+    net_total: ((c.net && c.net.rx) || 0) + ((c.net && c.net.tx) || 0),
+    pids: c.pids || 0, restart_count: c.restart_count || 0, image: c.image || '',
+  })).sort((a, b) => b.cpu_percent - a.cpu_percent);   // default: busiest first
+}
+const SVC_BT_COLS = [
+  { key: 'name', label: 'שירות', width: 180,
+    html: (v, r) => '<span class="svc-name" title="' + eh(v + ' · ' + r.image) + '">' + eh(v) + '</span>' },
+  { key: 'status', label: 'סטטוס', width: 100,
+    html: v => '<span class="status ' + eh(v) + '">' + eh(STATUS_HE[v] || v) + '</span>' },
+  { key: 'health', label: 'תקינות', width: 105,
+    html: v => v ? '<span class="status ' + eh(v) + '">' + eh(HEALTH_HE[v] || v) + '</span>'
+                 : '<span class="bt-null">—</span>' },
+  { key: 'cpu_percent', label: 'מעבד', width: 115, align: 'end',
+    html: v => '<span class="num">' + pct(v) + '</span><span class="minibar"><i class="'
+               + tone(v) + '" style="width:' + Math.min(100, v) + '%"></i></span>' },
+  { key: 'mem_used', label: 'זיכרון', width: 135, align: 'end',
+    html: (v, r) => '<span class="pair"><span class="num">' + fmtBytes(v) + '</span><span class="small num">' + pct(r.mem_pct) + '</span></span>' },
+  { key: 'net_total', label: 'רשת', width: 140, align: 'end',
+    html: (v, r) => '<span class="small num">↓' + fmtBytes(r.net_rx) + ' ↑' + fmtBytes(r.net_tx) + '</span>' },
+  { key: 'pids', label: 'תהליכים', width: 110, align: 'end' },
+  { key: 'restart_count', label: 'הפעלות מחדש', width: 140, align: 'end' },
+];   // the name's tooltip is the whole name and its image: identifiers one hover away, not a ninth column
+let svcGrid = null;
+function renderContainers(data){
+  const rows = flatContainers(data);
+  if (svcGrid) { svcGrid.setData(rows); return; }
+  svcGrid = BinaTable.create(el('containersGrid'), {
+    tableId: 'machine:services',
+    rowKey: 'name',
+    columns: SVC_BT_COLS,
+    data: rows,
+    height: 520,
+    searchPlaceholder: 'סנן מכולות…',
+    quickFilters: [
+      { key: 'running', label: 'פועל', fn: r => r.status === 'running' },
+      { key: 'exited', label: 'הסתיים', fn: r => r.status === 'exited' },
+      { key: 'unhealthy', label: 'לא תקין', fn: r => r.health === 'unhealthy' },
+    ],
+    emptyText: 'אין מכולות להצגה',
+    noMatchText: 'אין מכולות תואמות לסינון',
+  });
+}
+
+function renderStorage(data){
+  const s=data.storage; const max=Math.max(...s.top_paths.map(p=>p.size),1);
+  // the walk over the disk is measured behind the screen; until the first one is back, say so
+  el("storageStamp").textContent=s.generated_at ? `עודכן ${new Date(s.generated_at).toLocaleTimeString('he-IL')}` : "נמדד עכשיו…";
+  el("storageBars").innerHTML=!s.generated_at ? '<div class="small">המדידה הראשונה של התיקיות רצה ברקע — היא תופיע כאן בעוד רגע.</div>' : s.top_paths.map(p=>`
+    <div class="pathBar">
+      <div><div class="pathName">${p.label}</div><div class="path">${p.path||"/"}</div></div>
+      <div class="bar"><div class="fill" style="width:${p.size/max*100}%"></div></div>
+      <div class="num">${fmtBytes(p.size)}</div>
+    </div>`).join("");
+  const df=s.docker_df||{};
+  const imageBytes=(df.Images||[]).reduce((a,i)=>a+(i.Size||i.VirtualSize||0),0);
+  const volBytes=(df.Volumes||[]).reduce((a,v)=>a+((v.UsageData||{}).Size||0),0);
+  const reclaim=(df.Images||[]).reduce((a,i)=>a+((i.Containers===0)?(i.Size||i.VirtualSize||0):0),0);
+  el("dockerStorage").innerHTML=[
+    ["אימג׳ים",`${N((df.Images||[]).length)} · ${N(fmtBytes(imageBytes))}`],
+    ["כרכים",`${N((df.Volumes||[]).length)} · ${N(fmtBytes(volBytes))}`],
+    ["מכולות",N((df.Containers||[]).length)],
+    ["מטמון בנייה",one((df.BuildCache||[]).length||0,"רשומה אחת","רשומות")],
+    ["אומדן אימג׳ים לא פעילים",N(fmtBytes(reclaim))]
+  ].map(([k,v])=>`<div class="k">${k}</div><div class="v">${v}</div>`).join("");
+}
+
+// The service names its cleanups in English — they are an API's words. The screen's are these; the
+// engine's id stays one hover away, and an action nobody translated shows as the service sent it.
+const CLEAN_HE={
+  docker_container_prune:["ניקוי מכולות שנעצרו","מסיר מכולות שכבר נעצרו. שירותים שרצים לא נפגעים."],
+  docker_image_prune_dangling:["ניקוי שכבות תמונה יתומות","מסיר שכבות תמונה בלי תג, שנשארו מבניות חוזרות."],
+  docker_builder_prune_all:["ניקוי מטמון הבנייה","מסיר את מטמון הבנייה. הבניות הבאות עשויות להימשך יותר."],
+  docker_image_prune_all:["ניקוי תמונות שאינן בשימוש","מסיר תמונות שאף מכולה לא משתמשת בהן. אפשר למשוך או לבנות אותן שוב."],
+};
+const cleanHe=o=>CLEAN_HE[o.id]||[o.title||o.id,o.description||""];
+function renderCleanup(data){
+  const enabled=data.cleanup_enabled;
+  el("cleanupNote").textContent=enabled?`מותר: ${(data.cleanup_allowed_actions||[]).map(id=>cleanHe({id})[0]).join(", ")}`:"אין פעולות ניקוי מותרות כרגע";
+  el("cleanupActions").innerHTML=cleanupOptions.map(opt=>{
+    const on=Boolean(enabled&&opt.enabled), [he,what]=cleanHe(opt);
+    const why=enabled?"אינה בין הפעולות שהותרו במכונה הזאת":"פעולה זו אינה מאושרת בתצורה הנוכחית";
+    return `<div class="action"><b title="${opt.id}">${he}</b><span class="small risk-${opt.risk}">סיכון ${RISK_HE[opt.risk]||opt.risk}</span>
+      <p>${what}</p>${on?"":`<p>${why}</p>`}
+      <button data-action="${opt.id}" ${on?"":"disabled"} title="${on?"הרצת הניקוי עכשיו — תישאל לפני שמשהו נמחק":why}">${on?"הרץ":"מושבת"}</button></div>`;
+  }).join("");
+  document.querySelectorAll("button[data-action]").forEach(btn=>btn.addEventListener("click",async()=>{
+    const a=cleanupOptions.find(o=>o.id===btn.dataset.action);
+    const [he,what]=cleanHe(a||{id:btn.dataset.action});
+    if(!await binaAsk({title:`להריץ את «${he}»?`,body:what,ok:"הרצה",danger:a?.risk==="high",
+        facts:[["סיכון",RISK_HE[a?.risk]||a?.risk||"—"]]}))return;
+    btn.disabled=true; btn.textContent="רץ";
+    try{ const res=await fetch(`api/cleanup/${btn.dataset.action}`,{method:"POST"});
+      if(!res.ok)throw new Error(await res.text()); btn.textContent="הושלם"; await loadCleanupOptions(); await refresh(); }
+    catch{ btn.disabled=false; btn.textContent="נכשל"; }
+  }));
+}
+
+/* @bina-ask:start */
+var binaAsk, binaTell;
+(function () {
+  var doc = document;
+  var CSS = ".bask{position:fixed;inset:0;z-index:2147483000;display:grid;grid-template:minmax(0,1fr)/minmax(0,1fr);place-items:center;padding:16px;background:var(--scrim)}"
+    + ".bask-card{display:flex;flex-direction:column;width:min(440px,100%);max-height:100%;overflow:auto;box-sizing:border-box;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:16px;padding:20px;box-shadow:var(--shadow-lg);font:14px/1.5 var(--font,system-ui,sans-serif);text-align:start;outline:0}"
+    + ".bask-card h2{margin:0 0 8px;font-size:16px;font-weight:800;line-height:1.35}"
+    + ".bask-read{overflow:auto}.bask-read:not(:empty){min-height:19px}"   // never squeezed to nothing: a line of it stays, and past that the card itself scrolls
+    + ".bask-card p{margin:0 0 6px;font-size:13px;color:var(--muted)}"
+    + ".bask-read p:last-child{margin:0}"
+    + ".bask-facts{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:10px 0 0;padding:10px 12px;background:var(--surface-2);border:1px solid var(--line);border-radius:9px}"
+    + ".bask-facts dt{color:var(--muted);font-size:11px;font-weight:600;line-height:1.7}"
+    + ".bask-facts dd{margin:0;font-size:12.5px;font-weight:600;overflow-wrap:anywhere;unicode-bidi:plaintext;text-align:right}"
+    + ".bask-field{display:grid;gap:5px;margin-top:10px;font-size:12px;font-weight:600;color:var(--muted)}"
+    + ".bask-field input{font:inherit;font-size:13px;font-weight:400;height:36px;padding:0 10px;border:1px solid var(--line);border-radius:9px;background:var(--surface);color:var(--ink)}"
+    + ".bask-said{margin-top:10px;padding:8px 12px;border-radius:9px;border-inline-start:4px solid var(--red);background:color-mix(in srgb,var(--red) 14%,var(--surface));font-size:12.5px;overflow-wrap:anywhere}"
+    + ".bask-said:empty{display:none}"
+    + ".bask-acts{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}"
+    + ".bask-btn{height:34px;padding:0 16px;border-radius:9px;border:1px solid var(--line);background:transparent;color:var(--ink);font:inherit;font-size:13px;font-weight:700;cursor:pointer}"
+    + ".bask-btn.primary{background:var(--accent);border-color:transparent;color:var(--accent-ink)}"
+    + ".bask-btn.danger{background:var(--red);border-color:transparent;color:var(--surface)}"
+    + ".bask-btn:disabled{opacity:.5;cursor:default}"
+    + ".bask-field input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}"
+    + "@media (pointer:coarse){.bask-btn{height:44px}.bask-field input{height:44px}}"
+    + "@media (max-height:399px){.bask{padding:8px}.bask-card{padding:12px}.bask-acts{margin-top:10px}}"   // the side menu's own short frame
+    + "#bina-tell{position:fixed;inset-block-end:16px;inset-inline-start:16px;z-index:2147483001;display:grid;gap:8px;max-width:min(420px,calc(100vw - 32px))}"
+    + ".btell{--c:var(--ok);padding:10px 14px;border-radius:12px;background:color-mix(in srgb,var(--c) 14%,var(--surface));color:var(--ink);border:1px solid color-mix(in srgb,var(--c) 38%,var(--surface));border-inline-start:4px solid var(--c);font:13px/1.45 var(--font,system-ui,sans-serif);box-shadow:var(--shadow-lg);cursor:pointer;text-align:start}"
+    + ".btell.warn{--c:var(--lime)}.btell.bad{--c:var(--red)}"   // --ok and --red, not the bare hues: they are the steps that are lifted on the dark ground
+    + ".btell small{display:block;margin-top:2px;font-size:11.5px;color:var(--muted);overflow-wrap:anywhere;unicode-bidi:plaintext}"
+    + ".btell button{margin-inline-start:12px;padding:0;border:0;background:none;font:inherit;font-weight:800;color:var(--blue);text-decoration:underline;cursor:pointer}";
+
+  function el(tag, cls, text) {
+    var n = doc.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+  function style() {
+    if (doc.getElementById("bina-ask-css")) return;
+    var s = el("style", "", CSS);
+    s.id = "bina-ask-css";
+    doc.head.appendChild(s);
+  }
+
+  binaAsk = function (q) {
+    style();
+    return new Promise(function (resolve) {
+      var back = doc.activeElement, field = null, must = q.input && q.input.must;
+      var scrim = el("div", "bask"), card = el("div", "bask-card"), read = el("div", "bask-read"), said = el("div", "bask-said");
+      card.setAttribute("role", "alertdialog");
+      card.setAttribute("aria-modal", "true");
+      card.setAttribute("dir", "rtl");
+      card.setAttribute("tabindex", "-1");
+      said.setAttribute("role", "alert");
+      card.appendChild(el("h2", "", q.title));
+      card.appendChild(read);
+      String(q.body || "").split(/\n+/).forEach(function (line) { if (line.trim()) read.appendChild(el("p", "", line)); });
+      if (q.facts && q.facts.length) {
+        var dl = el("dl", "bask-facts");
+        q.facts.forEach(function (f) { dl.appendChild(el("dt", "", f[0])); dl.appendChild(el("dd", "", f[1])); });
+        read.appendChild(dl);
+      }
+      if (q.input) {
+        var lab = el("label", "bask-field", q.input.label || "");
+        field = el("input");
+        field.value = q.input.value || "";
+        if (q.input.dir) field.setAttribute("dir", q.input.dir);
+        lab.appendChild(field);
+        card.appendChild(lab);
+      }
+      var acts = el("div", "bask-acts"), no = el("button", "bask-btn", q.cancel || "ביטול"),
+          yes = el("button", "bask-btn " + (q.danger ? "danger" : "primary"), q.ok || "אישור");
+      no.setAttribute("type", "button");
+      yes.setAttribute("type", "button");
+      acts.appendChild(no);
+      acts.appendChild(yes);
+      card.appendChild(said);
+      card.appendChild(acts);
+      scrim.appendChild(card);
+      doc.body.appendChild(scrim);
+
+      function fit() { if (must) yes.disabled = field.value.trim() !== must; }
+      function home() { (field || (q.danger ? no : yes)).focus(); }
+      function done(v) {
+        doc.removeEventListener("keydown", key, true);
+        scrim.remove();
+        if (back && back.focus) back.focus();
+        resolve(v);
+      }
+      function cancel() { if (!no.disabled) done(field ? null : false); }
+      function agree() {
+        if (yes.disabled) return;
+        var v = field ? field.value : true;
+        if (!q.run) return done(v);
+        yes.disabled = no.disabled = true;                // in flight: busy, and there is nothing left to cancel
+        yes.textContent = "מבצע…";
+        said.textContent = "";
+        card.focus();
+        Promise.resolve(v).then(q.run).then(function () { done(v); }, function (e) {
+          yes.textContent = q.ok || "אישור";
+          yes.disabled = no.disabled = false;
+          fit();
+          said.textContent = (e && e.message) || "הפעולה נכשלה";
+          home();
+        });
+      }
+      function key(e) {
+        if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); cancel(); }
+        else if (e.key === "Enter" && field && doc.activeElement === field) { e.preventDefault(); agree(); }
+        else if (e.key === "Tab") {                       // the page behind is not reachable while asked
+          var ring = [field, no, yes].filter(function (n) { return n && !n.disabled; });
+          var i = ring.indexOf(doc.activeElement);
+          e.preventDefault();
+          if (ring.length) ring[(i + (e.shiftKey ? ring.length - 1 : 1)) % ring.length].focus();
+        }
+        else if (/^(Arrow|Page)(Up|Down)$/.test(e.key) && doc.activeElement !== field && read.scrollHeight > read.clientHeight) {
+          e.preventDefault();                               // the focus lives on the buttons, outside what scrolls
+          read.scrollTop += (/Up$/.test(e.key) ? -1 : 1) * (/^Page/.test(e.key) ? read.clientHeight : 40);
+        }
+      }
+      yes.addEventListener("click", agree);
+      no.addEventListener("click", cancel);
+      scrim.addEventListener("mousedown", function (e) { if (e.target === scrim) cancel(); });
+      if (field) field.addEventListener("input", fit);
+      doc.addEventListener("keydown", key, true);
+      fit();
+      home();
+    });
+  };
+
+  // The third word is how long the notice stays (ms) — or what more it carries: { ms, more, act, stay }.
+  //   more  the service's own sentence, on a line of its own under the notice's words
+  //   act   [label, fn] — one way on from the notice (an undo, a refresh): pressing it runs fn and takes the notice down
+  //   stay  no clock: the notice is there until it is pressed
+  binaTell = function (text, kind, opt) {
+    style();
+    var o = opt && typeof opt === "object" ? opt : { ms: opt };
+    var box = doc.getElementById("bina-tell");
+    if (!box) { box = el("div"); box.id = "bina-tell"; doc.body.appendChild(box); }
+    var n = el("div", "btell " + (kind || "ok"), text);
+    n.setAttribute("role", kind === "bad" ? "alert" : "status");
+    n.setAttribute("dir", "rtl");
+    if (o.more) n.appendChild(el("small", "", o.more));
+    if (o.act) {
+      var go = el("button", "", o.act[0]);
+      go.setAttribute("type", "button");
+      go.addEventListener("click", function (e) { e.stopPropagation(); n.remove(); o.act[1](); });
+      n.appendChild(go);
+    }
+    n.addEventListener("click", function () { n.remove(); });
+    box.appendChild(n);
+    if (!o.stay) setTimeout(function () { n.remove(); }, o.ms || (kind === "bad" ? 9000 : 5200));
+    return n;
+  };
+})();
+/* @bina-ask:end */
+async function loadCleanupOptions(){
+  const res=await fetch("api/cleanup/options");
+  if(res.redirected){location.href=res.url;throw new Error("auth redirect");}
+  cleanupOptions=(await res.json()).options||[];
+}
+
+async function refresh(){
+  if(refreshInFlight)return; refreshInFlight=true;
+  try{
+    const res=await fetch("api/overview");
+    if(res.redirected){location.href=res.url;throw new Error("auth redirect");}
+    if(!res.ok) throw new Error("status "+res.status);       // an error's body is not an overview to draw
+    latest=await res.json(); unskel();
+    renderFreshness(latest); renderInfo(latest); renderMetrics(latest);
+    renderContainers(latest); renderStorage(latest); renderCleanup(latest); renderChart(latest);
+  } finally { refreshInFlight=false; }
+}
+
+el("refreshBtn").addEventListener("click",()=>refresh().catch(unheard));
+el("resourceChart").addEventListener("mousemove",onChartMove);
+el("resourceChart").addEventListener("mouseleave",()=>el("chartTip").style.opacity=0);
+window.addEventListener("resize",()=>latest&&renderChart(latest));
+loadCleanupOptions().catch(()=>{}).then(refresh).catch(unheard);   // the clean-up's options are not what the numbers wait for
+setInterval(()=>refresh().catch(unheard),5000);
+</script>
+</body>
+</html>

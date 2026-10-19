@@ -1,0 +1,59 @@
+# yaml-language-server: $schema=./schema.json
+title: "SECURITY: Rotate exposed secrets (n8n encryption key + more)"
+opened: "2026-06-14"
+category: security
+severity: critical
+status: open  # 2026-07-31 re-triage: PARTIALLY superseded, not closed. N8N_ENCRYPTION_KEY / POSTGRES_PASSWORD / 2026-08-04 re-triage: STILL OPEN — shared secrets deliberately unrotated; third-party credentials are off-tree.
+  # N8N_USER_MANAGEMENT_JWT_SECRET rotation is DECLINED — see `ai/context/platform-os-release-plan.md`'s
+  # "OPERATOR DECISION — 2026-07-30: KEEP THE SHARED SECRETS. DO NOT ROTATE." — a deliberate, recorded
+  # choice for THIS deployment's committed n8n/authentik secrets specifically, not a fix for this issue.
+  # Everything ELSE in the table below (Anthropic/DeepSeek/Telegram/Google OAuth/Google Vision keys) is
+  # NOT covered by that decision — those were third-party API credentials leaked via data/chat.json and
+  # gdrive_credentials.json, need revocation in their own external consoles, and remain genuinely open.
+  # 2026-07-30 triage (superseded by the above, kept for the record): every referenced file
+  # (n8n/.env.singelrun, data/chat.json, production/apitools/ocr_processor.py) is gone from the tree,
+  # so only the containment is verifiable; the rotations themselves are off-tree console actions.
+summary: "Credentials were committed to git and pushed to GitHub; files were removed but the values MUST be rotated (git removal alone does NOT make them safe)."
+
+description: |
+  ## Why this is mandatory
+  The secret values below were committed and pushed to
+  `github.com/solomonBoltin/deployment-hacohen`. They were present in
+  **`origin/main`** (default branch) and **`origin/COPILOT`**, so they must be
+  treated as **already compromised**. Removing the files / rewriting history
+  reduces exposure but GitHub retains dangling commits reachable by SHA until
+  garbage-collection — **rotation is the only real fix.**
+
+  ## Secrets to rotate (values are in `.env` / the live system — NOT repeated here)
+
+  | Secret | Where it lived (now removed) | Rotation action |
+  |---|---|---|
+  | `N8N_ENCRYPTION_KEY` (n8n master key) | `n8n/.env.singelrun` (in `origin/main`), `obsidian/References/n8n/Credentials.md`, session-exports | Generate new key, then **re-enter / re-encrypt all n8n credentials** (old creds become undecryptable) |
+  | All **n8n stored credentials** (Gmail/Sheets/Kafka/OAuth/API keys) | `db-dumps/n8n-pg-dump.sql` (encrypted blobs, in `origin/main`) | Re-issue each underlying credential; the dump + key together expose all of them |
+  | `POSTGRES_PASSWORD` | `n8n/.env.singelrun` (in `origin/main`) | Rotate Postgres password, update `.env` + dependent services |
+  | `N8N_USER_MANAGEMENT_JWT_SECRET` | `n8n/.env.singelrun` (in `origin/main`) | Rotate, will invalidate existing n8n sessions |
+  | Anthropic API key (`ANTHROPIC_API_KEY`) | `data/chat.json` | Revoke + reissue in Anthropic console |
+  | DeepSeek API key (`DEEPSEEK_API_KEY`) | `data/chat.json` | Revoke + reissue |
+  | Telegram bot token (`TELEGRAM_BOT_TOKEN`) | `data/chat.json`, `development/openhands/.env.bak.pre-gemini-2026-06-12` | `/revoke` via @BotFather, update `.env` |
+  | Google OAuth — doc-extraction (`GDRIVE_DOC_EXTRACTION_CLIENT_SECRET` + refresh token) | `data/document-extraction-test-group/gdrive_credentials.json` | Rotate client secret in Google Cloud Console, **revoke the refresh token** |
+  | Google Vision API key (hardcoded fallback) | `production/apitools/ocr_processor.py:19` (submodule, pinned at `origin/main`) | Revoke in Google Cloud Console; remove the hardcoded fallback, require env var |
+
+  ## After rotation — optionally purge from GitHub history
+  Removing the files from the branch tip (done) cleans `main`'s tip on merge, but
+  the blobs remain in `origin/main` and `origin/COPILOT` history. To purge:
+  1. Rewrite history (`git filter-repo --invert-paths --path n8n/.env.singelrun --path db-dumps/n8n-pg-dump.sql …`) on a fresh clone.
+  2. Force-push `main` (⚠️ violates the "never force-push to a synced repo" iron rule — needs explicit approval + branch-protection toggle).
+  3. Delete / rewrite `origin/COPILOT`.
+  4. GitHub Support purge request for cached views, if the repo is/was public.
+
+tasks:
+  - { text: "Saved missing gdrive OAuth creds to `.env`", done: true }
+  - { text: "Removed all 9 secret files from the project; scrubbed `obsidian/References/n8n/Credentials.md`", done: true }
+  - { text: "Hardened `.gitignore` (`.env.*`, `data/db-dumps/`, `data/chat.json`, `**/gdrive_credentials.json`, etc.)", done: true }
+  - { text: "Rotate the secrets above (this issue)", done: false }
+  - { text: "(optional) Purge from `main` / `COPILOT` history on GitHub", done: false }
+
+references:
+  - n8n/.env.singelrun
+  - data/chat.json
+  - production/apitools/ocr_processor.py

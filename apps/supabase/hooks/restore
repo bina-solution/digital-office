@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+#: restore supabase's auth users and storage object index, after its services have migrated
+#
+# restore <indir> <mode>   — invoked by scripts/deployment-archive.py, never by hand.
+#
+# THE WHOLE POINT OF THIS HOOK IS THE FIRST STEP: start gotrue and storage-api and WAIT, so they run
+# their own migrations and create their own tables, and only then put the rows back. Without it the
+# rows are restored into a schema several migrations old and 887 of them are silently dropped —
+# measured, and the reason this hook exists separately from platform-base/postgres's.
+#
+# `bbox run` would also start these services, but it runs AFTER `bbox import`, which is too late: the
+# import is where the data lands. An app starting the services it owns is the established pattern
+# here (platform-base/authentik/hooks/prepare does exactly this, and says why).
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+. "${REPO_ROOT}/scripts/archive-lib.sh"
+
+IN="${1:?usage: restore <indir> <mode>}"
+[ -f "${IN}/supabase-auth-storage.dump" ] || {
+  echo "[supabase/restore] supabase-auth-storage.dump not in archive — nothing to do"; exit 0; }
+DB="$(archive_require supabase-db)"
+U=supabase_admin
+q() { docker exec "${DB}" psql -U "${U}" -d postgres -tAc "$1" 2>/dev/null | tr -d '\r' | tr -d ' '; }
+
+# ── 1. let the owners of these schemas build them ───────────────────────────────────────────────
+#
+# One at a time, and never as a list: `auth` (gotrue) is NOT a service in this deployment's
+# supabase compose — only rest/storage/kong/meta/studio are, which is why auth.users is 0 here and
+# identity lives in authentik instead. `dcx up -d auth storage` would fail on the missing service
+# and start NEITHER, so a deployment that does have gotrue would silently lose its users too.
+echo "[supabase/restore] starting the services that own these schemas so they migrate…"
+for svc in storage auth; do
+  dcx up -d "${svc}" >/dev/null 2>&1 && echo "[supabase/restore]   started ${svc}"
+done
+
+# Wait on the SCHEMA, not on a container status. A container reports healthy the moment it answers a
+# port; the question that matters is whether the migration that adds the columns this dump carries
+# has run. `storage.buckets.public` is the column the first failed restore died on, so it is the
+# right sentinel — it cannot be true before storage-api has migrated.
+ready=0
+for _ in $(seq 1 60); do
+  if [ "$(q "select count(*) from information_schema.columns where table_schema='storage' and table_name='buckets' and column_name='public';")" = "1" ]; then
+    ready=1; break
+  fi
+  sleep 5
+done
+if [ "${ready}" != 1 ]; then
+  echo "[supabase/restore] storage schema never reached the expected shape (no storage.buckets.public" >&2
+  echo "                   after 300s). Restoring anyway would drop rows silently; refusing." >&2
+  exit 1
+fi
+
+# ── 2. the rows ─────────────────────────────────────────────────────────────────────────────────
+# --disable-triggers: the dump is data-only across FK-linked tables, so insertion order would
+# otherwise matter. supabase_admin is superuser-equivalent here, which is what that flag requires.
+ERR="${BBOX_TMP}/supabase-auth-storage.err"; : > "${ERR}"
+docker exec -i "${DB}" pg_restore -U "${U}" -d postgres --data-only --disable-triggers \
+  < "${IN}/supabase-auth-storage.dump" 2>>"${ERR}" || true
+if [ -s "${ERR}" ]; then
+  echo "[supabase/restore] pg_restore diagnostics ($(grep -c . "${ERR}") lines, first 3):" >&2
+  head -3 "${ERR}" >&2
+fi
+
+echo "FACT auth_users $(q 'select count(*) from auth.users;')"
+echo "FACT storage_objects $(q 'select count(*) from storage.objects;')"
+echo "FACT storage_buckets $(q 'select count(*) from storage.buckets;')"
+echo "FACT storage_sha $(q "select md5(string_agg(id::text||coalesce(name,''), '|' order by id)) from storage.objects;")"
+exit 0

@@ -1,0 +1,279 @@
+# INDOX demo blueprint — single source for `bbox indox demo run small`
+# companies + per-sync docs + ai_cache_file (frozen extractions) + settings. Injected via the indox API.
+name: small
+description: 5x5 demo — 5 docs per sync, all companies
+per_sync: 5
+companies:
+- id: '510003320'
+  name: חומרי בנין ו
+- id: '510520687'
+  name: פזקר
+- id: '510560246'
+  name: איקן מפעל לי
+- id: '510605959'
+  name: בניאס
+- id: '510711716'
+  name: שריזלי
+- id: '510818859'
+  name: נוימן
+- id: '511020471'
+  name: סבח
+- id: '511022493'
+  name: ארכה
+- id: '511027419'
+  name: יחזקאל אהרון
+- id: '511061780'
+  name: מסגריית שטיל
+- id: '511200180'
+  name: ע.ד.א פלסט
+- id: '511212615'
+  name: איטונג
+- id: '511301129'
+  name: אגן
+- id: '511429698'
+  name: משווקי הצפון
+- id: '511581084'
+  name: אורבונד
+- id: '511634388'
+  name: דלתות תייר
+- id: '511690935'
+  name: אצ חומרי איטום
+- id: '511744898'
+  name: לוירון
+- id: '512069865'
+  name: קמחי כלי ע
+- id: '512093170'
+  name: י.ש קרטון מו
+- id: '512396276'
+  name: טסה
+- id: '512525940'
+  name: פלמרכז הפצה
+- id: '512643859'
+  name: מילסטון
+- id: '513105494'
+  name: דיאור
+- id: '513327064'
+  name: פל ים
+- id: '513381830'
+  name: כהן פור
+- id: '513498345'
+  name: פולירן
+- id: '513905851'
+  name: נטו אספקה
+- id: '514194612'
+  name: איש הכול ירוק
+- id: '514291418'
+  name: בי גי
+- id: '514380393'
+  name: עטרות בטון
+- id: '514454446'
+  name: חופית קיבוץ כנרת
+- id: '514488782'
+  name: כרמל פלור
+- id: '514697606'
+  name: טיח הארץ
+- id: '514745819'
+  name: סימנט אי.אס.
+- id: '514772342'
+  name: דור רפאל
+- id: '514779065'
+  name: רוזנפלד
+- id: '514905041'
+  name: שק בטון
+- id: '514930718'
+  name: פלסאון
+- id: '514947746'
+  name: ענבל
+- id: '515218279'
+  name: סוליד יציקות
+- id: '515463354'
+  name: וויז אלקטריק
+- id: '515672863'
+  name: נוברנד-פלס
+- id: '516009677'
+  name: זלמן סחר
+- id: '516245529'
+  name: ארקו
+- id: '516386919'
+  name: פרקט פוריו
+- id: '516431434'
+  name: מבנה דרום חדש
+- id: '516587961'
+  name: אונת סימנט
+- id: '516618881'
+  name: אסיף סחר עץ
+- id: '516620499'
+  name: לכ כלי עבודה
+- id: '516711157'
+  name: מוראל
+- id: '520037532'
+  name: נירלט צבעים
+- id: '570038158'
+  name: חוליות זרימה
+- id: '570042077'
+  name: מבנה דרום
+- id: '570043745'
+  name: כפר מנחם
+- id: '570045310'
+  name: מצרפלס
+- id: '570047217'
+  name: פוליביד
+syncs:
+  gmail-doc:
+  - name: yhzkal-ahrvn-5.pdf
+    path: demo-docs/invoice/files/yhzkal-ahrvn-5.pdf
+    company_id: '511027419'
+    type: INVOICE
+    md5: 823e0de0372e5436cd39b9830109d1d6
+    cache_key: invoice:823e0de0372e5436cd39b9830109d1d6
+  - name: dltvt-tyyr-2.pdf
+    path: demo-docs/invoice/files/dltvt-tyyr-2.pdf
+    company_id: '511634388'
+    type: INVOICE
+    md5: c40e7d950aa2a0b6b82b1aca41a84bfd
+    cache_key: invoice:c40e7d950aa2a0b6b82b1aca41a84bfd
+  - name: bnyas-2.pdf
+    path: demo-docs/invoice/files/bnyas-2.pdf
+    company_id: '510605959'
+    type: INVOICE
+    md5: ae3094df564f2746412502dcf5ef95cd
+    cache_key: invoice:ae3094df564f2746412502dcf5ef95cd
+  - name: bnyas-3.pdf
+    path: demo-docs/invoice/files/bnyas-3.pdf
+    company_id: '510605959'
+    type: INVOICE
+    md5: bc7d2d6157c9692c0080f6fd4131e477
+    cache_key: invoice:bc7d2d6157c9692c0080f6fd4131e477
+  - name: shryzly-3.pdf
+    path: demo-docs/invoice/files/shryzly-3.pdf
+    company_id: '510711716'
+    type: INVOICE
+    md5: f415ce48ba3282ae6710d4587aa9bd22
+    cache_key: invoice:f415ce48ba3282ae6710d4587aa9bd22
+  gmail-link:
+  - name: tsh-1.jpg
+    path: demo-docs/invoice/files/tsh-1.jpg
+    company_id: '512396276'
+    type: INVOICE
+    md5: bc2555f864c12bdfee9fee6613757841
+    cache_key: invoice:bc2555f864c12bdfee9fee6613757841
+  - name: zlmn-shr-1.pdf
+    path: demo-docs/invoice/files/zlmn-shr-1.pdf
+    company_id: '516009677'
+    type: INVOICE
+    md5: 1ba289816ff17cda223412aea3149194
+    cache_key: invoice:1ba289816ff17cda223412aea3149194
+  - name: zlmn-shr-2.pdf
+    path: demo-docs/invoice/files/zlmn-shr-2.pdf
+    company_id: '516009677'
+    type: INVOICE
+    md5: 5c00b49e11a788ac749e4f7fbfd4ca97
+    cache_key: invoice:5c00b49e11a788ac749e4f7fbfd4ca97
+  - name: avnt-symnt-3.pdf
+    path: demo-docs/invoice/files/avnt-symnt-3.pdf
+    company_id: '516587961'
+    type: INVOICE
+    md5: 0641c637e4f6f8a8e5e4ed64a571df61
+    cache_key: invoice:0641c637e4f6f8a8e5e4ed64a571df61
+  - name: avrbvnd-1.jpg
+    path: demo-docs/invoice/files/avrbvnd-1.jpg
+    company_id: '511581084'
+    type: INVOICE
+    md5: d52c9b543e5d98a5f76ad789dc41e2af
+    cache_key: invoice:d52c9b543e5d98a5f76ad789dc41e2af
+  drive-gdoc:
+  - name: mylstvn-1.jpg
+    path: demo-docs/invoice/files/mylstvn-1.jpg
+    company_id: '512643859'
+    type: INVOICE
+    md5: 8f936abfe9d35044796000114ee609d2
+    cache_key: invoice:8f936abfe9d35044796000114ee609d2
+  - name: mtsrpls-1.pdf
+    path: demo-docs/invoice/files/mtsrpls-1.pdf
+    company_id: '570045310'
+    type: INVOICE
+    md5: 20ca8453202c49d5371ba8419cf5c954
+    cache_key: invoice:20ca8453202c49d5371ba8419cf5c954
+  - name: avnt-symnt-4.pdf
+    path: demo-docs/invoice/files/avnt-symnt-4.pdf
+    company_id: '516587961'
+    type: INVOICE
+    md5: f53c1eab9e3c73842f22f31df6d767d7
+    cache_key: invoice:f53c1eab9e3c73842f22f31df6d767d7
+  - name: msgryyt-shtyl-3.pdf
+    path: demo-docs/invoice/files/msgryyt-shtyl-3.pdf
+    company_id: '511061780'
+    type: INVOICE
+    md5: 0a36eefd0724c7f8fdd3e99bb32815b2
+    cache_key: invoice:0a36eefd0724c7f8fdd3e99bb32815b2
+  - name: dvr-rpal-4.pdf
+    path: demo-docs/invoice/files/dvr-rpal-4.pdf
+    company_id: '514772342'
+    type: INVOICE
+    md5: eb1870f5dddde7fc61befa421e375dfd
+    cache_key: invoice:eb1870f5dddde7fc61befa421e375dfd
+  gmail-bs:
+  - name: tvrndv-3.xlsx
+    path: demo-docs/balance_sheet/files/tvrndv-3.xlsx
+    company_id: '510520687'
+    type: BALANCE_SHEET
+    md5: d733bb86334dad4f4dfad60ad26359ff
+    cache_key: bs:d733bb86334dad4f4dfad60ad26359ff
+  - name: ysh-krtvn-5.xlsx
+    path: demo-docs/balance_sheet/files/ysh-krtvn-5.xlsx
+    company_id: '512093170'
+    type: BALANCE_SHEET
+    md5: 00d996ce5341c3ec09dfb3fdad83e0d3
+    cache_key: bs:00d996ce5341c3ec09dfb3fdad83e0d3
+  - name: plsavn-5.xlsx
+    path: demo-docs/balance_sheet/files/plsavn-5.xlsx
+    company_id: '514930718'
+    type: BALANCE_SHEET
+    md5: fe8bf4e0e0aac213372159b22a361cbc
+    cache_key: bs:fe8bf4e0e0aac213372159b22a361cbc
+  - name: nvymn-5.xlsx
+    path: demo-docs/balance_sheet/files/nvymn-5.xlsx
+    company_id: '510818859'
+    type: BALANCE_SHEET
+    md5: 86213139efba52199a85632c32a5914f
+    cache_key: bs:86213139efba52199a85632c32a5914f
+  - name: aytvng-5.xlsx
+    path: demo-docs/balance_sheet/files/aytvng-5.xlsx
+    company_id: '511212615'
+    type: BALANCE_SHEET
+    md5: 2eec3c36d6fc5faff53ec6d6f4516534
+    cache_key: bs:2eec3c36d6fc5faff53ec6d6f4516534
+  drive-bs:
+  - name: rvznpld-3.xlsx
+    path: demo-docs/balance_sheet/files/rvznpld-3.xlsx
+    company_id: '514779065'
+    type: BALANCE_SHEET
+    md5: e02b02f3820eedbbc4af0f92e3a04fc4
+    cache_key: bs:e02b02f3820eedbbc4af0f92e3a04fc4
+  - name: rvznpld-2.xlsx
+    path: demo-docs/balance_sheet/files/rvznpld-2.xlsx
+    company_id: '514779065'
+    type: BALANCE_SHEET
+    md5: 0c37af35b601040714cd3e6b6b2a0e70
+    cache_key: bs:0c37af35b601040714cd3e6b6b2a0e70
+  - name: m-trvt-b-1.jpg
+    path: demo-docs/balance_sheet/files/m-trvt-b-1.jpg
+    company_id: '514380393'
+    type: BALANCE_SHEET
+    md5: 354144ca2acb4b81cd5a762e50b613d6
+    cache_key: bs:354144ca2acb4b81cd5a762e50b613d6
+  - name: nvymn-4.xlsx
+    path: demo-docs/balance_sheet/files/nvymn-4.xlsx
+    company_id: '510818859'
+    type: BALANCE_SHEET
+    md5: 1550bf54688dac6976c1f78fa3fd5366
+    cache_key: bs:1550bf54688dac6976c1f78fa3fd5366
+  - name: vvyz-alktryk-1.pdf
+    path: demo-docs/balance_sheet/files/vvyz-alktryk-1.pdf
+    company_id: '515463354'
+    type: BALANCE_SHEET
+    md5: d4e0e3a283d0af2ed7e9ce632347c61a
+    cache_key: bs:d4e0e3a283d0af2ed7e9ce632347c61a
+settings:
+  demo_inject_count: 5
+ai_cache_file: files/small-ai-cache.json

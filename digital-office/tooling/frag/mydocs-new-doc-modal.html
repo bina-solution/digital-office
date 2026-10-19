@@ -1,0 +1,80 @@
+<style>body:has(.screen[data-screen="mydocs-new-doc-modal"].active) #navBtn{display:none}
+.screen[data-screen="mydocs-new-doc-modal"] .hm-body{padding:22px 39px 60px 118px}
+.screen[data-screen="mydocs-new-doc-modal"] .hm-main{position:relative}
+.screen[data-screen="mydocs-new-doc-modal"] .nm-ov{position:absolute;left:0;right:0;top:60px;bottom:0;z-index:30}
+.screen[data-screen="mydocs-new-doc-modal"] .nm-scrim{position:absolute;inset:0;background:rgba(18,32,25,.42)}
+.screen[data-screen="mydocs-new-doc-modal"] .nm-panel{position:absolute;top:0;bottom:0;right:0;width:54%;min-width:560px;background:#fff;box-shadow:-14px 0 42px rgba(10,40,30,.15);display:flex;flex-direction:column}
+.screen[data-screen="mydocs-new-doc-modal"] .nm-head{display:flex;align-items:center;justify-content:space-between;padding:20px 30px;border-bottom:1px solid var(--line)}
+.screen[data-screen="mydocs-new-doc-modal"] .nm-head h2{margin:0;font-size:22px;font-weight:800;color:var(--ink)}
+.screen[data-screen="mydocs-new-doc-modal"] .nm-x{width:40px;height:40px;border-radius:9px;border:none;background:#eef1f0;color:#556;font-size:16px;cursor:pointer}
+.screen[data-screen="mydocs-new-doc-modal"] .nm-body{flex:1;overflow:auto;padding:22px 30px}
+.screen[data-screen="mydocs-new-doc-modal"] .nm-foot{border-top:1px solid var(--line);padding:16px 30px;display:flex;gap:12px;justify-content:flex-start}
+.screen[data-screen="mydocs-new-doc-modal"] .nm-lbl{display:block;text-align:right;color:var(--muted);font-size:13.5px;margin-bottom:7px}
+.screen[data-screen="mydocs-new-doc-modal"] .nm-field{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:9px;padding:11px 13px;font:inherit;font-size:14px;color:#2b3a34;background:#fff;text-align:right}
+.screen[data-screen="mydocs-new-doc-modal"] .nm-sel{display:flex;align-items:center;justify-content:space-between}
+.screen[data-screen="mydocs-new-doc-modal"] .nm-ph{color:#9aa}
+.screen[data-screen="mydocs-new-doc-modal"] .nm-grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px 22px;margin-top:18px}
+.screen[data-screen="mydocs-new-doc-modal"] .nm-fs{border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-top:20px}
+.screen[data-screen="mydocs-new-doc-modal"] .nm-fs-t{color:var(--muted);font-size:13.5px;font-weight:700;text-align:right;margin-bottom:12px}
+.screen[data-screen="mydocs-new-doc-modal"] .nm-lines-h{display:grid;grid-template-columns:1fr 70px 92px 92px 34px;gap:10px;color:var(--muted);font-size:12.5px;font-weight:700;text-align:right;margin-bottom:8px}
+.screen[data-screen="mydocs-new-doc-modal"] .nm-line{display:grid;grid-template-columns:1fr 70px 92px 92px 34px;gap:10px;align-items:center}
+.screen[data-screen="mydocs-new-doc-modal"] .nm-line .tot{font-size:13.5px;color:#2b3a34;text-align:right;padding-top:2px}
+.screen[data-screen="mydocs-new-doc-modal"] .nm-del{width:32px;height:32px;border-radius:8px;border:none;background:#fde8e8;color:#c23636;cursor:pointer;font-size:14px}
+.screen[data-screen="mydocs-new-doc-modal"] .nm-add{margin-top:14px;text-align:center}
+.screen[data-screen="mydocs-new-doc-modal"] .nm-add button{background:#e7f6ef;color:var(--green-d);border:none;border-radius:9px;padding:9px 18px;font-weight:700;font-size:13.5px;cursor:pointer}
+.screen[data-screen="mydocs-new-doc-modal"] .nm-total{background:#fafbfa;border:1px solid var(--line);border-radius:12px;padding:16px 20px;margin-top:16px}
+.screen[data-screen="mydocs-new-doc-modal"] .nm-total .r{display:flex;justify-content:space-between;color:#516;font-size:14px;margin-bottom:9px}
+.screen[data-screen="mydocs-new-doc-modal"] .nm-total .r.big{font-size:18px;font-weight:800;color:var(--ink);border-top:1px dashed #cfd8d4;padding-top:13px;margin:4px 0 0}</style><section class="screen" data-screen="mydocs-new-doc-modal"><div class="viewport"><aside class="hm-side"><div class="hm-brand"><div class="logo">מ</div><div class="bt"><b>המרכז</b><span>מערכת ניהול העסק</span></div></div><nav class="hm-nav"><div class="hm-sec">ראשי</div><a data-nav="dashboard"><span>לוח בקרה</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></a><div class="hm-sec">עסק</div><a data-nav="mydocs-dash" class="on"><span>מסמכים שלי</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></a><a data-nav="drive-root"><span>דרייב</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></a><a data-nav="mail-inbox"><span>מייל</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg></a><a data-nav="indox-root"><span>מסמכים נכנסים</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5 5h14l3 7v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-6z"/></svg></a><a data-nav="wadmin-dashboard"><span>בוט ווצאפ</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5.7a8.5 8.5 0 1 1 16.1-3.8z"/></svg></a><div class="hm-sec">תשתית</div><a data-nav="kabil"><span>כל‑מקביל</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></a><a data-nav="notifications"><span>התראות</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></a><a data-nav="machine"><span>מכונה</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="6" rx="1"/><rect x="2" y="9" width="20" height="6" rx="1"/><rect x="2" y="15" width="20" height="6" rx="1"/></svg></a><a data-nav="apps"><span>אפליקציות</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></a><a data-nav="feature-validation"><span>אימות מערכת</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg></a><div class="hm-sec">הגדרות</div><a data-nav="connections-auth"><span>חיבורים ומפתחות</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="15" r="4"/><path d="m10.85 12.15 8.15-8.15 2 2-2 2 2 2-3 3-2-2-2 2"/></svg></a><a data-nav="console-install"><span>מסך התקנה</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-2.82 1.17V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 8 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 8.6a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9z"/></svg></a></nav><div class="hm-foot"><small>מחובר/ת</small><b>authentik Default Admin</b></div></aside><main class="hm-main"><div class="hm-top"><div class="grp"><div class="hm-title">מסמכים שלי</div><button class="hm-burger">☰</button></div><div class="grp"><div class="hm-search"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4-4"/></svg><span>חיפוש</span><span class="kbd">Ctrl K</span></div></div><div class="grp left"><span style="color:var(--muted);font-size:13px">ניהול מסמכים עסקיים</span><div class="pill-amber">⚙ 7 שלבי התקנה</div></div></div><div class="hm-scroll"><div class="biz-bar"><button class="btn btn-primary">+ מסמך חדש</button><div class="biz-tabs"><a data-nav="mydocs-dash" class="on"><span class="dot">▪</span>לוח בקרה</a><a data-nav="mydocs-docs"><span class="dot">▪</span>מסמכים</a><a data-nav="mydocs-customers"><span class="dot">▪</span>לקוחות</a><a data-nav="mydocs-items"><span class="dot">▪</span>פריטים</a><a data-nav="mydocs-settings"><span class="dot">▪</span>הגדרות עסק</a></div></div><div class="hm-body">
+<div class="page-head"><div><h1>לוח בקרה</h1></div><div class="page-meta">בינה פתרונות בע"מ · עוסק מורשה · ח.פ 514789234</div></div>
+<div class="stat-row" style="grid-template-columns:2.5fr 1fr 1fr 1fr 1fr;gap:20px">
+  <div class="stat stat-big"><div class="l">סך התקבולים</div><div class="n">₪0.00</div><div class="foot">השנה ₪0.00 · החודש ₪0.00</div></div>
+  <div class="stat" style="display:flex;flex-direction:column;align-items:flex-end"><div class="n">0</div><div class="l">קבלות</div></div>
+  <div class="stat" style="display:flex;flex-direction:column;align-items:flex-end"><div class="n">₪0.00</div><div class="l">קבלה ממוצעת</div></div>
+  <div class="stat" style="display:flex;flex-direction:column;align-items:flex-end"><div class="n">0</div><div class="l">לקוחות</div></div>
+  <div class="stat" style="display:flex;flex-direction:column;align-items:flex-end"><div class="n">5</div><div class="l">סה״כ מסמכים</div></div>
+</div>
+<div class="card" style="margin-bottom:20px"><div class="spread"><h3 style="margin:0">תקבולים לפי חודש</h3><span class="muted" style="font-size:12px">12 חודשים</span></div>
+<div style="display:flex;align-items:flex-end;gap:14px;height:150px;margin-top:20px;padding:0 8px"><div style="flex:1;text-align:center"><div style="height:6px;background:var(--green);border-radius:3px"></div><div class="muted" style="font-size:11px;margin-top:8px">אוג</div></div><div style="flex:1;text-align:center"><div style="height:6px;background:var(--green);border-radius:3px"></div><div class="muted" style="font-size:11px;margin-top:8px">ספט</div></div><div style="flex:1;text-align:center"><div style="height:6px;background:var(--green);border-radius:3px"></div><div class="muted" style="font-size:11px;margin-top:8px">אוק</div></div><div style="flex:1;text-align:center"><div style="height:6px;background:var(--green);border-radius:3px"></div><div class="muted" style="font-size:11px;margin-top:8px">נוב</div></div><div style="flex:1;text-align:center"><div style="height:6px;background:var(--green);border-radius:3px"></div><div class="muted" style="font-size:11px;margin-top:8px">דצמ</div></div><div style="flex:1;text-align:center"><div style="height:6px;background:var(--green);border-radius:3px"></div><div class="muted" style="font-size:11px;margin-top:8px">ינו</div></div><div style="flex:1;text-align:center"><div style="height:6px;background:var(--green);border-radius:3px"></div><div class="muted" style="font-size:11px;margin-top:8px">פבר</div></div><div style="flex:1;text-align:center"><div style="height:6px;background:var(--green);border-radius:3px"></div><div class="muted" style="font-size:11px;margin-top:8px">מרץ</div></div><div style="flex:1;text-align:center"><div style="height:6px;background:var(--green);border-radius:3px"></div><div class="muted" style="font-size:11px;margin-top:8px">אפר</div></div><div style="flex:1;text-align:center"><div style="height:6px;background:var(--green);border-radius:3px"></div><div class="muted" style="font-size:11px;margin-top:8px">מאי</div></div><div style="flex:1;text-align:center"><div style="height:6px;background:var(--green);border-radius:3px"></div><div class="muted" style="font-size:11px;margin-top:8px">יונ</div></div><div style="flex:1;text-align:center"><div style="height:6px;background:var(--green);border-radius:3px"></div><div class="muted" style="font-size:11px;margin-top:8px">יול</div></div></div></div>
+<h3 style="text-align:right;margin:0 0 12px">מסמכים אחרונים</h3>
+<div class="tbl-wrap"><table class="tbl"><thead><tr><th>מספר</th><th>סוג</th><th>לקוח</th><th>סכום</th><th>סטטוס</th></tr></thead><tbody>
+<tr><td>—</td><td>חשבונית מס</td><td>ישראל קרטון</td><td>₪25,488.00</td><td><span class="badge badge-gray">טיוטה</span></td></tr><tr><td>—</td><td>הצעת מחיר</td><td>אגן שיווק</td><td>₪9,900.00</td><td><span class="badge badge-gray">טיוטה</span></td></tr><tr><td>—</td><td>הזמנת רכש</td><td>פוליראן תעשיות</td><td>₪8,500.00</td><td><span class="badge badge-gray">טיוטה</span></td></tr>
+</tbody></table></div>
+</div></div>
+<div class="nm-ov"><div class="nm-scrim"></div><div class="nm-panel">
+  <div class="nm-head"><h2>מסמך חדש</h2><button class="nm-x">✕</button></div>
+  <div class="nm-body">
+    <label class="nm-lbl">סוג מסמך</label>
+    <div class="nm-field nm-sel"><span>חשבונית מס</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8a9a94" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
+    <div class="nm-grid2">
+      <div><label class="nm-lbl">תאריך</label><div class="nm-field" style="display:flex;align-items:center;justify-content:space-between;direction:ltr"><span style="color:#2b3a34">07/20/2026</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8a9a94" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></div></div>
+      <div><label class="nm-lbl">אמצעי תשלום</label><div class="nm-field nm-sel"><span>מזומן</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8a9a94" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div></div>
+    </div>
+    <div class="nm-fs">
+      <div class="nm-fs-t">לקוח</div>
+      <div class="nm-grid2" style="margin-top:0">
+        <div><label class="nm-lbl">שם</label><div class="nm-field"><span class="nm-ph">שם הלקוח</span></div></div>
+        <div><label class="nm-lbl">ח.פ / ע.מ</label><div class="nm-field"><span class="nm-ph">514…</span></div></div>
+        <div><label class="nm-lbl">כתובת</label><div class="nm-field"><span class="nm-ph">רחוב ומספר</span></div></div>
+        <div><label class="nm-lbl">עיר</label><div class="nm-field">&nbsp;</div></div>
+      </div>
+    </div>
+    <div class="nm-fs">
+      <div class="nm-fs-t">שורות</div>
+      <div class="nm-lines-h"><span>תיאור</span><span>כמות</span><span>מחיר יח'</span><span>סה״כ</span><span></span></div>
+      <div class="nm-line">
+        <div class="nm-field"><span class="nm-ph">תיאור / בחר פריט</span></div>
+        <div class="nm-field" style="text-align:left">1</div>
+        <div class="nm-field" style="text-align:left">0</div>
+        <div class="tot">₪0.00</div>
+        <button class="nm-del">✕</button>
+      </div>
+      <div class="nm-add"><button>+ הוסף שורה</button></div>
+    </div>
+    <div class="nm-total">
+      <div class="r"><span>סכום ביניים</span><span>₪0.00</span></div>
+      <div class="r"><span>מע״מ 18%</span><span>₪0.00</span></div>
+      <div class="r big"><span>סה״כ לתשלום</span><span>₪0.00</span></div>
+    </div>
+  </div>
+  <div class="nm-foot"><button class="btn">שמור טיוטה</button><button class="btn btn-primary">הפק מסמך ›</button></div>
+</div></div></main></div></section>

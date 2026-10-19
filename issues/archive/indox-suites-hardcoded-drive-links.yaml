@@ -1,0 +1,20 @@
+title: BS + GDoc suites hardcode real Drive fixture links (google-only lanes)
+status: closed  # 2026-07-07 — find-or-upload bootstrap landed; both backends verified green. 2026-07-30 triage: CONFIRMED — indoxV2BSTest01.json and indoxV2GDocTest01.json now bootstrap from indox-demo-docs and no drive.google.com/file literal remains under apps/indox/blueprint/n8n/.
+created: 2026-07-07
+priority: medium
+context: |
+  drive api is dual-backend (google | local via redis n8n.indox.drive_backend), and the
+  doc_base + pipeline suites are fully backend-agnostic (they find-or-upload their files
+  from the indox-demo-docs server). The BS suite (indoxV2BSTest01 Config doc.LINK/failDoc.LINK)
+  and the GDoc suite (indoxV2GDocTest01 Config link) still hardcode real
+  drive.google.com file links for their lifecycle/extract/partial-error fixture docs —
+  those lanes fail in local mode (id extracted from a google URL -> storage 404), so
+  `bbox indox test all` under DRIVE_BACKEND=local (and hence fully-hermetic CI) is blocked
+  on these two suites.
+action: |
+  Add a find-or-upload bootstrap head to each suite (same pattern as the batch lanes):
+  resolve/upload ONE canonical fixture file per lane from http://indox-demo-docs:8088,
+  write the resolved webViewLink into the Config doc objects, keep the existing
+  Download-for-Hash -> Prime Cache flow (it is already hash-dynamic). Then run
+  `bbox indox test all` in BOTH backends and update ai/context/indox-testing.md
+  (remove this limitation note).

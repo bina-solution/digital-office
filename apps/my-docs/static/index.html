@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>מסמכים שלי · ניהול מסמכים עסקיים</title>
+<link rel="stylesheet" href="style.css"/>
+<link rel="stylesheet" href="vendor/bina-table.css"/>
+</head>
+<body>
+<div id="app">
+  <aside class="side">
+    <div class="brand"><span class="logo"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg></span><b>מסמכים שלי</b></div>
+    <nav>
+      <a data-view="dash" class="active"><span class="nav-dot"></span>לוח בקרה</a>
+      <a data-view="docs"><span class="nav-dot"></span>מסמכים</a>
+      <a data-view="customers"><span class="nav-dot"></span>לקוחות</a>
+      <a data-view="items"><span class="nav-dot"></span>פריטים</a>
+      <a data-view="settings"><span class="nav-dot"></span>הגדרות עסק</a>
+    </nav>
+    <button id="newBtn" class="primary block"><svg class="ic-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg> מסמך חדש</button>
+    <div class="user" id="userBox">…</div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <h1 id="viewTitle">לוח בקרה</h1>
+      <div class="hint" id="bizHint">מסמכים חוקיים · מספר הקצאה · מקור/העתק · שמירת 7 שנים</div>
+    </header>
+
+    <section id="view-dash" class="view">
+      <div class="stats" id="stats"></div>
+      <h2>מסמכים אחרונים</h2>
+      <div id="recent" class="tablewrap"></div>
+    </section>
+
+    <section id="view-docs" class="view hidden">
+      <div class="filters" id="filters"></div>
+      <div id="docsTable" class="tablewrap"></div>
+    </section>
+
+    <section id="view-customers" class="view hidden">
+      <div class="listhead"><button class="primary" id="addCust"><svg class="ic-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg>לקוח</button></div>
+      <div id="custTable" class="tablewrap"></div>
+    </section>
+
+    <section id="view-items" class="view hidden">
+      <div class="listhead"><input id="itemSearch" placeholder="חיפוש פריט…"/><button class="primary" id="addItem"><svg class="ic-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg>פריט</button></div>
+      <div id="itemTable" class="tablewrap"></div>
+    </section>
+
+    <section id="view-settings" class="view hidden">
+      <form id="bizForm" class="card-form"></form>
+    </section>
+  </main>
+</div>
+
+<!-- Onboarding -->
+<div id="onboard" class="onboard hidden">
+  <div class="onboard-card">
+    <div class="brand big"><span class="logo"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg></span><b>מסמכים שלי</b></div>
+    <h2>ברוכים הבאים — הגדרת העסק</h2>
+    <p class="sub">כמה פרטים כדי להתחיל להפיק מסמכים חוקיים. אפשר לערוך בכל עת ב״הגדרות עסק״.</p>
+    <form id="onboardForm"></form>
+    <button class="primary block" id="onboardSave">התחל לעבוד<svg class="ic-svg ic-end" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
+  </div>
+</div>
+
+<!-- New-document panel -->
+<div id="overlay" class="overlay hidden"></div>
+<div id="editor" class="editor hidden" dir="rtl">
+  <div class="editor-h">
+    <h2 id="editorTitle">מסמך חדש</h2>
+    <button class="ghost" id="closeEditor"><svg class="ic-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+  </div>
+  <div class="editor-b">
+    <label>סוג מסמך
+      <select id="fType">
+        <option value="INVOICE">חשבונית מס</option>
+        <option value="INVOICE_RECEIPT">חשבונית מס קבלה</option>
+        <option value="RECEIPT">קבלה</option>
+        <option value="QUOTE">הצעת מחיר</option>
+        <option value="ORDER">הזמנת רכש</option>
+        <option value="SHIPMENT">תעודת משלוח</option>
+      </select>
+    </label>
+    <div class="row">
+      <label>תאריך<input type="date" id="fDate"/></label>
+      <label>אמצעי תשלום
+        <select id="fPay">
+          <option>מזומן</option>
+          <option>העברה בנקאית</option>
+          <option>כרטיס אשראי</option>
+          <option>המחאה</option>
+          <option>ביט</option>
+        </select>
+      </label>
+    </div>
+    <fieldset><legend>לקוח</legend>
+      <div class="row">
+        <label>שם<input id="cName" placeholder="שם הלקוח"/></label>
+        <label>ח.פ / ע.מ<input id="cId" placeholder="514…"/></label>
+      </div>
+      <div class="row">
+        <label>כתובת<input id="cStreet" placeholder="רחוב ומספר"/></label>
+        <label>עיר<input id="cCity"/></label>
+      </div>
+    </fieldset>
+    <fieldset class="lines-fs"><legend>שורות</legend>
+      <table class="lines"><thead><tr>
+        <th>תיאור</th><th>כמות</th><th>מחיר יח׳</th><th>סה״כ</th><th></th>
+      </tr></thead><tbody id="lines"></tbody></table>
+      <button class="ghost" id="addLine"><svg class="ic-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg>הוסף שורה</button>
+    </fieldset>
+    <div class="totals" id="editorTotals"></div>
+  </div>
+  <div class="editor-f">
+    <button class="ghost" id="saveDraft">שמור טיוטה</button>
+    <button class="primary" id="issueNow">הפק מסמך<svg class="ic-svg ic-end" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
+  </div>
+</div>
+
+<!-- Document detail drawer -->
+<div id="drawer" class="drawer hidden" dir="rtl">
+  <div class="drawer-h">
+    <div><span id="dNum" class="dnum"></span><span id="dStatus" class="chip"></span><span id="dConv" class="conv-from"></span></div>
+    <button class="ghost" id="closeDrawer"><svg class="ic-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+  </div>
+  <div class="drawer-actions" id="dActions"></div>
+  <div class="drawer-b">
+    <iframe id="dPdf" title="מסמך"></iframe>
+    <div class="events"><h3>יומן פעולות</h3><ul id="dEvents"></ul></div>
+  </div>
+</div>
+
+<script src="vendor/bina-table.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

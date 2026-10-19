@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+#: snapshot supabase's own service state — the auth users and the storage object index
+#
+# backup <outdir> <mode>   — invoked by scripts/deployment-archive.py, never by hand.
+#
+# WHY THIS IS NOT IN platform-base/postgres/hooks/backup, WHERE IT STARTED.
+#
+# It was there, and the restore proved it wrong. `auth` and `storage` are not the database's
+# schemas; they belong to gotrue and storage-api, which create them BY MIGRATION on first boot.
+# Restoring their rows before those services have ever run means restoring into tables that do not
+# exist yet — measured on the first real restore: 887 `storage.objects` rows and 1 bucket dropped
+# with "relation storage.buckets_analytics does not exist" and "column public of relation buckets
+# does not exist", because the target's storage schema was several migrations older than the
+# source's. Every one of those 887 rows is the INDEX ENTRY for a file that DID restore into
+# `supabase_storage_data`, so the failure mode is 140 MB of documents present on disk and invisible
+# to the application.
+#
+# The app that owns the services is the only thing that may start them, and it is the only thing
+# that knows they must be started before their data lands. So the ownership moved to match the fact.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+. "${REPO_ROOT}/scripts/archive-lib.sh"
+
+OUT="${1:?usage: backup <outdir> <mode>}"
+DB="$(archive_require supabase-db)"
+U=supabase_admin
+
+# Migration bookkeeping is EXCLUDED: it belongs to the instance, not to the archive. Restoring it
+# either collides with the target's rows ("duplicate key ... schema_migrations_pkey", measured) or,
+# worse, convinces the target it has applied migrations it has not — so it never creates the tables
+# the rest of this dump needs.
+docker exec "${DB}" pg_dump -U "${U}" -d postgres -Fc --data-only -n auth -n storage \
+  --exclude-table='auth.schema_migrations' --exclude-table='storage.migrations' \
+  > "${OUT}/supabase-auth-storage.dump.part" \
+  || { echo "[supabase/backup] pg_dump failed" >&2; rm -f "${OUT}/supabase-auth-storage.dump.part"; exit 1; }
+mv "${OUT}/supabase-auth-storage.dump.part" "${OUT}/supabase-auth-storage.dump"
+echo "ARTIFACT supabase-auth-storage.dump"
+
+q() { docker exec "${DB}" psql -U "${U}" -d postgres -tAc "$1" 2>/dev/null | tr -d '\r' | tr -d ' '; }
+echo "FACT auth_users $(q 'select count(*) from auth.users;')"
+echo "FACT storage_objects $(q 'select count(*) from storage.objects;')"
+echo "FACT storage_buckets $(q 'select count(*) from storage.buckets;')"
+# The object index and the bytes on disk are two halves of one fact. Hash the index so a restore
+# that carries the volume and loses the rows (the exact defect this hook was split out to fix)
+# cannot report success.
+echo "FACT storage_sha $(q "select md5(string_agg(id::text||coalesce(name,''), '|' order by id)) from storage.objects;")"
+# NB: supabase_storage_data is NOT claimed with SKIPVOL. The driver's generic volume tar is the
+# right tool for it — it is a plain file tree — and claiming it here would only move working code.
+exit 0

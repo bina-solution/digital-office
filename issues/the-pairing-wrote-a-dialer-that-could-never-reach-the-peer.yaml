@@ -1,0 +1,120 @@
+# yaml-language-server: $schema=./schema.json
+title: "A pairing writes a pair that can never handshake: the office with a public address is made the DIALER of the peer's private LAN address, and every screen says `paired`"
+opened: 2026-10-12
+category: bug
+severity: high
+status: resolved
+summary: >
+  The owner paired `hp-laptop` (at home, behind its NAT) with `vps1` (a server at 31.97.196.82) from
+  the screens. The pairing completed on both ends — record written, token in the vault, both screens
+  reporting a pair — and the tunnel never carried a byte: `wg show wg2` counted `0 B received` for
+  four minutes and never completed a handshake. `pair_api.claim` chose WHO DIALS by asking only
+  "did the joiner publish a listen address?", never "can this office reach it": the HP published the
+  address its own LAN knows it by (`192.168.16.100:51830`), so the cloud office was made the dialer
+  and the office that no packet can reach was made the listener — the pair written exactly the wrong
+  way round. Nothing on any screen said so: with the tunnel unmeasured the verdict read
+  „המנהרה אליה פעילה, אבל הלשכה עצמה לא עונה”, and the two automatic repairs (a fresh source port,
+  a search of the peer's `/24`) spent 8½ minutes and two port rotations proving nothing, because
+  neither can fix a dial into a network this office is not on.
+description: |
+  ## Measured (2026-10-12, office `vps1`, its own volumes and containers)
+
+  ```
+  /data/dgo/hp-laptop.yaml  → kind: paired, slot 2, side: 1, role: host, dial: host,
+                              endpoint: 192.168.16.100, port: 51830, paired_at 1791810569 (16:09:29)
+  docker exec dgo-net-staging wg show wg2
+      endpoint: 192.168.16.83:51830        (mid-scan; the rendered plan said 192.168.16.100:51830)
+      transfer: 0 B received, 1.45 KiB sent;  no latest handshake
+  .env → DGO_WG_ENDPOINT=console.staging.digital-office.co.il (= 31.97.196.82),
+         DGO_WG_PUBLISH_BIND=0.0.0.0, DGO_WG_PUBLISH_PORT=51830, DGO_WG_PORT=51830
+  ufw status → 51830/udp ALLOW IN   ·  DOCKER-USER → RETURN udp dpt:51830
+  /data/find-peer.json   → {"candidates": 64, "count": 1, "why": "hp-laptop לא ענתה 328 שניות"}
+  /data/listen-ports.json → 51830 → 51932 → 52032   (two rotations)
+  GET /api/link → verdict {"ok": false, "hop": "office",
+                           "why": "המנהרה אליה פעילה, אבל הלשכה עצמה לא עונה"}
+  ```
+
+  The `/24` search ran 13:14:59 → 13:23:36 UTC (8 min 37 s), probed all 64 addresses of
+  `192.168.16.0/24` — a home network this office has no route to — and answered `found` empty. While
+  it ran, the tunnel container's own measurement (`wg-state.json`, written by the same 15-second
+  loop) went unwritten for longer than the app's 60-second staleness window, so `tunnel` became
+  `null` and the verdict fell through to `office`: the screen claimed a LIVE TUNNEL over a tunnel
+  that had never completed a handshake.
+
+  ## The two independent faults
+
+  1. **The decision was taken without asking who can reach whom.** `pair_api.claim` preferred the
+     joiner's published listen address unconditionally
+     (`if theirs.get("endpoint") and theirs.get("port"): dial = "host"`). A private address is a fact
+     about ONE LAN, so the same address is right for the MacBook beside the HP (lnk-017, measured the
+     other way on 2026-10-07) and impossible for a cloud office. Reachability is a fact of the PAIR,
+     and it was never asked.
+  2. **Two surfaces reported the opposite of the measurement.** The verdict called an unmeasured
+     tunnel "alive"; and the heal acted on a pair whose dial target it can never reach — rotating
+     this office's own source port (a repair for a NAT that blackholes a flow that DOES leave) and
+     scanning a foreign `/24` (a repair for a peer whose DHCP lease moved on a network we share).
+
+  ## Fixed (2026-10-12, vps1)
+
+  * `net.dialable_from_here(peer_endpoint, own_endpoint)` — one predicate, beside `lan_address`:
+    a name or a public address is dialable by anybody; a private address is dialable only by an
+    office that declares a private address of its own; an office that declared nothing dials
+    whatever it was given (the macOS engine, a working case that must not regress).
+  * `pair_api.claim` asks it: the joiner's private address is chosen only when this office could be
+    on that network, otherwise this office listens and the joiner dials THIS OFFICE's published
+    address, and when neither is possible the pairing is refused in words (the existing 409).
+  * `find_peer` refuses the `/24` search for a pair this office cannot dial, and `heal_links` skips
+    both repairs for it — with the reason in the answer, instead of manufacturing traffic.
+  * `_verdict`: `office` now requires a MEASURED-LIVE handshake; no measurement (or no handshake) is
+    `tunnel`, and a pair this office dials into a private address it cannot be on is the new `pair`
+    hop — „הצימוד הזה נכתב בכיוון שאי אפשר לחייג בו … צמדו מחדש”.
+  * Proof: `pair_api.selftest` (public office + private peer ⇒ `dial: joiner`; a LAN office and an
+    office that published nothing keep `dial: host`), `net.py selftest` (6 cases),
+    `apps/dgo-extend/tests/fresh-offices.sh` — a throwaway office AT HOME offering to the LIVE office,
+    which must not dial its private address.
+
+  ## The pair that had never carried a byte, closed the same evening
+
+  The record already written could not be repaired from one side (both ends held the same
+  `dial: host`), so it was REPLACED by a fresh pairing — vps1 as the joining office, the HP claiming
+  with `replace: true` — and the fix is what makes that answer reachable. Measured (2026-10-12
+  19:01):
+
+  ```
+  hp-laptop.yaml → slot 3, side 2, role joiner, dial host,
+                   endpoint console.staging.digital-office.co.il, port 51830  (listen_port 51830)
+  docker exec dgo-net-staging wg show wg3
+      listening port: 51830 · peer OUBWvxLV… · endpoint 79.177.165.212:60670
+      latest handshake: 36 seconds ago · transfer: 56856 B received, 43988 B sent
+  GET /api/link → state up, verdict {ok: true}, delivery {door listening, catalog ok}, apps ["plane"]
+  console /api/modules → plane.hp-laptop (remote hp-laptop, ok true, embed /a/plane/)
+  curl -H 'Host: plane.hp-laptop' http://plane.hp-laptop:9003/ → 200, the HP's own Plane page
+  ./bbox dgo link status → hp-laptop  answers: up   handshake: 36s ago
+  ```
+
+  The owner's Plane is now a tile in this office's console. Two gaps this exposed, neither of them
+  the link: this office holds no Plane API key, so `./bbox project-pln plan office` reaches Plane
+  through the link but cannot publish (`404 unknown instance` for `plane_local_api_token-local` in
+  this vault); and on the `.localhost` engine the nested host of a REMOTE app is not registered with
+  the identity outpost (`plane.hp-laptop.console.localhost` → 404, where the real domain answers the
+  sign-in redirect), which is the `serve.py`/`reconcile.py` lane. Both are recorded in
+  `apps/project-pln/plans/office.yaml`.
+
+references:
+- apps/dgo-extend/pair_api.py
+- apps/dgo-extend/net.py
+- apps/dgo-extend/app.py
+- apps/dgo-extend/tests/fresh-offices.sh
+- ai/context/dgo-pairing-contract.md
+- apps/project-pln/plans/office.yaml
+tasks:
+- text: "`net.dialable_from_here` + `pair_api.claim` asks it before choosing who dials"
+  done: true
+- text: "The verdict stops calling an unmeasured tunnel alive, and names a mis-written pair (`hop: pair`)"
+  done: true
+- text: "The heal does not scan a foreign /24 nor rotate a port for a dial target it can never reach"
+  done: true
+- text: "The live pair re-paired so the HP dials this office's published address — done 2026-10-12: handshake up, catalog pulled, `plane.hp-laptop` in the console"
+  done: true
+- text: "A REMOTE tile on the `.localhost` engine is not in the identity outpost's host list (real domain answers the sign-in redirect) — `serve.py`/`reconcile.py` lane, still open"
+  done: false

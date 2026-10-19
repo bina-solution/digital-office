@@ -1,0 +1,13 @@
+{
+  "name": "@bina/dsh-office-workspace",
+  "description": "Registers the office checkout as a workspace in the harness's workspace registry at boot, so it is offered first for a new conversation",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./package.json": "./package.json"
+  },
+  "license": "MIT"
+}

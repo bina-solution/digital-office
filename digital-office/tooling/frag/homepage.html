@@ -1,0 +1,99 @@
+<style>body:has(.screen[data-screen="homepage"].active) #navBtn{display:none}</style><section class="screen" data-screen="homepage">
+<div style="height:100vh;overflow:auto;background:#1a2337;color:#e6e9ef;font-family:'Heebo',Arial,sans-serif;direction:ltr;text-align:left;padding:24px 116px">
+<style>
+.hp-hdr{display:flex;align-items:center;gap:16px;padding-bottom:18px;border-bottom:1px solid #384258}
+.hp-hdr h1{font-size:22px;font-weight:600;margin:0;color:#fff;flex-shrink:0}
+.hp-search{flex:1;max-width:640px;background:#2a3350;border-radius:8px;padding:9px 14px;color:#8b93a7;font-size:13px;display:flex;align-items:center;justify-content:space-between}
+.hp-search .k{background:#1a2337;border-radius:5px;padding:2px 6px;font-size:11px}
+.hp-date{color:#c3c9d6;font-size:13px;white-space:nowrap}
+.hp-cols{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;margin-top:22px}
+.hp-col h2{font-size:20px;font-weight:600;color:#e6e9ef;margin:0 0 12px}
+.hp-card{background:#29334c;border-radius:10px;padding:14px 16px;margin-bottom:14px;position:relative}
+.hp-badge{position:absolute;top:12px;right:14px;font-size:10px;letter-spacing:.03em;font-weight:700;padding:2px 8px;border-radius:5px}
+.hp-badge.healthy{background:#173832;color:#3ddc97}
+.hp-badge.running{background:#173a3d;color:#3dd6dc}
+.hp-row{display:flex;align-items:flex-start;gap:12px}
+.hp-icon{width:36px;height:36px;border-radius:8px;background:#3a4562;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-weight:700;font-size:12px;color:#9aa4bd}
+.hp-name{font-size:15px;font-weight:600;color:#fff;margin-bottom:2px}
+.hp-desc{font-size:12px;color:#9aa4bd}
+.hp-tmpl{font-size:11px;color:#6b7590}
+.hp-err{margin-top:10px;background:#5b1235;color:#f4c9d9;border-radius:8px;padding:10px 14px;font-size:13px;display:flex;align-items:center;gap:8px}
+</style>
+  <div class="hp-hdr">
+    <h1>Hacohen Deployment</h1>
+    <div class="hp-search"><span>Search...</span><span class="k">⌘</span></div>
+    <div class="hp-date">July 18, 2026 at 22:57</div>
+  </div>
+
+  <div class="hp-cols">
+    <div class="hp-col">
+      <h2>Applications</h2>
+      <div class="hp-card"><span class="hp-badge healthy">HEALTHY</span>
+        <div class="hp-row"><div class="hp-icon">API</div><div><div class="hp-name">API Tools</div><div class="hp-desc">OCR &amp; PDF Processing API</div></div></div>
+      </div>
+      <div class="hp-card"><span class="hp-badge healthy">HEALTHY</span>
+        <div class="hp-row"><div class="hp-icon">▦</div><div><div class="hp-name">Console</div><div class="hp-desc">Unified business system</div></div></div>
+      </div>
+      <div class="hp-card"><span class="hp-badge healthy">HEALTHY</span>
+        <div class="hp-row"><div class="hp-icon" style="color:#e0517a">⚭</div><div><div class="hp-name">n8n</div><div class="hp-desc">Workflow Automation</div></div></div>
+      </div>
+      <div class="hp-card"><span class="hp-badge healthy">HEALTHY</span>
+        <div class="hp-row"><div class="hp-icon" style="color:#3ddc6a">☎</div><div><div class="hp-name">WhatsApp Admin</div><div class="hp-desc">WhatsApp Management</div></div></div>
+      </div>
+    </div>
+
+    <div class="hp-col">
+      <h2>Infrastructure</h2>
+      <div class="hp-card"><span class="hp-badge healthy">HEALTHY</span>
+        <div class="hp-row"><div class="hp-icon">☰</div><div><div class="hp-name">Any Concurrency</div><div class="hp-desc">Deployment-wide concurrency observability</div></div></div>
+      </div>
+      <div class="hp-card"><span class="hp-badge healthy">HEALTHY</span>
+        <div class="hp-row"><div class="hp-icon" style="color:#e2542e">⏚</div><div>
+          <div class="hp-name">Authentik</div><div class="hp-desc">Identity &amp; Access Management</div>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <div style="background:#1f2740;border-radius:6px;padding:6px 10px;text-align:center;flex:1"><div style="font-size:14px;font-weight:700;color:#fff">0</div><div class="hp-tmpl">USERS</div></div>
+            <div style="background:#1f2740;border-radius:6px;padding:6px 10px;text-align:center;flex:1"><div class="hp-tmpl" style="font-size:13px">{{value, number}}</div><div class="hp-tmpl">LOGINS (24H)</div></div>
+            <div style="background:#1f2740;border-radius:6px;padding:6px 10px;text-align:center;flex:1"><div class="hp-tmpl" style="font-size:13px">{{value, number}}</div><div class="hp-tmpl">FAILED LOGINS (24H)</div></div>
+          </div>
+        </div></div>
+      </div>
+      <div class="hp-card"><span class="hp-badge healthy">HEALTHY</span>
+        <div class="hp-row"><div class="hp-icon">⚿</div><div><div class="hp-name">Connections</div><div class="hp-desc">Credential plane (text / oauth / qr)</div></div></div>
+      </div>
+      <div class="hp-card"><span class="hp-badge healthy">HEALTHY</span>
+        <div class="hp-row"><div class="hp-icon">▤</div><div><div class="hp-name">Machine</div><div class="hp-desc">Machine resources, containers, storage</div></div></div>
+      </div>
+      <div class="hp-card"><span class="hp-badge healthy">HEALTHY</span>
+        <div class="hp-row"><div class="hp-icon" style="color:#e0517a">⚙</div><div><div class="hp-name">n8n Task Runner</div><div class="hp-desc">Code Node Runner (main)</div></div></div>
+      </div>
+      <div class="hp-card"><span class="hp-badge healthy">HEALTHY</span>
+        <div class="hp-row"><div class="hp-icon" style="color:#e0517a">⚭</div><div><div class="hp-name">n8n Worker</div><div class="hp-desc">Queue Worker</div></div></div>
+      </div>
+      <div class="hp-card"><span class="hp-badge healthy">HEALTHY</span>
+        <div class="hp-row"><div class="hp-icon" style="color:#e0517a">⚙</div><div><div class="hp-name">n8n Worker Runner</div><div class="hp-desc">Code Node Runner (worker)</div></div></div>
+      </div>
+      <div class="hp-card" style="padding-bottom:44px"><span class="hp-badge healthy">HEALTHY</span>
+        <div class="hp-row"><div class="hp-icon" style="color:#1f2a44;background:#111826">P</div><div><div class="hp-name">Portainer</div><div class="hp-desc">Container Management</div></div></div>
+        <div class="hp-err">ⓘ API Error Information</div>
+      </div>
+    </div>
+
+    <div class="hp-col">
+      <h2>Monitoring</h2>
+      <div class="hp-card"><span class="hp-badge healthy">HEALTHY</span>
+        <div class="hp-row"><div class="hp-icon" style="color:#e0325b;font-weight:800">G</div><div><div class="hp-name">GlitchTip</div><div class="hp-desc">Error Tracking</div></div></div>
+      </div>
+    </div>
+
+    <div class="hp-col">
+      <h2>Databases</h2>
+      <div class="hp-card"><span class="hp-badge running">RUNNING</span>
+        <div class="hp-row"><div class="hp-icon" style="color:#e0325b">⛁</div><div><div class="hp-name">RedisInsight</div><div class="hp-desc">Redis GUI</div></div></div>
+      </div>
+      <div class="hp-card"><span class="hp-badge healthy">HEALTHY</span>
+        <div class="hp-row"><div class="hp-icon" style="color:#3ddc97">⚡</div><div><div class="hp-name">Supabase Studio</div><div class="hp-desc">INDOX data + storage (Supabase)</div></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+</section>

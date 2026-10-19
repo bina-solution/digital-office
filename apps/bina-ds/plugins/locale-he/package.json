@@ -1,0 +1,22 @@
+{
+  "name": "@bina/dsh-client-locale-he",
+  "description": "Hebrew language pack for the DeepSeek Harness web client: the `he` language, one dictionary per UI namespace, and right-to-left document direction while Hebrew is active",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-locale"
+      ]
+    }
+  },
+  "license": "MIT"
+}

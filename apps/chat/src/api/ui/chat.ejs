@@ -1,0 +1,2630 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>צ׳אט</title>
+  <style>
+    /* This page's own: radii, type, and the names a conversation uses — each pointed at the office's
+       palette (the generated block below, kept identical to platform-base/bina-ui/theme-tokens.css by
+       gate G27). What I wrote is a tint of the brand's olive; what I was sent is the surface; the
+       room behind them is the page's ground. Nothing here writes a colour, so the dark ground needs
+       no rule of its own. */
+    :root{--radius:16px;--radius-sm:10px;--radius-pill:999px;
+      --shadow-xs:0 1px 2px var(--line);--shadow-md:var(--shadow-lg);
+      --bubble-out:var(--olive-soft);--bubble-out-bd:var(--olive-line);--bubble-in:var(--surface);
+      --chat-bg:var(--bg);--chat-dot:color-mix(in srgb,var(--ink) 4.5%,transparent);
+      --font:"Segoe UI",system-ui,-apple-system,"Noto Sans Hebrew","Assistant",Arial,sans-serif}
+/* @bina-theme-tokens:start */
+/* OLIVE GROVE — the one palette of the office (the owner, 2026-10-07 · DGO-450). Four hues, sampled
+   from his mock-up, and the ground they stand on. A screen never writes a colour: it names one of
+   these. Each hue is the colour itself (a FILL — a button, a bar, a dot), «-d» for text and thin
+   lines on the ground (4.5:1 or more), «-soft» and «-line» for a tint and its hairline, and «-ink»
+   for what is written ON the fill. The role names every screen already uses point at them:
+   (no backtick in this block: one of its copies lives inside a script's template string)
+     olive  the brand and the main action · what is well, what is done
+     sky    what is in motion, what only informs · a link
+     lime   look here — a warning, something waiting
+     plum   a person must act — a failure, a removal, the one final action
+   Contrast, measured (WCAG): ink on the ground 13.7 · muted 4.65 · light text on olive 5.51 and on
+   plum 9.54 · ink on lime 6.88 · its ink on sky 6.32 · sky-d 4.61 · lime-d 4.70 · violet 5.32 ·
+   on the desk: its ink 6.32 (dark: 13.96), and 11.2 where the sky pales (dark: 5.12). */
+:root,:root[data-theme="light"]{
+  color-scheme:light;
+  accent-color:var(--accent);   /* the browser's OWN controls - a checkbox, a radio, a range, a progress bar - on both grounds: said once, here (it was said for eight single controls, and every other one was the browser's blue) */
+  --bg:#f3f5f7; --surface:#fff; --surface-2:#f9fafb; --ink:#1f2a17; --muted:#6a7068; --line:#dcdfde;
+  --olive:#56693f; --olive-d:#475734; --olive-soft:#e7eae4; --olive-line:#bfc6b6; --olive-ink:#f3f5f7;
+  --sky:#7baae3; --sky-d:#2a6fc4; --sky-soft:#edf3fb; --sky-line:#cddff4; --sky-ink:#13263f;
+  --lime:#a9b84c; --lime-d:#69732e; --lime-soft:#f3f5e6; --lime-line:#dee4bb; --lime-ink:#1f2a17;
+  --plum:#5b3349; --plum-d:#4a303b; --plum-soft:#e8e2e6; --plum-line:#c1b1ba; --plum-ink:#f3f5f7;
+  --accent:var(--olive); --accent-d:var(--olive-d); --accent-soft:var(--olive-soft); --accent-ink:var(--olive-ink);
+  --blue:var(--sky-d); --amber:var(--lime-d); --red:var(--plum);
+  --violet:#7c5c6d;   /* plum, lifted a fifth toward white: someone has to look — nothing has failed */
+  --ok:var(--olive); --warn:var(--lime-d); --danger:var(--plum); --info:var(--sky-d);
+  --ok-soft:var(--olive-soft); --warn-soft:var(--lime-soft); --danger-soft:var(--plum-soft); --info-soft:var(--sky-soft);
+  --red-soft:var(--plum-soft); --amber-soft:var(--lime-soft); --blue-soft:var(--sky-soft); --violet-soft:var(--plum-soft);
+  --side:var(--olive); --side-ink:#f3f5f7; --side-mut:#dce1da; --side-line:#788765;
+  --desk:var(--sky); --desk-ink:var(--sky-ink);   /* desktop mode's ground is the sky (the owner, DGO-452), and what is written straight on it */
+  --scrim:rgba(31,42,23,.5);                      /* what dims a screen behind a pop-up */
+  --shadow:0 1px 3px rgba(31,42,23,.08),0 6px 24px rgba(31,42,23,.06);
+  --shadow-lg:0 20px 60px rgba(31,42,23,.28);
+  /* ONE COLOUR AND ONE ANIMAL PER OFFICE (the owner, 2026-10-09 · flt-002). When offices are linked,
+     a person reads WHICH office a thing belongs to without opening it, so each office gets a hue of
+     its own. The hue is an IDENTITY and never a health state: an office that stopped answering keeps
+     its colour, and the quiet mark is the one that says "not answering". Each is an ALIAS of the
+     palette's own hue — no fourth value is invented, and because the ground re-points the hue, the
+     office mark follows the ground by itself. Each office's animal (elephant, deer, eagle) is a
+     glyph of bina-icons.js. */
+  --office-hp:var(--muted);   /* hp · elephant — grey: the heavy laptop at home, in the palette's own grey */
+  --office-mac:var(--lime);   /* macbook · deer — yellow: the palette has one yellow and it is lime. A FILL, so what is written ON it is --lime-ink, never this */
+  --office-vps:var(--sky-d);  /* vps · eagle — deep sky blue, «the eagle in the clouds». THE OWNER'S OWN CHOICE (2026-10-09, in writing: vps = נשר + כחול-שמיים) — this line is the colour he picked, not a default kept for him */
+}
+
+/* ── A LINKED OFFICE'S MARK, BY NAME (flt-004) ───────────────────────────────────────────────
+   The link carries a NAME — mark: {color, animal} in the catalog, from the office's own identity
+   — and never a value: the office that DRAWS a linked tile owns the pixels, so it paints the name
+   with its own palette. These seven rules are that translation, one per family above; a screen sets
+   data-office-hue="lime" and paints var(--office-hue).
+   A name this file does not know paints nothing, which is why the vocabulary in
+   apps/dgo-extend/identity.py may only name families that exist here — and why --red and --ok
+   are not among them: they mean «danger» and «it is well» on every screen in the office. */
+[data-office-hue="grey"]   { --office-hue:var(--muted); }
+[data-office-hue="lime"]   { --office-hue:var(--lime); }
+[data-office-hue="sky"]    { --office-hue:var(--sky-d); }
+[data-office-hue="olive"]  { --office-hue:var(--olive-d); }
+[data-office-hue="plum"]   { --office-hue:var(--plum); }
+[data-office-hue="blue"]   { --office-hue:var(--blue); }
+[data-office-hue="violet"] { --office-hue:var(--violet); }
+/* the dark ground is the same four hues on the palette's own ink, and the SAME legend. Olive on that
+   ink is 2.5:1, so its text step there is olive LIFTED — its own hue and saturation, lighter (7.14
+   on a card, 4.82 on its own tint) — and the brand, the main action and «it is well» take that step.
+   Lime stays «look here» and the sky «in motion», as on the light ground: were lime the accent here
+   (it was, for a day), a warning, a selection and «it is well» were one colour. Each «-d» on its
+   own «-soft» there, measured: olive 4.82 · sky 4.62 · lime 4.63 · plum 4.71. */
+@media (prefers-color-scheme:dark){
+  :root{ color-scheme:dark;
+         --bg:#141b0f; --surface:#1f2a17; --surface-2:#192213; --ink:#f3f5f7; --muted:#a2a8a2; --line:#414a3b;
+         --olive-d:#a5ba8c; --olive-soft:#384629; --olive-line:#56693f;
+         --sky-d:#7baae3; --sky-soft:#2e3f38; --sky-line:#4d6a8c;
+         --lime-d:#a9b84c; --lime-soft:#3b4622; --lime-line:#69732e;
+         --plum-d:#ad99a4; --plum-soft:#402f33; --plum-line:#7c5c6d;
+         --accent:var(--olive-d); --accent-ink:var(--surface);
+         --red:#ad99a4; --violet:#bdadb6; --danger:#ad99a4; --ok:var(--olive-d); --side:var(--surface);
+         --desk:var(--sky-ink); --desk-ink:var(--ink); --scrim:rgba(0,0,0,.6);
+         --shadow:0 1px 3px rgba(0,0,0,.4),0 6px 24px rgba(0,0,0,.3);
+         --shadow-lg:0 20px 60px rgba(0,0,0,.55); }
+}
+:root[data-theme="midnight"]{
+  color-scheme:dark;
+  --bg:#141b0f; --surface:#1f2a17; --surface-2:#192213; --ink:#f3f5f7; --muted:#a2a8a2; --line:#414a3b;
+  --olive-d:#a5ba8c; --olive-soft:#384629; --olive-line:#56693f;
+  --sky-d:#7baae3; --sky-soft:#2e3f38; --sky-line:#4d6a8c;
+  --lime-d:#a9b84c; --lime-soft:#3b4622; --lime-line:#69732e;
+  --plum-d:#ad99a4; --plum-soft:#402f33; --plum-line:#7c5c6d;
+  --accent:var(--olive-d); --accent-ink:var(--surface);
+  --red:#ad99a4; --violet:#bdadb6; --danger:#ad99a4; --ok:var(--olive-d); --side:var(--surface);
+  --desk:var(--sky-ink); --desk-ink:var(--ink); --scrim:rgba(0,0,0,.6);
+  --shadow:0 1px 3px rgba(0,0,0,.4),0 6px 24px rgba(0,0,0,.3);
+  --shadow-lg:0 20px 60px rgba(0,0,0,.55);
+}
+/* THE KEYBOARD'S RING - what the browser draws around the stop the keyboard is on, in the palette, wherever
+   a part draws none of its own. It has no specificity at all (:where), so any rule of a part wins. Two
+   screens said this for themselves; on the others nearly every stop wore the browser's ring (DGO-455).
+   A field keeps the offset it has - fourteen rules draw a field's own outline and say no offset. An area
+   (a scroll box, a table) takes the ring inside, where nothing clips it; a control takes it outside,
+   where a filled button does not hide it. */
+:where(:focus-visible){outline:2px solid var(--accent)}
+:where(:focus-visible:not(a,button,summary,[role=button],input,select,textarea)){outline-offset:-2px}
+:where(a,button,summary,[role=button]):focus-visible{outline-offset:2px}
+/* HEBREW AT A HEAVY WEIGHT - on Windows, where the first family of --font is installed. "Segoe UI" has its
+   Hebrew in Light, Regular, Semibold and Bold. Asked for 800 or 900 the browser takes the family's Black
+   face, which has none, and so has every family after it - so the Hebrew of every title at 800 was drawn in
+   the system's last-resort serif, thin, beside Latin in Black: «חשבונות ומראות» at 20px is 150px wide at 700
+   and 120px at 800 (Chrome 154; the screens ask for 800 in 167 places, the question's title among them).
+   These faces give the family's HEBREW RANGE the faces that have it. A family a sheet names is no longer the
+   system's for those characters, so every weight and both styles are named, each as the system resolves it:
+   measured, only upright 800 and 900 change. Any other character is not theirs and goes on to the next
+   family the screen names - system-ui in --font, on Windows the same faces, Black included - which is why
+   G27 asks that system-ui follows wherever a screen names this family itself. Where the family is not
+   installed nothing here resolves and nothing changes. */
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Light");font-weight:100 300;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI");font-weight:400;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Semibold");font-weight:500 600;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Bold");font-weight:700 900;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Light Italic");font-weight:100 300;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Italic");font-weight:400;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Semibold Italic");font-weight:500 600;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Bold Italic");font-weight:700 900;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+/* @bina-theme-tokens:end */
+    *{box-sizing:border-box}html,body{margin:0;height:100%}
+    body{background:var(--bg);color:var(--ink);font-family:var(--font);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+    .muted{color:var(--muted)}.small{font-size:12px}
+    ::-webkit-scrollbar{width:9px;height:9px}::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--muted) 32%,transparent);border-radius:9px;border:2px solid transparent;background-clip:padding-box}
+    ::-webkit-scrollbar-thumb:hover{background:color-mix(in srgb,var(--muted) 50%,transparent);background-clip:padding-box}
+    button{font-family:inherit}
+    .tag{display:inline-flex;align-items:center;font-size:10px;font-weight:800;border-radius:999px;padding:1px 7px;letter-spacing:.01em;line-height:1.55}
+    .tag-cust,.tag-bot{background:var(--info-soft);color:var(--blue)}.tag-supp{background:var(--violet-soft);color:var(--violet)}
+    .tag-grp{background:var(--accent-soft);color:var(--accent-d)}
+
+    .chat{display:flex;height:100vh;overflow:hidden;background:var(--bg)}
+
+    /* ── sidebar ─────────────────────────────────────────────────────────── */
+    aside.side{width:248px;flex:none;background:var(--surface);border-inline-start:1px solid var(--line);
+      display:flex;flex-direction:column;order:-1}
+    aside.side .brand{padding:18px 18px 15px;display:flex;align-items:center;gap:11px}
+    aside.side .brand .logo{width:38px;height:38px;border-radius:11px;flex:none;display:inline-flex;align-items:center;justify-content:center;
+      background:var(--olive);color:var(--olive-ink);box-shadow:var(--shadow)}
+    aside.side .brand h1{font-size:19px;font-weight:800;margin:0;letter-spacing:-.02em}
+    aside.side .brand .sub{font-size:11.5px;color:var(--muted);margin-top:1px}
+    .newbtn{margin:2px 14px 8px;display:flex;align-items:center;justify-content:center;gap:8px;padding:11px;border:none;border-radius:12px;
+      background:var(--accent);color:var(--accent-ink);font-weight:700;font-size:13.5px;cursor:pointer;box-shadow:var(--shadow);transition:.15s}
+    .newbtn:hover{background:var(--accent-d);transform:translateY(-1px);box-shadow:var(--shadow-lg)}
+    .newbtn:active{transform:translateY(0)}
+    .side-lbl{padding:14px 20px 6px;font-size:10.5px;font-weight:800;letter-spacing:.09em;color:var(--muted);text-transform:uppercase}
+    .botctl{margin:2px 14px 6px;padding:14px;border:1px solid var(--line);border-radius:14px;background:linear-gradient(180deg,var(--surface),var(--surface-2));box-shadow:var(--shadow-xs)}
+    .botctl .h{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:800;color:var(--ink)}
+    .botctl .h .bi{width:26px;height:26px;border-radius:8px;background:var(--accent-soft);color:var(--accent-d);display:inline-flex;align-items:center;justify-content:center;flex:none}
+    .selwrap{position:relative;margin-top:11px}
+    /* the select's chevron is DRAWN (two borders of a turned square), not a character of the font — and it
+       stands at the END of the line, where the select keeps room for it: at the start it lay over the first
+       letter of the option («בוט» read «צוט») */
+    .selwrap::after{content:"";position:absolute;inset-inline-end:13px;top:50%;width:6px;height:6px;border:solid var(--muted);border-width:0 1.6px 1.6px 0;transform:translateY(-70%) rotate(45deg);pointer-events:none}
+    .botctl select{width:100%;padding:9px 12px;padding-inline-end:30px;border:1px solid var(--line);border-radius:10px;font:inherit;font-size:13px;font-weight:600;
+      background:var(--surface);color:var(--ink);appearance:none;cursor:pointer}
+    .botctl select:focus{outline:2px solid var(--accent);border-color:transparent}
+    .botctl .bd{margin-top:9px;font-size:11.5px;color:var(--muted);line-height:1.5}
+    .side-sp{flex:1}
+    /* the account bar's own rules live with the switcher, further down — it is one control and it
+       reads better in one place than split between the sim's old block and its replacement */
+
+    /* ── conversation list ───────────────────────────────────────────────── */
+    .conv-col{width:352px;flex:none;background:var(--surface);border-inline-start:1px solid var(--line);display:flex;flex-direction:column;min-width:0}
+    .conv-head{padding:16px 18px 10px}
+    .conv-head .r{display:flex;align-items:center;justify-content:space-between}
+    .conv-head h2{margin:0;font-size:19px;font-weight:800;letter-spacing:-.02em}
+    .conv-head .cnt{font-size:11px;font-weight:800;color:var(--muted);background:var(--bg);border-radius:999px;padding:2px 9px}
+    .search{position:relative;margin-top:12px}
+    .search input{width:100%;padding:10px 38px 10px 14px;border:1px solid var(--line);border-radius:12px;font:inherit;font-size:13px;background:var(--surface-2);color:var(--ink);transition:.15s}
+    .search input:focus{outline:none;border-color:var(--accent);background:var(--surface);box-shadow:0 0 0 3px var(--accent-soft)}
+    .search svg{position:absolute;inset-inline-start:12px;top:50%;transform:translateY(-50%);color:var(--muted)}
+    .segtabs{display:flex;gap:3px;padding:3px;margin:12px 18px 4px;background:var(--bg);border-radius:11px}
+    .seg{flex:1;display:flex;align-items:center;justify-content:center;gap:5px;padding:7px 6px;border-radius:8px;font-size:12.5px;font-weight:700;color:var(--muted);cursor:pointer;transition:.15s;border:none;background:transparent}
+    .seg:hover{color:var(--ink)}
+    .seg.on{background:var(--surface);color:var(--accent-d);box-shadow:var(--shadow-xs)}
+    .seg .n{font-size:10px;font-weight:800;background:var(--bg);color:var(--muted);border-radius:999px;padding:0 6px;min-width:16px;text-align:center}
+    /* a count is said once it is KNOWN: the four stood «0» in the markup, beside a chat that could not be read */
+    .conv-head .cnt:empty,.seg .n:empty{display:none}
+    .seg.on .n{background:var(--accent-soft);color:var(--accent-d)}
+    .conv-list{flex:1;min-height:0;overflow-y:auto;padding:4px 10px 14px}
+    .conv{display:flex;gap:12px;padding:10px 11px;border-radius:14px;cursor:pointer;align-items:center;position:relative;transition:background .12s}
+    .conv:hover{background:var(--surface-2)}
+    .conv.on{background:var(--accent-soft)}
+    .conv.on::before{content:"";position:absolute;inset-inline-start:0;top:14px;bottom:14px;width:3px;border-radius:3px;background:var(--accent)}
+    .avatar{position:relative;flex:none}
+    .av{width:48px;height:48px;border-radius:50%;color:var(--surface);font-weight:700;font-size:16px;display:inline-flex;align-items:center;justify-content:center;letter-spacing:.02em}
+    .av.sm{width:42px;height:42px;font-size:14px}
+    .presence{position:absolute;inset-inline-end:1px;bottom:1px;width:12px;height:12px;border-radius:50%;background:var(--ok);border:2.5px solid var(--surface)}
+    .conv.on .presence{border-color:var(--accent-soft)}
+    .conv .cx{flex:1;min-width:0}
+    .conv .r1{display:flex;align-items:baseline;gap:8px}
+    .conv .nm{font-weight:700;font-size:14.5px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0;letter-spacing:-.01em}
+    .conv .tm{font-size:11px;color:var(--muted);flex:none;font-weight:600}
+    .conv.unread .tm{color:var(--accent-d);font-weight:800}
+    .conv .r2{display:flex;align-items:center;gap:7px;margin-top:3px}
+    .conv .lm{flex:1;min-width:0;font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:4px}
+    .conv.unread .lm{color:var(--ink);font-weight:600}
+    .conv .lm .tick{color:var(--blue);font-weight:700;flex:none}.conv .lm .tick.gray{color:var(--muted)}
+    .conv .badge{flex:none;min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:var(--accent);color:var(--accent-ink);font-size:11px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;box-shadow:var(--shadow-xs)}
+    .conv .pin{color:var(--muted);flex:none}
+    .list-empty{padding:44px 22px;text-align:center;color:var(--muted);font-size:13px}
+    .list-err{padding:40px 26px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:10px}
+    .list-err .le-ic{width:66px;height:66px;border-radius:20px;background:var(--danger-soft);border:1px solid var(--plum-line);color:var(--red);display:flex;align-items:center;justify-content:center}
+    .list-err b{font-size:16px;color:var(--ink);font-weight:800}
+    .list-err span{font-size:12.5px;color:var(--muted);line-height:1.5;max-width:280px}
+    .list-err .le-btn{margin-top:4px;display:inline-flex;align-items:center;gap:7px;padding:11px 18px;border:none;border-radius:11px;background:var(--plum);color:var(--plum-ink);font:inherit;font-weight:700;cursor:pointer;box-shadow:var(--shadow)}
+
+    /* ── thread ──────────────────────────────────────────────────────────── */
+    .thread-col{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;background:var(--chat-bg);position:relative}
+    .thread-col::before{content:"";position:absolute;inset:0;pointer-events:none;opacity:1;
+      background-image:radial-gradient(var(--chat-dot) 1.4px,transparent 1.4px);background-size:22px 22px;background-position:0 0}
+    /* #thread must itself fill the column and establish the flex context, or the header/messages/composer
+       grow past the viewport (composer disappears) and .msgs never scrolls. min-height:0 lets .msgs shrink. */
+    #thread{flex:1;min-height:0;display:flex;flex-direction:column}
+    .th-head,.msgs,.composer,.th-empty{position:relative;z-index:1}
+    .th-head{flex:none;background:var(--surface);border-bottom:1px solid var(--line);padding:11px 20px;display:flex;align-items:center;gap:13px;box-shadow:var(--shadow-xs)}
+    .th-head .cx{flex:1;min-width:0}
+    .th-head .nm{font-weight:800;font-size:15.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:8px;letter-spacing:-.01em}
+    .th-head .hn{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+    .th-head .hn.online{color:var(--accent-d);font-weight:600}
+    .th-head .ha{display:flex;gap:2px}
+    .th-head .ha button{background:transparent;border:none;color:var(--muted);cursor:pointer;padding:9px;border-radius:10px;transition:.12s;display:inline-flex}
+    .th-head .ha button:hover{background:var(--surface-2);color:var(--ink)}
+    .msgs{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;padding:20px clamp(18px,4%,52px) 16px;display:flex;flex-direction:column;gap:2px;align-items:stretch}
+    .daysep{align-self:center;background:color-mix(in srgb,var(--surface) 85%,transparent);backdrop-filter:blur(4px);border:1px solid var(--line);border-radius:999px;
+      padding:4px 14px;font-size:11px;font-weight:700;color:var(--muted);margin:12px 0 8px;box-shadow:var(--shadow-xs)}
+    /* bubble: fit content but never so narrow the time wraps — the time is absolutely placed in the
+       bottom corner and the text reserves room for it via a trailing inline spacer (WhatsApp technique). */
+    .msg{position:relative;max-width:min(64%,560px);min-width:58px;padding:6px 11px 7px;border-radius:12px;font-size:13.6px;line-height:1.4;
+      box-shadow:var(--shadow-xs);margin-top:2px;white-space:pre-wrap;overflow-wrap:break-word;word-break:break-word}
+    .msg.in{align-self:flex-start;background:var(--bubble-in)}
+    .msg.out{align-self:flex-end;background:var(--bubble-out);border:1px solid var(--bubble-out-bd)}
+    .msg.head{margin-top:9px}
+    .msg.in.head{border-start-start-radius:4px}
+    .msg.out.head{border-start-end-radius:4px}
+    .msg.in.head::before{content:"";position:absolute;top:0;inset-inline-start:-6px;width:11px;height:13px;background:var(--bubble-in);clip-path:polygon(100% 0,100% 100%,0 0)}
+    .msg.out.head::before{content:"";position:absolute;top:0;inset-inline-end:-7px;width:12px;height:13px;background:var(--bubble-out);border-top:1px solid var(--bubble-out-bd);border-inline-end:1px solid var(--bubble-out-bd);clip-path:polygon(0 0,0 100%,100% 0)}
+    .msg .sndr{display:block;font-size:12px;font-weight:800;margin-bottom:2px;letter-spacing:-.01em}
+    .msg .txt::after{content:"";display:inline-block;width:46px;height:1px}
+    .msg.out .txt::after{width:62px}
+    /* An attachment chip. Sits inside the bubble, inherits its direction, and is a real anchor so
+       the browser's own download handling applies. */
+    .msg .att{display:flex;align-items:center;gap:8px;margin-top:4px;padding:8px 10px;border-radius:10px;
+      background:color-mix(in srgb,var(--ink) 5%,transparent);text-decoration:none;color:inherit;max-width:min(320px,70vw)}
+    .msg.out .att{background:color-mix(in srgb,var(--surface) 35%,transparent)}
+    .msg .att:hover{background:color-mix(in srgb,var(--ink) 9%,transparent)}
+    .msg.out .att:hover{background:color-mix(in srgb,var(--surface) 50%,transparent)}
+    .msg .att-ic{font-size:18px;line-height:1;flex:0 0 auto}
+    .msg .att-nm{flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
+    .msg .att-sz{flex:0 0 auto;font-size:11px;opacity:.65}
+    .msg .mt{position:absolute;inset-inline-end:11px;bottom:6px;font-size:10px;color:var(--muted);font-weight:600;line-height:1;white-space:nowrap;pointer-events:none}
+    .msg.out .mt{color:var(--olive-d)}
+    .msg .mt .tick{color:var(--blue);font-weight:800;margin-inline-start:1px}
+    .msg .mt .tick.gray{color:var(--muted)}
+    /* typing indicator */
+    .typing{align-self:flex-start;background:var(--bubble-in);border-radius:14px;border-start-start-radius:5px;padding:11px 14px;box-shadow:var(--shadow-xs);display:inline-flex;gap:4px;margin-top:6px}
+    .typing i{width:7px;height:7px;border-radius:50%;background:var(--muted);display:inline-block;animation:tp 1.2s infinite ease-in-out}
+    .typing i:nth-child(2){animation-delay:.18s}.typing i:nth-child(3){animation-delay:.36s}
+    @keyframes tp{0%,60%,100%{transform:translateY(0);opacity:.5}30%{transform:translateY(-4px);opacity:1}}
+    .botnote{align-self:center;background:color-mix(in srgb,var(--surface) 72%,transparent);backdrop-filter:blur(4px);border:1px solid var(--line);border-radius:999px;padding:4px 13px;font-size:11px;font-weight:600;color:var(--muted);margin:10px 0 4px;display:inline-flex;align-items:center;gap:6px}
+
+    .th-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;color:var(--muted);text-align:center;padding:30px}
+    .th-empty .big{width:96px;height:96px;border-radius:28px;background:linear-gradient(180deg,var(--surface),var(--surface-2));color:var(--accent-d);display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow-md);border:1px solid var(--line)}
+    .th-empty .big.err{background:var(--danger-soft);border-color:var(--plum-line);color:var(--red)}
+    .th-empty h3{margin:0;font-size:18px;color:var(--ink);font-weight:800;letter-spacing:-.01em}
+    .th-empty p{margin:0;max-width:330px;font-size:13px;line-height:1.6}
+
+    /* ── composer ────────────────────────────────────────────────────────── */
+    .composer{flex:none;background:var(--surface);border-top:1px solid var(--line);padding:12px 18px;display:flex;align-items:flex-end;gap:10px}
+    .composer .ico{background:transparent;border:none;color:var(--muted);cursor:pointer;padding:9px;border-radius:10px;flex:none;transition:.12s;display:inline-flex}
+    .composer .ico:hover{background:var(--surface-2);color:var(--accent-d)}
+    .composer .field{flex:1;background:var(--surface-2);border:1px solid var(--line);border-radius:22px;display:flex;align-items:flex-end;padding:2px 6px 2px 4px;transition:.15s}
+    .composer .field:focus-within{border-color:var(--accent);background:var(--surface);box-shadow:0 0 0 3px var(--accent-soft)}
+    .composer textarea{flex:1;resize:none;max-height:120px;min-height:22px;border:none;background:transparent;padding:9px 11px;font:inherit;font-size:14px;color:var(--ink);line-height:1.4;outline:none}
+    .composer .send{flex:none;width:44px;height:44px;border-radius:50%;background:var(--accent);color:var(--accent-ink);border:none;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;box-shadow:var(--shadow);transition:.15s}
+    .composer .send:hover{background:var(--accent-d);transform:scale(1.05)}
+    .composer .send:active{transform:scale(.96)}
+
+    /* thread back button (mobile only) */
+    .th-back{display:none;background:transparent;border:none;color:var(--ink);cursor:pointer;padding:6px;margin-inline-end:2px;border-radius:9px}
+    .th-back:hover{background:var(--surface-2)}
+
+    /* ── mobile-first: collapse the 3-pane layout to a single column (list → thread → back).
+       Desktop (>820px) is completely untouched. Super-app pattern: full-screen sub-views. ── */
+    @media (max-width:820px){
+      aside.side{display:none}
+      .conv-col{width:100%;flex:1 1 auto;border:none}
+      .conv-head{padding:14px 16px 8px}
+      .thread-col{display:none}
+      .chat.mob-thread .conv-col{display:none}
+      .chat.mob-thread .thread-col{display:flex;flex:1 1 auto}
+      .th-back{display:inline-flex}
+      .msgs{padding:16px 12px 14px}
+      .msg{max-width:82%}
+      .conv{padding:12px 10px}          /* taller rows for touch */
+      .composer{padding:10px 12px calc(10px + env(safe-area-inset-bottom))}
+      .th-head{padding:10px 12px}
+      .th-head .ha button{padding:10px}  /* 44px touch targets */
+    }
+
+    /* ── account bar · the SAME control drive and mail carry ──────────────────
+       Copied from apps/drive/static/index.html and apps/mail/mailapi/static/index.html rather than
+       invented a third time. Their shape, exactly: `.acct` is the LAST thing in the sidebar, marked
+       off by a border-top and nothing else; the button is dot + name + identity + chevron; the menu
+       is absolutely positioned and opens UPWARD (`bottom:100%`) so it can never clip against the
+       viewport edge, and it shrinks with its column.
+
+       WHAT THIS REPLACED, and why it had to go. The sim's `.connftr` — a bordered row under a
+       «חיבור פעיל» heading with a 30px protocol tile and `cursor:default` — was ported faithfully
+       and was the wrong thing to port. It reads as a STATUS PLAQUE, so nobody discovers that it
+       opens anything, and «חיבור חשבון» (which has been inside its menu all along) may as well not
+       exist. Drive and mail already solved this; chat now says it the same way.
+
+       The sim's class names are KEPT on the elements that survived — `.connftr` on the button,
+       `.provico`/`.pdot` on the badge and the dot, `.cx`/`.cn`/`.cs` on the text — because the
+       parity harness compares CLASS TOKENS between the sim's tree and this one. The component is the
+       same component; only its treatment changed. Dropping the tokens would report five components
+       as un-ported work when they had merely been restyled. */
+    .acct{position:relative;border-top:1px solid var(--line);margin:4px 14px 14px;padding-top:10px;min-width:0}
+    .acct-btn{display:flex;align-items:center;gap:8px;width:100%;min-width:0;background:var(--surface-2);
+      border:1px solid var(--line);border-radius:10px;padding:7px 10px;font:inherit;font-size:12.5px;
+      color:var(--ink);text-align:start;cursor:pointer;transition:.15s}
+    .acct-btn:hover{border-color:var(--accent)}
+    .acct .dot{width:8px;height:8px;border-radius:50%;flex:none}
+    /* the protocol badge — the one part chat has that drive and mail do not, because three genuinely
+       different transports answer here and "which one am I on" is not answerable from the label
+       alone. Deliberately small: a piece of information, not the plaque it used to be. */
+    .acct .provico{width:19px;height:19px;border-radius:6px;flex:none;display:inline-flex;
+      align-items:center;justify-content:center;color:var(--olive-ink);font-size:10px;font-weight:800;line-height:1}   /* a provider's letter on the provider's colour */
+    .acct-tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+    .acct-lbl{display:block;font-weight:700;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    /* (a line with no letter of its own — a phone number — reads left to right: «050-000-0007» stood «50-123-4567 972+») */
+    .acct-hint{display:block;color:var(--muted);font-size:11px;min-width:0;overflow:hidden;
+      text-overflow:ellipsis;white-space:nowrap;unicode-bidi:plaintext;text-align:right}
+    .acct-chev{flex:none;color:var(--muted);font-size:10px;margin-inline-start:auto;line-height:1}
+    .acct-menu{position:absolute;bottom:calc(100% + 6px);inset-inline-start:0;
+      width:max(100%,244px);max-width:min(320px,86vw);background:var(--surface);border:1px solid var(--line);
+      border-radius:12px;box-shadow:var(--shadow-md);padding:6px;z-index:60;max-height:60vh;overflow-y:auto}
+    .acct-menu.hidden{display:none}
+    .acct-item{display:flex;align-items:center;gap:4px;border-radius:8px;min-width:0}
+    .acct-item:hover{background:var(--accent-soft)}
+    .acct-pick{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;background:transparent;border:none;
+      padding:8px 10px;border-radius:8px;cursor:pointer;text-align:start;color:inherit;font:inherit}
+    .acct-l1{display:flex;align-items:center;gap:7px;min-width:0}
+    .acct-l1 .acct-lbl{font-size:12.5px}
+    .acct-dot{width:8px;height:8px;border-radius:50%;flex:none}
+    .acct-proto{display:block;font-size:10.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .acct-menu .acct-hint{font-size:10.5px}
+    .acct-on{margin-inline-start:auto;color:var(--accent-d);font-weight:800;flex:none;font-size:12px}
+    .acct-sep{height:1px;background:var(--line);margin:6px 4px}
+    .acct-rm{flex:none;background:transparent;border:none;color:var(--muted);font:inherit;font-size:16px;line-height:1;
+      padding:6px 8px;border-radius:9px;cursor:pointer}
+    .acct-rm:hover{background:var(--danger-soft);color:var(--red)}
+    .acct-rm:focus-visible{outline:2px solid var(--red);outline-offset:1px}
+    /* ── tools · the admin dashboard's remaining jobs, in the app ──────────────
+       Same parts as every other modal here (bcard / mlbl / bset-* / note / btn); the only new one is
+       the subscriber table, which has no equivalent anywhere else in this UI. */
+    .utab{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:4px}
+    .utab th{text-align:start;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted);
+      text-transform:uppercase;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+    .utab td{padding:7px 8px;border-bottom:1px solid var(--line);color:var(--ink);
+      max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .utab td.ltr{direction:ltr;text-align:end;unicode-bidi:plaintext;color:var(--muted)}
+    .utab tr:last-child td{border-bottom:none}
+    .uwrap{max-height:210px;overflow:auto;border:1px solid var(--line);border-radius:11px;margin-top:8px}
+    .danger{border-color:var(--plum-line);color:var(--red)}
+    .danger:hover{border-color:var(--red);background:var(--danger-soft)}
+    .tool-sec{margin-top:16px}
+    .tool-sec:first-child{margin-top:0}
+    /* Mail's two-line entry, taken with its reason: three entries that do three different things
+       were not telling themselves apart by title alone (an operator opened «חיבור חשבון» looking for
+       "add a user" and concluded the product could not do it). The second line says what each does,
+       and — as in mail — the CREATE action is named as an action and put first. */
+    .acct-add{display:flex;align-items:flex-start;gap:7px;width:100%;background:transparent;border:none;
+      color:var(--accent-d);font:inherit;font-size:12.5px;font-weight:700;padding:9px 10px;border-radius:8px;
+      cursor:pointer;text-align:start}
+    .acct-add:hover{background:var(--accent-soft)}
+    .acct-add:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+    .acct-add .ai{flex:none;line-height:1.35}
+    .acct-add-t{display:flex;flex-direction:column;gap:2px;min-width:0;text-align:start}
+    .acct-add-s{font-weight:500;font-size:11px;color:var(--muted);white-space:normal;line-height:1.35}
+    .acct-warn{display:flex;align-items:flex-start;gap:6px;color:var(--amber);font-size:11px;font-weight:600;padding:7px 5px 2px;line-height:1.45;min-width:0}
+    .acct-empty{padding:10px;font-size:11.5px;color:var(--muted)}
+    .mconn{display:none;align-items:center;gap:6px;margin-inline-start:auto;max-width:52%;
+      background:var(--surface-2);border:1px solid var(--line);border-radius:999px;color:var(--ink);
+      font:inherit;font-size:11.5px;font-weight:700;padding:5px 11px;cursor:pointer;
+      white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .mconn .mdot{width:7px;height:7px;border-radius:50%;flex:none;background:var(--ok)}
+    /* AFTER the base rule, not inside the layout media query further up: same specificity, so the
+       later declaration wins — putting the override earlier left the chip hidden on every phone. */
+    @media (max-width:820px){.mconn{display:inline-flex}}
+    /* (34px under a finger, 28 of them in the row: the head keeps its height, and the list under it its own) */
+    .mnew{display:none;flex:none;align-items:center;justify-content:center;width:34px;height:34px;margin-block:-3px;margin-inline-start:8px;
+      border:none;border-radius:999px;background:var(--accent);color:var(--accent-ink);cursor:pointer}
+    @media (max-width:820px){.mnew{display:inline-flex}}
+    .gear{background:transparent;border:none;color:var(--muted);cursor:pointer;padding:4px;border-radius:8px;
+      margin-inline-start:auto;display:inline-flex;flex:none}
+    .gear:hover{background:var(--bg);color:var(--accent-d)}
+
+    /* ── modal (bot management · connect) ─────────────────────────────────────── */
+    .ov{position:fixed;inset:0;background:var(--scrim);display:flex;align-items:center;justify-content:center;z-index:90;padding:20px}
+    .ov.hidden{display:none}
+    .modal{background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow-lg);
+      width:min(580px,100%);max-height:86vh;display:flex;flex-direction:column}
+    .modal .mh{padding:15px 20px 12px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
+    .modal .mh h3{margin:0;font-size:16.5px;font-weight:800;flex:1;letter-spacing:-.02em}
+    /* `flex:1;min-height:0` is what makes overflow-y:auto actually DO anything here.
+       .modal is a flex column clamped to max-height:86vh. A flex item defaults to min-height:auto,
+       which refuses to shrink below its content — so .mb's own height always equalled its content
+       height, there was never any overflow for it to scroll, and anything past 86vh was simply
+       unreachable. On a 735px-tall window that hid the whole "add user" form of the private-engine
+       screen: the modal looked complete, the footer sat where a footer should, and the wheel did
+       nothing. Only keyboard focus reached the fields, because scrollIntoView moves an ancestor
+       regardless of whether a scrollbar was offered. */
+    .modal .mb{padding:15px 20px;flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;font-size:13px}
+    .modal .mf{padding:12px 20px 15px;border-top:1px solid var(--line);display:flex;gap:8px}
+    .btn{border:1px solid var(--line);background:var(--surface-2);color:var(--ink);font:inherit;font-size:13px;
+      font-weight:700;padding:9px 16px;border-radius:11px;cursor:pointer;transition:.14s}
+    .btn:hover{border-color:var(--accent)}
+    .btn.pri{background:var(--accent);border-color:transparent;color:var(--accent-ink)}
+    .btn.pri:hover{background:var(--accent-d)}
+    .xbtn{background:transparent;border:none;color:var(--muted);cursor:pointer;display:inline-flex;padding:5px 8px;border-radius:8px}
+    .xbtn:hover{background:var(--surface-2);color:var(--ink)}
+    .mlbl{font-size:10.5px;font-weight:800;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;margin:2px 0 6px}
+    .brow{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
+    .brow:last-of-type{border-bottom:none}
+    .brow .bx{flex:1;min-width:0}
+    .brow .bn{display:block;font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .brow .bs{display:block;font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .brow select{padding:7px 10px;border:1px solid var(--line);border-radius:10px;font:inherit;font-size:12.5px;
+      font-weight:600;background:var(--surface);color:var(--ink);max-width:190px;cursor:pointer}
+    .bcard{margin-top:14px;padding:13px 14px;border:1px solid var(--line);border-radius:13px;background:var(--surface-2)}
+    .bcard h4{margin:0 0 5px;font-size:13.5px;font-weight:800}
+    .bcard p{margin:0 0 10px;font-size:12.5px;color:var(--muted);line-height:1.55}
+    .caps{display:flex;flex-wrap:wrap;gap:6px}
+    .cap{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;border-radius:999px;
+      padding:3px 9px;background:var(--bg);color:var(--muted)}
+    .cap.on{background:var(--accent-soft);color:var(--accent-d)}
+    .note{margin-top:13px;font-size:11.5px;color:var(--muted);line-height:1.6}
+
+    /* ── the bot's own settings, per connection ────────────────────────────────
+       A section of the bot card, not a second screen: same .bcard / .mlbl / .note / .btn parts as
+       everything else in this modal. The matrix row the operator picked is highlighted with the same
+       accent-soft the connection list uses for "this one", so "which row am I editing" is the same
+       visual answer everywhere in the app. */
+    .brow{border-radius:11px;padding-inline:8px;margin-inline:-8px;cursor:pointer}
+    .brow.on{background:var(--accent-soft)}
+    .brow:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+    .bset-row{display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}
+    .bset-row:last-child{border-bottom:none}
+    .bset-x{flex:1;min-width:0}
+    .bset-lbl{display:block;font-size:12.5px;font-weight:700;cursor:pointer}
+    .bset-hint{display:block;font-size:11px;color:var(--muted);line-height:1.5;margin-top:2px}
+    .bset-ctl{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:3px;max-width:44%}
+    .bset-row input[type=number],.bset-row input[type=text],.bset-row select{
+      padding:7px 10px;border:1px solid var(--line);border-radius:10px;font:inherit;font-size:12.5px;
+      font-weight:600;background:var(--surface);color:var(--ink);max-width:190px}
+    .bset-row input[type=number]{width:104px;text-align:start}
+    .bset-row input[type=text]{width:190px}
+    .bset-row input:focus,.bset-row select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+    .bset-unit{font-size:10.5px;color:var(--muted);direction:ltr}
+    .bset-row.bad input,.bset-row.bad select{border-color:var(--red);box-shadow:0 0 0 3px var(--danger-soft)}
+    .bset-err{font-size:11px;font-weight:700;color:var(--red);line-height:1.45;text-align:end;direction:ltr;unicode-bidi:plaintext}
+    /* boolean = a switch. RTL: the knob rests at the inline-start (right) edge and slides to the left
+       when on, so "on" is the same direction the rest of the RTL UI moves. */
+    .sw{position:relative;display:inline-flex;flex:none;width:40px;height:23px;cursor:pointer}
+    .sw input{position:absolute;inset:0;width:100%;height:100%;opacity:0;margin:0;cursor:pointer}
+    .sw i{flex:1;border-radius:999px;background:var(--bg);border:1px solid var(--line);transition:.16s;pointer-events:none}
+    .sw i::after{content:"";position:absolute;top:3px;inset-inline-start:3px;width:17px;height:17px;border-radius:50%;
+      background:var(--surface);box-shadow:var(--shadow-xs);transition:.16s}
+    .sw input:checked+i{background:var(--accent);border-color:transparent}
+    .sw input:checked+i::after{transform:translateX(-17px)}
+    .sw input:focus-visible+i{outline:2px solid var(--accent);outline-offset:2px}
+    .bset-foot{display:flex;align-items:center;gap:8px;margin-top:13px;flex-wrap:wrap}
+    .bset-foot .btn{padding:8px 15px;font-size:12.5px}
+    .bset-state{font-size:11.5px;color:var(--muted)}
+    .bset-state.bad{color:var(--red);font-weight:700}
+    .prow{display:flex;align-items:center;gap:11px;padding:11px 12px;border:1px solid var(--line);border-radius:12px;margin-bottom:8px}
+    /* standalone, NOT `.prow .pic`: the same badge is used in the bot matrix, and `.provico` — the
+       account bar's protocol badge — is scoped to `.acct`, so reusing THAT class out here produced an
+       unstyled grey box. This one carries its own rule and works wherever it is put. */
+    .pic{width:32px;height:32px;border-radius:10px;flex:none;display:inline-flex;align-items:center;justify-content:center;color:var(--olive-ink);font-size:14px;font-weight:800}
+    .brow .pic{width:30px;height:30px;border-radius:9px;font-size:13px}
+    .prow .px{flex:1;min-width:0}
+    .prow .pn{display:block;font-weight:700;font-size:13px}
+    .prow .pd{display:block;font-size:11.5px;color:var(--muted);line-height:1.5;margin-top:2px}
+
+    /* ── new conversation · the people picker ─────────────────────────────────
+       No new visual language: the rows are the bot matrix's .brow with the conversation list's
+       .avatar/.av/.presence inside them, held in the same .uwrap scroll frame the subscriber table
+       uses, and the mode switch is the conversation list's own .segtabs. The only genuinely new
+       parts are the two below — a disabled state for the sidebar button, and the multi-select tick —
+       because neither exists anywhere else in this app.
+
+       The disabled state is the point of the whole screen: `listUsers`/`createDirect` are OPTIONAL
+       ops, so on WhatsApp and Telegram the button would have nothing to open. It says so instead of
+       opening a picker that can only 501. */
+    .newbtn.off{background:var(--bg);color:var(--muted);box-shadow:none;cursor:default}
+    .newbtn.off:hover{background:var(--bg);transform:none;box-shadow:none}
+    .newhint{margin:-2px 14px 10px}
+    .uwrap.nclist{max-height:284px;padding:0 11px}
+    .uwrap.nclist .brow{margin-inline:0;padding-inline:3px}
+    .uwrap.nclist .brow:last-child{border-bottom:none}
+    .nc-check{flex:none;color:var(--accent-d);font-weight:800;font-size:13px;visibility:hidden}
+    .brow.on .nc-check{visibility:visible}
+    .mb .segtabs{margin:0 0 12px}
+
+    /* ── the private engine's own users ───────────────────────────────────────
+       No new visual language: the rows are the people picker's .brow inside the same .uwrap frame,
+       with the bot settings' own .sw switch on the end and the bot card's .cap as the operator
+       badge. The only genuinely new rule is the cursor — these rows are NOT a picker (the switch is
+       the control), and .brow is `cursor:pointer` everywhere else in this modal. */
+    .uwrap.englist{max-height:262px;padding:0 11px}
+    .uwrap.englist .brow{margin-inline:0;padding-inline:3px;cursor:default}
+    .uwrap.englist .brow:last-child{border-bottom:none}
+    .uwrap.englist .cap{flex:none}
+    /* Declared LAST so it beats the display of whatever it is put on (.bset-row is flex, and an
+       equal-specificity rule earlier in the file would otherwise win). */
+    .hidden{display:none}
+
+    /* the office's notice sits above the connection chip at the foot of the side column: its usual corner IS
+       that chip — the button a refused switch sends a person back to */
+    body #bina-tell{inset-block-end:76px}
+    /* a MARK of the page (`mark()` below): drawn at the size of the text it sits in */
+    .mk{width:1em;height:1em;flex:none;vertical-align:-.14em}
+    .tick{display:inline-flex}
+    .tick.read .mk{stroke-width:3.2}   /* read is also HEAVIER than delivered — not told by colour alone */
+  </style>
+</head>
+<body>
+  <div class="chat">
+    <aside class="side">
+      <div class="brand">
+        <span class="logo"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></span>
+        <div><h1>צ׳אט</h1><div class="sub">שיחות מרובות ספקים</div></div>
+      </div>
+      <button class="newbtn" id="newChat"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>שיחה חדשה</button>
+      <!-- Only rendered when the ACTIVE connection cannot start one (the ops are optional). Empty
+           and display:none otherwise, so the sidebar is unchanged where the button works. -->
+      <div class="note newhint hidden" id="newHint"></div>
+
+      <!-- (hidden until an account is read: renderBotCard shows them) -->
+      <div class="side-lbl" hidden>אוטומציה</div>
+      <div class="botctl" hidden>
+        <div class="h"><span class="bi"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4M8 16h.01M16 16h.01"/></svg></span>בוט פעיל בחיבור זה<button class="gear" id="botCfg" type="button" title="ניהול בוטים וחיבורים"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button></div>
+        <div class="selwrap"><select id="botSelect"></select></div>
+        <div class="bd" id="botDesc"></div>
+      </div>
+
+      <div class="side-sp"></div>
+      <!-- Drive's and mail's account bar, part for part: sidebar footer, border-top, no heading of
+           its own (the «חיבור פעיל» label above it was the sim's, and a label is what made this read
+           as a plaque instead of a control). #acctBtn / #acctMenu are their ids too. -->
+      <div class="acct" id="acct">
+        <button class="acct-btn connftr" id="acctBtn" type="button" aria-haspopup="menu" aria-expanded="false"
+                title="החיבור הפעיל · החלפת חיבור או חיבור חשבון">
+          <span class="dot pdot" id="provDot"></span>
+          <span class="provico" id="provIco">·</span>
+          <span class="acct-tx cx">
+            <bdi class="acct-lbl cn" id="connName">—</bdi>
+            <small class="acct-hint cs muted" id="connState">טוען…</small>
+          </span>
+          <span class="acct-chev"><svg class="mk" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span>
+        </button>
+        <div class="acct-menu hidden" id="acctMenu" role="menu"></div>
+        <!-- the ACTIVE connection's failure, on the box under the button exactly as drive and mail
+             place it: visible without opening anything, which is the whole point of it. -->
+        <div class="acct-warn hidden" id="acctWarn"></div>
+      </div>
+    </aside>
+
+    <div class="conv-col">
+      <div class="conv-head">
+        <div class="r"><h2>שיחות</h2><span class="cnt" id="convCount"></span>
+          <!-- phone-only twin of the sidebar's connection chip: under 820px aside.side is hidden, so
+               without this the switcher and the bot controls would simply not exist on a phone. -->
+          <button class="mconn" id="mConn" type="button" title="חיבור פעיל · החלפה"><span class="mdot" id="mConnDot"></span><span id="mConnName">—</span><svg class="mk" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+          <!-- …and of «שיחה חדשה»: the sidebar's button is hidden with the sidebar, and it was the only way to
+               start a conversation - so none could be started from a phone, or from the window desktop mode opens
+               this screen in (580px on a laptop). Never disabled: newChat() says why where the connection cannot. -->
+          <button class="mnew" id="mNew" type="button" title="שיחה חדשה" aria-label="שיחה חדשה"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+        </div>
+        <div class="search">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          <input id="convSearch" placeholder="חיפוש שיחה או איש קשר…">
+        </div>
+      </div>
+      <div class="segtabs" id="segtabs">
+        <button class="seg on" data-f="all">הכל <span class="n" data-c="all"></span></button>
+        <button class="seg" data-f="unread">לא נקראו <span class="n" data-c="unread"></span></button>
+        <button class="seg" data-f="group">קבוצות <span class="n" data-c="group"></span></button>
+      </div>
+      <div class="conv-list" id="convList" role="list" aria-label="רשימת שיחות"></div>
+    </div>
+
+    <div class="thread-col"><div id="thread"></div></div>
+  </div>
+  <div class="ov hidden" id="ov"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="mTitle">
+    <div class="mh"><h3 id="mTitle"></h3><button class="xbtn" id="mX" type="button" title="סגירה" aria-label="סגירה"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+    <div class="mb" id="mBody"></div>
+    <div class="mf" id="mFoot"></div>
+  </div></div>
+
+  <script>
+/* @bina-ask:start */
+var binaAsk, binaTell;
+(function () {
+  var doc = document;
+  var CSS = ".bask{position:fixed;inset:0;z-index:2147483000;display:grid;grid-template:minmax(0,1fr)/minmax(0,1fr);place-items:center;padding:16px;background:var(--scrim)}"
+    + ".bask-card{display:flex;flex-direction:column;width:min(440px,100%);max-height:100%;overflow:auto;box-sizing:border-box;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:16px;padding:20px;box-shadow:var(--shadow-lg);font:14px/1.5 var(--font,system-ui,sans-serif);text-align:start;outline:0}"
+    + ".bask-card h2{margin:0 0 8px;font-size:16px;font-weight:800;line-height:1.35}"
+    + ".bask-read{overflow:auto}.bask-read:not(:empty){min-height:19px}"   // never squeezed to nothing: a line of it stays, and past that the card itself scrolls
+    + ".bask-card p{margin:0 0 6px;font-size:13px;color:var(--muted)}"
+    + ".bask-read p:last-child{margin:0}"
+    + ".bask-facts{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:10px 0 0;padding:10px 12px;background:var(--surface-2);border:1px solid var(--line);border-radius:9px}"
+    + ".bask-facts dt{color:var(--muted);font-size:11px;font-weight:600;line-height:1.7}"
+    + ".bask-facts dd{margin:0;font-size:12.5px;font-weight:600;overflow-wrap:anywhere;unicode-bidi:plaintext;text-align:right}"
+    + ".bask-field{display:grid;gap:5px;margin-top:10px;font-size:12px;font-weight:600;color:var(--muted)}"
+    + ".bask-field input{font:inherit;font-size:13px;font-weight:400;height:36px;padding:0 10px;border:1px solid var(--line);border-radius:9px;background:var(--surface);color:var(--ink)}"
+    + ".bask-said{margin-top:10px;padding:8px 12px;border-radius:9px;border-inline-start:4px solid var(--red);background:color-mix(in srgb,var(--red) 14%,var(--surface));font-size:12.5px;overflow-wrap:anywhere}"
+    + ".bask-said:empty{display:none}"
+    + ".bask-acts{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}"
+    + ".bask-btn{height:34px;padding:0 16px;border-radius:9px;border:1px solid var(--line);background:transparent;color:var(--ink);font:inherit;font-size:13px;font-weight:700;cursor:pointer}"
+    + ".bask-btn.primary{background:var(--accent);border-color:transparent;color:var(--accent-ink)}"
+    + ".bask-btn.danger{background:var(--red);border-color:transparent;color:var(--surface)}"
+    + ".bask-btn:disabled{opacity:.5;cursor:default}"
+    + ".bask-field input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}"
+    + "@media (pointer:coarse){.bask-btn{height:44px}.bask-field input{height:44px}}"
+    + "@media (max-height:399px){.bask{padding:8px}.bask-card{padding:12px}.bask-acts{margin-top:10px}}"   // the side menu's own short frame
+    + "#bina-tell{position:fixed;inset-block-end:16px;inset-inline-start:16px;z-index:2147483001;display:grid;gap:8px;max-width:min(420px,calc(100vw - 32px))}"
+    + ".btell{--c:var(--ok);padding:10px 14px;border-radius:12px;background:color-mix(in srgb,var(--c) 14%,var(--surface));color:var(--ink);border:1px solid color-mix(in srgb,var(--c) 38%,var(--surface));border-inline-start:4px solid var(--c);font:13px/1.45 var(--font,system-ui,sans-serif);box-shadow:var(--shadow-lg);cursor:pointer;text-align:start}"
+    + ".btell.warn{--c:var(--lime)}.btell.bad{--c:var(--red)}"   // --ok and --red, not the bare hues: they are the steps that are lifted on the dark ground
+    + ".btell small{display:block;margin-top:2px;font-size:11.5px;color:var(--muted);overflow-wrap:anywhere;unicode-bidi:plaintext}"
+    + ".btell button{margin-inline-start:12px;padding:0;border:0;background:none;font:inherit;font-weight:800;color:var(--blue);text-decoration:underline;cursor:pointer}";
+
+  function el(tag, cls, text) {
+    var n = doc.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+  function style() {
+    if (doc.getElementById("bina-ask-css")) return;
+    var s = el("style", "", CSS);
+    s.id = "bina-ask-css";
+    doc.head.appendChild(s);
+  }
+
+  binaAsk = function (q) {
+    style();
+    return new Promise(function (resolve) {
+      var back = doc.activeElement, field = null, must = q.input && q.input.must;
+      var scrim = el("div", "bask"), card = el("div", "bask-card"), read = el("div", "bask-read"), said = el("div", "bask-said");
+      card.setAttribute("role", "alertdialog");
+      card.setAttribute("aria-modal", "true");
+      card.setAttribute("dir", "rtl");
+      card.setAttribute("tabindex", "-1");
+      said.setAttribute("role", "alert");
+      card.appendChild(el("h2", "", q.title));
+      card.appendChild(read);
+      String(q.body || "").split(/\n+/).forEach(function (line) { if (line.trim()) read.appendChild(el("p", "", line)); });
+      if (q.facts && q.facts.length) {
+        var dl = el("dl", "bask-facts");
+        q.facts.forEach(function (f) { dl.appendChild(el("dt", "", f[0])); dl.appendChild(el("dd", "", f[1])); });
+        read.appendChild(dl);
+      }
+      if (q.input) {
+        var lab = el("label", "bask-field", q.input.label || "");
+        field = el("input");
+        field.value = q.input.value || "";
+        if (q.input.dir) field.setAttribute("dir", q.input.dir);
+        lab.appendChild(field);
+        card.appendChild(lab);
+      }
+      var acts = el("div", "bask-acts"), no = el("button", "bask-btn", q.cancel || "ביטול"),
+          yes = el("button", "bask-btn " + (q.danger ? "danger" : "primary"), q.ok || "אישור");
+      no.setAttribute("type", "button");
+      yes.setAttribute("type", "button");
+      acts.appendChild(no);
+      acts.appendChild(yes);
+      card.appendChild(said);
+      card.appendChild(acts);
+      scrim.appendChild(card);
+      doc.body.appendChild(scrim);
+
+      function fit() { if (must) yes.disabled = field.value.trim() !== must; }
+      function home() { (field || (q.danger ? no : yes)).focus(); }
+      function done(v) {
+        doc.removeEventListener("keydown", key, true);
+        scrim.remove();
+        if (back && back.focus) back.focus();
+        resolve(v);
+      }
+      function cancel() { if (!no.disabled) done(field ? null : false); }
+      function agree() {
+        if (yes.disabled) return;
+        var v = field ? field.value : true;
+        if (!q.run) return done(v);
+        yes.disabled = no.disabled = true;                // in flight: busy, and there is nothing left to cancel
+        yes.textContent = "מבצע…";
+        said.textContent = "";
+        card.focus();
+        Promise.resolve(v).then(q.run).then(function () { done(v); }, function (e) {
+          yes.textContent = q.ok || "אישור";
+          yes.disabled = no.disabled = false;
+          fit();
+          said.textContent = (e && e.message) || "הפעולה נכשלה";
+          home();
+        });
+      }
+      function key(e) {
+        if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); cancel(); }
+        else if (e.key === "Enter" && field && doc.activeElement === field) { e.preventDefault(); agree(); }
+        else if (e.key === "Tab") {                       // the page behind is not reachable while asked
+          var ring = [field, no, yes].filter(function (n) { return n && !n.disabled; });
+          var i = ring.indexOf(doc.activeElement);
+          e.preventDefault();
+          if (ring.length) ring[(i + (e.shiftKey ? ring.length - 1 : 1)) % ring.length].focus();
+        }
+        else if (/^(Arrow|Page)(Up|Down)$/.test(e.key) && doc.activeElement !== field && read.scrollHeight > read.clientHeight) {
+          e.preventDefault();                               // the focus lives on the buttons, outside what scrolls
+          read.scrollTop += (/Up$/.test(e.key) ? -1 : 1) * (/^Page/.test(e.key) ? read.clientHeight : 40);
+        }
+      }
+      yes.addEventListener("click", agree);
+      no.addEventListener("click", cancel);
+      scrim.addEventListener("mousedown", function (e) { if (e.target === scrim) cancel(); });
+      if (field) field.addEventListener("input", fit);
+      doc.addEventListener("keydown", key, true);
+      fit();
+      home();
+    });
+  };
+
+  // The third word is how long the notice stays (ms) — or what more it carries: { ms, more, act, stay }.
+  //   more  the service's own sentence, on a line of its own under the notice's words
+  //   act   [label, fn] — one way on from the notice (an undo, a refresh): pressing it runs fn and takes the notice down
+  //   stay  no clock: the notice is there until it is pressed
+  binaTell = function (text, kind, opt) {
+    style();
+    var o = opt && typeof opt === "object" ? opt : { ms: opt };
+    var box = doc.getElementById("bina-tell");
+    if (!box) { box = el("div"); box.id = "bina-tell"; doc.body.appendChild(box); }
+    var n = el("div", "btell " + (kind || "ok"), text);
+    n.setAttribute("role", kind === "bad" ? "alert" : "status");
+    n.setAttribute("dir", "rtl");
+    if (o.more) n.appendChild(el("small", "", o.more));
+    if (o.act) {
+      var go = el("button", "", o.act[0]);
+      go.setAttribute("type", "button");
+      go.addEventListener("click", function (e) { e.stopPropagation(); n.remove(); o.act[1](); });
+      n.appendChild(go);
+    }
+    n.addEventListener("click", function () { n.remove(); });
+    box.appendChild(n);
+    if (!o.stay) setTimeout(function () { n.remove(); }, o.ms || (kind === "bad" ? 9000 : 5200));
+    return n;
+  };
+})();
+/* @bina-ask:end */
+  (function(){
+    var $=function(s,r){return (r||document).querySelector(s);};
+    function api(p,o){return fetch('api'+p,o);}
+    /* Every backend answer is JSON — including the ERROR ones (chatapi answers a bad connection with
+       {error, connection_id} and a 4xx/5xx). So the status is kept alongside the body rather than
+       thrown away: "the connection is misconfigured" and "the network is down" need different words
+       on screen, and a bare .json() cannot tell them apart. */
+    function jx(p,o){return api(p,o).then(function(r){return r.json().then(function(d){return {ok:r.ok,status:r.status,d:d||{}};},
+      function(){return {ok:false,status:r.status,d:{}};});},function(e){return {ok:false,status:0,d:{error:String(e&&e.message||e)}};});}
+    function jf(p,o){return jx(p,o).then(function(r){return r.d;});}
+    function post(p,body){return jx(p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})});}
+    function del(p,body){return jx(p,{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})});}
+    /* A download, not a fetch: the export routes answer with Content-Disposition, and reading them
+       into JS only to re-wrap them in a Blob would throw away the filename the SERVICE chose (which
+       carries the connection id and the timestamp). The app runs in the console's iframe, so the
+       anchor is appended to this document and clicked — window.open is blocked as a popup there. */
+    function download(p){
+      var a=document.createElement('a'); a.href='api'+p; a.rel='noopener'; a.download='';
+      document.body.appendChild(a); a.click(); setTimeout(function(){a.remove();},0);
+    }
+    function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c];});}
+    function ago(m){ if(m==null)return''; if(m<1)return'עכשיו'; if(m<60)return m+' דק׳'; if(m<1440){return Math.floor(m/60)+' שע׳';} var d=Math.round(m/1440); return d===1?'אתמול':d+' ימים'; }
+    function clock(m){ var total=(9*60)-m; if(total<0)total+=24*60; var hh=Math.floor(total/60)%24, mm=((total%60)+60)%60; return (hh<10?'0':'')+hh+':'+(mm<10?'0':'')+mm; }
+    function daylabel(m){ var d=Math.floor(m/1440); return d===0?'היום':d===1?'אתמול':'לפני '+d+' ימים'; }
+    /* What the page says, it says through the office's notice (`binaTell`, the copied block above).
+       `tell(msg, bad)` keeps the page's own yes/no — a failure is `bad`, anything else is good news;
+       a step not taken yet is said as a warning where it happens. */
+    function tell(msg,bad){ return binaTell(msg, bad?'bad':'ok'); }
+    /* What cannot be taken back - a removed connection or profile, a replaced key, every user deleted, a
+       message to every conversation, a bot's saved settings - is asked through the office's question
+       (`binaAsk`, the same block), and the question does it (`run`): its action is busy while the request
+       is out, and a refusal is said IN the question, in the service's words, with the action offered
+       again. `must` is that request: its answer, or the refusal thrown for the question to say. */
+    function must(p,say){ return p.then(function(r){
+      if(!r.ok||(r.d&&r.d.ok===false)) throw new Error((r.d&&r.d.error)||(say+(r.status?' ('+r.status+')':'')));
+      return r; }); }
+
+    var STCOL={ok:'var(--ok)',warning:'var(--lime)',error:'var(--red)'};   // the palette's: well · look here · failed (the steps that are lifted on the dark ground)
+    var STHE={ok:'מחובר',warning:'דורש תשומת לב',error:'שגיאת חיבור'};
+    /* Keyed by what /api/accounts actually returns — the connection's PROTOCOL with the `chat_`
+       prefix stripped (chat_wa_baileys -> wa_baileys). The sim's mock invented its own provider
+       names, so the sim keys are kept as aliases: a connections service that labels an instance
+       "whatsapp" still gets its icon instead of the fallback dot. */
+    var PROVICO={whatsapp:'W',wa_baileys:'W',telegram:'T',tg_bot:'T',whatsapp_cloud:'W',messenger:'M'};
+    /* a provider's chip: its initial — and the built-in chat, which has none, is the drawn bubble */
+    function provIco(p){ return p==='local'||p==='chat_local'?mark('message'):(PROVICO[p]||'·'); }
+    var PROVHE={local:'צ׳אט מקומי',chat_local:'צ׳אט מקומי',wa_baileys:'וואטסאפ · Baileys',whatsapp:'וואטסאפ · Baileys',
+      tg_bot:'טלגרם · בוט',telegram:'טלגרם · בוט',whatsapp_cloud:'WhatsApp Cloud API',messenger:'Facebook Messenger'};
+    /* The connect catalogue, keyed by the protocol ids /api/manifest advertises. Nothing here is
+       invented: a protocol the service does not list is not offered. */
+    var PROTOHE={
+      chat_local:{name:'צ׳אט מקומי',desc:'שירות הצ׳אט הפנימי של הפלטפורמה — מובנה, פעיל תמיד, ואינו דורש חיבור.',color:'var(--olive)',mk:'message'},
+      chat_wa_baileys:{name:'וואטסאפ · Baileys',desc:'מספר וואטסאפ עסקי, מקושר בסריקת קוד QR ממכשירים מקושרים.',color:'#25d366',ic:'W'},
+      chat_tg_bot:{name:'טלגרם · בוט',desc:'בוט טלגרם רשמי עם Bot Token מ-BotFather.',color:'#2aabee',ic:'T'}
+    };
+    function provName(a){ return PROVHE[a&&a.provider]||(a&&a.provider)||'—'; }
+    var ALERT_SVG='<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg>';
+    var RETRY_SVG='<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5"/></svg>';
+    /* The page's MARKS are drawn, never typed. A character is whatever the reader's font has for it,
+       sits on that font's metrics and is read aloud by its name («check mark», «heavy multiplication
+       x») — and an emoji is somebody else's picture. One helper for all of them; a mark that tells
+       something (a message was read, a capability is missing) carries the words for it in `say`. */
+    var MARK={check:'M20 6 9 17l-5-5',checks:'M18 6 7 17l-5-5M22 10l-7.5 7.5L13 16',x:'M18 6 6 18M6 6l12 12',
+      chevron:'m6 9 6 6 6-6',plus:'M5 12h14M12 5v14',
+      alert:'M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01',
+      message:'M7.9 20A9 9 0 1 0 4 16.1L2 22z',
+      clip:'m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48',
+      bot:'M12 8V4H8M6 8h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2zM2 14h2M20 14h2M15 13v2M9 13v2',
+      user:'M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2M12 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8z',
+      tool:'M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z'};
+    function mark(n,say){ return '<svg class="mk" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" '+
+      (say?'role="img" aria-label="'+esc(say)+'"><title>'+esc(say)+'</title>':'aria-hidden="true">')+'<path d="'+MARK[n]+'"/></svg>'; }
+    function tagClass(t){return t==='לקוח'?'tag-cust':t==='ספק'?'tag-supp':t==='קבוצה'?'tag-grp':'tag-bot';}
+    function tagHtml(t){return t?'<span class="tag '+tagClass(t)+'">'+esc(t)+'</span>':'';}
+    /* A sent message's three states: one check, two, and two that are heavier and in the read colour. */
+    function tickHtml(status){ return status==='read'?'<span class="tick read">'+mark('checks','נקראה')+'</span>'
+      :status==='delivered'?'<span class="tick gray">'+mark('checks','נמסרה')+'</span>'
+      :status==='sent'?'<span class="tick gray">'+mark('check','נשלחה')+'</span>':''; }
+
+    var S={accounts:[],active:null,activeAcct:null,me:null,bots:[],convs:[],filter:'all',q:'',openId:null,openContact:null,
+      ready:null,ops:[],protocols:[],reachable:true,connErr:'',threadSig:'',booted:false,
+      /* which connection's row the bot modal is configuring — NOT necessarily the active one */
+      botConn:null,
+      /* The CONNECTION GENERATION. Bumped by resetForConnection() and by nothing else. Every async
+         continuation that writes per-connection state captures it on the way out and re-checks it on
+         the way back (see fresh()), because the active pointer is a file on the SERVICE's disk that
+         four different controls can move — the in-app switcher, the console's top-bar chip, the
+         connect wizard, and a bare POST from n8n. An answer that was requested about connection A
+         must never be written into a screen that is now showing connection B. */
+      gen:0};
+
+    /**
+     * THE ONE DOOR out of one connection and into another.
+     *
+     * Everything below is scoped to a single connection, and the whole point of listing it here is
+     * that "what is per-connection" becomes something you can READ rather than reconstruct from
+     * eight call sites. Before this existed, selectConn() cleared eight fields by hand and
+     * __chatReload() cleared three of the same eight — so removing or adding a connection left the
+     * previous connection's search term filtering the new connection's list, and left the bots and
+     * new-chat modals showing rows that belong to an account that is no longer active.
+     *
+     * `id` is the connection we are moving TO, or null when we do not know yet (a console switch
+     * tells us only THAT it happened). boot() overwrites it with the service's own answer either
+     * way; setting it here is what lets loadConvs() reject a stale list immediately instead of one
+     * round-trip later.
+     */
+    function resetForConnection(id){
+      S.gen++;
+      /* server truth about the new connection — unknown until boot() answers */
+      S.active=id||null; S.activeAcct=null; S.ready=null; S.ops=[];
+      /* the conversation list and whatever is open in it. Ids are NOT portable across connections. */
+      S.convs=[]; S.openId=null; S.openContact=null; S.threadSig='';
+      /* view state. A search term or a "unread only" tab from the old account silently hides the new
+         account's chats, which reads exactly like "my chats are gone". */
+      S.filter='all'; S.q='';
+      /* the two modals that hold a connection's rows, and the cursor into the bots matrix. Their
+         tokens are bumped so an in-flight load/save from before the switch cannot land. */
+      S.botConn=null;
+      BS.token++; NC.token++; NC.users=[]; NC.picked={};
+      /* optimistic sends. An entry here suppresses the inbound refresh for its conversation id
+         (see onChange), so one that outlives its connection silences a conversation for good.
+         This is the only place it is ever cleared wholesale. */
+      _pending={};
+      /* A stream belongs to ONE connection — the server resolved it when the request was made. Left
+         open it keeps a dedicated Postgres LISTEN client alive on the server for an account nobody is
+         looking at, and every event it pushes calls loadConvs() for the OTHER connection's list. */
+      stopEvents();
+      /* A modal whose header says «ההתנהגות בחיבור X» must not survive onto Y. */
+      closeModal();
+      var si=$('#convSearch'); if(si)si.value='';
+      document.querySelectorAll('#segtabs .seg').forEach(function(x,i){ x.classList.toggle('on', i===0); });
+      var ch=document.querySelector('.chat'); if(ch) ch.classList.remove('mob-thread');
+    }
+    /** The guard: is the answer I am holding still about the connection I am showing? */
+    function fresh(gen){ return gen===S.gen; }
+
+    function botOf(id){ return S.bots.filter(function(b){return b.id===id;})[0]||null; }
+    function botNameOf(id){ var b=botOf(id); return b?b.name:(id||'—'); }
+    /* Does THIS connection have anything to re-pair? Derived from /api/manifest's op list rather than
+       assumed: local chat deliberately does not implement `reconnect`, and offering a button that can
+       only ever answer 501 is worse than not offering one — the operator reads the failure as an
+       outage. */
+    function hasOp(op){ return S.ops.indexOf(op)>=0; }
+    function canReconnect(){ return hasOp('reconnect'); }
+    /* Starting a conversation is the same story as reconnect, and it is the reason `listUsers`,
+       `createDirect` and `createGroup` are PROTOCOL ops rather than canonical ones: Baileys has no
+       "list every contact" call and a Telegram bot may only answer users who wrote to it first.
+       So the button is gated on what /api/manifest actually advertises FOR THIS CONNECTION — a
+       picker with no address book behind it can only ever answer 501, and an operator reads a 501
+       as an outage rather than as "this transport does not work that way".
+       Listing is required for BOTH shapes: a group is picked out of the same address book. */
+    function canListUsers(){ return hasOp('listUsers'); }
+    function canCreateDirect(){ return hasOp('createDirect'); }
+    function canCreateGroup(){ return hasOp('createGroup'); }
+    function canStartChat(){ return canListUsers() && (canCreateDirect()||canCreateGroup()); }
+    /* Same story again, and the reason the poll below is NOT simply deleted: `subscribe` is a
+       PROTOCOL op. Local chat can be told by Postgres the instant a row lands and advertises it;
+       Baileys and Telegram have their own event streams and do not, so /api/events answers them 501.
+       Gating on the manifest is what keeps live updates an upgrade for the connections that have
+       them instead of a removal of updates for the ones that do not. */
+    function canSubscribe(){ return hasOp('subscribe'); }
+    /** Why not, in the operator's words. Names the CONNECTION, because the answer is per connection
+     *  and the same app says yes on the next one in the switcher. */
+    function noStartReason(){
+      if(!S.booted) return 'שירות הצ׳אט אינו זמין כרגע, ולכן אי אפשר לפתוח שיחה חדשה.';
+      var who='«'+((S.activeAcct&&(S.activeAcct.label||S.activeAcct.id))||'—')+'»';
+      if(!canListUsers()) return 'החיבור '+who+' אינו יכול להציג מי אנשי הקשר שלו, ולכן אי אפשר לפתוח ממנו שיחה חדשה כאן. שיחות שנפתחו מהצד השני ימשיכו להגיע לרשימה.';
+      return 'החיבור '+who+' אינו יכול לפתוח שיחה חדשה מכאן.';
+    }
+    /** The button and its explanation are one control: whichever state it is in, it says why. */
+    function renderNewBtn(){
+      var b=$('#newChat'),h=$('#newHint'); if(!b)return;
+      var ok=S.booted&&canStartChat(),why=ok?'':noStartReason();
+      b.classList.toggle('off',!ok);
+      b.disabled=!ok;
+      b.setAttribute('aria-disabled',ok?'false':'true');
+      b.title=ok?'פתיחת שיחה חדשה בחיבור זה':why;
+      if(h){ h.textContent=why; h.classList.toggle('hidden',ok); }
+    }
+
+    /**
+     * One load of everything the shell needs: the connections, the bot roster, the LIVE readiness
+     * probe and the op surface. /readyz is fetched because the account list cannot answer readiness —
+     * it reports the connections service's last-known status, while /readyz actually probes the
+     * ACTIVE backend. A local connection the vault happily calls "ok" with its database down is
+     * exactly the case the list gets wrong.
+     */
+    function boot(){
+      /* A stream belongs to ONE connection — the server resolved it when the request was made — and a
+         boot is exactly the moment that can change. Dropped HERE rather than after the answers land:
+         a stream left open on the connection the operator just left keeps a dedicated Postgres LISTEN
+         client alive on the server and pushes events about an account that is no longer on screen. */
+      stopEvents();
+      /* FOUR requests, and three of them answer "which connection". Without this token a switch that
+         lands between the dispatch of /accounts and the dispatch of /manifest leaves S.active and
+         S.activeAcct describing connection A while S.ops and S.ready describe connection B —
+         permanently, until something reboots. That is the "the buttons do not match the label"
+         failure exactly: canStartChat() gates the button on B's ops while noStartReason() names A,
+         and canSubscribe() decides poll-vs-stream from B while startEvents() pins the stream to A.
+         Two concurrent boot()s interleave the same way and the SLOWER one wins every field. */
+      var gen=S.gen;
+      return Promise.all([jx('/accounts'),jx('/bots'),jx('/readyz'),jx('/manifest'),jx('/engine/whoami')]).then(function(r){
+        if(!fresh(gen)) return;          // the connection moved while these were in flight
+        var acc=r[0].d||{},bt=r[1].d||{},rd=r[2].d||{},mf=r[3].d||{};
+        /* WHO AM I. Every request into the private engine now resolves a PROFILE, and the ring that
+           profile is in decides whether profile management is even offered. Asked of the service
+           rather than guessed from the connection: a UI that decides its own permissions is a UI
+           that will eventually offer a button the server refuses. A remote connection answers with
+           profile:null, which correctly hides the screen. */
+        S.me=(r[4]&&r[4].ok&&r[4].d&&r[4].d.profile)?r[4].d:null;
+        if(!r[0].ok&&!acc.accounts) throw new Error(acc.error||('accounts '+r[0].status));
+        S.accounts=acc.accounts||[]; S.active=acc.active||null;
+        S.reachable=acc.reachable!==false; S.connErr=acc.error||'';
+        S.bots=bt.bots||[]; S.ready=rd; S.ops=mf.ops||[]; S.protocols=mf.protocols||[];
+        S.activeAcct=S.accounts.filter(function(a){return a.id===S.active;})[0]||S.accounts[0]||null;
+        // The probe outranks the list for the ACTIVE connection only — /readyz probes one backend and
+        // must never be read as a verdict on the others.
+        if(S.activeAcct&&rd&&rd.ready===false){ S.activeAcct.status='error'; S.activeAcct.reason=rd.reason||rd.error||S.activeAcct.reason; }
+        S.booted=true;
+        renderBotCard(); renderConn(); renderAcctMenu(); renderNewBtn();
+        /* The op surface is now known FOR THIS CONNECTION, which is the only thing that decides
+           whether this tab streams or polls. */
+        syncLive();
+        return loadConvs();
+      }).catch(function(e){
+        /* A boot that lost its race must not paint its failure over the screen that replaced it —
+           the operator would be told the service is down about a connection they already left. */
+        if(!fresh(gen)) return;
+        fatal(e);
+      });
+    }
+    /* A boot that failed must SAY so. The original silently kept a blank list and an empty thread,
+       which reads as "you have no chats" — the one message that is certainly wrong here. */
+    function fatal(e){
+      S.booted=false; S.ops=[];
+      renderNewBtn();
+      /* No manifest means no advertised `subscribe`, so this closes the stream and puts the poll
+         back — the retry button re-boots into whichever mode the service turns out to support. */
+      syncLive();
+      var msg=String((e&&e.message)||e||'שגיאה לא ידועה');
+      $('#connName').textContent='שירות הצ׳אט אינו זמין';
+      var stx=$('#connState'); stx.textContent=msg; stx.style.color=STCOL.error;
+      $('#provDot').style.background=STCOL.error;
+      $('#convList').innerHTML='<div class="list-err"><div class="le-ic">'+ALERT_SVG+'</div>'+
+        '<b>לא ניתן לטעון את הצ׳אט</b><span>'+esc(msg)+'</span>'+
+        '<button class="le-btn" id="retryBtn">'+RETRY_SVG+'ניסיון נוסף</button></div>';
+      var rb=$('#retryBtn'); if(rb)rb.onclick=function(){rb.disabled=true;rb.style.opacity='.6';boot();};
+      $('#thread').innerHTML='';
+    }
+    /** The reload hook, exported for anything outside this script that knows the connection moved:
+     *  the remove-connection flow, the connect wizard, the reconnect button — and the console shell,
+     *  through the postMessage listener at the foot of this file. It goes through the same door the
+     *  in-app switcher does, so "start over on a different connection" means one thing here. */
+    window.__chatReload=function(){ resetForConnection(S.active); return boot(); };
+
+    /* The list is the one surface that changes under a switch WITHOUT anyone asking it to: the poll
+       and the stream both call this, and neither knows the pointer moved. Two guards, because they
+       catch different things — `gen` catches "this tab has since moved on", and `d.account` (which
+       chatapi has always sent and this client always threw away) catches "the SERVICE answered about
+       a different connection than the one I think I am on", which is the P5 case no client-side
+       token can see: n8n, curl or a second tab moved the pointer and nothing told us. */
+    function loadConvs(){
+      var gen=S.gen;
+      return jf('/conversations').then(function(d){
+        if(!fresh(gen)) return;
+        // Only reject on a POSITIVE disagreement: right after a console switch S.active is null
+        // (we know THAT it moved, not where to) and the server's answer is the authority.
+        if(d&&d.account&&S.active&&d.account!==S.active) return;
+        S.convs=(d&&d.conversations)||[]; renderList(); if(!S.openId) renderThreadState();
+      });
+    }
+
+    /* ── sidebar: which bot answers on THIS connection ───────────────────────────
+       Attachment is per connection (POST api/account/bot {id, bot}), so the control always names the
+       connection it is changing and re-reads /accounts afterwards rather than trusting its own
+       optimism — the runtime is the owner of that mapping, not this select. */
+    function renderBotCard(){
+      var sel=$('#botSelect'),a=S.activeAcct,card=sel.closest('.botctl');
+      // with no account in view there is no bot to choose: «בוט פעיל בחיבור זה» stood over an EMPTY select
+      card.hidden=!a; if(card.previousElementSibling)card.previousElementSibling.hidden=!a;
+      if(!a){ sel.innerHTML=''; $('#botDesc').textContent=''; return; }
+      sel.innerHTML=S.bots.map(function(b){return '<option value="'+esc(b.id)+'"'+(b.id===a.activeBot?' selected':'')+'>'+esc(b.name)+'</option>';}).join('');
+      var cur=botOf(a.activeBot); $('#botDesc').textContent=cur?cur.desc:'';
+      sel.onchange=function(){ setBot(a.id,sel.value); };
+    }
+    /** Attach `bot` to `connId`, then re-read the truth. Returns a promise so the modal can await it. */
+    function setBot(connId,bot){
+      return post('/account/bot',{id:connId,bot:bot}).then(function(r){
+        if(!r.ok) { tell((r.d&&r.d.error)||'שיוך הבוט נכשל',true); return jf('/accounts'); }
+        return jf('/accounts');
+      }).then(function(d){
+        S.accounts=(d&&d.accounts)||S.accounts;
+        S.activeAcct=S.accounts.filter(function(x){return x.id===S.active;})[0]||S.activeAcct;
+        var target=S.accounts.filter(function(x){return x.id===connId;})[0];
+        renderBotCard(); renderAcctMenu();
+        if(target&&target.activeBot===bot) tell('הבוט בחיבור «'+(target.label||connId)+'»: '+botNameOf(bot));
+        if(S.openId) renderBotnote();
+      });
+    }
+    /** The button, drive/mail's `renderAcct()` in chat's terms: the readiness DOT first, then the
+     *  protocol badge, the connection's label, and its identity underneath. The dot is chat's
+     *  per-connection status — which boot() has already overridden with the live /api/readyz verdict
+     *  for the ACTIVE connection — so it means the same thing drive's and mail's dot means, without
+     *  claiming a live probe for accounts that were never probed. */
+    function renderConn(){
+      var a=S.activeAcct;
+      var nm=$('#connName'),stx=$('#connState'),ico=$('#provIco'),dot=$('#provDot'),w=$('#acctWarn'),btn=$('#acctBtn');
+      if(!a){
+        nm.textContent='אין חיבורים'; stx.textContent='חבר/י חשבון צ׳אט'; stx.style.color='var(--muted)';
+        ico.textContent='·'; ico.style.background='var(--muted)'; dot.style.background=STCOL.error;
+        if(btn)btn.title='אין חיבורים — לחצו כדי לחבר חשבון צ׳אט';
+        if(w){ w.classList.add('hidden'); w.innerHTML=''; }
+        $('#mConnName').textContent='—'; $('#mConnDot').style.background=STCOL.error;
+        return;
+      }
+      var ok=a.status==='ok', why=a.reason||STHE[a.status]||'';
+      nm.textContent=a.label;
+      stx.textContent=ok?(a.identity||provName(a)):why;
+      stx.style.color=ok?'var(--muted)':STCOL[a.status];
+      ico.innerHTML=provIco(a.provider); ico.style.background=a.color||'var(--muted)';
+      dot.style.background=STCOL[a.status]||'var(--line)';
+      if(btn)btn.title=(a.label||'')+' — '+(ok?STHE.ok:why)+' · לחצו להחלפת חיבור או לחיבור חשבון';
+      // The reason goes on the BOX, under the button — drive and mail both put it there so a failure
+      // does not require opening a menu to be seen.
+      if(w){
+        var show=!ok&&!!why;
+        w.classList.toggle('hidden',!show);
+        w.innerHTML=show?('<span>'+mark('alert')+'</span><span>'+esc(why)+'</span>'):'';
+      }
+      $('#mConnName').textContent=a.label||a.id;
+      $('#mConnDot').style.background=STCOL[a.status]||'var(--line)';
+    }
+
+    /* ── the connection switcher ─────────────────────────────────────────────────
+       Drive and Mail both keep this control at the foot of their sidebar: dot + name + chevron, a
+       menu of the other connections, and one entry that ADDS a new one. Chat keeps it in the same
+       place with the same acct-* parts, so "which account am I on / switch it" is the same gesture in
+       all three. The rows carry the ATTACHED BOT as their third line, because on this service the
+       question "what happens on that connection" is answered by the bot, not by the protocol.
+
+       WHY IT IS STILL IN THE APP, NOW THAT THE CONSOLE HAS A CHIP TOO. The console renders its own
+       top-bar chip (renderAccountBar) for a module whose declaration carries `service:` — drive's and
+       mail's do, and since c80af853 chat's does as well (routing[0].module.service = "chat" in
+       apps/chat/app.json). So showEmbed() lights #acctChip and there are TWO controls on screen.
+       Both are legitimate and neither is going away: this app is also served at its own origin
+       (chat.hacohen.bina-solutions.co.il) where there is no console around it, and the shell owns
+       "which account" for every embedded service by design. Making them agree is the fix; removing
+       one is a different product.
+
+       HOW THEY STAY IN SYNC. There is exactly ONE pointer — a file on this service's disk
+       (chatapi/connections_client.js, /data/active.json) — and both controls write it: this one via
+       POST api/account/select, the chip via POST /connections/select. The file being shared was never
+       the problem. The problem was that a shared source of truth SAMPLED ONLY AT MOUNT is a cache:
+       this app read the pointer once, inside boot(), so a chip click changed the pointer and the
+       frame went on showing the previous account's label, badge, bot card and conversation list.
+       Three edges close that, and all three are in this file:
+         · the console posts a same-origin message into the frame on select / remove / wizard-close;
+           the listener at the foot of this script answers it with resetForConnection() + boot().
+         · every async continuation that writes per-connection state carries S.gen, so an answer
+           about the connection we just left is dropped rather than painted (see fresh()).
+         · loadConvs() checks the `account` field chatapi puts on every /conversations answer, which
+           catches a pointer moved by something that cannot post a message at all — n8n, curl, or a
+           second browser tab.
+       If no message ever arrives (an older console), nothing breaks: showEmbed() re-sets the frame's
+       src on every openModule(), so navigating away and back still re-boots the app. */
+    function menuEl(){ return $('#acctMenu'); }
+    function acctBtn(){ return $('#acctBtn'); }
+    function hideMenu(){ var m=menuEl(),b=acctBtn(); if(m){m.classList.add('hidden'); if(b)b.setAttribute('aria-expanded','false');} }
+    function toggleMenu(){ var m=menuEl(),b=acctBtn(); var open=m.classList.contains('hidden'); m.classList.toggle('hidden',!open); if(b)b.setAttribute('aria-expanded',open?'true':'false'); }
+    /** One menu action, in mail's two-line shape (title + what it actually does). */
+    function acctEntry(m,icon,title,sub,fn){
+      var b=document.createElement('button');
+      b.className='acct-add'; b.type='button'; b.setAttribute('role','menuitem');
+      b.innerHTML='<span class="ai">'+icon+'</span><span class="acct-add-t"><span>'+esc(title)+
+        '</span><span class="acct-add-s">'+esc(sub)+'</span></span>';
+      b.onclick=function(e){ e.stopPropagation(); hideMenu(); fn(); };
+      m.appendChild(b);
+      return b;
+    }
+    function renderAcctMenu(){
+      var m=menuEl(); if(!m)return; m.innerHTML='';
+      acctRows(m);
+      m.appendChild(node('div','acct-sep',''));
+      /* ADD AN ACCOUNT IS FIRST, and named as an action — mail's ordering, for mail's reason. This
+         entry has existed all along; what was missing was any suggestion that the control above it
+         could be opened at all, which is what the plaque-shaped chip cost. */
+      acctEntry(m,mark('plus'),'חיבור חשבון','וואטסאפ · טלגרם — אשף חיבור החשבון',openConnect);
+      acctEntry(m,mark('bot'),'בוטים וחיבורים','איזה בוט עונה בכל חיבור, וההגדרות שלו',openBots);
+      /* Administering the ENGINE is a different job from choosing a connection, and it exists only
+         for the engine we run — so it is offered only while a local connection is active. On
+         WhatsApp the equivalent gesture is pairing a device, which is «חיבור חשבון» above. */
+      if(canAdminEngine())
+        acctEntry(m,mark('user'),'פרופילים במנוע הפנימי','זהויות עם אישור גישה, ואנשי הקשר של המנוע',openEngine);
+      /* The admin dashboard's remaining jobs — the subscriber list, the exports and a broadcast —
+         reachable from the one control that already means "this app, not this conversation". */
+      acctEntry(m,mark('tool'),'כלים וייצוא','ייצוא שיחות, הודעת תפוצה ורשימת המשתמשים',openTools);
+      /* Not the same fact as #acctWarn: that one is the ACTIVE connection's readiness, this one is
+         the connections SERVICE being unreachable, which costs every remote account at once. */
+      if(!S.reachable){
+        m.appendChild(node('div','acct-warn','<span>'+mark('alert')+'</span><span>שירות החיבורים אינו זמין — מוצג הצ׳אט המקומי בלבד.'+
+          (S.connErr?' ('+esc(S.connErr)+')':'')+'</span>'));
+      }
+    }
+    /** The connection rows themselves — shared by the sidebar menu and the phone-sized picker, so the
+     *  two can never disagree about what is connected or which bot answers on it. */
+    function acctRows(host,after){
+      if(!S.accounts.length) host.appendChild(node('div','acct-empty','אין חיבורים זמינים'));
+      S.accounts.forEach(function(c){
+        var item=node('div','acct-item','');
+        var pick=document.createElement('button');
+        pick.className='acct-pick'; pick.type='button'; pick.setAttribute('role','menuitemradio');
+        pick.setAttribute('aria-checked',c.id===S.active?'true':'false');
+        pick.innerHTML='<span class="acct-l1"><span class="acct-dot" style="background:'+(STCOL[c.status]||'var(--line)')+'"></span>'+
+          '<b class="acct-lbl">'+esc(c.label||c.id)+'</b>'+(c.id===S.active?'<span class="acct-on">'+mark('check','החיבור הפעיל')+'</span>':'')+'</span>'+
+          (c.identity ? '<small class="acct-hint">'+esc(c.identity)+'</small>' : '')+
+          '<small class="acct-proto">'+esc(provName(c))+' · בוט: '+esc(botNameOf(c.activeBot))+'</small>';
+        pick.title=c.status==='ok'?'מצב אחרון מהשירות. בדיקה חיה מתבצעת על החיבור הפעיל בלבד.':(c.reason||STHE[c.status]||'');
+        pick.onclick=function(e){ e.stopPropagation(); if(after)after(); selectConn(c.id); };
+        item.appendChild(pick);
+        /* Remove — only on a connection that HAS a vault row. The built-in local chat is synthetic
+           (the service answers DELETE on it with a 400), so offering the control there would be a
+           button whose only outcome is a refusal. */
+        if(!c.builtin){
+          var rm=document.createElement('button');
+          rm.className='acct-rm'; rm.type='button'; rm.innerHTML=mark('x');
+          rm.title='הסרת החיבור «'+(c.label||c.id)+'»';
+          rm.setAttribute('aria-label',rm.title);
+          rm.onclick=function(e){ e.stopPropagation(); if(after)after(); confirmRemoveConn(c); };
+          item.appendChild(rm);
+        }
+        host.appendChild(item);
+      });
+    }
+    /** Removing a connection deletes a credential — it gets a confirmation naming what goes, and the
+     *  app re-boots afterwards because the ACTIVE pointer may have just been cleared by the service. */
+    function confirmRemoveConn(c){
+      var name=c.label||c.id;
+      binaAsk({danger:true,ok:'הסרה',title:'להסיר את החיבור «'+name+'»?',
+        body:'החיבור והסוד שלו יוסרו מכספת החיבורים. השיחות עצמן נשארות אצל הספק — '+
+          'אבל האפליקציה לא תוכל להגיע אליהן עד שהחיבור יחובר מחדש.',
+        facts:[['ספק',provName(c)]].concat(c.identity?[['חשבון',c.identity]]:[]),
+        run:function(){ return must(del('/account/'+encodeURIComponent(c.id)),'הסרת החיבור נכשלה'); }
+      }).then(function(ok){ if(ok){ tell('החיבור «'+name+'» הוסר'); return window.__chatReload(); } });
+    }
+    function node(tag,cls,html){ var e=document.createElement(tag); e.className=cls; e.innerHTML=html; return e; }
+
+    /** The phone-sized switcher: same rows, presented as a sheet because there is no sidebar to
+     *  anchor a dropdown to under 820px. */
+    function openConnPicker(){
+      // Same entries, same ORDER as the sidebar menu — add-an-account first — so the phone and the
+      // desktop are one control presented twice, not two controls.
+      var btns=[{label:'חיבור חשבון',onclick:function(){ closeModal(); openConnect(); }},
+                {label:'בוטים וחיבורים',onclick:function(){ closeModal(); openBots(); }}];
+      // Same gate as the sidebar menu, so the phone offers exactly what the desktop does.
+      if(canAdminEngine()) btns.push({label:'פרופילים במנוע הפנימי',onclick:function(){ closeModal(); openEngine(); }});
+      btns.push({label:'כלים וייצוא',onclick:function(){ closeModal(); openTools(); }});
+      btns.push({label:'סגירה',pri:true,onclick:closeModal});
+      modal('חיבור פעיל','<div id="connRows"></div>',btns);
+      acctRows($('#connRows'),closeModal);
+    }
+
+    function selectConn(id){
+      if(id===S.active){ hideMenu(); return; }
+      post('/account/select',{id:id}).then(function(r){
+        hideMenu();
+        if(!r.ok) return tell((r.d&&r.d.error)||'החלפת החיבור נכשלה',true);
+        // One door — the same one __chatReload() and the console's message go through, so all three
+        // paths that mean "start over on a different connection" clear the same things.
+        resetForConnection(id);
+        return boot().then(function(){ tell('החיבור הוחלף: '+(S.activeAcct?S.activeAcct.label:id)); });
+      });
+    }
+
+    /* ── modal ─────────────────────────────────────────────────────────────────── */
+    function modal(title,bodyHtml,buttons){
+      $('#mTitle').textContent=title; $('#mBody').innerHTML=bodyHtml;
+      var f=$('#mFoot'); f.innerHTML='';
+      (buttons||[]).forEach(function(b){
+        var el=document.createElement('button'); el.type='button'; el.className='btn'+(b.pri?' pri':'');
+        el.textContent=b.label; el.onclick=b.onclick; f.appendChild(el);
+      });
+      $('#ov').classList.remove('hidden');
+    }
+    function closeModal(){ $('#ov').classList.add('hidden'); }
+
+    /* ── bots · the management surface ─────────────────────────────────────────────
+       Two things live here and they are different questions. ATTACHMENT — which bot answers on which
+       connection — is a full matrix rather than only the active connection's row, because the failure
+       this prevents ("the WhatsApp number stopped answering") is invisible from a control that only
+       ever shows the connection you happen to be looking at.
+
+       SETTINGS is everything the bot itself declares — the schema comes from the bot, never from this
+       file (GET api/bots/:id/settings returns {schema, settings}), so a bot that adds a knob gets a
+       control here with no UI change. Values are per (connection, bot): the panel therefore follows
+       the matrix ROW the operator selected, not the active connection, because the whole point of the
+       contract is that the same bot runs a different policy on a public WhatsApp number than it does
+       on internal local chat. A bot that declares no settings says so instead of showing an empty frame. */
+    function capHtml(on,label){ return '<span class="cap'+(on?' on':'')+'">'+mark(on?'check':'x',on?'נתמך':'לא נתמך')+esc(label)+'</span>'; }
+    function connLabel(id){ var c=S.accounts.filter(function(x){return x.id===id;})[0]; return (c&&(c.label||c.id))||id||'—'; }
+    /* The panel's own state. `saved` is the server's LAST RESOLVED answer — the baseline every diff and
+       every re-render is taken from, so the screen can never claim a value the service did not confirm.
+       `token` invalidates an in-flight load/save when the operator moves to another row. */
+    var BS={conn:null,bot:null,schema:[],saved:{},token:0};
+    function ctlId(k){ return 'bs_'+String(k).replace(/[^a-zA-Z0-9]/g,'_'); }
+    function fieldOf(k){ return BS.schema.filter(function(f){return f.key===k;})[0]||null; }
+    function labelOf(k){ var f=fieldOf(k); return (f&&f.label)||k; }
+    /** One control per declared field, chosen by `type` — the four the contract defines and no more.
+     *  min/max/maxLength go into the markup so the browser refuses the value before the server has to. */
+    function fieldHtml(f,val){
+      var id=ctlId(f.key),k=esc(f.key),ctl,extra='';
+      if(f.type==='boolean'){
+        ctl='<label class="sw"><input type="checkbox" id="'+id+'" data-key="'+k+'"'+(val?' checked':'')+'><i></i></label>';
+      }else if(f.type==='number'){
+        ctl='<input type="number" id="'+id+'" data-key="'+k+'" step="1" inputmode="numeric" value="'+esc(val)+'"'+
+          (f.min!==undefined?' min="'+esc(f.min)+'"':'')+(f.max!==undefined?' max="'+esc(f.max)+'"':'')+'>';
+        if(f.min!==undefined||f.max!==undefined)
+          extra='<span class="bset-unit">'+esc((f.min!==undefined?f.min:'')+'–'+(f.max!==undefined?f.max:''))+'</span>';
+      }else if(f.type==='select'){
+        ctl='<select id="'+id+'" data-key="'+k+'">'+(f.options||[]).map(function(o){
+          var v=(o&&typeof o==='object'&&o.value!==undefined)?o.value:o;
+          var l=(o&&typeof o==='object'&&o.label!==undefined)?o.label:v;
+          return '<option value="'+esc(v)+'"'+(String(v)===String(val)?' selected':'')+'>'+esc(l)+'</option>';
+        }).join('')+'</select>';
+      }else{
+        ctl='<input type="text" id="'+id+'" data-key="'+k+'" value="'+esc(val)+'"'+(f.maxLength?' maxlength="'+esc(f.maxLength)+'"':'')+'>';
+        if(f.maxLength) extra='<span class="bset-unit">'+esc('≤'+f.maxLength)+'</span>';
+      }
+      return '<div class="bset-row" data-row="'+k+'">'+
+        '<span class="bset-x"><label class="bset-lbl" for="'+id+'">'+esc(f.label||f.key)+'</label>'+
+          (f.hint?'<span class="bset-hint">'+esc(f.hint)+'</span>':'')+'</span>'+
+        '<span class="bset-ctl">'+ctl+extra+'</span></div>';
+    }
+    function openBots(){
+      var body='<div class="mlbl">בוט לכל חיבור</div><div id="botMatrix"></div><div id="botDetail"></div>';
+      modal('בוטים וחיבורים',body,[{label:'סגירה',pri:true,onclick:closeModal}]);
+      S.botConn=(S.activeAcct&&S.activeAcct.id)||null;
+      drawBotMatrix();
+    }
+    function drawBotMatrix(){
+      var host=$('#botMatrix'); if(!host)return;
+      if(!S.accounts.filter(function(x){return x.id===S.botConn;}).length)
+        S.botConn=(S.activeAcct&&S.activeAcct.id)||(S.accounts[0]&&S.accounts[0].id)||null;
+      host.innerHTML=S.accounts.map(function(c){
+        return '<div class="brow'+(c.id===S.botConn?' on':'')+'" data-conn="'+esc(c.id)+'" role="button" tabindex="0"'+
+          ' aria-pressed="'+(c.id===S.botConn?'true':'false')+'" title="עריכת ההגדרות בחיבור זה">'+
+          '<span class="pic" style="background:'+esc(c.color||'var(--muted)')+'">'+
+          provIco(c.provider)+'</span>'+
+          '<span class="bx"><span class="bn">'+esc(c.label||c.id)+'</span><span class="bs">'+
+            // the protocol name is the label of the built-in connection, and echoing it under itself
+            // reads as a rendering fault rather than as a second fact
+            (provName(c)===(c.label||'')?'':esc(provName(c))+(c.identity?' · ':''))+esc(c.identity||'')+'</span></span>'+
+          '<select data-conn="'+esc(c.id)+'">'+S.bots.map(function(b){
+            return '<option value="'+esc(b.id)+'"'+(b.id===c.activeBot?' selected':'')+'>'+esc(b.name)+'</option>';
+          }).join('')+'</select></div>';
+      }).join('')||'<div class="acct-empty">אין חיבורים</div>';
+      host.querySelectorAll('select').forEach(function(sel){
+        sel.onchange=function(){ sel.disabled=true; var cid=sel.getAttribute('data-conn');
+          setBot(cid,sel.value).then(function(){ sel.disabled=false; pickBotConn(cid,true); });
+        };
+      });
+      // The row is what selects the connection being configured; the select inside it is a different
+      // control and must keep its own click.
+      host.querySelectorAll('.brow').forEach(function(row){
+        var go=function(e){ if(e.target&&e.target.closest&&e.target.closest('select'))return; pickBotConn(row.getAttribute('data-conn')); };
+        row.onclick=go;
+        row.onkeydown=function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); go(e); } };
+      });
+      drawBotDetail(S.botConn);
+    }
+    /** Move the panel to `connId`. `force` re-reads even if the row did not change (the attached bot did). */
+    function pickBotConn(connId,force){
+      if(!force&&connId===S.botConn) return;
+      S.botConn=connId;
+      var host=$('#botMatrix');
+      if(host) host.querySelectorAll('.brow').forEach(function(r){
+        var on=r.getAttribute('data-conn')===connId;
+        r.classList.toggle('on',on); r.setAttribute('aria-pressed',on?'true':'false');
+      });
+      drawBotDetail(connId);
+    }
+    /** Load and render the settings of whichever bot is attached to `connId`, ON that connection. */
+    function drawBotDetail(connId){
+      var d=$('#botDetail'); if(!d)return;
+      var c=S.accounts.filter(function(x){return x.id===connId;})[0]||null;
+      var botId=(c&&c.activeBot)||'none', b=botOf(botId), tk=++BS.token;
+      BS.conn=connId; BS.bot=botId; BS.schema=[]; BS.saved={};
+      var head='<div class="mlbl">ההתנהגות בחיבור «'+esc(connLabel(connId))+'»</div>';
+      if(!c){ d.innerHTML='<div class="bcard"><h4>אין חיבור נבחר</h4><p>בחר/י חיבור מהרשימה שלמעלה.</p></div>'; return; }
+      if(!b){
+        d.innerHTML=head+'<div class="bcard"><h4>'+esc(botNameOf(botId))+'</h4>'+
+          '<p>לא יופעל מענה אוטומטי בחיבור הזה. כל ההודעות הנכנסות ממתינות לצוות.</p>'+
+          '<div class="note">אין מה להגדיר — בחר/י בוט לחיבור הזה כדי לפתוח את ההגדרות שלו.</div></div>';
+        return;
+      }
+      d.innerHTML=head+'<div class="bcard"><h4>'+esc(b.name)+'</h4><p>'+esc(b.desc||'')+'</p>'+
+        '<div class="mlbl">מה הבוט עושה תמיד</div><div class="caps">'+
+          capHtml(true,'שאלות')+capHtml(true,'בחירה בתפריט')+capHtml(true,'פקודות')+
+          capHtml(true,'בקשה לנציג')+capHtml(true,'קבצים מצורפים')+
+        '</div><div id="botSet"><div class="acct-empty">טוען הגדרות…</div></div></div>';
+      jx('/bots/'+encodeURIComponent(botId)+'/settings?connection_id='+encodeURIComponent(connId)).then(function(r){
+        if(tk!==BS.token)return;                       // the operator moved on — that answer is stale
+        var host=$('#botSet'); if(!host)return;
+        if(!r.ok){ host.innerHTML='<div class="mlbl">הגדרות</div><div class="note">לא ניתן לטעון את ההגדרות: '+
+          esc((r.d&&r.d.error)||('שגיאה '+r.status))+'</div>'; return; }
+        BS.schema=(r.d&&r.d.schema)||[]; BS.saved=(r.d&&r.d.settings)||{};
+        BS.conn=(r.d&&r.d.connection_id)||connId;      // the service decides which connection it answered for
+        renderBotSet();
+      });
+    }
+    /** Draw the controls from BS.schema over BS.saved — the only place values reach the screen. */
+    function renderBotSet(){
+      var host=$('#botSet'); if(!host)return;
+      if(!BS.schema.length){
+        host.innerHTML='<div class="mlbl">הגדרות</div><div class="note">הבוט הזה אינו מגדיר הגדרות הניתנות לשינוי — כל ההתנהגות שלו קבועה.</div>';
+        return;
+      }
+      host.innerHTML='<div class="mlbl">הגדרות בחיבור זה</div>'+
+        BS.schema.map(function(f){ return fieldHtml(f,BS.saved[f.key]); }).join('')+
+        '<div class="bset-foot"><button class="btn pri" id="bsSave" type="button">שמירה</button>'+
+        '<button class="btn" id="bsUndo" type="button">ביטול שינויים</button>'+
+        '<button class="btn" id="bsReset" type="button">איפוס לברירת המחדל</button>'+
+        '<span class="bset-state" id="bsState"></span></div>';
+      host.querySelectorAll('[data-key]').forEach(function(el){
+        var ev=(el.tagName==='SELECT'||el.type==='checkbox')?'change':'input';
+        el.addEventListener(ev,function(){ clearFieldErr(el.getAttribute('data-key')); markDirty(); });
+      });
+      $('#bsSave').onclick=saveBotSet;
+      $('#bsUndo').onclick=function(){ renderBotSet(); };
+      $('#bsReset').onclick=resetBotSet;
+      markDirty();
+    }
+    /** Back to whatever the BOT declares — which is not the same as writing today's defaults back.
+     *  The service stores overrides only, so this DELETEs them; saving the current defaults instead
+     *  would pin them, and a bot that later changed a default would keep running the old one here. */
+    function resetBotSet(){
+      var conn=BS.conn,bot=BS.bot,tk=BS.token,d;
+      // What was saved for this bot on this connection is gone once reset, so it is asked (see `must`).
+      binaAsk({danger:true,ok:'איפוס',title:'לאפס את ההגדרות לברירת המחדל?',
+        body:'הערכים שנשמרו לבוט בחיבור הזה יימחקו, והבוט יתנהג כפי שהוא עצמו מגדיר.',
+        facts:[['בוט',botNameOf(bot)],['חיבור',connLabel(conn)]],
+        run:function(){ return must(jx('/bots/'+encodeURIComponent(bot)+'/settings',{method:'DELETE',
+          headers:{'Content-Type':'application/json'},body:JSON.stringify({connection_id:conn})}),'האיפוס נכשל')
+          .then(function(r){ d=r.d||{}; }); }
+      }).then(function(ok){
+        if(!ok||tk!==BS.token)return;
+        BS.saved=d.settings||BS.saved;
+        renderBotSet();
+        var n=(d.cleared||[]).length;
+        tell(n?('אופסו '+n+' הגדרות · '+connLabel(conn)):('אין מה לאפס — הכל בברירת המחדל'));
+      });
+    }
+    function currentVals(){
+      var out={};
+      BS.schema.forEach(function(f){
+        var el=document.getElementById(ctlId(f.key)); if(!el)return;
+        out[f.key]= f.type==='boolean' ? !!el.checked
+          : f.type==='number' ? (el.value===''?'':Number(el.value))
+          : el.value;
+      });
+      return out;
+    }
+    /** Only what actually changed goes on the wire. The API takes a partial set, and sending the whole
+     *  form would silently re-write keys this operator never touched. */
+    function changedVals(){
+      var cur=currentVals(),out={},n=0;
+      Object.keys(cur).forEach(function(k){ if(String(cur[k])!==String(BS.saved[k])){ out[k]=cur[k]; n++; } });
+      return {vals:out,n:n};
+    }
+    function markDirty(){
+      var st=$('#bsState'),sv=$('#bsSave'); if(!st||!sv)return;
+      var n=changedVals().n;
+      sv.disabled=!n; sv.style.opacity=n?'1':'.55'; sv.style.cursor=n?'pointer':'default';
+      st.classList.remove('bad');
+      st.textContent=n?(n===1?'שינוי אחד לא נשמר':n+' שינויים לא נשמרו'):'הכל שמור';
+    }
+    function clearFieldErr(key){
+      var row=key&&$('#botSet .bset-row[data-row="'+String(key).replace(/"/g,'')+'"]'); if(!row)return;
+      row.classList.remove('bad'); var e=row.querySelector('.bset-err'); if(e)e.remove();
+    }
+    /** A 400 names the offending FIELD inside quotes — put the reason next to that control and focus it.
+     *  A generic toast would throw away the one thing the API went to the trouble of telling us. */
+    function showFieldErr(key,msg){
+      var row=key&&$('#botSet .bset-row[data-row="'+String(key).replace(/"/g,'')+'"]');
+      if(!row){ var st=$('#bsState'); if(st){ st.textContent=msg; st.classList.add('bad'); } return false; }
+      clearFieldErr(key);
+      row.classList.add('bad');
+      row.querySelector('.bset-ctl').insertAdjacentHTML('beforeend','<span class="bset-err">'+esc(msg)+'</span>');
+      var el=document.getElementById(ctlId(key)); if(el&&el.focus)el.focus();
+      return true;
+    }
+    function saveBotSet(){
+      var ch=changedVals(); if(!ch.n)return;
+      BS.schema.forEach(function(f){ clearFieldErr(f.key); });
+      var sv=$('#bsSave'); sv.disabled=true; sv.style.opacity='.55';
+      var st=$('#bsState'); if(st){ st.classList.remove('bad'); st.textContent='שומר…'; }
+      var conn=BS.conn,bot=BS.bot,tk=BS.token;
+      jx('/bots/'+encodeURIComponent(bot)+'/settings',{method:'PUT',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({connection_id:conn,settings:ch.vals})}).then(function(r){
+        if(tk!==BS.token)return;
+        if(!r.ok){
+          var msg=(r.d&&r.d.error)||('שמירת ההגדרות נכשלה ('+r.status+')');
+          var m=/"([^"]+)"/.exec(msg), key=m&&fieldOf(m[1])?m[1]:null;
+          var pointed=showFieldErr(key,msg);
+          markDirty();
+          return tell(pointed?('לא נשמר — «'+labelOf(key)+'»'):msg,true);
+        }
+        // The PUT answers with the FULL resolved set. Re-render from THAT: what was sent is a request,
+        // what came back is what the service actually holds.
+        BS.saved=(r.d&&r.d.settings)||BS.saved;
+        if(r.d&&r.d.connection_id) BS.conn=r.d.connection_id;
+        renderBotSet();
+        tell('ההגדרות נשמרו · '+connLabel(conn));
+      });
+    }
+
+    /* ── connect ───────────────────────────────────────────────────────────────────
+       The catalogue is the SERVICE's (GET api/chat-providers), which is itself derived from the
+       protocols adapters/index.js can build — so this screen can never offer a backend that would
+       fail on its first op. It is provider-first with auth methods, the same shape mail's flow uses,
+       because the two apps share a switcher vocabulary and should share this one too.
+
+       `direct` is what splits the flow in half, and it is the service's answer, not a guess here:
+         · direct  — the credential is a STRING the operator has (a Telegram bot token). It is typed
+                     here and POSTed to api/account/add, which forwards it to the vault. Chat still
+                     stores nothing: the vault is the only writer.
+         · not direct — the pairing is a browser ceremony (WhatsApp's QR, proxied by the console's
+                     חיבורים ומפתחות screen with the chat-auth basic auth). This hands over rather
+                     than inventing a second place where a pairing is attempted. */
+    var CONN={providers:[],pick:null};
+    function openConnect(){
+      modal('חיבור חשבון צ׳אט','<div id="connBody"><div class="acct-empty">טוען ספקים…</div></div>',
+        [{label:'סגירה',pri:true,onclick:closeModal}]);
+      jx('/chat-providers').then(function(r){
+        var host=$('#connBody'); if(!host)return;
+        if(!r.ok){ host.innerHTML='<div class="note">לא ניתן לטעון את רשימת הספקים: '+esc((r.d&&r.d.error)||('שגיאה '+r.status))+'</div>'; return; }
+        CONN.providers=(r.d&&r.d.providers)||[]; CONN.pick=null;
+        drawProviders();
+      });
+    }
+    function drawProviders(){
+      var host=$('#connBody'); if(!host)return;
+      var have={}; S.accounts.forEach(function(a){ have[a.provider]=true; });
+      host.innerHTML='<div class="mlbl">מה אפשר לחבר</div>'+CONN.providers.map(function(p){
+        var m=p.auth_methods&&p.auth_methods[0]||{};
+        var meta=PROTOHE[m.protocol]||{color:'var(--muted)',ic:'·'};
+        var connected=have[String(m.protocol||'').replace(/^chat_/,'')];
+        return '<div class="prow" role="button" tabindex="0" data-prov="'+esc(p.id)+'">'+
+          '<span class="pic" style="background:'+esc(meta.color)+'">'+(meta.mk?mark(meta.mk):esc(meta.ic))+'</span>'+
+          '<span class="px"><span class="pn">'+esc(p.name)+(connected?' · מחובר':'')+(p.builtin?' · מובנה':'')+'</span>'+
+          '<span class="pd">'+esc(p.description||'')+'</span></span>'+
+          '<span class="cap'+(m.direct?' on':'')+'">'+(m.direct?'הזנת מפתח':'קישור בלשכה')+'</span></div>';
+      }).join('')+'<div id="connForm"></div>';
+      host.querySelectorAll('.prow[data-prov]').forEach(function(row){
+        var go=function(){ pickProvider(row.getAttribute('data-prov')); };
+        row.onclick=go; row.onkeydown=function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); go(); } };
+      });
+    }
+    function pickProvider(id){
+      CONN.pick=id;
+      var p=CONN.providers.filter(function(x){return x.id===id;})[0]; if(!p)return;
+      var m=(p.auth_methods||[])[0]||{};
+      var f=$('#connForm'); if(!f)return;
+      if(p.builtin){
+        f.innerHTML='<div class="bcard"><h4>'+esc(p.name)+'</h4><p>'+esc(m.can||'')+'</p>'+
+          '<div class="note">מובנה בפלטפורמה — קיים תמיד ואין מה לחבר.</div></div>';
+        return;
+      }
+      if(!m.direct){
+        f.innerHTML='<div class="bcard"><h4>'+esc(m.label||p.name)+'</h4>'+
+          '<p>'+esc(m.explain||'')+'</p>'+
+          '<div class="bset-foot"><button class="btn pri" id="connGo" type="button">פתיחת מסך החיבורים</button>'+
+          '<span class="bset-state">שם נשמרים הסודות של כל השירותים</span></div></div>';
+        $('#connGo').onclick=function(){ closeModal(); gotoConnections(); };
+        return;
+      }
+      f.innerHTML='<div class="bcard"><h4>'+esc(m.label||p.name)+'</h4><p>'+esc(m.explain||m.can||'')+'</p>'+
+        '<div class="bset-row"><span class="bset-x"><label class="bset-lbl" for="cf_label">שם לתצוגה</label>'+
+          '<span class="bset-hint">איך החיבור ייקרא ברשימת החיבורים.</span></span>'+
+          '<span class="bset-ctl"><input type="text" id="cf_label" value="'+esc(p.name)+'"></span></div>'+
+        (m.needs||[]).map(function(k){
+          return '<div class="bset-row" data-row="'+esc(k)+'"><span class="bset-x">'+
+            '<label class="bset-lbl" for="cf_'+esc(k)+'">'+esc(k)+'</label></span>'+
+            '<span class="bset-ctl"><input type="text" id="cf_'+esc(k)+'" data-need="'+esc(k)+'" autocomplete="off" spellcheck="false" dir="ltr"></span></div>';
+        }).join('')+
+        '<div class="bset-foot"><button class="btn pri" id="cfSave" type="button">חיבור</button>'+
+        (m.help_url?'<a class="btn" href="'+esc(m.help_url)+'" target="_blank" rel="noopener">עזרה</a>':'')+
+        '<span class="bset-state" id="cfState"></span></div></div>';
+      $('#cfSave').onclick=function(){ submitConnect(m); };
+    }
+    function submitConnect(m){
+      var label=($('#cf_label')&&$('#cf_label').value||'').trim();
+      var secret={},missing=null;
+      (m.needs||[]).forEach(function(k){
+        var el=document.getElementById('cf_'+k), v=(el&&el.value||'').trim();
+        if(!v){ if(!missing)missing=k; return; }
+        secret[k]=v;
+      });
+      var st=$('#cfState');
+      if(!label){ if(st){st.classList.add('bad');st.textContent='נדרש שם לתצוגה';} return; }
+      if(missing){ if(st){st.classList.add('bad');st.textContent='נדרש '+missing;} return; }
+      var btn=$('#cfSave'); btn.disabled=true; btn.style.opacity='.55';
+      if(st){ st.classList.remove('bad'); st.textContent='מחבר…'; }
+      post('/account/add',{protocol:m.protocol,label:label,secret:secret}).then(function(r){
+        if(!r.ok){
+          btn.disabled=false; btn.style.opacity='1';
+          if(st){ st.classList.add('bad'); st.textContent=(r.d&&r.d.error)||('החיבור נכשל ('+r.status+')'); }
+          return;
+        }
+        var id=r.d&&r.d.id;
+        if(st){ st.textContent='בודק את החיבור…'; }
+        // Added is not the same as WORKING. The service can verify one connection without selecting
+        // it (api/account/:id/probe), so a token that will 401 on its first message says so NOW —
+        // while the operator is still looking at the field they typed it into.
+        return jx('/account/'+encodeURIComponent(id)+'/probe').then(function(pr){
+          closeModal();
+          var ok=pr.ok&&pr.d&&pr.d.ok;
+          tell(ok?('החיבור «'+label+'» נוסף ונבדק'):('החיבור «'+label+'» נוסף — אך הבדיקה נכשלה: '+((pr.d&&pr.d.reason)||'')),!ok);
+          return window.__chatReload();
+        });
+      });
+    }
+    /* The app runs inside the console's frame. Same origin, so the hash can be set directly; if it is
+       ever embedded cross-origin the access throws and a new tab is the honest fallback. */
+    function gotoConnections(){
+      try{ if(window.top&&window.top!==window){ window.top.location.hash='#/m/connections'; return; } }catch(e){}
+      window.open('/#/m/connections','_blank','noopener');
+    }
+
+    /* ── tools · what the /admin dashboard used to be ──────────────────────────────
+       The dashboard was a second surface for the same service, and the simulation has no such thing:
+       accounts, bots, conversations AND subscribers are one app. So its four sections came here.
+       #connect and #settings already had homes (the switcher, and the per-connection bot panel).
+       What was left is below, and each piece says which layer answers it:
+
+         · ייצוא שיחות   ABSTRACT — GET api/export/conversations goes through the adapter contract, so
+                         it works on local chat, WhatsApp and Telegram alike. It replaces the
+                         dashboard's api/wa-archive/* view, which could only ever read the WhatsApp
+                         SQLite archive.
+         · תפוצה         ABSTRACT — POST api/broadcast fans out over CONVERSATIONS, which every
+                         backend has.
+         · משתמשים       WHATSAPP-ONLY, and labelled as such. "Subscriber" is a concept of the
+                         WhatsApp bot's own store (src/data/subscribers); there is no canonical op
+                         behind it, and n8n reads it. Relocating the screen without pretending the
+                         data is cross-backend is the honest move.
+         · שליחת מסמך    WHATSAPP-ONLY. Sending to a PHONE NUMBER that has no conversation has no
+                         canonical equivalent — the contract addresses conversations, not addresses.
+                         The legacy route stays (n8n's "WhatsApp Send Document" workflow posts to it)
+                         and so does this form, rather than deleting a capability to look tidy. */
+    var TOOLS={subs:[],loaded:false};
+    function openTools(){
+      modal('כלים וייצוא',
+        '<div class="tool-sec"><div class="mlbl">ייצוא שיחות · החיבור הפעיל</div>'+
+          '<div class="bcard"><h4>'+esc((S.activeAcct&&S.activeAcct.label)||'—')+'</h4>'+
+          '<p>כל השיחות וההודעות של החיבור הפעיל, כפי שהשירות רואה אותן. עובד על כל סוג חיבור — '+
+          'צ׳אט מקומי, וואטסאפ וטלגרם — כי הייצוא עובר דרך אותה שכבת פעולות שהאפליקציה משתמשת בה.</p>'+
+          '<div class="bset-foot"><button class="btn pri" id="tExpCsv" type="button">ייצוא CSV</button>'+
+          '<button class="btn" id="tExpJson" type="button">ייצוא JSON</button>'+
+          '<span class="bset-state">'+esc(S.convs.length+' שיחות')+'</span></div></div></div>'+
+
+        '<div class="tool-sec"><div class="mlbl">הודעת תפוצה</div>'+
+          '<div class="bcard"><p>אותה הודעה לכל השיחות בחיבור הפעיל. נשלחת דרך שכבת הפעולות, '+
+          'ולכן פועלת גם בטלגרם ובצ׳אט המקומי.</p>'+
+          '<div class="bset-row"><span class="bset-x"><label class="bset-lbl" for="tBcast">תוכן ההודעה</label>'+
+          '<span class="bset-hint">תישלח לכל '+esc(S.convs.length)+' השיחות ברשימה.</span></span></div>'+
+          '<textarea id="tBcast" rows="3" style="width:100%;resize:vertical;padding:9px 11px;border:1px solid var(--line);border-radius:10px;font:inherit;font-size:13px;background:var(--surface);color:var(--ink)"></textarea>'+
+          '<div class="bset-foot"><button class="btn pri" id="tBcastGo" type="button">שליחה לכולם</button>'+
+          '<span class="bset-state" id="tBcastState"></span></div></div></div>'+
+
+        '<div class="tool-sec"><div class="mlbl">משתמשי הבוט · וואטסאפ בלבד</div>'+
+          '<div class="bcard"><p>מי שכתב לבוט הוואטסאפ. זהו מאגר של הבוט עצמו ולא של החיבור הפעיל, '+
+          'ולכן הוא אינו משתנה כשמחליפים חיבור.</p>'+
+          '<div id="tUsers"><div class="acct-empty">טוען משתמשים…</div></div>'+
+          '<div class="bset-foot"><button class="btn pri" id="tUsrExp" type="button">ייצוא רשימה</button>'+
+          '<button class="btn" id="tUsrRestore" type="button">שחזור מגיבוי</button>'+
+          '<button class="btn danger" id="tUsrDel" type="button">מחיקת כל המשתמשים</button>'+
+          '<input type="file" id="tUsrFile" accept=".json" style="display:none">'+
+          '<span class="bset-state" id="tUsrState"></span></div></div></div>'+
+
+        '<div class="tool-sec"><div class="mlbl">שליחת מסמך למספר · וואטסאפ בלבד</div>'+
+          '<div class="bcard"><p>שליחה למספר טלפון שאין לו שיחה פתוחה. אין לזה מקבילה בשכבת הפעולות '+
+          '(היא מכירה שיחות, לא כתובות), ולכן זה עובר במסלול הוואטסאפ הישיר — אותו מסלול ש-n8n משתמש בו.</p>'+
+          '<div class="bset-row"><span class="bset-x"><label class="bset-lbl" for="tDocTo">מספר טלפון</label>'+
+            '<span class="bset-hint">לדוגמה 050-000-0007</span></span>'+
+            '<span class="bset-ctl"><input type="text" id="tDocTo" dir="ltr" inputmode="tel"></span></div>'+
+          '<div class="bset-row"><span class="bset-x"><label class="bset-lbl" for="tDocCap">כיתוב</label></span>'+
+            '<span class="bset-ctl"><input type="text" id="tDocCap"></span></div>'+
+          '<div class="bset-foot"><input type="file" id="tDocFile" accept="application/pdf">'+
+          '<button class="btn pri" id="tDocGo" type="button">שליחה</button>'+
+          '<span class="bset-state" id="tDocState"></span></div></div></div>',
+        [{label:'סגירה',pri:true,onclick:closeModal}]);
+
+      var conn=(S.active?('&connection_id='+encodeURIComponent(S.active)):'');
+      $('#tExpCsv').onclick=function(){ download('/export/conversations?format=csv'+conn); tell('הייצוא ירד כקובץ CSV'); };
+      $('#tExpJson').onclick=function(){ download('/export/conversations?format=json'+conn); tell('הייצוא ירד כקובץ JSON'); };
+      $('#tBcastGo').onclick=doBroadcast;
+      $('#tUsrExp').onclick=function(){ download('/subscribers/backup'); tell('רשימת המשתמשים ירדה'); };
+      $('#tUsrRestore').onclick=function(){ $('#tUsrFile').click(); };
+      $('#tUsrFile').onchange=doRestore;
+      $('#tUsrDel').onclick=confirmDeleteUsers;
+      $('#tDocGo').onclick=doSendDoc;
+      loadSubscribers();
+    }
+    function loadSubscribers(){
+      jx('/subscribers').then(function(r){
+        var host=$('#tUsers'); if(!host)return;
+        if(!r.ok){ host.innerHTML='<div class="note">לא ניתן לטעון את המשתמשים: '+esc((r.d&&r.d.error)||('שגיאה '+r.status))+'</div>'; return; }
+        var list=Array.isArray(r.d)?r.d:((r.d&&r.d.subscribers)||[]);
+        TOOLS.subs=list; TOOLS.loaded=true;
+        var st=$('#tUsrState'); if(st)st.textContent='סה״כ '+list.length;
+        if(!list.length){ host.innerHTML='<div class="acct-empty">אין משתמשים רשומים</div>'; return; }
+        // The first 100 only, and it SAYS so — a silently truncated list reads as "that is everyone",
+        // and the export below is the surface that hands over all of them.
+        var show=list.slice(0,100);
+        host.innerHTML='<div class="uwrap"><table class="utab"><thead><tr>'+
+          '<th>שם</th><th>מספר</th><th>אינטראקציה אחרונה</th></tr></thead><tbody>'+
+          show.map(function(u){
+            var t=u.lastInteraction||u.updatedAt||u.createdAt;
+            var when=t?new Date(t).toLocaleString('he-IL'):'לא זמין';
+            return '<tr><td>'+esc(u.fullName||u.name||'לא זמין')+'</td>'+
+              '<td class="ltr">'+esc(u.phoneNumber||'')+'</td><td>'+esc(when)+'</td></tr>';
+          }).join('')+'</tbody></table></div>'+
+          (list.length>show.length?'<div class="note">מוצגים '+show.length+' מתוך '+list.length+' — הייצוא כולל את כולם.</div>':'');
+      });
+    }
+    function doBroadcast(){
+      var ta=$('#tBcast'),st=$('#tBcastState'); if(!ta)return;
+      var text=ta.value.trim(),d;
+      if(!text){ st.classList.add('bad'); st.textContent='ההודעה ריקה'; return; }
+      if(!S.convs.length){ st.classList.add('bad'); st.textContent='אין שיחות בחיבור הזה'; return; }
+      st.classList.remove('bad'); st.textContent='';
+      /* `to:'all'` is typed here rather than defaulted by the service — a broadcast that goes out
+         because a field was omitted cannot be taken back. Nor can one that goes out on one press: it is
+         asked first, with what will be sent and to how many. A partial send (207) is an answer, not a
+         refusal — some of it went out — so it closes the question and is said on the screen. */
+      binaAsk({danger:true,ok:'שליחה לכולם',title:'לשלוח את ההודעה לכל השיחות?',
+        body:'הודעה שנשלחה אי אפשר להחזיר.',
+        facts:[['חיבור',(S.activeAcct&&S.activeAcct.label)||'—'],['שיחות',String(S.convs.length)],
+               ['הודעה',text.length>140?text.slice(0,140)+'…':text]],
+        run:function(){ return post('/broadcast',{text:text,to:'all'}).then(function(r){
+          d=r.d||{}; d.partial=r.status===207;
+          if(!r.ok) throw new Error(d.error||'התפוצה נכשלה'); }); }
+      }).then(function(ok){
+        if(!ok)return;
+        if(d.partial){ st.classList.add('bad'); st.textContent='נשלחו '+d.sent+', נכשלו '+d.failed; return tell('תפוצה חלקית: '+d.failed+' נכשלו',true); }
+        st.textContent='נשלחו '+d.sent; ta.value=''; tell('ההודעה נשלחה ל-'+d.sent+' שיחות'); loadConvs();
+      });
+    }
+    function doRestore(e){
+      var f=e.target.files&&e.target.files[0]; if(!f)return;
+      var fd=new FormData(); fd.append('backupFile',f);
+      var st=$('#tUsrState'); st.classList.remove('bad'); st.textContent='משחזר…';
+      // No Content-Type header: the browser has to set the multipart boundary itself.
+      api('/subscribers/restore',{method:'POST',body:fd}).then(function(r){
+        e.target.value='';
+        if(!r.ok){ st.classList.add('bad'); st.textContent='השחזור נכשל ('+r.status+')'; return tell('השחזור נכשל',true); }
+        tell('הרשימה שוחזרה'); loadSubscribers();
+      },function(){ st.classList.add('bad'); st.textContent='השחזור נכשל'; });
+    }
+    /* Every user at once, and no way back: the one question here that also asks for its words to be typed -
+       the office's way for an act of that size (the vault's «מחק הכל» is the other). */
+    function confirmDeleteUsers(){
+      binaAsk({danger:true,ok:'מחיקה',title:'למחוק את כל המשתמשים?',
+        body:'הפעולה מוחקת את כל רשומות המשתמשים של בוט הוואטסאפ ואי אפשר לבטל אותה. מומלץ לייצא את הרשימה לפני כן.',
+        facts:[['משתמשים',String(TOOLS.subs.length)]],
+        input:{label:'להמשך, הקלד: מחק הכל',must:'מחק הכל'},
+        run:function(){ return must(del('/subscribers'),'המחיקה נכשלה'); }
+      }).then(function(v){ if(v!=null){ tell('כל המשתמשים נמחקו'); loadSubscribers(); } });
+    }
+    function doSendDoc(){
+      var to=($('#tDocTo').value||'').trim(),cap=($('#tDocCap').value||'').trim();
+      var f=$('#tDocFile').files&&$('#tDocFile').files[0];
+      var st=$('#tDocState'); st.classList.remove('bad');
+      if(!to){ st.classList.add('bad'); st.textContent='נדרש מספר טלפון'; return; }
+      if(!f){ st.classList.add('bad'); st.textContent='נדרש קובץ'; return; }
+      var fd=new FormData(); fd.append('document',f); fd.append('phoneNumber',to); fd.append('caption',cap);
+      var btn=$('#tDocGo'); btn.disabled=true; btn.style.opacity='.55'; st.textContent='שולח…';
+      api('/bot/send-document',{method:'POST',body:fd}).then(function(res){
+        btn.disabled=false; btn.style.opacity='1';
+        return res.json().then(function(d){return {ok:res.ok,d:d||{}};},function(){return {ok:res.ok,d:{}};});
+      }).then(function(r){
+        // The WhatsApp route answers a refusal with {success:false} and a 400 — the BODY is the
+        // verdict, exactly as it is for a conversation send.
+        if(!r.ok||r.d.success===false){ st.classList.add('bad'); st.textContent=r.d.message||r.d.error||'השליחה נכשלה'; return tell('השליחה נכשלה',true); }
+        st.textContent='נשלח'; tell('המסמך נשלח אל '+to);
+      },function(){ btn.disabled=false; btn.style.opacity='1'; st.classList.add('bad'); st.textContent='השליחה נכשלה'; });
+    }
+
+    /* ── the private chat engine · PROFILES ────────────────────────────────────────
+       An ENGINE is software that moves messages; a PROFILE is an IDENTITY on one, holding a
+       CREDENTIAL. On WhatsApp that credential comes from a paired device, on Telegram from a bot
+       token — both minted somewhere else, which is exactly why you cannot CREATE an identity there:
+       you pair, you register. The private engine is one we run, so we mint the credential ourselves.
+
+       THIS SCREEN IS NOT THE CONNECT WIZARD, and that is deliberate: creating an identity and
+       connecting to one are different acts. Creating a profile here mints its key AND its connection
+       in the same operation, so the new identity appears in the switcher immediately — the separate
+       "now go and connect it" step had no decision in it and is what made adding a user
+       undiscoverable.
+
+       WHAT CHANGED. This used to be a list of PEOPLE with an `operator` toggle, and the screen said
+       out loud that it was not authentication: anyone who opened the app could pick any identity.
+       Now every identity holds a minted API key; the engine resolves credential → profile, and a
+       request carrying one profile's key cannot act as another. The screen is therefore offered only
+       to a profile in the ADMIN ring, and the service — not this file — decides who that is. */
+    var ENG={profiles:[],users:[],busy:false};
+    /** Is this connection on the engine we run? The provider is the protocol with `chat_` stripped
+     *  (chat_local -> local); both spellings are accepted for the same reason PROVIDERS accepts both. */
+    function isLocalConn(a){ var p=(a&&a.provider)||''; return p==='local'||p==='chat_local'; }
+    /** Offer profile management only where it is REAL (a private engine is bound) and PERMITTED (the
+     *  acting profile is an admin). Both halves come from the service's own answer — /engine/whoami —
+     *  so this cannot advertise a ring the engine will refuse. */
+    function canAdminEngine(){ return !!(S.me&&S.me.is_admin&&isLocalConn(S.activeAcct)); }
+    function engState(msg,bad){ var st=$('#engState'); if(!st)return; st.classList.toggle('bad',!!bad); st.textContent=msg||''; }
+
+    /** THE KEY IS SHOWN ONCE. The service stores only its hash, so there is no route that can show it
+     *  again — the screen has to say that plainly, or an operator closes the dialog and files a bug
+     *  against a lookup that cannot exist. The honest recovery is a rotation, and it is named here. */
+    function showKey(title,profileId,key){
+      modal(title,
+        '<div class="bcard"><h4>אישור הגישה של «'+esc(profileId)+'»</h4>'+
+        '<p>המפתח מוצג <b>פעם אחת בלבד</b>. השירות שומר רק את הטביעה שלו, ולכן אין מסך שיציג אותו שוב. '+
+        'העתק אותו עכשיו. אם אבד — מחליפים אותו (החלפת מפתח), וכל לקוח שמחזיק את הישן יפסיק לעבוד.</p>'+
+        '<div class="bset-row"><span class="bset-ctl" style="flex:1">'+
+          '<input type="text" id="engKeyOut" dir="ltr" readonly value="'+esc(key)+'" style="width:100%">'+
+        '</span></div>'+
+        '<p>המפתח נשמר גם במאגר החיבורים של הפלטפורמה, ומשם אוטומציות יכולות למשוך אותו.</p></div>',
+        [{label:'העתקה',pri:true,onclick:function(){
+          var el=$('#engKeyOut'); if(!el)return;
+          el.select();
+          var done=function(){ tell('המפתח הועתק'); };
+          if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(key).then(done,function(){ tell('ההעתקה נכשלה — סמן והעתק ידנית',true); });
+          else { try{ document.execCommand('copy'); done(); }catch(e){ tell('ההעתקה נכשלה — סמן והעתק ידנית',true); } }
+        }},{label:'סגירה',onclick:function(){ closeModal(); openEngine(); }}]);
+    }
+
+    function openEngine(){
+      ENG={profiles:[],users:[],busy:false};
+      modal('פרופילים במנוע הפנימי',
+        '<div class="note">המסך הזה מנהל <b>זהויות</b> על המנוע שאנחנו מפעילים — כל אחת עם אישור גישה משלה. '+
+          'רשימת החיבורים בוחרת באיזו זהות פועלים; כאן קובעים מי בכלל קיים.</div>'+
+        '<div class="mlbl" id="engLbl">פרופילים</div>'+
+        '<div class="uwrap englist" id="engList"><div class="acct-empty">טוען פרופילים…</div></div>'+
+        '<div class="note">כל בקשה למנוע הפנימי מזוהה מול פרופיל. בקשה שמחזיקה את המפתח של פרופיל אחד '+
+          'אינה יכולה לפעול בשם אחר, והמנהל האחרון אינו ניתן להורדה, להשהיה או למחיקה — אחרת אין דרך חזרה.</div>'+
+
+        '<div class="bcard"><h4>פרופיל חדש</h4>'+
+        '<p>יצירת פרופיל מייצרת גם את אישור הגישה שלו וגם את החיבור שלו — בפעולה אחת. '+
+        'הזהות תופיע מיד ברשימת החיבורים.</p>'+
+        '<div class="bset-row"><span class="bset-x"><label class="bset-lbl" for="engName">שם</label>'+
+          '<span class="bset-hint">כך הפרופיל יופיע ברשימת החיבורים ובשיחות.</span></span>'+
+          '<span class="bset-ctl"><input type="text" id="engName" maxlength="60" autocomplete="off"></span></div>'+
+        '<div class="bset-row"><span class="bset-x"><label class="bset-lbl" for="engId">מזהה</label>'+
+          '<span class="bset-hint">אותיות קטנות, ספרות, מקף וקו תחתון.</span></span>'+
+          '<span class="bset-ctl"><input type="text" id="engId" dir="ltr" autocomplete="off" spellcheck="false"></span></div>'+
+        '<div class="bset-row"><span class="bset-x"><label class="bset-lbl" for="engAdminNew">מנהל</label>'+
+          '<span class="bset-hint">מנהל יכול ליצור, לערוך, להשהות ולמחוק פרופילים אחרים.</span></span>'+
+          '<span class="bset-ctl"><label class="sw"><input type="checkbox" id="engAdminNew"><i></i></label></span></div>'+
+        '<div class="bset-foot"><button class="btn pri" id="engAdd" type="button">יצירת פרופיל</button>'+
+        '<span class="bset-state" id="engState"></span></div></div>'+
+
+        '<div class="mlbl">אנשי קשר</div>'+
+        '<div class="note">איש קשר הוא מישהו <b>לדבר איתו</b>, לא מישהו <b>להיות</b>. אין לו אישור גישה '+
+          'ואי אפשר לפעול בשמו.</div>'+
+        '<div class="uwrap englist" id="engContacts"><div class="acct-empty">טוען…</div></div>'+
+        '<div class="bcard"><h4>איש קשר חדש</h4>'+
+        '<div class="bset-row"><span class="bset-x"><label class="bset-lbl" for="cName">שם</label></span>'+
+          '<span class="bset-ctl"><input type="text" id="cName" maxlength="60" autocomplete="off"></span></div>'+
+        '<div class="bset-row"><span class="bset-x"><label class="bset-lbl" for="cHandle">כינוי (לא חובה)</label>'+
+          '<span class="bset-hint">שורת המשנה ליד השם — תפקיד, מחלקה או תיאור קצר.</span></span>'+
+          '<span class="bset-ctl"><input type="text" id="cHandle" maxlength="60" autocomplete="off"></span></div>'+
+        '<div class="bset-foot"><button class="btn" id="cAdd" type="button">הוספת איש קשר</button>'+
+        '<span class="bset-state" id="cState"></span></div></div>',
+        [{label:'סגירה',pri:true,onclick:closeModal}]);
+      $('#engAdd').onclick=createProfile;
+      $('#cAdd').onclick=createContact;
+      loadEngine();
+    }
+
+    function loadEngine(){
+      return Promise.all([jx('/engine/profiles'),jx('/engine/users')]).then(function(r){
+        var host=$('#engList');
+        // A 403 here is the ADMIN RING refusing, which is a different fact from a broken engine and
+        // must read as one. The service's own sentence goes on screen either way.
+        if(host){
+          if(!r[0].ok||(r[0].d&&r[0].d.ok===false)){
+            ENG.profiles=[];
+            host.innerHTML='<div class="note">'+esc((r[0].d&&r[0].d.error)||('לא ניתן לטעון פרופילים ('+r[0].status+')'))+'</div>';
+          } else {
+            ENG.profiles=(r[0].d&&r[0].d.profiles)||[];
+            renderProfiles();
+          }
+        }
+        var ch=$('#engContacts');
+        if(ch){
+          if(!r[1].ok||(r[1].d&&r[1].d.ok===false)){
+            ENG.users=[];
+            ch.innerHTML='<div class="note">'+esc((r[1].d&&r[1].d.error)||('לא ניתן לטעון אנשי קשר ('+r[1].status+')'))+'</div>';
+          } else {
+            ENG.users=((r[1].d&&r[1].d.users)||[]).filter(function(u){return !u.profile;});
+            renderContacts();
+          }
+        }
+      });
+    }
+
+    function renderProfiles(){
+      var host=$('#engList'); if(!host)return;
+      var lbl=$('#engLbl');
+      var admins=ENG.profiles.filter(function(p){return p.is_admin&&p.status==='active';});
+      if(lbl) lbl.textContent='פרופילים · '+ENG.profiles.length+' סה״כ, '+admins.length+' מנהלים';
+      if(!ENG.profiles.length){ host.innerHTML='<div class="acct-empty">אין פרופילים במנוע</div>'; return; }
+      var meId=(S.me&&S.me.profile&&S.me.profile.id)||null;
+      host.innerHTML=ENG.profiles.map(function(p){
+        // The LAST admin is the one control this screen must refuse, and it says why on the control
+        // itself rather than only after the click — a disabled button with no reason is a bug report.
+        var last=p.is_admin&&p.status==='active'&&admins.length<=1;
+        var mine=p.id===meId;
+        // The connection id is shown because it is what the switcher, the bot attachment and any
+        // automation are keyed by — "where do I find this identity" should not need explaining.
+        var sub='<span dir="ltr">'+esc(p.id)+'</span>'+
+          (p.instance_id?' · <span dir="ltr">'+esc(p.instance_id)+'</span>':' · <b>ממתין לחיבור</b>');
+        return '<div class="brow" data-pid="'+esc(p.id)+'">'+
+          '<span class="avatar"><span class="av sm" style="background:'+esc(colorFor(p.id))+'">'+
+            esc(initialsOf(p.display_name||p.id))+'</span></span>'+
+          '<span class="bx"><span class="bn">'+esc(p.display_name||p.id)+(mine?' · אני':'')+'</span>'+
+            '<span class="bs">'+sub+'</span></span>'+
+          '<span class="cap'+(p.is_admin?' on':'')+'">'+(p.is_admin?'מנהל':'פרופיל')+'</span>'+
+          (p.status==='active'?'':'<span class="cap">מושהה</span>')+
+          '<button class="btn sm" data-act="key" data-pid="'+esc(p.id)+'" title="החלפת אישור הגישה. כל לקוח שמחזיק את הישן יפסיק לעבוד.">מפתח</button>'+
+          '<button class="btn sm" data-act="admin" data-pid="'+esc(p.id)+'"'+(last?' disabled title="זהו המנהל האחרון — הורדתו תשאיר את המנוע בלי אף אחד שיכול לנהל פרופילים"':'')+'>'+
+            (p.is_admin?'הורדה ממנהל':'הפיכה למנהל')+'</button>'+
+          '<button class="btn sm" data-act="susp" data-pid="'+esc(p.id)+'"'+(last?' disabled title="זהו המנהל האחרון — אי אפשר להשהות אותו"':'')+'>'+
+            (p.status==='active'?'השהיה':'הפעלה')+'</button>'+
+          '<button class="btn sm" data-act="del" data-pid="'+esc(p.id)+'"'+(last?' disabled title="זהו המנהל האחרון — אי אפשר למחוק אותו"':'')+'>הסרה</button>'+
+        '</div>';
+      }).join('');
+      host.querySelectorAll('button[data-act]').forEach(function(el){
+        el.onclick=function(){ profileAction(el.getAttribute('data-act'),el.getAttribute('data-pid')); };
+      });
+    }
+
+    function renderContacts(){
+      var ch=$('#engContacts'); if(!ch)return;
+      if(!ENG.users.length){ ch.innerHTML='<div class="acct-empty">אין אנשי קשר</div>'; return; }
+      ch.innerHTML=ENG.users.map(function(u){
+        return '<div class="brow">'+
+          '<span class="avatar"><span class="av sm" style="background:'+esc(u.color||colorFor(u.id))+'">'+
+            esc(initialsOf(u.name||u.id))+'</span></span>'+
+          '<span class="bx"><span class="bn">'+esc(u.name||u.id)+'</span>'+
+            '<span class="bs">'+(u.handle?esc(u.handle)+' · ':'')+'<span dir="ltr">'+esc(u.id)+'</span></span></span>'+
+          '<span class="cap">איש קשר</span></div>';
+      }).join('');
+    }
+
+    /** Deterministic avatar colour, matching the server's palette so an identity keeps one colour. */
+    function colorFor(key){
+      var P=['sky-d','violet','lime-d','olive-d','plum-d','muted'].map(function(n){return 'var(--'+n+')';}),h=0,i;   // the palette's line steps, in the server's order
+      for(i=0;i<String(key||'').length;i++) h=(h*31+String(key).charCodeAt(i))>>>0;
+      return P[h%P.length];
+    }
+
+    /**
+     * One profile operation. The list is ALWAYS re-read afterwards — including on failure, so a
+     * refused change snaps back to what the service actually holds rather than staying where the
+     * finger left it — and boot() re-reads the connections, because creating or removing a profile
+     * adds or removes a row from the switcher.
+     */
+    function profileAction(act,pid){
+      if(ENG.busy||!pid)return;
+      var p=ENG.profiles.filter(function(x){return x.id===pid;})[0]||{},name=p.display_name||pid,d;
+      var at='/engine/profiles/'+encodeURIComponent(pid);
+      var patch=function(body){ return jx(at,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); };
+      /* The request: its answer kept for `done`, or the service's refusal thrown — for the question to
+         say where one was asked, for the screen's own line where the change is a plain switch. */
+      var run=function(){
+        ENG.busy=true; engState('מעדכן…');
+        return must(act==='key'?post(at+'/key',{}):act==='admin'?patch({is_admin:!p.is_admin})
+            :act==='susp'?patch({status:p.status==='active'?'suspended':'active'}):del(at),'הפעולה נכשלה')
+          .then(function(r){ ENG.busy=false; d=r.d||{}; },function(e){ ENG.busy=false; engState(''); throw e; });
+      };
+      var done=function(){
+        if(act==='key'){
+          // Reload BEFORE showing the key: the dialog replaces this one, and its "close" reopens
+          // the screen — which must already reflect the rotation.
+          return loadEngine().then(boot).then(function(){ showKey('אישור גישה חדש',pid,d.key); });
+        }
+        engState(act==='del'?('«'+pid+'» הוסר — ההיסטוריה שלו נשמרה'):('«'+pid+'» עודכן'));
+        tell(act==='del'?('הפרופיל «'+pid+'» הוסר'):('הפרופיל «'+pid+'» עודכן'));
+        return loadEngine().then(function(){ return boot(); });
+      };
+      // Deleting a profile removes ACCESS, never data — and saying so is the difference between a
+      // confirmation an operator can answer and one they have to guess at.
+      var ask=act==='del'?{ok:'הסרה',title:'להסיר את הפרופיל «'+name+'»?',
+          body:'אישור הגישה שלו יבוטל והחיבור שלו יוסר מהרשימה. ההיסטוריה נשמרת — ההודעות ששלח והשיחות שהוא חבר בהן נשארות במקומן.'}
+        :act==='key'?{ok:'החלפה',title:'להחליף את אישור הגישה של «'+name+'»?',
+          body:'המפתח הקיים יפסיק לעבוד מיד. כל אוטומציה שמחזיקה אותו תצטרך למשוך את החדש ממאגר החיבורים, או לקבל אותו מהמסך הבא.'}
+        :null;
+      if(!ask) return run().then(done,function(e){ engState(e.message,true); tell(e.message,true); return loadEngine(); });
+      ask.danger=true; ask.facts=[['מזהה',pid]]; ask.run=run;
+      // Asked over the open screen, whose list is re-read whichever way the question ends: a refusal can
+      // mean the screen was showing what is no longer so.
+      return binaAsk(ask).then(function(ok){ return ok?done():loadEngine(); });
+    }
+
+    function createProfile(){
+      if(ENG.busy)return;
+      var ni=$('#engName'),ii=$('#engId'),ai=$('#engAdminNew');
+      var name=((ni&&ni.value)||'').trim(),id=((ii&&ii.value)||'').trim().toLowerCase();
+      // The service refuses a nameless or badly-named profile with its own 400; this only saves the
+      // round-trip, and every other rule (charset, duplicates) stays the service's call, in its words.
+      if(!name){ engState('נדרש שם',true); if(ni)ni.focus(); return; }
+      if(!id){ engState('נדרש מזהה',true); if(ii)ii.focus(); return; }
+      ENG.busy=true;
+      var b=$('#engAdd'); b.disabled=true; b.style.opacity='.55';
+      engState('יוצר…');
+      post('/engine/profiles',{id:id,display_name:name,is_admin:!!(ai&&ai.checked)}).then(function(r){
+        ENG.busy=false; b.disabled=false; b.style.opacity='1';
+        var d=r.d||{};
+        if(!r.ok||d.ok===false){
+          var m=d.error||('היצירה נכשלה ('+r.status+')');
+          engState(m,true); return tell(m,true);
+        }
+        if(ni)ni.value=''; if(ii)ii.value=''; if(ai)ai.checked=false;
+        tell('הפרופיל «'+name+'» נוצר');
+        return loadEngine().then(boot).then(function(){ showKey('הפרופיל נוצר',id,d.key); });
+      });
+    }
+
+    function createContact(){
+      if(ENG.busy)return;
+      var ni=$('#cName'),hi=$('#cHandle'),st=$('#cState');
+      var name=((ni&&ni.value)||'').trim(),handle=((hi&&hi.value)||'').trim();
+      var say=function(m,bad){ if(st){ st.classList.toggle('bad',!!bad); st.textContent=m||''; } };
+      if(!name){ say('נדרש שם',true); if(ni)ni.focus(); return; }
+      ENG.busy=true; say('מוסיף…');
+      var body={name:name}; if(handle)body.handle=handle;
+      post('/engine/users',body).then(function(r){
+        ENG.busy=false;
+        var d=r.d||{};
+        if(!r.ok||d.ok===false){ var m=d.error||('ההוספה נכשלה ('+r.status+')'); say(m,true); return tell(m,true); }
+        if(ni)ni.value=''; if(hi)hi.value='';
+        say('נוסף «'+(d.name||name)+'» כאיש קשר');
+        tell('איש הקשר «'+(d.name||name)+'» נוסף');
+        return loadEngine();
+      });
+    }
+
+    /* conversation list */
+    function filtered(){
+      var arr=S.convs.slice();
+      if(S.filter==='unread')arr=arr.filter(function(c){return c.unread>0;});
+      else if(S.filter==='group')arr=arr.filter(function(c){return c.group;});
+      if(S.q){var q=S.q.toLowerCase();arr=arr.filter(function(c){return (c.name+' '+c.last+' '+(c.handle||'')).toLowerCase().indexOf(q)>=0;});}
+      return arr;
+    }
+    function counts(){var c={all:S.convs.length,unread:0,group:0};S.convs.forEach(function(x){if(x.unread>0)c.unread++;if(x.group)c.group++;});return c;}
+    function renderList(){
+      var c=counts(); Object.keys(c).forEach(function(k){var el=document.querySelector('[data-c="'+k+'"]');if(el)el.textContent=c[k];});
+      $('#convCount').textContent=S.convs.length;
+      var arr=filtered(),host=$('#convList');
+      // an errored account has no conversations — on mobile the thread pane is hidden, so surface the
+      // failure + reconnect right here in the list (otherwise the user sees a blank "no chats" and is stuck).
+      if(!arr.length && S.activeAcct && S.activeAcct.status==='error'){
+        host.innerHTML='<div class="list-err"><div class="le-ic"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg></div>'+
+          '<b>החיבור נכשל</b><span>'+esc(S.activeAcct.reason||'החשבון אינו זמין כרגע.')+'</span>'+
+          '<button class="le-btn" id="reconBtnL"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5"/></svg>חבר מחדש</button></div>';
+        wireReconnect($('#reconBtnL'));
+        return;
+      }
+      if(!arr.length){host.innerHTML='<div class="list-empty">'+(S.convs.length?'אין שיחות תואמות':'אין שיחות בחיבור זה עדיין')+'</div>';return;}
+      host.innerHTML=arr.map(function(c){
+        var pin=c.pinned?'<svg class="pin" viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M16 3v2l-1 1v4l2 2v2h-4v5l-1 1-1-1v-5H6v-2l2-2V6L7 5V3z"/></svg>':'';
+        var badge=c.unread>0?'<span class="badge">'+c.unread+'</span>':'';
+        var pres=c.online?'<span class="presence"></span>':'';
+        var lead=c.lastDir==='out'?tickHtml(c.lastStatus==='sent'||c.lastStatus==='read'?c.lastStatus:'delivered'):'';
+        return '<div class="conv'+(c.id===S.openId?' on':'')+(c.unread>0?' unread':'')+'" data-id="'+esc(c.id)+'" role="listitem" tabindex="0" aria-label="'+esc(c.name)+(c.unread>0?(', '+(c.unread===1?'אחת חדשה':c.unread+' חדשות')):'')+'">'+
+          '<span class="avatar"><span class="av" style="background:'+c.color+'">'+esc(c.initials)+'</span>'+pres+'</span>'+
+          '<span class="cx"><span class="r1"><span class="nm">'+esc(c.name)+'</span><span class="tm">'+ago(c.mins)+'</span></span>'+
+          '<span class="r2"><span class="lm">'+lead+'<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(c.last)+'</span></span>'+tagHtml(c.tag)+pin+badge+'</span></span></div>';
+      }).join('');
+      host.querySelectorAll('.conv').forEach(function(el){var go=function(){openConv(el.getAttribute('data-id'));};el.onclick=go;el.onkeydown=function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();go();}};});
+    }
+
+    /* thread */
+    var mob=function(){return window.matchMedia&&window.matchMedia('(max-width:820px)').matches;};
+    function openConv(id){ S.openId=id; S.threadSig=''; var c=S.convs.filter(function(x){return x.id===id;})[0]; if(c)c.unread=0; renderList();
+      if(mob()) document.querySelector('.chat').classList.add('mob-thread');   // slide to thread on phones
+      // Opening a chat IS reading it. The badge was cleared locally only, so it came back on the next
+      // load and the other side never saw a read tick — both halves of markRead were being skipped.
+      post('/conversation/'+encodeURIComponent(id)+'/read',{}).catch(function(){});
+      jf('/conversation/'+encodeURIComponent(id)).then(renderThread); }
+    function mobBack(){ document.querySelector('.chat').classList.remove('mob-thread'); }
+    /* An attachment on a message, rendered as a downloadable chip.
+       The backend has carried `attachment` on every message shape from the start, and this renderer
+       dropped it on the floor — so a file could be sent and then never seen, which is worse than not
+       being able to send one. The bytes are fetched through THIS service (api/media/…), never from
+       the engine's own URL: that host is only resolvable inside the docker network, and it wants the
+       engine's own authorization, which a browser has no business holding. */
+    function attHtml(a){
+      if(!a||!a.name) return '';
+      var kb=a.size?(a.size<1024?a.size+' B':Math.round(a.size/1024)+' KB'):'';
+      return '<a class="att" href="api/media/'+encodeURIComponent(a.sha256||a.id||'')+'?name='+encodeURIComponent(a.name)+
+        (S.active?'&connection_id='+encodeURIComponent(S.active):'')+'" download="'+esc(a.name)+'" title="הורדה">'+
+        '<span class="att-ic">'+mark('clip')+'</span><span class="att-nm">'+esc(a.name)+'</span>'+(kb?'<span class="att-sz">'+kb+'</span>':'')+'</a>';
+    }
+    function bubble(msg,head,showSender){
+      var sndr=(showSender&&msg.sender)?'<span class="sndr" style="color:'+(msg.scolor||'var(--blue)')+'">'+esc(msg.sender)+'</span>':'';
+      var att=attHtml(msg.attachment);
+      /* An attachment-only message has its filename as its preview text, so echoing that ABOVE the
+         chip would print the name twice. */
+      var txt=(att && msg.text==='📎 '+(msg.attachment&&msg.attachment.name))?'':esc(msg.text);
+      return '<div class="msg '+(msg.dir==='out'?'out':'in')+(head?' head':'')+'">'+sndr+
+        (txt?'<span class="txt">'+txt+'</span>':'')+att+
+        '<span class="mt">'+clock(msg.mins)+(msg.dir==='out'?tickHtml(msg.status):'')+'</span></div>';
+    }
+    function msgsHtml(list,isGroup){
+      var out='',prevKey=null,prevDay=null;
+      list.forEach(function(mm){ var day=Math.floor(mm.mins/1440);
+        if(day!==prevDay){ out+='<div class="daysep">'+daylabel(mm.mins)+'</div>'; prevDay=day; prevKey=null; }
+        var key=mm.dir==='out'?'out':('in:'+(mm.sender||'')); var head=key!==prevKey;
+        out+=bubble(mm, head, isGroup && mm.dir==='in' && head); prevKey=key;
+      });
+      return out;
+    }
+    function lastIsOut(m){ var e=m.querySelectorAll('.msg'); var l=e[e.length-1]; return l && l.classList.contains('out'); }
+    function activeBotName(){var a=S.activeAcct;if(!a||a.activeBot==='none')return null;var b=S.bots.filter(function(x){return x.id===a.activeBot;})[0];return b?b.name:null;}
+    function renderBotnote(){ var m=$('#msgs'); if(!m)return; var old=m.querySelector('.botnote'); if(old)old.remove();
+      if(S.openContact && S.openContact.group) return;   // bots don't auto-reply in group chats
+      var bn=activeBotName(); if(bn){var d=document.createElement('div');d.className='botnote';d.innerHTML=mark('bot')+' '+esc(bn)+' פעיל · מגיב אוטומטית';m.appendChild(d);m.scrollTop=m.scrollHeight;} }
+    function renderThread(data){
+      var ct=data.contact||{}; S.openContact=ct;
+      $('#thread').innerHTML=
+        '<div class="th-head"><button class="th-back" title="חזרה"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></button><span class="avatar"><span class="av sm" style="background:'+(ct.color||'var(--muted)')+'">'+esc(ct.initials||'?')+'</span>'+((S.convs.filter(function(x){return x.id===data.id;})[0]||{}).online?'<span class="presence"></span>':'')+'</span>'+
+          '<span class="cx"><div class="nm">'+esc(ct.name||'')+tagHtml(ct.tag)+'</div><div class="hn'+((S.convs.filter(function(x){return x.id===data.id;})[0]||{}).online?' online':'')+'">'+((S.convs.filter(function(x){return x.id===data.id;})[0]||{}).online?'מחובר/ת עכשיו':esc(ct.handle||''))+'</div></span>'+
+          '<span class="ha">'+
+            '<button title="שיחת וידאו"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 8-6 4 6 4V8z"/><rect x="2" y="6" width="14" height="12" rx="2"/></svg></button>'+
+            '<button title="חיפוש בשיחה"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></button>'+
+            '<button title="פרטים"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg></button>'+
+          '</span></div>'+
+        '<div class="msgs" id="msgs" role="log" aria-live="polite" aria-label="הודעות בשיחה"></div>'+
+        '<div class="composer" id="composer">'+
+          '<button class="ico" title="אמוג׳י"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"/></svg></button>'+
+          '<button class="ico" title="צירוף קובץ"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 6.34l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></button>'+
+          '<div class="field"><textarea id="ta" rows="1" placeholder="הקלד/י הודעה…"></textarea></div>'+
+          '<button class="send" id="sendBtn" title="שליחה"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg></button>'+
+        '</div>';
+      var m=$('#msgs'); m.innerHTML=msgsHtml(data.messages||[], ct.group); renderBotnote(); m.scrollTop=m.scrollHeight;
+      S.threadSig=threadSig(data.messages);
+      // THE PAPERCLIP. It was decoration: the button has been rendered since this client was ported
+      // from the sim, with no handler and no file input behind it, so attaching a file was a control
+      // that silently did nothing. The input is created on demand rather than living in the markup,
+      // so there is exactly one per composer render and no stale reference after a thread switch.
+      var att=$('#composer .ico[title="צירוף קובץ"]');
+      if(att) att.onclick=function(){
+        var fi=document.createElement('input');
+        fi.type='file'; fi.style.display='none';
+        fi.onchange=function(){
+          var f=fi.files&&fi.files[0]; if(!f||!S.openId) return;
+          var fd=new FormData(); fd.append('file',f); fd.append('text',($('#ta')&&$('#ta').value)||'');
+          if(S.active) fd.append('connection_id',S.active);
+          att.disabled=true;
+          jf('/conversation/'+encodeURIComponent(S.openId)+'/attach',{method:'POST',body:fd})
+            .then(function(d){
+              // A write that did not happen never reports success: say so and KEEP the typed text,
+              // so the operator can retry instead of wondering whether it went.
+              if(!d||d.ok===false){ tell((d&&d.error)||'שליחת הקובץ נכשלה',true); return; }
+              if($('#ta')) $('#ta').value='';
+              refreshThread(); loadConvs();
+            })
+            .catch(function(e){ tell('שליחת הקובץ נכשלה: '+e.message,true); })
+            .then(function(){ att.disabled=false; fi.remove(); });
+        };
+        document.body.appendChild(fi); fi.click();
+      };
+      var ta=$('#ta');
+      ta.addEventListener('input',function(){ta.style.height='auto';ta.style.height=Math.min(120,ta.scrollHeight)+'px';});
+      ta.addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();doSend();}});
+      $('#sendBtn').onclick=doSend;
+      var bk=$('.th-back'); if(bk)bk.onclick=mobBack;
+      if(!mob())ta.focus();
+    }
+    function renderThreadState(){
+      var a=S.activeAcct;
+      if(a&&a.status==='error'){
+        $('#thread').innerHTML='<div class="th-empty"><div class="big err"><svg viewBox="0 0 24 24" width="42" height="42" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg></div>'+
+          '<h3>החיבור נכשל</h3><p>'+esc(a.reason||'החשבון אינו זמין כרגע.')+'</p>'+
+          '<button class="newbtn" id="reconBtn" style="margin:2px 0 0;background:var(--plum);color:var(--plum-ink)"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5"/></svg>חבר מחדש</button></div>';
+        wireReconnect($('#reconBtn'));
+        return;
+      }
+      $('#thread').innerHTML='<div class="th-empty"><div class="big"><svg viewBox="0 0 24 24" width="44" height="44" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></div>'+
+        '<h3>הצ׳אט העסקי שלך</h3><p>בחר/י שיחה מהרשימה כדי להתחיל, או חבר/י חשבון צ׳אט נוסף (וואטסאפ · טלגרם · מקומי) מהמתג שבראש הדף.</p></div>';
+    }
+    function doSend(){
+      var ta=$('#ta'); if(!ta)return; var text=ta.value.trim(); if(!text||!S.openId)return;
+      var m=$('#msgs'); var note=m.querySelector('.botnote'); if(note)note.remove();
+      m.insertAdjacentHTML('beforeend',bubble({dir:'out',text:text,mins:0,status:'sent'}, !lastIsOut(m)));
+      var optimistic=m.querySelectorAll('.msg.out'); optimistic=optimistic[optimistic.length-1];
+      m.scrollTop=m.scrollHeight; ta.value=''; ta.style.height='auto';
+      var c=S.convs.filter(function(x){return x.id===S.openId;})[0]; if(c){c.last=text;c.lastDir='out';c.lastStatus='sent';c.mins=0;} renderList();
+      var convId=S.openId;
+      // Marked pending BEFORE the write, because the push can beat the response back — see onChange.
+      pendingAdd(convId);
+      post('/conversation/'+encodeURIComponent(convId)+'/send',{text:text}).then(function(r){
+        pendingDone(convId);
+        var res=r.d||{};
+        // A write that did not happen must never look like one that did. The local backend answers a
+        // failed send with {ok:false,…} and a 200, so the body is checked, not only the status.
+        if(!r.ok||res.error||res.ok===false){
+          if(optimistic){ optimistic.style.opacity='.55'; var t=optimistic.querySelector('.mt'); if(t)t.innerHTML='לא נשלח'; }
+          return tell(res.error||'שליחת ההודעה נכשלה',true);
+        }
+        // The server's copy is the truth (real id, real timestamp, real status) — take it on the next
+        // poll rather than keeping the optimistic bubble forever.
+        S.threadSig='';
+        setTimeout(function(){var os=m.querySelectorAll('.msg.out');var last=os[os.length-1];if(last&&last===optimistic){var t=last.querySelector('.mt');if(t)t.innerHTML=clock(0)+tickHtml('sent');}},700);
+        if(convId===S.openId) refreshThread();
+        loadConvs();
+        // The abstract API deliberately does NOT answer a send with a bot reply (chatapi/server.js:
+        // bots answer INBOUND messages, not what the operator types). The branch is kept for backends
+        // that do return one — it simply never fires against this service.
+        if(res.reply){
+          var tp=document.createElement('div'); tp.className='typing'; tp.innerHTML='<i></i><i></i><i></i>'; m.appendChild(tp); m.scrollTop=m.scrollHeight;
+          setTimeout(function(){ tp.remove(); m.insertAdjacentHTML('beforeend',bubble(res.reply,true)); renderBotnote(); m.scrollTop=m.scrollHeight;
+            if(c){c.last=res.reply.text;c.lastDir='in';c.mins=0;renderList();} },1100);
+        }
+      },function(){
+        /* The REJECTION arm, not a .catch: a .catch here would also swallow (and mis-handle) an
+           error thrown inside the success handler above, and would call pendingDone a second time.
+           jx() already turns an ordinary network failure into a resolved {ok:false,status:0}, so
+           this only fires on a genuine throw — but an entry left in _pending suppresses THIS
+           conversation's inbound refresh forever (see onChange), so it must not depend on the happy
+           path running. */
+        pendingDone(convId);
+      });
+    }
+    /* ── new conversation ──────────────────────────────────────────────────────────
+       "שיחה חדשה" used to open the CONNECT flow, because at the time the service had no route that
+       could open a conversation. It has two now (GET api/users, POST api/conversations) and they are
+       optional per connection, which is what this screen is really about:
+
+         · WHO can be talked to is the SERVICE's answer, never a guess here. The search box passes
+           `q` to the backend instead of filtering a cached page, so the list obeys whatever the
+           address book actually is — including one too large to have been sent in full.
+         · The SHAPE is decided by which field goes on the wire: `user_id` is a direct chat, `title`
+           is a group. `name` is deliberately NOT the switch — in the direct shape it is the peer's
+           display name, and sending it alone would create a group named after a person.
+         · A direct chat is IDEMPOTENT at the backend: `created:false` means the 1:1 already existed
+           and was reused. That gets its own words, because "נוצרה שיחה" would be contradicted by a
+           conversation count that did not move.
+         · A 400 is shown in the SERVICE's words. It names the problem (self-DM, nameless group);
+           replacing that with a generic failure throws away the only useful part of the answer. */
+    var NC={users:[],q:'',mode:'direct',picked:{},token:0,busy:false};
+    /** The users endpoint returns a USER, not a conversation, so there is no `initials` on it. Same
+     *  rule the backend applies to conversations: two words -> two firsts, else the first two chars. */
+    function initialsOf(name){
+      var s=String(name||'').trim(); if(!s) return '??';
+      var p=s.split(/\s+/).filter(Boolean);
+      return p.length>=2 ? (p[0][0]+p[1][0]) : s.slice(0,2);
+    }
+    function ncState(msg,bad){ var st=$('#ncState'); if(!st)return; st.classList.toggle('bad',!!bad); st.textContent=msg||''; }
+    function ncPicked(){ return Object.keys(NC.picked); }
+    function ncPickedLabel(){ var n=ncPicked().length; return n?(n===1?'נבחר משתתף אחד':'נבחרו '+n+' משתתפים'):'בחר/י משתתפים לקבוצה'; }
+    /** The connection this modal is about — pinned onto every call, so a switch mid-flow cannot make
+     *  the picker list one connection's people and open the conversation on another. */
+    function ncConn(){ return S.active||null; }
+
+    function openNewChat(){
+      // Defensive only — the button is disabled when this is false. A toast here means the manifest
+      // changed under an already-open screen.
+      if(!canStartChat()){ binaTell(noStartReason(),'warn'); return; }
+      NC={users:[],q:'',mode:canCreateDirect()?'direct':'group',picked:{},token:0,busy:false};
+      var tabs = (canCreateDirect()&&canCreateGroup())
+        ? '<div class="segtabs" id="ncTabs">'+
+            '<button class="seg on" data-nc="direct" type="button">שיחה אישית</button>'+
+            '<button class="seg" data-nc="group" type="button">קבוצה חדשה</button></div>'
+        : '';
+      modal('שיחה חדשה',
+        tabs+
+        '<div class="bset-row hidden" id="ncTitleRow"><span class="bset-x">'+
+          '<label class="bset-lbl" for="ncTitle">שם הקבוצה</label>'+
+          '<span class="bset-hint">כך הקבוצה תופיע ברשימת השיחות.</span></span>'+
+          '<span class="bset-ctl"><input type="text" id="ncTitle" maxlength="60"></span></div>'+
+        '<div class="search"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>'+
+          '<input id="ncQ" placeholder="חיפוש לפי שם או כינוי…" autocomplete="off"></div>'+
+        '<div class="mlbl" id="ncLbl">אנשים</div>'+
+        '<div class="uwrap nclist" id="ncList"><div class="acct-empty">טוען אנשים…</div></div>'+
+        '<div class="bset-foot"><button class="btn pri hidden" id="ncGo" type="button">יצירת קבוצה</button>'+
+          '<span class="bset-state" id="ncState"></span></div>',
+        [{label:'סגירה',pri:true,onclick:closeModal}]);
+
+      var tw=$('#ncTabs');
+      if(tw) tw.querySelectorAll('.seg').forEach(function(el){
+        el.onclick=function(){
+          tw.querySelectorAll('.seg').forEach(function(x){x.classList.remove('on');});
+          el.classList.add('on'); setNCMode(el.getAttribute('data-nc'));
+        };
+      });
+      // The query goes to the SERVER (?q=), so it is debounced like the conversation search rather
+      // than fired per keystroke.
+      var deb; $('#ncQ').addEventListener('input',function(e){
+        var v=e.target.value.trim(); clearTimeout(deb);
+        deb=setTimeout(function(){ if(v===NC.q)return; NC.q=v; loadNCUsers(); },160);
+      });
+      $('#ncGo').onclick=createGroupChat;
+      setNCMode(NC.mode);
+      loadNCUsers();
+    }
+    function setNCMode(m){
+      NC.mode=m;
+      var grp=(m==='group');
+      var tr=$('#ncTitleRow'),go=$('#ncGo'),lbl=$('#ncLbl');
+      if(tr) tr.classList.toggle('hidden',!grp);
+      if(go) go.classList.toggle('hidden',!grp);
+      if(lbl) lbl.textContent=grp?'חברי הקבוצה':('אנשים בחיבור «'+connLabel(ncConn())+'»');
+      if(!grp) NC.picked={};
+      ncState(grp?ncPickedLabel():'בחירה באדם פותחת את השיחה מיד.');
+      renderNCList();
+    }
+    function loadNCUsers(){
+      var tk=++NC.token, cid=ncConn();
+      var p='/users?limit=200'+(NC.q?('&q='+encodeURIComponent(NC.q)):'')+
+            (cid?('&connection_id='+encodeURIComponent(cid)):'');
+      jx(p).then(function(r){
+        if(tk!==NC.token) return;                       // the operator kept typing — that answer is stale
+        var host=$('#ncList'); if(!host)return;
+        // A 501 here is not "the request failed", it is the connection saying it has no address book
+        // to show. Either way the SERVICE's sentence is what goes on screen.
+        if(!r.ok||(r.d&&r.d.ok===false)){
+          NC.users=[];
+          host.innerHTML='<div class="note">'+esc((r.d&&r.d.error)||('לא ניתן לטעון אנשי קשר ('+r.status+')'))+'</div>';
+          return;
+        }
+        NC.users=(r.d&&r.d.users)||[];
+        renderNCList();
+      });
+    }
+    function renderNCList(){
+      var host=$('#ncList'); if(!host)return;
+      if(!NC.users.length){
+        host.innerHTML='<div class="acct-empty">'+(NC.q?'אין אנשים תואמים לחיפוש':'אין אנשים זמינים בחיבור הזה')+'</div>';
+        return;
+      }
+      host.innerHTML=NC.users.map(function(u){
+        var on=NC.mode==='group'&&!!NC.picked[u.id];
+        return '<div class="brow'+(on?' on':'')+'" data-uid="'+esc(u.id)+'" role="button" tabindex="0"'+
+          ' aria-pressed="'+(on?'true':'false')+'">'+
+          '<span class="avatar"><span class="av sm" style="background:'+esc(u.color||'var(--muted)')+'">'+
+            esc(initialsOf(u.name||u.handle||u.id))+'</span>'+
+            (u.online?'<span class="presence"></span>':'')+'</span>'+
+          '<span class="bx"><span class="bn">'+esc(u.name||u.id)+'</span>'+
+            '<span class="bs">'+esc(u.handle||'')+(u.online?(u.handle?' · ':'')+'מחובר/ת עכשיו':'')+'</span></span>'+
+          '<span class="nc-check">'+mark('check')+'</span></div>';
+      }).join('');
+      host.querySelectorAll('.brow').forEach(function(row){
+        var go=function(){ pickUser(row.getAttribute('data-uid')); };
+        row.onclick=go;
+        row.onkeydown=function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); go(); } };
+      });
+    }
+    function pickUser(id){
+      var u=NC.users.filter(function(x){return x.id===id;})[0]; if(!u)return;
+      if(NC.mode==='group'){
+        if(NC.picked[id]) delete NC.picked[id]; else NC.picked[id]=u;
+        renderNCList(); ncState(ncPickedLabel());
+        return;
+      }
+      startDirect(u);
+    }
+    function startDirect(u){
+      if(NC.busy)return; NC.busy=true;
+      var who=u.name||u.id;
+      ncState('פותח שיחה עם «'+who+'»…');
+      var body={user_id:u.id,name:u.name,handle:u.handle}, cid=ncConn();
+      if(cid) body.connection_id=cid;
+      post('/conversations',body).then(function(r){
+        NC.busy=false;
+        var d=r.d||{};
+        if(!r.ok||d.ok===false||!d.id){
+          var msg=d.error||('פתיחת השיחה נכשלה ('+r.status+')');
+          ncState(msg,true); return tell(msg,true);
+        }
+        closeModal();
+        // created:false = the 1:1 was already there and was reused. Saying "נוצרה" would be a claim
+        // the conversation count immediately contradicts.
+        tell(d.created===false?('השיחה עם «'+who+'» כבר קיימת — נפתחה'):('נפתחה שיחה עם «'+who+'»'));
+        openAfterCreate(d.id);
+      });
+    }
+    function createGroupChat(){
+      if(NC.busy)return;
+      var t=$('#ncTitle'), title=((t&&t.value)||'').trim();
+      // The service refuses a nameless group with its own 400; this only saves the round-trip, and
+      // everything else (membership, duplicates) stays the service's call.
+      if(!title){ ncState('נדרש שם לקבוצה',true); if(t)t.focus(); return; }
+      var members=ncPicked().map(function(k){
+        var u=NC.picked[k]; return {id:u.id,name:u.name,handle:u.handle,color:u.color};
+      });
+      NC.busy=true; ncState('יוצר קבוצה…');
+      var body={title:title,members:members}, cid=ncConn();
+      if(cid) body.connection_id=cid;
+      post('/conversations',body).then(function(r){
+        NC.busy=false;
+        var d=r.d||{};
+        if(!r.ok||d.ok===false||!d.id){
+          var msg=d.error||('יצירת הקבוצה נכשלה ('+r.status+')');
+          ncState(msg,true); return tell(msg,true);
+        }
+        closeModal();
+        // The COUNT comes back from the service (it includes you, and it dedupes), so it is reported
+        // rather than recomputed from what was ticked here.
+        tell('הקבוצה «'+title+'» נוצרה'+(typeof d.members==='number'?(' · '+d.members+' משתתפים'):''));
+        openAfterCreate(d.id);
+      });
+    }
+    /** Re-read the list first, THEN open: openConv() reads the row out of S.convs for its unread
+     *  badge and its header, and a conversation that is not in the list yet would open headerless. */
+    function openAfterCreate(id){
+      return loadConvs().then(function(){ openConv(id); });
+    }
+    function newChat(){
+      if(!canStartChat()){ binaTell(noStartReason(),'warn'); return; }
+      openNewChat();
+    }
+
+    /* ── live refresh · the FALLBACK ───────────────────────────────────────────────
+       Chat is two-sided: the other person's message arrives in the database, not in this tab.
+       Without a refresh the window is a snapshot of whenever it was opened. The poll is cheap (one
+       list query), stops while the tab is hidden, and re-renders the open thread ONLY when its
+       content actually changed — re-rendering unconditionally would wipe half-typed text out of the
+       composer every few seconds.
+
+       This is NOT dead code now that the block below can stream. `subscribe` is a protocol op, so a
+       connection that cannot push (WhatsApp, Telegram) keeps exactly this, and a stream that fails
+       to establish falls back to it. Both paths call the SAME two functions, which is why the app
+       behaves identically either way — only the trigger differs. */
+    function threadSig(list){ list=list||[]; var l=list[list.length-1]||{}; return list.length+':'+(l.id||'')+':'+(l.status||''); }
+    function refreshThread(){
+      var id=S.openId; if(!id)return;
+      /* TWO identities, because `id!==S.openId` alone answers the wrong question. It is correct for
+         "the operator clicked another conversation" and useless for "the connection changed":
+         resetForConnection() nulls S.openId, so a later openConv() on the NEW connection re-sets it
+         and this guard then passes trivially for an answer fetched about the OLD one. Conversation
+         ids are not portable across connections, and GET /api/conversation/:id is the one read route
+         that does not report which connection it answered for — so the generation is the only thing
+         here that can tell those two apart. */
+      var gen=S.gen;
+      jf('/conversation/'+encodeURIComponent(id)).then(function(d){
+        if(!fresh(gen))return;
+        if(!d||!d.messages||id!==S.openId)return;
+        var sig=threadSig(d.messages); if(sig===S.threadSig)return;
+        S.threadSig=sig;
+        var m=$('#msgs'); if(!m)return;
+        var near=(m.scrollHeight-m.scrollTop-m.clientHeight)<90;
+        S.openContact=d.contact||S.openContact;
+        m.innerHTML=msgsHtml(d.messages,(d.contact||{}).group); renderBotnote();
+        if(near)m.scrollTop=m.scrollHeight;
+      });
+    }
+    var POLL_MS=8000,_poll=null;
+    function tick(){
+      if(document.hidden||!S.booted)return;
+      loadConvs();
+      if(S.openId) refreshThread();
+    }
+    function startPoll(){ if(_poll)return; _poll=setInterval(tick,POLL_MS); }
+    function stopPoll(){ if(!_poll)return; clearInterval(_poll); _poll=null; }
+    /* Still the right thing with a stream open: it is a ONE-SHOT resync, not a poll. A tab that was
+       hidden may have been throttled, and coming back is the moment to re-read rather than to trust
+       whatever the last event left on screen. */
+    document.addEventListener('visibilitychange',function(){ if(!document.hidden) tick(); });
+
+    /* ── push · the same refresh, driven by the server ─────────────────────────────
+       GET /api/events is a Server-Sent Events stream: `ready` on connect, `change` per event, a
+       keep-alive comment every 25s. Three things are deliberate here.
+
+       IT IS GATED ON THE MANIFEST, exactly like the people picker is gated on `listUsers`. Where
+       `subscribe` is advertised the stream replaces the 8s poll; where it is not, the poll STAYS.
+       Deleting the poll outright would leave WhatsApp and Telegram — the two connections that cannot
+       push — with no updates at all, which is a worse app than the one that polls.
+
+       IT RE-READS RATHER THAN RECONSTRUCTS. The event carries IDS only, on purpose, and every
+       refresh goes back through loadConvs() / refreshThread(). Building a bubble out of an event
+       would make the pushed view and the fetched view two renderings that can disagree; this way
+       there is still exactly one place a message is turned into HTML.
+
+       IT DOES NOT RETRY. EventSource reconnects by itself, with its own backoff. A retry loop here
+       would open a SECOND stream — and each stream holds a dedicated Postgres LISTEN client on the
+       server, so a leak is measured in database connections, not in browser memory. The only thing
+       handled below is the case the browser gives up on (readyState CLOSED, i.e. a non-200 such as
+       the 501 a backend without `subscribe` answers), and that falls back to the poll. */
+    var _es=null;
+    /** How long a stream gets to say `ready` before it is written off — see startEvents(). Generous:
+     *  the server writes that line the moment it accepts the request, so anything slower than this is
+     *  something in the path holding the response, not a slow network. */
+    var HELLO_MS=10000;
+    /** Conversations this tab has an unacknowledged optimistic bubble in — see onChange. */
+    var _pending={};
+    function pendingAdd(id){ _pending[id]=(_pending[id]||0)+1; }
+    function pendingDone(id){ if(!_pending[id])return; if(--_pending[id]<=0) delete _pending[id]; }
+
+    function stopEvents(){
+      if(!_es)return;
+      var es=_es; _es=null;                 // cleared FIRST: the handlers below check identity
+      try{ es.close(); }catch(e){}
+    }
+    /** One event. Ids only — nothing here builds a message. */
+    function onChange(raw){
+      var d={}; try{ d=JSON.parse(raw||'{}'); }catch(e){ return; }
+      loadConvs();                          // the list changes for any conversation, not just the open one
+      if(!S.openId) return;
+      if(d.conversation_id && d.conversation_id!==S.openId) return;
+      /* `fromMe` is the echo of what THIS identity just sent. doSend() has already drawn that bubble
+         optimistically and re-reads the thread itself the moment the write is acknowledged, so
+         refreshing on the echo too would render the same message a second time in the window between
+         the two. Skipped only while the send is actually outstanding: a fromMe event with nothing
+         pending came from another tab or device and IS news. */
+      if(d.fromMe && _pending[S.openId]) return;
+      refreshThread();
+    }
+    function startEvents(){
+      if(typeof window.EventSource!=='function') return false;
+      /* Pinned to the connection this tab believes it is on. Without it the server resolves whatever
+         the ACTIVE pointer says at the instant the request arrives, and a switch racing a boot would
+         hand this tab a stream about the other account. */
+      var cid=S.active, es;
+      try{ es=new EventSource('api/events'+(cid?('?connection_id='+encodeURIComponent(cid)):'')); }
+      catch(e){ return false; }
+      _es=es;
+      /* A stream that never speaks is not a stream. This used to be aimed at the console's own embed
+         proxy, which buffered the whole response before forwarding it — an event-stream never ends,
+         so the request hung until that proxy's 40s read timeout and EventSource opened another,
+         forever. That is FIXED (a92b6dc0): app_proxy in platform-base/console/app.py now buffers
+         only text/html — the rewrite needs the whole document — and streams everything else through
+         iter_content with direct_passthrough, disabling the read timeout when the client asked for
+         text/event-stream and setting no-transform + X-Accel-Buffering: no on the way back.
+
+         The deadline stays, and not out of superstition: the console is not the only hop. Traefik,
+         an SSO forward-auth, or a corporate proxy in front of the console can each hold a response
+         that never ends, and the failure looks identical from here — silence. So `ready` keeps a
+         deadline, and missing it means push does not work ON THIS PATH: close the stream and stay on
+         the poll, which every connection has anyway. This is the opposite of a retry — it is the one
+         place that stops the browser reopening a stream that cannot work. */
+      var hello=setTimeout(function(){
+        if(_es!==es)return;
+        stopEvents(); startPoll();
+      },HELLO_MS);
+      es.addEventListener('ready',function(){
+        if(_es!==es)return;
+        /* Fires on every connect INCLUDING the ones EventSource makes on its own after a drop.
+           Whatever changed while the stream was down was never delivered, so the state is re-read
+           rather than assumed — and only now, with a stream proven to be up, does the poll stop. */
+        clearTimeout(hello);
+        stopPoll();
+        loadConvs(); if(S.openId) refreshThread();
+      });
+      es.addEventListener('change',function(ev){ if(_es===es) onChange(ev.data); });
+      es.onerror=function(){
+        if(_es!==es)return;
+        if(es.readyState===2){ stopEvents(); startPoll(); }   // the browser gave up; poll again
+      };
+      return true;
+    }
+    /** Which of the two this connection gets. The poll runs until a stream says `ready`, so a
+     *  connection whose stream never opens is never left with nothing. */
+    function syncLive(){
+      stopEvents();
+      startPoll();
+      if(S.booted&&canSubscribe()) startEvents();
+    }
+    /* An abandoned stream is not free: the server holds a Postgres LISTEN client per open one, and a
+       browser that goes to the bfcache never fires `beforeunload`. Both, so neither case leaks. */
+    window.addEventListener('pagehide',stopEvents);
+    window.addEventListener('beforeunload',stopEvents);
+
+    function wireReconnect(btn){
+      if(!btn)return;
+      // Local chat has nothing to re-pair (the op is absent from /manifest), so the button says what
+      // it will actually do rather than promising a re-pair that answers 501.
+      if(!canReconnect()&&btn.lastChild&&btn.lastChild.nodeType===3) btn.lastChild.textContent='בדיקה מחדש';
+      btn.onclick=function(){
+        btn.disabled=true; btn.style.opacity='.6';
+        if(!canReconnect()) return window.__chatReload().then(function(){ tell('החיבור נבדק מחדש'); });
+        post('/account/reconnect',{id:S.activeAcct&&S.activeAcct.id}).then(function(r){
+          if(!r.ok){ btn.disabled=false; btn.style.opacity='1'; return tell((r.d&&r.d.error)||'החיבור מחדש נכשל',true); }
+          tell('החיבור חודש בהצלחה'); window.__chatReload();
+        });
+      };
+    }
+
+    document.querySelectorAll('#segtabs .seg').forEach(function(el){el.onclick=function(){document.querySelectorAll('#segtabs .seg').forEach(function(x){x.classList.remove('on');});el.classList.add('on');S.filter=el.getAttribute('data-f');renderList();};});
+    var deb; $('#convSearch').addEventListener('input',function(e){clearTimeout(deb);deb=setTimeout(function(){S.q=e.target.value.trim();renderList();},110);});
+    $('#newChat').onclick=newChat;
+    $('#mNew').onclick=newChat;
+    $('#botCfg').onclick=openBots;
+    $('#acctBtn').onclick=function(e){ e.stopPropagation(); toggleMenu(); };
+    $('#mConn').onclick=function(e){ e.stopPropagation(); openConnPicker(); };
+    document.addEventListener('click',hideMenu);
+    document.addEventListener('keydown',function(e){ if(e.key==='Escape'){ hideMenu(); closeModal(); } });
+    $('#mX').onclick=closeModal;
+    $('#ov').onclick=function(e){ if(e.target===$('#ov')) closeModal(); };
+
+    /* ── the shell tells the frame the pointer moved ───────────────────────────────
+       The console's top-bar chip and the connect wizard both POST /connections/select, which writes
+       the SAME single active pointer this app reads — but server-side, with nothing in the response
+       that reaches this document. Before this listener the frame simply went on rendering the
+       previous account: its label, its status dot, its bot card, its op-gated buttons and (on a local
+       connection, whose stream had already stopped the poll) its frozen conversation list.
+
+       postMessage rather than polling for it, because the console and the embedded app are
+       SAME-ORIGIN — the app is served through /a/chat/ by app_proxy — so the message is cheap,
+       instant, and origin-checkable at both ends. It carries no data: "something moved, re-read",
+       which is the only thing the shell actually knows. Everything else comes from the service.
+
+       THE CONTRACT (the console side is wired separately; this end is deliberately liberal about
+       what it accepts and strict about who it accepts it from):
+         in   { type: 'platform:connection-changed' | 'platform:reload', service?: 'chat' }
+         out  { type: 'platform:reload-ack', service: 'chat' }   → posted back to the sender
+       `service` is optional on the way in and ignored unless present, so a shell that broadcasts to
+       every frame it owns does not need to know which app is in this one. The ack exists so the
+       shell can keep Option B — reload the frame outright — as the fallback for an app that does not
+       listen, without paying for it here: an app that answers is not reloaded, and an app that never
+       answers gets today's behaviour. Nothing here is required for correctness; a console that sends
+       nothing at all leaves this app exactly as it was.
+
+       Everything else on the message is untrusted input and none of it is used: no connection id is
+       taken from the shell, because the pointer's owner is the service and boot() is about to ask
+       it. That keeps this listener incapable of pointing the app at a connection nobody selected. */
+    window.addEventListener('message',function(ev){
+      if(ev.origin!==window.location.origin) return;       // same-origin only, both ends
+      var d=ev.data;
+      if(!d||typeof d!=='object') return;
+      if(d.type!=='platform:connection-changed'&&d.type!=='platform:reload') return;
+      if(d.service&&d.service!=='chat') return;            // a broadcast meant for another frame
+      try{ if(ev.source&&ev.source.postMessage) ev.source.postMessage({type:'platform:reload-ack',service:'chat'},window.location.origin); }catch(e){}
+      /* null, not an id: the shell knows THAT the pointer moved, never where to. resetForConnection
+         invalidates everything scoped to the old connection and bumps S.gen, so the answers still in
+         flight for it are dropped instead of landing on the new screen; boot() then asks the service
+         who we are now. This is the same door the in-app switcher uses — which is the point: the two
+         controls now converge on one behaviour instead of one of them doing nothing. */
+      resetForConnection(null);
+      boot();
+    });
+
+    /* boot() ends in syncLive(), which is what starts the poll or the stream — so every path that
+       re-boots (the connection switcher, __chatReload, the retry button) gets the right one for the
+       connection it lands on, instead of only the first load getting it right. */
+    boot();
+  })();
+  </script>
+</body>
+</html>

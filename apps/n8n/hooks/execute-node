@@ -1,0 +1,180 @@
+#!/usr/bin/env bash
+set -euo pipefail
+export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
+# n8n-execute-node — run ONE node against a set of input items and print what it returns.
+#
+#   bbox n8n execute -n tmp/node.json tmp/input.json [--ex-link] [--keep]
+#
+# Why this exists: n8n has no per-node run endpoint outside the editor (the public API and the
+# internal REST both 404), so the only honest way to exercise one node's real code is to give it
+# a workflow of its own. This wraps that: it builds a throwaway workflow
+#
+#       Webhook -> Feed (items) -> <your node> -> Return
+#
+# posts the input items to it, prints the node's output, and DELETES the workflow again. The
+# point is A/B: run the node as it is live, edit node.json, run again, and diff the two outputs
+# over a large set of real rows -- without touching the pipeline or sending anything downstream.
+#
+# node.json   one n8n node object (as it appears in a workflow's `nodes`), or {"nodes":[...]}
+#             in which case the first non-trigger node is used.
+# input.json  an array of item objects, or {"items":[...]}, or NDJSON (one object per line).
+#
+# Flags
+#   --ex-link   keep the workflow and print the execution URL (default: everything is removed)
+#   --keep      keep the workflow but stay quiet about it
+#   --name X    name the temporary workflow (default: nx-<node name>)
+#
+# Exit codes: 0 the node ran (look at the output) · 1 the node errored or the call failed
+#             2 usage.
+#
+# Caveat worth knowing before you blame the node: a node that reaches for another node's data
+# ($('Some Node')) has nothing to reach for here, and will fail on that reference alone. Feed
+# it the fields it needs through input.json instead.
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+LOG_TAG="n8n-execute"
+
+NODE_FILE=""; INPUT_FILE=""; EX_LINK=0; KEEP=0; WF_NAME=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -n|--node)  NODE_FILE="${2:-}"; shift 2 ;;
+    --ex-link)  EX_LINK=1; KEEP=1; shift ;;
+    --keep)     KEEP=1; shift ;;
+    --name)     WF_NAME="${2:-}"; shift 2 ;;
+    -h|--help)  sed -n '4,32p' "$0"; exit 0 ;;
+    -*)         echo "unknown flag: $1" >&2; exit 2 ;;
+    *)          INPUT_FILE="$1"; shift ;;
+  esac
+done
+[ -n "${NODE_FILE}" ] && [ -n "${INPUT_FILE}" ] || {
+  echo "usage: bbox n8n execute -n <node.json> <input.json> [--ex-link] [--keep] [--name X]" >&2; exit 2; }
+[ -f "${NODE_FILE}" ]  || { echo "no such file: ${NODE_FILE}" >&2; exit 2; }
+[ -f "${INPUT_FILE}" ] || { echo "no such file: ${INPUT_FILE}" >&2; exit 2; }
+
+API_KEY="$(read_env N8N_API_KEY)"
+[ -n "${API_KEY}" ] || { echo "Error: N8N_API_KEY not in .env — run any 'bbox n8n push <app>' once (it mints one)." >&2; exit 1; }
+BASE="http://127.0.0.1:5678"
+TMP="$(mktemp -d)"; trap 'rm -rf "${TMP}"' EXIT
+
+# ---- assemble the throwaway workflow -------------------------------------------------------
+python3 - "${NODE_FILE}" "${INPUT_FILE}" "${TMP}" "${WF_NAME}" "${EX_LINK}" <<'PY'
+import json, sys, os, hashlib
+
+node_file, input_file, tmp, wf_name = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+keep_exec = (len(sys.argv) > 5 and sys.argv[5] == '1')
+
+raw = json.load(open(node_file, encoding='utf-8'))
+if isinstance(raw, dict) and 'nodes' in raw:
+    cands = [n for n in raw['nodes'] if 'trigger' not in str(n.get('type', '')).lower()]
+    if not cands:
+        sys.exit('node.json holds only trigger nodes')
+    node = cands[0]
+elif isinstance(raw, list):
+    node = raw[0]
+else:
+    node = raw
+if not isinstance(node, dict) or 'type' not in node:
+    sys.exit('node.json is not an n8n node object')
+
+txt = open(input_file, encoding='utf-8').read().strip()
+try:
+    parsed = json.loads(txt)
+    items = parsed['items'] if isinstance(parsed, dict) and 'items' in parsed else parsed
+    if isinstance(items, dict):
+        items = [items]
+except json.JSONDecodeError:                      # NDJSON
+    items = [json.loads(l) for l in txt.splitlines() if l.strip()]
+if not isinstance(items, list):
+    sys.exit('input.json must be an array of objects, {"items":[...]}, or NDJSON')
+
+under_test = node.get('name') or 'Node Under Test'
+# The path MUST be unique per invocation. A deterministic path collides with a kept
+# workflow from an earlier --ex-link run: n8n refuses to register the duplicate, the new
+# workflow stays inactive, and the POST silently lands on the OLD one -- so you score a
+# node you did not just build.
+path = 'nx-' + hashlib.sha1(os.urandom(16)).hexdigest()[:20]
+name = wf_name or ('nx ' + under_test)
+
+node = dict(node)
+node['position'] = [420, 300]
+node['id'] = 'nodeUnderTest'
+
+wf = {
+    "name": name,
+    "settings": {"executionOrder": "v1",
+                 "saveManualExecutions": keep_exec,
+                 "saveDataSuccessExecution": "all" if keep_exec else "none",
+                 "saveDataErrorExecution": "all",
+                 "saveExecutionProgress": False},
+    "nodes": [
+        {"id": "nxWebhook", "name": "In", "type": "n8n-nodes-base.webhook",
+         "typeVersion": 2, "position": [0, 300], "webhookId": path,
+         "parameters": {"path": path, "httpMethod": "POST", "responseMode": "responseNode",
+                        "options": {}}},
+        {"id": "nxFeed", "name": "Feed", "type": "n8n-nodes-base.code",
+         "typeVersion": 2, "position": [210, 300],
+         "parameters": {"jsCode": "const b = $input.first().json.body || {};\n"
+                                  "const rows = Array.isArray(b.items) ? b.items : [];\n"
+                                  "return rows.map(j => ({ json: j }));"}},
+        node,
+        {"id": "nxOut", "name": "Return", "type": "n8n-nodes-base.respondToWebhook",
+         "typeVersion": 1, "position": [640, 300],
+         "parameters": {"respondWith": "allIncomingItems", "options": {}}},
+    ],
+    "connections": {
+        "In":   {"main": [[{"node": "Feed", "type": "main", "index": 0}]]},
+        "Feed": {"main": [[{"node": under_test, "type": "main", "index": 0}]]},
+        under_test: {"main": [[{"node": "Return", "type": "main", "index": 0}]]},
+    },
+}
+json.dump(wf, open(os.path.join(tmp, 'wf.json'), 'w', encoding='utf-8'), ensure_ascii=False)
+json.dump({"items": items}, open(os.path.join(tmp, 'body.json'), 'w', encoding='utf-8'), ensure_ascii=False)
+open(os.path.join(tmp, 'path.txt'), 'w').write(path)
+open(os.path.join(tmp, 'count.txt'), 'w').write(str(len(items)))
+PY
+
+WPATH="$(cat "${TMP}/path.txt")"; NITEMS="$(cat "${TMP}/count.txt")"
+
+# ---- create + activate ---------------------------------------------------------------------
+WF_ID="$(curl -sS -X POST "${BASE}/api/v1/workflows" \
+  -H "X-N8N-API-KEY: ${API_KEY}" -H 'Content-Type: application/json' \
+  --data-binary @"${TMP}/wf.json" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("id",""))')"
+[ -n "${WF_ID}" ] || { echo "could not create the temporary workflow" >&2; exit 1; }
+
+cleanup_wf() {
+  [ "${KEEP}" = "1" ] && return 0
+  curl -sS -o /dev/null -X DELETE "${BASE}/api/v1/workflows/${WF_ID}" -H "X-N8N-API-KEY: ${API_KEY}" || true
+}
+trap 'cleanup_wf; rm -rf "${TMP}"' EXIT
+
+curl -sS -o /dev/null -X POST "${BASE}/api/v1/workflows/${WF_ID}/activate" -H "X-N8N-API-KEY: ${API_KEY}"
+
+# ---- run -------------------------------------------------------------------------------------
+CODE="$(curl -sS -o "${TMP}/out.json" -w '%{http_code}' -X POST "${BASE}/webhook/${WPATH}" \
+  -H 'Content-Type: application/json' --data-binary @"${TMP}/body.json" --max-time 600 || echo 000)"
+
+python3 - "${TMP}/out.json" "${CODE}" "${NITEMS}" <<'PY'
+import json, sys
+out, code, n = sys.argv[1], sys.argv[2], sys.argv[3]
+try:
+    d = json.load(open(out, encoding='utf-8'))
+except Exception:
+    print(open(out, encoding='utf-8').read()[:2000]); sys.exit(1 if code != '200' else 0)
+print(json.dumps(d, ensure_ascii=False, indent=2))
+sys.stderr.write("[n8n-execute] in=%s out=%s http=%s\n"
+                 % (n, len(d) if isinstance(d, list) else 1, code))
+PY
+RC=$?
+
+if [ "${EX_LINK}" = "1" ]; then
+  EXID="$(curl -sS "${BASE}/api/v1/executions?workflowId=${WF_ID}&limit=1" \
+    -H "X-N8N-API-KEY: ${API_KEY}" \
+    | python3 -c 'import json,sys; d=json.load(sys.stdin).get("data",[]); print(d[0]["id"] if d else "")')"
+  echo "[n8n-execute] workflow kept: ${WF_ID}" >&2
+  [ -n "${EXID}" ] && echo "[n8n-execute] execution: http://n8n.localhost/workflow/${WF_ID}/executions/${EXID}" >&2
+fi
+
+[ "${CODE}" = "200" ] || exit 1
+exit ${RC}

@@ -1,0 +1,72 @@
+# yaml-language-server: $schema=../schema.json
+title: "docker compose down hangs for ~2 min on apitools"
+opened: "2026-06-14"
+category: ops
+severity: medium
+status: resolved  # 2026-07-30 triage: CONFIRMED — apps/apitools/requirements.txt:20 pins gunicorn==23.0.0 (refs moved production/apitools/ -> apps/apitools/).
+summary: "`docker compose down`/restart/redeploy stalls up to ~120s waiting on the apitools container to stop, even when it is idle."
+
+description: |
+  ## Symptom
+  `docker compose down` (and `restart` / redeploys) blocks for up to ~120s while
+  waiting on the **apitools** container to stop. Other services stop quickly; the
+  whole command appears to "hang" on apitools before finishing.
+
+  ## Root cause (corrected after investigation)
+  The initial guess — that the `stop_grace_period` / `GUNICORN_GRACEFUL_TIMEOUT`
+  was too high and idle workers were "slow to drain" — was **wrong**. The grace
+  period is correct and intentional (it protects in-flight OCR up to ~120s).
+
+  The real cause is a **gunicorn version regression**. The image shipped
+  **gunicorn 26.0.0** (a non-standard build whose shutdown path was rewritten
+  around a SIG_QUEUE + "dirty arbiter" mechanism). That rewrite **leaks stale
+  entries into the arbiter's `self.WORKERS` set**, so the master's graceful-stop
+  loop:
+
+  ```python
+  while (self.WORKERS or self.dirty_arbiter_pid) and time.time() < limit:
+      ...
+  ```
+
+  never sees `WORKERS` go empty and runs until `limit` (== `graceful_timeout`,
+  120s) before falling through to SIGKILL.
+
+  Evidence from a timed **idle** stop on the running container (gunicorn 26.0.0):
+  - `docker stop -t 130 apitools` took **2m0.8s**.
+  - Logs showed **every worker exited at T+0s** and all children were reaped by
+    T+3s, yet the master did not log `Shutting down: Master` until **T+120s**.
+  - So workers drain instantly when idle; only the **master** hung. This is a
+    master-side bookkeeping bug, not a draining problem.
+
+  ## Why it's a real problem
+  - Slows down every redeploy / config change cycle (~2 min per teardown).
+  - Makes `down` feel broken; tempts operators to `Ctrl-C` or `kill -9`, which is
+    exactly the unsafe path the grace period was added to prevent.
+
+  ## Fix (applied)
+  Pinned **`gunicorn==23.0.0`** (last solid upstream release) in
+  `production/apitools/requirements.txt`; `requirements.txt` had floated
+  `gunicorn>=21.2.0`, which resolved up to the regressed 26.0.0. This keeps the
+  **same graceful worker-drain semantics** (long-running OCR still protected by
+  the unchanged 120s `stop_grace_period` / `GUNICORN_GRACEFUL_TIMEOUT`) while
+  removing the master-side stall. No API/runtime behaviour changed.
+
+  ## Verification (local rebuild)
+  After rebuild with gunicorn 23.0.0, an idle `docker stop -t 130 apitools`
+  finished in **3.0s** (was 2m0.8s); the master logged `Shutting down: Master`
+  in the same second workers terminated. Container healthy after restart.
+
+  ## Repro (pre-fix, on a gunicorn 26.0.0 image)
+  ```bash
+  cd /root/deployment-hacohen
+  docker stop -t 130 apitools   # ~120s even when idle (master hangs)
+  docker logs --tail 40 apitools  # workers exit at T+0, master at T+120s
+  ```
+
+  ## Deploy note (VPS)
+  Not yet applied on the VPS. To roll out: pull, then rebuild the apitools image
+  (`docker compose up -d --build apitools`) so it picks up the pinned gunicorn.
+
+references:
+  - production/apitools/requirements.txt
+  - production/apitools/docker-compose.yml

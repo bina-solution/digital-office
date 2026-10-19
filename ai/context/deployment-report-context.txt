@@ -1,0 +1,237 @@
+# Sunday Morning Deployment Report Context
+
+Use this file as the operating brief for a thorough Sunday morning business automation deployment and process review of `/root/deployment-hacohen`.
+
+The review must be evidence-based. Prefer live machine state, Docker Compose status, collected logs, n8n execution history, feature-validation results, Traefik data, and security-relevant host/network artifacts over assumptions. When a check cannot be performed, say exactly why and list the next best manual command or access path.
+
+## Baseline Context
+
+Read first:
+
+- `context/deployment-context.txt` for service inventory, domains, ports, compose layout, networks, and maintenance commands.
+- `compose.yml` and `compose.override.yaml` for the active service graph, Traefik routing, labels, exposed ports, and environment overrides.
+- `feature-validation/README.md`, `feature-validation/docker-compose.yml`, and all active feature `scenario.json` files for validation scope.
+- Current `context/storage-report*.txt` files for prior storage trajectory and cleanup history.
+
+Assume this is a single Debian host running a multi-service Docker Compose deployment behind Traefik v3.3. The public domain pattern is `<service>.hacohen.bina-solutions.co.il`. The deployment serves real business automation processes, especially OCR/document extraction, WhatsApp operations, n8n workflows, AI/MCP tools, observability, and identity/access services.
+
+## Required Report Output
+
+Produce a concise but thorough report with these sections, in this order:
+
+1. Executive summary
+2. Business automation readiness for Sunday morning
+3. Machine state and resource pressure
+4. Running services and routing overview
+5. Storage report and growth risks
+6. Seven-day log analysis across all systems
+7. Past-day close-up and recent events
+8. n8n seven-day execution history, with past-day close-up
+9. Feature-validation report
+10. Security review of host, Docker, Traefik, SSH, and exposed services
+11. Lower-level network and access observations
+12. Risks, incidents, suspected regressions, and operational debt
+13. Prioritized action plan: immediate, this week, later
+14. Appendix: commands run, files inspected, limits, and skipped checks
+
+Every finding should include severity, evidence, affected service or path, likely business impact, and recommended next action.
+
+## Machine State Review
+
+Capture current host health:
+
+- OS/kernel, uptime, reboot history, timezone, current date.
+- CPU load, memory, swap, process pressure, top resource consumers.
+- Disk usage by mount, inode usage, journal size, Docker footprint, largest workspace directories.
+- Docker daemon state, image/container/volume/build-cache usage, stopped containers, restart counts.
+- Network interfaces, listening ports, firewall status, DNS/resolution symptoms, public exposure.
+- Systemd failed units, recent kernel/system errors, OOM kills, disk I/O errors, certificate renewal issues.
+
+Recommended evidence commands include `hostnamectl`, `uptime`, `free -h`, `df -h`, `df -ih`, `du`, `docker system df -v`, `docker ps -a`, `docker stats --no-stream`, `systemctl --failed`, `journalctl -p warning..alert --since "7 days ago"`, and `dmesg -T`.
+
+## Running Services and Deployment Overview
+
+Review all services from the root compose project:
+
+- Traefik, Portainer, Redis, RedisInsight.
+- n8n main, n8n worker, n8n task runners, n8n Postgres.
+- apitools OCR/PDF API.
+- chat.
+- Ollama.
+- LibreChat, LibreChat Mongo, RAG API, vector DB.
+- Rocket.Chat and Mongo.
+- Plane, filesystem, and Playwright MCP SSE servers.
+- GlitchTip web, worker, migrate job, Postgres, Valkey.
+- Authentik server, worker, Postgres.
+- Homepage.
+- Log collector.
+- Feature-validation API.
+
+For each service, report:
+
+- Running/healthy state and restart count.
+- Image/build age if relevant.
+- Resource use.
+- External route and expected authentication posture.
+- Recent errors, warnings, and suspicious log patterns.
+- Whether it is business-critical for Sunday morning operations.
+
+Use `docker compose ps`, `docker compose logs --since 7d`, `docker inspect`, Traefik labels in `compose.override.yaml`, and service-specific health endpoints where available.
+
+## Storage Report
+
+Create an updated storage report, not just a snapshot. Compare against previous `context/storage-report*.txt` files when possible.
+
+Cover:
+
+- Root filesystem free space and risk level.
+- Docker images, containers, volumes, and build cache.
+- `apitools/storage` growth: uploaded files, OCR cache, PDF images, drawings, and logs.
+- `system-logs` growth, especially verbose databases or recurring noisy services.
+- n8n binary data and Postgres volume growth.
+- LibreChat, Rocket.Chat, GlitchTip, Authentik, Ollama, and feature-validation data growth.
+- Safe cleanup candidates and unsafe/destructive cleanup items to avoid.
+- Growth rate estimate and when the next storage emergency may happen.
+
+Do not recommend deleting production data unless the retention policy and business impact are clear.
+
+## Seven-Day Log Analysis
+
+Analyze all available logs for the last seven days:
+
+- Docker logs for every running service.
+- `system-logs/<service>/` collected logs.
+- Host journal warnings/errors.
+- Traefik access/error logs and routing/certificate events.
+- Application logs under service directories, especially `apitools/logs` and n8n-related logs.
+
+Look for:
+
+- Restarts, crashes, healthcheck failures, OOMs, timeouts, failed DB connections, queue stalls.
+- 4xx/5xx bursts, upstream unavailable errors, TLS/certificate failures, auth failures.
+- Slow OCR/document jobs, failed Google Vision/local OCR runs, cache failures, large file problems.
+- n8n workflow failures, queue pressure, task-runner failures, binary data errors, Postgres errors.
+- WhatsApp connection/session problems.
+- Authentik login or forward-auth anomalies.
+- GlitchTip event volume and new recurring errors.
+- Security-relevant messages: brute-force attempts, suspicious paths, unexpected exposed ports.
+
+The report must include a separate past-day close-up that highlights the last 24 hours with exact timestamps and recent operational events.
+
+## n8n Execution History
+
+Review n8n execution history for seven days, then zoom into the past day.
+
+Cover:
+
+- Total executions, success/failure/canceled/error counts.
+- Top failing workflows and nodes.
+- Long-running executions and timeout pressure.
+- Queue/worker/task-runner symptoms.
+- Workflows tagged `feature-validation` or otherwise related to deployment validation.
+- Business-critical automations and whether they ran on schedule.
+- Any manual runs, retries, disabled workflows, credential/auth errors, webhook errors, and external API rate-limit issues.
+
+Use the n8n API or direct PostgreSQL read-only queries when available. Avoid mutating workflow state. If credentials are unavailable, state that clearly and fall back to logs and UI-visible evidence.
+
+## Feature-Validation Report
+
+Summarize the `feature-validation` framework as production observability evidence.
+
+Include:
+
+- Current feature-validation API health and scheduler state.
+- Latest benchmark/result per suite.
+- Seven-day trend by suite.
+- Current status of all suites: aligned-value-extraction, local-aligned-value-extraction, document-ocr, local-ocr, find-option-matching, column-extraction, balance-sheet, integration, and any `online-tools` checks if present.
+- Failures grouped by root cause: OCR quality, rotation/alignment, Hebrew/RTL, table extraction, n8n webhook, Redis/Postgres/WhatsApp integration, external service availability.
+- Any fixture drift or benchmark output growth.
+- Gaps where production-critical services are not yet covered by validation.
+
+Use benchmark JSON files under `feature-validation/*/benchmarks/`, API endpoints, dashboard output, and scenario definitions.
+
+## Manual Specialized Security Check
+
+Perform a careful manual security review of the running host, Docker setup, Traefik, SSH, and exposed services.
+
+Cover:
+
+- SSH configuration, recent successful/failed logins, authorized keys, root login posture, password auth, nonstandard users, sudoers changes.
+- `auth.log`, `journalctl`, `last`, `lastb`, and shell history indicators where accessible.
+- Open ports and which service owns each listener.
+- Firewall/UFW/iptables/nftables state.
+- Traefik routers, middlewares, TLS options, certificate state, dashboard exposure, forwarded headers, Authentik ForwardAuth coverage.
+- Services intentionally protected by own auth vs Authentik ForwardAuth.
+- Containers running privileged, mounted Docker socket, host mounts, broad volume access, weak secrets exposure through env vars, public database/cache exposure.
+- Docker image freshness and risky orphaned containers/images.
+- Unexpected cron jobs/systemd timers.
+- World-writable files, risky permissions on `.env`, `traefik/acme.json`, `n8n.credentials.json`, and key material.
+- Suspicious network connections or repeated external clients.
+
+Do not print secrets. Redact tokens, passwords, DSNs, cookies, private keys, and credential values.
+
+### Host evidence available read-only inside agent-runner
+
+If running inside the `agent-runner` sidecar, the following host paths are bind-mounted read-only and SHOULD be used directly instead of marking the corresponding checks as "deferred to host":
+
+- `/host/var/log/` — host `/var/log` (auth.log, syslog, kern.log, journal/, etc.)
+- `/host/etc/ssh/sshd_config` and `/host/etc/ssh/sshd_config.d/` — SSH server configuration
+- `/host/etc/crontab`, `/host/etc/cron.d/` — cron jobs
+- `/host/etc/systemd/` — systemd unit files and timers
+- `/host/proc/` — host `/proc` (uptime, meminfo, loadavg, net/, etc.); use this instead of saying `uptime`/`free`/`ss` are unavailable
+
+For commands that genuinely need root or a host shell (e.g. `ufw status`, `last`, `lastb`, `journalctl`, `dmesg`, `systemctl --failed`), note them explicitly and recommend running them on host. Do not deferred-list checks that can be answered from the read-only mounts above.
+
+## Lower-Level Network Logs and Access Evidence
+
+Inspect available lower-level evidence:
+
+- Traefik access logs by route/status/client where available.
+- Docker network state and container IPs.
+- Host listening sockets with process names.
+- Firewall logs, kernel network warnings, dropped packets if logging is enabled.
+- SSH login history and failed auth attempts.
+- DNS or certificate renewal failures.
+- Unusual outbound connections from containers if visible.
+
+The goal is to find signs of exposure, abuse, misrouting, blocked dependencies, or noisy clients that can affect business automation reliability.
+
+## Business Process Review Angle
+
+Evaluate the deployment as a business automation system, not only as infrastructure.
+
+Pay special attention to:
+
+- OCR/document extraction readiness for incoming Sunday documents.
+- Hebrew/RTL, rotated document, table extraction, shipment/document ID extraction, and balance-sheet workflows.
+- WhatsApp ingestion and outbound message reliability.
+- n8n workflow scheduling, queue health, and worker capacity.
+- Error tracking visibility through GlitchTip.
+- Operator dashboards: Homepage, Portainer, feature-validation dashboard, n8n UI, GlitchTip.
+- Manual fallback paths if automation fails Sunday morning.
+
+## Reporting Rules
+
+- Start with what is healthy, degraded, broken, or unknown.
+- Distinguish incidents from chronic operational debt.
+- Use exact service names and file paths.
+- Include timestamps and time windows.
+- Include commands run and queries used, but do not include sensitive values.
+- Call out checks requiring root, credentials, or production UI access.
+- Keep recommendations concrete and ordered by business impact.
+- Do not make destructive changes during the review unless explicitly asked.
+
+## Suggested Final Checklist
+
+- `docker compose ps` reviewed from `/root/deployment-hacohen`.
+- Storage pressure reviewed and compared with prior reports.
+- All service logs reviewed for seven days.
+- Last 24 hours reviewed separately.
+- n8n seven-day and last-day execution history reviewed.
+- Feature-validation latest results and trend reviewed.
+- Traefik routers, certificates, and auth coverage reviewed.
+- SSH/auth history reviewed.
+- Host journal and kernel warnings reviewed.
+- Network listeners/firewall reviewed.
+- Security-sensitive files checked for permissions without exposing contents.
+- Business-critical Sunday morning workflows identified with status and fallback.

@@ -1,0 +1,408 @@
+# yaml-language-server: $schema=./schema.json
+title: Are indoxV2Upsert01 / indoxDocBatchUpsert01 needed, or should callers hit the indox API directly — plus an estate-wide scan for workflows and node paths that do not need to exist
+opened: '2026-08-10'
+category: other
+severity: high
+status: open
+summary: 'The two workflows are NOT the same kind of thing, and the owner''s instinct is half right. `indoxV2Upsert01` ("Upsert (central)") holds ZERO business logic: 7 nodes, of which the production path is a Redis GET, an IF that is always false, a Code node that returns its own input unchanged, and a delegate to `indoxDocBatchUpsert01`. Its only real function is a test-capture seam consumed by two INACTIVE E2E tests. It is a pure pass-through and it is redundant. `indoxDocBatchUpsert01` ("Batch Upsert") is NOT redundant — it holds two things that would be lost: (a) a null-strip that is mandatory because its own trigger schema INJECTS ~86 nulls into every item, and (b) `SB Unlock Doc`, the release half of the `doc_step` lock that `indoxV2Driver01` acquires. Nothing else releases that lock on the happy path. The redundancy is real but it is one level, not two. Nobody writes `incoming_documents` directly through the API: `indoxDocBatchUpsert01` is the ONLY live workflow that issues `INLINE_ACTION=UPSERT`, and `indoxApiSupabase01` has exactly one caller in the whole estate (`indoxApiRouter01`, node `Call Supabase`). So the two paths the owner wanted compared are not "nested vs direct" — they are "all writes nested" vs "all reads direct", which is a coherent split, not an accident. Measured over an 11.8h retained window: the five workflows of the upsert call chain account for 19,228 of 42,808 executions — 44.9% of every execution row in the estate. The `indoxV2Upsert01` layer alone adds ~5.7s to the median 22.1s upsert and buys nothing in production. Estate scan: 51 of `indoxV2Driver01`''s 132 nodes are unreachable from any trigger (confirmed against runData — none of the 51 ever executed), including 4 of the 5 Driver call sites into Batch Upsert; 4 active workflows have no caller of any kind and cannot be invoked; 5 stale connection entries in `indoxApiSupabase01` point at nodes that no longer exist.'
+description: |
+  As first recorded — category: architecture
+
+  ## Method
+
+  ```yaml
+  window: execution_entity spans 2026-08-10 07:21:09Z .. 2026-08-10 19:09:47Z, 42,808 rows. Retention is N8N_EXECUTIONS_DATA_MAX_AGE=168 with N8N_EXECUTIONS_DATA_PRUNE_MAX_COUNT=2000, so the window is count-bound, not age-bound, and it slides while you read it. Counts re-queried ~20 min later were 3,908 for Batch Upsert vs 3,107 — same ratios, larger window. All figures below are from the 07:21..19:09 snapshot unless stated.
+  live_version_resolution: Read via `workflow_entity we JOIN workflow_history wh ON wh."versionId" = we."activeVersionId"`, never `workflow_entity.nodes`. Verified that for all 89 workflows with an activeVersionId, activeVersionId = versionId and json_array_length(draft.nodes) = json_array_length(live.nodes), so draft and live currently agree — but the join was used regardless.
+  compaction_hazard: execution_data is COMPACTED; purely-numeric strings are array indices. A naive `substring(data from '"message":"[^"]*')` returned `"message":"21` — index 21, not a message. All runData figures below come from the dereferencer (scratchpad/audit810/{timing,keys,nodefreq,errs}.py, same algorithm as dedup/deref.py).
+  running_rows: 781+ estate-wide executions sit in `running` from worker restarts. Every duration figure below uses `done_s` = sum over rows with a non-null stoppedAt, which excludes them. The wall_s column that charges now() to orphans is reported but NOT used for conclusions.
+  execution_mode: CORRECTION TO THE BRIEF'S PREMISE. Sub-workflow executions are NOT enqueued. Every execution of all five chain workflows has execution_entity.mode='integrated' (Batch Upsert 3,908/3,908; indox api 4,929/4,929; process_lock 6,155/6,155; indox api - supabase 4,895 integrated + 82 trigger for its own schedules). They run in-process inside the parent's worker slot. So a hop costs CPU, a Postgres connection, an execution_entity row and an execution_data blob — it does NOT cost queue latency and does NOT occupy an extra slot. The cost is real but it is a different cost than assumed.
+  fleet: EXECUTIONS_MODE=queue, 2 workers x `n8n worker --concurrency=8` = 16 slots. DB_POSTGRESDB_POOL_SIZE=25. That pool is the binding constraint — see failure_mode below.
+  ```
+
+  ## Part 1 the two upsert workflows
+
+  ```yaml
+  the_actual_chain: 'Actions workflow  ->  indoxV2Upsert01  ->  indoxDocBatchUpsert01  ->  indoxApiRouter01 ->  indoxApiSupabase01  ->  Postgres, plus a per-item side-call into processLock01. That is FIVE n8n executions per logical document write. The owner''s phrase "just run the api directly" resolves to `indoxApiRouter01` — the front door, called by 25 nodes across the estate. `indoxApiSupabase01` is not directly callable by convention: its only caller anywhere is `indoxApiRouter01` node `Call Supabase`.'
+  indoxV2Upsert01:
+    name: indox-v2 Upsert (central)
+    live_nodes: 7
+    verdict: REDUNDANT — pure pass-through in production
+    what_it_actually_holds:
+    - node: When Called
+      type: executeWorkflowTrigger
+      detail: inputSource=passthrough. No schema, no validation, no field list.
+    - node: Read Capture Flag
+      type: redis (GET n8n.indox.test_capture)
+      detail: Runs on EVERY call. Measured median 707 ms (max 4,446 ms) for a single Redis GET — that is n8n node overhead under saturation, not Redis.
+    - node: Is Capture?
+      type: if
+      detail: 'True only when the Redis flag is non-empty. VERIFIED EMPTY: `redis-cli GET n8n.indox.test_capture` returns nil and no key matches `*test_capture*`. Always takes the false branch.'
+    - node: Capture Write -> Capture Echo
+      type: redis set -> code
+      detail: 'DEAD IN PRODUCTION. `Capture Echo` has no outgoing connection, so in capture mode the upsert is swallowed and never written — that is the point, it is a test seam. Confirmed empirically: across 21 sampled executions, runData contains only 5 node names and neither Capture node appears once.'
+    - node: Restore Payload
+      type: code
+      detail: 'Body is `return $(''When Called'').all();` — it returns its own input, unchanged. Measured median 644 ms. Verified byte-for-byte: for execution 944559 the key set at `When Called` and at `Restore Payload` are the same 18 keys.'
+    - node: Delegate to Batch Upsert
+      type: executeWorkflow -> indoxDocBatchUpsert01, mappingMode=passthrough, waitForSubWorkflow=true
+    who_calls_it:
+      total_call_sites: 16
+      all_inside: The 4 Actions workflows only. indoxV2ActionsBS01 (4 sites), indoxV2ActionsGlobal01 (2), indoxV2ActionsShip01 (5), indoxV2ActionsGDoc01 (5). Every one uses mappingMode=passthrough, waitForSubWorkflow=true, none disabled.
+      volume: 3,137 executions in the window (~266/h). Those 4 Actions workflows ran 2,109 times total (DOC BASE 944, Ship 450, GDoc 426, BS 289), so ~1.5 upsert calls per action run.
+    what_it_calls: indoxDocBatchUpsert01, and nothing else.
+    proof_it_is_1_to_1: indoxV2Upsert01 successes = 2,989. indoxDocBatchUpsert01 successes = 2,989. Exactly equal. Total executions 3,137 vs 3,107; the 30-row gap is wrapper executions that failed at `Delegate to Batch Upsert` before or during the child call (54 errors). One live producer, one live consumer, 1:1 — the textbook shape of redundant nesting.
+    measured_cost:
+      sample: 25 successful executions, per-node runData executionTime
+      median_total_span_ms: 22067
+      median_delegate_node_ms: 20314
+      own_node_time_ms: ~1753
+      child_median_total_ms: 16356
+      interpretation: The wrapper's own nodes cost ~1.8s median. The extra executeWorkflow hop costs a further ~4.0s (Delegate 20,314 ms vs the child's own 16,356 ms span). Together the layer accounts for ~5.7s of the median 22.1s central upsert — ~26% — for zero production work.
+    what_breaks_if_removed: 'Re-point the 16 Actions call sites from indoxV2Upsert01 to indoxDocBatchUpsert01, keeping mappingMode=passthrough. Behaviour is identical: today the Actions items arrive at indoxV2Upsert01''s schemaless passthrough trigger unchanged, are returned unchanged by `Restore Payload`, and are then passed through into Batch Upsert''s jsonExample trigger. Calling Batch Upsert directly with passthrough produces the same padding and the same adapter output. The ONE thing lost is the test-capture seam, consumed by `Config Base` in indoxV2GDocTest01 and indoxV2BSTest01 — BOTH INACTIVE. If that seam is wanted, it belongs inside Batch Upsert (one IF before `UPSERT Adapter`), not as its own workflow and its own execution row.'
+    caveat: 'UNPROVEN: the equivalence argument above is reasoned from the node definitions and from observed key sets, not from a live A/B — this lane is read-only and ran no test.'
+  indoxDocBatchUpsert01:
+    name: Batch Upsert
+    live_nodes: 5
+    verdict: NEEDED BUT THIN — two of its four production behaviours are load-bearing, two are duplicated downstream
+    what_it_actually_holds:
+    - node: When Executed by Another Workflow
+      type: executeWorkflowTrigger, inputSource=jsonExample
+      detail: 'THIS IS NOT A WHITELIST — IT IS THE OPPOSITE, AND IT IS THE SOURCE OF THE PROBLEM THE NEXT NODE SOLVES. The jsonExample lists ~104 keys. n8n PADS every incoming item up to all 104, filling absent keys with null. Proved by key-set comparison: indoxV2Upsert01 execution 944559 passed 18 keys; the matching Batch Upsert execution 944564 shows 104 keys at the trigger; `UPSERT Adapter` then strips it back to 18 (17 of the originals plus INLINE_ACTION; `THUMBNAIL` was null and was dropped). Same pattern for the 4-key case (exec 944593 -> 944607, `ERROR` null and dropped).'
+    - node: UPSERT Adapter
+      type: code
+      detail: Four behaviours. (1) Deletes every null/undefined key — MANDATORY as currently wired, because without it the ~86 nulls the trigger just injected would be written as NULL over live column values. (2) Deletes `__force_backend` and `_be`. (3) Skips items carrying no identifying field (ID/SOURCE_TYPE/HASH/NAME/LINK/SOURCE_ID/SOURCE_LINK) — the guard against minting NULL documents. (4) Stamps INLINE_ACTION='UPSERT'. Median 393 ms.
+    - node: Call INDOX UPSERT
+      type: executeWorkflow -> indoxApiRouter01
+      detail: 'NOT to indoxApiSupabase01 — there is one more hop. Median 11,303 ms (69% of this workflow''s span). indoxApiRouter01 is a 5-node switch: if INLINE_ACTION is one of RESET/STATUS/INJECT/SCAN go to SyncApi0000000001, else `Call Supabase` -> indoxApiSupabase01.'
+    - node: SB Emit IDs
+      type: code
+      detail: Collects the doc IDs to unlock, with three fallbacks (trigger -> UPSERT Adapter -> $input) because the node reference goes stale after the sub-call. Its own comment records that the original single-source version silently skipped the unlock and leaked doc_step locks. Median 357 ms.
+    - node: SB Unlock Doc
+      type: executeWorkflow -> processLock01, mode=each, PROCESS=doc_step, ACTION=unlock
+      detail: THE LOAD-BEARING SIDE EFFECT. mode=each means one processLock01 sub-execution PER ITEM. Median 4,225 ms — 26% of this workflow's span.
+    the_lock_protocol_this_workflow_completes: '`doc_step` is acquired in exactly ONE place estate-wide: indoxV2Driver01 node `Check LOCKED` (ACTION=check_and_lock). It is released in exactly TWO places: indoxDocBatchUpsert01 `SB Unlock Doc` (happy path) and errorHandler01 `EH Unlock Doc` (failure path, keyed off the `n8n.exec.<execId>.docmap` that the Driver''s `Lock Map Set` writes). So Batch Upsert is the release half of the Driver''s lock. This is real logic, not forwarding, and it is the single blocker to retiring this workflow.'
+    who_calls_it:
+      live_and_reachable:
+      - indoxV2Upsert01 / Delegate to Batch Upsert — effectively 100% of traffic (2,989 = 2,989)
+      live_workflow_but_DEAD_NODE:
+      - indoxV2Driver01 / Create New Shipment Row
+      - indoxV2Driver01 / Update Existing - Link to Invoice
+      - indoxV2Driver01 / Mark Invoice Completed
+      - indoxV2Driver01 / Call 'Incoming Document Batch Update' - SHIPMENT_ID_COMPLETED
+      - All four sit in the unreachable half of the Driver (see part_2). Statically unreachable from any trigger AND absent from runData across 13 sampled Driver executions. 4 of the 5 Driver call sites into Batch Upsert are dead code.
+      wired_but_idle_in_window:
+      - indoxGmailDocDownloader01 / Upsert Incoming Document (1 execution, errored)
+      - indoxGmailBSDownloader01 / Call 'Batch UPSERT Incoming Document' (0)
+      - indoxGmailLinkDownloader01 / Upsert Incoming Document (0)
+      - SyncProcGDoc0001 / Call 'Batch UPSERT Incoming Document' (0)
+      inactive:
+      - SyncProcBS000001 / Register (workflow inactive)
+      volume: 3,107 executions in the window
+    what_is_genuinely_duplicated_downstream: 'The null-strip and the empty-item guard BOTH exist again inside indoxApiSupabase01 node `Resolve IDs`: `const clean={}; for(const [k,v] of Object.entries(row)){ if(v!==null && v!==undefined && v!=='''') clean[k]=v; }`, followed by a SUBSTANTIVE-field guard that is strictly stronger than the adapter''s, plus an `updateKeys.length===0` skip. Nothing between the router entry and `Resolve IDs` is harmed by nulls: `If Management` compares INLINE_ACTION to four literals (null fails all four -> Call Supabase), the `Action` switch reads `$json.INLINE_ACTION || ''UPSERT''` so a missing value already defaults to UPSERT, `Strip Control` only deletes a key, and `Build Match Index SQL` guards every probe with `bad()`. So of the adapter''s four behaviours, only the `_be`/`__force_backend` strip is unique — and `_be`/`__force_backend` are set in exactly one workflow, indoxDocGet01, on the GET path, never on an upsert payload. UNPROVEN: that the pipeline would behave identically with the adapter removed. This is read from code, not tested, and the adapter is currently the only thing standing between 86 injected nulls and the table — do not remove it without the trigger schema change.'
+  who_calls_indoxApiSupabase01_directly:
+    answer: 'NOBODY, by design. Exactly one executeWorkflow edge targets it in the entire estate: indoxApiRouter01 node `Call Supabase`. It also self-triggers on two schedules (`Keepalive`, `Poll Line Changes`) — that is the 82 rows with mode=''trigger''.'
+  who_calls_the_api_directly_and_what_they_do_differently:
+    the_real_comparison: '25 nodes across 14 live workflows call indoxApiRouter01 directly. Grouped by the INLINE_ACTION they set, the split is total and clean:'
+    writes:
+    - indoxDocBatchUpsert01 — INLINE_ACTION=UPSERT. The ONLY live workflow that writes incoming_documents.
+    reads_and_other_tables:
+    - indoxV2Driver01 (GET_ALL), indoxDocGet01 (GET), mailApi01 (GET)
+    - indoxV2ActionsBS01 / ActionsShip01 / ActionsGDoc01 / ActionsGlobal01 (GET, TABLE_GET, MERGE)
+    - indoxSettings01, indoxV2SearchWarehouse01, SyncApi0000000001 (TABLE_GET)
+    - syncV3Main0001, sv3Inject3x001, IndoxInjectDemo01 (TABLE_GET / TABLE_UPSERT — other tables)
+    - syncV3Deliver0001 (DELIVER)
+    only_direct_upsert_callers_are_inactive:
+    - indoxV2BSTest01, indoxV2DocBaseTest01, indoxV2GDocTest01, indoxV2PipelineTest01 — all active=false
+    what_this_means: There is no live "direct" write path to compare the nested one against, because there isn't one. Reads go direct and writes funnel through a single door. That is a single-writer discipline, and it is the reason the identity/dedup logic in `Resolve IDs` can assume it sees every write. Flattening should preserve that property.
+  where_the_real_upsert_semantics_live:
+    location: indoxApiSupabase01, path `Action` -> `Strip Control` -> `Build Match Index SQL` -> `Load Match Index` -> `Resolve IDs` -> `PG Upsert`
+    detail: '`Resolve IDs` is where the genuinely hard logic sits, and none of it is in either upsert workflow: identity resolution by ID -> (COMPANY_ID, COMPANY_DOC_ID) -> (COMPANY_ID, SHORT_DOC_ID) -> HASH; COMPANY_DOC_ID validity rules (rejects ''none'', all-zeros, <3 alphanumerics, doc-id equal to company-id); multi-company quarantine so a shared invoice number cannot silently merge two suppliers'' rows; intra-batch dedup by merging into the already-emitted item; a generated-id guard requiring a SUBSTANTIVE field. `Build Match Index SQL` scopes the identity index to the keys actually present in the batch — its own comment records that the unbounded version blew the 1536MB worker heap at 45,839 rows.'
+  db_level_protections_checked:
+    action_log: '`trg_incdoc_action_log_append` BEFORE UPDATE runs `incdoc_action_log_append()`. A partial update that sets ACTION_LOG=NULL CANNOT wipe the log: new_log='''' and old_log<>'''' takes the `merged := old_log` branch, so the trigger restores the previous value. ACTION_LOG is therefore safe at the DB layer independent of any n8n null-strip.'
+    doc_date_norm: '`trg_incdoc_doc_date_norm` BEFORE INSERT OR UPDATE. Derived column, not a protection.'
+    everything_else: 'The other ~100 columns have NO equivalent trigger. Also present and not previously declared in the brief: `trg_incdoc_mirror_warehouse_ins/upd`, `trg_incdoc_touch`, `trg_stats_dirty`. public.incoming_documents currently holds 16,808 rows. CONCLUSION on the brief''s warning: the null-strip IS real protection for ~100 columns, so Batch Upsert is not "just nesting" — but the protection is duplicated in `Resolve IDs`, and the nulls it defends against are manufactured by its own trigger schema three nodes earlier.'
+  cost_of_the_chain:
+    executions_in_window:
+      indoxV2Upsert01: 3137
+      indoxDocBatchUpsert01: 3107
+      indoxApiRouter01: 3964
+      indoxApiSupabase01: 4013
+      processLock01: 5007
+      chain_total: 19228
+      estate_total: 42808
+      share: 44.9%
+    completed_seconds_in_window:
+      indoxV2Upsert01: 200574
+      indoxDocBatchUpsert01: 154593
+      indoxApiRouter01: 76149
+      indoxApiSupabase01: 33788
+      processLock01: 31656
+    note_on_the_briefs_numbers: The brief cited 1,351 executions / 91,781 worker-seconds for Upsert (central) in one hour. This window measures ~266 executions/hour. Either the earlier hour was a burst or the two windows differ; both are reported rather than reconciled. The RATIOS — 1:1 producer:consumer, 26% wrapper overhead, 44.9% of estate executions — do not depend on which absolute rate is right.
+  failure_mode_worth_knowing_before_you_change_anything:
+    finding: 'Sampled errors in both workflows are almost entirely `timeout exceeded when trying to connect` — Postgres pool exhaustion against DB_POSTGRESDB_POOL_SIZE=25. indoxV2Upsert01: 10/12 at `Delegate to Batch Upsert`. indoxDocBatchUpsert01: 7/12 at `Call INDOX UPSERT`, 2/12 at `SB Unlock Doc`.'
+    consequence: Every nesting level multiplies concurrent connection demand — 16 slots x a 5-deep chain against a 25-connection pool. And when `Call INDOX UPSERT` fails, `SB Emit IDs` and `SB Unlock Doc` never run, so the doc_step lock is not released and the document stalls until the 600s TTL (errorHandler01 is the compensator, via the docmap). 166 doc_step keys and 983 total n8n lock keys were held at audit time.
+    implication: Flattening the chain is not only a latency win — it is directly a reduction in concurrent Postgres connections, which is the thing currently failing.
+  recommendations_part_1:
+  - id: R1
+    priority: high
+    action: Retire `indoxV2Upsert01`. Re-point its 16 call sites (all in the 4 Actions workflows) at `indoxDocBatchUpsert01` with mappingMode=passthrough unchanged. If the test-capture seam is still wanted, move it into Batch Upsert as one IF ahead of `UPSERT Adapter`.
+    removes: one execution row and ~5.7s per upsert, ~266 times an hour
+    risk: LOW. Both consumers of the capture seam are inactive. No other behaviour is attached. Verify first that nothing outside n8n calls indoxV2Upsert01 by id.
+  - id: R2
+    priority: high
+    action: Fix the self-inflicted padding. Change `indoxDocBatchUpsert01`'s trigger from inputSource=jsonExample to passthrough (or trim the jsonExample to the fields callers actually send). Today the trigger injects ~86 nulls and the very next node strips them.
+    risk: MEDIUM — the 5 callers using mappingMode=defineBelow rely on the schema to shape their payload. Change the trigger and the adapter together, never separately, and keep the adapter's null-strip until the change is proven.
+  - id: R3
+    priority: medium
+    action: Collapse `indoxApiRouter01` into its callers for the UPSERT path only, or let Batch Upsert call `indoxApiSupabase01` directly. The router's whole contribution on the write path is one IF that is always false for UPSERT.
+    risk: MEDIUM — the router is the estate's single API front door for 25 call sites. Special- casing one path erodes that. Prefer R1+R2 first and re-measure.
+  - id: R4
+    priority: do-not-do-yet
+    action: Do NOT retire `indoxDocBatchUpsert01`. Moving `SB Unlock Doc` to the Driver changes WHEN the lock is released (per-upsert today vs once-per-document if moved), and the Driver's `Lock Map Clear` is a different mechanism serving the error handler. That is a design decision, not a mechanical migration.
+  ```
+
+  ## Part 2 estate scan
+
+  ```yaml
+  never_invoked_and_uninvokable:
+    definition: 'Zero executions in the window AND no executeWorkflow caller AND no HTTP-webhook caller AND no dynamic-dispatch string reference AND no webhook/schedule trigger of their own. NOTE: an executeWorkflow-only trigger with no referrer is genuinely unreachable — there is no other way in.'
+    findings:
+    - id: gmailApiRouter01
+      name: gmail api
+      active: true
+      nodes: 3
+      evidence: Only trigger is `When Called` (executeWorkflowTrigger). Zero executions. Zero executeWorkflow edges target it. Its id appears in NO other workflow's JSON, live or inactive. Repo hits are docs and lint scripts only.
+      risk_of_removal: LOW — but confirm no external caller uses the n8n REST API by id.
+    - id: whatsappApi01
+      name: whatsapp api
+      active: true
+      nodes: 14
+      evidence: Identical shape to gmailApiRouter01. executeWorkflowTrigger only, 0 executions, 0 references.
+      risk_of_removal: LOW
+    - id: JQExV3Order00001
+      name: Order JQ Ex V3
+      active: true
+      nodes: 5
+      evidence: executeWorkflowTrigger only, 0 executions, 0 references — while its four siblings (JQExV3Base000001, JQExV3BS00000001, JQExV3Invoice001, JQExV3Ship000001) ARE referenced and three of them ran (2,579 / 201 / 217). The Order variant was never wired up.
+      risk_of_removal: LOW
+    - id: indoxGmailActionProcessor01
+      name: Gmail Action Processor
+      active: true
+      nodes: 23
+      evidence: executeWorkflowTrigger only. Its sole referrer is `indoxGmailActionsScanner01`, which is active=false. Unreachable for as long as the scanner stays off.
+      risk_of_removal: MEDIUM — this is a dormant feature, not dead code. Turning the scanner back on re-animates it. Recommend leaving it and de-activating it rather than deleting.
+    explicitly_NOT_dead_despite_zero_executions:
+      note: These were nearly mis-filed. HTTP calls to `http://n8n:5678/webhook/<path>` are call graph edges that an executeWorkflow-only analysis misses entirely, and `syncV3Deliver0001` dispatches by workflow id read from data (`$json.processor_wf`).
+      items:
+      - indoxV2ExtractBalanceSheet01 — reached via webhook bs_ex_2_dev from BsDocEx01 and indoxV2ActionsBS01
+      - indoxSettings01 webhooks (setting/company/query/queries) — called by 3 Gmail downloaders and indoxProcessDocument01
+      - mailApi01 — called by indoxHealth00001 via webhook mail-api/doc-context
+      - indoxGmailDocDownloader01 / indoxGmailLinkDownloader01 / SyncProcGDoc0001 — dynamic targets of syncV3Deliver0001 (`Run Drive Processor`, `Run Mail Processor`, expression `{{ $json.processor_wf }}`)
+      - SyncApi0000000001 — reached via indoxApiRouter01 for INLINE_ACTION in (RESET,STATUS,INJECT,SCAN). 0 executions means no traffic used those actions in the window, not that it is unwired.
+  dead_node_paths:
+    method: Per workflow, BFS from every trigger node over `connections`, with a fixpoint pass so ai_* sub-nodes attached to a reachable parent count as reachable. Anything not reached is dead. Cross-checked against runData.
+    indoxV2Driver01:
+      dead: 51
+      total: 132
+      corroboration: Across 13 sampled Driver executions, 34 distinct node names appear in runData. The intersection of {observed} and {statically dead} is EMPTY. Static analysis confirmed.
+      notable_dead_subgraphs:
+      - name: the parallel-webhook fan-out (the one the brief already knew about)
+        entry: '`Simulate Multi-Item for Parallel Processing` — no inbound edge, not a trigger'
+        reaches: Loop Over Items36, Initialize finishedSet, `Start Sub-Workflow via Webhook` (-> http://n8n:5678/webhook/incoming-documents-016), If All Finished, Timestamp, Continue Workflow (noop), Webhook Callback Wait, Loop End, Update finishedSet, Acknowledge Finished. All 11 nodes are dead; the subgraph's only entry is that code node.
+        extra_finding: The webhook it targets CANNOT ANSWER. Driver node `Webhook2` (path incoming-documents-016) is disabled:true, and `incoming-documents-016` is absent from webhook_entity. Same for `Webhook1` (parallel-subworkflow-target). The separate orphan node `HTTP Request` -> incoming-documents-017 targets a webhook that IS registered and active — but the node itself has no inbound edge.
+      - name: the shipment-linking branch
+        entry: '`Action: Link Shipments` — no inbound edge'
+        reaches: 'Split Shipment IDs, Search Existing Shipment (-> indoxDocGet01), Join Search Results1, Switch: Found?, Already Linked?, `Create New Shipment Row`, `Update Existing - Link to Invoice`, `Mark Invoice Completed` (all three -> indoxDocBatchUpsert01), Skip - Already Linked, End Link Shipment, Collect Unique Invoice IDs, End. 13 nodes.'
+        significance: This is why 4 of the 5 Driver call sites into Batch Upsert are dead — they all live here. Whatever shipment-linking this was meant to do is not happening.
+      - name: Priority ERP posting
+        entry: '`map response` (no inbound) -> `pririty sync1`, plus orphan `Post Priority Table1`'
+        detail: Both POST to https://testhacohanim.macomp.vip/odata/Priority/... . Unreachable. `Priority Table Error` is orphaned AND disabled.
+      - name: orphan test node
+        entry: '`Determine Action Tests` — a Code node with no inbound edge'
+        detail: It fans out into the LIVE dispatcher (Check LOCKED, Execute Action, the four `Call indox-v2 Actions - *` nodes). Those downstream nodes are alive via other inbound edges; only `Determine Action Tests` itself is unreachable. A test assertion node wired into the production dispatcher is worth removing on clarity grounds alone.
+      - name: misc isolated
+        detail: 'No Action: Shipment ID Missing1, No Action: Purchase ID Missing1, No Action: Allready COMPLETED, Reset Loop, Group By ACTION1, Join COMPANY_ID1, Selection & Scoring Logic, Selection & Scoring Logic2, Set SHIPMENT_DOC_ID TO COMPANY_DOC_ID1, Execution Data2, Replace Me, Replace Me1, Batch x Start, Loop Over Items25/38/39, If From Waerhouse1.'
+    other_workflows_with_dead_paths:
+    - indoxV2QueryPurchaseId01 — 25/46 nodes dead, incl. Document OCR1, Extract AFTER/BELOW, Information Extractor, Ollama Model, Upload Flow
+    - indoxV2QueryShipmentId01 — 21/42 dead, same shape
+    - 'indoxV2ExtractBalanceSheet01 — 6/57 dead (Text Processor, Document OCR, Response Format: No LLM Output, Code in JavaScript2, Code in Python (Native), If2)'
+    - 'indoxGmailLinkDownloader01 — 4/33 dead (Download PDF (binary), HTTP Request2, Stop and Error: Not PDF, Upload file -> driveApi01)'
+    - indoxGmailDocDownloader01 — 2/35 dead (Output Filename1, Switch3)
+    - 'indoxGmailBSDownloader01 — 1/22 dead: `Send to Webhook` -> http://n8n:5678/webhook/process-document. That path is NOT in webhook_entity; no workflow serves it.'
+    - indoxV2QueryInvoiceId01 — 2/22 dead (DOCUMENT_DATE Query1, Parse Date Result)
+    - indoxProcessDocument01 — 1/19 dead (Settings Loader2 -> indoxSettings01)
+    - indoxV2ExtractInvoiceGemini01 — MAP LINK, Google Gemini Chat Model, Code in JavaScript3 orphaned (this workflow ran 3,702 times, so the live path is fine)
+    - indoxSettings01 — Handle Query Request, Handle Setting Request, Execution Data, Company Name By Identifier orphaned
+    - processLock01 — StartTests, Replace Me, DELETE RESULTS1 orphaned
+    dangling_connection_entries:
+      description: '`connections` keys naming nodes that no longer exist. Harmless at runtime, but they make the editor graph lie and they defeat naive dependency tooling.'
+      items:
+      - workflow: indoxApiSupabase01
+        entries:
+        - On New Incoming Doc
+        - Poll IN_PROGRESS Schedule
+        - Get IN_PROGRESS Docs
+        - On Doc Change
+        - On Line Change
+        note: five removed triggers whose wiring was left behind
+      - workflow: IndoxResetFull01
+        entries:
+        - Call Supabase Setup
+  disabled_but_wired:
+    note: Per the owner's standing correction, the `doc_step` lock SKIP is CORRECT BY DESIGN — a collision means another main workflow already owns the row. Nothing below recommends re-enabling that deferral.
+    items:
+    - workflow: indoxV2Driver01
+      nodes:
+      - Call 'Snooze Incoming Document' (disabled, has outgoing) — target id bdchh5urW9lBzudZ does not exist in this instance. Even enabled it would fail to resolve.
+      - Process Blocked Error (stopAndError, disabled, terminal)
+      - Action Filter (filter, disabled, has outgoing) — observed in runData as a pass-through
+      - MAP ID1 (set, disabled, has outgoing)
+      - Merge (merge, disabled, terminal)
+      assessment: 'These are wired into the live dispatch path and appear in runData as pass-throughs. They do not swallow work today, but `Call ''Snooze Incoming Document''` pointing at a non-existent workflow id is a latent trap: enabling it would throw, not snooze.'
+    - workflow: indoxSettings01
+      nodes:
+      - Companies By Mail
+      - All Companies Identifiers
+      - Company Response3
+      - HTTP Request
+      - HTTP Request1
+      - HTTP Request2
+      - Code in JavaScript
+      assessment: seven disabled nodes on wired paths in an ACTIVE, webhook-exposed workflow (4 registered webhook paths). Worth a deliberate keep-or-cut pass.
+    - workflow: processLock01
+      nodes:
+      - Test GET KEY
+      - Test GET KEY EXECUTION
+      - Test GET ALL PROCESS KEYS
+      - Test LOCK
+      - Test LOCK1
+      - Test UNLOCK KEY EXECUTION
+      - Test UNLOCK EXECUTION
+      - Test CECHK & LOCK
+      assessment: Eight disabled `Test *` Set nodes inline in the estate's most-executed workflow (5,007 executions). Harmless but they are test scaffolding living in production.
+    - workflow: errorHandler01
+      nodes:
+      - Telegram (disabled, terminal)
+      assessment: an error-notification channel that is wired and off. Confirm that is intended.
+  test_and_probe_workflows_active_in_production:
+    items:
+    - id: ZZAbGemProbe01
+      name: ZZ A/B Gem transport probe (scratch, lane-parallel)
+      active: true
+      webhook: zz_ab_gem_probe (registered)
+      executions: 1 (2026-08-10 17:33, did not finish successfully)
+      assessment: Self-described scratch. It POSTs to the live `invoice_extractor` webhook, so firing it exercises production extraction. Recommend de-activating when the A/B is finished.
+    - id: ciHelloWebhook01
+      name: '[CI] Active-state webhook probe'
+      active: true
+      webhook: ci-hello (registered)
+      executions: 0
+      assessment: INTENDED — referenced by .github/workflows/ci-verify.yml. Leave active.
+    - id: indoxV2ExtractBalanceSheet01
+      name: Balance Sheet Extractor - v2- shmuel
+      active: true
+      webhook: bs_ex_2_dev (registered)
+      assessment: A production workflow reached through a webhook named `_dev`, plus a manualTrigger and an evaluationTrigger. Not dead — rename rather than remove.
+    - id: sv3Inject3x001
+      name: sv3 Inject 3x Every Registry Source
+      active: true
+      assessment: synthetic data injector, manualTrigger + executeWorkflowTrigger, no referrer, 0 executions. Operator tool. Active costs nothing (no schedule/webhook) but it can be invoked by id.
+    - id: IndoxInjectDemo01
+      name: INDOX Inject Demo Blueprint
+      active: true
+      assessment: same shape as sv3Inject3x001 — demo seeder, manual entry only.
+    - id: indoxV2TestFixtures01
+      name: INDOX Seed Fixtures
+      active: false
+      assessment: correctly inactive, but it is still the target of 8 executeWorkflow edges from the inactive E2E tests.
+    - id: sG9bU0ER2yVitKXR
+      name: zz-scratch-gateway-probe (delete me)
+      active: false
+      assessment: named "delete me" by its author. Inactive. Safe to remove.
+    - id: ztestMailDiscovery01
+      name: ztest mail discovery (incremental)
+      active: false
+      webhook: ztest/mail-discovery (row present in webhook_entity, workflow inactive)
+      assessment: safe to remove.
+    - id: IPqTtikNP1sLxoka
+      name: Batching loop issue
+      active: false
+      assessment: a scratch reproduction workflow. Safe to remove.
+    inactive_test_suite_kept_deliberately:
+      note: 9 E2E/unit workflows are inactive and referenced only by each other — indoxV2BSTest01, indoxV2DocBaseTest01, indoxV2GDocTest01, indoxV2PipelineTest01, indoxV2DecideTest01, mailOrgTest00001, syncV3FullTest01, syncV3KernelTest01, syncV3SourcesTest01. These are the test suite, not dead code. Leave them. NOTE they are the only consumers of indoxV2Upsert01's capture seam — see R1.
+    inactive_and_superseded_in_the_instance:
+      items:
+      - indoxDataGateway01 (INDOX Data Gateway 'single writer'), indoxIdentity01 (INDOX Identity 'single source') — both inactive, both referenced only by inactive workflows. These look like an abandoned attempt at the very consolidation this audit recommends; check them for prior art before designing R1-R3.
+      - SyncScanner00001, SyncScanUnit0001, SyncSource000001, SyncProcBS000001 — inactive sync-v2 generation, superseded by syncV3*.
+      - IndoxResetFull01, IndoxResetGml001, tVzFMkz18pCsXRyw (INDOX Reset - Drive Sync) — inactive operator reset tools.
+      - whatsappSendDoc01, indoxGmailActionsScanner01 — inactive.
+  ```
+
+  ## Part 3 repo superseded copies
+
+  ```yaml
+  the_actual_deploy_source:
+    finding: 'It is NOT a fixed glob. `platform-base/n8n/hooks/push` resolves the set per app from each app manifest''s `blueprints.n8n` key via `python3 platform/manager/reconcile.py blueprints` (push:428-431), copies each resolved dir''s *.json into `.n8n-push-stage` (push:432-444, failing loudly on filename collisions), tars it to `/tmp/n8n-push-wf` (push:454), and imports with `n8n import:workflow --separate --input=/tmp/n8n-push-wf` (push:678). `WF_DIR = ${REPO_ROOT}/platform-base/n8n/workflows` (push:27) is only a liveness guard (push:415) — it is not the staging set. Path resolution: reconcile.py:1196 reads the manifest key, reconcile.py:1204 resolves it against the app dir, reconcile.py:1202 skips apps that are not enabled.'
+    resolved_dirs_82_files:
+    - apps/indox/blueprint/n8n — 69 files
+    - apps/mail/blueprint/n8n — 6
+    - platform-base/n8n/workflows — 4 (ciHelloWebhook01, errorHandler01, glitchtipReporter01, processLock01)
+    - apps/chat/blueprint/n8n — 2 (whatsappApi01, whatsappSendDoc01)
+    - apps/drive/blueprint/n8n — 1 (driveApi01)
+    - 'apps/google-workspace-agent/blueprint/n8n — 4, DORMANT: app enabled:false at platform.state.yaml:58, reachable only via `bbox n8n google-workspace-agent push`'
+    quick_discriminator: Every non-deploy copy except `legacy/` and `apps/*/tests/` is gitignored. If a workflow JSON is tracked by git and not under `apps/*/blueprint/n8n/` or `platform-base/n8n/workflows/`, it is not a deploy source.
+  DEPLOY_VS_LIVE_DRIFT:
+    severity: HIGHEST-VALUE FINDING OF PART 3. Verified independently against the live DB by this lane, not taken on trust from the file scan.
+    findings:
+    - id: processLock01
+      repo_nodes: 42
+      live_nodes: 44
+      repo_mtime: 2026-08-06 15:51
+      consequence: The live workflow has 2 nodes the deploy source does not. `bbox n8n push` would REVERT them. This is the estate's most-executed workflow (5,007 executions in the window) and it is the lock manager for the whole document pipeline. A pull of live state exists at tmp/lane-sync-discovery/live/processLock01.live.json (44 nodes, 2026-08-10 03:28) but was never landed into the blueprint.
+      recommendation: reconcile before the next push; do not push processLock01 until then.
+    - id: indoxV2Driver01
+      repo_nodes: 131
+      live_nodes: 132
+      repo_mtime: 2026-08-10 02:28
+      consequence: one live node would be reverted by a push.
+    - id: indoxV2ExtractInvoiceGemini01
+      repo_nodes: 57
+      live_nodes: 56
+      repo_mtime: 2026-08-10 22:35
+      consequence: Opposite direction — the repo is AHEAD of live by one node, and its mtime is later than this audit's DB read, so a concurrent lane edited it. Pending push, not drift.
+    verified_in_sync: indoxDocBatchUpsert01 (5), indoxV2Upsert01 (7), indoxApiSupabase01 (32), indoxApiRouter01 (5) — repo and live node counts match. The Part 1 conclusions are therefore safe to act on from the repo files.
+    other_live_pulls_never_landed: tmp/lane-sync-discovery/live/*.live.json also holds newer-mtime pulls of driveApi01, gmailApiImap01, mailDiscovery01, syncV3Main0001, syncV3Unit0001, syncV3Deliver0001, indoxSettings01 — same node counts as the blueprint, so likely benign, but they are uncommitted captures of live state.
+  live_only_workflows_push_cannot_manage:
+  - id: ZZAbGemProbe01
+    detail: 'No file under ANY deploy dir. The only copy in the tree is `tmp/par/ZZAbGemProbe01.json` (gitignored scratch, mtime 2026-08-10 20:31). So it is live-only as far as `bbox n8n push` is concerned: push will never stage it and pull has never landed it into a blueprint. `scripts/refactor/app-tag-lint.py:39-42` describes exactly this class. (Correction to a first-pass claim that no file existed at all — one does, just not a deploy-source one.)'
+  - id: indoxDocUploader01
+    detail: Its only file is `legacy/n8n/indox-sheets-era/indoxDocUploader01.json`, yet the workflow is ACTIVE in the live instance with a registered webhook `upload-document`. Documented at scripts/refactor/app-tag-lint.py:28-31. Push never stages it.
+  - id: ztestMailDiscovery01 / ztestGmailApi01
+    detail: moved to apps/mail/tests/, outside the blueprint dir, so also live-but-unmanaged.
+  stale_mirrors_that_could_be_mistaken_for_live:
+    items:
+    - dir: apps/indox/app/incoming_documents/context-collection/n8n-workflows
+      files: 21, all mtime 2026-07-31 02:54
+      detail: 'Systematically stale. Named `<slug>_<n8n-random-id>.json` while carrying a DIFFERENT inner id. 15 duplicate a live deploy workflow, several with dramatic divergence: indoxDocBatchUpsert01 34 nodes here vs 5 live; indoxDocGet01 25 vs 4; indoxV2QueryShipmentId01 19 vs 42; indoxV2FigureDocType01 25 vs 16; indoxSettings01 59 vs 69; processLock01 35 vs 44. The invoice-extractor-gemini-3.1-pro snapshot named in the brief (48 nodes, 2026-07-31) is one of these; the method that found it found the other 20.'
+      recommendation: Treat the whole directory as documentation-era reference material. Add a README saying so, or move it under a name that cannot read as a deploy dir.
+    - dir: .claude/worktrees/fervent-mestorf-20f464/production/n8n/workflows
+      files: 139
+      detail: a separate git worktree holding the pre-refactor `production/` layout (2026-07-17), plus a 21-file copy of the context-collection dir and a 5-file `trash/`. Not a deploy source.
+    - dirs_gitignored_backups: data/_wf_backup (73), data/_wf_backup/2026-07-07-phase0 (131), data/exclude/_wf_backup (70), data/_registry_backup (16), .tmp-indox-v2-ct (35), tmp/** (~33 across b27, b34, bf-stage*, lane-stage, lane-sync-discovery, gmaillink, stage, fairness-lane, pickup-lane, par). 661 workflow-shaped JSONs exist in the tree; only 86 are under a deploy dir (82 staged by default + 4 dormant gwa).
+  test_files_under_the_deploy_path:
+    detail: '10 *test* files ARE deployed on purpose and should stay: indoxV2BSTest01, indoxV2DecideTest01, indoxV2DocBaseTest01, indoxV2GDocTest01, indoxV2PipelineTest01, indoxV2TestFixtures01, syncV3FullTest01, syncV3KernelTest01, syncV3SourcesTest01, mailOrgTest00001. All carry "active": false so they import without self-triggering. No ZZ*/probe/scratch/backup/old/.bak/copy file exists under any deploy dir. ciHelloWebhook01 is a probe by content but is deliberately deployed for CI.'
+  recommendations_part_3:
+  - id: R5
+    priority: high
+    action: Reconcile processLock01 (live 44 nodes vs repo 42) before any `bbox n8n push`. A push today silently reverts the lock manager.
+  - id: R6
+    priority: medium
+    action: Land ZZAbGemProbe01 into a blueprint dir or delete it from the live instance. A live active workflow with a registered webhook and no deploy source is invisible to every git-based gate.
+  - id: R7
+    priority: low
+    action: Mark apps/indox/app/incoming_documents/context-collection/n8n-workflows as non-deploy reference material so its 21 pre-2026-08 snapshots stop reading as live.
+  ```
+
+  ## Constraints honoured
+
+  READ-ONLY. No deploy, no import, no ./bbox run, no git checkout, no container or DB row changed, execution history untouched. The only write made by this lane is this file.

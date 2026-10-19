@@ -1,0 +1,85 @@
+# yaml-language-server: $schema=../schema.json
+title: "n8n workflows imported 'active' but never PUBLISHED — silent false-active (DB/UI say active, runtime runs 0)"
+opened: "2026-06-17"
+category: bug
+severity: high
+status: resolved  # 2026-07-30 triage: CONFIRMED — the publish SQL lives at platform-base/n8n/hooks/push:435 (active + activeVersionId) and scripts/ci-verify.sh:87-90 gates on activeVersionId IS NOT NULL; scripts/n8n-push is now `bbox n8n push`.
+summary: "n8n >= 2.x needs a workflow PUBLISHED (activeVersionId set) to register its trigger; n8n-push only set active=true, leaving 61 workflows as drafts that the DB+UI show as active while n8n's runtime registers 0 triggers."
+
+description: |
+  ## Symptom — three different answers to "is it active?"
+  After a fresh `down -v` + `up` + `n8n-push`, three sources disagreed:
+
+  | Source | What it reports | Count |
+  |---|---|---|
+  | **DB column** `workflow_entity.active` | flagged active | **61** |
+  | **UI list** / `GET /rest/workflows` (the toggles) | shown active | **61** of 113 |
+  | **Runtime** `GET /rest/active-workflows` (triggers actually registered) | actually listening | **0** |
+
+  So every "active" workflow showed an ON toggle in the UI and `active=true` in the
+  DB, but **n8n's runtime had registered ZERO triggers** — nothing was actually
+  running. A silent false-active: the dashboard lies, the automations are dead.
+  CI caught it because the verification asks the runtime, not the column.
+
+  ## Root cause — the n8n 2.x draft/published model
+  n8n 2.x added workflow **publishing** (migrations `AddActiveVersionIdColumn`,
+  `ActivateExecuteWorkflowTriggerWorkflows`). A workflow now registers its trigger
+  **only when PUBLISHED** — i.e. `workflow_entity.activeVersionId` is non-null and
+  equals the current `versionId`. `active=true` alone makes it a **DRAFT**, which
+  n8n boots but never activates. The startup log says it plainly:
+
+      Finished building workflow dependency index. Processed 61 draft workflows, 0 published workflows.
+
+  `n8n import:workflow` always imports with `activeVersionId = NULL`. `scripts/n8n-push`
+  then ran a **bulk `UPDATE workflow_entity SET active=true`** (a speed optimization
+  that had replaced the per-workflow `publish:workflow` CLI). That set the flag but
+  **never published**, so all 61 stayed drafts → 0 triggers registered.
+
+  ## The encryption-key was a RED HERRING
+  We first suspected the credential-decryption failure (the known
+  `N8N_ENCRYPTION_KEY` drift: blueprint `7895…` vs instance `483f…`). It is NOT the
+  cause of inactivity: with the key still mismatched, **57 workflows activated** once
+  published. Trigger **registration does not need decrypted credentials** — creds are
+  only needed at RUN time. (Cred drift is a separate issue — see references.)
+
+  ## Fix (applied) — publish in the same bulk SQL
+  Publishing simply means `activeVersionId = versionId` on `workflow_entity` — verified
+  no `workflow_published_version` row is required. So `scripts/n8n-push` now does, in
+  one statement (fast, no 286s CLI loop):
+
+      UPDATE workflow_entity SET active=true, "activeVersionId"="versionId" WHERE id IN (...);
+
+  Verified end-to-end on a fresh local stack: runtime `/rest/active-workflows`
+  went **0 → 57**, and the startup log flipped to `0 draft workflows, 61 published`.
+
+  ## Why 57 register, not 61 (expected, not a bug)
+  All 61 are published, but `/rest/active-workflows` lists only **standalone trigger
+  listeners**. ~4 of the 61 are invoked **indirectly** and correctly do not appear
+  there: `executeWorkflowTrigger` sub-workflows (called by other workflows),
+  `errorTrigger` error-handlers, and `mcpTrigger` servers. They are published/active
+  and ready — they just aren't standalone listeners. So the deployment's gate is
+  "**no blueprint-active workflow is left a draft**" (published == declared), with
+  runtime-active reported as a sanity signal.
+
+  ## How the deployment overcomes this
+  1. `scripts/n8n-push` publishes (activeVersionId=versionId), not just active=true.
+  2. The `publish:workflow` fallback path was already correct (it publishes per-id);
+     the bulk path now matches it.
+  3. CI `integration-n8n-active-state` verifies against n8n's RUNTIME + publish state
+     (not the bare `active` column, which is the signal that lied), and stays GATING
+     so a regression to silent-drafts fails the build.
+
+tasks:
+  - { text: "Diagnose 3-way DB/UI/runtime active-state discrepancy on a fresh stack", done: true }
+  - { text: "Root-cause to n8n 2.x draft/published model (activeVersionId)", done: true }
+  - { text: "Fix scripts/n8n-push: bulk SQL sets active=true AND activeVersionId=versionId", done: true }
+  - { text: "Verify end-to-end locally (runtime active 0 -> 57; '0 draft, 61 published')", done: true }
+  - { text: "CI active-state check gates on runtime/publish state, not the active column", done: true }
+  - { text: "Decide whether the ~4 sub-workflow/error/mcp 'active' flags should stay set in the blueprint", done: false }
+
+references:
+  - ai/context/workflow-state-sync.md
+  - scripts/n8n-push
+  - scripts/ci-verify.sh
+  - .github/workflows/ci-verify.yml
+  - issues/n8n-encription-rotate.yaml

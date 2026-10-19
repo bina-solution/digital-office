@@ -1,0 +1,5 @@
+# the built binary, by any name a target gives it — the source is the artifact that is tracked
+/dgo
+/dgo.exe
+/dgo-*
+/dist/

@@ -1,0 +1,886 @@
+<!doctype html>
+<html lang="he" dir="rtl"><head><meta charset="utf-8">
+<!--
+  כל מקביל · live parallel-work observability for the Bina business system.
+  Design + build: Claude (Opus 4.8), acting product manager for this window.
+  A calm, Hebrew-native (RTL) timeline: system → process → parallel runs, "now" pinned right,
+  live HUD + concurrency pulse, hover card + detail drawer. Light Bina design; English
+  identifiers isolated LTR. Poll-driven live (the console proxy is HTTP-only).
+
+  Navigation: wheel = scroll rows (releases to the page at the top/bottom, never trapped),
+  drag = pan. Zoom/pan with the on-screen − + ‹ › controls (also keyboard −/+ and ← →),
+  smoothly animated; double-click or "תצוגה מלאה" resets. Click a dense process (×N מקביל) to
+  fan it out to its full parallelism depth; click a system header to collapse it. The pulse
+  doubles as a minimap — it boxes the slice you're viewing. Gesture hint teaches then fades.
+-->
+
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>כל מקביל · Bina</title>
+<style>
+/* ── this screen's own: type and one radius — the colours are the office's palette, in the block below ── */
+:root{
+  --font:"Segoe UI",system-ui,-apple-system,"Noto Sans Hebrew","Assistant",Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;--r:16px;
+}
+/* @bina-theme-tokens:start */
+/* OLIVE GROVE — the one palette of the office (the owner, 2026-10-07 · DGO-450). Four hues, sampled
+   from his mock-up, and the ground they stand on. A screen never writes a colour: it names one of
+   these. Each hue is the colour itself (a FILL — a button, a bar, a dot), «-d» for text and thin
+   lines on the ground (4.5:1 or more), «-soft» and «-line» for a tint and its hairline, and «-ink»
+   for what is written ON the fill. The role names every screen already uses point at them:
+   (no backtick in this block: one of its copies lives inside a script's template string)
+     olive  the brand and the main action · what is well, what is done
+     sky    what is in motion, what only informs · a link
+     lime   look here — a warning, something waiting
+     plum   a person must act — a failure, a removal, the one final action
+   Contrast, measured (WCAG): ink on the ground 13.7 · muted 4.65 · light text on olive 5.51 and on
+   plum 9.54 · ink on lime 6.88 · its ink on sky 6.32 · sky-d 4.61 · lime-d 4.70 · violet 5.32 ·
+   on the desk: its ink 6.32 (dark: 13.96), and 11.2 where the sky pales (dark: 5.12). */
+:root,:root[data-theme="light"]{
+  color-scheme:light;
+  accent-color:var(--accent);   /* the browser's OWN controls - a checkbox, a radio, a range, a progress bar - on both grounds: said once, here (it was said for eight single controls, and every other one was the browser's blue) */
+  --bg:#f3f5f7; --surface:#fff; --surface-2:#f9fafb; --ink:#1f2a17; --muted:#6a7068; --line:#dcdfde;
+  --olive:#56693f; --olive-d:#475734; --olive-soft:#e7eae4; --olive-line:#bfc6b6; --olive-ink:#f3f5f7;
+  --sky:#7baae3; --sky-d:#2a6fc4; --sky-soft:#edf3fb; --sky-line:#cddff4; --sky-ink:#13263f;
+  --lime:#a9b84c; --lime-d:#69732e; --lime-soft:#f3f5e6; --lime-line:#dee4bb; --lime-ink:#1f2a17;
+  --plum:#5b3349; --plum-d:#4a303b; --plum-soft:#e8e2e6; --plum-line:#c1b1ba; --plum-ink:#f3f5f7;
+  --accent:var(--olive); --accent-d:var(--olive-d); --accent-soft:var(--olive-soft); --accent-ink:var(--olive-ink);
+  --blue:var(--sky-d); --amber:var(--lime-d); --red:var(--plum);
+  --violet:#7c5c6d;   /* plum, lifted a fifth toward white: someone has to look — nothing has failed */
+  --ok:var(--olive); --warn:var(--lime-d); --danger:var(--plum); --info:var(--sky-d);
+  --ok-soft:var(--olive-soft); --warn-soft:var(--lime-soft); --danger-soft:var(--plum-soft); --info-soft:var(--sky-soft);
+  --red-soft:var(--plum-soft); --amber-soft:var(--lime-soft); --blue-soft:var(--sky-soft); --violet-soft:var(--plum-soft);
+  --side:var(--olive); --side-ink:#f3f5f7; --side-mut:#dce1da; --side-line:#788765;
+  --desk:var(--sky); --desk-ink:var(--sky-ink);   /* desktop mode's ground is the sky (the owner, DGO-452), and what is written straight on it */
+  --scrim:rgba(31,42,23,.5);                      /* what dims a screen behind a pop-up */
+  --shadow:0 1px 3px rgba(31,42,23,.08),0 6px 24px rgba(31,42,23,.06);
+  --shadow-lg:0 20px 60px rgba(31,42,23,.28);
+  /* ONE COLOUR AND ONE ANIMAL PER OFFICE (the owner, 2026-10-09 · flt-002). When offices are linked,
+     a person reads WHICH office a thing belongs to without opening it, so each office gets a hue of
+     its own. The hue is an IDENTITY and never a health state: an office that stopped answering keeps
+     its colour, and the quiet mark is the one that says "not answering". Each is an ALIAS of the
+     palette's own hue — no fourth value is invented, and because the ground re-points the hue, the
+     office mark follows the ground by itself. Each office's animal (elephant, deer, eagle) is a
+     glyph of bina-icons.js. */
+  --office-hp:var(--muted);   /* hp · elephant — grey: the heavy laptop at home, in the palette's own grey */
+  --office-mac:var(--lime);   /* macbook · deer — yellow: the palette has one yellow and it is lime. A FILL, so what is written ON it is --lime-ink, never this */
+  --office-vps:var(--sky-d);  /* vps · eagle — deep sky blue, «the eagle in the clouds». THE OWNER'S OWN CHOICE (2026-10-09, in writing: vps = נשר + כחול-שמיים) — this line is the colour he picked, not a default kept for him */
+}
+
+/* ── A LINKED OFFICE'S MARK, BY NAME (flt-004) ───────────────────────────────────────────────
+   The link carries a NAME — mark: {color, animal} in the catalog, from the office's own identity
+   — and never a value: the office that DRAWS a linked tile owns the pixels, so it paints the name
+   with its own palette. These seven rules are that translation, one per family above; a screen sets
+   data-office-hue="lime" and paints var(--office-hue).
+   A name this file does not know paints nothing, which is why the vocabulary in
+   apps/dgo-extend/identity.py may only name families that exist here — and why --red and --ok
+   are not among them: they mean «danger» and «it is well» on every screen in the office. */
+[data-office-hue="grey"]   { --office-hue:var(--muted); }
+[data-office-hue="lime"]   { --office-hue:var(--lime); }
+[data-office-hue="sky"]    { --office-hue:var(--sky-d); }
+[data-office-hue="olive"]  { --office-hue:var(--olive-d); }
+[data-office-hue="plum"]   { --office-hue:var(--plum); }
+[data-office-hue="blue"]   { --office-hue:var(--blue); }
+[data-office-hue="violet"] { --office-hue:var(--violet); }
+/* the dark ground is the same four hues on the palette's own ink, and the SAME legend. Olive on that
+   ink is 2.5:1, so its text step there is olive LIFTED — its own hue and saturation, lighter (7.14
+   on a card, 4.82 on its own tint) — and the brand, the main action and «it is well» take that step.
+   Lime stays «look here» and the sky «in motion», as on the light ground: were lime the accent here
+   (it was, for a day), a warning, a selection and «it is well» were one colour. Each «-d» on its
+   own «-soft» there, measured: olive 4.82 · sky 4.62 · lime 4.63 · plum 4.71. */
+@media (prefers-color-scheme:dark){
+  :root{ color-scheme:dark;
+         --bg:#141b0f; --surface:#1f2a17; --surface-2:#192213; --ink:#f3f5f7; --muted:#a2a8a2; --line:#414a3b;
+         --olive-d:#a5ba8c; --olive-soft:#384629; --olive-line:#56693f;
+         --sky-d:#7baae3; --sky-soft:#2e3f38; --sky-line:#4d6a8c;
+         --lime-d:#a9b84c; --lime-soft:#3b4622; --lime-line:#69732e;
+         --plum-d:#ad99a4; --plum-soft:#402f33; --plum-line:#7c5c6d;
+         --accent:var(--olive-d); --accent-ink:var(--surface);
+         --red:#ad99a4; --violet:#bdadb6; --danger:#ad99a4; --ok:var(--olive-d); --side:var(--surface);
+         --desk:var(--sky-ink); --desk-ink:var(--ink); --scrim:rgba(0,0,0,.6);
+         --shadow:0 1px 3px rgba(0,0,0,.4),0 6px 24px rgba(0,0,0,.3);
+         --shadow-lg:0 20px 60px rgba(0,0,0,.55); }
+}
+:root[data-theme="midnight"]{
+  color-scheme:dark;
+  --bg:#141b0f; --surface:#1f2a17; --surface-2:#192213; --ink:#f3f5f7; --muted:#a2a8a2; --line:#414a3b;
+  --olive-d:#a5ba8c; --olive-soft:#384629; --olive-line:#56693f;
+  --sky-d:#7baae3; --sky-soft:#2e3f38; --sky-line:#4d6a8c;
+  --lime-d:#a9b84c; --lime-soft:#3b4622; --lime-line:#69732e;
+  --plum-d:#ad99a4; --plum-soft:#402f33; --plum-line:#7c5c6d;
+  --accent:var(--olive-d); --accent-ink:var(--surface);
+  --red:#ad99a4; --violet:#bdadb6; --danger:#ad99a4; --ok:var(--olive-d); --side:var(--surface);
+  --desk:var(--sky-ink); --desk-ink:var(--ink); --scrim:rgba(0,0,0,.6);
+  --shadow:0 1px 3px rgba(0,0,0,.4),0 6px 24px rgba(0,0,0,.3);
+  --shadow-lg:0 20px 60px rgba(0,0,0,.55);
+}
+/* THE KEYBOARD'S RING - what the browser draws around the stop the keyboard is on, in the palette, wherever
+   a part draws none of its own. It has no specificity at all (:where), so any rule of a part wins. Two
+   screens said this for themselves; on the others nearly every stop wore the browser's ring (DGO-455).
+   A field keeps the offset it has - fourteen rules draw a field's own outline and say no offset. An area
+   (a scroll box, a table) takes the ring inside, where nothing clips it; a control takes it outside,
+   where a filled button does not hide it. */
+:where(:focus-visible){outline:2px solid var(--accent)}
+:where(:focus-visible:not(a,button,summary,[role=button],input,select,textarea)){outline-offset:-2px}
+:where(a,button,summary,[role=button]):focus-visible{outline-offset:2px}
+/* HEBREW AT A HEAVY WEIGHT - on Windows, where the first family of --font is installed. "Segoe UI" has its
+   Hebrew in Light, Regular, Semibold and Bold. Asked for 800 or 900 the browser takes the family's Black
+   face, which has none, and so has every family after it - so the Hebrew of every title at 800 was drawn in
+   the system's last-resort serif, thin, beside Latin in Black: «חשבונות ומראות» at 20px is 150px wide at 700
+   and 120px at 800 (Chrome 154; the screens ask for 800 in 167 places, the question's title among them).
+   These faces give the family's HEBREW RANGE the faces that have it. A family a sheet names is no longer the
+   system's for those characters, so every weight and both styles are named, each as the system resolves it:
+   measured, only upright 800 and 900 change. Any other character is not theirs and goes on to the next
+   family the screen names - system-ui in --font, on Windows the same faces, Black included - which is why
+   G27 asks that system-ui follows wherever a screen names this family itself. Where the family is not
+   installed nothing here resolves and nothing changes. */
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Light");font-weight:100 300;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI");font-weight:400;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Semibold");font-weight:500 600;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Bold");font-weight:700 900;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Light Italic");font-weight:100 300;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Italic");font-weight:400;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Semibold Italic");font-weight:500 600;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Bold Italic");font-weight:700 900;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+/* @bina-theme-tokens:end */
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--font);font-size:14px;overflow:hidden;
+  display:flex;flex-direction:column;-webkit-font-smoothing:antialiased;user-select:none}
+.ltr{direction:ltr;unicode-bidi:isolate}
+.mono{font-family:var(--mono)}
+
+/* header + HUD */
+.top{padding:16px 22px 10px;display:flex;flex-direction:column;gap:12px;flex:none}
+
+/* the tiles, and the pulse beside them while the row has room for both */
+.hudrow{display:flex;gap:12px;align-items:stretch;flex-wrap:wrap}
+/* the tiles, their row and the strip they become in a window are the office's (.pg-kpi in
+   .pg-kpis); what is this screen's: that there are five, a breathing bar while something is
+   running, and that a tile is never under 116px — at a FIXED 116px «151.9 שע׳» lost its unit to
+   the tile's edge, so the five share one width, the widest number's. */
+.hud{--pg-kpi-cols:5}
+.hud .stat{min-width:116px}
+.stat[data-state=running]::after{animation:sheen 1.4s infinite}
+@keyframes sheen{0%,100%{opacity:.35}50%{opacity:1}}
+
+/* pulse chart */
+.pulse{background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);
+  padding:8px 8px 2px;height:92px;position:relative;flex:1;min-width:280px}
+.pulse canvas{width:100%;height:100%;display:block}
+.pulse .plabel{position:absolute;top:8px;inset-inline-end:14px;font-size:11px;color:var(--muted);font-weight:600}
+
+/* controls */
+.ctrls{padding:0 22px 12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;flex:none}
+.seg{display:inline-flex;background:var(--surface-2);border:1px solid var(--line);border-radius:11px;padding:3px;gap:2px}
+.seg button{border:none;background:transparent;color:var(--muted);font-family:inherit;font-size:13px;font-weight:700;
+  padding:7px 14px;min-height:30px;border-radius:8px;cursor:pointer;transition:.12s}
+.seg button.on{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px var(--line)}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{border:1px solid var(--line);background:var(--surface);color:var(--muted);font-size:12.5px;font-weight:700;
+  padding:6px 12px;border-radius:999px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:.12s}
+.chip .cd{width:9px;height:9px;border-radius:50%}
+.chip.off{opacity:.42} .chip:hover{border-color:var(--muted)}
+.search{flex:1;min-width:150px;max-width:280px;background:var(--surface);border:1px solid var(--line);border-radius:11px;
+  padding:8px 13px;font-family:inherit;font-size:13px;color:var(--ink)}
+.search:focus{outline:2px solid var(--accent);border-color:transparent}
+.spacer{flex:1}
+
+/* timeline */
+.stage{flex:1;margin:0 22px 18px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
+  box-shadow:var(--shadow);position:relative;overflow:hidden;min-height:0}
+#tl{display:block;width:100%;height:100%;cursor:crosshair}
+.empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:14px}
+.tlc{position:absolute;top:10px;left:12px;z-index:6;display:flex;gap:6px;align-items:center}
+.tlc button{border:1px solid var(--line);background:var(--surface);color:var(--ink);font-family:inherit;
+  font-size:16px;font-weight:800;width:34px;height:32px;border-radius:9px;cursor:pointer;box-shadow:var(--shadow);
+  display:inline-flex;align-items:center;justify-content:center;line-height:1;transition:.1s;padding:0}
+.tlc button:hover{border-color:var(--muted);background:var(--surface-2)}
+/* a drawn icon, never a text glyph: one stroke, the size of the text beside it */
+.gi{width:1em;height:1em;flex:none;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.tlc button:active{transform:translateY(1px)}
+.zbtn{font-size:12px!important;font-weight:700!important;width:auto!important;padding:0 12px!important;gap:6px;
+  color:var(--accent-d);border-color:var(--accent-soft)!important;display:none!important}
+.zbtn.show{display:inline-flex!important}
+.hint{position:absolute;top:17px;left:178px;z-index:5;color:var(--muted);font-size:11px;font-weight:600;opacity:.72;
+  pointer-events:none;background:var(--surface);padding:2px 8px;border-radius:8px;transition:opacity .6s}
+@media (pointer:coarse),(max-width:700px){.hint{display:none}}
+
+/* ── COMPACT: a desktop-mode window, a tablet, a phone ──────────────────────────
+   The TIMELINE is this screen; everything above it is a summary of it. In anything smaller than
+   a wide, tall page the summary took the page: in the window desktop mode opens (580 × 530) the
+   title, five tiles in two rows, the pulse and two rows of filters ended at 526px and the timeline
+   was the strip under them — 66px in a half-screen window, 2 in a quarter, 136 on a phone
+   (measured 2026-10-07; the owner: «ממש בלתי שמיש בדסקטופ ובמובייל»). So below a roomy page the
+   five numbers are ONE strip (the office's, in a short frame and at a phone's width), the pulse
+   — which every lane's own density row already draws — steps aside, the title is one line and
+   the filters are tight; and a SHORT window gives up the
+   title, then the strip, before it takes a pixel from the lanes. Decided by the frame's own
+   width AND height: a window is short far more often than it is narrow. */
+@media (max-width:1000px),(max-height:699px){
+  .top{padding:10px 12px 6px;gap:8px}
+  .top .pg-head{margin:0;padding:0;border:0;gap:8px;flex-wrap:nowrap;align-items:center}
+  .top .pg-head h1{font-size:17px;line-height:24px}
+  .top .pg-sub{display:none}
+  .top .pg-actions{width:auto;margin-inline-start:auto}
+  .hudrow{display:block}
+  .pulse{display:none}
+  .hud .stat{min-width:0}
+  .ctrls{padding:0 12px 8px;gap:6px}
+  .ctrls .spacer{display:none}
+  .seg{padding:2px}
+  .seg button{padding:5px 10px;font-size:12.5px}
+  .chip{padding:4px 10px;font-size:12px;min-height:30px}
+  .search{min-width:110px;min-height:30px;padding:5px 10px}
+  .stage{margin:0 10px 10px}
+  .hint{display:none}
+  .tlc{top:6px;left:8px;gap:4px}
+}
+/* a phone's width: two rows of filters, not three — the search takes the room beside the time
+   window, and the states sit with the sources */
+@media (max-width:430px){
+  .seg button{padding:5px 8px}
+  #win{order:1} #q{order:2;flex:1 1 110px;max-width:none} #stat{order:3} #sys{order:4}
+}
+@media (max-height:429px){ .top .pg-head{display:none} }
+/* the smallest window (380 × 260): the filters are ONE row that slides, and the rest is lanes */
+@media (max-height:329px){
+  .top{display:none}
+  .ctrls{padding-top:8px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+  .ctrls::-webkit-scrollbar{display:none}
+  .ctrls>*{flex:none}
+  .chips{flex-wrap:nowrap}
+}
+
+/* tooltip */
+.tip{position:fixed;z-index:40;pointer-events:none;background:var(--surface);border:1px solid var(--line);
+  border-radius:12px;box-shadow:var(--shadow-lg);padding:11px 13px;min-width:190px;max-width:320px;font-size:12.5px;
+  opacity:0;transform:translateY(4px);transition:opacity .1s,transform .1s}
+.tip.show{opacity:1;transform:none}
+.tip .tt{font-weight:800;font-size:13px;margin-bottom:5px;display:flex;align-items:center;gap:7px}
+.tip .tk{color:var(--muted)} .tip .tr{display:flex;justify-content:space-between;gap:14px;margin-top:3px}
+.badge{font-size:10.5px;font-weight:800;padding:2px 8px;border-radius:999px}
+.b-success{background:var(--accent-soft);color:var(--accent-d)} .b-running{background:var(--info-soft);color:var(--blue)}
+.b-error{background:var(--red-soft);color:var(--red)} .b-unknown{background:var(--bg);color:var(--muted)}
+
+/* drawer */
+.scrim{position:fixed;inset:0;background:var(--scrim);opacity:0;pointer-events:none;transition:.16s;z-index:44}
+.scrim.show{opacity:1;pointer-events:auto}
+/* app is always RTL — drawer sits on the LEFT (inline-end) and hides by sliding off the left edge */
+.drawer{position:fixed;top:0;bottom:0;left:0;width:min(430px,92vw);background:var(--surface);
+  transform:translateX(-102%);transition:transform .22s cubic-bezier(.2,.8,.2,1);
+  z-index:45;display:flex;flex-direction:column}
+/* the shadow is the OPEN drawer's: on the parked one it painted a grey band down the screen edge */
+.drawer.show{transform:none;box-shadow:var(--shadow-lg)}
+.drawer .dh{padding:18px 20px;border-bottom:1px solid var(--line);display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.drawer .dh h3{margin:0 0 4px;font-size:17px;font-weight:800}
+.drawer .db{padding:16px 20px;overflow:auto;flex:1}
+.drow{display:flex;justify-content:space-between;gap:16px;padding:9px 0;border-bottom:1px solid var(--line);font-size:13px}
+.drow .k{color:var(--muted);font-weight:600}
+.x{border:none;background:var(--surface-2);border-radius:9px;width:34px;height:34px;cursor:pointer;font-size:17px;color:var(--muted);flex:none;display:inline-grid;place-items:center}
+.dact{padding:14px 20px 0;display:none}
+.dact.show{display:block}
+.dbtn{display:flex;align-items:center;justify-content:center;gap:7px;width:100%;padding:10px 14px;
+  background:var(--accent-soft);color:var(--accent-d);border:1px solid var(--accent-soft);border-radius:11px;
+  font-weight:800;font-size:13px;font-family:inherit;text-decoration:none;cursor:pointer;transition:.12s}
+.dbtn:hover{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+/* A missing button is indistinguishable from a button that was never built. When the span IS an
+   n8n execution but the deep link cannot be composed, the row stays — greyed, unclickable, and
+   carrying the reason — so the operator learns why rather than wondering where the button went. */
+.dbtn.off,.dbtn.off:hover{background:var(--surface-2);color:var(--muted);border-color:var(--line);
+  cursor:not-allowed;font-weight:600}
+.dnote{margin-top:6px;font-size:11.5px;color:var(--muted);line-height:1.5}
+
+/* @bina-page:start */
+.pg{
+  --pg-max:1180px;
+  width:100%;
+  max-width:var(--pg-max);
+  margin:0 auto;
+  padding:20px 24px 48px;
+  box-sizing:border-box;
+}
+/* the header: title block at the start, actions at the end. It wraps rather than shrinking,
+   which is what keeps a long action row off the title on a narrow screen. */
+.pg-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:16px;
+  flex-wrap:wrap;
+  margin-bottom:18px;
+  padding-bottom:14px;
+  border-bottom:1px solid var(--line);
+}
+.pg-head h1{
+  margin:0;
+  font-size:22px;
+  line-height:30px;
+  font-weight:700;
+  letter-spacing:-.01em;
+  color:var(--ink);
+}
+.pg-sub{margin-top:3px;color:var(--muted);font-size:13px;line-height:20px;max-width:70ch}
+.pg-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-inline-start:auto}
+
+/* the live chip. One chip, everywhere: a dot that beats while the number is fresh, and that
+   stops dead when it is not — a still dot is the whole signal that the figure is old. */
+.pg-live{
+  display:inline-flex;align-items:center;gap:7px;
+  font-size:12.5px;line-height:18px;font-weight:700;white-space:nowrap;
+  color:var(--accent-d);
+  background:var(--accent-soft);
+  border-radius:999px;
+  padding:4px 11px;
+  border:0;font-family:inherit;          /* the chip is a <button> where it pauses the refresh */
+}
+button.pg-live{cursor:pointer}
+.pg-live[data-stale="1"]{color:var(--amber);background:var(--warn-soft)}
+.pg-live .beat{width:9px;height:9px;border-radius:50%;background:currentColor;flex:none;animation:pg-beat 1.6s infinite}
+.pg-live[data-stale="1"] .beat{animation:none}
+@keyframes pg-beat{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 45%,transparent)}70%{box-shadow:0 0 0 9px transparent}100%{box-shadow:0 0 0 0 transparent}}
+
+/* the card. `> h2/h3` is the card's own title; an app that puts a toolbar in it uses .pg-cardhead */
+.pg-card{
+  box-sizing:border-box;
+  background:var(--surface);
+  border:1px solid var(--line);
+  border-radius:14px;
+  padding:16px 18px;
+  box-shadow:var(--shadow);
+  margin-bottom:16px;
+}
+.pg-card>h2,.pg-card>h3{margin:0 0 10px;font-size:15px;line-height:22px;font-weight:700;color:var(--ink)}
+.pg-cardhead{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.pg-cardhead>h2,.pg-cardhead>h3{margin:0;font-size:15px;line-height:22px;font-weight:700}
+.pg-cardhead .pg-actions{margin-inline-start:auto}
+.pg-hint{color:var(--muted);font-size:12px;line-height:18px;font-weight:400}
+.pg-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pg-note{color:var(--muted);font-size:12.5px;line-height:19px}
+.pg-empty{padding:18px 4px;color:var(--muted);font-size:13px}
+
+/* ── the KPI tile: the one number a screen leads with ─────────────────────────────
+   Four of these screens drew it four ways — 26, 28 and 30px numbers, three paddings, with and
+   without a shadow (measured 2026-10-06). One tile: a 12.5px label over a 26px tabular number.
+   A state is said twice — the number's colour and a 3px bar on the reading edge — through
+   `data-state`, in the product's legend; a zero is not a state, so a screen leaves the attribute
+   off and adds `is-zero`. The legend is the palette's: what waits is lime, what is in motion is
+   sky, what is done is olive, what failed is plum, what needs a person is plum lifted. What a
+   screen adds of its own (a chip, a sparkline, a sub-line) goes inside the tile; how many tiles
+   share a row is the screen's (`--pg-kpi-cols`), so that no row ends in a lone one. */
+.pg-kpis{display:grid;grid-template-columns:repeat(var(--pg-kpi-cols,4),minmax(0,1fr));gap:12px}
+.pg-kpi{position:relative;min-width:0;overflow:hidden;background:var(--surface);
+  border:1px solid var(--line);border-radius:14px;padding:14px 16px;
+  box-shadow:var(--shadow)}
+.pg-kpi-k{display:block;color:var(--muted);font-size:12.5px;line-height:18px;font-weight:600}
+/* `fit-content`: the number sits under its label at the page's reading edge even when it is an
+   LTR token (`.num`) — as a full-width block its own direction sent it to the far side. */
+.pg-kpi-v{display:block;width:fit-content;max-width:100%;margin-top:4px;font-size:26px;line-height:30px;
+  font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums;white-space:nowrap}
+.pg-kpi-v small{font-size:13px;font-weight:700;letter-spacing:0;margin-inline-start:4px;color:var(--muted)}
+.pg-kpi.is-zero .pg-kpi-v{color:var(--muted)}
+.pg-kpi[data-state]::after{content:"";position:absolute;inset-block:0;inset-inline-start:0;width:3px;background:var(--pg-kpi-c)}
+.pg-kpi[data-state] .pg-kpi-v{color:var(--pg-kpi-c)}
+.pg-kpi[data-state=todo]{--pg-kpi-c:var(--amber)}
+.pg-kpi[data-state=running]{--pg-kpi-c:var(--blue)}
+.pg-kpi[data-state=done]{--pg-kpi-c:var(--accent-d)}
+.pg-kpi[data-state=failed]{--pg-kpi-c:var(--red)}
+.pg-kpi[data-state=person]{--pg-kpi-c:var(--violet)}
+
+/* touch: the header's controls are the ones a phone reaches for first */
+@media (pointer:coarse){
+  .pg-actions .btn,.pg-actions button,.pg-actions a.btn{min-height:44px}
+}
+@media (max-width:640px){
+  .pg{padding:14px 12px 40px}
+  .pg-head{gap:10px;margin-bottom:14px}
+  .pg-head h1{font-size:19px;line-height:26px}
+  .pg-card{padding:14px;border-radius:12px}
+  .pg-actions{margin-inline-start:0;width:100%}
+}
+/* ── a SHORT frame: a window in desktop mode ─────────────────────────────────────
+   Desktop mode opens an app in a window of about 580 × 530, and a person halves and quarters it.
+   A page laid out for a tall frame spent that whole window on its own heading: at 640 × 330 five
+   of the office's screens showed their title, their sentence, their buttons and four tiles — and
+   none of what they are for (photographed 2026-10-07). In a short frame the heading is ONE line:
+   the window's bar already names the app, so the sentence under the title steps aside (a line
+   that reports something — `data-live` — stays), and the room is the content's. */
+@media (max-height:699px){
+  .pg{padding-block-start:10px}
+  .pg-head{gap:8px;margin-bottom:10px;padding-bottom:8px;align-items:center}
+  .pg-head h1{font-size:17px;line-height:24px}
+  .pg-sub:not([data-live]){display:none}
+  .pg-actions{width:auto;margin-inline-start:auto;gap:6px}
+  .pg-actions .btn,.pg-actions button,.pg-actions a.btn{padding:4px 9px;font-size:12px}
+}
+/* …and in the SMALLEST window — its corner dragged in as far as it goes, 380 × 224 of page — a
+   title over a row of buttons was 88px of it. The window's bar already says the screen's name,
+   so where the heading has actions the title steps aside and they are its one line. A title
+   that names a VIEW (`data-view`) stays: the bar says the app, not where in it. */
+@media (max-height:699px) and (max-width:430px){
+  .pg-head:not([data-view]):has(.pg-actions) h1{display:none}
+  .pg-actions{margin-inline-start:0}
+  /* …and a line that reports (`data-live`) shares that line with them, as far as it fits */
+  .pg-head:has(.pg-sub[data-live]){flex-wrap:nowrap}
+  .pg-head>:first-child:has(.pg-sub[data-live]){flex:1 1 0;min-width:0}
+  .pg-sub[data-live]{margin-top:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pg-head:has(.pg-sub[data-live]) .pg-actions{flex:none;flex-wrap:nowrap}
+}
+/* …and there, and at a phone's width, the leading numbers are one STRIP rather than tiles: a
+   hairline grid, key over value, in the columns the screen declares (`--pg-kpi-cols`). Four tiles
+   were 184px of a 530px window, before the first row of what they count. */
+@media (max-height:699px),(max-width:700px){
+  .pg-kpis{gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .pg-kpis>.pg-kpi{border:0;border-radius:0;box-shadow:none;padding:5px 8px}
+  .pg-kpis .pg-kpi-k{font-size:10.5px;line-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pg-kpis .pg-kpi-v{margin-top:0;font-size:17px;line-height:22px}
+  .pg-kpis .pg-kpi-v small{font-size:10.5px;margin-inline-start:3px}
+}
+@media (prefers-reduced-motion:reduce){
+  .pg-live .beat{animation:none}
+}
+/* @bina-page:end */
+</style></head>
+<body>
+  <div class="top">
+    <header class="pg-head">
+      <div>
+        <h1>כל מקביל</h1>
+        <div class="pg-sub">מבט חי על כל מה שרץ במקביל במערכת</div>
+      </div>
+      <div class="pg-actions">
+        <span class="pg-live" id="live"><span class="beat"></span><span id="liveTxt">חי</span></span>
+      </div>
+    </header>
+    <div class="hudrow">
+      <div class="hud pg-kpis" id="hud"></div>
+      <div class="pulse"><span class="plabel">עומס מקבילי</span><canvas id="pulse"></canvas></div>
+    </div>
+  </div>
+  <div class="ctrls">
+    <div class="seg" id="win"></div>
+    <div class="seg" id="stat"></div>
+    <div class="chips" id="sys"></div>
+    <div class="spacer"></div>
+    <input class="search" id="q" placeholder="חיפוש תהליך / מזהה…">
+  </div>
+  <div class="stage"><canvas id="tl"></canvas><div class="empty" id="empty">טוען…</div>
+    <div class="tlc">
+      <button id="cPanL" title="הזז אחורה (מקש חץ שמאלה)" aria-label="הזז אחורה"><svg class="gi" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>
+      <button id="cZoomOut" title="התרחק (מקש מינוס)" aria-label="התרחק"><svg class="gi" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button>
+      <button id="cZoomIn" title="התקרב (מקש פלוס)" aria-label="התקרב"><svg class="gi" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+      <button id="cPanR" title="הזז קדימה (מקש חץ ימינה)" aria-label="הזז קדימה"><svg class="gi" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+      <button class="zbtn" id="zreset" title="חוזר לכל טווח הזמן ולעקיבה אחרי עכשיו"><svg class="gi" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5"/></svg> תצוגה מלאה</button>
+    </div>
+    <div class="hint">גלגלת — גלילה · מקשי החיצים — הזזה · פלוס ומינוס — זום</div></div>
+
+  <div class="tip" id="tip"></div>
+  <div class="scrim" id="scrim"></div>
+  <div class="drawer" id="drawer"><div class="dh"><div><h3 id="dTitle"></h3><div class="sub mono" id="dSub"></div></div><button class="x" id="dX" title="סגירה" aria-label="סגירה"><svg class="gi" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div><div class="dact" id="dAct"><a class="dbtn" id="dN8nBtn" target="_blank" rel="noopener noreferrer"><svg class="gi" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg> פתח ב-n8n</a><div class="dnote" id="dN8nNote"></div></div><div class="db" id="dBody"></div></div>
+
+<script>
+"use strict";
+const $=s=>document.querySelector(s), DPR=()=>Math.max(1,Math.min(2.5,devicePixelRatio||1));
+// A source the server publishes but this map does not name still renders — renderSys/draw fall back
+// to the raw `src` and the neutral grey — so adding a lane server-side never needs a UI release.
+// These three (apitools · mailapi · drive) are the request lanes: same gunicorn JSON access line,
+// one lane each, deliberately three different hues so a dense timeline stays readable.
+// N8N_BG is the SECOND automations section: the same story as `אוטומציות` seen from the machines
+// that run it (every n8n worker and task runner is a lane inside it), so it is pinned directly
+// below that section in build() instead of floating by span count like every other source.
+const N8N_BG="n8n-bg";
+const HE_SRC={indox:"מסמכים נכנסים",n8n:"אוטומציות","n8n-bg":"אוטומציות - תהליכי רקע",traefik:"רשת",docker:"מכולות",gmail:"דואר",apitools:"מנוע מסמכים",mailapi:"שירות הדואר",drive:"דרייב",webhook:"וובהוק",logspan:"יומן",custom:"מותאם",wa:"ווצאפ",browser42:"דפדפן",bina:"בינה"};
+// The timeline names no colour. It draws with the office's palette, read where it is written (the
+// theme block) each time the data is loaded — so a theme that turns is followed.
+//   a run's state: done is olive, in motion is sky, failed is plum — each a fill and the ink on it
+//   a source: its place in the list above, taken round the palette's line steps (neighbours differ)
+const P={}, ST={success:["ok","surface"],running:["sky-d","surface"],error:["red","surface"],unknown:["muted","surface"]};
+const SRC_STEP=["sky-d","olive-d","plum-d","lime-d","violet","muted"];
+function readPalette(){ const cs=getComputedStyle(document.documentElement);
+  for(const n of ["surface","surface-2","ink","line","ok","red",...SRC_STEP]) P[n]=cs.getPropertyValue("--"+n).trim(); }   // --ok and --red: olive's and plum's steps that are lifted on the dark ground
+readPalette();
+const srcColor=s=>{ const i=Object.keys(HE_SRC).indexOf(s); return P[i<0?"muted":SRC_STEP[i%SRC_STEP.length]]; };
+const ST_HE={success:"הצלחה",running:"רץ",error:"שגיאה",unknown:"—"};
+const WINS=[["15 דק׳",0.25],["30 דק׳",0.5],["שעה",1],["6 שעות",6],["יממה",24],["7 ימים",168]];
+const STATS=[["all","הכל"],["running","רץ"],["success","הצלחה"],["error","שגיאה"]];
+
+const S={winH:0.25,stat:"all",sys:{},q:"",spans:[],groups:[],live:true,now:Date.now(),
+  scroll:0,rowH:26,collapsed:{},expanded:{},font:"",_contentH:0,
+  viewS:0,viewE:0,follow:true,hover:null,drag:null,tS:null,tE:null,n8nUrl:""};
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+
+// n8n base URL (e.g. https://n8n.localhost) — fetched once so the drawer can deep-link an execution
+// straight into n8n's own UI. n8n opts out of same-origin console embedding (embed:false in its
+// app.json — its UI can't be framed), so this always points at n8n's own host, never the console proxy.
+async function loadN8nUrl(){
+  try{ const r=await fetch("healthz"); const d=await r.json(); S.n8nUrl=(d&&d.n8n_url)||""; }
+  catch(e){ S.n8nUrl=""; }
+}
+// The chip says what IS: «חי» only while the last read was answered. It beat on beside «שירות המקביליות אינו זמין»,
+// and a refusal that carried JSON was drawn as a system with nothing running.
+function chip(){
+  $("#live").classList.toggle("paused",!S.live);
+  $("#live").dataset.stale = S.live&&!S.unheard ? "0" : "1";   // the shared page-chrome chip reads `data-stale`
+  $("#liveTxt").textContent = !S.live ? "מושהה" : S.unheard ? "אין תשובה מהשירות" : "חי";
+}
+async function load(){
+  try{
+    const r=await fetch(`api/spans?hours=${S.winH}`); if(!r.ok) throw new Error("status "+r.status);
+    const d=await r.json(); S.unheard=false; chip();
+    S.spans=(Array.isArray(d)?d:(d.spans||[])); S.now=Date.now(); readPalette();
+    // default view = the calm overview: every system starts collapsed to its density strip
+    // (respects later manual toggles — a src is seeded exactly once, when first seen).
+    for(const sp of S.spans){ if(!(sp.src in S.sys)){ S.sys[sp.src]=true; S.collapsed[sp.src]=true; } }
+    build(); renderHUD(); renderSys(); layout();
+  }catch(e){ S.unheard=true; chip(); renderSys();   // (its filters are the screen's own, read or not: unread, they stood as two empty pills)
+    $("#empty").textContent="שירות המקביליות אינו זמין."; $("#empty").style.display="flex"; }
+}
+// system > process > parallel-stacked spans
+function build(){
+  const q=S.q.trim().toLowerCase(), bySrc={};
+  for(const sp of S.spans){
+    if(!S.sys[sp.src]) continue;
+    if(S.stat!=="all" && sp.status!==S.stat) continue;
+    if(q && !(((sp.svc||"")+(sp.label||"")+(sp.id||"")).toLowerCase().includes(q))) continue;
+    (bySrc[sp.src]=bySrc[sp.src]||{}); const proc=sp.svc||sp.label||sp.id;
+    (bySrc[sp.src][proc]=bySrc[sp.src][proc]||[]).push(sp);
+  }
+  const order=Object.keys(bySrc).sort((a,b)=>Object.values(bySrc[b]).flat().length-Object.values(bySrc[a]).flat().length);
+  // …except the background-automations section, which belongs next to the automations it runs.
+  // Sorting it by volume would drop it below `רשת`/`מכולות` on a quiet night and above them on a
+  // busy one, so the two halves of the same story would never be read together.
+  const bgi=order.indexOf(N8N_BG);
+  if(bgi>=0){ order.splice(bgi,1); const ni=order.indexOf("n8n"); order.splice(ni>=0?ni+1:0,0,N8N_BG); }
+  S.groups=order.map(src=>{
+    const procs=Object.entries(bySrc[src]).map(([name,arr])=>{
+      arr.sort((a,b)=>a.s-b.s);
+      const lanes=[];
+      for(const sp of arr){ let li=lanes.findIndex(L=>L<=sp.s); if(li<0){li=lanes.length;lanes.push(0);} sp._lane=li; lanes[li]=(sp.status==="running"?S.now:(sp.e||S.now)); }
+      return {name,spans:arr,depth:Math.max(1,lanes.length),count:arr.length};
+    }).sort((a,b)=>b.count-a.count);
+    const all=procs.flatMap(p=>p.spans);
+    return {src,procs,count:all.length,running:all.filter(s=>s.status==="running").length,color:srcColor(src)};
+  });
+}
+function renderHUD(){
+  const w=S.spans.filter(s=>S.sys[s.src]);
+  const run=w.filter(s=>s.status==="running").length, ok=w.filter(s=>s.status==="success").length, err=w.filter(s=>s.status==="error").length;
+  const durs=w.filter(s=>s.status!=="running"&&s.d).map(s=>s.d).sort((a,b)=>a-b);
+  const pct=p=>durs.length?durs[Math.min(durs.length-1,Math.floor(durs.length*p))]:0;
+  const fmt=ms=>{ const [n,u]=durParts(ms); return `${n}<small>${u}</small>`; };
+  const cards=[
+    {k:"רץ עכשיו",v:run,n:run,s:"running"},
+    {k:"הצלחות",v:ok.toLocaleString("he"),n:ok,s:"done"},
+    {k:"שגיאות",v:err,n:err,s:"failed"},
+    {k:"זמן חציוני",v:fmt(pct(.5))},
+    {k:"שיא (p99)",v:fmt(pct(.99))},
+  ];
+  // a state is said only when there is something in it: a zero is grey, with no bar
+  $("#hud").innerHTML=cards.map(c=>`<div class="stat pg-kpi${c.n===0?" is-zero":""}"${c.s&&c.n?` data-state="${c.s}"`:""}><span class="pg-kpi-k">${c.k}</span><span class="pg-kpi-v">${c.v}</span></div>`).join("");
+}
+function renderSys(){
+  // keep it to a clean 3-pill segment: a sliding window centered on the current selection.
+  // clicking a neighbour re-centres, so all 6 ranges are reachable while only 3 ever show.
+  const wi=Math.max(0,WINS.findIndex(w=>w[1]===S.winH)), ws=Math.max(0,Math.min(WINS.length-3,wi-1));
+  $("#win").innerHTML=WINS.slice(ws,ws+3).map(w=>`<button class="${S.winH===w[1]?'on':''}" data-w="${w[1]}">${w[0]}</button>`).join("");
+  $("#stat").innerHTML=STATS.map(s=>`<button class="${S.stat===s[0]?'on':''}" data-s="${s[0]}">${s[1]}</button>`).join("");
+  const srcs=[...new Set(S.spans.map(s=>s.src))];
+  $("#sys").innerHTML=srcs.map(s=>`<span class="chip ${S.sys[s]?'':'off'}" data-src="${s}"><span class="cd" style="background:${srcColor(s)}"></span>${HE_SRC[s]||s}</span>`).join("");
+}
+
+/* ── geometry ── */
+const PADX=16, HEADH=36, AXISH=26, GAP=3;
+let RAIL=232;      // the lanes' label column: 232px, or a third of a narrow stage (it took two thirds of a phone's)
+let cv,ctx,W,H,rows=[];
+function layout(){
+  cv=$("#tl"); const st=cv.parentElement.getBoundingClientRect();
+  W=st.width; H=st.height; const d=DPR(); RAIL=Math.min(232,Math.round(W*.36));
+  cv.width=W*d; cv.height=H*d; cv.style.width=W+"px"; cv.style.height=H+"px";
+  ctx=cv.getContext("2d"); ctx.setTransform(d,0,0,d,0,0);
+  rows=[]; for(const g of S.groups){ rows.push({type:"sys",g});
+    if(!S.collapsed[g.src]) for(const p of g.procs){ const key=g.src+"|"+p.name;
+      const exp=S.expanded[key], cap=Math.max(1,exp?Math.min(24,p.depth):Math.min(6,p.depth));
+      const unit=exp?15:18, h=cap*unit+12; rows.push({type:"proc",g,p,h,key,cap,exp}); } }
+  const em=$("#empty"); if(S.groups.length){em.style.display="none";} else {em.style.display="flex"; em.textContent="אין פעילות בחלון הזמן הזה.";}
+  draw();
+}
+const plotW=()=>W-RAIL-PADX*2;
+function vspan(){ return Math.max(1000, S.viewE-S.viewS); }
+function tx(t){ return PADX + (t-S.viewS)/vspan()*plotW(); }
+function xToT(x){ return S.viewS + (x-PADX)/plotW()*vspan(); }
+function resetView(){ const w=S.winH*3600e3; S.viewE=S.now; S.viewS=S.now-w; S.follow=true; S.scroll=0; }
+
+let raf;
+function tick(){
+  if(S.live) S.now=Date.now();
+  if(S.follow){ const sp=vspan(); S.viewE=S.now; S.viewS=S.now-sp; S.tS=null; }
+  else if(S.tS!=null){ // smooth ease toward the button/key target
+    const k=0.28, sp=vspan(); S.viewS+=(S.tS-S.viewS)*k; S.viewE+=(S.tE-S.viewE)*k;
+    if(Math.abs(S.tS-S.viewS)<sp*0.003 && Math.abs(S.tE-S.viewE)<sp*0.003){
+      S.viewS=S.tS; S.viewE=S.tE; S.tS=null;
+      if(S.viewE>=S.now-2000 && (S.viewE-S.viewS)>=S.winH*3600e3*0.985) S.follow=true; }
+    updateZoomUI(); drawPulse(); }
+  if(ctx) draw(); raf=requestAnimationFrame(tick);
+}
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  const right=PADX+plotW(), railX=W-RAIL, now=S.now, F=S.font, secs=vspan()<300e3, dated=vspan()>36*3600e3;
+  ctx.textBaseline="alphabetic";
+  // grid + axis (across the visible range)
+  const ticks=Math.max(2,Math.min(6,Math.floor(plotW()/84))); ctx.font="11px "+F;
+  const p2=n=>n.toString().padStart(2,"0");
+  for(let i=0;i<=ticks;i++){ const t=S.viewS+vspan()*i/ticks, x=tx(t);
+    ctx.strokeStyle=hexA(P.ink,.05); ctx.beginPath(); ctx.moveTo(x,HEADH-6); ctx.lineTo(x,H-AXISH); ctx.stroke();
+    const dt=new Date(t); ctx.fillStyle=P.muted; ctx.textAlign="center";
+    const lbl=dated ? p2(dt.getDate())+"/"+p2(dt.getMonth()+1)+" "+p2(dt.getHours())+":"+p2(dt.getMinutes())
+                    : p2(dt.getHours())+":"+p2(dt.getMinutes())+(secs?":"+p2(dt.getSeconds()):"");
+    const half=ctx.measureText(lbl).width/2; ctx.fillText(lbl,Math.max(half+4,Math.min(W-half-4,x)),H-8); }
+  // NOW (only if in view)
+  if(now>=S.viewS && now<=S.viewE){ const nx=tx(now);
+    ctx.strokeStyle=hexA(P["sky-d"],.5); ctx.setLineDash([4,4]); ctx.beginPath(); ctx.moveTo(nx,HEADH-6); ctx.lineTo(nx,H-AXISH); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle=P["sky-d"]; ctx.textAlign="center"; ctx.font="700 10px "+F; ctx.fillText("עכשיו",nx,HEADH-10); }
+
+  let y=HEADH-S.scroll, idx=0;
+  for(const r of rows){
+    const rh=r.type==="sys"?HEADH:r.h, yy=y;
+    if(yy+rh>HEADH-2 && yy<H-AXISH+2){
+      if(r.type==="sys"){
+        ctx.fillStyle=P["surface-2"]; ctx.fillRect(0,yy,W,rh-2);
+        ctx.textAlign="right"; ctx.textBaseline="middle"; ctx.font="800 13.5px "+F; ctx.fillStyle=P.ink;
+        ctx.fillText(HE_SRC[r.g.src]||r.g.src, W-PADX-4, yy+rh/2-6);
+        // The system's line is measured too, against the names' column it stands in: in a narrow window the
+        // running dot keeps its number without the word, and then the count loses its noun - three-digit counts
+        // ran across the column's edge and into the lanes.
+        let said=r.g.count+" הרצות", runs=r.g.running?r.g.running+" רצות":"";
+        const by=yy+rh/2+10, lim=W-PADX-18-(railX+4); ctx.font="700 11px "+F;
+        const wide=()=>tw(said)+(runs?20+tw(runs):0);
+        if(runs && wide()>lim) runs=String(r.g.running);
+        if(wide()>lim) said=String(r.g.count);
+        ctx.fillStyle=P.muted; fold(W-PADX-8, by, !S.collapsed[r.g.src]); ctx.fillText(said, W-PADX-18, by);
+        if(runs){ const rx=W-PADX-18-tw(said)-10; ctx.fillStyle=P[ST.running[0]];
+          ctx.beginPath(); ctx.arc(rx-3, by, 3, 0, 7); ctx.fill(); ctx.fillText(runs, rx-10, by); }
+        drawDensity(r.g, yy+7, rh-16);
+      } else {
+        ctx.fillStyle=P[(idx%2)?"surface-2":"surface"]; ctx.fillRect(0,yy,railX,rh);
+        const ly=Math.min(yy+rh/2, yy+24), canExp=r.p.depth>6;
+        // Both lines are measured against what the names' column leaves past the process's dot. The name is a
+        // token of its own direction: written as part of the right-to-left page, an identifier cut at its END
+        // showed its «…» at the left, as if its beginning were missing.
+        const room=W-PADX-16-(railX+16);
+        ctx.textAlign="right"; ctx.textBaseline="middle"; ctx.font="600 12px "+F; ctx.fillStyle=P.ink;
+        ctx.direction=/[א-ת]/.test(r.p.name)?"rtl":"ltr"; ctx.fillText(fit(r.p.name,room), W-PADX-16, ly-6); ctx.direction="rtl";
+        ctx.font="600 10px "+F; ctx.fillStyle=canExp?r.g.color:P.muted;
+        // in a narrow window the fold says it without its word, and then the depth without its noun - never over the lanes
+        let cnt=r.p.count+" הרצות"+(r.p.depth>1?" · ×"+r.p.depth+" מקביל":""), word=canExp?(r.exp?"פרוס":"הרחב"):"";
+        const need=()=>tw(cnt)+(canExp?15:0)+(word?4+tw(word):0);
+        if(need()>room) word="";
+        if(need()>room && r.p.depth>1) cnt=r.p.count+" הרצות · ×"+r.p.depth;
+        ctx.fillText(cnt, W-PADX-16, ly+9);
+        if(canExp){ const fx=W-PADX-16-tw(cnt)-11; fold(fx, ly+9, r.exp); if(word) ctx.fillText(word, fx-7, ly+9); }
+        ctx.beginPath(); ctx.arc(railX+9, ly, 3, 0, 7); ctx.fillStyle=r.g.color; ctx.fill();
+        const cap=r.cap||Math.min(6,r.p.depth), laneH=(rh-12)/cap;
+        for(const sp of r.p.spans){
+          const x1=tx(sp.s), x2=Math.max(x1+3, tx(sp.status==="running"?now:(sp.e||now)));
+          if(x2<PADX||x1>right){ sp._box=null; continue; }
+          const bx=Math.max(PADX,x1), bw=Math.min(right,x2)-bx;
+          const by=yy+6+Math.min(cap-1,sp._lane)*laneH, bh=Math.max(7,laneH-GAP);
+          const st=ST[sp.status]||ST.unknown, col=P[st[0]];
+          ctx.fillStyle= sp.status==="running"? shimmer(col): col;
+          roundRect(bx,by,bw,bh,Math.min(5,bh/2)); ctx.fill();
+          if(bw>50){ ctx.save(); roundRect(bx,by,bw,bh,4); ctx.clip();
+            ctx.fillStyle=P[st[1]]; ctx.font="600 10px "+getComputedStyle(document.documentElement).getPropertyValue("--mono");
+            ctx.textAlign="left"; ctx.textBaseline="middle"; ctx.direction="ltr";
+            ctx.fillText(ellip(sp.label||sp.id,Math.floor(bw/6.2)), bx+6, by+bh/2); ctx.direction="rtl"; ctx.restore(); }
+          if(sp===S.hover){ ctx.save(); ctx.strokeStyle=P.ink; ctx.lineWidth=1.5;
+            roundRect(bx-.5,by-.5,bw+1,bh+1,Math.min(5,bh/2)); ctx.stroke(); ctx.restore(); }
+          sp._box=[bx,by,bw,bh];
+        }
+      }
+      if(r.type==="proc") idx++;
+    } else if(r.type==="proc"){ for(const sp of r.p.spans) sp._box=null; }
+    y+=rh;
+  }
+  ctx.strokeStyle=P.line; ctx.beginPath(); ctx.moveTo(railX,HEADH-6); ctx.lineTo(railX,H-4); ctx.stroke();
+  S._contentH=y-(HEADH-S.scroll);
+}
+function drawDensity(g,y,h){
+  const win=S.winH*3600e3, B=120, arr=new Float32Array(B), t0=S.now-win;
+  // …so a span counts in every bucket it is alive in. Counted where it STARTED, 39 containers that
+  // had been up for days were an empty lane under the words "39 רצות".
+  for(const p of g.procs) for(const sp of p.spans){
+    const a=Math.floor((sp.s-t0)/win*B), b=Math.floor(((sp.status==="running"?S.now:(sp.e||S.now))-t0)/win*B);
+    for(let i=Math.max(0,a);i<=Math.min(B-1,b);i++) arr[i]++; }
+  const mx=Math.max(1,...arr), bw=plotW()/B; ctx.fillStyle=hexA(g.color,.3);
+  for(let i=0;i<B;i++){ if(!arr[i])continue; const hh=Math.max(2,arr[i]/mx*h); ctx.fillRect(PADX+i*bw, y+h-hh, Math.max(1,bw-.5), hh); }
+}
+// The mark that says a row folds: a corner pointing the way the page reads (left) while the row is shut, and down
+// once it is open - drawn in the colour of the words it stands beside. It was a character of the font («▸», «▾»),
+// which no direction turns: on this right-to-left page the shut one pointed back at the edge.
+function fold(x,y,open){ ctx.save(); ctx.strokeStyle=ctx.fillStyle; ctx.lineWidth=1.6; ctx.lineCap=ctx.lineJoin="round"; ctx.beginPath();
+  if(open){ ctx.moveTo(x-3.5,y-1.75); ctx.lineTo(x,y+1.75); ctx.lineTo(x+3.5,y-1.75); }
+  else    { ctx.moveTo(x+1.75,y-3.5); ctx.lineTo(x-1.75,y); ctx.lineTo(x+1.75,y+3.5); }
+  ctx.stroke(); ctx.restore(); }
+function shimmer(col){ const a=.5+.4*Math.sin((Date.now()%1400)/1400*6.283); return hexA(col,a); }
+function roundRect(x,y,w,h,r){ if(w<=0){ctx.beginPath();return;} r=Math.min(r||0,h/2,w/2); ctx.beginPath();
+  ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+function ellip(s,n){ s=String(s||""); return s.length>n?s.slice(0,n-1)+"…":s; }
+// A name cut to the width it is given, by measuring it in the caller's font - `ellip` counts characters, and a
+// count is a guess: thirteen wide letters ran over the process's dot in the narrowest window. Remembered per
+// name and width, because the timeline is redrawn at every frame.
+const FIT=new Map(), TW=new Map();
+// …and the width of a line of words, in the font set at the moment: the same few strings are measured at
+// every frame, sixty times a second, so each is measured once (one frame cost a fifth more without this).
+function tw(s){ const k=ctx.font+"|"+s; let w=TW.get(k);
+  if(w===undefined){ if(TW.size>4000) TW.clear(); w=ctx.measureText(s).width; TW.set(k,w); }
+  return w; }
+function fit(s,w){ s=String(s||""); const k=s+"|"+Math.round(w); let v=FIT.get(k);
+  if(v===undefined){ let n=s.length; v=s; while(n>1 && ctx.measureText(v).width>w) v=s.slice(0,--n)+"…";
+    if(FIT.size>2000) FIT.clear(); FIT.set(k,v); }
+  return v; }
+function hexA(hex,a){ const n=parseInt(hex.slice(1).replace(/^(.)(.)(.)$/,"$1$1$2$2$3$3"),16); return `rgba(${n>>16&255},${n>>8&255},${n&255},${a})`; }
+
+/* ── pulse ── */
+function drawPulse(){
+  const c=$("#pulse"); if(!c.clientWidth) return; const x=c.getContext("2d"),d=DPR(),w=c.clientWidth,h=c.clientHeight;
+  c.width=w*d;c.height=h*d;x.setTransform(d,0,0,d,0,0);x.clearRect(0,0,w,h);
+  const win=S.winH*3600e3, N=Math.max(60,Math.floor(w/2)), arr=new Float32Array(N), t0=S.now-win;
+  for(const sp of S.spans){ if(!S.sys[sp.src])continue; const a=Math.floor((sp.s-t0)/win*N), b=Math.floor(((sp.status==="running"?S.now:sp.e||S.now)-t0)/win*N);
+    for(let i=Math.max(0,a);i<=Math.min(N-1,b);i++) arr[i]++; }
+  // the scale has a floor of 3; the PEAK is what was counted — the floor was printed as the peak («שיא 3 במקביל» over a quiet hour)
+  const peak=Math.max(0,...arr), mx=Math.max(3,peak), px=i=>i/(N-1)*w, py=v=>h-4-(v/mx)*(h-16);
+  const sky=P["sky-d"], grd=x.createLinearGradient(0,0,0,h); grd.addColorStop(0,hexA(sky,.28)); grd.addColorStop(1,hexA(sky,.02));
+  x.beginPath(); x.moveTo(0,h); for(let i=0;i<N;i++) x.lineTo(px(i),py(arr[i])); x.lineTo(w,h); x.closePath(); x.fillStyle=grd; x.fill();
+  x.beginPath(); for(let i=0;i<N;i++){ const X=px(i),Y=py(arr[i]); i?x.lineTo(X,Y):x.moveTo(X,Y);} x.strokeStyle=sky; x.lineWidth=1.6; x.stroke();
+  x.beginPath(); x.arc(w-1,py(arr[N-1]),3.4,0,7); x.fillStyle=sky; x.fill();
+  // zoom viewport — the pulse doubles as a minimap: shade the region you're NOT viewing, box the region you are
+  let vx1=(S.viewS-t0)/win*w, vx2=(S.viewE-t0)/win*w;
+  if(vx1>1 || vx2<w-1){ vx1=Math.max(0,vx1); vx2=Math.min(w,vx2);
+    x.fillStyle=hexA(P.ink,.055); x.fillRect(0,0,vx1,h); x.fillRect(vx2,0,w-vx2,h);
+    x.fillStyle=hexA(sky,.08); x.fillRect(vx1,0,vx2-vx1,h);
+    x.strokeStyle=hexA(sky,.7); x.lineWidth=1; x.strokeRect(vx1+.5,1,Math.max(2,vx2-vx1-1),h-2); }
+  x.fillStyle=P.muted; x.font="700 10px "+S.font; x.textAlign="left"; x.fillText("שיא "+Math.round(peak)+" במקביל",6,h-6);
+}
+
+/* ── interactions ── */
+function hit(mx,my){ for(const r of rows){ if(r.type!=="proc")continue; for(const sp of r.p.spans){ const b=sp._box; if(b&&mx>=b[0]&&mx<=b[0]+b[2]&&my>=b[1]&&my<=b[1]+b[3]) return sp; } } return null; }
+// A duration in the unit a person would say — ONE scale, for the tiles, the tooltip and the detail
+// panel. A container up for 14 hours read "52001s" in its tile; the tile was given hours and the
+// tooltip went on reading «518400 ש׳»; and one up for six days read «151.9 שע׳».
+function durParts(ms){ ms=ms||0;
+  return ms>=172800e3?[(ms/86400e3).toFixed(1),"ימים"]:ms>=3600e3?[(ms/3600e3).toFixed(1),"שע׳"]
+    :ms>=90e3?[Math.round(ms/60e3),"דק׳"]:ms>=1000?[(ms/1000).toFixed(ms>=10000?0:1),"ש׳"]:[Math.round(ms),"מ״ש"]; }
+function fmtD(ms){ return durParts(ms).join(" "); }
+function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+function scrollMax(){ return Math.max(0,(S._contentH||0)-(H-HEADH-AXISH)+40); }
+function updateZoomUI(){ const zoomed=!S.follow||(S.viewE-S.viewS)<S.winH*3600e3*0.98; $("#zreset").classList.toggle("show",zoomed); }
+function vchg(){ updateZoomUI(); drawPulse(); }
+function hideHint(){ const h=document.querySelector(".hint"); if(h) h.style.opacity=0; }
+function showTip(e,sp){ const tip=$("#tip");
+  tip.innerHTML=`<div class="tt"><span class="badge b-${sp.status}">${ST_HE[sp.status]}</span><span class="ltr mono">${esc(sp.label||sp.id)}</span></div>`+
+    `<div class="tr"><span class="tk">תהליך</span><b class="ltr">${esc(sp.svc||"—")}</b></div>`+
+    `<div class="tr"><span class="tk">מערכת</span><b>${HE_SRC[sp.src]||sp.src}</b></div>`+
+    `<div class="tr"><span class="tk">משך</span><b>${sp.status==="running"?"רץ… "+fmtD(S.now-sp.s):fmtD(sp.d)}</b></div>`;
+  tip.classList.add("show"); const tw=tip.offsetWidth,th=tip.offsetHeight;
+  let x=e.clientX-tw-14; if(x<8)x=e.clientX+14; let yy=e.clientY-th-10; if(yy<8)yy=e.clientY+16; tip.style.left=x+"px"; tip.style.top=yy+"px"; }
+function bindStage(){
+  const stage=$("#tl");
+  stage.addEventListener("mousedown",e=>{ const r=stage.getBoundingClientRect(); hideHint();
+    S.drag={x:e.clientX,y:e.clientY,vs:S.viewS,ve:S.viewE,scroll:S.scroll,moved:false,mx:e.clientX-r.left,my:e.clientY-r.top}; });
+  stage.addEventListener("mousemove",e=>{ const r=stage.getBoundingClientRect(), mx=e.clientX-r.left, my=e.clientY-r.top;
+    if(S.drag){ const dx=e.clientX-S.drag.x, dy=e.clientY-S.drag.y;
+      if(Math.abs(dx)+Math.abs(dy)>3) S.drag.moved=true;
+      const dt=dx/plotW()*(S.drag.ve-S.drag.vs); S.viewS=S.drag.vs-dt; S.viewE=S.drag.ve-dt; S.follow=false; S.tS=null;
+      S.scroll=clamp(S.drag.scroll-dy,0,scrollMax()); stage.style.cursor="grabbing"; $("#tip").classList.remove("show"); vchg(); return; }
+    const sp=hit(mx,my); S.hover=sp;
+    if(sp){ stage.style.cursor="pointer"; showTip(e,sp); } else { stage.style.cursor="crosshair"; $("#tip").classList.remove("show"); } });
+  addEventListener("mouseup",()=>{ if(!S.drag)return; const d=S.drag; S.drag=null; stage.style.cursor="crosshair";
+    if(d.moved) return; // it was a pan, not a click
+    const sp=hit(d.mx,d.my); if(sp){ openDrawer(sp); return; }
+    let y=HEADH-S.scroll; for(const row of rows){ const rh=row.type==="sys"?HEADH:row.h; if(d.my>=y&&d.my<y+rh){
+      if(row.type==="sys"){ S.collapsed[row.g.src]=!S.collapsed[row.g.src]; layout(); }
+      else if(row.type==="proc" && row.p.depth>6){ S.expanded[row.key]=!S.expanded[row.key]; layout(); } break; } y+=rh; } });
+  stage.addEventListener("mouseleave",()=>{ $("#tip").classList.remove("show"); S.hover=null; });
+  stage.addEventListener("dblclick",e=>{ e.preventDefault(); doReset(); });
+  // wheel = natural vertical scroll of the rows. At the top/bottom edge we DON'T preventDefault,
+  // so the wheel bubbles up and the console shell (or page) keeps scrolling — nothing is trapped.
+  stage.addEventListener("wheel",e=>{ const max=scrollMax(); if(max<=0) return;
+    const atTop=S.scroll<=0, atBot=S.scroll>=max;
+    if((e.deltaY<0&&atTop)||(e.deltaY>0&&atBot)) return;
+    e.preventDefault(); hideHint(); S.scroll=clamp(S.scroll+e.deltaY,0,max); },{passive:false});
+  // zoom / pan are explicit, discoverable controls — buttons + keyboard, both smoothly animated
+  $("#cZoomIn").onclick=()=>zoomBy(1/1.7);
+  $("#cZoomOut").onclick=()=>zoomBy(1.7);
+  $("#cPanL").onclick=()=>panBy(-0.35);
+  $("#cPanR").onclick=()=>panBy(0.35);
+  $("#zreset").onclick=doReset;
+  addEventListener("keydown",e=>{ if(/^(INPUT|TEXTAREA)$/.test((e.target.tagName)||""))return;
+    if(e.key==="ArrowLeft"){ panBy(-0.35); e.preventDefault(); }
+    else if(e.key==="ArrowRight"){ panBy(0.35); e.preventDefault(); }
+    else if(e.key==="+"||e.key==="="){ zoomBy(1/1.7); }
+    else if(e.key==="-"||e.key==="_"){ zoomBy(1.7); }
+    else if(e.key==="0"){ doReset(); } });
+}
+// view = the [s,e] currently animating toward (tS/tE) if mid-flight, else the live view — so repeated
+// clicks compound smoothly instead of snapping back to the in-progress frame.
+function curView(){ return S.tS!=null?[S.tS,S.tE]:[S.viewS,S.viewE]; }
+function clampView(s,e){ const w=S.winH*3600e3, lo=S.now-w, hi=S.now, ns=e-s;
+  if(e>hi){ e=hi; s=hi-ns; } if(s<lo){ s=lo; e=lo+ns; } return [s,e]; }
+function animateTo(s,e){ const ns=clamp(e-s,4000,S.winH*3600e3), c=(s+e)/2; [s,e]=clampView(c-ns/2,c+ns/2);
+  S.tS=s; S.tE=e; S.follow=false; hideHint(); updateZoomUI(); }
+function zoomBy(f){ const [s,e]=curView(), cur=e-s, ns=clamp(cur*f,4000,S.winH*3600e3), c=(s+e)/2; animateTo(c-ns/2,c+ns/2); }
+function panBy(f){ const [s,e]=curView(), d=(e-s)*f; animateTo(s+d,e+d); }
+// reset = snap home to the live, full-window view. Instant + deterministic (no frame-rate dependence);
+// tick's follow branch then keeps the right edge pinned to "now".
+function doReset(){ S.tS=null; resetView(); vchg(); }
+// Returns {url} when the deep link can be composed, or {why} naming the ONE missing piece — never
+// a bare null, so the drawer can say why instead of quietly dropping the control.
+// The link needs both ids: the workflow id (svcid — "_" means n8n had no workflowId to join, e.g.
+// a deleted workflow) and the numeric execution id (parsed off the "n8n:<id>" span id). A dead
+// link is worse than no button; an unexplained missing button is worse than a disabled one.
+// The scheme+host come from the server (`/healthz` n8n_url), which derives them from the host
+// family rather than a hardcoded https — see _public_n8n_url() in app.py.
+function n8nExecLink(sp){
+  if(sp.src!=="n8n") return null;
+  if(!S.n8nUrl) return {why:"כתובת n8n הציבורית אינה מוגדרת בשירות (N8N_URL)."};
+  const wfid=sp.svcid, execId=String(sp.id||"").split(":",2)[1];
+  if(!execId) return {why:"לריצה הזו אין מזהה ביצוע."};
+  if(!wfid || wfid==="_") return {why:"התהליך שהריץ את הביצוע הזה נמחק מ-n8n, ולכן אין לאן לקשר."};
+  return {url:`${S.n8nUrl}/workflow/${encodeURIComponent(wfid)}/executions/${encodeURIComponent(execId)}`};
+}
+function openDrawer(sp){ $("#dTitle").innerHTML=`<span class="badge b-${sp.status}">${ST_HE[sp.status]}</span> <span class="ltr">${esc(sp.label||sp.id)}</span>`;
+  $("#dSub").textContent=sp.id;
+  const link=n8nExecLink(sp), act=$("#dAct"), btn=$("#dN8nBtn"), note=$("#dN8nNote");
+  if(!link){ act.classList.remove("show"); }
+  else if(link.url){ btn.href=link.url; btn.classList.remove("off"); btn.removeAttribute("aria-disabled");
+    btn.removeAttribute("title"); note.textContent=""; act.classList.add("show"); }
+  else { btn.removeAttribute("href"); btn.classList.add("off"); btn.setAttribute("aria-disabled","true");
+    btn.title=link.why; note.textContent=link.why; act.classList.add("show"); }
+  const R=[["מערכת",HE_SRC[sp.src]||sp.src],["תהליך",sp.svc||"—"],["מזהה תהליך",sp.svcid||"—"],
+    ["סטטוס",ST_HE[sp.status]],["התחלה",new Date(sp.s).toLocaleString("he-IL")],["סיום",sp.e?new Date(sp.e).toLocaleString("he-IL"):"—"],
+    ["משך",sp.status==="running"?"רץ… "+fmtD(S.now-sp.s):fmtD(sp.d)]];
+  // meta.highlight is a nested object (the workflow's own outline + any highlight.* keys);
+  // String(v) rendered it as "[object Object]", so flatten it into one row per key.
+  if(sp.meta) for(const [k,v] of Object.entries(sp.meta)){
+    if(k==="highlight" && v && typeof v==="object"){ for(const [hk,hv] of Object.entries(v)) R.push([hk,String(hv)]); }
+    else R.push([k,String(v)]); }
+  $("#dBody").innerHTML=R.map(([k,v])=>`<div class="drow"><span class="k">${esc(k)}</span><b class="ltr" style="text-align:start">${esc(v)}</b></div>`).join("");
+  $("#scrim").classList.add("show"); $("#drawer").classList.add("show"); }
+function closeDrawer(){ $("#scrim").classList.remove("show"); $("#drawer").classList.remove("show"); }
+
+/* ── wire ── */
+$("#win").onclick=e=>{ const b=e.target.closest("button"); if(!b)return; S.winH=+b.dataset.w; resetView(); updateZoomUI(); renderSys(); load(); };
+$("#stat").onclick=e=>{ const b=e.target.closest("button"); if(!b)return; S.stat=b.dataset.s; renderSys(); build(); renderHUD(); layout(); };
+$("#sys").onclick=e=>{ const c=e.target.closest(".chip"); if(!c)return; S.sys[c.dataset.src]=!S.sys[c.dataset.src]; renderSys(); build(); renderHUD(); layout(); drawPulse(); };
+$("#q").oninput=e=>{ S.q=e.target.value; build(); layout(); };
+$("#live").onclick=()=>{ S.live=!S.live; chip(); };   // (`paused` is this app's own extra state)
+$("#dX").onclick=closeDrawer; $("#scrim").onclick=closeDrawer;
+addEventListener("resize",()=>{layout();drawPulse();});
+
+/* ── boot ── */
+S.font=getComputedStyle(document.documentElement).getPropertyValue("--font")||"sans-serif";
+resetView(); bindStage(); layout(); tick(); loadN8nUrl();
+(async function loop(){ for(;;){ await load(); drawPulse(); await new Promise(r=>setTimeout(r, S.live?3500:60000)); } })();
+setInterval(()=>{ if(S.live) drawPulse(); },1500);
+setTimeout(hideHint,7000);
+</script>
+</body></html>

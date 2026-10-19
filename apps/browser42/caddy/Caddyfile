@@ -1,0 +1,43 @@
+# Single entry point, fronted by Traefik in this deployment.
+#   SITE_ADDRESS=:80  -> plain HTTP, match any Host (Traefik terminates routing/TLS)
+# Traefik routes browser42.localhost (and BROWSER42_BASE_URL) to this Caddy on :80.
+{$SITE_ADDRESS::80} {
+	# No basic-auth here: access control is done declaratively at the Traefik
+	# edge (Authentik forward-auth on the -https and -local routers, like machine
+	# / homepage). The noVNC view's VNC password is an OPTIONAL extra factor
+	# (BROWSER42_VNC_PASSWORD); empty by default since Authentik already gates it.
+
+	# Live browser view (noVNC): open /view/ and you SEE the agent's browser.
+	# The console injects <base href="/a/browser42/"> into this HTML, so the relative
+	# websocket path below resolves to /a/browser42/websockify when embedded and to
+	# /websockify when standalone. Including the mount prefix here would apply it twice.
+	redir /view /view/vnc.html?autoconnect=true&reconnect=true&resize=remote&quality=6&compression=2
+	redir /view/ /view/vnc.html?autoconnect=true&reconnect=true&resize=remote&quality=6&compression=2&path=websockify
+	handle_path /view/* {
+		reverse_proxy browser42-browser:6080
+	}
+	# noVNC opens its websocket back to /websockify on the same origin.
+	handle /websockify {
+		reverse_proxy browser42-browser:6080
+	}
+	# MCP endpoint: point your MCP client at <addr>/mcp with header
+	#   Authorization: Bearer $BROWSER42_MCP_TOKEN
+	# Authentik (browser SSO) can't gate non-browser MCP clients, so the bearer
+	# token is enforced here in Caddy — it applies on every ingress (the public
+	# Traefik route AND the loopback dev port). @playwright/mcp has DNS-rebinding
+	# protection and 403s unless the Host header is its bind address, so rewrite it.
+	handle_path /mcp* {
+		@unauthorized not header Authorization "Bearer {$MCP_TOKEN}"
+		route {
+			respond @unauthorized "Unauthorized" 401 {
+				close
+			}
+			reverse_proxy browser42-mcp:8931 {
+				header_up Host localhost:8931
+			}
+		}
+	}
+
+	# Bare / -> the live view.
+	redir / /view/
+}

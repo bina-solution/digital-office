@@ -1,0 +1,78 @@
+# yaml-language-server: $schema=./schema.json
+title: "Collapse duplicate Authentik apps — run local with DEPLOYMENT_DOMAIN=localhost"
+opened: "2026-06-16"
+category: chore
+severity: low
+status: open  # 2026-07-30 triage: STILL OPEN and now larger — the parallel <app>-local providers/apps persist in platform-base/authentik/blueprints/deployment-apps.yaml:69-158 and are auto-emitted per app in zz-generated-apps.yaml; production/compose.override.yml no longer exists. 2026-08-04 re-triage: STILL OPEN — surface has grown, not shrunk.
+summary: "Replace the parallel `<app>-local` Authentik providers/apps with a single env-driven app per service by setting DEPLOYMENT_DOMAIN=localhost on the local box (removes the '(local)' duplicate tiles and halves the blueprint)."
+
+description: |
+  ## Context (current state — "Approach X", implemented 2026-06-16)
+  Local `*.localhost` apps are gated by Authentik via **parallel** `<app>-local`
+  providers+apps (`external_host: http://<app>.localhost`) added *alongside* the
+  public ones, because the local box runs `DEPLOYMENT_DOMAIN=hacohen.bina-solutions.co.il`
+  and `forward_single` providers match a single host. It works (SSO verified), but:
+  - The shared blueprint creates BOTH sets on every environment → **12 apps in the
+    Authentik library** (the "(local)" duplicates), confusing on both local & VPS.
+  - **12 near-identical blueprint blocks**; adding an app = editing two places + the outpost.
+  - Two parallel router sets (`-local` vs `-http`/`-https`).
+
+  ## Target ("Approach Y") — one app per service, env-driven
+  Run the **laptop** with `DEPLOYMENT_DOMAIN=localhost` so each app's **single existing**
+  provider/app resolves `external_host` to `app.localhost`. Then **delete** the 5
+  `<app>-local` providers/apps AND the redundant `-local` routers. Net result:
+  **12 → 5 apps, one blueprint block per app, one router set, one code path** for local
+  and prod, **one tile per app** pointing at the right host per environment. It's a
+  *net reduction* in standing config.
+
+  ## Why it's a refactor, not a toggle (gotchas to solve)
+  1. **Router collision:** `DEPLOYMENT_DOMAIN=localhost` makes `${APP_BASE_URL}=app.localhost`,
+     so the hardcoded `-local` router (`Host(app.localhost)@web`) collides with `-http`
+     (`Host(${BASE_URL})@web`). Fix: **remove the `-local` routers** (the BASE_URL routers
+     now cover localhost).
+  2. **ACME can't cert `*.localhost`:** the `-https` routers (`certresolver=myresolver`)
+     fail for localhost. Fix: env-driven entrypoint/certresolver — locally serve over
+     `web` (http) only (or Traefik self-signed); prod keeps `websecure`+ACME. Use a
+     `void` sink entrypoint and/or empty `certresolver` on the local profile.
+  3. **http scheme locally:** provider `external_host` and app base URLs must be http
+     locally. Reuse the `AUTH_PROTOCOL` var added this session; extend a general
+     `APP_PROTOCOL` to the public providers' `external_host` (`${APP_PROTOCOL}://${BASE_URL}`).
+  4. **`-http` router behaves differently per env:** locally it must SERVE + `authentik`;
+     on prod it REDIRECTS to https. Env-driven middleware (`authentik` vs `tohttps`).
+
+  ## Concrete plan
+  1. Remove Approach-X additions: the 5 `<app>-local` providers/apps + their outpost
+     entries from `deployment-apps.yaml`; the `middlewares=authentik` on the `-local`
+     routers; then remove the `-local` routers themselves.
+  2. Parameterize public providers' `external_host` to `${APP_PROTOCOL:-https}://${BASE_URL}`.
+  3. Make `-http`/`-https` routers env-driven (entrypoint + middleware + certresolver vars).
+  4. Laptop `.env`: `DEPLOYMENT_DOMAIN=localhost`, `APP_PROTOCOL=http`, the toggle vars.
+     (`AUTH_EXTERNAL_URL`/`AUTH_PROTOCOL` from this session still apply — with
+     `DEPLOYMENT_DOMAIN=localhost`, `AUTHENTIK_BASE_URL` already = `auth.localhost`.)
+  5. VPS `.env`: `DEPLOYMENT_DOMAIN=<public>`, toggle vars = prod, `AUTH_*` unset.
+  6. Verify: one tile per app in the library; `app.localhost` gated via `auth.localhost`;
+     `docker compose config` with prod values renders identical to today's prod.
+
+  ## Tradeoffs
+  - ✅ 12→5 apps, halved blueprint, one router set, one code path, one tile per app.
+  - ⚠️ Local diverges from prod's exact TLS/domain routing (intended — local is its own env).
+  - ⚠️ Bigger upfront refactor; touches every service's routers + the blueprint + `.env`.
+
+  ## Note
+  This **supersedes** the parallel-provider approach currently in place. If adopted,
+  delete the `<app>-local` entries. Quick alternative if not doing the full refactor:
+  hide the "(local)" tiles via `meta_launch_url: blank://blank` (cosmetic only).
+
+tasks:
+  - { text: "Remove the 5 <app>-local providers/apps + outpost entries + -local middlewares from the blueprint", done: false }
+  - { text: "Remove the -local routers; parameterize -http/-https entrypoint+middleware+certresolver via env", done: false }
+  - { text: "Parameterize public providers' external_host scheme with APP_PROTOCOL", done: false }
+  - { text: "Laptop .env: DEPLOYMENT_DOMAIN=localhost + APP_PROTOCOL=http + toggle vars", done: false }
+  - { text: "Verify one tile per app, local gating via auth.localhost, and prod render unchanged (docker compose config)", done: false }
+
+references:
+  - production/authentik/blueprints/deployment-apps.yaml
+  - production/authentik/docker-compose.yml
+  - production/compose.override.yml
+  - compose.yml
+  - .env.ex

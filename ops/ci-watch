@@ -1,0 +1,90 @@
+#!/bin/bash
+# ci-watch — live view of the portable-ssd GitHub Actions runner.
+#
+# LEAK FIX (2026-07-28)
+#
+# The follow loop started `tail -n +1 -f "$l" &` for each new per-job worker log and never stopped
+# the previous one. That is one leaked `tail -f` per CI job, for as long as this script stays open.
+# After ~20 hours there were 185 of them, each spinning around 10% CPU, holding the 4-core machine
+# at a load average of 282 (332 runnable processes). An unrelated Docker stack's healthchecks began
+# flapping, which is how it was noticed - the symptom appeared nowhere near the cause.
+#
+# Two changes:
+#   * the previous tail is killed before a new one starts, so at most ONE is ever running;
+#   * a trap kills the whole process group on exit, so quitting this script does not orphan
+#     children that outlive the terminal.
+set -uo pipefail
+# Overridable so the follow loop can be exercised against a scratch directory. The leak was only
+# ever visible after several jobs had run, which on real CI means waiting hours; pointing this at a
+# temp dir and touching a few files reproduces it in seconds.
+D="${CI_WATCH_DIAG:-/opt/actions-runner/_diag}"
+
+# Kill what this script started, however it exits (Ctrl-C, terminal close, TERM).
+#
+# Deliberately NOT `kill 0`. That signals the whole process group, and when this script is invoked
+# non-interactively it shares its caller's group - so a tidy-up would take the calling shell (or an
+# ssh session) with it. Killing the watcher and its own children is precise and cannot reach
+# anything we did not start.
+WATCHER=""
+JOURNAL=""
+cleanup() {
+  trap - EXIT INT TERM
+  if [ -n "${WATCHER}" ]; then
+    pkill -TERM -P "${WATCHER}" 2>/dev/null   # the tail it is currently following
+    kill "${WATCHER}" 2>/dev/null
+  fi
+  [ -n "${JOURNAL}" ] && kill "${JOURNAL}" 2>/dev/null
+  return 0
+}
+trap cleanup EXIT INT TERM
+
+clear
+echo "############################################################"
+echo "#   PORTABLE SSD  —  GitHub Actions CI  (LIVE)             #"
+echo "#   repo: solomonBoltin/deployment-hacohen                 #"
+echo "############################################################"
+echo
+if systemctl is-active --quiet github-runner; then
+  echo "[runner: ACTIVE - listening for jobs]"
+else
+  echo "[runner: NOT active]"
+fi
+echo "----------------------------------------------------------"
+
+# Follow the newest per-job worker log as jobs arrive - exactly one tail at a time.
+(
+  cur=""
+  tpid=""
+  while true; do
+    l=$(ls -t "$D"/Worker_*.log 2>/dev/null | head -1)
+    if [ -n "$l" ] && [ "$l" != "$cur" ]; then
+      # Stop following the finished job before following the new one. Without this line the old
+      # tail stays alive forever, which is the entire bug.
+      if [ -n "$tpid" ]; then
+        kill "$tpid" 2>/dev/null
+        wait "$tpid" 2>/dev/null
+      fi
+      cur="$l"
+      echo
+      echo "================ NEW JOB LOG: $cur ================"
+      tail -n +1 -f "$l" &
+      tpid=$!
+    fi
+    sleep 2
+  done
+) &
+WATCHER=$!
+
+# The runner service journal shows job pickup and completion.
+#
+# Backgrounded and waited on, rather than run in the foreground. Bash defers trap handling until the
+# current FOREGROUND command finishes, and `journalctl -f` never finishes - so a foreground call
+# meant the cleanup trap did not run on Ctrl-C, and the last tail was orphaned anyway. `wait` is
+# interruptible, so the trap fires immediately.
+if sudo -n true 2>/dev/null; then
+  sudo journalctl -u github-runner -n 40 -f &
+else
+  journalctl -u github-runner -n 40 -f &
+fi
+JOURNAL=$!
+wait "${JOURNAL}"

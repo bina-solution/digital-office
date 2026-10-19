@@ -1,0 +1,60 @@
+# Pixel-diff metrics (mockup vs real screenshots)
+
+**mean 7.18% | mean excl authentik-login photo 5.85% | median 5.99% | under 8%: 45/54 | under 6%: 28/54**
+
+| screen id | source screenshot | pixel-diff % |
+|---|---|---|
+| glitchtip | glitchtip__issues.png | 2.7% |
+| indox-repo-tail | incoming-documents__repos--repo-tail.png | 2.9% |
+| feature-validation | feature-validation__main.png | 3.1% |
+| redis | redisinsight__databases.png | 3.3% |
+| notifications | notifications__main.png | 3.4% |
+| indox-repo-doc | incoming-documents__repos--repo-documents--id.png | 3.5% |
+| browser42 | browser42__main.png | 3.8% |
+| console-wizard | console__state-wizard-provider.png | 3.9% |
+| drive-search | localdrive__state-search.png | 4.0% |
+| drive-trash | localdrive__state-trash.png | 4.0% |
+| drive-root | localdrive__root.png | 4.0% |
+| wadmin-settings | wadmin__settings.png | 4.1% |
+| mydocs-settings | my-docs__settings.png | 4.8% |
+| n8n-workflows | n8n__workflows.png | 4.8% |
+| indox-repos | incoming-documents__repos.png | 5.0% |
+| supabase | supabase-studio__tables.png | 5.1% |
+| kabil | any-concurrency__main.png | 5.2% |
+| indox-repo | incoming-documents__repos--repo.png | 5.2% |
+| portainer-dashboard | portainer__dashboard.png | 5.4% |
+| indox-tests | incoming-documents__tests.png | 5.4% |
+| mydocs-customers | my-docs__customers.png | 5.5% |
+| indox-sync | incoming-documents__sync.png | 5.6% |
+| connections-apppw | connections__app-password.png | 5.6% |
+| mydocs-items | my-docs__items.png | 5.7% |
+| apps | console__apps.png | 5.9% |
+| wadmin-login | wadmin__login.png | 6.0% |
+| wadmin-dashboard | wadmin__dashboard.png | 6.0% |
+| wadmin-connect | wadmin__connect.png | 6.0% |
+| indox-repo-docs | incoming-documents__repos--repo-documents.png | 6.0% |
+| console-rail | console__state-rail-collapsed.png | 6.0% |
+| console-install | console__install.png | 6.0% |
+| mydocs-docs | my-docs__docs.png | 6.1% |
+| dashboard | console__dashboard.png | 6.1% |
+| n8n-credentials | n8n__credentials.png | 6.2% |
+| wadmin-actions | wadmin__actions.png | 6.2% |
+| mail-search | mailview__state-search.png | 6.3% |
+| n8n-executions | n8n__executions.png | 6.3% |
+| homepage | homepage__main.png | 6.7% |
+| mydocs-dash | my-docs__dash.png | 6.8% |
+| console-palette | console__state-palette.png | 6.8% |
+| wadmin-users | wadmin__users.png | 7.0% |
+| mail-inbox | mailview__inbox.png | 7.0% |
+| mail-label | mailview__label.png | 7.0% |
+| mail-message | mailview__message.png | 7.0% |
+| mail-attention | mailview__state-attention.png | 7.0% |
+| connections-auth | connections__auth.png | 8.0% |
+| machine | machine__main.png | 8.1% |
+| connections-infra | connections__infra.png | 8.4% |
+| authentik-admin | authentik__admin.png | 8.4% |
+| indox-settings | incoming-documents__settings.png | 8.9% |
+| indox-extraction | incoming-documents__extraction.png | 9.1% |
+| portainer-containers | portainer__containers.png | 9.2% |
+| indox-root | incoming-documents__root.png | 9.6% |
+| authentik-login | authentik__login.png | 77.6% |

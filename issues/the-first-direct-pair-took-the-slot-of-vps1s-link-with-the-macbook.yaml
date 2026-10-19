@@ -1,0 +1,61 @@
+# yaml-language-server: $schema=./schema.json
+title: "The first direct pair hp-laptop↔vps1 took the slot of vps1's link with the MacBook — every app of the MacBook's behind vps1 is «Bad Gateway»"
+opened: 2026-10-09
+category: ops
+severity: critical
+status: open
+summary: "The pair written on 2026-10-08 23:37 was given slot 2, which is vps1's link with the MacBook (10.79.2.1 the MacBook, 10.79.2.2 vps1). vps1 now holds two tunnels on one /24, and `bina.macbook.console.staging.digital-office.co.il` has answered «Bad Gateway» since that minute. The pair was also the wrong way round. The HP's side is removed; vps1's side is still there and is what keeps the MacBook cut off. The slot rule is fixed in 0e0294c7 (on dgo-stable)."
+description: |
+  ## For the MacBook office's agent — read this first
+
+  The chat you are reached through (`bina.macbook.console.staging…`) is one of the apps that fell,
+  so this could not be written to you there. It is also on the hub item (DGO-460).
+
+  ## Measured from hp-laptop, 2026-10-08 23:45 – 2026-10-09 00:25
+
+  ```
+  GET  hp-laptop /api/pair          vps1: slot 2, side 1, role host, dial host, direction use
+  wg   hp-laptop dgo-net            wg2: peer 31.97.196.82:51830, allowed 10.79.2.2/32, handshake
+  link hp-laptop proxy              only USE rules for vps1 (172.18.0.21:9002 → 10.79.2.2:9002);
+                                    no serve rule — vps1 was given nothing, the HP showed 16 apps of it
+  GET  bina.macbook.console.staging.digital-office.co.il (the owner's session)   «Bad Gateway», five readings
+  vps1's own screen («לשכות מחוברות»)  one card: HP, paired 23:37, «היא משתמשת באפליקציות מכאן»,
+                                    «מאזינה כאן · UDP 51830», «המנהרה לא חיה». No card for the MacBook:
+                                    vps1 holds no record of that link at all.
+  ```
+
+  ## Why
+
+  1. **The slot.** `pair_api._taken_slots` counted an office's records and its home slot. vps1 is the
+     FAR end of the link the MacBook converged: the tunnel is `wg0` on vps1's host and the record is on
+     the MacBook. So vps1's offer named nothing as used, and the HP (home slot 1, the MacBook on 4)
+     took the lowest slot "free on both": 2. Inside vps1's tunnel container there is now `wg2` with
+     10.79.2.2/24 and a peer at 10.79.2.1 — the HP — so what vps1's link proxy sends to the MacBook
+     at 10.79.2.1 leaves through `wg2`. (The route inside vps1 was not read from here; this is what
+     the two facts above and the timing say: it fell in the minute the pair was written and did not
+     come back when the HP's side was removed.)
+  2. **The direction.** An offer's `direction` is the OFFERING office's sentence about itself, and
+     the claiming office gets the mirror unless it says its own (`pair_api.claim`). The HP's record
+     came out `use`: the HP used vps1's apps, and vps1 could not reach Plane.
+
+  ## Done on the HP
+
+  * Its side of the pair removed through its own API (23:50): the record, the token, `wg2`. The
+    compiled registry kept vps1's 16 tiles until a compile was run by hand — fixed in b51c0bb3
+    (an unpairing now ends with the compile).
+  * 0e0294c7: `_taken_slots` also takes the slot of every tunnel address the office holds; the
+    selftest reproduces this case (without the rule it fails with `{'slot': 2}`).
+  * `serve.only: {vps1: [plane]}` is still declared on the HP.
+tasks:
+  - text: "On vps1: remove the dead pair — «ביטול צימוד» on the HP's card, or DELETE /api/pair/hp-laptop — and read bina.macbook through vps1 again"
+    done: false
+  - text: "Converge vps1 to a commit that has 0e0294c7 BEFORE it offers again; an offer from older code names no slot and lands on 2 once more"
+    done: false
+  - text: "Pair again: the offer on vps1 with direction `use`; the claim on the HP with no direction (it becomes `serve`)"
+    done: false
+  - text: "Then, on vps1: the tile plane.hp-laptop, its DNS name and its certificate"
+    done: false
+references:
+  - apps/dgo-extend/pair_api.py
+  - ai/context/dgo-pairing-contract.md
+  - issues/a-direct-pair-between-hp-laptop-and-vps1-needs-the-pairing-code-on-both-ends.yaml

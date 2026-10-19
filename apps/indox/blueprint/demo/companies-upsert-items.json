@@ -1,0 +1,377 @@
+[
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "יחזקאל אהרון",
+  "מזהה 1": "511027419",
+  "מייל 1": "person47@example.com"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "דלתות תייר",
+  "מזהה 1": "511634388"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "בניאס",
+  "מזהה 1": "510605959",
+  "מייל 1": "person48@example.com"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "שריזלי",
+  "מזהה 1": "510711716",
+  "מייל 1": "person49@example.com"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "טסה",
+  "מזהה 1": "512396276"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "זלמן סחר",
+  "מזהה 1": "516009677",
+  "מייל 1": "person9@example.com"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "אונת סימנט",
+  "מזהה 1": "516587961"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "אורבונד",
+  "מזהה 1": "511581084"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "מילסטון",
+  "מזהה 1": "512643859",
+  "מייל 1": "person50@example.com"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "מצרפלס",
+  "מזהה 1": "570045310"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "מסגריית שטיל",
+  "מזהה 1": "511061780",
+  "מייל 1": "person51@example.com"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "דור רפאל",
+  "מזהה 1": "514772342",
+  "מייל 1": "person52@example.com"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "י.ש קרטון מו",
+  "מזהה 1": "512093170"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "נירלט צבעים",
+  "מזהה 1": "520037532"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "נוברנד-פלס",
+  "מזהה 1": "515672863"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "וויז אלקטריק",
+  "מזהה 1": "515463354"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "פל ים",
+  "מזהה 1": "513327064",
+  "מייל 1": "person53@example.com"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "מוראל",
+  "מזהה 1": "516711157",
+  "מייל 1": "person54@example.com"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "פרקט פוריו",
+  "מזהה 1": "516386919"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "חופית קיבוץ כנרת",
+  "מזהה 1": "514454446",
+  "מייל 1": "person55@example.com"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "כרמל פלור",
+  "מזהה 1": "514488782",
+  "מייל 1": "person56@example.com"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "כפר מנחם",
+  "מזהה 1": "570043745",
+  "מייל 1": "person57@example.com"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "פוליביד",
+  "מזהה 1": "570047217",
+  "מייל 1": "person58@example.com"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "איקן מפעל לי",
+  "מזהה 1": "510560246"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "אגן",
+  "מזהה 1": "511301129"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "ארקו",
+  "מזהה 1": "516245529"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "ארכה",
+  "מזהה 1": "511022493"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "ענבל",
+  "מזהה 1": "514947746"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "חוליות זרימה",
+  "מזהה 1": "570038158"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "מבנה דרום חדש",
+  "מזהה 1": "516431434"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "סימנט אי.אס.",
+  "מזהה 1": "514745819"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "דיאור",
+  "מזהה 1": "513105494",
+  "מייל 1": "person59@example.com"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "פולירן",
+  "מזהה 1": "513498345",
+  "מייל 1": "person60@example.com"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "ע.ד.א פלסט",
+  "מזהה 1": "511200180",
+  "מייל 1": "person61@example.com"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "סבח",
+  "מזהה 1": "511020471",
+  "מייל 1": "person62@example.com"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "פלמרכז הפצה",
+  "מזהה 1": "512525940",
+  "מייל 1": "person63@example.com"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "קמחי כלי ע",
+  "מזהה 1": "512069865",
+  "מייל 1": "person64@example.com"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "מבנה דרום",
+  "מזהה 1": "570042077",
+  "מייל 1": "person58@example.com"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "בי גי",
+  "מזהה 1": "514291418",
+  "מייל 1": "person65@example.com"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "פזקר",
+  "מזהה 1": "510520687"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "פלסאון",
+  "מזהה 1": "514930718"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "נוימן",
+  "מזהה 1": "510818859",
+  "מייל 1": "person66@example.com"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "איטונג",
+  "מזהה 1": "511212615"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "רוזנפלד",
+  "מזהה 1": "514779065",
+  "מייל 1": "person67@example.com"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "עטרות בטון",
+  "מזהה 1": "514380393"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "נטו אספקה",
+  "מזהה 1": "513905851",
+  "מייל 1": "person68@example.com"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "איש הכול ירוק",
+  "מזהה 1": "514194612",
+  "מייל 1": "person69@example.com"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "טיח הארץ",
+  "מזהה 1": "514697606",
+  "מייל 1": "person70@example.com"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "אסיף סחר עץ",
+  "מזהה 1": "516618881",
+  "מייל 1": "person71@example.com"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "חומרי בנין ו",
+  "מזהה 1": "510003320",
+  "מייל 1": "person72@example.com"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "משווקי הצפון",
+  "מזהה 1": "511429698"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "כהן פור",
+  "מזהה 1": "513381830",
+  "מייל 1": "person27@example.com"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "לכ כלי עבודה",
+  "מזהה 1": "516620499",
+  "מייל 1": "person73@example.com"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "אצ חומרי איטום",
+  "מזהה 1": "511690935",
+  "מייל 1": "person9@example.com"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "סוליד יציקות",
+  "מזהה 1": "515218279"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "שק בטון",
+  "מזהה 1": "514905041",
+  "מייל 1": "person74@example.com"
+ },
+ {
+  "INLINE_ACTION": "TABLE_UPSERT",
+  "table": "companies",
+  "שם חברה": "לוירון",
+  "מזהה 1": "511744898",
+  "מייל 1": "person75@example.com"
+ }
+]

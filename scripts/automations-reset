@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# automations-reset — clean the incoming-documents APPLICATION state (sheets/folders/gmail-tags/caches)
+# for the current tenant, so it is a clean slate for re-onboarding. NOT an infra wipe (that is `bbox reset`).
+# Thin wrapper around scripts/automations-reset.py (forces UTF-8 for the Hebrew tabs/labels).
+#
+#   bbox n8n automations reset            -> dry-run preview (no changes)
+#   bbox n8n automations reset --force    -> LIVE: clear data rows + trash folder files + strip auto labels
+#                                            + clear Redis caches (reset-indox + reset-label-engine)
+#   flags: --no-sheet --no-drive --no-gmail --no-redis  (scope down)
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "${SCRIPT_DIR}/lib.sh" 2>/dev/null || true
+export PYTHONUTF8=1 PYTHONIOENCODING=utf-8
+# Convert the MSYS path to a Windows path so Windows python3 can open the script.
+PY_SCRIPT="${SCRIPT_DIR}/automations-reset.py"
+command -v cygpath >/dev/null 2>&1 && PY_SCRIPT="$(cygpath -w "${PY_SCRIPT}")"
+exec python3 "${PY_SCRIPT}" "$@"

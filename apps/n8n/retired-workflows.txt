@@ -1,0 +1,44 @@
+# Workflow ids that have LEFT the blueprints for good. One per line: <id>  <why>.
+#
+# WHY A LIST. Live is the source of truth, and `bbox n8n pull all` exports the whole instance — so a
+# workflow that was retired by moving its file away comes straight back from any instance that
+# still holds it, untagged, into the CENTRAL blueprint, and from there to every office.
+# That is how twelve dead workflows came to ship in the base layer until 2026-10-07 (the last
+# two had been "moved to an attic" on 2026-08-06 and were back within the month), failing four
+# gates between them: G9 (five of them dialled apitools from the base), G42 (a retired API still
+# carrying `Terminalize Stalled`), G45 and G47.
+#
+# WHO READS IT.
+#   hooks/pull                  never brings one of these back.
+#   hooks/unpush --retired      removes them from THIS instance (`bbox n8n base unpush --retired`).
+#                               Deliberately a verb, not part of bring-up: it deletes from a live
+#                               database, and each office's operator chooses when.
+#   G38 dangling-workflow-ref   an id here must have no blueprint file — and so nothing may call it.
+#
+# Each of these was inactive, called by no node of any shipped blueprint (measured from the
+# compiled blueprints), and its id is quoted by no tracked code or configuration — the second
+# check is what caught indoxApiRouter01 below. Their files are in legacy/n8n/retired-20261007/.
+
+# scratch and probes that were never part of anything
+IPqTtikNP1sLxoka           "Batching loop issue" - a demonstration of the loop-drain defect G45 guards
+ZZAbGemProbe01             "ZZ A/B Gem transport probe (scratch, lane-parallel)"
+sG9bU0ER2yVitKXR           "zz-scratch-gateway-probe (delete me)" - the only caller of indoxDataGateway01
+zzDecideSweep01            "zz decide sweep (temp)"
+
+# retired on 2026-08-12, by its own name
+indoxApiSupabase01         its id became indoxApi01 (apps/indox); this copy kept `Terminalize Stalled`
+# NOT here, whatever its name says: indoxApiRouter01 ("RETIRED 2026-08-12 - folded into
+# indoxApiSupabase01"). No node names it, and it is still what runs — apps/indox/hooks/demo.py
+# executes it by id (ROUTER_WF) and four test suites call it through `routerId` in their Config.
+# A reference by expression is invisible to "who calls this"; look for the quoted id too.
+
+# an agent lane's draft of 2026-08-06: never executed, not the owner's architecture (GATES.md, G42/G43)
+indoxDataGateway01         "INDOX Data Gateway (single writer)" - called only by the scratch probe above
+indoxIdentity01            "INDOX Identity (single source)" - called only by indoxDataGateway01
+
+# the v1 single-value extractors, replaced by the JQExV3 family (apps/indox) on 2026-08-17
+indoxV2QueryDocDate01      Query DOCUMENT_DATE
+indoxV2QueryInvoiceId01    Query INVOICE_ID
+indoxV2QueryPurchaseId01   Query PURCHASE_ID
+indoxV2QueryShipmentId01   Query SHIPMENT_ID
+indoxV2QueryTotalAmt01     Query DOCUMENT_TOTAL_AMOUNT

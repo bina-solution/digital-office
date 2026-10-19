@@ -1,0 +1,64 @@
+# apps/project-pln/bootstrap.yaml — the DECLARED starting state of a fresh office.
+#
+# This file is Plane's analogue of an authentik blueprint or an n8n workflow import: the app's own
+# bring-up is DATA, in the repo, applied by `hooks/onboard` (which `bbox run` calls for every enabled
+# app once the stack is up). Nothing here is clicked in a UI, and re-applying is free.
+#
+# WHY IT EXISTS AT ALL. Plane ships no bootstrap: a fresh instance refuses every sign-in until a
+# human completes the instance-admin form under /god-mode/, and then that same human has to create a
+# workspace, a project and its states before the product is usable. Every other app in this office is
+# configured by its own manifest and a hook — n8n opens already holding this office's workflows, the
+# forge opens with an account that already exists. This file, `bootstrap.py` and `hooks/onboard` are
+# that same promise for Plane: `./bbox run` leaves a working instance with a login, a workspace and a
+# first project, and the owner's part is to open the URL and sign in.
+#
+# NOT HERE, deliberately: the owner's email and password. They are secrets-or-identity, they belong
+# in .env (PLANE_OWNER_*) like every other credential of this deployment, and `hooks/onboard` reads
+# them from there — minting the password on first use and writing it back, never printing it.
+#
+# Also not here: Plane's own `workspace_seed` demo. That task (plane/bgtasks/workspace_seed_task.py)
+# creates a bot user, an example project with cycles, modules, PAGES and a pile of fake work items —
+# a product tour, not an office. A row written through the ORM by this file does not trigger it,
+# which is one of the reasons the bootstrap runs in `manage.py shell` and not through the API.
+
+# The workspace a fresh office starts with. `slug` is what appears in URLs and in the import hook's
+# PLANE_LOCAL_WORKSPACE, so it is short and URL-safe; `name` is what the owner reads.
+workspace:
+  name: "המשרד"
+  slug: bina
+
+# The first project, with the three states a task actually moves through, and two labels.
+#
+# `slug` is filled by hand for a reason worth knowing: Plane derives a state's slug from its name
+# (`State.save()` → `slugify(name)`), and `slugify` strips Hebrew entirely, so three Hebrew states
+# would all carry slug "". They are addressed by UUID everywhere, so nothing breaks — but an empty
+# identifier in the API and in exports is a lie about "which state is this", and one line here fixes
+# it. `default: true` is what Plane's `Issue._ensure_default_state()` falls back to.
+projects:
+  - identifier: GEN
+    name: "כללי"
+    states:
+      - { name: "לביצוע", slug: todo,    group: unstarted, color: "#3f76ff", default: true }
+      - { name: "בתהליך", slug: started, group: started,   color: "#f59e0b" }
+      - { name: "בוצע",   slug: done,    group: completed, color: "#16a34a" }
+    labels:
+      - { name: "דחוף",   color: "#ef4444" }
+      - { name: "בדיקות", color: "#8b5cf6" }
+    # A project that opens EMPTY teaches nothing, and the alternative Plane offers is worse: its own
+    # onboarding seeds a fresh workspace with English sample items ("Welcome to Plane 👋", "1. Create
+    # Projects 🎯"), which is the first thing the owner sees and the first thing to be wrong in a
+    # Hebrew office. These three are the Hebrew replacement for that demo — real work for one person,
+    # in the states declared above — created ONCE, only when the project has no items at all.
+    work_items:
+      - { name: "לפתוח פרויקט ראשון ולכתוב את שלוש המשימות הבאות", state: "לביצוע", priority: high }
+      - { name: "להזמין את מי שצריך לעקוב אחרי הפרויקט",          state: "לביצוע", labels: ["בדיקות"] }
+      - { name: "לסמן משימה כבוצעת ולבדוק שהלוח מתעדכן",           state: "בתהליך", priority: medium }
+
+# Accounts for the AGENTS of this office — created the same way the owner is, so a plan file can
+# assign work to a name instead of a person having to hand out a token. The vault instance is
+# `plane_local_api_token-<slug>`, and its secret carries `token` AND `user_id`, which is what
+# apps/project-pln/plan.py reads to turn an assignee name into a Plane member.
+agents:
+  - slug: azaria
+    name: "עזריה"
+    token_label: azaria-agent

@@ -1,0 +1,148 @@
+services:
+  feature-validation-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    image: feature-validation-api:latest
+    container_name: feature-validation-api
+    restart: unless-stopped
+    # Secrets (REDIS/POSTGRES/N8N_API_KEY/webhook + BS creds) are sourced from the repo-root .env so a
+    # plain `docker compose up` from this dir works (this compose is its own project, not in root compose,
+    # and has no local .env). The explicit `environment:` host/URL overrides below win over env_file.
+    #
+    # ../../../.env is the REPO ROOT. It was ../../.env at legacy/feature-validation/ — TWO levels
+    # down — and this file now sits THREE levels down, at apps/apitools/feature-validation/. Relative
+    # paths in a compose file resolve against the file's own directory, so carrying the old depth
+    # over pointed at apps/.env: `compose config` fails outright when the file is missing, and the
+    # container that does start has none of the secrets. Verified with
+    #   "${BBOX_COMPOSE}" -f apps/apitools/feature-validation/docker-compose.yml config
+    # which renders the values only the repo-root .env can supply.
+    env_file:
+    - ../../../.env
+    environment:
+    - FEATURES_ROOT=/app/features
+    - APITOOLS_BASE_URL=http://apitools:8080
+    - SCHEDULE_INTERVAL_MINUTES=${FV_SCHEDULE_MINUTES:-360}
+    - N8N_URL=http://n8n:5678
+    - REDIS_HOST=redis
+    - REDIS_PORT=6379
+    - POSTGRES_HOST=n8n-postgres
+    - POSTGRES_PORT=5432
+    - WHATSAPP_URL=http://whatsapp-hacohanim:3000
+    - WHATSAPP_USER=${WHATSAPP_USER:-admin}
+    - WHATSAPP_PASS=${WHATSAPP_PASS:-1234}
+    - WHATSAPP_TEST_PHONE=${WHATSAPP_TEST_PHONE:-050-000-0002}
+    - N8N_WEBHOOK_BASE=http://n8n:5678/webhook
+    - N8N_EXTERNAL_URL=https://${N8N_BASE_URL:-n8n.hacohen.bina-solutions.co.il}
+    volumes:
+    - ./aligned-value-extraction:/app/features/aligned-value-extraction
+    - ./balance-sheet-extraction:/app/features/balance-sheet-extraction
+    - ./balance-sheet-extraction-dev:/app/features/balance-sheet-extraction-dev
+    - ./column-extraction:/app/features/column-extraction
+    - ./document-ocr:/app/features/document-ocr
+    - ./find-option-matching:/app/features/find-option-matching
+    - ./integration:/app/features/integration
+    - ./local-aligned-value-extraction:/app/features/local-aligned-value-extraction
+    - ./local-ocr:/app/features/local-ocr
+    - ./lib:/app/features/lib
+    - ./api:/app/api
+    networks:
+    - traefik-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+    healthcheck:
+      test:
+      - CMD
+      - python
+      - -c
+      - import urllib.request; urllib.request.urlopen('http://localhost:8100/api/health')
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+  aligned-value-extraction:
+    build: ./aligned-value-extraction
+    image: aligned-value-extraction-validator:latest
+    container_name: aligned-value-extraction-validator
+    environment:
+    - APITOOLS_BASE_URL=http://apitools:8080
+    volumes:
+    - ./aligned-value-extraction:/app
+    - ./lib:/app/lib
+    networks:
+    - traefik-network
+    restart: 'no'
+  find-option-matching:
+    build: ./find-option-matching
+    image: find-option-matching-validator:latest
+    container_name: find-option-matching-validator
+    environment:
+    - APITOOLS_BASE_URL=http://apitools:8080
+    volumes:
+    - ./find-option-matching:/app
+    - ./lib:/app/lib
+    networks:
+    - traefik-network
+    restart: 'no'
+  document-ocr:
+    build: ./document-ocr
+    image: document-ocr-validator:latest
+    container_name: document-ocr-validator
+    environment:
+    - APITOOLS_BASE_URL=http://apitools:8080
+    volumes:
+    - ./document-ocr:/app
+    networks:
+    - traefik-network
+    restart: 'no'
+  local-aligned-value-extraction:
+    build: ./local-aligned-value-extraction
+    image: local-aligned-value-extraction-validator:latest
+    container_name: local-aligned-value-extraction-validator
+    environment:
+    - APITOOLS_BASE_URL=http://apitools:8080
+    volumes:
+    - ./local-aligned-value-extraction:/app
+    - ./lib:/app/lib
+    networks:
+    - traefik-network
+    restart: 'no'
+  integration:
+    build: ./integration
+    image: integration-validator:latest
+    container_name: integration-validator
+    env_file:
+    - ../../../.env
+    environment:
+    - N8N_URL=http://n8n:5678
+    - REDIS_HOST=redis
+    - REDIS_PORT=6379
+    - POSTGRES_HOST=n8n-postgres
+    - POSTGRES_PORT=5432
+    - WHATSAPP_URL=http://whatsapp-hacohanim:3000
+    - WHATSAPP_USER=${WHATSAPP_USER:-admin}
+    - WHATSAPP_PASS=${WHATSAPP_PASS:-1234}
+    - WHATSAPP_TEST_PHONE=${WHATSAPP_TEST_PHONE:-050-000-0002}
+    - APITOOLS_BASE_URL=http://apitools:8080
+    - N8N_WEBHOOK_BASE=http://n8n:5678/webhook
+    - N8N_EXTERNAL_URL=https://${N8N_BASE_URL:-n8n.hacohen.bina-solutions.co.il}
+    volumes:
+    - ./integration:/app
+    - ./lib:/app/lib
+    networks:
+    - traefik-network
+    restart: 'no'
+networks:
+  traefik-network:
+    external: true

@@ -1,0 +1,6 @@
+{
+  "feature": "document-ocr",
+  "description": "Validate the document OCR upload pipeline: successful uploads, engine selection, unsupported formats, and edge cases.",
+  "upload_endpoint": "/documentOcr",
+  "cases_source": "fixtures/fixtures.json"
+}

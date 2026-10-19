@@ -1,0 +1,172 @@
+<title>INDOX Restart Cycle 08-17</title>
+<style>
+:root{
+  --bg:#fafbf9; --panel:#f1f5f1; --ink:#17231d; --muted:#5b6b62; --line:#dde5de;
+  --accent:#0f8a63; --accent-ink:#0b6b4d; --ok:#0f8a63; --warn:#a86a1c; --crit:#b3382e;
+  --chip-ok-bg:#e2f2ea; --chip-warn-bg:#f7ecd9; --chip-crit-bg:#f8e5e2; --code:#eef2ee;
+}
+:root:not([data-theme="light"]){}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#101613; --panel:#18211c; --ink:#e6ece8; --muted:#93a59a; --line:#27332c;
+    --accent:#3fbf94; --accent-ink:#5ecfa8; --ok:#3fbf94; --warn:#d9a050; --crit:#e07a6e;
+    --chip-ok-bg:#173129; --chip-warn-bg:#33291a; --chip-crit-bg:#33201d; --code:#1c2620;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#101613; --panel:#18211c; --ink:#e6ece8; --muted:#93a59a; --line:#27332c;
+  --accent:#3fbf94; --accent-ink:#5ecfa8; --ok:#3fbf94; --warn:#d9a050; --crit:#e07a6e;
+  --chip-ok-bg:#173129; --chip-warn-bg:#33291a; --chip-crit-bg:#33201d; --code:#1c2620;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:16px/1.6 "Segoe UI",system-ui,-apple-system,sans-serif;}
+main{max-width:900px;margin:0 auto;padding:48px 24px 96px}
+h1{font-size:2rem;line-height:1.15;margin:0 0 4px;letter-spacing:-.02em;text-wrap:balance}
+h2{font-size:1.25rem;margin:0 0 14px;letter-spacing:-.01em}
+h3{font-size:1.02rem;margin:22px 0 8px}
+p{margin:0 0 12px;max-width:72ch}
+section{margin-top:44px}
+.eyebrow{font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:var(--accent-ink);font-weight:600;margin-bottom:6px}
+.sub{color:var(--muted);margin-bottom:0}
+.statrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:26px 0 0}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px 16px}
+.stat .n{font-size:1.5rem;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.stat .l{font-size:.78rem;color:var(--muted);margin-top:2px}
+.stat.good .n{color:var(--ok)} .stat.warn .n{color:var(--warn)}
+table{border-collapse:collapse;width:100%;font-size:.9rem}
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px}
+th{Text-align:left;font-size:.74rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600;padding:10px 12px;border-bottom:1px solid var(--line);background:var(--panel)}
+td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:none}
+td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+code,.mono{font-family:ui-monospace,Consolas,"Cascadia Mono",monospace;font-size:.86em;background:var(--code);padding:1px 5px;border-radius:4px}
+.chip{display:inline-block;font-size:.72rem;font-weight:600;padding:2px 9px;border-radius:99px;white-space:nowrap}
+.chip.ok{background:var(--chip-ok-bg);color:var(--ok)}
+.chip.warn{background:var(--chip-warn-bg);color:var(--warn)}
+.chip.crit{background:var(--chip-crit-bg);color:var(--crit)}
+.timeline{list-style:none;margin:0;padding:0;border-left:2px solid var(--line)}
+.timeline li{padding:0 0 14px 18px;position:relative}
+.timeline li::before{content:"";position:absolute;left:-6px;top:.45em;width:10px;height:10px;border-radius:99px;background:var(--accent);border:2px solid var(--bg)}
+.timeline .t{font-family:ui-monospace,Consolas,monospace;font-size:.82rem;color:var(--muted)}
+.callout{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:8px;padding:14px 18px;margin:14px 0}
+.callout.warn{border-left-color:var(--warn)}
+ul.tight{margin:6px 0 12px;padding-left:22px}
+ul.tight li{margin-bottom:6px}
+a{color:var(--accent-ink)}
+.small{font-size:.85rem;color:var(--muted)}
+hr{border:none;border-top:1px solid var(--line);margin:36px 0}
+</style>
+<main>
+<div class="eyebrow">INDOX · deployment-hacohen · 2026-08-17</div>
+<h1>INDOX Restart Cycle 08-17</h1>
+<p class="sub">Full report of the ACTION_RESTART → drain-by-status (lane6) cycle: what ran, what broke, what was proven, what changed, and the checklist for a clean next cycle.</p>
+
+<div class="statrow">
+  <div class="stat"><div class="n">25,209</div><div class="l">docs flipped &amp; drained (1 lane6 call, 16 lanes)</div></div>
+  <div class="stat"><div class="n">~61 min</div><div class="l">flip 08:17 → queue empty 09:19 UTC</div></div>
+  <div class="stat warn"><div class="n">40 → 1</div><div class="l">errors before vs after the fixes landed</div></div>
+  <div class="stat good"><div class="n">0</div><div class="l">lock or guard breaches, entire run</div></div>
+  <div class="stat good"><div class="n">17</div><div class="l">console duplications — every one root-caused</div></div>
+</div>
+
+<section>
+<div class="eyebrow">1 · What ran</div>
+<h2>Timeline</h2>
+<ul class="timeline">
+  <li><span class="t">08:17</span> — 25,210 docs across 11 non-terminal statuses flipped to <code>ACTION_RESTART</code>. Excluded by design: COMPLETED, DOUBLE, MERGED, GARBAGE (terminal verdicts), PAUSE (operator hold, 31 docs).</li>
+  <li><span class="t">08:18:30</span> — one call to the new <b>lane6 drain-by-status</b> (<code>{STATUS:"ACTION_RESTART"}</code>) → 16 drivers fired, full <code>drainer_lane6</code> provenance, drainer execution 3350711.</li>
+  <li><span class="t">08:19–08:20</span> — <b>burst incident</b>: 2 of 16 lanes die ("runner became unresponsive").</li>
+  <li><span class="t">08:28–08:46</span> — <b>timeout cascade</b>: ~600s per-workflow timeouts kill queued sub-executions; 1,194 UploadApiTools executions canceled; errorHandler fires ~1,300× (mostly backlog digestion), dead-letters docs back to ACTION_RESTART.</li>
+  <li><span class="t">08:52 / 09:04</span> — fixes land live mid-run (timeouts 3600; figure_company_id eliminated). <b>Error generation stops: exactly 1 error after 08:52</b> (an unrelated hourly health-probe hiccup).</li>
+  <li><span class="t">09:19</span> — queue fully drained (run=0, new=0). Runner fleet auto-recreated with the hardened config; 971 orphan brackets closed; main healthy.</li>
+  <li><span class="t">09:04–09:35</span> — two-point extraction rule enforced across 4 workflows, with executed proofs.</li>
+</ul>
+<h3>Outcome census</h3>
+<div class="tablewrap"><table>
+<tr><th>status</th><th class="num">count</th><th>meaning</th></tr>
+<tr><td>OLD</td><td class="num">18,330</td><td>re-verdicted by the state machine (73% of the wave) at ~10.6 lines/s</td></tr>
+<tr><td>COMPLETED</td><td class="num">+23</td><td>recovered end-to-end (incl. 2 by the name-retry design)</td></tr>
+<tr><td>ACTION_RESTART</td><td class="num">~4,170</td><td>the 2 dead lanes' docs + errorHandler dead-letters — <b>next lane6 call picks them up by design</b></td></tr>
+<tr><td>MISSING_COMPANY_ID</td><td class="num">299</td><td>honest terminal after resolution exhausted</td></tr>
+<tr><td>MISSING_LINK</td><td class="num">112</td><td>960 drive searches ran (threaded drive service, 1.54s/line)</td></tr>
+<tr><td>MAX_ITERATIONS</td><td class="num">321</td><td>epoch-fix holding; no false runaways</td></tr>
+</table></div>
+</section>
+
+<section>
+<div class="eyebrow">2 · Errors</div>
+<h2>Complete error ledger — 3 root causes, all fixed</h2>
+<div class="tablewrap"><table>
+<tr><th>class</th><th class="num">errors</th><th>root cause</th><th>fix</th><th>status</th></tr>
+<tr><td>Runner unresponsive</td><td class="num">5</td><td>16 lanes × ~1,575-doc Code tasks vs runner procs at 1GB heap / 24 concurrent → GC storm → missed heartbeats → broker aborts 2 lanes</td><td>heap 1024→1536 (cgroup 2G) · concurrency 24→12 · <code>N8N_RUNNERS_HEARTBEAT_INTERVAL=90</code></td><td><span class="chip ok">APPLIED (fleet recreated 09:19)</span></td></tr>
+<tr><td>Timeout cascade</td><td class="num">~34</td><td>three tight per-workflow <code>executionTimeout</code>s (ProcessDocument 600, DocBatchUpsert 600, UploadApiTools 420) killed queued sub-executions under full-wave slot saturation; cancellations cascaded up as "action failed" and errorHandler dead-letters</td><td>all three raised to 3600 — whole chain aligned</td><td><span class="chip ok">LIVE (proof: 1 error after 08:52)</span></td></tr>
+<tr><td>Doc-intrinsic</td><td class="num">2</td><td>historic-failure PDFs re-failing OCR — the population the restart deliberately re-attempts</td><td>terminalize by verdict (by design)</td><td><span class="chip ok">BY DESIGN</span></td></tr>
+</table></div>
+<p class="small">The "Error Handler working like crazy" observation: 1,194 canceled UploadApiTools executions each fired errorHandler once; the ×24-parallel activity afterwards was the queued backlog draining. Generation stopped at the timeout fix — zero new cancellations since.</p>
+</section>
+
+<section>
+<div class="eyebrow">3 · Duplications</div>
+<h2>All 17 console duplications — 4 classes, per-pair proof</h2>
+<div class="tablewrap"><table>
+<tr><th>class</th><th class="num">groups</th><th>fingerprint &amp; proof</th><th>verdict</th></tr>
+<tr><td><b>L</b> — bounded name retry</td><td class="num">12</td><td><code>get_company_name</code> ×5 per doc: a name-miss deliberately writes no state ([stage-retry 08-10]) + decide's RETRY&lt;10 bound ([company-retry 08-13]); all stopped at RETRY=5; 9 → UNKNOWN_COMPANY, <b>2 recovered real names → COMPLETED</b></td><td><span class="chip ok">BY DESIGN</span></td></tr>
+<tr><td><b>B</b> — crash re-delivery</td><td class="num">2</td><td><code>extract_per_type</code> ×5–6 in ~90s; first executions status=<b>crashed</b> (worker died at drain time, pre-recreate) → Bull stalled-job recovery re-ran to success; both COMPLETED</td><td><span class="chip warn">CAUSE FIXED (runner config)</span></td></tr>
+<tr><td><b>R</b> — timeout recovery</td><td class="num">3+1</td><td>first executions status=<b>error</b> (pre-fix cancellations) → dead-letter → ACTION_RESTART → sanctioned re-run ~20min later</td><td><span class="chip ok">ROOT FIXED</span></td></tr>
+<tr><td><b>P</b> — deliberate proof</td><td class="num">1</td><td>the two-point-rule proof drive (08:37 wave + 09:33 proof)</td><td><span class="chip ok">INTENTIONAL</span></td></tr>
+</table></div>
+<div class="callout">
+<b>The red-team standard, met.</b> Adversarial attempts with the real machinery: two <i>simultaneous</i> driver dispatches on one doc → defended (<code>was_locked=true</code>, single bracket). Stale-snapshot replay straight at the router → duplicated (restart-class <i>and</i> non-restart) — reproducing the ghost's exact mechanism and proving the one remaining door is handing the router a stale full-row line directly (basicAuth'd; used only by driver + deliberate operator dispatch). Through drainer→driver, duplication is impossible: fresh re-fetch by ID + atomic lock + state change + token guard.
+</div>
+</section>
+
+<section>
+<div class="eyebrow">4 · Structural findings</div>
+<h2>What this cycle exposed and closed</h2>
+<ul class="tight">
+<li><b>The root drainer, finally:</b> a <b>ghost cron</b> — n8n main kept firing indoxApi01's <i>deleted</i> 5-minute poll lane from memory (every :55, no provenance, the err_15m≈4 "baseline", the 27 concurrent doubles). Killed by deactivate/activate at 23:30; proven silent across ~100 would-be ticks in the same living process; fleet-wide audit found zero other ghosts and purged 5 orphan trigger-state remnants.</li>
+<li><b>Two-point extraction rule enforced</b> (base + per-type, nothing else):
+  <ul class="tight">
+  <li><code>figure_company_id</code> — eliminated (base stamps unconditionally; decide branch + ACTION_RESTART bypass removed). Was 969 wasted OCR dispatches in this wave alone.</li>
+  <li><code>figure_company_offline</code> — <b>moved into BaseDocEx01</b>: NAME input added, B31 filename matcher ported verbatim as the fill-only third company leg. Proof: <code>"Fig Ord Co חשבונית 123.pdf" → company_id=511234567</code>.</li>
+  <li><code>figure_document_type</code> + standalone <code>extract_invoice_google_ai</code> — removed from decide (base owns TYPE via local + Gemini legs; per-type stamps AI completion itself).</li>
+  <li><code>action_extract_shipment_ids</code> — removed (per-type emits LOCAL/AI_SHIPMENT_IDS; Selection prefers them; link parses them directly).</li>
+  <li>Executed proof: a restarted companyless doc dispatched exactly <b>one</b> action (<code>update_status_missing_company</code>) — zero out-of-band extractors. Remaining extraction vocabulary: <code>extract_base_doc</code>, <code>extract_per_type</code>, <code>extract_balance_sheet</code>. The two points and nothing else.</li>
+  </ul></li>
+<li><b>Lane6 drain-by-status</b> built, named lanes 1–6, proven at 25k scale with full provenance.</li>
+<li><b>IndoxResetFull01</b> identified (the E2E test-reset harness that can wipe the table) and deactivated.</li>
+</ul>
+</section>
+
+<section>
+<div class="eyebrow">5 · Before the next cycle</div>
+<h2>Checklist for a 0-error, 0-violation cycle</h2>
+<div class="tablewrap"><table>
+<tr><th>#</th><th>item</th><th>status</th></tr>
+<tr><td class="num">1</td><td>Timeout alignment (ProcessDocument, DocBatchUpsert, UploadApiTools → 3600)</td><td><span class="chip ok">DONE · LIVE</span></td></tr>
+<tr><td class="num">2</td><td>Runner hardening (heap 1536 / cgroup 2G · concurrency 12 · heartbeat 90) — in repo + applied</td><td><span class="chip ok">DONE · FLEET RECREATED</span></td></tr>
+<tr><td class="num">3</td><td>Two-point rule enforcement (all 4 extractors folded/removed, proofs executed)</td><td><span class="chip ok">DONE · LIVE</span></td></tr>
+<tr><td class="num">4</td><td>Ghost cron dead + fleet ghost audit clean + orphan trigger-state purged</td><td><span class="chip ok">DONE · PROVEN</span></td></tr>
+<tr><td class="num">5</td><td>Bracket hygiene: orphan OPEN brackets closed (971); wipe/checkpoint the action log at cycle start so the dup counter starts at zero</td><td><span class="chip ok">DONE · repeat at fire time</span></td></tr>
+<tr><td class="num">6</td><td>Corpse pass DONE with value proof first: per-type writes the exact corpse columns (DOC_DATE 99.3%, PURCHASE_ID 81%, SHIPMENT/INVOICE ids, DOC_TOTAL_AMOUNT 52% — delivery notes structurally lack totals) and base writes COMPANY_ID 94.8% / TYPE 99.3% / DOC_DATE 97%. Then: 5 dead query_* lanes stripped from GDoc+Ship (~40 nodes), 3 dead figure/AI lanes stripped from Global01 (19 nodes), switch outputs renumbered (fallback 27→22, 17→14), and all 6 corpse workflows deactivated+deleted (files atticked). Executed proof: 3 docs driven through every renumbered region → correct actions, correct terminals, <b>0 errors, 0 unhandled-action fires</b></td><td><span class="chip ok">DONE · PROVEN</span></td></tr>
+<tr><td class="num">7</td><td>Name retry ABOLISHED (owner law: every action ALWAYS sets its *_COMPLETED flag; failures fail loudly; no retry counters). Join COMPANY_NAME always stamps; a missing Companies map now throws; __recordStageMiss + RETRY bookkeeping removed from Global01, InvoiceDocEx01, ShipmentDocEx01; decide gate is plain !COMPLETED (restart resets flags = the only re-run). Executed proof over the leftover drain: <b>get_company_name runs-per-doc = exactly 1 for all 8 docs</b></td><td><span class="chip ok">DONE · PROVEN</span></td></tr>
+<tr><td class="num">8</td><td>Verify hourly health probe green on next tick (its one hiccup was load-induced)</td><td><span class="chip ok">WATCHING</span></td></tr>
+</table></div>
+
+<h3>Next-cycle procedure (the same two commands)</h3>
+<ul class="tight">
+<li>Optional hygiene first: close any OPEN brackets, clear the action log (fresh dup baseline).</li>
+<li>Flip: <code>UPDATE incoming_documents SET STATUS='ACTION_RESTART' WHERE STATUS IN (…non-terminal…)</code></li>
+<li>Fire: <code>POST /webhook/indox-drain {STATUS:"ACTION_RESTART"}</code> — lane6 does the rest at the settings factor.</li>
+<li>Watch: the error+dup monitor (60s cadence; any new pair gets named and investigated on the spot).</li>
+</ul>
+
+<div class="callout">
+<b>Prediction — now backed by a live rehearsal.</b> The leftover drain (3,683 ACTION_RESTART docs, one lane6 call at 09:47) ran under the complete fix set and delivered the target numbers: <b>settled in ~9 minutes, 0 errors, 0 crashes, 0 cancellations, 0 duplications</b>, one name attempt per doc, table fully settled (OLD 20,939 · COMPLETED 11,829 · honest terminals for the rest · 3 edge-residue docs flagged). The full 25k cycle is the same machinery at ~7× the volume: expect <b>≈40 minutes at factor 16, 0 errors, 0 violations</b>. The 02:00 lane1 nightly (factor 1) is strictly gentler than everything proven here.
+</div>
+</section>
+
+<hr>
+<p class="small">Sources: NEXT.md session log (deployment-hacohen/apps/indox), execution links in-console (drainer 3350711; red-team router 3350861/3350932; proof drive 09:33). All fixes as-code: BaseDocEx01, indoxV2ActionsGlobal01/GDoc01/Ship01, indoxProcessDocument01, indoxDocBatchUpsert01, indoxV2UploadApiTools01, indoxV2BaseDrain01, platform-base/n8n/docker-compose.yml, .env.</p>
+</main>

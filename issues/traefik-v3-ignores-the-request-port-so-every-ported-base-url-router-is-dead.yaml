@@ -1,0 +1,66 @@
+# yaml-language-server: $schema=./schema.json
+title: "traefik v3 ignores the request's port — every `-http` router rendered from a `<APP>_BASE_URL` that carries `:8080` never matches, and the Mac edge works only through the `-local` routers; a nested host (plane.console.localhost) therefore needs a port-less BASE_URL AND an outpost re-sync"
+opened: 2026-09-30
+category: bug
+severity: high
+status: open
+summary: "Measured 2026-09-30 19:45 on the macOS engine (traefik:v3.3): `Host: console.localhost:9999` and `Host: plane.localhost:8080` are routed and reach the authentik forward-auth (its log shows those exact hosts), so a port-less rule matches any port; `Host: plane.console.localhost:8080` against the rule Host(`plane.console.localhost:8080`) never reaches authentik — a rule with a port never matches. scripts/ci-env.sh writes every `<APP>_BASE_URL` as `<host>.localhost:8080`, so on the Mac every compiled `-http`/`-https` router is dead code and the apps live on their `-local` routers. Harmless for `<host>.localhost`; fatal for the nested host the console now frames (plane.console.localhost), which has no `-local` twin. Second layer: the authentik outpost answers 404 for any Host it was never registered with (it matches host AND port: plane.localhost ok, plane.localhost:8080 404), and its list was synced once on 09-22."
+description: |
+  ## Measured
+
+  * Rules on the running containers (docker labels): console-local Host(`console.localhost`),
+    console-http Host(`console.localhost:8080`); project-pln-local Host(`plane.localhost`),
+    project-pln-http Host(`plane.console.localhost:8080`) (after the value got a port),
+    forge-http Host(`forge.console.localhost`) (port-less, auth:none).
+  * Through the edge (Host header → code): console.localhost → 302; console.localhost:9999 → 404
+    from the OUTPOST (authentik-server logs `host: console.localhost:9999` on
+    /outpost.goauthentik.io/auth/traefik); plane.localhost:8080 → 404 from the outpost likewise;
+    plane.console.localhost(:8080) → 404 from TRAEFIK (nothing in authentik's log);
+    forge.console.localhost and forge.console.localhost:9999 → 200 (port-less rule, no auth).
+  * Conclusion: traefik v3 compares the rule host against the request host WITHOUT its port; a rule
+    that contains a port cannot match. The outpost compares the full Host header (with port) to its
+    registered list.
+
+  ## Why it is structural
+
+  1. The compiler renders `<name>-http: Host(${<APP>_BASE_URL})` and ci-env.sh writes
+     `<host>.localhost:8080` into every BASE_URL on the Mac — the two together make every `-http`
+     router dead on this edge. Nobody noticed because `<name>-local: Host(<host>.localhost)` covers
+     the same hostname on any port. The first app whose public host is NOT `<host>.localhost`
+     (Plane's nested plane.console.localhost, needed for same-site cookies inside the console frame)
+     has no `-local` twin and 404s.
+  2. The authentik outpost's gated-host list is written once by the bootstrap (see issue
+     authentik-bootstrap-unhealthy-for-fifteen-hours…): a new host — or a new port form — is 404
+     until it re-runs.
+
+  ## Fix
+
+  * Now (Plane, forge): BASE_URL values PORT-LESS (`plane.console.localhost`,
+    `forge.console.localhost`); the app's own absolute URLs (Plane WEB_URL/CORS, Forgejo ROOT_URL)
+    keep the port separately. Then re-run the authentik bootstrap so the outpost registers the nested
+    hosts in both forms.
+  * Structural: the compiler must never put a port inside Host(): either strip it at render time
+    (read the value's host part) or take the traefik host from a dedicated field
+    (`routing[].local_host` for the Mac edge: Host(`<local_host>.localhost`)), and the outpost sync
+    must run whenever the registry's host set changes (DGO-60). ci-env.sh should stop writing the
+    port into BASE_URL and put it where URLs are built.
+  * A gate: no `Host(\`…:<port>\`)` in compiled labels; no `:port` in any `*_BASE_URL` of
+    .env.ex / ci-env.sh.
+tasks:
+  - text: "Compiler: never a port inside Host() — reconcile.traefik_host() renders the host part of a ported BASE_URL as a literal (d3497a85); byte-identical for port-less values"
+    done: true
+  - text: "CORRECTED 20:40: BASE_URL KEEPS the edge port (as ci-env.sh writes it) — authentik's forward-auth matches the browser's Host header port included, and the compiled blueprint's '<App> Provider' external_host is http://${BASE_URL}; only the traefik rule had to lose the port, which the compiler now does. ci-env.sh needs no change"
+    done: true
+  - text: "Plane: PROJECT_PLN_BASE_URL=plane.console.localhost:8080, recreate Plane, recreate the authentik bootstrap (provider gets the :8080 host), restart authentik-server if the outpost does not refresh; verify plane.console.localhost:8080 → 302 → sign-in → framed in the console"
+    done: false
+  - text: "Outpost sync on host-set change: the bootstrap must be RECREATED (compose up, fresh env), never docker start/restart (DGO-60); a provider change needs an outpost refresh — a server restart is the lever when the signal does not arrive. DONE a7f2b2a5: the compiled overlay labels the bootstrap with the digest of its inputs, so dc up recreates it when they change; the restart lever is tracked in the bootstrap issue"
+    done: true
+  - text: "Gate: compiled labels contain no Host() with a port. DONE a7f2b2a5: route-claim-lint invariant 3 — literal ports fail; a ${VAR} that this machine's .env resolves to host:port fails unless the same service has a port-less rule for that host (found supabase.localhost unreachable → twin added). 22:14 measured: plane.console.localhost:8080 → 302 to authentik"
+    done: true
+references:
+  - platform/manager/reconcile.py
+  - scripts/ci-env.sh
+  - platform-base/authentik/bootstrap.sh
+  - platform-base/authentik/outpost-ready.py
+  - apps/project-pln/app.json
+  - issues/authentik-bootstrap-unhealthy-for-fifteen-hours-two-sso-hosts-unserved.yaml

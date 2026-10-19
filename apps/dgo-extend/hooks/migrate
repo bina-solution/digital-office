@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+# DGO-1 · migrate `offices` → `dgo-extend` — idempotent, safe to run on every bring-up.
+#
+# Why a hook and not a note in a README: an office that already knows the app under its old name has
+# three things that carry the name — the desired state, two docker volumes (the declarations/run log
+# and the peer registry the console reads), and the declarations directory INSIDE the state volume
+# (`/data/offices/<id>.yaml`). A rename that only moves files in git leaves that office with an
+# unknown app, no declarations and no peer registry, and the only symptom is an empty screen.
+#
+# It runs on the HOST (every hook does), which is what makes it possible at all: the volumes can be
+# copied between container starts, before the app's own container mounts the new name.
+#
+# Nothing is deleted. The legacy volumes are left in place and named in the output, so a rollback is
+# `docker volume rm` of the new ones and a git checkout.
+set -euo pipefail
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+cd "${REPO_ROOT}"
+
+# Docker prefix every volume with the compose PROJECT name, so the names to look for are
+# `<project>_offices_state` — not `offices_state`. Resolved by suffix rather than assumed: the same
+# office is `digital-office_…` on a MacBook and `deployment-hacohen_…` on a server, and a migration
+# that assumes one of them silently does nothing on the other (measured: the first version of this
+# hook reported "done" and copied nothing).
+SUFFIX_STATE="offices_state"; SUFFIX_PEERS="offices_peers"
+NEW_SUFFIX_STATE="dgo_extend_state"; NEW_SUFFIX_PEERS="dgo_extend_peers"
+IMG="python:3.12-slim"       # the app's own base image: present on any office that ran it
+
+say() { printf '[dgo-extend migrate] %s\n' "$*"; }
+have_volume() { docker volume inspect "$1" >/dev/null 2>&1; }
+#: the full docker name of the volume whose name ENDS with the suffix, or empty.
+#: "None" is an ANSWER, so it must not be a failure: under `pipefail` a grep that matched nothing
+#: made this return 1, `set -e` then ended the hook at the assignment below without a word, and
+#: with it the whole of `prepare` — on every office that never had the old name (measured on
+#: hp-laptop, 2026-10-08: no identity step, no address step, no projection at bring-up).
+find_volume() { docker volume ls --format '{{.Name}}' 2>/dev/null | grep -E "(^|_)${1}\$" | head -1 || true; }
+volume_entries() { docker run --rm -v "$1:/v:ro" "$IMG" sh -c 'ls -A /v 2>/dev/null | wc -l' 2>/dev/null || echo 0; }
+
+# ── 1. the desired state ────────────────────────────────────────────────────────────────────────
+if grep -qE '^\s+offices:\s*\{[^}]*state:\s*enabled' platform.state.yaml 2>/dev/null; then
+  say "platform.state.yaml: offices → dgo-extend"
+  python3 platform/manager/reconcile.py set-state --app offices --state archived --by migration >/dev/null
+  python3 platform/manager/reconcile.py set-state --app dgo-extend --state enabled --by migration --create >/dev/null
+elif grep -qE '^\s+offices:' platform.state.yaml 2>/dev/null && ! grep -qE '^\s+dgo-extend:' platform.state.yaml; then
+  # a legacy entry in any other disposition still has to stop naming an app that no longer exists
+  python3 platform/manager/reconcile.py set-state --app offices --state archived --by migration >/dev/null || true
+  python3 platform/manager/reconcile.py set-state --app dgo-extend --state enabled --by migration --create >/dev/null
+  say "platform.state.yaml: legacy entry archived, dgo-extend enabled"
+fi
+
+# ── 2. the volumes ──────────────────────────────────────────────────────────────────────────────
+copy_volume() {
+  local old="$1" new="$2"
+  if [ -z "${old}" ]; then return 0; fi                    # fresh install: nothing to migrate
+  if have_volume "${new}" && [ "$(volume_entries "${new}")" != "0" ]; then
+    say "volume ${new} already has data — leaving ${old} alone"
+    return 0
+  fi
+  have_volume "${new}" || docker volume create "${new}" >/dev/null
+  say "copying volume ${old} → ${new} …"
+  docker run --rm -v "${old}:/from:ro" -v "${new}:/to" "${IMG}" \
+    python3 -c "import shutil;s=shutil.copytree('/from','/to',dirs_exist_ok=True)" >/dev/null
+  say "  ${new}: $(volume_entries "${new}") entries (${old} kept)"
+}
+OLD_STATE_VOL="$(find_volume "${SUFFIX_STATE}")"
+OLD_PEERS_VOL="$(find_volume "${SUFFIX_PEERS}")"
+# The destination name is the source's PROJECT prefix plus the new suffix — computed here rather than
+# returned by copy_volume: a value captured from a function that also talks would capture the talk,
+# and the declarations rename below then silently never ran (measured).
+NEW_STATE_VOL="${OLD_STATE_VOL%${SUFFIX_STATE}}${NEW_SUFFIX_STATE}"
+NEW_PEERS_VOL="${OLD_PEERS_VOL%${SUFFIX_PEERS}}${NEW_SUFFIX_PEERS}"
+copy_volume "${OLD_STATE_VOL}" "${NEW_STATE_VOL}"
+copy_volume "${OLD_PEERS_VOL}" "${NEW_PEERS_VOL}"
+
+# ── 3. the declarations directory inside the state volume ───────────────────────────────────────
+# `/data/offices/<id>.yaml` → `/data/dgo/<id>.yaml`. The peer-token file and the run logs are
+# name-neutral and stay where they are.
+if [ -n "${NEW_STATE_VOL}" ] && have_volume "${NEW_STATE_VOL}"; then
+  # `-i`: the script arrives on stdin. Without it docker does not attach stdin, python3 reads
+  # nothing and exits silently — the migration reports success and moves no declarations.
+  docker run -i --rm -v "${NEW_STATE_VOL}:/data" "${IMG}" python3 - <<'PY'
+import os, shutil
+old, new = "/data/offices", "/data/dgo"
+if os.path.isdir(old):
+    os.makedirs(new, exist_ok=True)
+    moved = 0
+    for name in sorted(os.listdir(old)):
+        src, dst = os.path.join(old, name), os.path.join(new, name)
+        if os.path.exists(dst):
+            continue
+        shutil.move(src, dst)
+        moved += 1
+    print(f"[dgo-extend migrate] declarations moved: {moved}")
+PY
+fi
+
+say "done — legacy volumes are kept as ${OLD_STATE_VOL:-none} / ${OLD_PEERS_VOL:-none}"

@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+#: first-run: restore the newest state dump into an empty profile
+# onboard — restore the latest browser42 state dump (Google logins etc.) into a fresh, empty
+# profile, so re-auth and agentic tasks work without signing in again. Invoked generically by
+# `bbox run` (every run) and `bbox onboarding` via run_app_hooks; the platform does not name this
+# app. Safe to call unconditionally — see the empty-profile gate below.
+#
+# This was ~20 lines inline in scripts/onboarding, which meant layer 0 knew this app's archive
+# filename format (`data/browser42-state-*.tar.gz.enc`), its container name, and how to read its
+# `info` output. It also ran UNCONDITIONALLY — browser42 ships `enabled: false`, so on a default
+# deployment onboarding spent its time restoring state for an app with no containers, then printed
+# a warning about it. run_app_hooks only walks ENABLED apps, so that no longer happens.
+#
+# LOUD + VERIFIED: a silently-missed restore looks identical to a successful one until someone
+# needs a Google session, which is usually days later.
+#
+# ALREADY ONBOARDED, DO NOTHING. This hook now runs unconditionally on every `bbox run` (see
+# `run_app_hooks onboard` in `bbox`'s `run)` case), not just the occasional manual `bbox onboarding`.
+# Restoring on every run would overwrite the LIVE profile with the last dump on every bring-up,
+# silently discarding any session activity since the last `bbox b42 dump`. So: only restore into a
+# profile that is still empty (a true first run for this container) — a non-empty profile means
+# either a prior restore already happened or a live session exists, and either way this hook has
+# nothing to do.
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # colors, say
+
+B42_SH="${SCRIPT_DIR}/../browser42-state.sh"
+
+# container must exist before `info`/`load` can resolve its /profile volume — `up -d` may still settle
+for _ in $(seq 1 15); do
+  docker ps -a --format '{{.Names}}' | grep -q browser42-browser && break
+  sleep 2
+done
+
+CUR_SZ="$(sh "${B42_SH}" info 2>/dev/null | sed -n 's/^size *: *//p' | tr -d ' ')"
+case "${CUR_SZ}" in
+  *K|0*|"") : ;;   # empty profile — proceed to restore below
+  *) say "[browser42] profile already has state (${CUR_SZ}) — already onboarded, skipping restore"; exit 0 ;;
+esac
+
+# hooks/state owns where dumps live and what they are called — ask it, don't restate it.
+DUMP="$(bash "${SCRIPT_DIR}/state" newest || true)"
+
+if [ -z "${DUMP}" ]; then
+  say "[browser42] no state dump under data/ — skipping (create one with 'bbox b42 dump')"
+  exit 0
+fi
+
+say "[browser42] restoring latest state: $(basename "${DUMP}")"
+if sh "${B42_SH}" load "${DUMP}"; then          # NOT suppressed — show what happened
+  SZ="$(sh "${B42_SH}" info 2>/dev/null | sed -n 's/^size *: *//p' | tr -d ' ')"
+  case "${SZ}" in
+    # a profile measured in KB (or zero, or unreadable) means the archive unpacked to nothing
+    *K|0*|"") say "${cr}[browser42] ⚠ restore looks EMPTY (profile=${SZ:-none}) — logins may NOT be preserved. Re-run 'bbox b42 load', or re-dump.${c0}" ;;
+    *)        say "${cg}[browser42] state restored${c0} (profile ${SZ})" ;;
+  esac
+else
+  say "${cr}[browser42] ⚠ state load FAILED${c0} (passphrase / container?) — logins NOT preserved. Fix, then: bbox b42 load"
+fi

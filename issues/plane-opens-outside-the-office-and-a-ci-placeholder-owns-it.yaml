@@ -1,0 +1,70 @@
+# yaml-language-server: $schema=./schema.json
+title: "project-pln: the tile opens Plane OUTSIDE the office, signup is open, a CI placeholder account owns the seeded Hebrew workspace, and a new project still gets English states"
+opened: 2026-09-30
+category: bug
+severity: high
+status: open
+summary: "Audit of the live instance against the owner's three acceptance points (inside the office like every app; 100% Hebrew incl. seeded defaults; fast). Fast is met and the Hebrew build is live, but: routing.module is embed:false/external:true so the console shows the very notice card the owner rejected; ENABLE_SIGNUP=1 on an auth:none host; hooks/onboard took the owner identity from .env's N8N_OWNER_EMAIL=ci@local.dev (a scripts/ci-env.sh placeholder) so ci@local.dev is the instance admin and owns workspace 'המשרד' while the owner's own workspace bbb keeps English states; DEFAULT_STATES in the backend still names Backlog/Todo/In Progress/Done/Cancelled for every project created from the UI or the API."
+description: |
+  ## Measured (2026-09-30 ~15:00, edge plane.localhost:8080, container project-pln-local)
+
+  * Fast: `/` 65 ms, `/api/instances/` 20-37 ms; app 110 MiB, five containers ≈ 240 MiB. Met.
+  * Hebrew build: `lang="he" dir="rtl"`, "Noto Sans Hebrew Bina" in globals-*.css. Met for the UI.
+  * DB: workspace `bbb` (project BBB, states Backlog/Todo/In Progress/Done/Cancelled, labels
+    concepts/admin) — the owner's, person8@example.com; workspace `bina` "המשרד" (project GEN
+    "כללי", states לביצוע/בתהליך/בוצע, labels דחוף/בדיקות) — created by the bootstrap for
+    ci@local.dev. Users: bot_user_…, person8@example.com, ci@local.dev.
+  * InstanceConfiguration: ENABLE_SIGNUP=1, ENABLE_EMAIL_PASSWORD=1, magic link off. Route auth:none.
+  * app.json routing.module: `embed: false, external: true`; the console's new `renderExternalNotice`
+    shows "האפליקציה הזו פועלת במארח משלה ואינה נטענת בתוך המסוף" and opens a new tab. The owner
+    pasted that card and said: "למה לא בעצם? הכל אמור לעבוד מושלם בתוך הלשכה כמו כל שאר האפלקציות".
+
+  ## Why each one is structural
+
+  1. **Path-embed vs host-embed.** `/a/plane/` cannot work (root-absolute paths, upstream #8168) —
+     but nothing stops framing the app's own HOST: desktop.js `openExternal` already puts
+     `spec.url` in an iframe and the SPA HTML carries no X-Frame-Options (Django's
+     XFrameOptionsMiddleware stamps API responses only). What breaks a host-embed is the cookie:
+     Plane's session cookie is Django-default SameSite=Lax with no Domain, and with
+     DEV_DOMAIN=localhost the hosts `console.localhost` and `plane.localhost` are different sites
+     (an unlisted TLD makes every two-label host its own registrable domain), so inside a frame
+     the cookie is not sent and Plane loops on sign-in. On the VPS (`<host>.<slug>.digital-office.co.il`)
+     console and plane are the same site and a host-embed works unchanged. The Mac edge needs one
+     shared label — `DEV_DOMAIN=bina.localhost` → `<app>.bina.localhost:8080` — which Chrome
+     resolves at any depth under *.localhost. Deployment-wide; the owner's decision.
+  2. **The owner's identity came from a CI placeholder.** `hooks/onboard` resolves the owner as
+     PLANE_OWNER_EMAIL → N8N_OWNER_EMAIL → owner@domain. This Mac's .env (regenerated in place by
+     scripts/ci-env.sh on 2026-09-30 04:05) has N8N_OWNER_EMAIL=ci@local.dev and no
+     PLANE_OWNER_EMAIL, so the bootstrap made ci@local.dev the instance admin with a minted
+     password in .env. entrypoint.sh in bina-ds already refuses placeholder API keys for the same
+     reason; the onboard hook must refuse a placeholder owner.
+  3. **Signup on a public host.** bootstrap.py sets is_setup_done and turns telemetry off but never
+     writes ENABLE_SIGNUP; with auth:none the host is reachable without the edge SSO.
+  4. **One list owns every project's default states**: `DEFAULT_STATES` in
+     /app/backend/plane/db/models/state.py:24, read by app/views/project/base.py:293 (UI) and
+     api/views/project.py:269 (API). A build patch beside patches/hebrew-defaults.py (same
+     anchor-asserting contract) renames the five and keeps group/colour/sequence.
+tasks:
+  - text: "Console: for module.external, showEmbed(externalUrl(m)) in the content frame (desktop window as today); the notice card only when the frame does not load. Acceptance: tile → Plane renders in the pane; sign in; reload the console; still signed in; same in desktop mode; at 390px"
+    done: false
+  - text: "Owner decision: DEV_DOMAIN=bina.localhost (every app at <app>.bina.localhost:8080) so console and plane are the same site on the Mac edge; the VPS domain is already same-site"
+    done: false
+  - text: "patches/hebrew-states.py: DEFAULT_STATES → לביצוע-ממתין/לביצוע/בתהליך/בוצע/בוטל (names only; group/colour/sequence kept), anchors asserted, build refuses on drift. Acceptance: a project created in the UI and one via POST /api/v1/…/projects/ both get Hebrew states"
+    done: false
+  - text: "hooks/onboard: refuse a placeholder owner (ci@local.dev, *@local.dev, your-*) and name the .env key to set; then PLANE_OWNER_EMAIL=<the owner> and re-run onboard (idempotent) so the owner is the instance admin of 'המשרד'"
+    done: false
+  - text: "Owner decision: keep/delete workspace bbb (offer: rename its five English states in place, UUIDs kept) and delete the ci@local.dev account"
+    done: false
+  - text: "bootstrap.py: ENABLE_SIGNUP=0 once the owner exists; route auth:sso at the edge (CE has no OIDC — Plane's own login stays, the host stops being public). Acceptance: /sign-up says disabled; unauthenticated host request 302s to authentik"
+    done: false
+  - text: "god-mode/admin stays the English static build: route /god-mode/ away or document that the bootstrap replaced it (owner's call, minor)"
+    done: false
+references:
+  - apps/project-pln/app.json
+  - apps/project-pln/hooks/onboard
+  - apps/project-pln/bootstrap.py
+  - apps/project-pln/patches/hebrew-defaults.py
+  - platform-base/console/static/app.js
+  - platform-base/console/static/desktop.js
+  - scripts/ci-env.sh
+  - issues/plane-api-dead-for-ten-hours-while-docker-said-healthy.yaml

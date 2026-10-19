@@ -1,0 +1,134 @@
+<section class="screen" data-screen="portainer-containers"><div style="height:100vh;overflow:auto" dir="ltr">
+<style>
+.ptc-wrap{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;min-height:100vh;background:#f6f7f8;color:#1c1c1c;font-size:14px;}
+.ptc-upgrade{background:#134664;color:#fff;padding:9px 16px;font-size:12.5px;display:flex;align-items:center;gap:6px;height:19px;box-sizing:content-box;}
+.ptc-upgrade svg{width:13px;height:13px;}
+.ptc-body-flex{display:flex;}
+.ptc-side{width:300px;flex:none;background:#2e2f33;color:#c4ccd4;min-height:100vh;display:flex;flex-direction:column;}
+.ptc-logo{padding:16px 16px 6px;}
+.ptc-logo-text{font-weight:800;font-size:32px;color:#fff;letter-spacing:.2px;}
+.ptc-ce{font-size:11px;color:#8b98a5;letter-spacing:.5px;padding:0 16px 11px;display:flex;align-items:center;gap:5px;border-bottom:1px solid #2b3946;margin-bottom:8px;}
+.ptc-ce .dot{width:8px;height:8px;background:#d63384;display:inline-block;}
+.ptc-env-active{margin:6px 12px 10px;background:#3a3b3f;border-radius:4px;padding:16px 12px;display:flex;align-items:center;gap:10px;font-size:14px;color:#fff;}
+.ptc-env-active svg{width:18px;height:18px;}
+.ptc-nav-item{display:flex;align-items:center;gap:12px;padding:8px 16px;margin:0 8px;border-radius:5px;width:calc(100% - 16px);box-sizing:border-box;color:#c4ccd4;text-decoration:none;font-size:14px;font-weight:400;}
+.ptc-nav-item.on{background:#484950;color:#fff;}
+.ptc-nav-item svg{width:16px;height:16px;flex:none;}
+.ptc-nav-sec{font-size:14px;color:#e4e7ea;padding:25px 16px 16px;letter-spacing:.2px;}
+.ptc-foot{margin-top:auto;padding:16px 16px;font-size:11px;color:#5d6a76;}
+.ptc-main{flex:1;min-width:0;}
+.ptc-crumb{display:flex;align-items:center;justify-content:space-between;padding:15px 24px 5px;border-bottom:1px solid #e1e4e7;background:#fff;font-size:13px;color:#6a7178;box-sizing:border-box;min-height:37px;}
+.ptc-crumb .left{display:flex;align-items:center;gap:6px;}
+.ptc-crumb .right{display:flex;align-items:center;gap:10px;color:#4a5158;}
+.ptc-crumb .user{display:flex;align-items:center;gap:6px;}
+.ptc-icopill{width:32px;height:32px;border-radius:50%;background:#eef0f1;display:flex;align-items:center;justify-content:center;}
+.ptc-content{padding:22px 28px 20px;}
+.ptc-h1row{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
+.ptc-h1row h1{font-size:19px;font-weight:400;margin:0;color:#1c1c1c;}
+.ptc-card{background:#fff;border:1px solid #e1e4e7;border-radius:3px;}
+.ptc-toolbar{display:flex;align-items:center;gap:8px;padding:15px 16px;border-bottom:1px solid #eef0f1;flex-wrap:nowrap;}
+.ptc-toolbar .title{font-weight:600;font-size:15px;display:flex;align-items:center;gap:8px;white-space:nowrap;}
+.ptc-search2{border:1px solid #d6dadd;border-radius:3px;padding:5px 8px;font-size:12.5px;color:#8a9199;display:flex;align-items:center;gap:6px;width:180px;white-space:nowrap;}
+.ptc-spacer{flex:1;}
+.ptc-actionbtn{border:1px solid #d6dadd;background:#fff;border-radius:3px;padding:5px 9px;font-size:12.5px;color:#b7bcc1;display:flex;align-items:center;gap:5px;white-space:nowrap;}
+.ptc-actionbtn.enabled{color:#2d3238;}
+.ptc-actionbtn.danger{color:#c0392b;border-color:#e6b3ac;}
+.ptc-addbtn{background:#1c1c1c;color:#fff;border:none;border-radius:3px;padding:6px 12px;font-size:12.5px;display:flex;align-items:center;gap:6px;white-space:nowrap;}
+.ptc-icobtn{border:none;background:transparent;padding:5px 6px;color:#2d3238;}
+.ptc-table{width:100%;border-collapse:collapse;font-size:13px;}
+.ptc-table th{text-align:left;padding:13px 14px;color:#4a5158;font-weight:600;border-bottom:1px solid #eef0f1;white-space:nowrap;background:#fafbfb;}
+.ptc-table td{padding:15px 14px;border-bottom:1px solid #f0f1f2;vertical-align:middle;color:#1c1c1c;white-space:nowrap;}
+.ptc-table a{color:#2d7ff9;text-decoration:none;}
+.ptc-badge{font-size:11px;font-weight:700;padding:3px 10px;border-radius:10px;color:#fff;display:inline-block;}
+.ptc-badge.healthy{background:#12b76a;}
+.ptc-badge.running{background:#12b76a;}
+.ptc-qa{display:flex;gap:8px;color:#2d7ff9;}
+.ptc-qa svg{width:14px;height:14px;}
+.ptc-pagerow{display:flex;justify-content:flex-end;align-items:center;gap:10px;padding:12px 18px;font-size:13px;color:#4a5158;}
+.ptc-pagebtn{border:none;border-radius:5px;width:26px;height:26px;display:flex;align-items:center;justify-content:center;color:#2d3238;}
+.ptc-pagebtn.on{background:#dbecfe;color:#1c1c1c;border-color:#dbecfe;}
+</style>
+<div class="ptc-wrap">
+  <div class="ptc-body-flex">
+    <aside class="ptc-side">
+      <div class="ptc-upgrade"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M12 19V5M5 12l7-7 7 7"/></svg> Upgrade to Business Edition</div>
+      <div class="ptc-logo"><span class="ptc-logo-text">PORTAINER.iO</span></div>
+      <div class="ptc-ce"><span class="dot"></span>COMMUNITY EDITION</div>
+      <a class="ptc-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg>Home</a>
+      <div class="ptc-env-active"><svg viewBox="0 0 24 24" fill="#2d7ff9"><path d="M12 2C6 2 2 6 2 12s4 10 10 10 10-4 10-10S18 2 12 2z"/></svg> primary <svg style="margin-left:auto" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#c4ccd4" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></div>
+      <a class="ptc-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>Dashboard</a>
+      <a class="ptc-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>Templates <svg style="margin-left:auto" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></a>
+      <a class="ptc-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="4"/><rect x="4" y="10" width="16" height="4"/><rect x="4" y="16" width="16" height="4"/></svg>Stacks</a>
+      <a class="ptc-nav-item on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/></svg>Containers</a>
+      <a class="ptc-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="14" rx="2"/><path d="M8 6V4h8v2"/></svg>Images</a>
+      <a class="ptc-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18z"/></svg>Networks</a>
+      <a class="ptc-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/></svg>Volumes</a>
+      <a class="ptc-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>Events</a>
+      <a class="ptc-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="2" width="16" height="20" rx="2"/></svg>Host <svg style="margin-left:auto" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></a>
+      <div class="ptc-nav-sec">App Delivery</div>
+      <a class="ptc-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>Workflows</a>
+      <a class="ptc-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>Sources</a>
+      <div class="ptc-nav-sec">Administration</div>
+      <a class="ptc-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="7" r="4"/><path d="M2 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2"/></svg>User-related <svg style="margin-left:auto" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></a>
+      <a class="ptc-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/></svg>Environment-related <svg style="margin-left:auto" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></a>
+      <a class="ptc-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/></svg>Registries</a>
+      <a class="ptc-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>Logs <svg style="margin-left:auto" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></a>
+      <div class="ptc-foot">© Portainer Community Edition 2.43.0 STS</div>
+    </aside>
+    <main class="ptc-main">
+      <div class="ptc-crumb">
+        <div class="left"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg> <span>›</span> Containers</div>
+        <div class="right">
+          <div class="ptc-icopill"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/></svg></div>
+          <div class="ptc-icopill"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 2-3 4"/></svg></div>
+          <div class="user"><div class="ptc-icopill"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg></div> admin <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
+        </div>
+      </div>
+      <div class="ptc-content">
+        <div class="ptc-h1row"><h1>Container list</h1><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4a5158" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></div>
+        <div class="ptc-card">
+          <div class="ptc-toolbar">
+            <div class="title"><span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#cfe8fb;color:#2d7ff9;font-size:13px;">⬡</span> Containers</div>
+            <div class="ptc-search2">🔍 Search... ✕</div>
+            <div class="ptc-actionbtn">▷ Start</div>
+            <div class="ptc-actionbtn">◻ Stop</div>
+            <div class="ptc-actionbtn">✕ Kill</div>
+            <div class="ptc-actionbtn">↻ Restart</div>
+            <div class="ptc-actionbtn">❚❚ Pause</div>
+            <div class="ptc-actionbtn">▷ Resume</div>
+            <div class="ptc-actionbtn danger">🗑 Remove</div>
+            <div class="ptc-addbtn">+ Add container</div>
+            <div class="ptc-icobtn">▤</div>
+            <div class="ptc-icobtn">⋮</div>
+          </div>
+          <table class="ptc-table">
+            <tr>
+              <th><input type="checkbox"></th><th>Name ↓↑</th><th>State ↓↑ Filter ▽</th><th>Quick Actions</th><th>Stack ↓↑</th><th>Image ↓↑</th><th>Created ↓↑</th><th>IP A...</th>
+            </tr>
+            <tr><td><input type="checkbox"></td><td><a href="#">any-concurrency-shlomo-laptop</a></td><td><span class="ptc-badge healthy">healthy</span></td><td class="ptc-qa">📄 ⓘ ⏱ >_ 📎</td><td>deployment-hacohen</td><td><a href="#">deployment-hacohen-any-concurrency</a></td><td>2026-07-16 11:06:56</td><td>172...</td></tr>
+            <tr><td><input type="checkbox"></td><td><a href="#">apitools</a></td><td><span class="ptc-badge healthy">healthy</span></td><td class="ptc-qa">📄 ⓘ ⏱ >_ 📎</td><td>deployment-hacohen</td><td><a href="#">deployment-hacohen-apitools</a></td><td>2026-07-17 11:09:53</td><td>172...</td></tr>
+            <tr><td><input type="checkbox"></td><td><a href="#">authentik-bootstrap-shlomo-la...</a></td><td><span class="ptc-badge healthy">healthy</span></td><td class="ptc-qa">📄 ⓘ ⏱ >_ 📎</td><td>deployment-hacohen</td><td><a href="#">ghcr.io/goauthentik/server:2024.12</a></td><td>2026-07-16 11:06:27</td><td>172...</td></tr>
+            <tr><td><input type="checkbox"></td><td><a href="#">authentik-postgres-shlomo-laptop</a></td><td><span class="ptc-badge healthy">healthy</span></td><td class="ptc-qa">📄 ⓘ ⏱ >_ 📎</td><td>deployment-hacohen</td><td><a href="#">postgres:16-alpine</a></td><td>2026-07-16 11:06:26</td><td>172...</td></tr>
+            <tr><td><input type="checkbox"></td><td><a href="#">authentik-server-shlomo-laptop</a></td><td><span class="ptc-badge healthy">healthy</span></td><td class="ptc-qa">📄 ⓘ ⏱ >_ 📎</td><td>deployment-hacohen</td><td><a href="#">ghcr.io/goauthentik/server:2024.12</a></td><td>2026-07-16 11:06:27</td><td>172...</td></tr>
+            <tr><td><input type="checkbox"></td><td><a href="#">authentik-worker-shlomo-laptop</a></td><td><span class="ptc-badge healthy">healthy</span></td><td class="ptc-qa">📄 ⓘ ⏱ >_ 📎</td><td>deployment-hacohen</td><td><a href="#">ghcr.io/goauthentik/server:2024.12</a></td><td>2026-07-16 11:06:27</td><td>172...</td></tr>
+            <tr><td><input type="checkbox"></td><td><a href="#">browser42-browser-shlomo-laptop</a></td><td><span class="ptc-badge healthy">healthy</span></td><td class="ptc-qa">📄 ⓘ ⏱ >_ 📎</td><td>deployment-hacohen</td><td><a href="#">deployment-hacohen-browser42-browser</a></td><td>2026-07-16 11:06:56</td><td>172...</td></tr>
+            <tr><td><input type="checkbox"></td><td><a href="#">browser42-caddy-shlomo-laptop</a></td><td><span class="ptc-badge running">running</span></td><td class="ptc-qa">📄 ⓘ ⏱ >_ 📎</td><td>deployment-hacohen</td><td><a href="#">caddy:2-alpine</a></td><td>2026-07-16 11:07:25</td><td>172...</td></tr>
+            <tr><td><input type="checkbox"></td><td><a href="#">browser42-mcp-shlomo-laptop</a></td><td><span class="ptc-badge running">running</span></td><td class="ptc-qa">📄 ⓘ ⏱ >_ 📎</td><td>deployment-hacohen</td><td><a href="#">node:22-slim</a></td><td>2026-07-16 11:06:57</td><td>172...</td></tr>
+            <tr><td><input type="checkbox"></td><td><a href="#">browser42-reaper-shlomo-laptop</a></td><td><span class="ptc-badge running">running</span></td><td class="ptc-qa">📄 ⓘ ⏱ >_ 📎</td><td>deployment-hacohen</td><td><a href="#">deployment-hacohen-browser42-reaper</a></td><td>2026-07-16 11:06:57</td><td>172...</td></tr>
+          </table>
+          <div class="ptc-pagerow">
+            Items per page <select style="border:1px solid #d6dadd;border-radius:3px;padding:3px 6px"><option>10</option></select>
+            <div class="ptc-pagebtn">‹</div>
+            <div class="ptc-pagebtn on">1</div>
+            <div class="ptc-pagebtn">2</div>
+            <div class="ptc-pagebtn">3</div>
+            <span>…</span>
+            <div class="ptc-pagebtn">6</div>
+            <div class="ptc-pagebtn">›</div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+</div></section>

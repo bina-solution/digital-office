@@ -1,0 +1,1750 @@
+{
+  "updatedAt": "2026-02-23T19:08:10.142Z",
+  "createdAt": "2026-02-21T10:58:47.424Z",
+  "id": "indoxV2QueryTotalAmt01",
+  "name": "Query DOCUMENT_TOTAL_AMOUNT",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "ID"
+            },
+            {
+              "name": "API_TOOLS_ID"
+            },
+            {
+              "name": "LINK"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -896,
+        -128
+      ],
+      "id": "5f6e1b90-3036-48e2-879c-375cabe1f910",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -464,
+        -128
+      ],
+      "id": "444e3aa6-684a-4d16-98e6-8fe395153e5b",
+      "name": "Start"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "indoxV2UploadApiTools01",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/indoxV2UploadApiTools01",
+          "cachedResultName": "Upload Doc To API TOOLS"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "HASH": "={{ $json.API_TOOLS_ID }}",
+            "LINK": "={{ $json.LINK || null }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "LINK",
+              "displayName": "LINK",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "HASH",
+              "displayName": "HASH",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "each",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        -32,
+        -32
+      ],
+      "id": "b852b1c0-4e9f-4df9-86c4-481d3d25ed38",
+      "name": "Upload OR Get API_TOOLS_ID",
+      "retryOnFail": true,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "40af2929-a4ed-4fc0-9ec8-eb392307d940",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        416,
+        -32
+      ],
+      "id": "d84d5a95-2c36-472b-9b03-18c3cc4c8fa1",
+      "name": "IS OK"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        640,
+        192
+      ],
+      "id": "9634edbc-9acc-4e21-89dc-7a8c4e306d0a",
+      "name": "Failed API_TOOLS_ID"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e69518aa-a04e-4af6-99a7-f0488ebb8317",
+              "name": "result",
+              "value": "={{ $json.result?.result || null}}",
+              "type": "string"
+            },
+            {
+              "id": "35c8afed-91ae-4cac-bfd4-93fca0489c9a",
+              "name": "file_id",
+              "value": "={{ $json.file_id }}",
+              "type": "string"
+            },
+            {
+              "id": "9034d30c-a009-4017-8e4b-71bf186dc08c",
+              "name": "error",
+              "value": "={{ $json.result?.error?.message || null }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1760,
+        -32
+      ],
+      "id": "1a780786-c9af-4150-9bb9-e78a493af004",
+      "name": "Result"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "9a2c300b-ed4f-4d25-af27-90742262814b",
+              "leftValue": "={{ $json?.result?.result }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        864,
+        -176
+      ],
+      "id": "a0ea3f4a-198f-4298-bb15-47fda76b373b",
+      "name": "If has results"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://apitools.hacohen.bina-solutions.co.il/documentJsonQuery",
+        "sendBody": true,
+        "specifyBody": "=json",
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "jsonBody": "={\n  \"file_id\": \"{{ $('Upload OR Get API_TOOLS_ID').item.json.file_id }}\",\n  \"ocr_json_query\": {{ $('DOCUMENT_TOTAL_AMOUNT Below Query').first().json.purchase_order_id_query.toJsonString() }}\n}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "e4a3894d-593a-4bad-af72-a21acacf519c",
+      "name": "Extract BELOW",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1088,
+        -96
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 2100,
+      "maxTries": 3,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://apitools.hacohen.bina-solutions.co.il/documentJsonQuery",
+        "sendBody": true,
+        "specifyBody": "=json",
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "jsonBody": "={\n  \"file_id\": \"{{ $('Upload OR Get API_TOOLS_ID').item.json.file_id }}\",\n  \"ocr_json_query\": {{ $('DOCUMENT_TOTAL_AMOUNT After Query').first().json.purchase_order_id_query.toJsonString() }}\n}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "5c2a8cc0-68ab-47cf-a82b-141bcb18a512",
+      "name": "Extract AFTER",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        640,
+        -128
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1088,
+        144
+      ],
+      "id": "ed347874-e2a7-4029-8596-ea95ff1a13a0",
+      "name": "Map Query Error"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "3456e851-7ada-4d49-baae-e5ab44d9aeb4",
+              "name": "ID",
+              "value": "={{ $(\"Start\").item.json.ID }}",
+              "type": "string"
+            },
+            {
+              "id": "70d0ca3a-b27e-40ca-9109-5bd53512ffaa",
+              "name": "result",
+              "value": "={{ $json.result || null }}",
+              "type": "string"
+            },
+            {
+              "id": "765d597c-0388-415d-9131-9e87b840f7d4",
+              "name": "ok",
+              "value": "={{ !!$json.result && $json.result.error === undefined }}",
+              "type": "boolean"
+            },
+            {
+              "id": "67eb213b-0fac-4bab-a75a-076e610fce9c",
+              "name": "error",
+              "value": "={{ $json.error || null }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2208,
+        -32
+      ],
+      "id": "adc185e6-01d2-41c6-80a5-82a8c7e330e0",
+      "name": "Output"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1536,
+        -32
+      ],
+      "id": "d5151caa-b5ec-43fc-9898-672fb434d6ca",
+      "name": "Merge"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1312,
+        -224
+      ],
+      "id": "e6b47dee-c75c-4c5b-8215-c47a38e0d2df",
+      "name": "Merge1"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1312,
+        96
+      ],
+      "id": "970402a8-c4f4-42d6-a50b-047647ead01d",
+      "name": "Merge2"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        864,
+        144
+      ],
+      "id": "a6397e8c-1ccf-4642-87e2-c876f26049d6",
+      "name": "Merge3"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo",
+          "mode": "list",
+          "cachedResultName": "AutomationValues",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1731210190,
+          "mode": "list",
+          "cachedResultName": "חילוץ תאריך - בחינת ספקים",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo/edit#gid=1731210190"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -1104,
+        64
+      ],
+      "id": "a1cf1938-36d3-40c3-94b4-9bdba0b67fe3",
+      "name": "Get row(s) in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "e2knIZpw8YF0QBAB",
+          "name": "Google Sheets person17@example.com"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1296,
+        64
+      ],
+      "id": "ce98c997-0886-42bd-9880-a1ef901bda85",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "faa97ccd-0f32-4802-bb2e-8781887929f3",
+              "name": "LINK",
+              "value": "={{ $json.LINK }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -896,
+        64
+      ],
+      "id": "b4f3921e-37cd-4a18-8351-a9ba6bb841ca",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nfunction createContext(value) {\n    return {\n        current: String(value ?? '').trim(),\n        isNegative: false,\n        numeric: null,\n        result: null,\n        invalid: false\n    };\n}\n\nfunction caseEmpty(ctx) {\n    if (!ctx.current) ctx.invalid = true;\n}\n\nfunction caseCurrencySymbol(ctx) {\n    ctx.current = ctx.current\n        .replace(/[$€£¥₪₹₩₺₽฿₫₴₦₲₵₡₢₣₤₥₧₨₭₮₯₰₱₳₶₷₸₹₻₼₾¢]/g, '')\n        .replace(/\\b[A-Z]{2,4}\\b/g, '')\n        .trim();\n}\n\nfunction caseNegative(ctx) {\n    if (/^\\(.*\\)$/.test(ctx.current)) {\n        ctx.isNegative = true;\n        ctx.current = ctx.current.slice(1, -1).trim();\n    } else if (ctx.current.startsWith('-')) {\n        ctx.isNegative = true;\n        ctx.current = ctx.current.replace(/^-+/, '');\n    } else if (ctx.current.endsWith('-')) {\n        ctx.isNegative = true;\n        ctx.current = ctx.current.replace(/-+$/, '');\n    } else if (ctx.current.includes('-')) {\n        ctx.invalid = true;\n    }\n}\n\nfunction caseInvalidChars(ctx) {\n    // Allow apostrophe as thousands separator (e.g. 1'234.56)\n    if (/[^\\d.,()'\\-\\s]/.test(ctx.current)) ctx.invalid = true;\n}\n\nfunction caseStripNoise(ctx) {\n    // Strip everything except digits, dot, comma\n    ctx.current = ctx.current.replace(/[^\\d.,]/g, '');\n}\n\nfunction caseNormalizeSeparators(ctx) {\n    const dots   = (ctx.current.match(/\\./g) || []).length;\n    const commas = (ctx.current.match(/,/g)  || []).length;\n\n    // Multiple of one separator: last one is always decimal\n    if (dots > 1 || commas > 1) {\n        const sep = dots > 1 ? '.' : ',';\n        const lastIdx = ctx.current.lastIndexOf(sep);\n        const after  = ctx.current.slice(lastIdx + 1);\n        const before = ctx.current.slice(0, lastIdx).replace(new RegExp(`\\\\${sep}`, 'g'), '');\n        // Always treat last separator as decimal regardless of digit count\n        ctx.current = before + '.' + after;\n        return;\n    }\n\n    // One dot and one comma: whichever comes last is the decimal separator\n    if (dots === 1 && commas === 1) {\n        const dotIdx   = ctx.current.indexOf('.');\n        const commaIdx = ctx.current.indexOf(',');\n        if (dotIdx > commaIdx) {\n            // 1,234.56 → remove comma\n            ctx.current = ctx.current.replace(',', '');\n        } else {\n            // 1.234,56 → remove dot, swap comma to dot\n            ctx.current = ctx.current.replace('.', '').replace(',', '.');\n        }\n        return;\n    }\n\n    // Single separator — ambiguous\n    const single = ctx.current.match(/^(\\d+)[.,](\\d+)$/);\n    if (single) {\n        const [, before, after] = single;\n        const sep = ctx.current.includes('.') ? '.' : ',';\n        // Treat as thousands only if: exactly 3 digits after, more than 2 digits before, and not all zeros\n        const isThousands = after.length === 3 && before.length > 2 && !/^0+$/.test(after);\n        if (isThousands) {\n            ctx.current = ctx.current.replace(sep, '');\n        } else {\n            ctx.current = ctx.current.replace(sep, '.');\n        }\n    }\n}\n\nfunction caseAssumeImpliedDecimal(ctx) {\n    // Only applies to pure digit strings long enough to have cents\n    if (!/^\\d+$/.test(ctx.current)) return;\n    if (ctx.current.length <= 2) return;\n    // Treat last 2 digits as decimal cents\n    const intPart = ctx.current.slice(0, -2);\n    const decPart = ctx.current.slice(-2);\n    ctx.current = intPart + '.' + decPart;\n}\n\nfunction caseParseNumber(ctx) {\n    const num = parseFloat(ctx.current);\n    if (isNaN(num)) { ctx.invalid = true; return; }\n    ctx.numeric = ctx.isNegative ? -Math.abs(num) : num;\n}\n\nfunction caseFormat(ctx) {\n    if (ctx.invalid || ctx.numeric === null) return;\n    const fixed = Math.abs(ctx.numeric).toFixed(2);\n    const [intPart, decPart] = fixed.split('.');\n    const withCommas = intPart.replace(/\\B(?=(\\d{3})+(?!\\d))/g, ',');\n    ctx.result = (ctx.isNegative ? '-' : '') + withCommas + '.' + decPart;\n}\n\nconst pipeline = [\n    caseEmpty,\n    caseNegative,\n    caseCurrencySymbol,\n    caseInvalidChars,\n    caseStripNoise,\n    caseNormalizeSeparators,\n    caseAssumeImpliedDecimal,\n    caseParseNumber,\n    caseFormat\n];\n\nfunction normalizeCurrency(value) {\n    const ctx = createContext(value);\n    for (const fn of pipeline) {\n        fn(ctx);\n        if (ctx.invalid) return null;\n    }\n    return ctx.result;\n}\n\nfor (const item of items) {\n    item.json.result = normalizeCurrency(item.json.result);\n}\n\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1984,
+        -32
+      ],
+      "id": "1445a7e2-ff7d-4c59-8ec4-b300e39f9946",
+      "name": "Normalize Format"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n    \"purchase_order_id_query\": {\n        \"action\": \"find below\",\n        \"action_value\": [\n            \":סך הכל כולל מע\\\"מ\",\n            \"סך הכל כולל מע\\\"מ\",\n            \"סך הכל כולל מע״מ\",\n            \"סך הכל כולל מעיימ\",\n            \":סך הכל לתשלום בשקל\",\n            \"סך הכל לתשלום בשקל\",\n            \":סה\\\"כ לתשלום בשקל\",\n            \"סה\\\"כ לתשלום בשקל\",\n            \"סה״כ לתשלום בשקל\",\n            \"סהייכ לתשלום בשקל\",\n            \":סך הכל לתשלום בש\\\"ח\",\n            \"סך הכל לתשלום בש\\\"ח\",\n            \"סך הכל לתשלום בש״ח\",\n            \"סך הכל לתשלום בשייח\",\n            \":סה\\\"כ לתשלום בש\\\"ח\",\n            \"סה\\\"כ לתשלום בש\\\"ח\",\n            \"סה״כ לתשלום בש\\\"ח\",\n            \"סהייכ לתשלום בש\\\"ח\",\n            \"סה\\\"כ לתשלום בש״ח\",\n            \"סה״כ לתשלום בש״ח\",\n            \"סהייכ לתשלום בש״ח\",\n            \"סה\\\"כ לתשלום בשייח\",\n            \"סה״כ לתשלום בשייח\",\n            \"סהייכ לתשלום בשייח\",\n            \":סה\\\"כ כולל מע\\\"מ\",\n            \"סה\\\"כ כולל מע\\\"מ\",\n            \"סה״כ כולל מע\\\"מ\",\n            \"סהייכ כולל מע\\\"מ\",\n            \"סה\\\"כ כולל מע״מ\",\n            \"סה״כ כולל מע״מ\",\n            \"סהייכ כולל מע״מ\",\n            \"סה\\\"כ כולל מעיימ\",\n            \"סה״כ כולל מעיימ\",\n            \"סהייכ כולל מעיימ\",\n            \":סה\\\"כ חשבונית מס\",\n            \"סה\\\"כ חשבונית מס\",\n            \"סה״כ חשבונית מס\",\n            \"סהייכ חשבונית מס\",\n            \":סך הכל לתשלום\",\n            \"סך הכל לתשלום\",\n            \":סה\\\"כ לתשלום\",\n            \"סה\\\"כ לתשלום\",\n            \"סה״כ לתשלום\",\n            \"סהייכ לתשלום\",\n            \":סכום לתשלום\",\n            \"סכום לתשלום\",\n            \":סך לתשלום\",\n            \"סך לתשלום\",\n            \":סה\\\"כ מחיר\",\n            \"סה\\\"כ מחיר\",\n            \"סה״כ מחיר\",\n            \"סהייכ מחיר\",\n            \":סה\\\"כ כללי\",\n            \"סה\\\"כ כללי\",\n            \"סה״כ כללי\",\n            \"סהייכ כללי\",\n            \":לתשלום\",\n            \"לתשלום\",\n            \":סה\\\"כ\",\n            \"סה\\\"כ\",\n            \"סה״כ\",\n            \"סהייכ\"\n        ],\n        \"value_validations\": [\n            {\n                \"validation_type\": \"has_number\"\n            },\n            {\n                \"validation_type\": \"length_greater_than\",\n                \"validation_value\": 1\n            },\n            {\n                \"validation_type\": \"length_less_than\",\n                \"validation_value\": 13\n            }\n        ],\n        \"is_rtl\": true\n    }\n}",
+        "options": {}
+      },
+      "id": "31450538-dc60-4ff1-95b5-501d220ebac1",
+      "name": "DOCUMENT_TOTAL_AMOUNT Below Query",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        192,
+        -224
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n    \"purchase_order_id_query\": {\n        \"action\": \"find after\",\n        \"action_value\": [\n            \":סך הכל כולל מע\\\"מ\",\n            \"סך הכל כולל מע\\\"מ\",\n            \"סך הכל כולל מע״מ\",\n            \"סך הכל כולל מעיימ\",\n            \":סך הכל לתשלום בשקל\",\n            \"סך הכל לתשלום בשקל\",\n            \":סה\\\"כ לתשלום בשקל\",\n            \"סה\\\"כ לתשלום בשקל\",\n            \"סה״כ לתשלום בשקל\",\n            \"סהייכ לתשלום בשקל\",\n            \":סך הכל לתשלום בש\\\"ח\",\n            \"סך הכל לתשלום בש\\\"ח\",\n            \"סך הכל לתשלום בש״ח\",\n            \"סך הכל לתשלום בשייח\",\n            \":סה\\\"כ לתשלום בש\\\"ח\",\n            \"סה\\\"כ לתשלום בש\\\"ח\",\n            \"סה״כ לתשלום בש\\\"ח\",\n            \"סהייכ לתשלום בש\\\"ח\",\n            \"סה\\\"כ לתשלום בש״ח\",\n            \"סה״כ לתשלום בש״ח\",\n            \"סהייכ לתשלום בש״ח\",\n            \"סה\\\"כ לתשלום בשייח\",\n            \"סה״כ לתשלום בשייח\",\n            \"סהייכ לתשלום בשייח\",\n            \":סה\\\"כ כולל מע\\\"מ\",\n            \"סה\\\"כ כולל מע\\\"מ\",\n            \"סה״כ כולל מע\\\"מ\",\n            \"סהייכ כולל מע\\\"מ\",\n            \"סה\\\"כ כולל מע״מ\",\n            \"סה״כ כולל מע״מ\",\n            \"סהייכ כולל מע״מ\",\n            \"סה\\\"כ כולל מעיימ\",\n            \"סה״כ כולל מעיימ\",\n            \"סהייכ כולל מעיימ\",\n            \":סה\\\"כ חשבונית מס\",\n            \"סה\\\"כ חשבונית מס\",\n            \"סה״כ חשבונית מס\",\n            \"סהייכ חשבונית מס\",\n            \":סך הכל לתשלום\",\n            \"סך הכל לתשלום\",\n            \":סה\\\"כ לתשלום\",\n            \"סה\\\"כ לתשלום\",\n            \"סה״כ לתשלום\",\n            \"סהייכ לתשלום\",\n            \":סכום לתשלום\",\n            \"סכום לתשלום\",\n            \":סך לתשלום\",\n            \"סך לתשלום\",\n            \":סה\\\"כ מחיר\",\n            \"סה\\\"כ מחיר\",\n            \"סה״כ מחיר\",\n            \"סהייכ מחיר\",\n            \":סה\\\"כ כללי\",\n            \"סה\\\"כ כללי\",\n            \"סה״כ כללי\",\n            \"סהייכ כללי\",\n            \":לתשלום\",\n            \"לתשלום\",\n            \":סה\\\"כ\",\n            \"סה\\\"כ\",\n            \"סה״כ\",\n            \"סהייכ\"\n        ],\n        \"value_validations\": [\n            {\n                \"validation_type\": \"has_number\"\n            },\n            {\n                \"validation_type\": \"length_greater_than\",\n                \"validation_value\": 1\n            },\n            {\n                \"validation_type\": \"length_less_than\",\n                \"validation_value\": 13\n            }\n        ],\n        \"is_rtl\": true\n    }\n}",
+        "options": {}
+      },
+      "id": "99502316-7a02-4a71-8c55-921c9c3a6714",
+      "name": "DOCUMENT_TOTAL_AMOUNT After Query",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -32,
+        -224
+      ],
+      "executeOnce": true
+    }
+  ],
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "DOCUMENT_TOTAL_AMOUNT After Query",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Upload OR Get API_TOOLS_ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload OR Get API_TOOLS_ID": {
+      "main": [
+        [
+          {
+            "node": "IS OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IS OK": {
+      "main": [
+        [
+          {
+            "node": "Extract AFTER",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Failed API_TOOLS_ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Failed API_TOOLS_ID": {
+      "main": [
+        [
+          {
+            "node": "Merge3",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Result": {
+      "main": [
+        [
+          {
+            "node": "Normalize Format",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If has results": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract BELOW",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract BELOW": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 1
+          }
+        ],
+        [
+          {
+            "node": "Merge2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract AFTER": {
+      "main": [
+        [
+          {
+            "node": "If has results",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map Query Error": {
+      "main": [
+        [
+          {
+            "node": "Merge2",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Output": {
+      "main": [
+        []
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge1": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge2": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge3": {
+      "main": [
+        [
+          {
+            "node": "Map Query Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Get row(s) in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        []
+      ]
+    },
+    "Normalize Format": {
+      "main": [
+        [
+          {
+            "node": "Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DOCUMENT_TOTAL_AMOUNT After Query": {
+      "main": [
+        [
+          {
+            "node": "DOCUMENT_TOTAL_AMOUNT Below Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false,
+    "errorWorkflow": "errorHandler01"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {
+    "When Executed by Another Workflow": [
+      {
+        "json": {
+          "ID": "17712618658788afoly",
+          "API_TOOLS_ID": "02df98be8dbbb54fa6cb803e0dd3ebc8",
+          "LINK": "https://drive.google.com/file/d/1T0OokXS3YnZFpnyjzYhqKVtDaoBAvC45"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "ID": "1771262162885a6r1y1",
+          "API_TOOLS_ID": "7eeacc9816f0683246ef03c6f606b9e1",
+          "LINK": "https://drive.google.com/file/d/1fNs9T6ZE3F6W0CTtdkgtL7bGMx-Rp_dr"
+        },
+        "pairedItem": {
+          "item": 1
+        }
+      },
+      {
+        "json": {
+          "ID": "17712624774701gx3k6",
+          "API_TOOLS_ID": "b9e1926fd75df705815a2d633d419a83",
+          "LINK": "https://drive.google.com/file/d/1Yw9zpfzXcO2nt5ta7_3k_U963t7n3g-6"
+        },
+        "pairedItem": {
+          "item": 2
+        }
+      },
+      {
+        "json": {
+          "ID": "17712627603511skkq9",
+          "API_TOOLS_ID": "44385deadb43cbed0730d8b73a409eba",
+          "LINK": "https://drive.google.com/file/d/1NFWeD6F-zCo4ZZ2BO-oMSMfVbzmEGmDp"
+        },
+        "pairedItem": {
+          "item": 3
+        }
+      },
+      {
+        "json": {
+          "ID": "1771263049699lldcq",
+          "API_TOOLS_ID": "352740fc333917e7b36ad8a144a6a4d0",
+          "LINK": "https://drive.google.com/file/d/1xV8DxQxoDcp9dZOYUbWzhlWq-lJG60Vy"
+        },
+        "pairedItem": {
+          "item": 4
+        }
+      },
+      {
+        "json": {
+          "ID": "17712634987201ft1ze",
+          "API_TOOLS_ID": "7da178aec312f62ed385cdaf2b42f313",
+          "LINK": "https://drive.google.com/file/d/18BYuQiNosbzadvAaQ-Q2S0qB9Bvy5_xF"
+        },
+        "pairedItem": {
+          "item": 5
+        }
+      },
+      {
+        "json": {
+          "ID": "1771263756372b6b6g2",
+          "API_TOOLS_ID": "7778a7d9f74b50341d968c402e1c8929",
+          "LINK": "https://drive.google.com/file/d/1QM1bHRGXcBMJ1uFog__EMHp2F6w1p3s0"
+        },
+        "pairedItem": {
+          "item": 6
+        }
+      },
+      {
+        "json": {
+          "ID": "692047795k4sxmt",
+          "API_TOOLS_ID": "4207324d3cd3ddeb47619bf9da2d146f",
+          "LINK": "https://drive.google.com/file/d/114v2N3ThVhk6owIR3RX3l7aLnjI7-nSw/view?usp=drivesdk"
+        },
+        "pairedItem": {
+          "item": 7
+        }
+      },
+      {
+        "json": {
+          "ID": "17712640382816jv6f2",
+          "API_TOOLS_ID": "7ddda1945e05f4ccf304b87a95eabec9",
+          "LINK": "https://drive.google.com/file/d/1PRWi724Sc4qe0uLzJrC5-ADw1vw7hTWs"
+        },
+        "pairedItem": {
+          "item": 8
+        }
+      },
+      {
+        "json": {
+          "ID": "17712643027734eyhoa",
+          "API_TOOLS_ID": "5d2a3a8e9945818c1c0472a2be47dc41",
+          "LINK": "https://drive.google.com/file/d/1LzdJTI-3YnqkQezpCUS9brncbNKKJPGx"
+        },
+        "pairedItem": {
+          "item": 9
+        }
+      },
+      {
+        "json": {
+          "ID": "17712646498976iqo96",
+          "API_TOOLS_ID": "b597cc0ab8bebaaea470b4d77e0dcf8e",
+          "LINK": "https://drive.google.com/file/d/1z8oFbLbdkLMn_rqvkMtpic7Bzyk8nHn0"
+        },
+        "pairedItem": {
+          "item": 10
+        }
+      },
+      {
+        "json": {
+          "ID": "1771265028308d6bmrj",
+          "API_TOOLS_ID": "ef1db57b5eeeb884b7ea5e814f414e94",
+          "LINK": "https://drive.google.com/file/d/16SyEnFGBH9oCFfP_VpviR2bh7qAXw398"
+        },
+        "pairedItem": {
+          "item": 11
+        }
+      },
+      {
+        "json": {
+          "ID": "17712652382444er6ge",
+          "API_TOOLS_ID": "460f7a518e587e31fbe31b3ea42d6592",
+          "LINK": "https://drive.google.com/file/d/1c5rFaFHfQj2peBwcywiuVA5zV1ov905z"
+        },
+        "pairedItem": {
+          "item": 12
+        }
+      },
+      {
+        "json": {
+          "ID": "1771265639683ggcpm8",
+          "API_TOOLS_ID": "eefd4a1a0272dcc88fb00afb4ef4327d",
+          "LINK": "https://drive.google.com/file/d/1gI6W-_WDeDWl5-H6jsUm9FW7osnMhxRH"
+        },
+        "pairedItem": {
+          "item": 13
+        }
+      },
+      {
+        "json": {
+          "ID": "177126592186914wuum",
+          "API_TOOLS_ID": "4d078af02fbb1fedc83ae7e87363ea5b",
+          "LINK": "https://drive.google.com/file/d/1Ie83llhZCbpCJ7M7IYsdQteI9a_Zb26g"
+        },
+        "pairedItem": {
+          "item": 14
+        }
+      },
+      {
+        "json": {
+          "ID": "1771266745193727xt6",
+          "API_TOOLS_ID": "ba9bccb1ab7c17f2fbc4e5e47c4d03d9",
+          "LINK": "https://drive.google.com/file/d/1U7Hr9erNyQ1nxtb6Fz0MLGkCI-ecoA5m"
+        },
+        "pairedItem": {
+          "item": 15
+        }
+      },
+      {
+        "json": {
+          "ID": "177126754930586r2ho",
+          "API_TOOLS_ID": "026108132d334d9893a4b892d5017dbf",
+          "LINK": "https://drive.google.com/file/d/1Z7kuq_QtJg4nw3Zig0d4WC-mUobw7RlO"
+        },
+        "pairedItem": {
+          "item": 16
+        }
+      },
+      {
+        "json": {
+          "ID": "1771270608436bzd9ng",
+          "API_TOOLS_ID": "e55bd8e40560975dba94e65c61d820d7",
+          "LINK": "https://drive.google.com/file/d/1EDqj-lNCBnqQ7oRW9GBiG-kG6kvIlHIJ"
+        },
+        "pairedItem": {
+          "item": 17
+        }
+      },
+      {
+        "json": {
+          "ID": "1771272084421eh6l1",
+          "API_TOOLS_ID": "24a47c5fab73d32dbb4d9a8b951f81cd",
+          "LINK": "https://drive.google.com/file/d/1BRxfaDoMwLJytwOc-jGx7BzmQ0Mwa360"
+        },
+        "pairedItem": {
+          "item": 18
+        }
+      },
+      {
+        "json": {
+          "ID": "17712728400227dve65",
+          "API_TOOLS_ID": "d18bb1a963824a6de53a2f55597af717",
+          "LINK": "https://drive.google.com/file/d/1IRJoeKTaJYTs8whlLfnqfOm5CBcZnwv3"
+        },
+        "pairedItem": {
+          "item": 19
+        }
+      },
+      {
+        "json": {
+          "ID": "1771272840048bjqqrh",
+          "API_TOOLS_ID": "913820731312d4180578b391070911b3",
+          "LINK": "https://drive.google.com/file/d/1y6n91Xxwqn6Ncpk7kPQ7AZpRQ_jkDEO9/view?usp=drivesdk"
+        },
+        "pairedItem": {
+          "item": 20
+        }
+      },
+      {
+        "json": {
+          "ID": "1771272840101acb7ib",
+          "API_TOOLS_ID": "1582cc62b30729a4ba73300173d403fe",
+          "LINK": "https://drive.google.com/file/d/1vKJY7fciWo2kEuflO0DZy7Sa5eKb_IFs/view?usp=drivesdk"
+        },
+        "pairedItem": {
+          "item": 21
+        }
+      },
+      {
+        "json": {
+          "ID": "17712728401307wl0le",
+          "API_TOOLS_ID": "40f192ca7329991c30814deb5ebfc3b6",
+          "LINK": "https://drive.google.com/file/d/1sS84rmjrfE9KRxPJIgCNjSZPhHg7e6Zq/view?usp=drivesdk"
+        },
+        "pairedItem": {
+          "item": 22
+        }
+      },
+      {
+        "json": {
+          "ID": "17712774629487ah46",
+          "API_TOOLS_ID": "7bcd570e23ce4de7a84e42d02de6e96c",
+          "LINK": "https://drive.google.com/file/d/1o4J5Flb8SI7zgI7aCCkO_YjeMkV9noYk"
+        },
+        "pairedItem": {
+          "item": 23
+        }
+      },
+      {
+        "json": {
+          "ID": "177127954770875v76i",
+          "API_TOOLS_ID": "a6b79577bc7e5a35ff07e8bab4afd82f",
+          "LINK": "https://drive.google.com/file/d/1f4MNfqjGSMZ7VBFMwVVCGowaRBNmnHdg"
+        },
+        "pairedItem": {
+          "item": 24
+        }
+      }
+    ],
+    "Get row(s) in sheet": [
+      {
+        "json": {
+          "row_number": 2,
+          "NAME": "גולבי-unknwon",
+          "KIND": "חשבונית מס",
+          "SCANNED": false,
+          "LINK": "https://drive.google.com/file/d/1wPOQMXCf_LPyvFc6ZYBeka7UArqRfH13",
+          "DATE": "2025-08-25",
+          "DATE KEYWORD": "תאריך",
+          "TOTAL PRICE": -4600,
+          "TOTAL_AMOUNT KEYWORD": "סה״כ כולל מע״מ",
+          "HASH": "17f541f8b557e6f5a68d4d62fc51deae"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "row_number": 3,
+          "NAME": "פרימיום ציוד-51466",
+          "KIND": "חשבונית מס",
+          "SCANNED": false,
+          "LINK": "https://drive.google.com/file/d/1cbCAu4IyLtUy-CaMPum0nVHiQIiVO_O7",
+          "DATE": "2025-12-30",
+          "DATE KEYWORD": "תאריך",
+          "TOTAL PRICE": 0,
+          "TOTAL_AMOUNT KEYWORD": "סך הכל לתשלום",
+          "HASH": "f3c00bc82f19e6b6f161faa57733d781"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "row_number": 4,
+          "NAME": "אבני סלע-32323",
+          "KIND": "חשבונית מס",
+          "SCANNED": true,
+          "LINK": "https://drive.google.com/file/d/11VeFsGfSAkLIrA0C9o_HINOD4ytCA1Pc/view?usp=drivesdk",
+          "DATE": "2025-09-29",
+          "DATE KEYWORD": "תאריך חשבונית",
+          "TOTAL PRICE": 472,
+          "TOTAL_AMOUNT KEYWORD": "סך לתשלום",
+          "HASH": "33ee0664801222baf17ca12dbaa8684d"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "row_number": 5,
+          "NAME": "סאן דק-33944",
+          "KIND": "חשבונית מס",
+          "SCANNED": true,
+          "LINK": "https://drive.google.com/file/d/1nO0EzA6GQ5I5VyLNg--fsd1sKV2xsUNx/view?usp=drivesdk",
+          "DATE": "2025-12-23",
+          "DATE KEYWORD": "תאריך הפקת מסמך",
+          "TOTAL PRICE": 563,
+          "TOTAL_AMOUNT KEYWORD": "סכום לתשלום",
+          "HASH": "8abb15630e4b8094c16297d68b2ce2e5"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "row_number": 6,
+          "NAME": "דור רפאל-10460",
+          "KIND": "חשבונית מס",
+          "SCANNED": false,
+          "LINK": "https://drive.google.com/file/d/1sod_Wo8WBo8ruV6HNa0qvJxl7Zbf_Nzx",
+          "DATE": "2025-12-17",
+          "DATE KEYWORD": "תאריך חשבונית",
+          "TOTAL PRICE": 935,
+          "TOTAL_AMOUNT KEYWORD": "סה״כ מחיר",
+          "HASH": "3c8706e840ee2a0db9fd0dbfe01097c8"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "row_number": 7,
+          "NAME": "אודיה שליח-20225",
+          "KIND": "חשבונית מס",
+          "SCANNED": false,
+          "LINK": "https://drive.google.com/file/d/150W_zF5vWoFMcXXl9ewkagZ8TxDuWkIZ",
+          "DATE": "2025-01-12",
+          "DATE KEYWORD": "-",
+          "TOTAL PRICE": 1416,
+          "TOTAL_AMOUNT KEYWORD": "סה״כ",
+          "HASH": "6a20560e20a1ba5548ba96f98257bef2"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "row_number": 8,
+          "NAME": "דלקו-70517",
+          "KIND": "חשבונית מס",
+          "SCANNED": true,
+          "LINK": "https://drive.google.com/file/d/1qUGsD7G-pEW8ipeh31bP0jldA4Zd3LCr/view?usp=drivesdk",
+          "DATE": "2026-02-11",
+          "DATE KEYWORD": "תאריך",
+          "TOTAL PRICE": 1705,
+          "TOTAL_AMOUNT KEYWORD": "סה״כ תלשלום",
+          "HASH": ""
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "row_number": 9,
+          "NAME": "אבני סלע-26886",
+          "KIND": "חשבונית מס",
+          "SCANNED": true,
+          "LINK": "https://drive.google.com/file/d/1ha2Y_4TlZO5XnsSEQPrNkBhNyLUjKtWk",
+          "DATE": "2025-04-03",
+          "DATE KEYWORD": "תאריך חשבונית",
+          "TOTAL PRICE": 2135,
+          "TOTAL_AMOUNT KEYWORD": "סך לתשלום",
+          "HASH": "0551b8341d3cbc2e293dea165a739b00"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "row_number": 10,
+          "NAME": "אורבונד-24000",
+          "KIND": "חשבונית מס",
+          "SCANNED": false,
+          "LINK": "https://drive.google.com/file/d/1i-KVVExSpB-bcYfvJoNEtAKxl10-ma0G",
+          "DATE": "2025-07-09",
+          "DATE KEYWORD": "תאריך חשבונית",
+          "TOTAL PRICE": 3043.95,
+          "TOTAL_AMOUNT KEYWORD": "סה״כ מחיר",
+          "HASH": "aab54eb4595016360be3f85b6ffe2035"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "row_number": 11,
+          "NAME": "דלקו-66585",
+          "KIND": "חשבונית מס",
+          "SCANNED": true,
+          "LINK": "https://drive.google.com/file/d/1L1gUWCCGXueutD5w4tpBq0bjI64qLQpb/view?usp=drivesdk",
+          "DATE": "2025-12-08",
+          "DATE KEYWORD": "תאריך",
+          "TOTAL PRICE": 3162,
+          "TOTAL_AMOUNT KEYWORD": "סה״כ לתשלום",
+          "HASH": ""
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "row_number": 12,
+          "NAME": "אם טי אי-61177",
+          "KIND": "חשבונית מס",
+          "SCANNED": false,
+          "LINK": "https://drive.google.com/file/d/1NxPqwEZ9QAXkV8mRok-YV9B9vvqTCOSr",
+          "DATE": "2025-03-23",
+          "DATE KEYWORD": "תאריך",
+          "TOTAL PRICE": 3258,
+          "TOTAL_AMOUNT KEYWORD": "לתשלום",
+          "HASH": "89dde48e25495b6279f92c8478621c06"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "row_number": 13,
+          "NAME": "חמת עיצוב-41037",
+          "KIND": "חשבונית מס",
+          "SCANNED": false,
+          "LINK": "https://drive.google.com/file/d/1oWe-YqUXKMiyPaALzgqA2Pj2zmI6OQox",
+          "DATE": "2025-06-05",
+          "DATE KEYWORD": "תאריך המסמך",
+          "TOTAL PRICE": 3585.85,
+          "TOTAL_AMOUNT KEYWORD": "סה״כ כלליֿ",
+          "HASH": "f06911c3b6c75811e8fbc5e2de638422"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "row_number": 14,
+          "NAME": "בודי-71079",
+          "KIND": "חשבונית מס",
+          "SCANNED": false,
+          "LINK": "https://drive.google.com/file/d/1mymOgEad2gzarmlaLGLPJX1wptnAA9mT",
+          "DATE": "2025-11-16",
+          "DATE KEYWORD": "תאריך",
+          "TOTAL PRICE": 4647,
+          "TOTAL_AMOUNT KEYWORD": "סה״כ לתשלום",
+          "HASH": "ca00d70d8be68538eb89f5a4cbff7e9f"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "row_number": 15,
+          "NAME": "דיאור-32867",
+          "KIND": "חשבונית מס",
+          "SCANNED": true,
+          "LINK": "https://drive.google.com/file/d/1SWRKX17TwehS6dYFh02zRcCsFInTwJOp/view?usp=drivesdk",
+          "DATE": "2025-08-25",
+          "DATE KEYWORD": "תאריך חשבונית",
+          "TOTAL PRICE": 4909,
+          "TOTAL_AMOUNT KEYWORD": "סה״כ מחיר",
+          "HASH": "b5f34d896ebca0d8dde5796eb3b884ba"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "row_number": 16,
+          "NAME": "גמל מפעלים-26951",
+          "KIND": "חשבונית מס",
+          "SCANNED": true,
+          "LINK": "https://drive.google.com/file/d/1Xemfu6soUO5Ok8e5BAaWSJbV4l294Biu",
+          "DATE": "",
+          "DATE KEYWORD": "-",
+          "TOTAL PRICE": 6208,
+          "TOTAL_AMOUNT KEYWORD": "סה״כ לתשלום בש״ח",
+          "HASH": "b0e849e643de316ad3c6787c15b3df2d"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "row_number": 17,
+          "NAME": "עלי סלאמה-29658",
+          "KIND": "חשבונית מס",
+          "SCANNED": true,
+          "LINK": "https://drive.google.com/file/d/1AY-oBtLMiwBgCJ7t9e0sceiuS4iJClMu/view?usp=drivesdk",
+          "DATE": "2025-10-19",
+          "DATE KEYWORD": "תאריך",
+          "TOTAL PRICE": 6739,
+          "TOTAL_AMOUNT KEYWORD": "סכום לתשלום",
+          "HASH": "8766a2dba9b2f5d50b42d2f22fc03671"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "row_number": 18,
+          "NAME": "פרו דסק-00195",
+          "KIND": "חשבונית מס",
+          "SCANNED": true,
+          "LINK": "https://drive.google.com/file/d/1gPVpVhVUczV_ZHvwz9VP0efNdpR1ST3b",
+          "DATE": "2025-08-24",
+          "DATE KEYWORD": "תאריך חשבונית",
+          "TOTAL PRICE": 7434,
+          "TOTAL_AMOUNT KEYWORD": "סה״כ מחיר",
+          "HASH": "dc696d44463475d18cefe289db3f9e9d"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "row_number": 19,
+          "NAME": "ברסיס-53607",
+          "KIND": "חשבונית מס",
+          "SCANNED": true,
+          "LINK": "https://drive.google.com/file/d/1vfmResdrY2yi0eg92-ZaB-7DNO9ZcnLR/view?usp=drivesdk",
+          "DATE": "2025-12-11",
+          "DATE KEYWORD": "תאריך חשבונית",
+          "TOTAL PRICE": 7744,
+          "TOTAL_AMOUNT KEYWORD": "סכום לתשלום",
+          "HASH": ""
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "row_number": 20,
+          "NAME": "א פתיה-00269",
+          "KIND": "חשבונית מס",
+          "SCANNED": true,
+          "LINK": "https://drive.google.com/file/d/1swKFAhTaRgQIykXc3QYmgHxPfBz4TaNi",
+          "DATE": "2026-01-05",
+          "DATE KEYWORD": "תאריך חשבונית",
+          "TOTAL PRICE": 8572,
+          "TOTAL_AMOUNT KEYWORD": "סה״כ מחיר",
+          "HASH": "2407af4189a619e16cc89dc2a6c78b49"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "row_number": 21,
+          "NAME": "אל שרד-07031",
+          "KIND": "חשבונית מס",
+          "SCANNED": true,
+          "LINK": "https://drive.google.com/file/d/1TAu4Pw4YL4osX3SR5txsV4N5ekxiJrh4",
+          "DATE": "2025-09-03",
+          "DATE KEYWORD": "תאריך רישום",
+          "TOTAL PRICE": 10383.59,
+          "TOTAL_AMOUNT KEYWORD": "לתשלום",
+          "HASH": "a024eed7293ef68e5e74568d4abdf8d5"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "row_number": 22,
+          "NAME": "אליהו דרעי-04423",
+          "KIND": "חשבונית מס",
+          "SCANNED": false,
+          "LINK": "https://drive.google.com/file/d/1myCzHN4Xemf_dZ_Dn50efMNbphtELTHL/view?usp=drivesdk",
+          "DATE": "2025-09-30",
+          "DATE KEYWORD": "-",
+          "TOTAL PRICE": 10797,
+          "TOTAL_AMOUNT KEYWORD": "סה״כ לתשלום",
+          "HASH": "5308c83c355313d5ed8f026cb7ed71f3"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "row_number": 23,
+          "NAME": "אוחנה מעוז ל-09373",
+          "KIND": "חשבונית מס",
+          "SCANNED": true,
+          "LINK": "https://drive.google.com/file/d/1Nmj9ahtnqWUKpaHvCGsqdXA8HD-AN7tD",
+          "DATE": "2025-08-12",
+          "DATE KEYWORD": "תאריך חשבונית",
+          "TOTAL PRICE": 12603.89,
+          "TOTAL_AMOUNT KEYWORD": "סך הכל כולל מע״מ",
+          "HASH": ""
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "row_number": 24,
+          "NAME": "גולן פלסטיק-04967",
+          "KIND": "חשבונית מס",
+          "SCANNED": false,
+          "LINK": "https://drive.google.com/file/d/1nlgsPokNi-7_Gcpr0us4LNdaZdG8ts8Q",
+          "DATE": "2025-05-29",
+          "DATE KEYWORD": "תאריך חשבונית",
+          "TOTAL PRICE": 13646.63,
+          "TOTAL_AMOUNT KEYWORD": "לתשלום",
+          "HASH": "f60cbdcbd17ce5824a244ece0f6e2606"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "row_number": 25,
+          "NAME": "לב ברון-01799",
+          "KIND": "חשבונית מס",
+          "SCANNED": false,
+          "LINK": "https://drive.google.com/file/d/15zVyxHBbcyHGBVhnj5US0C5KLa5V7P47",
+          "DATE": "2025-10-31",
+          "DATE KEYWORD": "ת. אסמכתא",
+          "TOTAL PRICE": 20903,
+          "TOTAL_AMOUNT KEYWORD": "סה״כ לתשלום",
+          "HASH": "803140cc7c8fa1145263e845deb8ed2d"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "row_number": 26,
+          "NAME": "אלי אנגל-42120",
+          "KIND": "חשבונית מס",
+          "SCANNED": false,
+          "LINK": "https://drive.google.com/file/d/1lLVhGT3vsuqf9eTTG3kJZABBgd_uTW_e",
+          "DATE": "2025-06-25",
+          "DATE KEYWORD": "תאריך חשבונית",
+          "TOTAL PRICE": 25537,
+          "TOTAL_AMOUNT KEYWORD": "סה״כ כולל מע״מ",
+          "HASH": "54a0d70611448f0bfc0074d35c277a5c"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "row_number": 27,
+          "NAME": "טורנדו-52024",
+          "KIND": "חשבונית מס",
+          "SCANNED": false,
+          "LINK": "https://drive.google.com/file/d/1HRnsetVupUJiRgVnSVHPL8MdRR0tj6hp",
+          "DATE": "2025-08-18",
+          "DATE KEYWORD": "תאריך חשבונית",
+          "TOTAL PRICE": 26188,
+          "TOTAL_AMOUNT KEYWORD": "סה\"כ לתשלום בשקל",
+          "HASH": "a32fb7215b9dbe3488572ea569e6c9aa"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "row_number": 28,
+          "NAME": "אגן-00258",
+          "KIND": "חשבונית מס",
+          "SCANNED": false,
+          "LINK": "https://drive.google.com/file/d/1e4pmQXpFpTXqf63-WYnDGHRGisLIQxuH",
+          "DATE": "2025-01-23",
+          "DATE KEYWORD": "תאריך חשבונית",
+          "TOTAL PRICE": 60368,
+          "TOTAL_AMOUNT KEYWORD": "סה״כ מחיר",
+          "HASH": "8d342eec9b08927f541bf034791d9f16"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "row_number": 29,
+          "NAME": "דור פתרונות-01066",
+          "KIND": "חשבונית מס",
+          "SCANNED": false,
+          "LINK": "https://drive.google.com/file/d/1oR4UnU2ZKhd3eWHXYfWOYoihMgeJE0Tr/view?usp=drivesdk",
+          "DATE": "2025-12-09",
+          "DATE KEYWORD": "-",
+          "TOTAL PRICE": 72334,
+          "TOTAL_AMOUNT KEYWORD": "סה''כ חשבונית מס",
+          "HASH": "1c7814eef3f6f5cf3d5a777305823869"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "row_number": 30,
+          "NAME": "גל לב הר ייב-09956",
+          "KIND": "חשבונית מס",
+          "SCANNED": false,
+          "LINK": "https://drive.google.com/file/d/1YqQzbYKsxTeEGfhwQx5VzQRYlwybHunM",
+          "DATE": "2025-05-29",
+          "DATE KEYWORD": "תאריך",
+          "TOTAL PRICE": 107520,
+          "TOTAL_AMOUNT KEYWORD": "סה״כ",
+          "HASH": "557263542b9491decfc4e4db6145db05"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "row_number": 31,
+          "NAME": "אליהו דרעי-20436",
+          "KIND": "תעודת משלוח",
+          "SCANNED": false,
+          "LINK": "https://drive.google.com/file/d/1Ig4yjbU46cC5kO5pH2QMM--KW6eEZbyb/view?usp=drivesdk",
+          "DATE": "2025-12-15",
+          "DATE KEYWORD": "-",
+          "TOTAL PRICE": 8968,
+          "TOTAL_AMOUNT KEYWORD": "סה״כ לתשלום",
+          "HASH": ""
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "row_number": 32,
+          "NAME": "אורבונד-75423",
+          "KIND": "תעודת משלוח",
+          "SCANNED": false,
+          "LINK": "https://drive.google.com/file/d/1RcxXIGf7N-piM07bLx5ngWSugDsB8rj8/view?usp=drivesdk",
+          "DATE": "2025-09-09",
+          "DATE KEYWORD": "תאריך (מתחת)",
+          "TOTAL PRICE": "",
+          "TOTAL_AMOUNT KEYWORD": "",
+          "HASH": ""
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "row_number": 33,
+          "NAME": "גומא - שרו-07943",
+          "KIND": "תעודת משלוח",
+          "SCANNED": false,
+          "LINK": "https://drive.google.com/file/d/1pcw8XVora3rtqR5JdwlsmkIetcEw7oCp",
+          "DATE": "2025-09-02",
+          "DATE KEYWORD": "תאריך התעודה",
+          "TOTAL PRICE": "",
+          "TOTAL_AMOUNT KEYWORD": "",
+          "HASH": ""
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "row_number": 34,
+          "NAME": "טוטאלדור ב-34357",
+          "KIND": "תעודת משלוח",
+          "SCANNED": false,
+          "LINK": "https://drive.google.com/file/d/10tzU59eW16LYz-N7heM8BXrxs77AE6V2",
+          "DATE": "2025-08-21",
+          "DATE KEYWORD": "תאריך הפקה",
+          "TOTAL PRICE": "",
+          "TOTAL_AMOUNT KEYWORD": "",
+          "HASH": ""
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "row_number": 35,
+          "NAME": "כלמוביל-55525",
+          "KIND": "תעודת משלוח",
+          "SCANNED": false,
+          "LINK": "https://drive.google.com/file/d/1tcgmgy1zcEg_VGVuuuN2-pfTkWMxVnZl/view?usp=drivesdk",
+          "DATE": "2025-08-17",
+          "DATE KEYWORD": "ת.הנפקה",
+          "TOTAL PRICE": "",
+          "TOTAL_AMOUNT KEYWORD": "",
+          "HASH": ""
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "row_number": 36,
+          "NAME": "אורבונד-68314",
+          "KIND": "תעודת משלוח",
+          "SCANNED": true,
+          "LINK": "https://drive.google.com/file/d/1DSmkBraRRP0i0WRclPH0RpxRKTwvk9qQ/view?usp=drivesdk",
+          "DATE": "2025-10-15",
+          "DATE KEYWORD": "תאריך (מתחת)",
+          "TOTAL PRICE": "",
+          "TOTAL_AMOUNT KEYWORD": "",
+          "HASH": ""
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "row_number": 37,
+          "NAME": "אלרם-17205",
+          "KIND": "תעודת משלוח",
+          "SCANNED": true,
+          "LINK": "https://drive.google.com/file/d/19BsqAgmudpftb8gm7CeYX6Gk07bj7Xap/view?usp=drivesdk",
+          "DATE": "2025-10-19",
+          "DATE KEYWORD": "תאריך",
+          "TOTAL PRICE": "",
+          "TOTAL_AMOUNT KEYWORD": "",
+          "HASH": ""
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "row_number": 38,
+          "NAME": "ארכה-00343",
+          "KIND": "תעודת משלוח",
+          "SCANNED": true,
+          "LINK": "https://drive.google.com/file/d/1le4chJ-rcH3b2yArqA2MmGjQ0FKtdiX-",
+          "DATE": "2026-01-04",
+          "DATE KEYWORD": "תאריך התעודה",
+          "TOTAL PRICE": "",
+          "TOTAL_AMOUNT KEYWORD": "",
+          "HASH": ""
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "row_number": 39,
+          "NAME": "חוליות זרימה-23905",
+          "KIND": "תעודת משלוח",
+          "SCANNED": true,
+          "LINK": "https://drive.google.com/file/d/1-CVTTJvP_48qryUYqWUNIkppflP_rbKO/view?usp=drivesdk",
+          "DATE": "2025-11-09",
+          "DATE KEYWORD": "תאריך התעודה",
+          "TOTAL PRICE": "",
+          "TOTAL_AMOUNT KEYWORD": "",
+          "HASH": ""
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "row_number": 40,
+          "NAME": "טסה-54854",
+          "KIND": "תעודת משלוח",
+          "SCANNED": true,
+          "LINK": "https://drive.google.com/file/d/13UfiBMF0563_JknFHeqfxW6rJwNwCAR1/view?usp=drivesdk",
+          "DATE": "2025-11-04",
+          "DATE KEYWORD": "-",
+          "TOTAL PRICE": "",
+          "TOTAL_AMOUNT KEYWORD": "",
+          "HASH": ""
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "row_number": 41,
+          "NAME": "פורום-13069",
+          "KIND": "תעודת משלוח",
+          "SCANNED": true,
+          "LINK": "https://drive.google.com/file/d/1hzWktRfQgIYf5AEPrqjwksQXmn73nosu",
+          "DATE": "2025-11-05",
+          "DATE KEYWORD": "רישום",
+          "TOTAL PRICE": "",
+          "TOTAL_AMOUNT KEYWORD": "",
+          "HASH": ""
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "row_number": 42,
+          "NAME": "פלמרכז הפצה-67245",
+          "KIND": "תעודת משלוח",
+          "SCANNED": true,
+          "LINK": "https://drive.google.com/file/d/1p77qFENzSdJrwLiH24WEjM1s3Jf4mPCi/view?usp=drivesdk",
+          "DATE": "2025-12-16",
+          "DATE KEYWORD": "תאריך",
+          "TOTAL PRICE": "",
+          "TOTAL_AMOUNT KEYWORD": "",
+          "HASH": ""
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "row_number": 43,
+          "NAME": "קל קל-20506",
+          "KIND": "תעודת משלוח",
+          "SCANNED": true,
+          "LINK": "https://drive.google.com/file/d/1JChPjiBeWaI9pUpJMqI94FXz17GrKILp/view?usp=drivesdk",
+          "DATE": "2025-09-29",
+          "DATE KEYWORD": "תאריך התעודה",
+          "TOTAL PRICE": "",
+          "TOTAL_AMOUNT KEYWORD": "",
+          "HASH": ""
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "row_number": 44,
+          "NAME": "קל קל-23336",
+          "KIND": "תעודת משלוח",
+          "SCANNED": true,
+          "LINK": "https://drive.google.com/file/d/1KiI1-qCrjxOqicqp05PX_AhL3jxivQZU",
+          "DATE": "2025-11-06",
+          "DATE KEYWORD": "תאריך התעודה",
+          "TOTAL PRICE": "",
+          "TOTAL_AMOUNT KEYWORD": "",
+          "HASH": ""
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      }
+    ]
+  },
+  "versionId": "29199e7c-be60-4472-ac91-e53bde400969",
+  "activeVersionId": "d8f6bb65-35cb-4934-8d5a-8a3403f3b820",
+  "versionCounter": 234,
+  "triggerCount": 0,
+  "tags": [
+    {
+      "updatedAt": "2025-11-27T17:35:29.026Z",
+      "createdAt": "2025-11-27T17:35:29.026Z",
+      "id": "wHGj6nJ2l5p2OnXD",
+      "name": "beta"
+    }
+  ],
+  "shared": [
+    {
+      "updatedAt": "2026-02-21T10:58:47.424Z",
+      "createdAt": "2026-02-21T10:58:47.424Z",
+      "role": "workflow:owner",
+      "workflowId": "indoxV2QueryTotalAmt01",
+      "projectId": "EChUnhWXmjrEc3fG",
+      "project": {
+        "updatedAt": "2024-09-26T18:07:08.765Z",
+        "createdAt": "2024-09-26T17:59:24.039Z",
+        "id": "EChUnhWXmjrEc3fG",
+        "name": "Shlomo Bolo <person8@example.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null
+      }
+    }
+  ]
+}

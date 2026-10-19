@@ -1,0 +1,146 @@
+<section class="screen" data-screen="authentik-admin"><div style="height:100vh;overflow:auto" dir="ltr">
+<style>
+.aka-wrap{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;display:flex;min-height:100vh;background:#f0f0f0;color:#232629;font-size:14px;}
+.aka-side{width:290px;flex:none;background:#fff;border-right:1px solid #d2d2d2;display:flex;flex-direction:column;}
+.aka-brand{display:flex;align-items:center;gap:10px;padding:33px 20px 10px;}
+.aka-brand .mark{width:56px;height:48px;border-radius:10px;background:#fd4b2d;position:relative;flex:none;}
+.aka-brand .mark::before{content:"";position:absolute;left:10px;top:15px;width:18px;height:18px;border-radius:50%;border:3px solid #fff;}
+.aka-brand span{font-size:40px;font-weight:600;color:#fd4b2d;}
+.aka-brand span b{color:#fd4b2d;font-weight:600;}
+.aka-ui-btn{margin:39px 16px 14px;background:#fd4b2d;color:#fff;text-align:left;padding:12px 14px;font-size:14px;font-weight:500;border-radius:2px;}
+.aka-nav{flex:1;overflow:auto;padding:6px 0;}
+.aka-sec{padding:16px 20px 8px;font-size:15px;font-weight:700;color:#202224;display:flex;align-items:center;justify-content:space-between;}
+.aka-sec svg{width:12px;height:12px;}
+.aka-item{display:block;padding:12px 20px 12px 30px;color:#151515;text-decoration:none;font-size:14px;}
+.aka-item.on{background:#f0f0f0;border-left:3px solid #fd4b2d;padding-left:27px;font-weight:400;}
+.aka-item.top{padding-left:20px;display:flex;justify-content:space-between;align-items:center;font-weight:500;}
+.aka-item.top svg{width:12px;height:12px;color:#6a6e73;}
+.aka-foot{padding:14px 18px;display:flex;align-items:center;gap:10px;border-top:1px solid #eee;}
+.aka-avatar{width:30px;height:30px;border-radius:50%;background:#4a90c4;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;}
+.aka-main{flex:1;min-width:0;}
+.aka-top{display:flex;align-items:center;justify-content:space-between;padding:28px 32px 22px;background:#f0f0f0;}
+.aka-top h1{font-size:22px;font-weight:400;margin:0;color:#232629;}
+.aka-top p{margin:14px 0 0;color:#6a6e73;font-size:13px;}
+.aka-top .icons{display:flex;gap:20px;color:#4a4e52;}
+.aka-body{padding:50px 32px 24px;}
+.aka-grid3{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px;align-items:start;}
+.aka-leftcol{display:flex;flex-direction:column;gap:20px;min-width:0;}
+.aka-grid2a{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px;}
+.aka-grid2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1fr);gap:20px;}
+.aka-card{background:#fff;border:1px solid #d8d8d8;border-radius:3px;}
+.aka-card h3{margin:0;padding:14px 18px;font-size:15px;font-weight:600;border-bottom:1px solid #eee;display:flex;align-items:center;gap:8px;justify-content:space-between;}
+.aka-card h3 .l{display:flex;align-items:center;gap:8px;}
+.aka-card ul{list-style:disc;margin:0;padding:14px 18px 14px 34px;}
+.aka-card li{padding:11px 0;}
+.aka-card a{color:#2b70e4;text-decoration:none;font-size:14px;}
+.aka-donutwrap{padding:3px 20px 20px;display:flex;justify-content:center;}
+.aka-donut{width:194px;height:194px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:600;color:#232629;position:relative;}
+.aka-donut.green{background:conic-gradient(#3e8635 0 100%);}
+.aka-donut.blue{background:conic-gradient(#2b70e4 0 25%,#8ec1ff 25% 50%,#c9deff 50% 75%,#e8f1ff 75% 100%);}
+.aka-donut::after{content:"";position:absolute;width:128px;height:128px;background:#fff;border-radius:50%;}
+.aka-donut span{position:relative;z-index:1;}
+.aka-table{width:100%;table-layout:fixed;border-collapse:collapse;font-size:13px;}
+.aka-table th{text-align:left;padding:10px 14px;color:#4a4e52;font-weight:600;border-bottom:2px solid #eee;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.aka-table td{padding:10px 14px;border-bottom:1px solid #f0f0f0;vertical-align:top;color:#232629;overflow:hidden;word-break:break-word;}
+.aka-table a{color:#2b70e4;text-decoration:none;}
+.aka-sub{color:#6a6e73;font-size:12px;}
+.aka-pagerow{display:flex;justify-content:flex-end;align-items:center;gap:10px;padding:10px 14px;font-size:13px;color:#4a4e52;}
+.aka-smallcard{padding:16px 18px;}
+.aka-smallcard .v{font-size:20px;font-weight:600;display:flex;align-items:center;gap:8px;margin-top:6px;}
+.aka-smallcard .sub{color:#6a6e73;font-size:12px;margin-top:4px;}
+</style>
+<div class="aka-wrap">
+  <aside class="aka-side">
+    <div class="aka-brand"><div class="mark"></div><span><b>a</b>uthentik</span></div>
+    <div class="aka-ui-btn">User interface</div>
+    <nav class="aka-nav">
+      <div class="aka-sec">Dashboards <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
+      <a class="aka-item on">Overview</a>
+      <a class="aka-item">User Statistics</a>
+      <a class="aka-item">System Tasks</a>
+      <a class="aka-item top">Applications <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></a>
+      <a class="aka-item top">Events <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></a>
+      <a class="aka-item top">Customization <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></a>
+      <a class="aka-item top">Flows and Stages <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></a>
+      <a class="aka-item top">Directory <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></a>
+      <a class="aka-item top">System <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></a>
+      <a class="aka-item top">Enterprise <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></a>
+    </nav>
+    <div class="aka-foot"><div class="aka-avatar">AA</div><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6a6e73" stroke-width="2" style="margin-left:auto"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg></div>
+  </aside>
+  <main class="aka-main">
+    <div class="aka-top">
+      <div style="display:flex;align-items:center;gap:20px">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4a4e52" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+        <div><h1>Welcome, authentik Default Admin.</h1><p>General system status</p></div>
+      </div>
+      <div class="icons">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="#2b70e4" stroke="#2b70e4" stroke-width="1"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+      </div>
+    </div>
+    <div class="aka-body">
+      <div class="aka-grid3">
+        <div class="aka-leftcol">
+          <div class="aka-grid2a">
+            <div class="aka-card">
+              <h3>➤ Quick actions</h3>
+              <ul>
+                <li><a href="#">Create a new application</a></li>
+                <li><a href="#">Check the logs</a></li>
+                <li><a href="#">Explore integrations ↗</a></li>
+                <li><a href="#">Manage users</a></li>
+                <li><a href="#">Check the release notes ↗</a></li>
+              </ul>
+            </div>
+            <div class="aka-card">
+              <h3><span class="l">⚙ Outpost status</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2b70e4" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></h3>
+              <div class="aka-donutwrap"><div class="aka-donut green"><span>1</span></div></div>
+            </div>
+          </div>
+          <div class="aka-card">
+            <h3>⟳ Sync status</h3>
+            <div class="aka-donutwrap" style="position:relative;padding-top:18px">
+              <svg width="150" height="150" viewBox="0 0 150 150">
+                <circle cx="75" cy="75" r="69" fill="none" stroke="#2b9af3" stroke-width="11" stroke-dasharray="430 11"/>
+                <circle cx="75" cy="75" r="56" fill="none" stroke="#2b9af3" stroke-width="11" stroke-dasharray="350 9"/>
+                <circle cx="75" cy="75" r="44" fill="none" stroke="#2b9af3" stroke-width="11" stroke-dasharray="270 8"/>
+                <circle cx="75" cy="75" r="32" fill="none" stroke="#2b9af3" stroke-width="11" stroke-dasharray="188 6"/>
+              </svg>
+              <span style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:26px;font-weight:600;color:#232629">0</span>
+            </div>
+          </div>
+          <div class="aka-grid2">
+            <div class="aka-card aka-smallcard">
+              <div style="font-weight:600">☰ System status</div>
+              <div class="v"><svg width="18" height="18" viewBox="0 0 24 24" fill="#2e7d32" stroke="#2e7d32"><circle cx="12" cy="12" r="10" fill="#2e7d32"/><path d="m9 12 2 2 4-4" stroke="#fff" fill="none" stroke-width="2"/></svg> OK</div>
+            </div>
+            <div class="aka-card aka-smallcard">
+              <div style="font-weight:600">🏷 Version</div>
+              <div class="v"><svg width="18" height="18" viewBox="0 0 24 24" fill="#f0ab00" stroke="#f0ab00"><path d="M12 2 1 21h22z" fill="#f0ab00"/><text x="12" y="19" font-size="10" fill="#000" text-anchor="middle">!</text></svg> 2024.12.5</div>
+              <div class="sub">2026.5.5 is available!</div>
+            </div>
+            <div class="aka-card aka-smallcard">
+              <div style="font-weight:600">☰ Workers</div>
+              <div class="v"><svg width="18" height="18" viewBox="0 0 24 24" fill="#2e7d32" stroke="#2e7d32"><circle cx="12" cy="12" r="10" fill="#2e7d32"/><path d="m9 12 2 2 4-4" stroke="#fff" fill="none" stroke-width="2"/></svg> 1</div>
+            </div>
+          </div>
+        </div>
+        <div class="aka-card">
+          <h3>📖 Recent events <span style="font-weight:400;font-size:13px;color:#4a4e52;display:flex;align-items:center;gap:8px">1 - 6 of 233 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></span></h3>
+          <table class="aka-table">
+            <tr><th>Action ↕</th><th>User</th><th>Creati... ↑</th><th>Client... ↕</th><th>Brand ↕</th></tr>
+            <tr><td><a href="#">Application authorized</a><div class="aka-sub">authentik.providers.oauth2.views.authorize</div></td><td>akadmin</td><td>לפני 37 שניות<div class="aka-sub">18.7.2026, 23:06:30</div></td><td>172.18.0.15</td><td>Default brand</td></tr>
+            <tr><td><a href="#">Login</a><div class="aka-sub">authentik.events.signals</div></td><td>akadmin</td><td>לפני 37 שניות<div class="aka-sub">18.7.2026, 23:06:30</div></td><td>172.18.0.15</td><td>Default brand</td></tr>
+            <tr><td><a href="#">Failed login</a><div class="aka-sub">authentik.events.signals</div></td><td>akadmin</td><td>לפני 39 שניות<div class="aka-sub">18.7.2026, 23:06:28</div></td><td>172.18.0.15</td><td>Default brand</td></tr>
+            <tr><td><a href="#">Application authorized</a><div class="aka-sub">authentik.providers.oauth2.views.authorize</div></td><td>akadmin</td><td>לפני 9 דקות<div class="aka-sub">18.7.2026, 22:58:27</div></td><td>172.18.0.15</td><td>Default brand</td></tr>
+            <tr><td><a href="#">Application authorized</a><div class="aka-sub">authentik.providers.oauth2.views.authorize</div></td><td>akadmin</td><td>לפני 9 דקות<div class="aka-sub">18.7.2026, 22:58:01</div></td><td>172.18.0.15</td><td>Default brand</td></tr>
+            <tr><td><a href="#">Application authorized</a><div class="aka-sub">authentik.providers.oauth2.views.authorize</div></td><td>akadmin</td><td>לפני 10 דקות<div class="aka-sub">18.7.2026, 22:56:57</div></td><td>172.18.0.15</td><td>Default brand</td></tr>
+          </table>
+          <div class="aka-pagerow">1 - 6 of 233 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+</div></section>

@@ -1,0 +1,63 @@
+# CI overlay: prebuilt images from GHCR instead of building on the runner.
+# Used with:  OVERLAYS="platform/profiles/ci-images.yml" ./scripts/dc up -d --no-build
+# Tags are CONTENT-ADDRESSED (apitools = submodule commit, n8n = tree hash + N8N_VERSION),
+# computed and ensured by the `images` job in .github/workflows/indox-e2e.yml.
+services:
+  apitools:
+    image: ghcr.io/solomonboltin/deployment-hacohen/apitools:${APITOOLS_IMAGE_TAG:-ci}
+  n8n:
+    image: ghcr.io/solomonboltin/deployment-hacohen/n8n:${N8N_IMAGE_TAG:-ci}
+  n8n-worker-1:
+    image: ghcr.io/solomonboltin/deployment-hacohen/n8n:${N8N_IMAGE_TAG:-ci}
+  n8n-worker-2:
+    image: ghcr.io/solomonboltin/deployment-hacohen/n8n:${N8N_IMAGE_TAG:-ci}
+
+# ── the first-party images (DGO-41) ─────────────────────────────────────────────────────────────
+# Built by .github/workflows/images.yml on every push to main/dgo and pushed to GHCR, so a
+# deployment can PULL the commit it declares instead of rebuilding the same layers. Opt in with
+#   OVERLAYS=platform/profiles/ci-images.yml ./scripts/dc up -d --no-build
+# and pin a revision with IMAGE_TAG=<sha> in .env (the default is `latest`).
+#
+# The naming above (`deployment-hacohen/<app>`) is the older, content-addressed set the indox-e2e
+# runner publishes for apitools/n8n; the images job uses `digital-office/<app>` because these are
+# the whole office, not one product. Both are kept until the older job is folded into this one.
+  any-concurrency:
+    image: ghcr.io/solomonboltin/digital-office/any-concurrency:${IMAGE_TAG:-latest}
+  app-management:
+    image: ghcr.io/solomonboltin/digital-office/app-management:${IMAGE_TAG:-latest}
+  archify:
+    image: ghcr.io/solomonboltin/digital-office/archify:${IMAGE_TAG:-latest}
+  bina-ds:
+    image: ghcr.io/solomonboltin/digital-office/bina-ds:${IMAGE_TAG:-latest}
+  computers:
+    image: ghcr.io/solomonboltin/digital-office/computers:${IMAGE_TAG:-latest}
+  connections:
+    image: ghcr.io/solomonboltin/digital-office/connections:${IMAGE_TAG:-latest}
+  console:
+    image: ghcr.io/solomonboltin/digital-office/console:${IMAGE_TAG:-latest}
+  data-management:
+    image: ghcr.io/solomonboltin/digital-office/data-management:${IMAGE_TAG:-latest}
+  dgo-extend:
+    image: ghcr.io/solomonboltin/digital-office/dgo-extend:${IMAGE_TAG:-latest}
+  digital-assets:
+    image: ghcr.io/solomonboltin/digital-office/digital-assets:${IMAGE_TAG:-latest}
+  domains:
+    image: ghcr.io/solomonboltin/digital-office/domains:${IMAGE_TAG:-latest}
+  drive:
+    image: ghcr.io/solomonboltin/digital-office/drive:${IMAGE_TAG:-latest}
+  git:
+    image: ghcr.io/solomonboltin/digital-office/git:${IMAGE_TAG:-latest}
+  machine:
+    image: ghcr.io/solomonboltin/digital-office/machine:${IMAGE_TAG:-latest}
+  my-docs:
+    image: ghcr.io/solomonboltin/digital-office/my-docs:${IMAGE_TAG:-latest}
+  notifications:
+    image: ghcr.io/solomonboltin/digital-office/notifications:${IMAGE_TAG:-latest}
+  project-pln:
+    image: ghcr.io/solomonboltin/digital-office/project-pln:${IMAGE_TAG:-latest}
+  sites:
+    image: ghcr.io/solomonboltin/digital-office/sites:${IMAGE_TAG:-latest}
+  social-list:
+    image: ghcr.io/solomonboltin/digital-office/social-list:${IMAGE_TAG:-latest}
+  telegram-tv:
+    image: ghcr.io/solomonboltin/digital-office/telegram-tv:${IMAGE_TAG:-latest}

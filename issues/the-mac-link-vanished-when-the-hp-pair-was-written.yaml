@@ -1,0 +1,72 @@
+# yaml-language-server: $schema=./schema.json
+title: "The MacBook's link left this office silently at 2026-10-08 23:37, while its tunnel kept running on the machine"
+opened: 2026-10-11
+category: bug
+severity: high
+status: open
+summary: >
+  At 2026-10-08 23:37:19 (20:37:19 UTC) this office wrote its first pairing record — hp-laptop — and
+  the app's record directory `/data/dgo` was BORN in that same nanosecond (`stat`: birth =
+  20:37:19.706700150). Twenty-four seconds later `platform.state.yaml` was rewritten and has declared
+  no remote app since (the MacBook's tiles left the console and never came back). What remains of the
+  Mac here is leftovers only: its last catalog (`/data/remote/macbook.json`, pulled 23:36:40 — one
+  minute before), a serve token in the vault (`dgo_link-serve-macbook-bina-ds-agent`) and a generated
+  traefik file — there is no pairing record for it and no `dgo_link-macbook` token. Meanwhile the
+  Mac's tunnel is NOT down: the machine still runs the legacy host-level pair (`wg-quick@wg0` active,
+  `dgo-link-door` active, wg0 on 10.79.2.2/24, last handshake 2026-10-11 01:23, 9.61 MiB received,
+  the door listening on 10.79.2.2:9002/:8983). So the office stopped DECLARING the Mac while the link
+  itself was alive, and nothing on any screen said so.
+description: |
+  ## Measured (from the office's own volumes and the machine, 2026-10-11)
+
+  ```
+  docker exec dgo-extend-staging stat -c '%n birth=%w' /data/dgo /data/dgo/hp-laptop.yaml
+    /data/dgo              birth=2026-10-08 20:37:19.706700150 +0000
+    /data/dgo/hp-laptop.yaml birth=2026-10-08 20:37:19.706700150 +0000
+  /data/remote/macbook.json   mtime=2026-10-08 20:36:40.819023718 +0000   (the Mac's last catalog)
+  platform.state.yaml         mtime=2026-10-08 23:37:43 +0300, no `remote:` block at all
+  curl -s http://dgo-extend:8983/api/pair   → items: [hp-laptop]  (no macbook, no record)
+  vault (connections) → dgo_link-hp-laptop, dgo_link-serve-macbook-bina-ds-agent; no dgo_link-macbook
+
+  on the machine:
+  systemctl is-active wg-quick@wg0 dgo-link-door   → active / active
+  wg show wg0   → peer +0B1Hc+7nYPESAjx/uu3JSDeuYQYadu7dvV0eb/C5B8= (the Mac, per .dgo/addressing.json)
+                  endpoint 79.177.165.212:58801, latest handshake 10h29m ago, 9.61 MiB received
+  .dgo/addressing.json (2026-10-08 22:54)  → pairs: macbook, slot 2, self 10.79.2.2
+  .dgo/doors/ (2026-10-08 23:35)           → macbook-2-door.sock, macbook-2-dgo-extend.sock
+  ```
+
+  Reading: this office's committed `platform.state.yaml` (git HEAD) even carries a `remote:` block for
+  office `vps1` — another office's projection, committed into this checkout (lnk-015's eng-040: "its
+  own platform.state.yaml is set aside"). When this office wrote its own projection at 23:37:43, the
+  block was rebuilt from THIS office's peers — hp-laptop alone, which did not answer — so the Mac's
+  tiles left and 0 remote apps have been declared since.
+
+  ## The two failures this exposes
+
+  1. **A peer can leave without a word.** A linked office known through the older (machine-level,
+     `.dgo/`) model is not carried into the pairing store, and the office neither refuses to start
+     nor says what it no longer recognises: its tiles simply stop being rendered. The card exists for
+     "an office that does not answer" (lnk-016) — there is nothing for "an office this one used to
+     know and no longer holds a record for".
+  2. **Two tunnels for one /24, one owner missing.** `wg0` on the machine (the Mac, `.dgo/`) and
+     `wg2` inside the container (`/tunnel`, hp-laptop) both claim 10.79.2.0/24 with self 10.79.2.2
+     and a peer at 10.79.2.1. Nothing in the platform measures, names or retires the machine-level
+     one, so the day the Mac is re-paired the two would fight over the same address.
+
+  ## What has to be true before this is closed
+
+  1. An office that finds a peer on its machine it holds no record for says so where the link's state
+     is read (its verdict, `bbox dgo link status`, the console), naming the peer and the evidence.
+  2. Records migrate or the office refuses: before/after a record-store change, the peer count is
+     unchanged, and a missing peer stops the bring-up with its name — proved on a stand-in peer.
+  3. The Mac's link works again without a fresh pairing if the record is recoverable, or the screen
+     says in so many words that it must be paired again and what happens to the old tunnel.
+  4. One owner per tunnel: the machine-level pair is migrated, retired or reported, and a second
+     claim on one 10.79.<slot>.0/24 is a measured, named condition — never a silent coexistence.
+references:
+- apps/dgo-extend/app.py
+- apps/dgo-extend/declaration.py
+- apps/dgo-extend/projection.py
+- ai/context/connection-status-standard.md
+- apps/project-pln/plans/office.yaml

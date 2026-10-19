@@ -1,0 +1,81 @@
+services:
+  data-management:
+    container_name: data-management-${DEPLOYMENT_NAME:-bina-deployment}
+    # The image CI publishes for this commit (DGO-41). `pull_policy: missing` means it is
+    # fetched only when it is not here already, so a checkout that has built it is untouched;
+    # the `build:` below stays as the fallback. Needs the GHCR package readable — a package made
+    # from a private repo is private, so `docker login ghcr.io` on a machine that must pull.
+    image: ghcr.io/solomonboltin/digital-office/data-management:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    build:
+      context: .
+      dockerfile: Dockerfile
+    hostname: data-management
+    networks:
+    - traefik-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.05'
+          memory: 64M
+    environment:
+    - SENTRY_DSN=${DATA_MANAGEMENT_SENTRY_DSN:-}
+    - DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-bina-deployment}
+    - COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME:-deployment-hacohen}
+    # The repo at the SAME path inside as outside. BBOX_REPO_HOST is exported by scripts/lib.sh, so
+    # every entry point supplies it — the same contract app-management uses. Identical paths matter
+    # here more than most: deployment-archive.py shells out to `docker run -v <hostpath>` to tar a
+    # volume, and a repo mounted at a different path inside would hand the daemon a host path that
+    # does not exist — failing mid-export, on the largest volume, an hour in.
+    - DEPLOYMENT_PATH=${BBOX_REPO_HOST:-/repo}
+    # SAME PATH INSIDE AND OUT, for exactly the reason the repo mount is — and it is not optional
+    # here either. The archiver writes volume and bind tars by running a helper container with
+    # `-v <archive dir>:/out`, and that path is resolved by the DAEMON, on the host. Mounted at
+    # /archives, the daemon would be handed a path that does not exist out there and would helpfully
+    # create an empty directory for it: the export would report every artifact written while the
+    # real archive root stayed empty.
+    - DATA_ARCHIVE_ROOT=${DATA_ARCHIVE_ROOT_HOST:-/var/backups/bbox}
+    # WHERE THE SOCKET IS *INSIDE* THIS CONTAINER. scripts/deployment-archive.py sets
+    # DOCKER_HOST=unix://$BBOX_DOCKER_SOCK on every docker call it makes, and that variable is
+    # exported by scripts/lib.sh with the HOST's path (/run/bbox-docker.sock). The bind below mounts
+    # it at the conventional /var/run/docker.sock in here, so without this override the archiver
+    # pointed at a path that does not exist in its own filesystem and every docker call failed —
+    # reporting a live volume as "does not exist on this engine (app never started)" and skipping
+    # it, which is an empty backup that exits successfully.
+    - BBOX_DOCKER_SOCK=/var/run/docker.sock
+    volumes:
+    # Project socket on the host side - see the note in platform-base/traefik/docker-compose.yml.
+    # Read-WRITE deliberately: this service does not merely inspect, it drives pg_dump inside other
+    # containers and creates the helper container that tars a volume.
+    - ${BBOX_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock
+    - ../../:${BBOX_REPO_HOST:-/repo}
+    # Archives live OUTSIDE the repo and outside C: on Windows. Measured 2026-08-12: a full export
+    # is ~50-55GB while C: had 41GB free, so the default target must not be the checkout.
+    - ${DATA_ARCHIVE_ROOT_HOST:-/var/backups/bbox}:${DATA_ARCHIVE_ROOT_HOST:-/var/backups/bbox}
+    # The service's OWN data, and all of it: the last completed sweep (app.py, KEPT_FILE), so a
+    # restarted service shows numbers at once instead of a minute of placeholders. Not the archive
+    # root (that is the backups') and not the checkout.
+    - data_management_state:/state
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - python -c "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://localhost:8080/healthz',timeout=3).status==200
+        else 1)"
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 5
+      start_period: 20s
+
+volumes:
+  data_management_state:
+
+networks:
+  # external, and DELIBERATELY without `name:`. The network is literally `traefik-network`; adding
+  # a project-prefixed name resolved to `deployment-hacohen_traefik-network`, which does not exist,
+  # and compose refused the whole service. Same declaration as platform-base/machine.
+  traefik-network:
+    external: true

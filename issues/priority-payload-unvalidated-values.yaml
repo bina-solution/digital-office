@@ -1,0 +1,171 @@
+# yaml-language-server: $schema=./schema.json
+title: Unvalidated values reach the Priority SHIM payload — broken dates, 100x amounts
+opened: 2026-08-26
+category: bug
+severity: high
+status: resolved
+summary: >-
+  Two extraction defects were reaching the Priority SHIM payload verbatim: DOC_DATE held ISO
+  timestamps that Map Request truncated to "2026-00Z", and the local reader returned the decimal
+  point as a comma so '16,583,00' was sent as 1,658,300. Both are fixed at the point where a raw
+  match first becomes a stored field — Select owns DOC_DATE's format, unifyDocAmount owns the
+  amount's — and the stored data was backfilled (2,503 dates, 37 amounts). Map Request itself is
+  deliberately unchanged: with clean input its expressions are correct. What remains is on the ERP
+  side only: 18 rows already stored at 100x and 11 flagged test rows, which SHIM will not let us
+  delete or update.
+description: |
+  Found on 2026-08-26 while switching uploads from the local stand-in table to the client's real
+  ERP (`https://msh.macomp.vip/odata/Priority/tabula.ini/mscohen/SHIM_RECEIVE_SUPDOC`).
+
+  `Map Request` builds the SHIM payload as a plain field copy, with no validator between it and
+  `Post Priority Table`. Two of its expressions are wrong for input shapes that actually occur,
+  and because `Post Priority Table` is `onError: continueRegularOutput`, neither the bad value
+  nor a rejection from Priority ever surfaces as an n8n error.
+
+    http://n8n.localhost/workflow/indoxV2ActionsGDoc01/priorityActionMapRequest
+    http://n8n.localhost/workflow/indoxV2ActionsShip01/priorityActionMapRequest
+    http://n8n.localhost/workflow/indoxV2ActionsGDoc01/priorityActionPostTable
+    http://n8n.localhost/workflow/indoxV2ActionsShip01/priorityActionPostTable
+
+  (The four priority-path nodes were given readable ids on 2026-08-26 so a defect can link at the
+  node rather than at the workflow: `priorityActionEntry`, `priorityActionMapRequest`,
+  `priorityActionPostTable`, `priorityActionBuildUpdate`.)
+
+  ## 1. DATEDOC — the expression truncates anything that is not exactly dd/mm/yyyy
+
+      DATEDOC = v.length >= 10 ? v.substring(0, 6) + v.slice(-2) : v
+
+  Correct only for `dd/mm/yyyy`. A 24-character ISO timestamp becomes `"2026-0"` + `"0Z"`:
+
+      "2026-02-24T00:00:00.000Z"  ->  DATEDOC "2026-00Z"
+
+  Measured in the client's ERP: 59 rows carry `2026-00Z` / `2026-10Z`, 249 rows uploaded on
+  2026-08-26 carry no date at all, and ~24 carry a dotted `20.07.26`.
+
+  **Closed upstream rather than in the node** (owner decision 2026-08-26). The expression is only
+  wrong for input that is not `dd/mm/yyyy`, and after the DOC_DATE work below there is no such
+  input left: 13,914 of 13,916 filled dates are canonical, Select normalises every write, and the
+  route that produced ISO values is cut. The two stragglers are both under 10 characters, so the
+  `substring` branch cannot fire on them. The node is left as it is.
+
+  ### Why ISO values were in DOC_DATE at all — fixed 2026-08-26
+
+  `doc_date_norm` is a derived `timestamptz` column (schema.sql:249-377, added 2026-08-10) that
+  exists so the dashboard can window on the business date; text dates sort wrongly, `'25/06/2026'
+  > '2026-08-10'`, so every slash-format row matched every window. A `BEFORE INSERT OR UPDATE`
+  trigger recomputes it from `DOC_DATE`.
+
+  The database never wrote `DOC_DATE` — demonstrated in a rolled-back transaction: writing
+  `DOC_DATE` updates `doc_date_norm`, while writing `doc_date_norm` is silently discarded and
+  recomputed. The corruption was indirect: n8n renders a `timestamptz` as
+  `"2026-05-10T00:00:00.000Z"`, `indoxApi01 :: Resolve IDs` listed the column in its write-boundary
+  allowlist, and `Build Bulk Upsert SQL` carried a `timestamptz` cast for it — so the value rode
+  the item across the boundary and something assigned it into `DOC_DATE`. 2,036 rows held it;
+  2,032 were byte-identical to their own `doc_date_norm`.
+
+  The node that made that assignment was never identified. What is closed is the route and the
+  format, not the copier.
+
+  ## 2. TOTPRICE — every comma is deleted, including a decimal comma
+
+      TOTPRICE = parseFloat(String(...).replace(/,/g, "")) || 0
+
+      "7,717,00"   ->  771700     (should be 7717.00)
+      "16,583,00"  ->  1658300
+      "2,070,00"   ->  207000
+
+  40 documents carry the pattern; **18 are already in the client's ERP at 100x**, e.g. LINE 23002
+  (1,658,300 for a 16,583 document — the correct figure is also there, at LINE 12907), LINE 23560,
+  LINE 23880.
+
+  ## 3. A failure looks like a success
+
+  `Post Priority Table` is `onError: continueRegularOutput`, so a rejection from Priority never
+  reaches n8n. During the 2026-08-26 re-sync, 725 documents were rejected while **every execution
+  showed green**; the reason is only visible in the document's own `ERROR` column.
+
+      486  HTTP 400  {"FORM":{"@TYPE":"SHIM_RECEIVE_SUPDOC","InterfaceErrors":
+                      {"@XmlFormat":"0","text":"שורה 1- הכנסה לקובץ נכשלה"}}}
+      227  HTTP 409  {"error":{"code":"409","message":"A record with the specified key already exists"}}
+       12  timeout of 30000ms exceeded   (all stamped 10:18, before the run — not from it)
+
+  **Both classes are transient, not payload defects.** Replaying the exact payload of a rejected
+  document minutes later was accepted: a 400 case returned 201 (LINE 25160), and a 409 case
+  returned 201 (LINE 25164). Dropping PORDNAME, DOC_INV or FROMWAREHOUSE individually also
+  returned 201. A read-only concurrency probe (1/5/10/20/30 parallel GETs) produced zero errors,
+  so this is not us overloading them. The 725 can simply be re-sent.
+
+  Note for whoever re-sends: the 409 documents are not findable in SHIM by `INCOMING_DOC_ID`, by
+  supplier+`DOCSHORT`, or by supplier+`DOCNAME` — all three return zero rows. The conflicting key
+  is presumably in Priority's own document table, which we cannot see. That is a question for the
+  ERP side, not a defect here.
+
+  ## Rows left in the client's ERP by this work
+
+  Test and reproduction rows, flagged `NOTRECEIVE=Y` with a note asking for deletion — the
+  endpoint returns 405 on DELETE, so only the ERP side can remove them:
+
+      LINE 20641-20645   5-row end-to-end proof, fictitious supplier 999000999
+      LINE 25159-25164   6 reproduction attempts for the 400/409 investigation
+
+references:
+  - apps/indox/blueprint/n8n/indoxV2ActionsGDoc01.workflow.ts
+  - apps/indox/blueprint/n8n/indoxV2ActionsShip01.workflow.ts
+  - apps/indox/blueprint/n8n/indoxApi01.workflow.ts
+  - apps/indox/blueprint/n8n/SelectBase01.workflow.ts
+  - apps/indox/blueprint/n8n/SelectType01.workflow.ts
+  - apps/indox/blueprint/fixtures/schema.sql
+tasks:
+  - text: "DONE — Select is the only writer of DOC_DATE and owns its format: normalizeDate() in
+      SelectBase01 and SelectType01, dd/mm/yyyy. SelectType01 already carried the function; the
+      duplicate I first added was deleted, and SelectBase01 got it ported verbatim."
+    done: true
+  - text: "DONE — closed the route that put ISO timestamps in DOC_DATE: doc_date_norm removed from
+      indoxApi01's Resolve IDs allowlist and from the Build Bulk Upsert SQL CAST map, and added to
+      its SKIP set. No workflow references the column any more."
+    done: true
+  - text: "DONE — repaired 2,503 of 2,505 non-conforming DOC_DATE values to dd/mm/yyyy, taking the
+      value from the row's own sources in order of authority (SELECTED 2,166, LOCAL 244, reformat
+      only 47, BS_LINE 27, AI 19). 230 of them had the wrong DAY, not just the wrong format.
+      Backup: scratchpad/doc_date_repair_backup.csv. Two rows unrepairable ('0/06/2026', '5/25')
+      — no source to recover from."
+    done: true
+  - text: "WON'T FIX (owner decision 2026-08-26) — DATEDOC in Map Request stays as it is. The
+      truncation only fires on input that is not dd/mm/yyyy, and that input no longer exists:
+      Select normalises every write and the ISO route is closed, so the node is wrong in principle
+      but unreachable in practice. The two rows still off-format ('5/25' len 4, '0/06/2026' len 9)
+      are both shorter than 10 characters, so the substring branch never runs on them either, and
+      the COMPLETED one is already synced. A corrected expression exists and was proven on 200 real
+      rows with `bbox n8n execute` (41 broken dates before, 0 after) if this is ever revisited."
+    done: true
+  - text: "DONE — fixed at the extraction boundary instead of in Map Request (owner decision):
+      unifyDocAmount added to the Collect node of all five JQExV3 extractors, as a sibling of the
+      existing unifyDocDate. Rule: a value ending ',dd' with no '.' anywhere has its last comma
+      turned into a decimal point; everything else passes through byte-identical. Proven twice
+      before shipping — as SQL over the table and as a real n8n node fed all 14,306 distinct amount
+      values via `bbox n8n execute`: 14,249 identical, 57 changed, 0 disagreements with the rule,
+      0 changes that were not exactly a 100x correction, AI/BS_LINE/TOTAL_AMOUNT untouched.
+      Map Request's TOTPRICE parsing is left as it is — comma-stripping is standard and correct."
+    done: true
+  - text: "WON'T FIX (owner decision 2026-08-26) — onError=continueRegularOutput on Post Priority
+      Table is the intended behaviour: an action is always marked completed. The rejection is not
+      lost, it is recorded on the document's own ERROR column, which is where it belongs."
+    done: true
+  - text: "NOT OURS (owner decision 2026-08-26) — the 18 rows stored at 100x and the 11 flagged
+      test/reproduction rows (LINE 20641-20645, 25159-25164) can only be corrected or deleted on
+      the ERP side; SHIM returns 405 on DELETE and does not update in place."
+    done: true
+  - text: "DONE — backfilled the comma-decimal amounts the sanctioned way: blank DOC_ID (per-type's
+      sentinel value, per the comment above __needsPerType) + cleared marks + STATUS=ACTION_RESTART
+      on 46 documents. 37 of 46 corrected, final value corrected on 19 of 22; the rest settled on
+      their own. PRIORITY_SYNC_COMPLETED was deliberately NOT cleared, so nothing re-sent — a
+      re-send to SHIM is a new row, not an update. Backup: scratchpad/pertype_restart_backup.csv."
+    done: true
+  - text: "OPEN, and the only thing left here — re-send the 726 documents Priority rejected. They
+      are NOT in the client's ERP, so this is a gap in their data, not a duplicate risk. Both
+      rejection classes were proven transient rather than payload defects: replaying the exact
+      payload of a rejected document was accepted minutes later (a 400 case returned 201 at LINE
+      25160, a 409 case returned 201 at LINE 25164), and a read-only concurrency probe at 1/5/10/
+      20/30 parallel produced zero errors, so it was not us overloading them. Re-run is the
+      sanctioned one: clear PRIORITY_SYNC_COMPLETED + STATUS=ACTION_RESTART on that set."
+    done: false

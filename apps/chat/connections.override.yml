@@ -1,0 +1,40 @@
+# WhatsApp bot — sandbox/local run override. Fixes the hardcoded host bind-mount to a local ./data and
+# joins traefik-network so connections can proxy the pairing QR during onboarding.
+#
+# Admin auth: the bot reads AUTH_USERNAME/AUTH_PASSWORD; connections resolves the SAME creds from the
+# `chat-auth` connection (the manifest aliases CHAT_AUTH_* -> AUTH_* so the injector feeds the bot
+# and connections' QR-proxy authenticate identically). Set them from connections on a real deploy.
+#
+# NOTE (verified 2026-07): on a cloud/datacenter IP, WhatsApp's anti-abuse 403s the pairing WebSocket
+# even with direct outbound — the bot connects, fetches the WA version, then hangs at "connecting" with
+# no QR. Pair from a local/residential IP; the connections<->console QR flow is otherwise proven.
+#
+# Apply: docker compose -p deployment-hacohen -f production/chat/docker-compose.yml \
+#                       -f apps/<id>/whatsapp-bot.sandbox.override.yml up -d
+services:
+  chat:
+    image: chat-local
+    container_name: chat-ci
+    environment:
+      - APP_PORT=3000
+      - WA_ARCHIVE_ENABLED=false
+      - NO_PROXY=*                   # direct outbound to WhatsApp + direct to internal Docker services
+      - AGENT_RUNNER_URL=http://agent-runner:7700
+      - DISPATCHER_URL=http://dispatcher:8800
+    volumes:
+      - ./_wa_data:/app/data        # local session dir (overrides the hardcoded host path)
+      - ./_wa_media:/wa_media
+    networks:
+      - traefik-network
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik-network
+      - traefik.http.services.chat.loadbalancer.server.port=3000
+      - traefik.http.routers.chat-local.rule=Host(`chat.localhost`)
+      - traefik.http.routers.chat-local.entrypoints=web
+      - traefik.http.routers.chat-local.service=chat
+networks:
+  traefik-network:
+    external: true
+volumes:
+  wa_media: null

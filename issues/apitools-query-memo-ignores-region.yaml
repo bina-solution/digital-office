@@ -1,0 +1,151 @@
+title: OcrQuery match memos are keyed without `region`, so a fallback chain serves a stale, wrongly-scoped match list
+opened: 2026-08-06
+category: bug
+severity: medium
+status: resolved
+summary: >-
+  `find_texts_matching_annotations` caches on (texts, fuzzy, max_matches) but reads the
+  region-filtered `self.text_annotations`, while `_run_single` re-assigns `self.ocr_query.region`
+  per fallback step on a shared OcrQuery — so a region is silently ignored (or leaks) between
+  steps of one query. Reproduced in both directions; not reachable by any query shipped today.
+description: |
+  ## Symptom
+
+  Within a single `/documentJsonQuery` request, a step that declares
+  `region: {"y_max": ...}` can match anchors from the **whole page**, and a step with no
+  region can match only a **previous step's band**. No error is raised — the response is
+  well-formed with a wrong or missing `result`.
+
+  ## Root cause
+
+  `OcrJsonQuery.json_query()` walks a `fallbacks` chain (depth up to 12) and, on
+  `ValidationFailed`, re-runs `_run_single` at an incremented `match_index` (up to
+  `APITOOLS_MAX_MATCH_ATTEMPTS`). Every attempt reuses **the same `OcrQuery` instance** —
+  `OcrObject` builds one per document and `OcrJsonQuery` holds a reference for the life of
+  the request.
+
+  Two facts conflict:
+
+  1. `_run_single` re-assigns query scope on that shared object on **every** step
+     (`apps/apitools/src/ocr_core/ocr_json_query.py`):
+
+         self.ocr_query.region       = query.get("region")
+         self.ocr_query.anchor_order = query.get("anchor_order")
+         self.ocr_query.value_order  = query.get("value_order")
+
+     `region` is consumed by the `OcrQuery.text_annotations` property, which filters
+     annotations to a vertical band (`y_min`/`y_max` as fractions of page height).
+
+  2. The memos that cache annotation matching are keyed **without** it
+     (`apps/apitools/src/ocr_core/ocr_query.py`):
+
+         # find_texts_matching_annotations
+         memo_key = (tuple(texts), fuzzy, max_matches)
+         # find_texts_matching_annotations_via_alignment
+         memo_key = (tuple(texts), fuzzy, max_matches, max_anchor_scan)
+
+     …and both then iterate `self.text_annotations` — the region-filtered property.
+     `_aligned_memo` has the same shape (`(id(annotation), relative_position,
+     max_candidates)`), and `annotations_aligned_with_annotation` also reads that property.
+
+  The memo docstrings justify caching as a "pure function of immutable per-request input"
+  and note "the document's annotations NEVER change within an OcrQuery's lifetime". That is
+  true of the document; it is **not** true of `self.region`, which is mutable per-step
+  request state living on the same object.
+
+  ## Why it is latent today
+
+  Verified not reachable by any query currently in `public.settings`:
+
+  - `find regex` is the only action carrying `region` in the shipped date queries, and it
+    uses **neither** memo — it builds its own list via `_word_list(ocr_data)`, reading
+    `ocr_data.text_annotations` (raw `OcrData`) rather than the `OcrQuery` property.
+  - `q_v3_company` does put `region` on `find option` steps, but those set
+    `match_mode: id` / `name_substring`, and `_run_single` deliberately **skips** the fuzzy
+    annotation pass for those modes, rebuilding from a normalized substring scan over
+    `_word_list`. They never touch the memo either.
+
+  It goes live the moment any settings query puts a `region` on a
+  `find after`/`before`/`above`/`below` step, or on a `find option` step **without**
+  `match_mode`, while another step in the same chain uses the same `action_value` texts.
+  That is an ordinary edit to a JSON blob in a DB row. Nothing would flag it.
+
+  ## Why it matters
+
+  Silent and direction-dependent — the bad combination:
+
+  - **unscoped → scoped**: the region is ignored, so a "supplier ח.פ in the letterhead" or
+    "grand total in the bottom half" query matches the whole page — precisely the confusion
+    `region` was added to prevent (see the `self.region` comment in `OcrQuery.__init__`).
+  - **scoped → unscoped**: the later step sees only the band and reports "not found" for a
+    value plainly on the document.
+
+  Neither raises, on financial documents. The failure is also **order-dependent within the
+  fallback chain**, so it reproduces only in one particular step sequence — the kind of bug
+  that survives a long time looking like "the OCR was bad on that document".
+
+  ## Reproduction (measured, not inferred)
+
+  Inside the apitools container, against a cached file_id —
+  `40dc745a71993e0657f59e7493fe04ca` = `demo-docs/balance_sheet/files/lvyrvn-3.pdf`,
+  520 annotations, page height 1188, three `תאריך` anchors at cy=94.5:
+
+      o = OcrObject.from_file_id(FID); TEXTS = ['תאריך']; BAND = {'y_max': 0.06}
+
+      # controls, each on a FRESH object (the truth)
+      scoped,   no prior call  ->  0 matches
+      unscoped, no prior call  ->  3 matches
+
+      # B — unscoped first, then scoped (what a fallback chain does)
+      unscoped first           ->  3
+      scoped after             ->  3     WRONG, expected 0   (region ignored)
+
+      # A — scoped first, then unscoped
+      scoped first             ->  0
+      unscoped after           ->  0     WRONG, expected 3   (band leaked)
+
+  **Band choice is load-bearing**; a careless one gives a false negative twice over:
+
+  - `y_max >= 0.08` keeps all three anchors, so scoped and unscoped agree by coincidence and
+    the test "passes" while the bug is present (this is what my first attempt did);
+  - a band tight enough to filter to **zero** annotations also proves nothing, because
+    `OcrQuery.text_annotations` ends with `return kept or anns` ("never strand the query with
+    nothing to match") and silently falls back to the whole page.
+
+  `y_max=0.06` keeps 8 of 520 annotations — non-empty, and excludes every anchor.
+
+  ## Suggested fix
+
+  Include the scope in the memo keys; it is per-request state and belongs there exactly like
+  `fuzzy` and `max_matches` already do:
+
+      rk = None if not self.region else (self.region.get('y_min'), self.region.get('y_max'))
+      memo_key = (tuple(texts), fuzzy, max_matches, rk)
+
+  …and likewise for the `via_alignment` key and `_aligned_memo`. This keeps every measured
+  performance win the memos exist for: the hot path is retries at incrementing `match_index`
+  **within** one step, where the region is constant, so those still hit.
+
+  Passing scope as an argument instead of holding it as mutable state on a shared object is
+  structurally cleaner but a wider change to `OcrQuery`'s surface — not worth it for this alone.
+
+  Any fix needs a regression test asserting against a **fresh-object control**, not merely that
+  two calls differ; otherwise the key can silently regress next time a parameter is added.
+
+  ## Provenance
+
+  Found during B5 (`q_v3_date_base` extracting a labelled-range boundary as `DOC_DATE`). Not
+  the cause of that defect — recorded because the same read of this call graph surfaced it, and
+  because `region` is now load-bearing in the shipped date queries' `find regex` steps, which
+  makes reaching for `region` on a `find after` step the likely next move.
+tasks:
+  - text: Add region (y_min, y_max) to the memo keys in find_texts_matching_annotations, find_texts_matching_annotations_via_alignment, and _aligned_memo
+    done: true
+  - text: Add a regression test asserting a region-scoped call after an unscoped one matches the fresh-object scoped control (band must keep >0 annotations and exclude >=1 anchor)
+    done: true
+  - text: Decide whether `return kept or anns` in OcrQuery.text_annotations should stay — it makes an over-tight region silently behave as no region
+    done: false
+references:
+  - apps/apitools/src/ocr_core/ocr_query.py
+  - apps/apitools/src/ocr_core/ocr_json_query.py
+  - apps/indox/blueprint/fixtures/settings.json

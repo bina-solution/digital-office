@@ -1,0 +1,107 @@
+# drive — THE drive platform service at drive.localhost (ai/context/platform-service-contract.md).
+# Owns its connections (built-in local storage + any Google Drive accounts), an ACTIVE pointer, and
+# every drive op through the active connection's adapter. The UI is domain-native — folders, files,
+# upload, move, trash, search — and apps extend it through /extensions; it knows nothing about them.
+# The built-in local connection keeps the on-disk semantics unchanged (storage object + drive_files
+# row), so anything that already reads those artifacts keeps working.
+# /file/d/* stays with the storage router (higher priority); this UI takes every other path.
+services:
+  drive:
+    # The image CI publishes for this commit (DGO-41). `pull_policy: missing` means it is
+    # fetched only when it is not here already, so a checkout that has built it is untouched;
+    # the `build:` below stays as the fallback. Needs the GHCR package readable — a package made
+    # from a private repo is private, so `docker login ghcr.io` on a machine that must pull.
+    image: ghcr.io/solomonboltin/digital-office/drive:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: drive-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: drive
+    restart: unless-stopped
+    environment:
+      - SENTRY_DSN=${DRIVE_SENTRY_DSN:-}
+      - DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-bina-deployment}
+      - SUPABASE_DB_PASSWORD=${SUPABASE_DB_PASSWORD:-}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY:-}
+      - PGHOST=supabase-db
+      - STORAGE_URL=http://storage:5000
+      - DRIVE_PUBLIC_HOST=drive.${DEV_DOMAIN:-localhost}
+      # credential plane (secret-base): drive connections live there, only the pointer lives here
+      - CONNECTIONS_URL=${CONNECTIONS_URL:-http://connections:8990}
+      # public base of the credential plane — the guided connect flow sends the browser to ITS
+      # consent broker (never to a provider directly), and it returns there too
+      - CONNECTIONS_PUBLIC_URL=${CONNECTIONS_PUBLIC_URL:-https://${CONNECTIONS_BASE_URL:-connections.localhost}}
+      # OAuth CLIENT (not a grant): the google adapter needs it to REFRESH an access token. The
+      # grant itself never lands here — it is fetched from secret-base per call (§5a).
+      - N8N_GOOGLE_OAUTH_CLIENT_ID=${N8N_GOOGLE_OAUTH_CLIENT_ID:-}
+      - N8N_GOOGLE_OAUTH_CLIENT_SECRET=${N8N_GOOGLE_OAUTH_CLIENT_SECRET:-}
+    volumes:
+      # the active-connection pointer (active.json) and the extension registry must survive restarts
+      - localdrive_data:/data
+    networks:
+      - traefik-network
+      - supabase-net
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik-network
+      # PUBLIC file bytes (/file/d/<id>/view) — no authentik: apitools fetches server-side
+      # and humans share links. Higher priority so it wins over the gated UI router.
+      - traefik.http.routers.drive-file.rule=(Host(`drive.localhost`) || Host(`${DRIVE_BASE_URL:-drive.${DEPLOYMENT_DOMAIN:-localhost}}`)) && PathPrefix(`/file/d/`)
+      - traefik.http.routers.drive-file.entrypoints=web
+      - traefik.http.routers.drive-file.priority=200
+      - traefik.http.routers.drive-file.service=drive-ui
+      # gated UI + API (everything else on the host)
+      - traefik.http.routers.drive-ui.rule=Host(`drive.localhost`) || Host(`${DRIVE_BASE_URL:-drive.${DEPLOYMENT_DOMAIN:-localhost}}`)
+      - traefik.http.routers.drive-ui.entrypoints=web
+      - traefik.http.routers.drive-ui.priority=1
+      - traefik.http.routers.drive-ui.middlewares=authentik@file
+      - traefik.http.routers.drive-ui.service=drive-ui
+      # The https twin. drive published `web` ONLY, so on a domain deployment https://drive.<domain>
+      # matched no router and 404'd — while http worked, which is the shape that hides it: the app
+      # is fine, SSO is fine, and the one scheme anybody actually visits has no route.
+      - traefik.http.routers.drive-ui-https.rule=Host(`${DRIVE_BASE_URL:-drive.${DEPLOYMENT_DOMAIN:-localhost}}`)
+      - traefik.http.routers.drive-ui-https.entrypoints=websecure
+      - traefik.http.routers.drive-ui-https.tls=true
+      - traefik.http.routers.drive-ui-https.tls.certresolver=myresolver
+      - traefik.http.routers.drive-ui-https.priority=1
+      - traefik.http.routers.drive-ui-https.middlewares=authentik@file
+      - traefik.http.routers.drive-ui-https.service=drive-ui
+      # …and the public /file/d/ share links, which must keep their higher priority and stay
+      # UNAUTHENTICATED (that is the point of a share link) on https too.
+      - traefik.http.routers.drive-file-https.rule=Host(`${DRIVE_BASE_URL:-drive.${DEPLOYMENT_DOMAIN:-localhost}}`) && PathPrefix(`/file/d/`)
+      - traefik.http.routers.drive-file-https.entrypoints=websecure
+      - traefik.http.routers.drive-file-https.tls=true
+      - traefik.http.routers.drive-file-https.tls.certresolver=myresolver
+      - traefik.http.routers.drive-file-https.priority=200
+      - traefik.http.routers.drive-file-https.service=drive-ui
+      - traefik.http.services.drive-ui.loadbalancer.server.port=8975
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://localhost:8975/healthz',timeout=8).status==200 else 1)"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          # 2026-08-05: 0.5 CPU / 256M was starving the process under real concurrent sync traffic
+          # (see the Dockerfile CMD comment) — every non-download request timed out client-side while
+          # 2 workers were fully occupied streaming downloads. Threads (Dockerfile) fix the concurrency
+          # model; this gives the process enough CPU/memory headroom to actually use them.
+          cpus: '1.0'
+          memory: 384M
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+
+volumes:
+  # NAME DELIBERATELY UNCHANGED. The service is `drive` now, but renaming this volume
+  # would orphan every byte already in deployment-hacohen_localdrive_data.
+  localdrive_data:
+
+networks:
+  traefik-network:
+    external: true

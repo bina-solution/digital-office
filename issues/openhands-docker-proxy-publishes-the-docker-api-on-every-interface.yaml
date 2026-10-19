@@ -1,0 +1,50 @@
+# yaml-language-server: $schema=./schema.json
+title: "Enabling the openhands app publishes the host's Docker API, unauthenticated, on every interface (docker-proxy 2375:2375)"
+opened: 2026-10-06
+category: security
+severity: high
+status: open
+summary: "apps/openhands/docker-compose.yml runs `docker-proxy` — socat forwarding TCP 2375 to /var/run/docker.sock — and publishes it as `2375:2375`, i.e. on 0.0.0.0. Whoever can reach that port can start a privileged container and owns the host. The app ships disabled (gallery), so no office is exposed today; the day one enables it on a server, the server's Docker API is on its public address."
+description: |
+  ## Measured (2026-10-06, dgo-pair @ 2146e65b)
+
+  * `apps/openhands/docker-proxy/Dockerfile`:
+    `ENTRYPOINT ["socat", "TCP-LISTEN:2375,reuseaddr,fork", "UNIX-CONNECT:/var/run/docker.sock"]`
+    — the whole API, no filter, no auth.
+  * `apps/openhands/docker-compose.yml`, service `docker-proxy`: `ports: - 2375:2375` and the
+    socket mounted read-write. A scan of every compose file's `ports:` shows the only publishes on
+    all interfaces are the edge (80/443), this one, and `openhands 3000:3000` beside it.
+  * Why it is published at all: the agent sandboxes OpenHands spawns are not on the office
+    network; `apps/openhands/agent-image/entrypoint-wrapper.sh` gives them
+    `DOCKER_HOST=tcp://host.docker.internal:2375`, i.e. they come back in through the HOST.
+  * `openhands` is `{ enabled: false }` in every state file seen (HP, the committed copy), so
+    nothing is listening anywhere today.
+
+  ## Why it is not a one-line change
+
+  Binding the publish to 127.0.0.1 closes the hole and also the feature: a sandbox reaches
+  `host.docker.internal` through the bridge gateway, not through the host's loopback. The two
+  honest fixes both need the app running to prove:
+
+  1. the sandboxes join the office network and use `tcp://docker-proxy-<deployment>:2375`
+     (no host publish at all), or
+  2. the publish is bound to the engine's bridge gateway address only, and the proxy is replaced
+     by a filtering one (containers and exec only) — the same remedy
+     `issues/traefik-docker-socket-rw.yaml` asks for the edge.
+
+  It was found from this office, where the app does not run, so nothing was changed blind.
+  `openhands 3000:3000` (the app's own UI, beside its loopback publish on 3001) deserves the same
+  look: the routed way in is the edge.
+tasks:
+  - text: "Decide the path for the sandboxes' docker access (office network, or bridge-gateway bind + filtering proxy) and prove it with the app running"
+    done: false
+  - text: "Remove the all-interface publishes of docker-proxy (2375) and openhands (3000)"
+    done: false
+  - text: "A gate: no compose file publishes a port on every interface except the edge (the scan that found this is twelve lines)"
+    done: false
+references:
+  - apps/openhands/docker-compose.yml
+  - apps/openhands/docker-proxy/Dockerfile
+  - apps/openhands/agent-image/entrypoint-wrapper.sh
+  - issues/traefik-docker-socket-rw.yaml
+  - issues/n8n-postgres-publicly-exposed.yaml

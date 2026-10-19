@@ -1,0 +1,236 @@
+<section class="screen" data-screen="machine-state-chart-tip">
+<style>
+.mc3-head{display:flex;align-items:flex-start;justify-content:space-between;padding-bottom:16px;border-bottom:1px solid var(--line);margin-bottom:18px}
+.mc3-head h1{margin:0;font-size:26px;font-weight:800;text-align:right}
+.mc3-head .sub{color:var(--muted);font-size:13px;margin-top:5px;text-align:right}
+.mc3-actions{display:flex;align-items:center;gap:10px}
+.mc3-badge{background:var(--amber-bg);border:1px solid var(--amber-line);color:var(--amber-ink);border-radius:999px;padding:6px 13px;font-size:12.5px;font-weight:600;white-space:nowrap}
+.mc3-stats{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:18px}
+.mc3-card{background:#e9edeb;border-radius:16px;padding:15px 17px;display:flex;flex-direction:column}
+.mc3-card .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+.mc3-card .lab{font-size:14px;font-weight:600;color:#31403a}
+.mc3-card .pill{font-size:11px;background:#dbe1de;color:#5a6b64;border-radius:6px;padding:2px 8px;white-space:nowrap}
+.mc3-card .pill.gr{background:#d7f0e4;color:#0b7a58}
+.mc3-card .val{font-size:33px;font-weight:800;text-align:left;line-height:1.15;margin-top:2px}
+.mc3-spark{margin-top:auto;height:34px}
+.mc3-track{position:relative;height:8px;border-radius:6px;background:#d4dbd7;margin-top:16px;overflow:hidden}
+.mc3-fill{position:absolute;right:0;top:0;height:100%;border-radius:6px}
+.mc3-g2{display:grid;grid-template-columns:1fr 2fr;gap:16px;margin-bottom:18px}
+.mc3-panel{background:#e9edeb;border-radius:16px;padding:18px 20px;position:relative}
+.mc3-panel h3{margin:0;font-size:18px;font-weight:800;text-align:right}
+.mc3-glegend{display:flex;gap:15px;font-size:12.5px;color:#31403a;align-items:center}
+.mc3-glegend .sw{display:inline-block;width:18px;height:3px;border-radius:2px;vertical-align:middle;margin-inline-end:5px}
+.mc3-ghead{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.mc3-flist{margin-top:8px}
+.mc3-flist .r{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:11px 0;border-bottom:1px solid #dadfdc;font-size:14px}
+.mc3-flist .r:last-child{border-bottom:none}
+.mc3-flist .k{color:#5a6b64;white-space:nowrap}
+.mc3-flist .v{color:#1a1a1a;text-align:left;direction:ltr;unicode-bidi:plain-text}
+.mc3-chartwrap{position:relative;margin-top:6px}
+.mc3-marker{position:absolute;top:44px;bottom:22px;left:38%;width:1px;background:rgba(30,45,40,.35)}
+.mc3-tip{position:absolute;top:58px;left:31%;background:#1e2b26;color:#fff;border-radius:10px;padding:9px 13px;font-size:12.5px;line-height:1.55;box-shadow:0 10px 30px rgba(10,25,18,.35);text-align:right;white-space:nowrap;z-index:3}
+.mc3-tip .t{font-weight:800;margin-bottom:2px}
+.mc3-svcrow{margin:4px 0 12px}
+.mc3-svcrow h3{margin:0;font-size:19px;font-weight:800;text-align:right}
+.mc3-svcard{background:#e9edeb;border-radius:16px;padding:16px 18px}
+.mc3-tabsrow{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-bottom:14px}
+.mc3-tab{padding:7px 15px;border-radius:999px;font-size:13px;background:#fff;color:#33403b;border:1px solid #d7ddda}
+.mc3-tab.on{background:var(--sidebar);color:#fff;border-color:var(--sidebar)}
+.mc3-toolrow{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.mc3-search{flex:1;background:#fff;border:1px solid #d7ddda;border-radius:9px;padding:10px 14px;color:#9aa;font-size:13px}
+.mc3-t{width:100%;border-collapse:collapse}
+.mc3-t th{color:#6b7c76;font-weight:700;font-size:13px;padding:10px 12px;text-align:right;border-bottom:1px solid #d7ddda}
+.mc3-t td{padding:12px 12px;border-bottom:1px solid #dfe4e1;text-align:right;font-size:13.5px;color:#1a1a1a}
+.mc3-t .svc{font-weight:700}
+.mc3-t .num{color:#6b7c76}
+.mc3-bdg{display:inline-block;padding:3px 12px;border-radius:999px;font-size:12px;font-weight:600}
+.mc3-bdg.g{background:#dff5ec;color:#0b7a58}
+.mc3-bdg.a{background:#fdf1dc;color:#b45309}
+.mc3-cpu{display:flex;align-items:center;gap:8px}
+.mc3-cbar{flex:1;max-width:70px;height:6px;border-radius:5px;background:#d9dfdc;overflow:hidden}
+.mc3-cbar>i{display:block;height:100%;background:var(--green)}
+</style>
+<div class="viewport">
+  <aside class="hm-side">
+    <div class="hm-brand"><div class="logo">מ</div><div class="bt"><b>המרכז</b><span>מערכת ניהול העסק</span></div></div>
+    <nav class="hm-nav">
+      <div class="hm-sec">ראשי</div>
+      <a data-nav="dashboard"><span>לוח בקרה</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></a>
+      <div class="hm-sec">עסק</div>
+      <a data-nav="mydocs-dash"><span>מסמכים שלי</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></a>
+      <a data-nav="drive-root"><span>דרייב</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></a>
+      <a data-nav="mail-inbox"><span>מייל</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg></a>
+      <a data-nav="indox-root"><span>מסמכים נכנסים</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5 5h14l3 7v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-6z"/></svg></a>
+      <a data-nav="wadmin-dashboard"><span>בוט ווצאפ</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5.7a8.5 8.5 0 1 1 16.1-3.8z"/></svg></a>
+      <div class="hm-sec">תשתית</div>
+      <a data-nav="kabil"><span>כל‑מקביל</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></a>
+      <a data-nav="notifications"><span>התראות</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></a>
+      <a data-nav="machine" class="on"><span>מכונה</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="6" rx="1"/><rect x="2" y="9" width="20" height="6" rx="1"/><rect x="2" y="15" width="20" height="6" rx="1"/></svg></a>
+      <a data-nav="apps"><span>אפליקציות</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></a>
+      <a data-nav="feature-validation"><span>אימות מערכת</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg></a>
+      <div class="hm-sec">הגדרות</div>
+      <a data-nav="connections-auth"><span>חיבורים ומפתחות</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="15" r="4"/><path d="m10.85 12.15 8.15-8.15 2 2-2 2 2 2-3 3-2-2-2 2"/></svg></a>
+      <a data-nav="console-install"><span>מסך התקנה</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-2.82 1.17V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 8 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 8.6a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9z"/></svg></a>
+    </nav>
+    <div class="hm-foot"><small>מחובר/ת</small><b>authentik Default Admin</b></div>
+  </aside>
+  <main class="hm-main">
+    <div class="hm-top">
+      <div class="grp"><div class="hm-title">מכונה</div><button class="hm-burger">☰</button></div>
+      <div class="grp"><div class="hm-search"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4-4"/></svg><span>חיפוש</span><span class="kbd">Ctrl K</span></div></div>
+      <div class="grp left"><span style="color:var(--muted);font-size:13px">מדדי מארח ו‑Docker</span><div class="pill-amber">⚙ 7 שלבי התקנה</div></div>
+    </div>
+    <div class="hm-scroll"><div class="hm-body">
+
+      <div class="mc3-head">
+        <div>
+          <h1>מכונה</h1>
+          <div class="sub">vm · Ubuntu 24.04.4 LTS</div>
+        </div>
+        <div class="mc3-actions">
+          <span class="mc3-badge">● עודכן לפני 440ש'</span>
+          <button class="btn btn-ghost btn-sm">ניקוי מושבת</button>
+          <button class="btn btn-primary btn-sm">↻ רענן</button>
+        </div>
+      </div>
+
+      <div class="mc3-stats">
+        <div class="mc3-card">
+          <div class="top"><span class="pill">עומס 7.16</span><span class="lab">מעבד</span></div>
+          <div class="val">—</div>
+          <svg class="mc3-spark" width="100%" viewBox="0 0 200 40" preserveAspectRatio="none"><polygon fill="rgba(37,99,235,.14)" points="0,22 12,18 24,24 36,14 48,20 60,10 72,18 84,8 96,16 108,9 120,17 132,7 144,15 156,10 168,14 180,8 200,12 200,40 0,40"/><polyline fill="none" stroke="#2563eb" stroke-width="1.5" points="0,22 12,18 24,24 36,14 48,20 60,10 72,18 84,8 96,16 108,9 120,17 132,7 144,15 156,10 168,14 180,8 200,12"/></svg>
+        </div>
+        <div class="mc3-card">
+          <div class="top"><span class="pill">GB / 16 GB 2.0</span><span class="lab">זיכרון</span></div>
+          <div class="val">13%</div>
+          <svg class="mc3-spark" width="100%" viewBox="0 0 200 40" preserveAspectRatio="none"><polygon fill="rgba(14,159,110,.14)" points="0,20 40,21 80,22 120,23 160,24 200,25 200,40 0,40"/><polyline fill="none" stroke="#0e9f6e" stroke-width="1.5" points="0,20 40,21 80,22 120,23 160,24 200,25"/></svg>
+        </div>
+        <div class="mc3-card">
+          <div class="top"><span class="pill">GB 8.5 פנוי</span><span class="lab">אחסון</span></div>
+          <div class="val">97%</div>
+          <div class="mc3-track"><div class="mc3-fill" style="width:97%;background:var(--red)"></div></div>
+        </div>
+        <div class="mc3-card">
+          <div class="top"><span class="pill">0 B/s ↑</span><span class="lab">רשת</span></div>
+          <div class="val">0 B ↓</div>
+          <svg class="mc3-spark" width="100%" viewBox="0 0 200 40" preserveAspectRatio="none"><polyline fill="none" stroke="#7c53c9" stroke-width="1.5" points="0,30 200,30"/></svg>
+        </div>
+        <div class="mc3-card">
+          <div class="top"><span class="pill gr">0 לא תקין</span><span class="lab">מכולות</span></div>
+          <div class="val">18/28</div>
+          <div class="mc3-track"><div class="mc3-fill" style="width:64%;background:var(--green)"></div></div>
+        </div>
+      </div>
+
+      <div class="mc3-g2">
+        <div class="mc3-panel">
+          <h3>פרטי מכונה</h3>
+          <div class="mc3-flist">
+            <div class="r"><span class="k">שם מארח</span><span class="v">vm</span></div>
+            <div class="r"><span class="k">מערכת הפעלה</span><span class="v">Ubuntu 24.04.4 LTS</span></div>
+            <div class="r"><span class="k">ליבה</span><span class="v">6.18.5</span></div>
+            <div class="r"><span class="k">ארכיטקטורה</span><span class="v">x86_64</span></div>
+            <div class="r"><span class="k">מעבד</span><span class="v">Intel(R) Xeon(R) Processor @ 2.80GHz · 4 ליבות</span></div>
+            <div class="r"><span class="k">עומס</span><span class="v">7.16 / 3.58 / 1.9</span></div>
+            <div class="r"><span class="k">זמן פעילות</span><span class="v">0.3 שעות</span></div>
+          </div>
+        </div>
+        <div class="mc3-panel">
+          <div class="mc3-ghead">
+            <div class="mc3-glegend">
+              <span><span class="sw" style="background:#2563eb"></span>מעבד 73%</span>
+              <span><span class="sw" style="background:#0e9f6e"></span>זיכרון 35%</span>
+              <span><span class="sw" style="background:var(--gold)"></span>אחסון 98%</span>
+              <span><span class="sw" style="background:#7c53c9"></span>רשת ↓0 B/s ↑0 B/s</span>
+            </div>
+            <h3>גרף משאבים</h3>
+          </div>
+          <div class="mc3-chartwrap">
+            <svg width="100%" height="300" viewBox="0 0 640 300" preserveAspectRatio="none">
+              <line x1="0" y1="90" x2="640" y2="90" stroke="#dfe4e1" stroke-width="1"/>
+              <line x1="0" y1="160" x2="640" y2="160" stroke="#dfe4e1" stroke-width="1"/>
+              <line x1="0" y1="230" x2="640" y2="230" stroke="#dfe4e1" stroke-width="1"/>
+              <polyline fill="none" stroke="var(--gold)" stroke-width="2.5" points="0,38 90,36 180,37 270,35 360,36 450,35 540,36 620,35 640,35"/>
+              <polygon fill="rgba(37,99,235,.10)" points="10,150 40,135 70,155 100,120 130,160 160,115 190,150 210,175 235,110 260,145 290,105 320,150 345,95 370,135 400,90 430,125 455,80 485,120 515,70 540,110 565,60 590,90 605,55 615,60 615,285 10,285"/>
+              <polyline fill="none" stroke="#2f74c0" stroke-width="2.2" points="10,150 40,135 70,155 100,120 130,160 160,115 190,150 210,175 235,110 260,145 290,105 320,150 345,95 370,135 400,90 430,125 455,80 485,120 515,70 540,110 565,60 590,90 605,55 615,60 615,285"/>
+              <polyline fill="none" stroke="#0e9f6e" stroke-width="2.2" points="10,175 50,180 90,182 130,188 170,220 210,225 250,228 290,232 330,236 370,240 410,244 450,248 490,252 530,258 570,264 600,270 613,275 615,285"/>
+              <polyline fill="none" stroke="#7c53c9" stroke-width="1.6" stroke-dasharray="5 4" points="0,285 640,285"/>
+            </svg>
+            <div class="mc3-marker"></div>
+            <div class="mc3-tip">
+              <div class="t">14:53:00</div>
+              <div>מעבד 62% · זיכרון 25%</div>
+              <div>אחסון 97% · רשת ↓ 0 B/s ↑ 0 B/s</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="mc3-svcrow"><h3>שירותים פעילים</h3></div>
+      <div class="mc3-svcard">
+        <div class="mc3-tabsrow">
+          <div class="mc3-tab on">הכל 28</div>
+          <div class="mc3-tab">פועל 18</div>
+          <div class="mc3-tab">הסתיים 0</div>
+          <div class="mc3-tab">לא תקין 0</div>
+        </div>
+        <div class="mc3-toolrow">
+          <span class="mc3-search">סנן מכולות...</span>
+          <button class="btn btn-ghost btn-sm">צפוף</button>
+          <button class="btn btn-ghost btn-sm">ייצוא</button>
+        </div>
+        <table class="mc3-t">
+          <thead><tr><th>שירות</th><th>סטטוס</th><th>תקינות</th><th>מעבד</th><th>זיכרון</th><th>רשת</th><th>תה…</th><th>הפעלו…</th><th></th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="svc">n8n</td>
+              <td><span class="mc3-bdg g">פועל</span></td>
+              <td><span class="mc3-bdg a">מתחיל</span></td>
+              <td><div class="mc3-cpu"><span>64%</span><div class="mc3-cbar"><i style="width:64%"></i></div></div></td>
+              <td>14 MB <span class="num">0.7%</span></td>
+              <td>↓42 B ↑84 B</td>
+              <td>3</td>
+              <td></td>
+              <td class="num">1</td>
+            </tr>
+            <tr>
+              <td class="svc">apitools</td>
+              <td><span class="mc3-bdg g">פועל</span></td>
+              <td><span class="mc3-bdg g">תקין</span></td>
+              <td><div class="mc3-cpu"><span>25%</span><div class="mc3-cbar"><i style="width:25%"></i></div></div></td>
+              <td>188 MB <span class="num">6.1%</span></td>
+              <td>↓1.6 KB ↑126 B</td>
+              <td>18</td>
+              <td></td>
+              <td class="num">2</td>
+            </tr>
+            <tr>
+              <td class="svc">browser42</td>
+              <td><span class="mc3-bdg g">פועל</span></td>
+              <td><span class="mc3-bdg g">תקין</span></td>
+              <td><div class="mc3-cpu"><span>9%</span><div class="mc3-cbar"><i style="width:9%"></i></div></div></td>
+              <td>612 MB <span class="num">4.2%</span></td>
+              <td>↓766 MB ↑164 MB</td>
+              <td>7</td>
+              <td></td>
+              <td class="num">3</td>
+            </tr>
+            <tr>
+              <td class="svc">authentik-server</td>
+              <td><span class="mc3-bdg g">פועל</span></td>
+              <td><span class="mc3-bdg g">תקין</span></td>
+              <td><div class="mc3-cpu"><span>1%</span><div class="mc3-cbar"><i style="width:3%"></i></div></div></td>
+              <td>132 MB <span class="num">0.9%</span></td>
+              <td>↓45 MB ↑14 MB</td>
+              <td>4</td>
+              <td></td>
+              <td class="num">4</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div></div>
+  </main>
+</div>
+</section>

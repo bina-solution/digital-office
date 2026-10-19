@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+set -uo pipefail
+export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
+# verify-dependencies — deployment readiness gate (host → stack → n8n). Read-only.
+#   host:   docker daemon, compose plugin, traefik-network
+#   config: .env present
+#   stack:  expected containers Up + healthy (flags genuine DOWN, ignores clean init exits)
+#   n8n:    delegate to n8n-verify (key audit + settings probe + OAuth tokens)
+# Exit non-zero if a CRITICAL host/stack dependency is missing (usable as a CI gate).
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "${SCRIPT_DIR}/lib.sh"   # read_env, DN, colors, ok/warn
+bad(){ echo "  ${cr}✗${c0} $*"; FAIL=1; }   # override: also trips the gate
+FAIL=0
+
+echo "verify dependencies — ${DN}"
+echo "[host]"
+command -v docker >/dev/null 2>&1 && ok "docker CLI" || bad "docker not found — bbox install <debian|windows>"
+docker info >/dev/null 2>&1 && ok "docker daemon reachable" || bad "docker daemon not reachable"
+docker compose version >/dev/null 2>&1 && ok "compose plugin" || bad "compose plugin missing"
+docker network inspect traefik-network >/dev/null 2>&1 && ok "traefik-network" || bad "traefik-network missing — bbox run creates it"
+
+echo "[config]"
+if [ -f "${REPO_ROOT}/.env" ]; then ok ".env present"
+  if [ -f "${REPO_ROOT}/.env.ex" ]; then
+    _keys(){ grep -oE '^[A-Z_][A-Z0-9_]*=' "$1" 2>/dev/null | sed 's/=$//' | sort -u; }
+    miss=$(comm -23 <(_keys "${REPO_ROOT}/.env.ex") <(_keys "${REPO_ROOT}/.env") | tr '\n' ' ')
+    xtra=$(comm -13 <(_keys "${REPO_ROOT}/.env.ex") <(_keys "${REPO_ROOT}/.env") | tr '\n' ' ')
+    [ -n "${miss// }" ] && warn ".env missing template keys: ${miss}" || ok ".env has all .env.ex keys"
+    [ -n "${xtra// }" ] && warn ".env keys absent from .env.ex (document in template): ${xtra}"
+  fi
+else bad ".env missing — bbox install or copy .env.ex"; fi
+
+echo "[stack]"
+if docker info >/dev/null 2>&1; then
+  up=$(docker ps --format '{{.Names}}' | grep -c -- "-${DN}$" || true)
+  healthy=$(docker ps --format '{{.Names}}\t{{.Status}}' | grep -- "-${DN}" | grep -c 'healthy' || true)
+  down=$(docker ps -a --format '{{.Names}}\t{{.Status}}' | grep -- "-${DN}" | grep -viE 'Up |Exited \(0\)' || true)
+  [ "${up:-0}" -gt 0 ] && ok "${up} containers up (${healthy} healthy)" || warn "no containers up — bbox run"
+  [ -n "${down}" ] && { echo "${down}" | sed "s/^/  ${cr}✗${c0} DOWN: /"; FAIL=1; } || ok "no crashed containers"
+fi
+
+echo "[n8n]"
+if docker ps --format '{{.Names}}' | grep -Fxq "n8n-${DN}"; then
+  bash "${REPO_ROOT}/bbox" app n8n verify | sed 's/^/  /' || true
+else
+  warn "n8n not running — skipping cred/key checks (bbox run)"
+fi
+
+echo "[platform services]"
+# THE readiness contract (§2/§4): n8n holds no Google credential — driveApi01/gmailApiRouter01 call
+# these services, and /readyz is the one thing they need to be true. So ask the same question n8n's
+# ops depend on, from inside the network n8n uses, against the REAL account.
+#
+# Deliberately NOT gated per-op inside driveApi01: /readyz makes a real Google call, so a per-op
+# probe would double every op's remote traffic and still could not prevent the failure it checks for
+# (the connection can die in the microsecond after a green readyz). The op path already carries the
+# truth — the service answers 503 with its own reason and the workflow fails loudly. Readiness is a
+# deploy-time question; this is where it gets asked, once, for real.
+probe_readyz() {  # probe_readyz <label> <container> <url>
+  local label="$1" cname="$2" url="$3" body
+  docker ps --format '{{.Names}}' | grep -Fxq "${cname}" || { warn "${label} not running — bbox run"; return; }
+  body="$(docker exec "${cname}" python -c "
+import json,sys,urllib.request
+try:
+    r=urllib.request.urlopen('${url}',timeout=15); d=json.load(r); code=r.status
+except urllib.error.HTTPError as e:
+    d=json.load(e); code=e.code
+except Exception as e:
+    print('unreachable: %s' % e); sys.exit(0)
+print(('READY %s' if d.get('ready') else 'NOT-READY %s') % json.dumps(
+    {k:v for k,v in d.items() if k in ('connection_id','reason','error','active')}, ensure_ascii=False))
+" 2>/dev/null)"
+  case "${body}" in
+    READY*)     ok "${label} ${body#READY }" ;;
+    NOT-READY*) bad "${label} NOT ready ${body#NOT-READY } — ops will 503 until an account is selected+verified" ;;
+    *)          bad "${label} /readyz ${body:-no answer}" ;;
+  esac
+}
+# `cn <svc>`, never a hand-built "<old-name>-${DN}". These two lines named `localdrive` and `inbox`
+# — the app ids from BEFORE drive/mail were consolidated into one app each — so the lookup never
+# matched the containers that exist (`drive-local`, `mailapi-local`) and this gate answered "not
+# running" for two services whose /readyz was the whole reason it exists. A false "not running" reads
+# as a bring-up problem and hides the real answer: drive was NOT ready (its byte store was down) the
+# entire time this reported it as absent.
+probe_readyz "drive" "$(cn drive)"   "http://localhost:8975/readyz"
+probe_readyz "mail"  "$(cn mailapi)" "http://localhost:8970/readyz"
+
+echo ""
+[ "${FAIL}" = 0 ] && { echo "${cg}dependencies OK${c0}"; exit 0; } || { echo "${cr}missing/critical dependencies (see ✗ above)${c0}"; exit 1; }

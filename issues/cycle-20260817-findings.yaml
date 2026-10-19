@@ -1,0 +1,39 @@
+# yaml-language-server: $schema=./schema.json
+title: 'Restart-cycle 2026-08-17 evening: every defect encountered, root cause, fix, and proof'
+opened: '2026-08-17'
+severity: high
+status: in-progress
+summary: 'Restart-cycle 2026-08-17 evening: every defect encountered, root cause, fix, and proof'
+description: |
+  id: cycle-20260817-findings · area: indox state machine / bulk upsert / find_link / BS extraction / locks
+  As first recorded — status: mostly-resolved (one item open)
+
+  ## Findings
+
+  ```yaml
+  - name: find_link infinite loop (the cycle's real defect - RESOLVED)
+    symptom: 3 docs looped find_link (455 dispatches total, worst 334); chains kept the fleet churning ~30 dispatches/min after the cycle drained
+    root_cause: 'PROVEN end-to-end: Ship''s search lane built a PERFECT write (LINK + SEARCH_IN_DRIVE_COMPLETED=true, seen in exec 3380642 payload item) but the write died at the table: the found drive file''s HASH already belonged to another doc, and the uq_incdoc_hash constraint (+ the twin-guard added around it 16:44) swallowed the row. No flag -> gate open -> check_next re-decides forever; ceiling blind (no stamps land).'
+    fix: 'owner order: DROP uq_incdoc_hash (dedup belongs to the dedup ACTION only; find_link writes hash and the duplicator resolves later). Upsert keeps in-batch twin detection; updates are never hash-vetoed; matching is strictly by ID (manually verified: new id + existing hash CREATES; id-carrying upsert updates BY ID, sibling untouched).'
+    proof: 'doc_msw9z0bx2cxcfc (334 loops) re-driven post-fix: COMPLETED with LINK in ONE pass; all 3 loopers now COMPLETED; zero repeat-dispatch docs since'
+  - name: upsert builder outage (self-inflicted - RESOLVED)
+    symptom: 'ALL fleet writes threw for ~15 min (19:47-20:02 local): Build Bulk Upsert SQL JS SyntaxError ''Unexpected identifier ID'''
+    root_cause: python patch escaping put a RAW NEWLINE inside a JS string in the jsCode (the recurring backslash-collapse class; also hit the BS gate regex \d -> d later)
+    fix: 'builder rebuilt clean via direct file edits; lesson: only direct Edit-tool changes on .workflow.ts, never string-surgery scripts'
+    proof: 0 errors since; live restart-drive walked a doc to COMPLETED through the builder
+  - name: BS extraction bad-request (RESOLVED)
+    symptom: '~10 executions red: Document Processor ''Request contains an invalid argument'''
+    root_cause: 'PROVEN by reading stored bytes: the 4 failing docs are the same 28-byte PLAIN-TEXT placeholder (''sv3s pb balance sheet 307407'') - syncV3-sources test fixtures ingested as real balance sheets; Gemini correctly rejects non-PDF bytes'
+    fix: 'File Type Router gate: claimed-PDF with byte-scale size ('' B'' unit, <300) routes to the existing handled-error path; formatter now says ''Broken PDF - file is broken or empty (28 B), not a valid PDF document'' instead of the absurd ''pdf not supported'''
+    proof: 'exec 3381110: placeholder run SUCCEEDED 1.6s handled (owner screenshot); exec 3381166 carries the new Broken PDF message; bs errors last window: 0'
+  - name: per-type double dispatch 6s apart (OPEN - root cause NOT yet proven)
+    symptom: doc_msofnnkuah1zok extract_per_type dispatched twice 6s apart (execs 3374270/3374305), run2 5s (lock-bounced), doc completed clean
+    status_note: 'My ''check_next stale-read'' theory is REJECTED by the owner (check_next fires only after the action grouper''s router POSTs complete) and remains UNPROVEN. Owed: full node-by-node execution timeline from the stored blobs of both dispatch chains (drivers, grouper, router POSTs, decide inputs) to name the true mechanism.'
+  - name: doc_action lock leaked on crash (DOCUMENTED, mitigation in place)
+    symptom: a crashed ActionRouter leaves n8n.process_lock.doc_action.<id>.<action> for the full 5400s TTL; every later drive of that doc lock-skips silently (no dispatch, no log)
+    meaning: 'owner: a 90-min lock means an action did not upsert at end - the end-of-action unlock never ran because the run died mid-flight'
+    mitigation: 'fire-time pre-flight sweeps stale doc_action locks when the queue is empty; candidates for a real fix: unlock in the router error path (errorHandler-side release)'
+  ```
+references:
+- apps/indox/NEXT.md (2026-08-17 17:00-20:15 entries)
+- issues/generated-deleted-console-outage.yaml (same day, separate incident)

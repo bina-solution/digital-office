@@ -1,0 +1,1033 @@
+{
+  "updatedAt": "2025-11-26T08:03:15.610Z",
+  "createdAt": "2025-11-05T21:06:13.975Z",
+  "id": "indoxV2FigureDocType01",
+  "name": "Figure Document Type",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "72d31359-d3a5-4246-af26-22a901684d38",
+              "leftValue": "={{ $json.error }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        288,
+        -864
+      ],
+      "id": "7715aa86-95fa-4ee2-90a0-50255dbf400c",
+      "name": "If OCR Error"
+    },
+    {
+      "parameters": {
+        "errorMessage": "=Failed to perform ocr {{ $json.error }}"
+      },
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        512,
+        -880
+      ],
+      "id": "cd4abaeb-3f37-42f0-b337-8f06504da545",
+      "name": "Stop and Error"
+    },
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "ID"
+            },
+            {
+              "name": "API_TOOLS_ID"
+            },
+            {
+              "name": "LINK"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -1392,
+        160
+      ],
+      "id": "4f0da3cb-f644-42d1-a6c4-401de13e0d7c",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $('Google Sheets Trigger').item.json.LINK }}",
+          "mode": "url"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        288,
+        -688
+      ],
+      "id": "8bc48453-212b-49e9-9769-7342d7d92992",
+      "name": "Download file2"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://apitools.hacohen.bina-solutions.co.il/documentOcr",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "dont_return_ocr",
+              "value": "={{true}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "35f462ab-06f6-4c39-bc62-ac3b4826301f",
+      "name": "Document OCR1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        512,
+        -688
+      ],
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "indoxV2UploadApiTools01",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/indoxV2UploadApiTools01",
+          "cachedResultName": "Upload Doc To API TOOLS"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "HASH": "={{ $json.API_TOOLS_ID || null}}",
+            "LINK": "={{ $json.LINK || null }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "LINK",
+              "displayName": "LINK",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "HASH",
+              "displayName": "HASH",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "each",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        -704,
+        160
+      ],
+      "id": "415929a3-c204-446e-b5d1-bd42fcc2e30c",
+      "name": "Upload OR Get API_TOOLS_ID"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "40af2929-a4ed-4fc0-9ec8-eb392307d940",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -512,
+        160
+      ],
+      "id": "9f012aee-40c6-4399-8ef7-bc96d3a4c618",
+      "name": "IS OK"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -272,
+        176
+      ],
+      "id": "3cc16ff6-dd0d-43e3-aeb2-99c5b9405e4f",
+      "name": "Failed API_TOOLS_ID"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "63bddc98-35fe-4380-b11d-fc4f104572f2",
+              "name": "bs_kws",
+              "value": "={{ [\n\"יתרת הנהלת חשבונות\",\n\"חובות שטרם שולמו\",\n\"שאילתת כרטיס - מצטבר\",\n\"תנועות פתוחות לתאריך\",\n\"גיול חובות\",\n\"כרטיס חשבון\",\n\"כרטסת\"\n] }}",
+              "type": "array"
+            },
+            {
+              "id": "bf20eb85-43d7-4bc2-84e2-100c18e47bd0",
+              "name": "invoice_kws",
+              "value": "={{ [\"חשבונית מס זיכוי מס':\",\n            \"חשבונית מס זיכוי\",\n      \"חשבונית מס מרוכזת מספר:\",\n            \"חשבונית מס מרכזת\",\n      \"חשבונית מס/קבלה מס':\",\n        \"חשבונית מס מספר:\",\n        \"חשבונית מס/קבלה\",\n      \"חשבונית מס / קבלה\",\n        \"חשבונית מס מספר\",\n        \"חשבונית מס מס':\",\n        \"חשבונית מס\\\"\",\n        \"חשבונית מס -\",\n        \"חשבונית מס :\",\n        \"חשבונית זיכוי\",\n        \"חשבונית מס'\",\n        \"חשבונית מס\"\n    ] }}",
+              "type": "array"
+            },
+            {
+              "id": "efe87ee9-df29-48d8-95ee-bf53619d89e2",
+              "name": "shipment_kws",
+              "value": "={{ [\n        \"משלוח אריזות מספר\",\n        \"תעודת משלוח מספר\",\n        \"משלוח מספר\",\n        \"תעודת משלוח מס':\",\n        \"תעודת משלוח מס'\",\n      \"מס' תמ\\\"ש\",\n        \"משלוח מספר\",\n         \"משלוח מס' :    \",\n       \"תעודת משלוח מס'\",\n        \"תעודת משלוח\",\n        \"תעודת משלוח מס\",\n        \"תעודת משלוח\",\n        \"מספר משלוח\",\n        \"משלוח מס'\",\n      \"תע' משלוח\",\n      \"ת.משלוח\",\n      \"מס תעודה\",\n      \"מספר תעודה\",\n      \"תעודה מס\",\n\n    ] }}",
+              "type": "array"
+            },
+            {
+              "id": "fb9d430a-c6cc-451f-9d0a-0f2a0fe4bf14",
+              "name": "order_kws",
+              "value": "={{ [\n       \"הזמנה\"\n    ] }}",
+              "type": "array"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1104,
+        -32
+      ],
+      "id": "cbd18518-db21-4ae6-b1d7-ba4a74ed797b",
+      "name": "Keywords",
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://apitools.hacohen.bina-solutions.co.il/documentJsonQuery",
+        "sendBody": true,
+        "specifyBody": "=json",
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "jsonBody": "={{ \n{\n  \"file_id\": $('Upload OR Get API_TOOLS_ID').item.json.file_id,\n  \"ocr_json_query\": {\n    \"action\": \"find option\",\n    \"action_value\":  $(\"Combined Keywords\").last().json.kws,\n    \"value_validations\": [],\n  \"is_rtl\": true\n  }\n}\n}}",
+        "options": {}
+      },
+      "id": "72154550-0aee-4ed4-9472-8c66b7aac4f9",
+      "name": "Find Option",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -272,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 2600
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a28a33da-361f-47b5-b622-e182dd18e5bc",
+              "name": "kws",
+              "value": "={{ [...$json.bs_kws, ...$json.invoice_kws, ...$json.shipment_kws, ...$json.order_kws] }}",
+              "type": "array"
+            },
+            {
+              "id": "16b57a30-c009-458b-90d2-f5bab4823bd7",
+              "name": "type_by_kw",
+              "value": "={{ \n{\n...Object.fromEntries($json.shipment_kws.map(val => [val, 'SHIPMENT'])),\n\n...Object.fromEntries($json.invoice_kws.map(val => [val, 'INVOICE'])),\n\n...Object.fromEntries($json.bs_kws.map(val => [val, 'BALANCE_SHEET'])),\n...Object.fromEntries($json.order_kws.map(val => [val, 'ORDER'])),\n}\n}}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -896,
+        -32
+      ],
+      "id": "a859b318-39d4-48cb-aa60-d12d00b34bf9",
+      "name": "Combined Keywords"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "45f50cee-96ab-4823-b97a-f6ee07708784",
+              "name": "type",
+              "value": "={{  $(\"Combined Keywords\").last().json.type_by_kw[$json.result.result.matches[0].option] }}",
+              "type": "string"
+            },
+            {
+              "id": "3f2624a4-92dc-4bb1-9875-0d55ba92c8ec",
+              "name": "originalIndex",
+              "value": "={{ $('Index Order').item.json.originalIndex }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -112,
+        0
+      ],
+      "id": "21911136-59d9-434e-9e52-7c7ebf40ffb0",
+      "name": "Edit Fields2"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "8TedFahagr7xPfuA",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/8TedFahagr7xPfuA",
+          "cachedResultName": "Query INVOICE_ID"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "API_TOOLS_ID": "={{ $(\"Upload OR Get API_TOOLS_ID\").item.json.file_id }}",
+            "LINK": "={{ $(\"Start\").item.json.LINK }}"
+          },
+          "matchingColumns": [
+            "API_TOOLS_ID"
+          ],
+          "schema": [
+            {
+              "id": "API_TOOLS_ID",
+              "displayName": "API_TOOLS_ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "LINK",
+              "displayName": "LINK",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "each",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        -112,
+        -624
+      ],
+      "id": "dbab85e9-8104-4217-8ce0-3c74107cf3ba",
+      "name": "Execute Query INVOICE_ID",
+      "retryOnFail": true,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "hgeyNmcWVw6XUDu0",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/hgeyNmcWVw6XUDu0",
+          "cachedResultName": "Query IS_BALANCE_SHEET"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "API_TOOLS_ID": "={{ $(\"Upload OR Get API_TOOLS_ID\").item.json.file_id }}",
+            "LINK": "={{ $(\"Start\").item.json.LINK }}"
+          },
+          "matchingColumns": [
+            "API_TOOLS_ID"
+          ],
+          "schema": [
+            {
+              "id": "API_TOOLS_ID",
+              "displayName": "API_TOOLS_ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "LINK",
+              "displayName": "LINK",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "each",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        -352,
+        -624
+      ],
+      "id": "2f074c5a-319a-44fc-9d38-169d9bf23586",
+      "name": "Execute Query IS_BALANCE_SHEET",
+      "retryOnFail": true,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "indoxV2QueryShipmentId01",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/indoxV2QueryShipmentId01",
+          "cachedResultName": "Query SHIPMENT_ID"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "API_TOOLS_ID": "={{ $(\"Upload OR Get API_TOOLS_ID\").item.json.file_id }}",
+            "LINK": "={{ $(\"Start\").item.json.LINK }}"
+          },
+          "matchingColumns": [
+            "API_TOOLS_ID"
+          ],
+          "schema": [
+            {
+              "id": "API_TOOLS_ID",
+              "displayName": "API_TOOLS_ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "LINK",
+              "displayName": "LINK",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "each",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        96,
+        -624
+      ],
+      "id": "7e6eb634-f057-4651-baac-7ef4f7890f0c",
+      "name": "Execute Query SHIPMENT_ID",
+      "retryOnFail": true,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e69518aa-a04e-4af6-99a7-f0488ebb8317",
+              "name": "is_balance_sheet",
+              "value": "={{  $(\"Execute Query IS_BALANCE_SHEET\").last().json.result}}",
+              "type": "string"
+            },
+            {
+              "id": "ba21c74c-ee52-409e-b000-1ebf6c3801e4",
+              "name": "is_invoice",
+              "value": "={{   !!$(\"Execute Query INVOICE_ID\").last().json.result}}",
+              "type": "string"
+            },
+            {
+              "id": "49c21de2-268b-4691-b69d-7d947ef0b36e",
+              "name": "is_shipment",
+              "value": "={{ !!$(\"Execute Query SHIPMENT_ID\").last().json.result}}",
+              "type": "string"
+            },
+            {
+              "id": "35c8afed-91ae-4cac-bfd4-93fca0489c9a",
+              "name": "file_id",
+              "value": "={{ $json.file_id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        384,
+        -496
+      ],
+      "id": "5aee80f8-9614-438c-9626-c76927e7bb1e",
+      "name": "Result1"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e69518aa-a04e-4af6-99a7-f0488ebb8317",
+              "name": "is_balance_sheet",
+              "value": "={{  $(\"Execute Query IS_BALANCE_SHEET\").last().json.result}}",
+              "type": "string"
+            },
+            {
+              "id": "ba21c74c-ee52-409e-b000-1ebf6c3801e4",
+              "name": "is_invoice",
+              "value": "={{   !!$(\"Execute Query INVOICE_ID\").last().json.result}}",
+              "type": "string"
+            },
+            {
+              "id": "49c21de2-268b-4691-b69d-7d947ef0b36e",
+              "name": "is_shipment",
+              "value": "={{ !!$(\"Execute Query SHIPMENT_ID\").last().json.result}}",
+              "type": "string"
+            },
+            {
+              "id": "35c8afed-91ae-4cac-bfd4-93fca0489c9a",
+              "name": "file_id",
+              "value": "={{ $json.file_id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -16,
+        -448
+      ],
+      "id": "cc629da3-eacd-4f03-9280-411324f73370",
+      "name": "Result"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "4c61e025-dda7-43fd-857f-df1086c6e389",
+              "name": "type",
+              "value": "={{ $json.is_balance_sheet ? \"BALANCE_SHEET\" : (\n $json.is_invoice ? \"INVOICE\" : (\n  $json.is_shipment ? \"SHIPMENT\" : \"UNKNWON\"\n )\n)}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        192,
+        -448
+      ],
+      "id": "c74834d5-f86f-4e0f-a6dc-8ae7b9d10aa7",
+      "name": "Edit Fields1"
+    },
+    {
+      "parameters": {
+        "batchSize": 25,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -1712,
+        -272
+      ],
+      "id": "0d9059ae-35e7-487c-8fe1-82020c7f4d06",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        112,
+        160
+      ],
+      "id": "20c4a10c-a2cb-4663-a3fc-578815dc1cef",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map((item, index) => ({\n  json: {\n    ...item.json,\n    originalIndex: index\n  }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -896,
+        160
+      ],
+      "id": "5ef0e06d-3f78-4cb9-b0ff-12923f3b8652",
+      "name": "Index Order"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "45f50cee-96ab-4823-b97a-f6ee07708784",
+              "name": "type",
+              "value": "={{ null }}",
+              "type": "string"
+            },
+            {
+              "id": "3f2624a4-92dc-4bb1-9875-0d55ba92c8ec",
+              "name": "originalIndex",
+              "value": "={{ $('Index Order').item.json.originalIndex }}",
+              "type": "number"
+            },
+            {
+              "id": "20c15328-1c23-403c-9709-8fe3464e0f8d",
+              "name": "error",
+              "value": "={{ $json.error }}",
+              "type": "string"
+            },
+            {
+              "id": "501af983-f7aa-4b81-9cfb-92cdc122bc46",
+              "name": "ok",
+              "value": "={{ $json.ok }}",
+              "type": "boolean"
+            },
+            {
+              "id": "e3ff7ad8-26a9-44d2-b92e-c79b8217b1a7",
+              "name": "file_type",
+              "value": "={{ $json.file_type }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -112,
+        176
+      ],
+      "id": "dedd9e4d-79dd-470a-9d5e-0c5da0f63787",
+      "name": "Edit Fields3"
+    },
+    {
+      "parameters": {
+        "sortFieldsUi": {
+          "sortField": [
+            {
+              "fieldName": "originalIndex"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.sort",
+      "typeVersion": 1,
+      "position": [
+        272,
+        160
+      ],
+      "id": "984a56d6-7dce-411e-91f0-a64362754130",
+      "name": "Sort1"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -1104,
+        160
+      ],
+      "id": "af666867-d4c0-486b-a22e-b83556d50662",
+      "name": "Start"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ed898b0e-0390-4f7b-b1ae-1008ba184d9c",
+              "name": "ID",
+              "value": "={{ $('Start').item.json.ID }}",
+              "type": "string"
+            },
+            {
+              "id": "f05e21e4-e8e8-4377-b6fe-33395e5c62f3",
+              "name": "LINK",
+              "value": "={{ $('Start').item.json.LINK }}",
+              "type": "string"
+            },
+            {
+              "id": "d49388e7-08a1-47dc-98cb-52b14a8e88cb",
+              "name": "TYPE",
+              "value": "={{ $json.type || \"UNKNWON\" }}",
+              "type": "string"
+            },
+            {
+              "id": "765d597c-0388-415d-9131-9e87b840f7d4",
+              "name": "ok",
+              "value": "={{ $json.ok != false }}",
+              "type": "boolean"
+            },
+            {
+              "id": "d726f563-91e3-46f5-8fa9-e58959ba6ce1",
+              "name": "error",
+              "value": "={{ $json.error || null }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        448,
+        160
+      ],
+      "id": "700207b5-d538-4f3c-a312-172441e09e67",
+      "name": "End"
+    }
+  ],
+  "connections": {
+    "If OCR Error": {
+      "main": [
+        [
+          {
+            "node": "Stop and Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Keywords",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download file2": {
+      "main": [
+        [
+          {
+            "node": "Document OCR1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload OR Get API_TOOLS_ID": {
+      "main": [
+        [
+          {
+            "node": "IS OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IS OK": {
+      "main": [
+        [
+          {
+            "node": "Find Option",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Failed API_TOOLS_ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Failed API_TOOLS_ID": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Keywords": {
+      "main": [
+        [
+          {
+            "node": "Combined Keywords",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Option": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Result": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields2": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Sort1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Index Order": {
+      "main": [
+        [
+          {
+            "node": "Upload OR Get API_TOOLS_ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields3": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Sort1": {
+      "main": [
+        [
+          {
+            "node": "End",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Index Order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "End": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": {
+    "When Executed by Another Workflow": [
+      {
+        "json": {
+          "ID": "420993375mfcxwb",
+          "LINK": "https://drive.google.com/file/d/1E-8LCkJVqNWvkYfHgepxlt9q75RNp4_9/edit"
+        }
+      }
+    ]
+  },
+  "versionId": "dd9ccd56-96bb-43a7-8805-7d1a92f34865",
+  "activeVersionId": "dd9ccd56-96bb-43a7-8805-7d1a92f34865",
+  "versionCounter": 77,
+  "triggerCount": 0,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2025-11-05T21:06:13.975Z",
+      "createdAt": "2025-11-05T21:06:13.975Z",
+      "role": "workflow:owner",
+      "workflowId": "indoxV2FigureDocType01",
+      "projectId": "EChUnhWXmjrEc3fG",
+      "project": {
+        "updatedAt": "2024-09-26T18:07:08.765Z",
+        "createdAt": "2024-09-26T17:59:24.039Z",
+        "id": "EChUnhWXmjrEc3fG",
+        "name": "Shlomo Bolo <person8@example.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null
+      }
+    }
+  ]
+}

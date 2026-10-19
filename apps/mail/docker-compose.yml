@@ -1,0 +1,786 @@
+# mail — ONE app for the whole mail capability:
+#   mailapi    the abstraction API (IMAP/SMTP + provider adapters), reached by name only — the single
+#              place that knows whether a message is local, Gmail-over-app-password, or OAuth. The
+#              `mail` platform-service (accounts + one active pointer). n8n calls http://mailapi:8970.
+#              It has no host of its own any more: its browser client was retired for mailview.
+#   mailview   the human UI (מייל) at mail.localhost — read + tag the CONNECTED account, talks ONLY
+#              to mailapi so it inherits whatever backend the active connection selects.
+#   mailserver Postfix + Dovecot (`mail-backend-local`) — a REAL MTA, the same one in dev, CI and
+#              production. Mail persists in volumes, unknown recipients bounce rather than being
+#              silently filed, and Sent/Drafts/Trash/Junk are real IMAP folders.
+#
+# These were three apps (inbox + mailview + localmail) forming one dependency cluster: mailview->the
+# API and the API->mailserver were cross-app capability edges that are now internal.
+#
+# The API service was called `inbox` until it was renamed to `mailapi`. The old name collided with
+# three other things in this platform — the IMAP INBOX folder, the indox@ mailbox user, and the
+# incoming-documents app (INDOX) — and it described a mailbox rather than what the service is: the
+# one API every other component calls. The volume name `gmail_imap_data` deliberately did NOT change
+# with it; it holds the active-connection pointer, and renaming a volume orphans the operator's
+# selection rather than migrating it.
+services:
+  mailapi:
+    build:
+      context: ./mailapi
+      dockerfile: Dockerfile
+    container_name: mailapi-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: mailapi
+    restart: unless-stopped
+    # Capped 2026-08-06. Same defect as `chat`: no deploy.resources block meant docker reported the
+    # host total (9.717GiB) as the limit — unlimited.
+    #
+    # Sized 512M from the proof-#5 sample: 204MiB under real load (~2.5x headroom). The first,
+    # idle sample said 58MiB and would have justified a 256M cap — 20% BELOW what this service
+    # actually uses when mail is moving. Exactly the under-sampling trap; the number that counts
+    # is the one measured while the pipeline is working.
+    deploy:
+      resources:
+        limits:
+          cpus: '0.75'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 96M
+    # DNS: default embedded resolver (127.0.0.11 -> host DNS). Public-resolver pin removed
+    # 2026-06-23 — it routed through a degraded WSL2->public-internet path (EAI_AGAIN).
+    environment:
+      - PORT=8970
+      # --- glibc allocator containment. Same defect proved on `incoming-documents` 2026-08-11
+      # (see apps/indox/docker-compose.yml for the full derivation) — this container is the
+      # WORSE instance of it.
+      #
+      # MEASURED 2026-08-11 23:18, 25h uptime, RestartCount=0: 11 glibc 64MB arena heaps whose
+      # rw-p regions span 634.7 MiB of address space — more than this service's entire 512M cap —
+      # against a resident 223.2 MiB. `memory.events` reads `max 722`: the cgroup has hit its
+      # ceiling 722 times and had to reclaim its way back down each time, which is why a
+      # `docker stats` sample here reads anywhere between 46% and 99.8% depending on when you
+      # look. That reclaim cycle is not free; it is paid in request latency on the mail path.
+      #
+      # ROOT CAUSE, same as indox: glibc sizes its arena limit from the HOST's core count, not
+      # the cgroup's. `nproc` reports 6 in here, so glibc permits 8 x 6 = 48 arenas, while
+      # `cpu.max` is `75000 100000` = 0.75 CPU — this service cannot run two threads at once, so
+      # every arena past the second is a private free list that never gets reused and never gets
+      # returned. It is a sharper edge here than on indox because this server runs MORE threads
+      # (`gunicorn -w 1 -k gthread --threads 12`) inside LESS CPU, so it touches more arenas.
+      # MMAP/TRIM thresholds are pinned for the same reason as indox: unpinned, glibc ratchets
+      # its mmap threshold up as large buffers are freed, after which they come from an arena
+      # and stop being returned to the kernel.
+      - MALLOC_ARENA_MAX=2
+      - MALLOC_MMAP_THRESHOLD_=131072
+      - MALLOC_TRIM_THRESHOLD_=131072
+      # GMAIL_IMAP_MODE is now only the BOOTSTRAP default — which connection ops use when none is
+      # selected. One process serves every protocol; selecting a connection wins over this.
+      #   local -> the self-hosted mailserver below; LOCALMAIL_* creds
+      #   gmail -> the env-configured account (GMAIL_IMAP_*), surfaced as connection
+      #            `mail_imap_app_password-env`
+      - GMAIL_IMAP_MODE=${GMAIL_IMAP_MODE:-gmail}
+      - GMAIL_IMAP_USER=${GMAIL_IMAP_USER:-}
+      - GMAIL_IMAP_APP_PW=${GMAIL_IMAP_APP_PW:-}
+      - GMAIL_IMAP_HOST=${GMAIL_IMAP_HOST:-imap.gmail.com}
+      - GMAIL_IMAP_PORT=${GMAIL_IMAP_PORT:-993}
+      - GMAIL_SMTP_HOST=${GMAIL_SMTP_HOST:-smtp.gmail.com}
+      - GMAIL_SMTP_PORT=${GMAIL_SMTP_PORT:-465}
+      # local-mode endpoint/creds (used only when GMAIL_IMAP_MODE=local) — served by `mailserver`
+      - LOCALMAIL_USER=${LOCALMAIL_USER:-indox}
+      - LOCALMAIL_PW=${LOCALMAIL_PW:-indox}
+      # secret-base: where connection instances (accounts) live. The active pointer persists in the
+      # gmail_imap_data volume at /data/active.json. Not a hard dependency — if connections is down
+      # the service still serves the synthetic local instance, so a fresh install needs zero config.
+      - CONNECTIONS_URL=${CONNECTIONS_URL:-http://connections:8990}
+      # public base of the credential plane — the guided connect flow sends the browser to ITS
+      # consent broker (never to a provider directly), and it returns there too
+      - CONNECTIONS_PUBLIC_URL=${CONNECTIONS_PUBLIC_URL:-https://${CONNECTIONS_BASE_URL:-connections.localhost}}
+      # OAuth connections (protocol mail_gmail_oauth) hold a refresh_token; refreshing it needs the
+      # SAME Google client that minted it. Only the client id/secret live here — the tokens
+      # themselves never leave the vault-to-service path (invariant §5a).
+      - N8N_GOOGLE_OAUTH_CLIENT_ID=${N8N_GOOGLE_OAUTH_CLIENT_ID:-}
+      - N8N_GOOGLE_OAUTH_CLIENT_SECRET=${N8N_GOOGLE_OAUTH_CLIENT_SECRET:-}
+      # ── what the private-mail setup checker needs to know about THIS deployment ──────────────
+      # It compares the identity this deployment claims (domain, mail FQDN, DKIM selector) against
+      # what is actually published in public DNS, and reports the difference as a to-do list. These
+      # are the same values the mailserver service is configured with, deliberately: if the checker
+      # read its own copy, it could report a setup as correct while the MTA used something else.
+      - MAIL_DOMAIN=${MAIL_DOMAIN:-local.test}
+      - MAIL_FQDN=${MAIL_FQDN:-mail.local.test}
+      - MAIL_DKIM_SELECTOR=${MAIL_DKIM_SELECTOR:-${DEPLOYMENT_NAME:-bina-deployment}}
+      # Set on a VPS so the checker can verify A/PTR without guessing. Left empty on a laptop, where
+      # the honest answer is "this machine cannot receive public mail" rather than a wrong IP.
+      - MAIL_PUBLIC_IP=${MAIL_PUBLIC_IP:-}
+      # The same value the MTA is configured with (see mailserver-init's postfix-main.cf block).
+      # Left at the safe default the checker stays quiet about IPv6, because with IPv6 sending off
+      # there is nothing for the operator to do. Set to `all` it grows one MORE check — the v6 PTR
+      # and an SPF mechanism covering the v6 address — because turning IPv6 on is exactly the moment
+      # those two stop being optional, and a silent landmine deserves a light.
+      - MAIL_INET_PROTOCOLS=${MAIL_INET_PROTOCOLS:-ipv4}
+      # Only consulted when IPv6 sending is on. Configured beats detected for the same reason
+      # MAIL_PUBLIC_IP is: a guessed address produces a confidently wrong PTR verdict.
+      - MAIL_PUBLIC_IP6=${MAIL_PUBLIC_IP6:-}
+      # WHICH resolvers the checker asks — and, since it asks all of them and compares the answers,
+      # this is also what "the resolvers agree" means. More than one is the point: a record edited
+      # minutes ago is correct at the zone and still cached everywhere else, and a checker that asks
+      # one resolver reports whichever half of that it happened to hit. Overridable for an install
+      # that must use its own resolvers, and settable to a single one to get the old behaviour back.
+      - MAIL_DNS_RESOLVERS=${MAIL_DNS_RESOLVERS:-1.1.1.1,8.8.8.8,9.9.9.9}
+      # The tiebreaker: ask the zone's OWN nameservers when no public resolver matches. Set to 0
+      # where direct outbound port 53 to arbitrary hosts is not allowed — the checker then simply
+      # loses the ability to tell "published seconds ago" from "not published".
+      - MAIL_DNS_AUTHORITATIVE=${MAIL_DNS_AUTHORITATIVE:-1}
+      # The mailbox writer (below). mailapi PROXIES to it — it holds no write capability of its own,
+      # and this is the only way it can reach one. Left unreachable, the mailbox screen reports the
+      # service as unavailable; nothing else in the mail app degrades.
+      - MAILBOXD_URL=${MAILBOXD_URL:-http://mailboxd:8971}
+      # ── the engine's declared profiles ───────────────────────────────────────────────────────
+      # MAIL_ENGINE_PROFILES is NOT set here. It is COMPILED, by platform/manager/reconcile.py, from
+      # apps/mail/app.json `engine.profiles` into .generated/routing.override.yml — one declaration,
+      # in the manifest, rendered onto this service. Writing it here as well would be the same fact
+      # twice, and the copy that drifts is the one nobody reads.
+      #
+      # Running this compose file ALONE (a test harness, `docker compose -f apps/mail/...`) leaves it
+      # unset, and mailapi then falls back to a single admin profile at LOCALMAIL_USER — the mailbox
+      # mailserver-init provisions below. So the app is self-contained without the compiler, and
+      # richer with it.
+    volumes:
+      # the active-connection pointer (active.json) and the extension registry (extensions.json)
+      - gmail_imap_data:/data
+      # READ-ONLY view of the mail server's config, for the setup checker only. It reads exactly one
+      # thing: opendkim/keys/<domain>/<selector>.txt, the PUBLIC half of the signing key, so the UI
+      # can show the operator the DNS record to publish and then verify that what is in DNS matches
+      # what this server actually signs with. Read-only because a UI that can rewrite the mail
+      # server's configuration is a much larger blast radius than "show me a TXT record".
+      #
+      # It STAYS read-only now that mailboxes can be created from the UI. That feature writes one
+      # line to postfix-accounts.cf, and the process allowed to do it is `mailboxd` below — a
+      # separate container with no route, no port and one file. Flipping this mount to read-write
+      # would have been the shorter diff and would have handed the browser-facing service the DKIM
+      # private key and postfix-main.cf along with it. See apps/mail/mailboxd/mailboxd.py.
+      - mail_config:/mailconfig:ro
+    networks:
+      - traefik-network
+    labels:
+      # NOT published through traefik (RELEASE-DECISIONS N12, one mail client): the three
+      # `mailui-*` routers that used to serve the API's own browser client at mailapi.localhost /
+      # ${MAIL_UI_BASE_URL} are gone with that client. mailapi is reached BY NAME on
+      # traefik-network — n8n (http://mailapi:8970), mailview and the console — and mailview at
+      # mail.* is the one human UI. `traefik.enable=false` is explicit rather than omitted so the
+      # provider's default rule (Host(`<container>`)) can never publish an unauthenticated API.
+      - traefik.enable=false
+    healthcheck:
+      # require BOTH liveness (/healthz) and readiness (/readyz) — both now take the per-mailbox
+      # lock NON-BLOCKING and report a busy mailbox as healthy (GmailBackend.healthz()/probe() in
+      # mailapi/app.py), so a 300 s sync fetch holding the one IMAP connection cannot flap the
+      # container to "unhealthy".
+      #
+      # per-request timeout=20 (was 8): this container is `-w 1 -k gthread --threads 12` (see
+      # mailapi/Dockerfile) — ONE process, and the 8 canonical mail ops (/search etc.) share that
+      # SAME 12-thread pool with /healthz and /readyz. Both routes are cheap once they get a
+      # thread, but neither guard helps when the request can't get a WORKER THREAD in the first place: a burst of
+      # real /search traffic can transiently occupy all 12 threads with blocking IMAP round-trips,
+      # queuing an incoming health request beneath gunicorn, before Flask ever runs.
+      #
+      # Confirmed live 2026-08-07: `docker inspect` showed FailingStreak climbing with every failing
+      # run's Start/End lasting ~8.1s (== old timeout=8, i.e. urlopen's own client-side timeout
+      # firing) immediately followed by exit 1, alternating with ~0.7s passing runs. The container's
+      # own access log had ZERO completed /healthz|/readyz lines from the healthcheck's own source
+      # (127.0.0.1) during those exact failing windows, while /search + /organizer/settings requests
+      # were actively running IMAP ops right on top of them (and a DIFFERENT client's /healthz landed
+      # 200 inside one of those same "failing" windows) — i.e. the app was up and serving the whole
+      # time; that one healthcheck instance just lost the race for a free thread. This is thread-pool
+      # queuing, not a hang, not a broken route, and not a capacity problem: worker count / thread
+      # count / the IMAP connection pool sizing are Task #99's call and are NOT touched here — only
+      # how patiently docker waits before calling transient queuing "unhealthy".
+      #
+      # timeout=20 (first pass) still flapped once under the SAME live traffic: a direct in-container
+      # timing probe (`urlopen('.../healthz', timeout=25)` run 6x, 4s apart) measured THREE consecutive
+      # real completions at ~20.2-20.5s each — i.e. the queuing window can be sustained for over a
+      # minute, not a sub-second blip — before dropping back to ~0.04-0.08s once the burst cleared.
+      # Bumped to 30/75 for real margin above that measured worst case; still pure docker-patience,
+      # zero change to -w/--threads or the IMAP pool.
+      test: ["CMD", "python", "-c", "import urllib.request,sys\ntry:\n sys.exit(0 if all(urllib.request.urlopen('http://localhost:8970/'+p,timeout=30).status==200 for p in ('healthz','readyz')) else 1)\nexcept Exception:\n sys.exit(1)"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: 75s
+      retries: 3
+      # 90s, not 20s: /readyz resolves the ACTIVE PROFILE, and on a cold bring-up the engine
+      # bootstrap has to wait for mailboxd and connections before a profile exists to resolve. The
+      # old synthetic instance made this window invisible by answering for an account that was
+      # always "there"; now the honest answer during it is 503, and the health check has to allow
+      # for it rather than call a still-provisioning service broken.
+      start_period: 90s
+    stop_signal: SIGTERM
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+
+  mailview:
+    build:
+      context: ./mailview
+      dockerfile: Dockerfile
+    container_name: mailview-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: mailview
+    restart: unless-stopped
+    environment:
+      # glitchtip-push provisions one project per app id, so the merged app's DSN is MAIL_SENTRY_DSN.
+      # Reading the old MAILVIEW_SENTRY_DSN (now orphaned + empty) would silently drop mailview's
+      # error reporting — the same trap the drive rename hit.
+      - SENTRY_DSN=${MAIL_SENTRY_DSN:-}
+      - DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-bina-deployment}
+      # in-app edge: the UI reads the CONNECTED account through the abstraction, never a backend
+      - GMAIL_IMAP_URL=http://mailapi:8970
+    networks:
+      - traefik-network
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik-network
+      - traefik.http.routers.mailview.rule=Host(`mail.localhost`) || Host(`mail.${DEV_DOMAIN:-localhost}`)
+      - traefik.http.routers.mailview.entrypoints=web
+      - traefik.http.routers.mailview.middlewares=authentik@file
+      - traefik.http.routers.mailview.service=mailview
+      - traefik.http.services.mailview.loadbalancer.server.port=8976
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://localhost:8976/healthz',timeout=8).status==200 else 1)"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+
+  # ── mailserver — a REAL MTA (Postfix + Dovecot), one implementation everywhere ────────────────
+  #
+  # This replaced GreenMail, and the reason is not features — it is honesty. GreenMail is a TEST
+  # double: it accepts every recipient, and for an address it has never seen it CREATES a local
+  # mailbox and files the message there. So `POST /send {"to":"person109@example.com"}` answered
+  # {"ok":true,"via":"smtp"} while the mail sat in a fake inbox inside the container. Every layer
+  # above it — the app, n8n, the operator — was told mail had been sent that had not been sent.
+  #
+  # ONE server for dev, CI and production. Not two paths: the whole point of `bbox run` working the
+  # same everywhere is that the thing you test is the thing you ship, and a dev-only mail stub is
+  # exactly where "works on my machine" comes from. What differs between environments is not the
+  # software, it is only:
+  #   · whether ports 25/587/993 are published to the internet   (MAIL_EXPOSE)
+  #   · whether DNS points at it (MX/SPF/DKIM/PTR)               (a domain concern, not a compose one)
+  # On a laptop neither is true, so it behaves as a complete, self-contained mail system: real IMAP,
+  # real SMTP, real folders, real delivery between local accounts — and mail addressed off-box is
+  # REJECTED rather than silently swallowed, which is the behaviour that makes it trustworthy.
+  #
+  # Postfix will not start without a fully-qualified hostname; `mail.local.test` is the default and
+  # production overrides it with the name the PTR record answers with (see ai/context/mail-delivery.md).
+  mailserver:
+    image: mailserver/docker-mailserver:15.0.2
+    container_name: mailserver-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: ${MAIL_FQDN:-mail.local.test}
+    restart: unless-stopped
+    depends_on:
+      mailserver-init:
+        condition: service_completed_successfully
+    environment:
+      - OVERRIDE_HOSTNAME=${MAIL_FQDN:-mail.local.test}
+      - POSTMASTER_ADDRESS=postmaster@${MAIL_DOMAIN:-local.test}
+      # Off by default because they cost startup time and RAM that dev and CI should not pay, and
+      # every one of them is a PRODUCTION concern. Turn them on with the env, not with a second
+      # compose file — a prod-only file is how the two environments start to drift.
+      - ENABLE_CLAMAV=${MAIL_ENABLE_CLAMAV:-0}
+      - ENABLE_RSPAMD=${MAIL_ENABLE_RSPAMD:-0}
+      # ── ONE flag, ONE meaning ────────────────────────────────────────────────────────────────
+      # ENABLE_AMAVIS was hardcoded to 0 while ENABLE_SPAMASSASSIN came from MAIL_ENABLE_SPAM, and
+      # `MAIL_ENABLE_SPAM=1` therefore bought NOTHING: in docker-mailserver SpamAssassin is not a
+      # daemon Postfix talks to, it is a Perl module Amavis loads. Amavis is what owns the
+      # content_filter hook; with it stopped, `postconf content_filter` is EMPTY, no message is ever
+      # handed to a scanner, and the only trace of "spam filtering" is a supervisor entry reading
+      # `amavis STOPPED  Not started`. Measured on staging 2026-07-29: ENABLE_SPAMASSASSIN=1,
+      # zero X-Spam headers on any delivered message, GTUBE straight to INBOX unremarked.
+      #
+      # An off switch that reads as on is worse than being off, because the operator stops looking.
+      # So the two now move together — MAIL_ENABLE_SPAM turns the whole chain on or leaves all of it
+      # off. (Upstream's own default for ENABLE_AMAVIS is 1; the hardcoded 0 was silently fighting
+      # the flag next to it.)
+      - ENABLE_AMAVIS=${MAIL_ENABLE_SPAM:-0}
+      - ENABLE_SPAMASSASSIN=${MAIL_ENABLE_SPAM:-0}
+      # Spam is TAGGED and FILED, never destroyed — stated here rather than inherited, because the
+      # default that matters most is the one nobody wrote down. This platform's reason to exist is
+      # ingesting emailed documents into INDOX; a scanner that BOUNCES at SA_KILL turns a
+      # false positive into a customer invoice that no longer exists anywhere. D_PASS + the Junk
+      # sieve means the worst a false positive can do is put a document in a folder.
+      - SPAMASSASSIN_SPAM_TO_INBOX=1
+      - MOVE_SPAM_TO_JUNK=1
+      - ENABLE_FAIL2BAN=${MAIL_ENABLE_FAIL2BAN:-0}
+      # ON by default, unlike the rest of this block. The others are optional hardening; DKIM is the
+      # difference between mail that arrives and mail that is spam-filed, and mailserver-init now
+      # always produces a key, so there is nothing left to configure. Signing with a key whose DNS
+      # record is not published yet is harmless — receivers that cannot find the record simply treat
+      # the message as unsigned — so this is safe on a laptop and correct on a VPS, which is the
+      # whole point of the two running the same stack.
+      - ENABLE_OPENDKIM=${MAIL_ENABLE_DKIM:-1}
+      - ENABLE_OPENDMARC=${MAIL_ENABLE_DKIM:-1}
+      - ENABLE_POP3=0
+      - ENABLE_UPDATE_CHECK=0
+      # Plain IMAP/SMTP inside the docker network; TLS is terminated at the edge in production
+      # (SSL_TYPE=letsencrypt) where there is a certificate for the mail FQDN.
+      - SSL_TYPE=${MAIL_SSL_TYPE:-}
+      # Other containers on this network (inbox, n8n) must be able to submit mail. Without this
+      # Postfix treats them as untrusted and refuses to relay for them.
+      - PERMIT_DOCKER=connected-networks
+      # A sender must own the address it sends from — except that the platform legitimately submits
+      # as its own accounts over authenticated submission, so this is on in production only.
+      - SPOOF_PROTECTION=${MAIL_SPOOF_PROTECTION:-0}
+      - LOG_LEVEL=${MAIL_LOG_LEVEL:-warn}
+    volumes:
+      - mail_data:/var/mail
+      - mail_state:/var/mail-state
+      - mail_logs:/var/log/mail
+      - mail_config:/tmp/docker-mailserver
+    networks:
+      - traefik-network
+    # ONLY 25, and only that. 25 is the port other mail servers deliver TO — it is what "receiving
+    # mail at your own domain" means, so it is the one port the platform genuinely needs.
+    #
+    # 587 (submission) and 993 (IMAPS) were published here and are deliberately gone. They exist for
+    # EXTERNAL mail CLIENTS — Outlook, Thunderbird, a phone — connecting to this mailbox from off-box,
+    # which is not a feature this platform offers: every user reads mail through the mail UI, and the
+    # UI talks to mailapi over the docker network, never over 993. Publishing them bought nothing and
+    # cost something real — they carry plaintext AUTH, so exposing them without a certificate for the
+    # mail FQDN would put mailbox passwords on the wire. Nothing internal regressed by removing them:
+    # inside the compose network Dovecot still listens on 143 and Postfix on 25, which is what
+    # mailapi and n8n actually connect to.
+    #
+    # Bound to LOOPBACK by default, and to 0.0.0.0 only where mail is meant to arrive from the
+    # internet (MAIL_BIND=0.0.0.0 on the VPS). A laptop that binds 25 to every interface is
+    # advertising an SMTP server to its whole network, and it cannot receive real mail anyway —
+    # nothing publishes an MX for a dynamic residential address.
+    ports:
+      - "${MAIL_BIND:-127.0.0.1}:25:25"
+    healthcheck:
+      # Same shape as before: the two ports anything here actually speaks. Standard numbers now
+      # (143/25) rather than GreenMail's 3143/3025 — a real MTA has no reason to sit on odd ports,
+      # and the standard ones are what every mail client and every MTA on the internet expects.
+      test: ["CMD-SHELL", "timeout 5 bash -c '</dev/tcp/localhost/143' && timeout 5 bash -c '</dev/tcp/localhost/25'"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 5
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          # Default 1024M -> 512M, 2026-08-06. Measured high-water 121MiB (~4.2x headroom
+          # retained). Still overridable via MAIL_MEM_LIMIT for a mail-heavy deployment.
+          memory: ${MAIL_MEM_LIMIT:-512M}
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+
+  # ── mailboxd — the one writer of postfix-accounts.cf ─────────────────────────────────────────
+  #
+  # Step 3 of onboarding a company is "add another private mail account, from the mail UI, with no
+  # domain work" (ai/context/mail-multi-tenant.md). That is true because the company's DNS already
+  # covers every address at its domain — so a new mailbox is one line in a file, and the only real
+  # question is which process may write it.
+  #
+  # Not mailapi: it keeps its READ-ONLY mount. The volume it would have to gain write access to
+  # holds the DKIM private key and postfix-main.cf, and mailapi is the browser-facing service that
+  # parses RFC822 from the internet, talks OAuth, and renders a UI. The privilege is separated by
+  # MOUNT rather than by discipline — the full argument is the docstring of mailboxd.py.
+  #
+  # No traefik labels and no published port, deliberately: it is addressable only from inside the
+  # compose network, so `mailapi` (behind authentik) is the only way to it and there is no second,
+  # unauthenticated door to the same capability.
+  #
+  # Runs the MAILSERVER image, not a python one, for the same reason mailserver-init does: the
+  # password hash must come from the very Dovecot that will verify it. That image already carries
+  # python 3.11, so the server is stdlib-only — no build, no requirements file, and no image beyond
+  # the one this app already pulls.
+  mailboxd:
+    image: mailserver/docker-mailserver:15.0.2
+    container_name: mailboxd-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: mailboxd
+    restart: unless-stopped
+    # The image's own entrypoint starts a whole MTA. This container is not one.
+    entrypoint: ["python3", "/srv/mailboxd.py"]
+    environment:
+      - MAILBOXD_PORT=8971
+      - MAILBOXD_CFG=/cfg
+      - MAILBOXD_MAILDIR_ROOT=/var/mail
+      # The domain a new mailbox is created AT, and the guard that stops one being created anywhere
+      # else. Same variable the MTA and mailapi read — an address this service invents at a domain
+      # the MX does not point here for is a black hole that looks live in the UI.
+      - MAIL_DOMAIN=${MAIL_DOMAIN:-local.test}
+      # The account mailapi logs in as. Named here so deleting it can be REFUSED.
+      #
+      # H6 (2026-08-05): this defaulted to `admin` while mailapi (above, `LOCALMAIL_USER=
+      # ${LOCALMAIL_USER:-indox}`) and mailserver-init (`addr="${LOCALMAIL_USER:-indox}"`) both
+      # default to `indox`. On any deployment that never set LOCALMAIL_USER in .env — this one
+      # included — mailboxd guarded `admin@<domain>`, an address that was never provisioned, while
+      # the REAL primary mailapi logs into (`indox@<domain>`) had no guard on it at all: the delete
+      # guard was live but pointed at the wrong account. Same default as the other two now, so the
+      # three can no longer drift apart when .env is silent.
+      - LOCALMAIL_USER=${LOCALMAIL_USER:-indox}
+    volumes:
+      # The code, read-only: the container cannot rewrite its own program.
+      - ./mailboxd:/srv:ro
+      # The one read-write mount in the mail app outside the MTA itself.
+      - mail_config:/cfg
+      # Read-only, and only to answer "does this mailbox have mail in it, and how much". Deleting an
+      # account must not be able to delete the mail — see delete_mailbox().
+      - mail_data:/var/mail:ro
+    networks:
+      - traefik-network
+    healthcheck:
+      test: ["CMD", "python3", "-c",
+             "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://localhost:8971/healthz',timeout=5).status==200 else 1)"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+
+  # Provisions the mailbox AND the DKIM signing key BEFORE the MTA starts, so a fresh install has a
+  # working, signing mail server with zero manual steps — the same promise the rest of the platform
+  # makes.
+  #
+  # Idempotent by construction: it appends only when the address is absent, so a restart never
+  # rewrites a password an operator has changed, and never wipes an account that has mail in it.
+  # Uses the mailserver's own image so the hash comes from the very Dovecot that will verify it —
+  # generating it with anything else is how you get an account that exists and cannot log in.
+  #
+  # ── why DKIM is generated HERE, declaratively ────────────────────────────────────────────────
+  # DKIM is a signature the sending server puts on every outgoing message, using a private key it
+  # keeps and a public key it publishes in DNS. The receiver fetches the public key and checks the
+  # signature — that is how Gmail tells "this really came from digital-office.co.il" apart from
+  # "someone typed that address into the From field". Without it, mail from a small self-hosted
+  # server is spam-filed on arrival, which is not a hypothetical: it is what happened here.
+  #
+  # It used to be generated BY HAND on the VPS, which meant a new deployment silently had no key,
+  # and the one that existed was not in the repo — so "it works" was a property of one machine
+  # rather than of the project. Generating it in init makes it a property of the deployment.
+  #
+  # The SELECTOR is the deployment name, and that is the multi-tenant hinge. The published record
+  # lives at `<selector>._domainkey.<domain>`, so two companies sharing digital-office.co.il get
+  # `hacohen._domainkey…` and `acme._domainkey…` — different records, different keys, neither able
+  # to sign for the other, and no coordination needed between them beyond one DNS entry each.
+  #
+  # The private key never leaves the mail_config volume. Nothing here prints it; the setup API reads
+  # only the .txt PUBLIC half.
+  mailserver-init:
+    # Capped 2026-08-06. Flagged by gate G30 (scripts/refactor/memory-budget-lint.py) as the last
+    # service in the stack declaring NO limit — "an uncapped service is an undeclared decision".
+    # It was invisible to the survey that found the other four uncapped services, because that
+    # survey walked `docker ps` and this is a one-shot init container that has already EXITED.
+    # A shell + openssl DKIM keygen against the mail_config volume; 256M is generous for that.
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+    image: mailserver/docker-mailserver:15.0.2
+    # NO container_name, deliberately — and this cost a whole stack to learn. A one-shot service
+    # EXITS and stays around as a stopped container; a fixed name then belongs to that corpse. Bring
+    # the stack up from a different compose project (or invoke `docker compose -f apps/mail/...`
+    # directly, as I did while testing) and the next create hits
+    #     Conflict. The container name "/mailserver-init-…" is already in use
+    # which fails the whole `up`, not just this service — `bbox run` took the entire deployment down
+    # with it. Letting compose generate `<project>-mailserver-init-N` makes the collision impossible.
+    restart: "no"
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -eu
+        cfg=/tmp/docker-mailserver
+        mkdir -p "$$cfg"
+        acc="$$cfg/postfix-accounts.cf"
+        touch "$$acc"
+        # ── the mailboxes this deployment DECLARES ──────────────────────────────────────────────
+        # LOCALMAIL_USER is the PRIMARY — the one account mailapi authenticates as, so there is
+        # exactly one of it and it stays a scalar. LOCALMAIL_EXTRA_USERS is everything else: the
+        # mailboxes that exist to RECEIVE (a per-company address, a role address, postmaster) and
+        # that nothing has to log into. Comma- or space-separated, each entry either `name`
+        # (qualified with MAIL_DOMAIN), a full `name@domain`, or `name:password` when it needs one
+        # of its own — otherwise it shares LOCALMAIL_PW.
+        #
+        # This env exists so an extra mailbox is a DECLARATION IN THE DEPLOYMENT'S CONFIG rather
+        # than a line someone once appended to postfix-accounts.cf over ssh. The hand-typed kind
+        # does not survive a volume wipe, is invisible to anyone reading the repo, and cannot be
+        # reproduced on a second deployment — which is exactly how the previous proof was lost.
+        default_pw='${LOCALMAIL_PW:-indox}'
+        # Every address this deployment DECLARES, fully qualified, collected as we go. It is the
+        # input to the reconcile below — "what should exist" has to be written down somewhere before
+        # anything can be called stale.
+        want=/tmp/mailserver-init.declared
+        : > "$$want"
+        provision() {
+          spec="$$1"
+          a="$${spec%%:*}"
+          if [ "$$a" = "$$spec" ]; then p="$$default_pw"; else p="$${spec#*:}"; fi
+          case "$$a" in *@*) ;; *) a="$$a@${MAIL_DOMAIN:-local.test}" ;; esac
+          printf '%s\n' "$$a" >> "$$want"
+          # Create-only, like the DKIM key below: an address already in the file keeps the hash it
+          # has. Re-running must never invalidate a password an operator changed, and must never
+          # look like a way to reset one.
+          if grep -q "^$${a}|" "$$acc" 2>/dev/null; then
+            echo "mailserver-init: $$a already provisioned — leaving it alone"
+          else
+            # doveadm from the mailserver's OWN image, so the hash comes from the very Dovecot that
+            # will verify it.
+            h="$$(doveadm pw -s SHA512-CRYPT -p "$$p")"
+            printf '%s|%s\n' "$$a" "$$h" >> "$$acc"
+            echo "mailserver-init: provisioned $$a"
+          fi
+        }
+        addr="${LOCALMAIL_USER:-indox}"
+        case "$$addr" in *@*) ;; *) addr="$$addr@${MAIL_DOMAIN:-local.test}" ;; esac
+        provision "$$addr"
+        for extra in $$(printf '%s' "${LOCALMAIL_EXTRA_USERS:-}" | tr ',;' '  '); do
+          if [ -n "$$extra" ]; then provision "$$extra"; fi
+        done
+
+        # ── reconcile: a previous TENANT must not survive into this deployment ───────────────────
+        # Provisioning is append-only, and append-only is exactly how the leak happens: the
+        # mail_config VOLUME outlives .env. Re-point a machine at another company (new COMPANY_SLUG,
+        # so new MAIL_DOMAIN) without wiping volumes and postfix-accounts.cf still lists the old
+        # company's addresses. Measured on staging 2026-07-29: five accounts, ONE of them belonged
+        # to this deployment — person110@example.com, person111@example.com
+        # and person112@example.com were the previous tenant's, and they were on the
+        # new company's mailbox screen. No MX points here for those domains, so they could not
+        # receive a single message; they were pure leakage of one customer's names to the next.
+        #
+        # So init OWNS what it declares, and ONLY that:
+        #   · declared here (above)                     -> kept
+        #   · undeclared, at a domain we do not serve   -> REMOVED. A black hole by construction:
+        #                                                  the MX for that domain is somewhere else.
+        #   · undeclared, but a PREVIOUS run of init    -> REMOVED. Taking the name out of
+        #     created it (the ledger below)                LOCALMAIL_EXTRA_USERS is how you delete
+        #                                                  a declared mailbox; otherwise the env is
+        #                                                  a list you can only ever add to.
+        #   · anything else at THIS domain              -> KEPT. That is a mailbox a person created
+        #                                                  from the UI through mailboxd. It is
+        #                                                  declared nowhere, and a restart that
+        #                                                  deleted it would be a catastrophe.
+        #
+        # THE MAIL IS NOT TOUCHED — same decision as mailboxd's delete (see delete_mailbox()): the
+        # account stops resolving, every message stays in /var/mail. And the accounts file is copied
+        # aside before it is rewritten, because this is the one place here that removes anything.
+        led="$$cfg/.mailserver-init-declared"
+        keep=/tmp/mailserver-init.keep
+        : > "$$keep"
+        dropped=0
+        while IFS= read -r ln || [ -n "$$ln" ]; do
+          case "$$ln" in ''|'#'*) printf '%s\n' "$$ln" >> "$$keep"; continue ;; esac
+          case "$$ln" in *'|'*) ;; *) printf '%s\n' "$$ln" >> "$$keep"; continue ;; esac
+          a="$${ln%%|*}"
+          if grep -qxF "$$a" "$$want"; then printf '%s\n' "$$ln" >> "$$keep"; continue; fi
+          if [ "$${a#*@}" != "${MAIL_DOMAIN:-local.test}" ] || { [ -f "$$led" ] && grep -qxF "$$a" "$$led"; }; then
+            echo "mailserver-init: removing $$a — not declared by this deployment (mail kept in /var/mail)"
+            dropped=$$((dropped + 1))
+            continue
+          fi
+          printf '%s\n' "$$ln" >> "$$keep"
+        done < "$$acc"
+        if [ "$$dropped" -gt 0 ]; then
+          cp -p "$$acc" "$$acc.bak-$$(date +%Y%m%d-%H%M%S)"
+          cat "$$keep" > "$$acc"
+          echo "mailserver-init: removed $$dropped stale account(s); previous file kept alongside as postfix-accounts.cf.bak-*"
+        fi
+        cp "$$want" "$$led"
+
+        # ── outbound TLS ────────────────────────────────────────────────────────────────────────
+        # Gmail showed "digital-office.co.il did not encrypt this message" on mail that arrived in
+        # the inbox, SPF+DKIM+DMARC all passing. The cause is not ours and is not obvious: with
+        # SSL_TYPE empty, docker-mailserver's ssl.sh takes its ( '' ) branch and runs
+        #     sedfile -i -r -e "s|^#?(smtpd?_tls_security_level).*|\1 = none|"
+        # on main.cf. That "d?" is optional, so the ONE sed that means "we have no server
+        # certificate, do not offer TLS to clients" also sets smtp_tls_security_level = none and
+        # smtp_use_tls = no — the CLIENT side, which is how this server talks to Gmail. Sending over
+        # STARTTLS requires no certificate of our own at all: opportunistic client TLS is free, and
+        # it was switched off as collateral damage of a decision about the server side.
+        #
+        # postfix-main.cf is docker-mailserver's supported override file; it is applied in
+        # _setup_postfix_late, which runs AFTER _setup_ssl, so it wins. "may" and not "encrypt":
+        # opportunistic. A receiver that offers STARTTLS gets an encrypted session; one that does not
+        # still gets the mail. "encrypt" would turn every legacy MTA into a permanent bounce, which
+        # is a worse failure than an unencrypted hop to a server that has no TLS in 2026 anyway.
+        #
+        # Skipped when RELAY_HOST is set: docker-mailserver's relay setup deliberately raises the
+        # level to "encrypt" (credentials go over that hop), and this file is appended after it, so
+        # writing "may" here would silently DOWNGRADE an authenticated relay.
+        # ── required headers (the second half of the same managed block) ───────────────────────
+        # Gmail: "550 5.7.1 Messages missing a valid Message-ID header are not accepted". Every
+        # cleanup log line on this host read `message-id=<>` because the composing code never wrote
+        # one and Postfix does not add one by default: with always_add_missing_headers = no it
+        # supplies From:/Date:/Message-ID: only when header ADDRESS REWRITING needs them, which a
+        # fully-qualified From never triggers. So the message left with no Message-ID at all.
+        #
+        # The real fix is in the composer (apps/mail/mailapi/local_app.py now writes a
+        # make_msgid(domain=MAIL_DOMAIN)). This line is the net UNDER it, and it is warranted:
+        # this MTA accepts submissions from every container on the compose network — n8n, seeders,
+        # and whatever app is written next — and one of those forgetting a header should degrade
+        # into "Postfix filled it in" rather than "Gmail refused the mail". It is cheap and it is
+        # scoped: header synthesis happens in the LOCAL rewriting context (local_header_rewrite_
+        # clients, i.e. our own mynetworks), so relayed inbound mail from the internet is not
+        # touched. It is a net, not the fix — a Postfix-generated Message-ID is opaque to the
+        # sender, so anything that wants to correlate what it sent still has to write its own.
+        #
+        # Written whether or not RELAY_HOST is set: a smarthost is not a reason to hand it a
+        # malformed message, and several relays reject exactly as Google does.
+        # ── which IP protocol we SEND from ──────────────────────────────────────────────────────
+        # IPv4 only, by default, and this is a deliverability decision rather than a networking one.
+        #
+        # A sender is trusted on the strength of two facts about the exact address it connected
+        # from: forward-confirmed reverse DNS (the PTR names us, and that name resolves back to that
+        # address) and SPF (the domain authorises that address). BOTH are per-address, and a dual-
+        # stacked host has two addresses. Measured on staging 2026-07-29:
+        #
+        #   IPv4 31.97.196.82        PTR mail.staging.digital-office.co.il   correct, matches HELO
+        #   IPv6 2a02:4780:28:cb4c::1  PTR srv908573.hstgr.cloud             the PROVIDER'S default
+        #   SPF  "v=spf1 mx ~all"    -> `mx` expands to the MX host's A record only; with no AAAA
+        #                               published, the v6 address is not authorised by anything
+        #
+        # So every delivery Postfix happened to make over IPv6 would fail FCrDNS and SPF at once —
+        # and Gmail does not merely spam-file that on IPv6, it rejects at RCPT. Nothing about our
+        # configuration decides which of the two gets used: `smtp_address_preference = any` means
+        # Postfix picks per remote MX from what DNS returns, so the same message can succeed today
+        # and be rejected tomorrow with no change on our side. Mail on this host works because
+        # selection kept landing on v4, which is luck wearing the costume of a working system.
+        #
+        # We take (a) — constrain sending to the address whose PTR and SPF we can actually verify —
+        # rather than (b), making IPv6 correct, because THIS FILE HAS TO BE RIGHT ON A MACHINE THAT
+        # DOES NOT EXIST YET. Every future company gets its own VPS with an IPv6 address we cannot
+        # know here and a PTR only its provider's control panel can set. A default whose correctness
+        # depends on an operator finishing an out-of-band step they were never told about is not a
+        # default, it is a trap that fires later. IPv4-only is correct with no steps at all.
+        #
+        # It is a floor, not a ceiling: an operator who HAS set the v6 PTR and put an ip6: mechanism
+        # in SPF sets MAIL_INET_PROTOCOLS=all and gets dual-stack sending — and the setup checker
+        # then verifies both of those instead of taking their word for it (mailsetup.py, check
+        # `ipv6`). Opt-in, because the person opting in is the person who did the work.
+        #
+        # Side effect worth having: today, with the mailserver on an IPv4-only docker bridge,
+        # `inet_protocols = all` still makes Postfix resolve AAAA and dial it first —
+        #     connect to gmail-smtp-in.l.google.com[2a00:1450:400c:c07::1a]:25: Network is unreachable
+        # — on nearly every outbound message, which is where the 2.2s connect delay in those log
+        # lines comes from. Not asking for an address we cannot use removes it.
+        #
+        # `inet_protocols` is read once at Postfix START, which is exactly when this file is applied
+        # (_setup_postfix_late runs before the daemons), so it lands on a fresh container — and only
+        # on a fresh container. Recreate, never restart; see the /CONTAINER_START note above.
+        main="$$cfg/postfix-main.cf"
+        beg='# --- mailserver-init: outbound TLS + required headers (managed, do not edit inside) ---'
+        end='# --- end mailserver-init: outbound TLS + required headers ---'
+        tmp=/tmp/mailserver-init.main
+        : > "$$tmp"
+        if [ -f "$$main" ]; then
+          # Strip ANY previously-written mailserver-init block by its marker PREFIX, not by an exact
+          # string: this block has been renamed once already, and an exact match would have left the
+          # old copy behind to be overridden by the new one further down the file.
+          awk '
+            /^# --- mailserver-init: / { skip = 1; next }
+            /^# --- end mailserver-init: / { skip = 0; next }
+            skip != 1 { print }' "$$main" > "$$tmp"
+        fi
+        {
+          printf '%s\n' "$$beg"
+          if [ -n "${RELAY_HOST:-}" ]; then
+            echo "mailserver-init: RELAY_HOST is set — leaving outbound TLS to the relay configuration" >&2
+          else
+            printf '%s\n' 'smtp_tls_security_level = may'
+            printf '%s\n' 'smtp_tls_loglevel = 1'
+            printf '%s\n' 'smtp_tls_CApath = /etc/ssl/certs'
+            printf '%s\n' 'smtp_tls_CAfile = /etc/ssl/certs/ca-certificates.crt'
+            printf '%s\n' 'smtp_tls_note_starttls_offer = yes'
+            echo "mailserver-init: outbound TLS set to opportunistic (smtp_tls_security_level = may)" >&2
+          fi
+          printf '%s\n' 'always_add_missing_headers = yes'
+          ipv="${MAIL_INET_PROTOCOLS:-ipv4}"
+          if [ "$$ipv" = "ipv4" ]; then
+            printf '%s\n' 'inet_protocols = ipv4'
+            # Belt to the braces: if anything downstream ever re-enables IPv6 lookups, at least do
+            # not PREFER an address whose PTR and SPF nobody has verified.
+            printf '%s\n' 'smtp_address_preference = ipv4'
+            echo "mailserver-init: sending over IPv4 only (inet_protocols = ipv4) — set MAIL_INET_PROTOCOLS=all after publishing an IPv6 PTR + SPF ip6:" >&2
+          else
+            echo "mailserver-init: MAIL_INET_PROTOCOLS=$$ipv — IPv6 sending is ENABLED; the IPv6 PTR and an SPF ip6: mechanism must be published or Gmail will reject" >&2
+          fi
+          printf '%s\n' "$$end"
+        } >> "$$tmp"
+        echo "mailserver-init: always_add_missing_headers = yes (Message-ID/Date/From safety net)"
+        cat "$$tmp" > "$$main"
+
+        # ── DKIM keypair + the three tables OpenDKIM reads ──────────────────────────────────────
+        dom="$${addr#*@}"
+        sel="${MAIL_DKIM_SELECTOR:-${DEPLOYMENT_NAME:-bina-deployment}}"
+        # A selector is a DNS label: letters, digits and hyphens only.
+        sel="$$(echo "$$sel" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9-' '-' | sed 's/^-*//; s/-*$$//')"
+        [ -n "$$sel" ] || sel=mail
+        kd="$$cfg/opendkim/keys/$$dom"
+        if [ -s "$$kd/$$sel.private" ]; then
+          echo "mailserver-init: DKIM key for $$dom (selector $$sel) already exists — leaving it alone"
+        else
+          mkdir -p "$$kd"
+          # 2048 is the floor receivers expect now; 1024 still verifies but is increasingly distrusted.
+          opendkim-genkey -b 2048 -s "$$sel" -d "$$dom" -D "$$kd"
+          echo "mailserver-init: generated DKIM key for $$dom (selector $$sel)"
+        fi
+        # Rewritten every run on purpose: these three are DERIVED from the key that exists, so they
+        # cannot drift from it. Regenerating a table is free; regenerating a key would invalidate
+        # every signature already published in DNS, which is why the key above is create-only.
+        #
+        # The KeyTable must point at /etc/opendkim/keys/…, NOT at the path we just wrote the key to.
+        # docker-mailserver copies this whole directory to /etc/opendkim at startup, and OpenDKIM
+        # walks the key's path and refuses any key reachable through a world-writable directory:
+        #     key data is not secure: /tmp can be read or written by other users
+        #     error loading key 'sel._domainkey.domain'
+        # /tmp is 1777, so a KeyTable naming /tmp/docker-mailserver/... is rejected for every
+        # message. That does not degrade to unsigned mail — OpenDKIM fails the milter, Postfix
+        # answers 451, and the deployment cannot send AT ALL. Caught only by actually sending one.
+        printf '%s._domainkey.%s %s:%s:/etc/opendkim/keys/%s/%s.private\n' \
+          "$$sel" "$$dom" "$$dom" "$$sel" "$$dom" "$$sel" > "$$cfg/opendkim/KeyTable"
+        # refile: (regex) rather than a plain lookup — a plain SigningTable matches the envelope
+        # address EXACTLY, so mail from any address other than the one listed goes out UNSIGNED.
+        # That is the failure this hit in production: the server signed nothing and looked fine.
+        printf '*@%s %s._domainkey.%s\n' "$$dom" "$$sel" "$$dom" > "$$cfg/opendkim/SigningTable"
+        printf '127.0.0.1\nlocalhost\n%s\n172.16.0.0/12\n192.168.0.0/16\n10.0.0.0/8\n' "$$dom" \
+          > "$$cfg/opendkim/TrustedHosts"
+        chmod 600 "$$kd/$$sel.private" 2>/dev/null || true
+        chown -R opendkim:opendkim "$$cfg/opendkim" 2>/dev/null || true
+    volumes:
+      - mail_config:/tmp/docker-mailserver
+    networks:
+      - traefik-network
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 1m
+        max-file: '1'
+
+volumes:
+  # NAME DELIBERATELY UNCHANGED — renaming it orphans deployment-hacohen_gmail_imap_data.
+  gmail_imap_data:
+  # The real MTA's state. GreenMail kept everything in memory — a restart wiped the mailbox, which
+  # was tolerable for a test double and is not for a mail server: these four hold the only copy of
+  # the mail, the delivery queue, and the DKIM private key.
+  mail_data:      # /var/mail        — the maildirs themselves
+  mail_state:     # /var/mail-state  — queue + service state that must survive a restart
+  mail_logs:      # /var/log/mail    — postfix/dovecot logs; the only place a bounce is explained
+  mail_config:    # /tmp/docker-mailserver — accounts, aliases, DKIM keys
+
+networks:
+  traefik-network:
+    external: true

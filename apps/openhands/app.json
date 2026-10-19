@@ -1,0 +1,71 @@
+{
+  "id": "openhands",
+  "title": {
+    "he": "סוכן קוד",
+    "en": "OpenHands"
+  },
+  "layer": 3,
+  "kind": "service",
+  "version": "1.8.0",
+  "summary": {
+    "he": "סוכן קוד אוטונומי",
+    "en": "Autonomous coding agent"
+  },
+  "capabilities": [
+    {
+      "name": "coding-agent",
+      "type": "protocol",
+      "endpoint": "http://openhands:3000"
+    }
+  ],
+  "use": [
+    {
+      "capability": "llm-local",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
+    },
+    {
+      "capability": "secrets",
+      "strength": "requires",
+      "after": true
+    }
+  ],
+  "connections": [
+    {
+      "id": "anthropic-key",
+      "required": false
+    },
+    {
+      "id": "openai-key",
+      "required": false
+    }
+  ],
+  "compose": "docker-compose.yml",
+  "routing": [
+    {
+      "host": "openhands",
+      "port": 3000,
+      "auth": "sso",
+      "emit_labels": false,
+      "sso": {
+        "slug": "openhands",
+        "display_name": "OpenHands",
+        "default_host": "openhands.localhost",
+        "base_url_env": "OPENHANDS_BASE_URL",
+        "local_twin": true
+      }
+    }
+  ],
+  "health": {
+    "structural": "auto"
+  },
+  "data": {
+    "volumes": ["openhands_state", "openhands_config", "llm_gateway_config"],
+    "on_uninstall": "prompt"
+  },
+  "resources": {
+    "cpus": "2",
+    "memory": "4g"
+  }
+}

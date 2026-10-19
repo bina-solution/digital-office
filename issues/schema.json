@@ -1,0 +1,64 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://deployment-hacohen/issues/schema.json",
+  "title": "Issue",
+  "description": "Schema for issue files tracked under ./issues. Every *.issue.yaml (or *.yaml) here MUST conform. Add `# yaml-language-server: $schema=./schema.json` at the top of each issue file so editors validate and autocomplete it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["title", "opened", "severity", "status", "summary"],
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Short human-readable title of the issue.",
+      "minLength": 1
+    },
+    "opened": {
+      "type": "string",
+      "format": "date",
+      "description": "Date the issue was opened (YYYY-MM-DD).",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "category": {
+      "type": "string",
+      "description": "What kind of issue this is.",
+      "enum": ["security", "ops", "bug", "performance", "feature", "chore", "other"]
+    },
+    "severity": {
+      "type": "string",
+      "description": "Impact level.",
+      "enum": ["critical", "high", "medium", "low"]
+    },
+    "status": {
+      "type": "string",
+      "description": "Current lifecycle state.",
+      "enum": ["open", "in-progress", "blocked", "resolved", "closed"]
+    },
+    "summary": {
+      "type": "string",
+      "description": "One-line summary of the problem.",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string",
+      "description": "Full details in Markdown: symptom, root cause, why it matters, fixes, repro, etc."
+    },
+    "tasks": {
+      "type": "array",
+      "description": "Actionable checklist for resolving the issue.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["text", "done"],
+        "properties": {
+          "text": { "type": "string", "minLength": 1 },
+          "done": { "type": "boolean" }
+        }
+      }
+    },
+    "references": {
+      "type": "array",
+      "description": "Related files, links, or other issues (repo-relative paths or URLs).",
+      "items": { "type": "string" }
+    }
+  }
+}

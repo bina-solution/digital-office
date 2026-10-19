@@ -1,0 +1,17 @@
+title: Rename gmail credential label "Gmail person9@example.com" -> solutionsbina
+status: resolved  # 2026-07-30 triage: FIXED — platform-base/n8n/credentials/41BKgLp83YYyfEM3.json is now name:"Gmail" (account-agnostic, so nothing misleading is left); the cited fresh-company-test-state-inject.py is no longer tracked.
+created: 2026-06-22
+priority: low
+context: |
+  The single n8n gmailOAuth2 credential id=41BKgLp83YYyfEM3 is LABELLED
+  "Gmail person9@example.com" but its CONNECTED Google account is being re-authed to
+  person2@example.com (the correct INDOX tenant). The label is now stale/misleading.
+  Used by: Gmail Documents/Actions/BalanceSheets/Links Scanners, Gmail Documents Downloader,
+  Gmail Balance Sheet Downloader, Gmail Label Engine, and the demo injector (fresh-company-test-state-inject.py CRED_GMAIL).
+action: |
+  Rename the credential label in n8n (Credentials -> Gmail person9@example.com -> rename to
+  "Gmail person2@example.com"). Label-only change; the id stays 41BKgLp83YYyfEM3 so no
+  workflow rewiring needed. Optionally update memory gmail-injection-messages-insert.md.
+why_deferred: |
+  Cosmetic; the connected-account re-auth (fresh quota + correct tenant) is the functional fix and
+  is done first. Rename is a follow-up so traces/UI read correctly.

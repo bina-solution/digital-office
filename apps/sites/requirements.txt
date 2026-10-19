@@ -1,0 +1,9 @@
+# sites — the API container. Deliberately four packages: a monitor that watches the internet for a
+# living makes a thin dependency list a feature, because every one of them is something that can be
+# CVE'd while the app is doing nothing but checking a status code.
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+requests==2.32.3
+# the beauty check scores PIXELS through `beautiful-score`, but the RENDERER (which owns Chromium
+# and the package) is a separate container — this app only talks to it over HTTP, so the heavy
+# dependency never lands in the container that must stay up. See docker-compose.yml.

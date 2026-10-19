@@ -1,0 +1,111 @@
+# yaml-language-server: $schema=./schema.json
+title: The hourly full-table sweep fails every single run. n8n hardcodes maxStalledCount:0, so one expired Bull lock kills the job with zero retries.
+opened: '2026-08-11'
+severity: high
+status: in-progress
+summary: indoxV2Driver01's Schedule Trigger (hourly, at minute 5) is the ONLY entry point that reads the whole incoming_documents table. Every scheduled run in the observed window failed after 470-830s with Bull's stalled-job error, not a workflow error. The webhook and integrated runs carry only 1-97 lines each and never sweep, so when the scheduled run dies there is no full-table pass at all.
+description: |
+  id: indox-scheduled-sweep-stalled-2026-08-11
+  As first recorded — opened: 2026-08-11T01:30Z · status: diagnosed-fix-written-NOT-DEPLOYED
+
+  ## Owner
+
+  unassigned
+
+  ## Evidence
+
+  ```yaml
+  scheduled_runs_observed:
+  - id: 1044601
+    mode: trigger
+    status: error
+    started: '2026-08-11T00:05:10Z'
+    duration_s: 504
+  - id: 1022396
+    mode: trigger
+    status: error
+    started: '2026-08-10T23:05:57Z'
+    duration_s: 470
+  - id: 1005417
+    mode: trigger
+    status: crashed
+    started: '2026-08-10T22:05:09Z'
+    duration_s: 830
+  - note: No 01:05 run appears at all. Worth confirming separately whether the schedule is still registered on the main instance, or whether that hour was simply missed.
+  error_text_verbatim: This execution failed to be processed too many times and will no longer retry. To allow this execution to complete, please break down your workflow or scale up your workers or adjust your worker settings.
+  execution_data_blob_size_bytes: 973
+  execution_data_note: 973 bytes with ZERO node run entries. The job dies before recording any node data, which is consistent with a queue-level stall rather than a node throwing. Do not go looking for a failing node -- there isn't one.
+  mode_breakdown_2h:
+    webhook:
+      n: 902
+      avg_s: 12
+      max_s: 364
+    integrated:
+      n: 899
+      avg_s: 10
+      max_s: 1417
+    trigger:
+      n: 2
+      avg_s: 487
+      max_s: 504
+      errors: 2
+  not_memory: Ruled out. docker inspect showed OOMKilled=false and RestartCount=0 on every n8n container; workers sat at 24-28% of their 2GB limit throughout.
+  ```
+
+  ## Root cause
+
+  ```yaml
+  primary: |-
+    n8n 2.17 dist/scaling/scaling.service.js line 89 reads:
+      settings: { ...this.globalConfig.queue.bull.settings, maxStalledCount: 0 }
+    It spreads the configured settings in and then HARDCODES maxStalledCount to 0, overriding anything supplied. In Bull, 0 means a job that stalls even once fails permanently with zero retries -- worse than Bull's own default of 1. There is no supported way to buy retries back.
+  secondary: QUEUE_WORKER_LOCK_DURATION was 300000 (5 min) while the sweep runs 601s average / 830s max. The sweep serialises ~17,800 rows through one job and blocks the worker's event loop past the lock, so the lock expires. A blocked event loop also cannot renew at QUEUE_WORKER_LOCK_RENEW_TIME, which is why raising the RENEW time is not a fix -- only the DURATION is.
+  inert_setting_that_masked_it: 'The compose declared QUEUE_WORKER_MAX_STALLED_COUNT=5, which n8n 2.x does not read at all. The four names @n8n/config/dist/configs/scaling-mode.config.js defines are LOCK_DURATION, LOCK_RENEW_TIME, STALLED_INTERVAL and TIMEOUT. n8n even ships dist/modules/breaking-changes/rules/v2/queue-worker-max-stalled-count.rule.js because the setting was REMOVED in v2. Believing that setting was active is what made these failures look inexplicable -- the same trap platform-base/n8n/docker-compose.yml already warns about for the EXECUTIONS_DATA_* vars: "an unknown env var is not an error, and the only symptom is a table that never stops growing."'
+  ```
+
+  ## Impact
+
+  ```yaml
+  measured_2026-08-11T01:20Z:
+    never_actioned_documents: 6627
+    of_total: 17904
+    percent: 37.5
+  mechanism: PG Get All is ORDER BY "ID", and "ID" sorts as TEXT so numeric ids (1771...) precede doc_... ones. With no full pass ever completing, the head of the table was re-processed every hour while a band in the middle was reached by neither the sweep nor the changelog entry point (which only covers recently-changed rows).
+  untouched_share_by_id_rank:
+    1-5000: 0.3
+    5001-10000: 29.6
+    10001-15000: 84.6
+    15001+: 33.5
+  caveat_do_not_overstate: These documents are NOT unreachable. The pickup's s_new slice drains them newest-first and s_old rotates the same population via md5 on a 300s bucket. Measured 79 documents gained their first ACTION_LOG in 30 minutes (~158/hr). The sweep failure makes the drain slow and ordering-skewed; it does not strand anything permanently. An earlier version of this analysis claimed it did.
+  ```
+
+  ## Fix
+
+  ```yaml
+  written: platform-base/n8n/docker-compose.yml
+  applied_to_all_three_n8n_services: true
+  change: |
+    - QUEUE_WORKER_LOCK_DURATION: 300000 -> 1800000  (30 min, ~2.2x the worst observed sweep)
+    - QUEUE_WORKER_STALLED_INTERVAL: unchanged at 60000
+    - QUEUE_WORKER_MAX_STALLED_COUNT: REMOVED, with a comment explaining it is inert in v2 and that
+      the effective value is a hardcoded 0
+  deployed: false
+  blocked_by: Applying it needs the worker containers RECREATED (env is baked at container creation, so a plain `docker restart` will not pick it up). The permission classifier declined the `docker compose up -d --force-recreate` call in the session where this was diagnosed.
+  deploy_command_when_authorised: |
+    cd deployment-hacohen
+    export DOCKER_HOST=unix:///run/bbox-docker.sock
+    docker compose -p deployment-hacohen \
+      -f .generated/compose.yml -f .generated/routing.override.yml -f .generated/connections.override.yml \
+      up -d --no-deps --force-recreate n8n-worker-1 n8n-worker-2
+  deploy_cost_state_it_plainly: Recreating a worker drops the executions it currently holds, and because maxStalledCount is 0 those do NOT retry -- they fail. At 16 active slots that is up to 16 lost executions. Do one worker at a time so the other keeps draining.
+  verify_after: docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' n8n-worker-1-shlomo-laptop | grep QUEUE_WORKER then confirm the next :05 scheduled run of indoxV2Driver01 reaches status=success.
+  ```
+
+  ## Important trap for whoever deploys this
+
+  The running stack composes from .generated/compose.yml, which is a 26-line `include:` file that pulls in platform-base/n8n/docker-compose.yml directly -- so editing the source IS editing what deploys. Do NOT be misled by .generated/compose.runtime.yml: it is a stale Jul 28 artifact, it contains none of the QUEUE_WORKER vars, and reading it led to a wrong conclusion that the settings had never been deployed at all. Always confirm against the container's own environment.
+
+  ## Secondary findings
+
+  - Lines Batching Loop in indoxV2Driver01 has batchSize=20000, so the entire 17,800-row table is one batch. The owner's stated design is 5000. Reducing it does not shorten the total job (all batches run inside the same execution) but is worth revisiting if the sweep is ever restructured to dispatch asynchronously instead of holding the job.
+  - Retention config is split-brain: the n8n MAIN container carries N8N_EXECUTIONS_DATA_* (wrong prefix, inert) while the WORKERS carry the correct unprefixed EXECUTIONS_DATA_*. Pruning is a main-instance service, so the intended 168h/20000 policy has never applied. Live: 65,859 executions, 3.2 GB execution_data, ~17h retention on n8n's defaults. Fixing the prefix on main would make the setting honest -- but note the repo's 20000 is LESS than what is currently retained, so applying it as-is would REDUCE debugging history from ~17h to ~5h. The owner has stated history must not be reduced, so this needs an explicit value decision, not a blind fix.

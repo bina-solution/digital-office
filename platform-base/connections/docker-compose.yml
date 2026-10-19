@@ -1,0 +1,110 @@
+# connections — the credential plane. Runs on traefik-network, behind Authentik forward-auth,
+# seeded from the root .env (env_file) so the resolve chain can warm-start the vault. Routed at
+# connections.localhost (+ ${CONNECTIONS_BASE_URL}); discovers services by their in-network hostnames.
+services:
+  connections:
+    # The image CI publishes for this commit (DGO-41). `pull_policy: missing` means it is
+    # fetched only when it is not here already, so a checkout that has built it is untouched;
+    # the `build:` below stays as the fallback. Needs the GHCR package readable — a package made
+    # from a private repo is private, so `docker login ghcr.io` on a machine that must pull.
+    #
+    # It used to be `image: deployment-hacohen-connections` — tagless, so `compose pull` resolved
+    # it against Docker Hub and got "pull access denied"; indox-e2e still carries
+    # `--ignore-pull-failures` on that account. The name CI publishes is the one below.
+    image: ghcr.io/solomonboltin/digital-office/connections:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: connections-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: connections
+    restart: unless-stopped
+    env_file:
+      - ../../.env                       # every secret, so resolve() can seed the vault from .env
+    environment:
+      # NOTE: env naming a layer-3 app is contributed BY that app (contributes.env in its
+      # app.json) and merged in via .generated/routing.override.yml — see gate G9.
+      # platform standard: report errors to GlitchTip (Sentry protocol)
+      - SENTRY_DSN=${CONNECTIONS_SENTRY_DSN:-}
+      - DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-bina-deployment}
+      - PORT=8990
+      - CONNECTIONS_ROOT_KEY=${CONNECTIONS_ROOT_KEY:-dev-root-key-not-for-production}
+      # WA_SESSION_DIR (the WhatsApp QR probe's offline fallback) was hardcoded here — the note
+      # above, verbatim. chat contributes the /wa mount, so it now contributes the path with it.
+      # inject_into_n8n() logs into n8n's REST API as the owner to PATCH the granted tokens into
+      # the Google credentials. Without these it got empty strings, the login threw, and the
+      # `except: return 0` made the whole grant a silent no-op — "connected ✓, injected into 0
+      # n8n credential(s)" — on every deployment. That IS the broker's entire job.
+      - N8N_INTERNAL_URL=${N8N_INTERNAL_URL:-http://n8n:5678}
+      - N8N_OWNER_EMAIL=${N8N_OWNER_EMAIL:-}
+      - N8N_OWNER_PASSWORD=${N8N_OWNER_PASSWORD:-}
+      # Public base for the ONE registered OAuth redirect URI (<base>/oauth/callback). Was read by
+      # app.py but set nowhere, so every domain deploy silently handed Google
+      # redirect_uri=https://connections.localhost/oauth/callback and no grant could ever complete.
+      # Defaults to the deployment's own connections host; a LOCAL box overrides it to
+      # http://127.0.0.1:8990 (the loopback callback published below). Must match a redirect URI
+      # registered on the Google OAuth client.
+      - CONNECTIONS_PUBLIC_URL=${CONNECTIONS_PUBLIC_URL:-https://${CONNECTIONS_BASE_URL:-connections.${DEPLOYMENT_DOMAIN:-localhost}}}
+      # BROKER: warn | enforce | off. `warn` is the safe first step of the 3-phase rollout — a
+      # caller this service cannot identify is still served AND logged, so the estate keeps booting
+      # while the unidentified callers are found. An IDENTIFIED caller is held to the full policy in
+      # every mode: it can never obtain another app's secrets, or one its app.json does not declare.
+      # Flip to `enforce` once /api/broker/audit shows no `unidentified: true` grants.
+      - CONN_BROKER_MODE=${CONN_BROKER_MODE:-warn}
+    volumes:
+      - connections_vault:/app/data      # encrypted vault persists
+      - ../../.generated/registry:/app/generated:ro   # compiled registries (see gate G9)
+      # Container identity. The broker maps a request's source address to the container that holds
+      # it, and thence to its `com.docker.compose.service` label — the key the manifest is written
+      # in. Without this the broker cannot name ANY caller and degrades to "warn, everyone
+      # unidentified", which /healthz reports rather than hides.
+      #
+      # ⚠ Residual risk, stated plainly: a docker socket in a container is root on the host, and
+      # `:ro` does not restrict the API (it only makes the socket FILE read-only). identity.py issues
+      # GET requests exclusively and never POSTs, but that is a property of our code, not a boundary
+      # the kernel enforces. Where a read-only socket proxy exists, point DOCKER_SOCK at it instead.
+      # Project socket on the host side — see the note in platform-base/traefik/docker-compose.yml.
+      - ${BBOX_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
+    networks:
+      - traefik-network
+    # Local Google-OAuth callback: publish on host loopback so Google can redirect the browser to
+    # http://127.0.0.1:8990/oauth/callback — DIRECT to the container, bypassing Traefik/Authentik (the
+    # OAuth callback is unauthenticated). Bound to 127.0.0.1 → harmless on the VPS; the connections.localhost
+    # Traefik route (SSO-gated) is untouched. Redirect must be registered on the Google OAuth client.
+    ports:
+      - "127.0.0.1:8990:8990"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://localhost:8990/healthz',timeout=3).status==200 else 1)\""]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-5s}
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits: {cpus: '0.5', memory: 256M}
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik-network
+      - traefik.http.services.connections.loadbalancer.server.port=8990
+      # local (http)
+      - traefik.http.routers.connections-local.rule=Host(`connections.localhost`)
+      - traefik.http.routers.connections-local.entrypoints=web
+      - traefik.http.routers.connections-local.service=connections
+      # gate localhost too (matches my-docs-local): the credential plane must never be
+      # reachable unauthenticated, even on the dev host.
+      - traefik.http.routers.connections-local.middlewares=authentik@file
+      # public (https, SSO-gated) — CONNECTIONS_BASE_URL derives from DEPLOYMENT_DOMAIN
+      - traefik.http.routers.connections-https.rule=Host(`${CONNECTIONS_BASE_URL:-connections.${DEPLOYMENT_DOMAIN:-localhost}}`)
+      - traefik.http.routers.connections-https.entrypoints=websecure
+      - traefik.http.routers.connections-https.tls=true
+      - traefik.http.routers.connections-https.tls.certresolver=myresolver
+      - traefik.http.routers.connections-https.service=connections
+      - traefik.http.routers.connections-https.middlewares=authentik@file
+    logging:
+      driver: json-file
+      options: {max-size: 5m, max-file: '3'}
+volumes:
+  connections_vault:
+networks:
+  traefik-network:
+    external: true

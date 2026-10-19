@@ -1,0 +1,21 @@
+sequenceDiagram
+    autonumber
+    participant O as Owner browser (SSO at auth.staging)
+    participant G as Gateway - network app
+    participant C as Credential plane (connections)
+    participant N as Office node - network app
+
+    O->>G: POST /digital-office/nodes/new (tenant, name, scope)
+    G->>G: mint enrollment_token (15 min, single-use, scoped)
+    G-->>O: QR + 8-char short code
+    N->>N: camera scans the GATEWAY QR (or code typed)
+    N->>N: generate Ed25519 + WireGuard keypairs locally
+    N->>G: POST /api/enroll (token, name, signing_pub, wg_pub, endpoint)
+    G->>G: verify signature, expiry, single-use, tenant boundary, reserved host
+    G->>G: allocate 10.79.slot.n and check the publish-time resolution of the node host
+    G->>C: create instance (digital_office_node, public halves only)
+    G-->>N: edge_pubkey, endpoint, assigned_ip, scope, overlay_cidr, mtu
+    N->>N: configure peer, bring up dow0, keepalive 25s
+    N->>G: first handshake
+    G->>G: state=active, render per-node Host() router + modules.d entry
+    Note over G,N: no handshake within 60s gives state=degraded, and the screen names the missing step

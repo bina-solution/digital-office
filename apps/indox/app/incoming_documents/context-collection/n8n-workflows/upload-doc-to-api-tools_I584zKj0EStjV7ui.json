@@ -1,0 +1,744 @@
+{
+  "updatedAt": "2025-11-24T22:49:09.350Z",
+  "createdAt": "2025-09-24T21:21:50.488Z",
+  "id": "indoxV2UploadApiTools01",
+  "name": "Upload Doc To API TOOLS",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $('Start').item.json.LINK }}",
+          "mode": "url"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        304,
+        1008
+      ],
+      "id": "0eb061dc-18a4-4aec-aa8c-6dfab93e46bb",
+      "name": "Download file3",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "KirWFwoFdEFmnN0R",
+          "name": "Google Drive person17@example.com"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://apitools.hacohen.bina-solutions.co.il/documentOcr",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "dont_return_ocr",
+              "value": "={{true}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "abf609cb-ab71-4561-a9ff-b5a61d561561",
+      "name": "Document OCR2",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        704,
+        1088
+      ],
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "8616dea3-a800-41ed-83c8-b149d059d407",
+              "name": "file_id",
+              "value": "={{ $json.file_hash || $json.file_id || null}}",
+              "type": "string"
+            },
+            {
+              "id": "70159040-f94b-4d44-9bc5-6be062f1edd5",
+              "name": "ok",
+              "value": "={{ !$json.error }}",
+              "type": "boolean"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1040,
+        672
+      ],
+      "id": "8c2f21ce-e1e7-4440-8a5e-2560a1416199",
+      "name": "Return"
+    },
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "LINK",
+              "type": "any"
+            },
+            {
+              "name": "HASH"
+            }
+          ]
+        }
+      },
+      "id": "6bbe529a-84ed-42ba-8323-aeb47760afdc",
+      "typeVersion": 1.1,
+      "name": "Start",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "position": [
+        -1008,
+        1072
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "a70fb07d-438c-4218-976c-ed0d6ad8ccb3",
+                    "leftValue": "={{ !!$json.HASH && !$input.item.binary }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "hash"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "8cd2bb61-153c-40a4-a499-c4830a249685",
+                    "leftValue": "={{ !!$json.LINK && !$input.item.binary }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "link"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ !!$input.item.binary }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    },
+                    "id": "e8a8ee5b-8823-43b4-87f9-b12b684982eb"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "binary"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -480,
+        1056
+      ],
+      "id": "f8211be0-3fb2-4fa1-bb1e-4651fde9eddd",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "url": "https://apitools.hacohen.bina-solutions.co.il/docExists",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "file_id",
+              "value": "={{ $json.HASH }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a83984d6-a0c8-4261-a133-c71c324e61ea",
+      "name": "Check HASH",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -256,
+        688
+      ],
+      "executeOnce": false,
+      "retryOnFail": true,
+      "waitBetweenTries": 3000,
+      "maxTries": 5
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "21ec0d81-6d00-44dd-a5df-1800474db253",
+              "leftValue": "={{ $json.exists || false }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -48,
+        688
+      ],
+      "id": "c37d7c65-e2e1-493f-a1f6-d5f8aeaf4bcf",
+      "name": "If Exists"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        464,
+        1184
+      ],
+      "id": "0969981e-0fd0-462e-a04a-0a3d6f55a03a",
+      "name": "Binary"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a5326124-7a8b-415b-adbd-33cd6e413a50",
+              "leftValue": "={{ $json['binary-test'] || false}}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -848,
+        1072
+      ],
+      "id": "8d2debe1-34ca-404d-ae7d-4eb276cc4672",
+      "name": "If Binary test"
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "1ZsOTNsIG4feWexl-5djDTc4gmtw9nuQd",
+          "mode": "list",
+          "cachedResultName": " אורבונד 06.2024 .PNG",
+          "cachedResultUrl": "https://drive.google.com/file/d/1ZsOTNsIG4feWexl-5djDTc4gmtw9nuQd/view?usp=drivesdk"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -656,
+        928
+      ],
+      "id": "359af7c3-9b89-4922-9938-c5890629c300",
+      "name": "Download file",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "KirWFwoFdEFmnN0R",
+          "name": "Google Drive person17@example.com"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "8616dea3-a800-41ed-83c8-b149d059d407",
+              "name": "error",
+              "value": "=wrong_input",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        704,
+        1344
+      ],
+      "id": "4e10aa39-fc4b-425c-95be-9fc07b694aa9",
+      "name": "WRONG INPUT"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "96028b67-15c2-4dfa-ad8f-0019b9cc7b8d",
+              "name": "error",
+              "value": "file_not_found",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        704,
+        768
+      ],
+      "id": "2b8b0b07-d8a1-425a-b9e8-3a93a3d3079f",
+      "name": "FILE_NOT_FOUND"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ce9d3c14-15e7-4b10-949a-8dd91f3dd696",
+              "leftValue": "={{ !$('Start').item.json.LINK  }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        128,
+        784
+      ],
+      "id": "aca064fe-dada-4d00-9864-e8f46896aeb5",
+      "name": "If MISSING Link"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "355c1caf-2c38-45e0-a0e2-864b949c54e3",
+              "name": "error",
+              "value": "={{ `Failed to download google drive link: ${$(\"Start\").item.json.LINK}, error: ${$json.error || ''}`  }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        704,
+        928
+      ],
+      "id": "f72c3305-980d-443f-b845-5ee3629c7aae",
+      "name": "GDRIVE FAIL"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "8b04ee70-69f9-4a58-a0c2-db8331936ff1",
+              "leftValue": "={{ !($input.item.binary || null) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        464,
+        1008
+      ],
+      "id": "d3f5e689-d064-4bc0-892f-6a887458197b",
+      "name": "If No Binary"
+    }
+  ],
+  "connections": {
+    "Download file3": {
+      "main": [
+        [
+          {
+            "node": "If No Binary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "If Binary test",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Document OCR2": {
+      "main": [
+        [
+          {
+            "node": "Return",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Check HASH",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Download file3",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Binary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "WRONG INPUT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check HASH": {
+      "main": [
+        [
+          {
+            "node": "If Exists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Exists": {
+      "main": [
+        [
+          {
+            "node": "Return",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "If MISSING Link",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Binary": {
+      "main": [
+        [
+          {
+            "node": "Document OCR2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Binary test": {
+      "main": [
+        [
+          {
+            "node": "Download file",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download file": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WRONG INPUT": {
+      "main": [
+        [
+          {
+            "node": "Return",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FILE_NOT_FOUND": {
+      "main": [
+        [
+          {
+            "node": "Return",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If MISSING Link": {
+      "main": [
+        [
+          {
+            "node": "FILE_NOT_FOUND",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Download file3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Return": {
+      "main": [
+        []
+      ]
+    },
+    "GDRIVE FAIL": {
+      "main": [
+        [
+          {
+            "node": "Return",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If No Binary": {
+      "main": [
+        [
+          {
+            "node": "GDRIVE FAIL",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Document OCR2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {
+    "Start": [
+      {
+        "json": {
+          "LINK": "https://drive.google.com/file/d/1S3X1iFXLFWSGTXA3JUxbniP8OdWz8h9X"
+        }
+      }
+    ]
+  },
+  "versionId": "a491af13-38bb-4d45-8f60-938b6ed6ff42",
+  "activeVersionId": "a491af13-38bb-4d45-8f60-938b6ed6ff42",
+  "versionCounter": 77,
+  "triggerCount": 0,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2025-09-24T21:21:50.488Z",
+      "createdAt": "2025-09-24T21:21:50.488Z",
+      "role": "workflow:owner",
+      "workflowId": "indoxV2UploadApiTools01",
+      "projectId": "EChUnhWXmjrEc3fG",
+      "project": {
+        "updatedAt": "2024-09-26T18:07:08.765Z",
+        "createdAt": "2024-09-26T17:59:24.039Z",
+        "id": "EChUnhWXmjrEc3fG",
+        "name": "Shlomo Bolo <person8@example.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null
+      }
+    }
+  ]
+}

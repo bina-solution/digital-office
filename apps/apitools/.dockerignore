@@ -1,0 +1,58 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env
+venv
+.venv
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Testing
+.pytest_cache
+.coverage
+.tox
+tests/
+# The feature-validation suites + their ~700MB of fixtures and benchmark output. They VALIDATE this
+# image from the outside (their own container, apps/apitools/feature-validation/docker-compose.yml);
+# nothing in the engine imports them, so shipping them would only make the build context enormous.
+feature-validation/
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Documentation
+*.md
+docs/
+
+# Logs
+logs/
+*.log
+
+# Storage (should be mounted as volume)
+.storage/
+storage/
+.test_files/
+
+# Temporary files
+tmp/
+temp/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/

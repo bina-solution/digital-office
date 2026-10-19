@@ -1,0 +1,130 @@
+#!/usr/bin/env python3
+"""Concurrency-layout report from any-concurrency's span API — per-version traceability.
+
+Renders the past N hours (default 1h) of n8n+apitools spans into:
+  <out>/concurrency-1h.png   — stacked concurrency curve + per-service span lanes
+  <out>/concurrency-1h.txt   — per-minute ASCII timeline + per-service aggregates
+
+Usage: ci-concurrency-report <deployment-name> [out-dir] [hours]
+Data is fetched via `docker exec any-concurrency-<dn>` so it works wherever the stack runs
+(no published port needed). PNG needs pillow on the HOST python (pip install pillow).
+"""
+import json, subprocess, sys, os, collections
+
+DN = sys.argv[1] if len(sys.argv) > 1 else 'ci'
+OUT = sys.argv[2] if len(sys.argv) > 2 else '.ci-cd/indox-e2e/latest'
+HOURS = float(sys.argv[3]) if len(sys.argv) > 3 else 1.0
+os.makedirs(OUT, exist_ok=True)
+
+code = ("import urllib.request,sys;"
+        f"sys.stdout.write(urllib.request.urlopen('http://localhost:8080/api/spans?hours={HOURS}&sources=n8n,apitools,webhook',timeout=120).read().decode())")
+o = subprocess.run(['docker', 'exec', f'any-concurrency-{DN}', 'python', '-c', code],
+                   capture_output=True)
+try:
+    spans = [s for s in json.loads(o.stdout.decode('utf-8', errors='replace')) if s.get('d')]
+except Exception as ex:
+    open(os.path.join(OUT, 'concurrency-1h.txt'), 'w', encoding='utf-8').write(
+        f'any-concurrency unreachable: {ex}\n')
+    sys.exit(0)
+
+if not spans:
+    open(os.path.join(OUT, 'concurrency-1h.txt'), 'w', encoding='utf-8').write('no spans\n')
+    sys.exit(0)
+
+t0 = min(s['s'] for s in spans); t1 = max(s['e'] for s in spans)
+span_min = max(1, (t1 - t0) // 60000)
+
+# ── aggregates per service ──
+per = collections.defaultdict(list); stat = collections.defaultdict(collections.Counter)
+for s in spans:
+    svc = s.get('svc', '?')
+    stat[svc][s.get('status', '?')] += 1
+    if s['status'] == 'success':
+        per[svc].append(s['d'])
+
+# ── per-minute concurrency (sampled at 10s) ──
+buckets = collections.defaultdict(int)     # minute -> peak concurrent
+occ = collections.Counter()
+for s in spans:
+    for t in range(s['s'] // 10000, s['e'] // 10000 + 1):
+        occ[t] += 1
+for t, c in occ.items():
+    m = (t * 10000 - t0) // 60000
+    buckets[m] = max(buckets[m], c)
+
+# suite phase markers
+import datetime
+def hhmm(ms): return datetime.datetime.utcfromtimestamp(ms / 1000).strftime('%H:%M')
+suites = sorted((s['s'], s['e'], s['svc']) for s in spans if 'E2E Test' in s.get('svc', ''))
+
+# profile stamp — makes per-version reports comparable when tuning perf profiles
+def envval(k):
+    try:
+        for ln in open('.env', encoding='utf-8', errors='replace'):
+            if ln.startswith(k + '='): return ln.split('=', 1)[1].strip()
+    except Exception: pass
+    return '?'
+PROFILE = envval('PERFORMANCE_PROFILE')
+KNOBS = ' '.join(f'{k}={envval(k)}' for k in (
+    'N8N_WORKER_CONCURRENCY', 'APITOOLS_MAX_CONCURRENT_JSON_QUERY',
+    'APITOOLS_MAX_CONCURRENT_OCR', 'APITOOLS_GUNICORN_WORKERS'))
+
+lines = [f'CONCURRENCY LAYOUT — {HOURS:g}h window {hhmm(t0)}→{hhmm(t1)} UTC, {len(spans)} spans',
+         f'profile: {PROFILE}   {KNOBS}']
+lines.append('')
+lines.append('per-minute peak concurrency (each char = 1 min):')
+BARS = ' .:-=+*#%@'
+row = ''.join(BARS[min(9, buckets.get(m, 0) // 8)] for m in range(int(span_min) + 1))
+lines.append('  |' + row + f'|  scale: char≈8 concurrent, @=72+')
+lines.append('')
+lines.append('suite phases:')
+for st, en, name in suites:
+    lines.append(f'  {hhmm(st)}→{hhmm(en)}  {name}  ({(en - st) // 1000}s)')
+lines.append('')
+lines.append('%9s %6s %8s %8s %8s  %-40s %s' % ('busy_s', 'n', 'p50_s', 'p95_s', 'max_s', 'service', 'crash/err'))
+rows = []
+for svc, ds in per.items():
+    ds.sort()
+    rows.append((sum(ds) / 1000, len(ds), ds[len(ds) // 2] / 1000, ds[int(len(ds) * .95)] / 1000, ds[-1] / 1000, svc))
+rows.sort(reverse=True)
+for t, c, p50, p95, mx, svc in rows[:25]:
+    cr, er = stat[svc].get('crashed', 0), stat[svc].get('error', 0)
+    lines.append('%9.0f %6d %8.2f %8.1f %8.1f  %-40s %s' % (t, c, p50, p95, mx, svc[:40], f'{cr}/{er}' if cr or er else ''))
+open(os.path.join(OUT, 'concurrency-1h.txt'), 'w', encoding='utf-8').write('\n'.join(lines) + '\n')
+print(f'[concurrency-report] txt written ({len(spans)} spans)')
+
+# ── PNG: concurrency curve + top-service lanes ──
+try:
+    from PIL import Image, ImageDraw
+except Exception:
+    print('[concurrency-report] pillow missing — txt only'); sys.exit(0)
+
+W, H = 1400, 900
+im = Image.new('RGB', (W, H), (13, 17, 23))
+dr = ImageDraw.Draw(im)
+X0, CURVE_H, LANE_H = 70, 220, 22
+def x_of(ms): return X0 + int((ms - t0) / (t1 - t0 + 1) * (W - X0 - 20))
+
+# curve
+maxc = max(buckets.values()) or 1
+pts = [(X0 + int(m / max(1, span_min) * (W - X0 - 20)), 30 + CURVE_H - int(buckets.get(m, 0) / maxc * CURVE_H))
+       for m in range(int(span_min) + 1)]
+dr.line(pts, fill=(88, 166, 255), width=2)
+dr.text((X0, 8), f'profile:{PROFILE}  peak/min max {maxc}   {hhmm(t0)}->{hhmm(t1)} UTC   {len(spans)} spans   {KNOBS}', fill=(200, 210, 220))
+for st, en, name in suites:   # phase bands
+    dr.rectangle([x_of(st), 30, x_of(en), 30 + CURVE_H], outline=(240, 100, 160))
+    dr.text((x_of(st) + 2, 32), name.replace('indox-v2 ', '').replace(' E2E Test', ''), fill=(240, 100, 160))
+
+# lanes: top 26 services by busy time
+y = 30 + CURVE_H + 30
+COL = {'success': (63, 185, 80), 'error': (248, 81, 73), 'crashed': (219, 109, 40), 'running': (88, 166, 255)}
+for _, _, _, _, _, svc in rows[:26]:
+    dr.text((4, y + 4), svc[:34], fill=(160, 170, 180))
+    for s in spans:
+        if s.get('svc') != svc: continue
+        dr.rectangle([x_of(s['s']), y + 14, max(x_of(s['e']), x_of(s['s']) + 1), y + LANE_H - 2],
+                     fill=COL.get(s['status'], (110, 118, 129)))
+    y += LANE_H
+    if y > H - 24: break
+im.save(os.path.join(OUT, 'concurrency-1h.png'))
+print('[concurrency-report] png written')

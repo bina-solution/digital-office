@@ -1,0 +1,38 @@
+# yaml-language-server: $schema=./schema.json
+title: "n8n Postgres published on 0.0.0.0:10001 (edge-bypassing DB exposure)"
+opened: "2026-06-16"
+category: security
+severity: high
+status: in-progress  # 2026-07-30 triage: STILL OPEN — platform-base/n8n/docker-compose.yml:74-75 still publishes `10001:5432` on all interfaces; the TCP router + db-ipallowlist at :86-90 does not cover the raw publish. The UI publish is now loopback-scoped (127.0.0.1:5678:5678) rather than removed. 2026-08-04 re-triage: STILL OPEN — raw 10001:5432 publish on all interfaces remains.
+summary: "n8n-postgres publishes 10001:5432 on all interfaces, exposing raw Postgres on the VPS public IP, bypassing Traefik's TLS + ipallowlist."
+
+description: |
+  ## Symptom / risk
+  `production/n8n/docker-compose.yml` publishes the n8n database directly:
+  ```yaml
+  ports:
+    - 10001:5432   # n8n-postgres -> 0.0.0.0:10001
+  ```
+  Unlike the main Postgres/Redis (which go through Traefik TCP routers with
+  `ipallowlist` + TLS), this is a raw host publish on all interfaces → reachable on
+  the VPS public IP, protected only by the DB password.
+
+  ## Progress this session
+  The n8n **UI** publish (`5678:5678`) was REMOVED — n8n is now reached only via
+  Traefik (`n8n.localhost` / public domain); the `n8n-pull/push` scripts use
+  `docker exec ... localhost:5678` (in-container), unaffected. The **Postgres**
+  `10001:5432` publish REMAINS and is the open item here.
+
+  ## Fix
+  - Bind to loopback: `127.0.0.1:10001:5432` (keeps local `scripts/` DB access,
+    removes public exposure), or
+  - Drop the publish and reach it via a Traefik TCP router with `db-ipallowlist`
+    (same pattern as the other DBs), or remove entirely if nothing external needs it.
+
+tasks:
+  - { text: "Change 10001:5432 to 127.0.0.1:10001:5432 (or route via Traefik TCP + ipallowlist) — done 2026-10-06 in platform-base/n8n/docker-compose.yml", done: true }
+  - { text: "Confirm scripts/n8n-* still work (they use docker exec, should be fine) — confirmed 2026-10-06 on hp-laptop after the container was re-created with the new binding: the n8n status hook, which reads this database through the container, answers as before; nothing tracked in the repo dials 10001", done: true }
+  - { text: "Verify 10001 is not reachable on the VPS public IP — measured on hp-laptop 2026-10-06: published 127.0.0.1:10001 only; a connect to the machine's LAN address and to every bridge address is refused, loopback answers. The VPS runs the old branch: there the port stays as it was until this branch is merged and a bring-up runs (`bbox status` names the container until then)", done: false }
+
+references:
+  - platform-base/n8n/docker-compose.yml

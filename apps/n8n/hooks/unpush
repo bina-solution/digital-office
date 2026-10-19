@@ -1,0 +1,102 @@
+#!/usr/bin/env bash
+# unpush — remove ONE app's workflows from the live n8n instance.
+#
+#   bash apps/n8n/hooks/unpush --app <id>
+#   bbox n8n <app> unpush
+#   bbox n8n base unpush --retired     the ids in retired-workflows.txt, whichever app's they were
+#
+# The other half of `push`. The schema has always promised that an app's automations are
+# "imported on enable and removed on disable" — push made the first half real; without this the
+# second half was a lie: disabling an app left its workflows running in n8n, still firing triggers
+# against services that were no longer there.
+#
+# Scope comes from the manifest, never from a guess: the app declares `blueprints.n8n`, the
+# compiler resolves it, and we delete exactly the workflow IDs found in that directory. A workflow
+# the app does not own is never touched.
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+
+log() { echo "[n8n-unpush] $*"; }
+
+APP_SCOPE=""; RETIRED=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --app)     APP_SCOPE="${2:-}"; shift 2 || shift ;;
+    --app=*)   APP_SCOPE="${1#--app=}"; shift ;;
+    --retired) RETIRED=1; shift ;;
+    *)         shift ;;
+  esac
+done
+[ -n "${APP_SCOPE}${RETIRED}" ] || { echo "usage: unpush --app <id> | unpush --retired" >&2; exit 1; }
+
+# --retired: the scope is the list, not a directory. These left the blueprints and an instance
+# that imported them once still has them (which is how pull kept bringing them back). Nothing is
+# restarted unless one of them was active — an inactive workflow has no trigger to unregister.
+if [ -n "${RETIRED}" ]; then
+  APP_SCOPE="the retired list"
+  IDS="$(awk '!/^[[:space:]]*#/ && NF {printf "%s\047%s\047", (n++ ? "," : ""), $1}' \
+           "${REPO_ROOT}/apps/n8n/retired-workflows.txt")"
+else
+# tr -d CR: python on Windows prints CRLF and a trailing CR breaks the path.
+REL="$( cd "${REPO_ROOT}" && python3 platform/manager/reconcile.py blueprints --for "${APP_SCOPE}" \
+        | tr -d '\r' | cut -f2 )" || { echo "Error: '${APP_SCOPE}' declares no blueprints.n8n." >&2; exit 1; }
+[ -n "${REL}" ] || { echo "Error: '${APP_SCOPE}' declares no blueprints.n8n." >&2; exit 1; }
+DIR="${REPO_ROOT}/${REL}"
+
+# One python pass over the whole dir: the workflow id is the JSON's own `id`, and quoting a
+# per-file `python3 -c` inside a command substitution under `set -u` proved too fragile.
+IDS="$( cd "${REPO_ROOT}" && python3 - "${REL}" <<'PYEOF' | tr -d ''
+import json, pathlib, sys
+ids = []
+p = pathlib.Path(sys.argv[1])
+for f in sorted(p.glob("*.json")):
+    try:
+        d = json.loads(f.read_text(encoding="utf-8"))
+    except Exception:
+        continue
+    wid = d.get("id")
+    if wid:
+        ids.append("'" + str(wid).replace("'", "''") + "'")
+# code blueprints (*.workflow.ts) carry the id in the filename — same identity everywhere
+for f in sorted(p.glob("*.workflow.ts")):
+    wid = f.name[: -len(".workflow.ts")]
+    q = "'" + wid.replace("'", "''") + "'"
+    if q not in ids:
+        ids.append(q)
+print(",".join(ids))
+PYEOF
+)"
+fi
+[ -n "${IDS}" ] || { log "no workflows declared by '${APP_SCOPE}' — nothing to remove."; exit 0; }
+
+if ! docker ps --format '{{.Names}}' | grep -qx "${PG_CONTAINER}"; then
+  log "n8n postgres (${PG_CONTAINER}) not running — nothing to remove."; exit 0
+fi
+
+PGUSER="$(read_env POSTGRES_USER)"; PGUSER="${PGUSER:-hacohen}"
+PGDB="$(read_env POSTGRES_DB)"; PGDB="${PGDB:-n8n}"
+psql_n8n() { docker exec -i "${PG_CONTAINER}" psql -U "${PGUSER}" -d "${PGDB}" "$@"; }
+
+BEFORE="$(psql_n8n -tAc "select count(*) from workflow_entity where id in (${IDS});" | tr -d '\r ')"
+WAS_ACTIVE="$(psql_n8n -tAc "select count(*) from workflow_entity where active and id in (${IDS});" | tr -d '\r ')"
+[ "${BEFORE}" != "0" ] || { log "none of the workflows of '${APP_SCOPE}' is on this instance — nothing to remove."; exit 0; }
+log "removing ${BEFORE} workflow(s) owned by '${APP_SCOPE}' from n8n (${WAS_ACTIVE} active)…"
+
+# Deactivate first so the runtime unregisters triggers/webhooks, THEN delete. Deleting an active
+# workflow leaves the in-memory trigger registered until the next restart, which is how a
+# "removed" workflow keeps firing.
+psql_n8n -q -c "update workflow_entity set active = false where id in (${IDS});" >/dev/null
+psql_n8n -q -c "delete from workflow_entity where id in (${IDS});" >/dev/null
+
+AFTER="$(psql_n8n -tAc "select count(*) from workflow_entity where id in (${IDS});" | tr -d '\r ')"
+[ "${AFTER}" = "0" ] || { echo "Error: ${AFTER} workflow(s) still present after delete." >&2; exit 1; }
+
+# The runtime caches active triggers; restart so the removed ones stop firing.
+if [ -n "${RETIRED}" ] && [ "${WAS_ACTIVE}" = "0" ]; then
+  log "removed ${BEFORE} workflow(s); none was active, so n8n was not restarted."
+  exit 0
+fi
+( cd "${REPO_ROOT}" && dcx restart n8n ) >/dev/null 2>&1 || true
+log "removed ${BEFORE} workflow(s); n8n restarted so triggers are unregistered."

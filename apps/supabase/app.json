@@ -1,0 +1,149 @@
+{
+  "id": "supabase",
+  "title": {
+    "he": "סופאבייס",
+    "en": "Supabase"
+  },
+  "layer": 3,
+  "kind": "tool",
+  "version": "1.0.0",
+  "summary": {
+    "he": "עיון וניהול בסיס הנתונים — טבלאות, אחסון ו-API",
+    "en": "Browse and manage the database — tables, storage and REST API"
+  },
+  "capabilities": [
+    {
+      "name": "object-storage",
+      "type": "protocol",
+      "endpoint": "http://supabase-kong:8000/storage/v1",
+      "required_ops": [
+        "put",
+        "get",
+        "list",
+        "delete"
+      ]
+    },
+    {
+      "name": "data-api",
+      "type": "protocol",
+      "endpoint": "http://supabase-kong:8000",
+      "required_ops": [
+        "rest",
+        "realtime"
+      ]
+    }
+  ],
+  "use": [
+    {
+      "capability": "sql",
+      "strength": "requires",
+      "after": true
+    }
+  ],
+  "connections": [
+    {
+      "id": "supabase-jwt-secret",
+      "required": true
+    },
+    {
+      "id": "supabase-service-key",
+      "required": true
+    },
+    {
+      "id": "supabase-anon-key",
+      "required": true
+    },
+    {
+      "id": "supabase-dashboard",
+      "required": false
+    }
+  ],
+  "compose": "docker-compose.yml",
+  "routing": [
+    {
+      "host": "supabase",
+      "port": 8000,
+      "auth": "none",
+      "service": "kong",
+      "emit_labels": false
+    },
+    {
+      "host": "supabase-studio",
+      "port": 3000,
+      "auth": "sso",
+      "service": "studio",
+      "emit_labels": false,
+      "module": {
+        "name": "Supabase Studio",
+        "icon": "database",
+        "desc": "מסד הנתונים והטבלאות",
+        "group": "תשתית",
+        "order": 230,
+        "embed": false
+      },
+      "sso": {
+        "slug": "supabase-studio",
+        "display_name": "Supabase Studio",
+        "default_host": "supabase-studio.localhost",
+        "base_url_env": "SUPABASE_STUDIO_BASE_URL",
+        "local_twin": true
+      }
+    }
+  ],
+  "health": {
+    "structural": "auto",
+    "probe": {
+      "http": "http://supabase-kong:8000/",
+      "interval": "30s"
+    }
+  },
+  "data": {
+    "volumes": [
+      "supabase_storage_data"
+    ],
+    "on_uninstall": "keep",
+    "sql": [
+      {
+        "instance": "supabase-db",
+        "database": "postgres",
+        "schemas": [
+          "auth",
+          "storage",
+          "vault"
+        ],
+        "note": "created by gotrue / storage-api migrations; dumped by this app's own hooks"
+      }
+    ]
+  },
+  "contributes": {
+    "connection_probes": {
+      "supabase-service-key": {
+        "type": "http",
+        "url": "http://storage:5000/status"
+      }
+    },
+    "connection_providers": [
+      {
+        "id": "supabase-dashboard",
+        "automint": {
+          "type": "password",
+          "chars": 24
+        },
+        "title": "Supabase Studio / Kong dashboard basic-auth",
+        "kind": "password",
+        "pillar": "app-password",
+        "app": {
+          "name": "Supabase Studio",
+          "url_env": "SUPABASE_STUDIO_BASE_URL",
+          "user": "supabase"
+        },
+        "env": "SUPABASE_DASHBOARD_PASSWORD",
+        "now": "plain env -> kong basic-auth (Studio also gated by Authentik forward-auth). Owned by THIS app, not by connections/providers/40-apps.yaml: the secret exists only because kong + Studio exist, so uninstalling supabase must take the credential card out of the catalog with it.",
+        "probe": {
+          "type": "present"
+        },
+        "wizard": "auto-mint"
+      }
+    ]
+  }
+}

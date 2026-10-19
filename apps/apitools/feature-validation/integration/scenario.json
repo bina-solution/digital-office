@@ -1,0 +1,9 @@
+{
+  "feature": "integration",
+  "description": "Validates deployment service integrations: N8N API, Redis, Postgres, Google OCR (apitools), WhatsApp messaging, and N8N-triggered integrations (Google Sheets, Drive, Gmail, Gemini).",
+  "cases_source": "fixtures/fixtures.json",
+  "requires": [
+    "orchestration"
+  ],
+  "notes": "Full-stack orchestration E2E (n8n/whatsapp/Gemini/Google). Runs only when FV_CAPABILITIES includes 'orchestration'; covered by the indox-e2e lane otherwise."
+}

@@ -1,0 +1,54 @@
+# GitHub through the office browser — for the two things GitHub's API cannot do (the avatar and a
+# repository's social preview) and for owners who connect by browser. Profile form fields are
+# GitHub's own ids on https://github.com/settings/profile (they have been stable for years).
+# DRAFT: nothing here has run against the owner's account yet — every write needs a watched run.
+platform: github
+version: 1
+status: draft
+origin: "https://github.com"
+session:
+  signed_in: "meta[name=user-login]:not([content=''])"
+  signed_out: "meta[name=user-login][content=''], a[href^='/login']"
+  wait: 6
+ops:
+  profile.get:
+    status: draft
+    why: "קריאה בלבד — בטוח להריץ"
+    steps:
+      - {id: settings, action: goto, value: "https://github.com/settings/profile"}
+      - id: read-profile
+        action: extract
+        out: profile
+        function: |
+          async () => {
+            for (let i = 0; i < 50 && !document.querySelector('#user_profile_name'); i++)
+              await new Promise(r => setTimeout(r, 100));
+            const v = (s) => (document.querySelector(s) || {}).value || null;
+            const img = document.querySelector('img.avatar-user, img.avatar');
+            const login = (document.querySelector('meta[name="user-login"]') || {}).content || null;
+            return JSON.stringify({ok: true, value: {name: v('#user_profile_name'), bio: v('#user_profile_bio'),
+              handle: login, links: [v('#user_profile_blog')].filter(Boolean), avatar_url: img ? img.src : null}});
+          }
+  profile.update.name:
+    status: draft
+    steps:
+      - {id: settings, action: goto, value: "https://github.com/settings/profile"}
+      - {id: type, action: js_fill, css: "#user_profile_name", value: "{name}"}
+      - {id: save, action: click, locator: {role: button, name: ["Update profile", "עדכון פרופיל"]}}
+      - {id: saved, action: wait_for, text: "Profile updated", seconds: 10}
+  profile.update.bio:
+    status: draft
+    steps:
+      - {id: settings, action: goto, value: "https://github.com/settings/profile"}
+      - {id: type, action: js_fill, css: "#user_profile_bio", value: "{bio}"}
+      - {id: save, action: click, locator: {role: button, name: ["Update profile", "עדכון פרופיל"]}}
+      - {id: saved, action: wait_for, text: "Profile updated", seconds: 10}
+  profile.update.avatar:
+    status: draft
+    why: "חלון החיתוך של GitHub טרם נצפה"
+    steps:
+      - {id: settings, action: goto, value: "https://github.com/settings/profile"}
+      - {id: give-file, action: upload, css: "input[type=file][name=avatar], #avatar_upload", file: avatar, spec: avatar}
+      - {id: crop, action: wait_for, seconds: 3}
+      - {id: set, action: click, locator: {role: button, name: ["Set new profile picture"]}}
+      - {id: settle, action: wait_for, seconds: 4}

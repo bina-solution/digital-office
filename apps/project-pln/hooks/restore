@@ -1,0 +1,132 @@
+#!/usr/bin/env bash
+#: put the Plane database back — into THIS office's own cluster, under its own password
+#
+# restore <indir> <mode>   — invoked by scripts/deployment-archive.py, never by hand.
+#
+# WHAT ARRIVES AND WHO PUTS IT BACK. hooks/backup carries the database as `plane.dump` and claims
+# `project_pln_db`, so the archiver restores the other volumes (the object store's bytes, the
+# instance's own secret keys in `project_pln_data`) and this hook loads the dump. That is the only
+# shape that works when the archive is opened on ANOTHER office — moving this app between two linked
+# offices — because a postgres data directory carries the password it was initialised with and this
+# office dials its cluster with its own (`PLANE_DB_PASSWORD` in its own .env). The dump goes into the
+# cluster that is already here.
+#
+# IN ORDER, and each step is here because leaving it out was a way to end with a broken instance:
+#   1. the cluster answers                — started by this hook if it is not running (an app
+#                                           starting the services it owns is the pattern here);
+#   2. the app is STOPPED                 — web, api, worker and beat are one container, and a
+#                                           worker writing into a database that is being replaced is
+#                                           how a restore ends with rows from two instances;
+#   3. what is about to be replaced is KEPT — a dump of the database that is here now, beside the
+#                                           archive (`<archive>/replaced-by-restore/`). A restore is
+#                                           a destructive write; this is the way back from it;
+#   4. the dump is loaded into an EMPTY database — dropped and created, never `--clean` over a
+#                                           migrated schema, which keeps every table the dump does
+#                                           not name. A failed load puts (3) back and says so;
+#   5. the cache is dropped and the object store restarted — valkey holds the sessions and cached
+#                                           rows of the instance that was replaced, and MinIO was
+#                                           running while the archiver replaced the volume under it;
+#   6. the FACTS, from hooks/facts        — the same list backup printed, so the archiver's
+#                                           comparison is like for like;
+#   7. the app is started again           — its migrator runs first, which is what brings a dump
+#                                           taken by an older build up to this office's schema.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+. "${REPO_ROOT}/scripts/archive-lib.sh"   # archive_container — this deployment's containers, strictly
+
+IN="${1:?usage: restore <indir> <mode>}"
+DUMP="${IN}/plane.dump"
+[ -f "${DUMP}" ] || { echo "[project-pln/restore] plane.dump not in archive — nothing to do"; exit 0; }
+U=plane
+D=plane
+note() { echo "[project-pln/restore] $*"; }
+
+# ── 1. the cluster ──────────────────────────────────────────────────────────────────────────────
+DB="$(archive_container plane-db 2>/dev/null || true)"
+if [ -z "${DB}" ]; then
+  note "starting plane-db…"
+  dcx up -d plane-db >/dev/null 2>&1 || true
+fi
+DB=""
+for _ in $(seq 1 60); do
+  DB="$(archive_container plane-db 2>/dev/null || true)"
+  # `-d postgres`: an earlier, interrupted restore may have left no `plane` database to ask about.
+  [ -n "${DB}" ] && docker exec "${DB}" pg_isready -U "${U}" -d postgres >/dev/null 2>&1 && break
+  DB=""
+  sleep 2
+done
+[ -n "${DB}" ] || { echo "[project-pln/restore] plane-db did not answer within 120s — nothing was changed" >&2; exit 1; }
+sql()  { docker exec "${DB}" psql -U "${U}" -d postgres -v ON_ERROR_STOP=1 -tAc "$1"; }
+has()  { docker exec "${DB}" psql -U "${U}" -d "${D}" -tAc "$1" 2>/dev/null | tr -d '\r' | tr -d ' '; }
+
+# ── 2. nothing writes while the database is replaced ────────────────────────────────────────────
+APP="$(archive_container project-pln 2>/dev/null || true)"
+if [ -n "${APP}" ]; then
+  note "stopping ${APP} while its database is replaced"
+  docker stop "${APP}" >/dev/null 2>&1 || true
+fi
+start_app() {
+  [ -n "${APP}" ] || return 0
+  docker start "${APP}" >/dev/null 2>&1 && note "started ${APP} — its migrator runs before it serves"
+}
+
+# ── 3. keep what is about to be replaced ────────────────────────────────────────────────────────
+KEEP=""
+if [ "$(has "select count(*) from information_schema.tables where table_schema='public' and table_name='users';")" = "1" ]; then
+  KEEP="$(dirname "$(dirname "${IN}")")/replaced-by-restore/plane-$(date -u +%Y%m%dT%H%M%SZ).dump"
+  if mkdir -p "$(dirname "${KEEP}")" \
+     && docker exec "${DB}" pg_dump -U "${U}" -d "${D}" -Fc > "${KEEP}.part" && mv "${KEEP}.part" "${KEEP}"; then
+    note "the database this replaces ($(has 'select count(*) from issues;') work item(s)) is kept at ${KEEP}"
+  else
+    rm -f "${KEEP}.part"
+    echo "[project-pln/restore] could not keep a copy of the database that is here now — refusing to replace it" >&2
+    start_app
+    exit 1
+  fi
+fi
+
+# ── 4. the dump, into an EMPTY database ─────────────────────────────────────────────────────────
+load() {  # load <dump file>
+  sql "drop database if exists ${D} with (force);" >/dev/null || return 1
+  sql "create database ${D} owner ${U};" >/dev/null || return 1
+  docker exec -i "${DB}" pg_restore -U "${U}" -d "${D}" --no-owner --exit-on-error < "$1"
+}
+ERR="${BBOX_TMP}/project-pln-restore.err"
+if ! load "${DUMP}" 2>"${ERR}"; then
+  echo "[project-pln/restore] loading plane.dump FAILED:" >&2
+  head -5 "${ERR}" >&2
+  if [ -n "${KEEP}" ]; then
+    if load "${KEEP}" 2>>"${ERR}"; then
+      echo "[project-pln/restore] the database that was here was put back from ${KEEP}" >&2
+    else
+      echo "[project-pln/restore] …and putting the previous database back FAILED too. It is at ${KEEP};" >&2
+      echo "[project-pln/restore]   load it with: pg_restore -U ${U} -d ${D} --no-owner < that file (in ${DB})" >&2
+    fi
+  fi
+  start_app
+  exit 1
+fi
+note "plane.dump loaded into ${DB}/${D}"
+
+# ── 5. what the replaced instance left in memory ────────────────────────────────────────────────
+KV="$(archive_container plane-redis 2>/dev/null || true)"
+if [ -n "${KV}" ] && docker exec "${KV}" valkey-cli flushall >/dev/null 2>&1; then
+  note "the cache and the sessions of the replaced instance were dropped (one sign-in)"
+fi
+S3="$(archive_container plane-minio 2>/dev/null || true)"
+if [ -n "${S3}" ]; then
+  docker restart "${S3}" >/dev/null 2>&1 || true
+  for _ in $(seq 1 45); do
+    docker exec "${S3}" mc ready local >/dev/null 2>&1 && break
+    sleep 2
+  done
+  note "the object store was restarted on the volume the archive restored"
+fi
+
+# ── 6. the facts, then 7. the app ───────────────────────────────────────────────────────────────
+bash "${SCRIPT_DIR}/facts"
+rc=$?
+start_app
+exit "${rc}"

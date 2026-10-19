@@ -1,0 +1,78 @@
+# platform-base/postgres — the platform database, layer 1. ONLY the db.
+#
+# This was the `db` service of the old layer-1 `supabase` app. The rest of supabase (kong,
+# postgrest, storage, studio) moved to the GALLERY app `apps/supabase` — optional, installable,
+# and removable — per the decision that the OS ships a database, not a Supabase.
+#
+# Everything observable is unchanged on purpose: same image (the supabase-patched postgres —
+# swapping to vanilla postgres:17 is a later, separate migration with a data step), same
+# container_name, same `supabase-db` network alias every DATABASE_URL in the stack points at,
+# same volumes, same init SQL. An app that talks to the database cannot tell this happened.
+#
+# So the `supabase` spellings left in this file are IDENTITY, not a dependency on apps/supabase:
+#   image                  a Docker Hub NAMESPACE — the postgres build the Supabase company
+#                          publishes. Our data volume was initdb'd by it; it pulls whether or not
+#                          the gallery app is installed. (layering-lint `_is_vendor_namespace`)
+#   container_name/alias   the address every DATABASE_URL in the stack already holds. Renaming it
+#                          would break every consumer to fix a spelling, so it stays.
+#   SUPABASE_DB_*/JWT_*    historical env NAMES, minted by this app's own hooks/keygen.py and read
+#                          by drive/apitools/indox/.env. Renaming them is its own migration.
+# What genuinely belonged to the gallery app has left: the kong/postgrest/storage/studio services
+# (apps/supabase/docker-compose.yml) and its credential catalog rows (apps/supabase/app.json
+# contributes.connection_providers / connection_probes).
+services:
+  db:
+    container_name: supabase-db-${DEPLOYMENT_NAME:-bina-deployment}
+    image: supabase/postgres:15.8.1.085
+    hostname: supabase-db
+    restart: unless-stopped
+    deploy:
+      resources:
+        # 2G -> 1G, 2026-08-06. Measured high-water 274MiB (~3.7x headroom retained).
+        limits: { cpus: '1.0', memory: 1G }
+        reservations: { cpus: '0.25', memory: 256M }
+    volumes:
+    - ./volumes/db/roles.sql:/docker-entrypoint-initdb.d/init-scripts/99-roles.sql:Z
+    - ./volumes/db/jwt.sql:/docker-entrypoint-initdb.d/init-scripts/99-jwt.sql:Z
+    - ./volumes/db/webhooks.sql:/docker-entrypoint-initdb.d/init-scripts/98-webhooks.sql:Z
+    - ./volumes/db/_supabase.sql:/docker-entrypoint-initdb.d/migrations/97-_supabase.sql:Z
+    - ./volumes/db/realtime.sql:/docker-entrypoint-initdb.d/migrations/99-realtime.sql:Z
+    - ./volumes/db/logs.sql:/docker-entrypoint-initdb.d/migrations/99-logs.sql:Z
+    - ./volumes/db/pooler.sql:/docker-entrypoint-initdb.d/migrations/99-pooler.sql:Z
+    # NOTE: the INDOX schema is deliberately NOT applied at initdb — the "INDOX Seed Fixtures"
+    # workflow is the ONE creation path (as the postgres role). An initdb copy created the tables
+    # as supabase_admin and broke the workflow's idempotent ALTERs ("must be owner of table").
+    - supabase_db_data:/var/lib/postgresql/data:Z
+    - db-config:/etc/postgresql-custom
+    healthcheck:
+      test: [CMD, pg_isready, -U, postgres, -h, localhost]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-5s}
+      retries: 10
+    environment:
+      TZ: ${TZ:-UTC}
+      POSTGRES_HOST: /var/run/postgresql
+      PGPORT: 5432
+      POSTGRES_PORT: 5432
+      PGPASSWORD: ${SUPABASE_DB_PASSWORD}
+      POSTGRES_PASSWORD: ${SUPABASE_DB_PASSWORD}
+      PGDATABASE: ${SUPABASE_DB_NAME:-postgres}
+      POSTGRES_DB: ${SUPABASE_DB_NAME:-postgres}
+      JWT_SECRET: ${SUPABASE_JWT_SECRET}
+      JWT_EXP: ${SUPABASE_JWT_EXPIRY:-3600}
+    command:
+    - postgres
+    - -c
+    - config_file=/etc/postgresql/postgresql.conf
+    - -c
+    - log_min_messages=fatal
+    networks:
+      supabase-net: null
+      traefik-network: { aliases: [supabase-db] }
+volumes:
+  supabase_db_data: null
+  db-config: null
+networks:
+  supabase-net: null
+  traefik-network:
+    external: true

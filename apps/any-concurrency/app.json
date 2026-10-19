@@ -1,0 +1,95 @@
+{
+  "id": "any-concurrency",
+  "title": {
+    "he": "כל מקביל",
+    "en": "Any Concurrency"
+  },
+  "layer": 3,
+  "kind": "service",
+  "version": "1.0.0",
+  "summary": {
+    "he": "ציר-זמן מקביליות — תצפית על ריצות במקביל",
+    "en": "Deployment-wide concurrency observability"
+  },
+  "capabilities": [
+    {
+      "name": "concurrency-metrics",
+      "type": "protocol",
+      "endpoint": "http://any-concurrency:8080"
+    }
+  ],
+  "use": [
+    {
+      "capability": "sql",
+      "strength": "requires",
+      "after": true
+    },
+    {
+      "capability": "kv",
+      "strength": "requires",
+      "after": true
+    }
+  ],
+  "connections": [
+    {
+      "id": "n8n-postgres",
+      "required": true
+    },
+    {
+      "id": "redis-password",
+      "required": true
+    }
+  ],
+  "compose": "docker-compose.yml",
+  "routing": [
+    {
+      "host": "any-concurrency",
+      "port": 8080,
+      "auth": "sso",
+      "sso": {
+        "slug": "any-concurrency",
+        "default_host": "any-concurrency.localhost",
+        "display_name": "Any Concurrency",
+        "local_twin": true,
+        "base_url_env": "ANY_CONCURRENCY_BASE_URL"
+      },
+      "emit_labels": false,
+      "module": {
+        "group": "תשתית",
+        "icon": "activity",
+        "embed": true,
+        "alias": "any-concurrency",
+        "id": "concurrency",
+        "name": "כל מקביל",
+        "desc": "ציר-זמן מקביליות",
+        "order": 6,
+        "url_env": "ANYC_URL",
+        "url": "http://any-concurrency:8080"
+      }
+    }
+  ],
+  "health": {
+    "structural": "auto",
+    "probe": {
+      "http": "http://any-concurrency:8080/healthz",
+      "interval": "30s"
+    }
+  },
+  "data": {
+    "volumes": [
+      "n8n_storage"
+    ],
+    "on_uninstall": "keep",
+    "kv": [
+      {
+        "instance": "redis",
+        "db": 0,
+        "durable": true,
+        "note": "REDIS_URL pins /0"
+      }
+    ]
+  },
+  "observability": {
+    "sentry_platform": "python"
+  }
+}

@@ -1,0 +1,448 @@
+{
+ "type": "INVOICE",
+ "doc_class": "invoice",
+ "version": 1,
+ "detect": {
+  "keywords": [
+   "חשבונית מס",
+   "חשבונית מס/קבלה",
+   "חשבונית מס / קבלה",
+   "חשבונית זיכוי",
+   "חשבונית מס'"
+  ],
+  "strong_keywords": [
+   "חשבונית מס"
+  ],
+  "priority": 40,
+  "ai_type_map": [
+   "INVOICE"
+  ],
+  "_note": "keywords here are illustrative candidates drawn from the invoice_id anchors + AI prompt. The LIVE type detection uses settings rows invoice_kws/invoice_strong (NOT extracted in this Step-0 INVOICE pass; classifier is a separate engine). ai_type_map from the AI_TYPE enum."
+ },
+ "kw_extract": {
+  "fields": [
+   {
+    "target": "INVOICE_ID",
+    "field_ref": "INVOICE_ID",
+    "normalizer": "docid_last5",
+    "guard": "!INVOICE_ID && !INVOICE_ID_COMPLETED",
+    "completionFlag": "INVOICE_ID_COMPLETED"
+   },
+   {
+    "target": "DOC_DATE",
+    "field_ref": "DOC_DATE",
+    "normalizer": "date_ddmmyyyy",
+    "guard": "!DOC_DATE && !DOC_DATE_COMPLETED",
+    "completionFlag": "DOC_DATE_COMPLETED"
+   },
+   {
+    "target": "DOC_TOTAL_AMOUNT",
+    "field_ref": "DOC_TOTAL_AMOUNT",
+    "normalizer": "amount_2dp",
+    "guard": "!DOC_TOTAL_AMOUNT && !DOC_TOTAL_AMOUNT_COMPLETED && TYPE=='INVOICE'",
+    "completionFlag": "DOC_TOTAL_AMOUNT_COMPLETED"
+   },
+   {
+    "target": "PURCHASE_ID",
+    "field_ref": "PURCHASE_ID",
+    "normalizer": "id_clean",
+    "guard": "!PURCHASE_ID && !PURCHASE_ID_COMPLETED",
+    "completionFlag": "PURCHASE_ID_COMPLETED"
+   },
+   {
+    "target": "SHIPMENT_DOC_ID",
+    "field_ref": "SHIPMENT_DOC_ID",
+    "normalizer": "trim",
+    "guard": "!SHIPMENT_DOC_ID && !SHIPMENT_ID_COMPLETED",
+    "completionFlag": "SHIPMENT_ID_COMPLETED"
+   }
+  ]
+ },
+ "ai_extract": {
+  "enabled": true,
+  "model": "models/gemini-3.1-pro-preview",
+  "model_fallback_text": "models/gemini-3-flash-preview (Text Processor path for textual/xlsx input)",
+  "temperature": null,
+  "_temperature_note": "Gemini nodes have options:{} (empty) -> provider default temperature; NO explicit temperature is set in the live workflow.",
+  "credential": "ai-studio-bs-extraction [env-managed] (googlePalmApi id 6mfcsdRaqQ4IdQ8Y)",
+  "cache": {
+   "table": "ai_extraction_cache",
+   "key_expr": "invoice:{crypto_hash(binary)}",
+   "key_prefix": "invoice",
+   "hash_source": "binary file bytes via n8n Crypto node (dataPropertyName=cached_input_key, binaryData=true)",
+   "hash_algo_LIVE": "UNSPECIFIED in node params -> n8n crypto node DEFAULT (MD5), NOT sha256",
+   "bust_on": [],
+   "_bust_note": "LIVE cache key does NOT include version or model -> does NOT invalidate on prompt/model change. (Draft proposed sha256 + version/model bust; PROPOSED change, not live.)"
+  },
+  "constants": {
+   "own_company_vat": "515561520",
+   "own_company_name": "הכהנים חומרי בניין בע\"מ"
+  },
+  "response_schema": {
+   "AI_COMPANY_ID": {
+    "type": "string",
+    "desc": "issuer company identification / VAT number (ח.פ / עוסק מורשה / מספר תאגיד). CRITICAL: exclude our own company VAT {{own_company_vat}} / {{own_company_name}} (recipient). If not found use ''.",
+    "hint": "ח.פ / עוסק מורשה"
+   },
+   "AI_DOC_AMOUNT": {
+    "type": "string:decimal",
+    "desc": "total incl VAT (סה\"כ כולל מע\"מ / סכום כולל / סה\"כ לתשלום / לתשלום). Return as string. Do NOT confuse with order number (הזמנה). If credit note (חשבונית זיכוי / זיכוי / credit note / credit memo / חשבון זיכוי / מסמך זיכוי / ת. זיכוי / תעודת זיכוי or similar) amount MUST be NEGATIVE. If not found use ''."
+   },
+   "AI_DOC_DATE": {
+    "type": "date:DD/MM/YYYY",
+    "desc": "document date. If multiple, strict order: 1.תאריך הפקה 2.תאריך חשבונית 3.תאריך מסמך 4.תאריך. Do NOT use payment date (תאריך תשלום) or pay-by date (לתשלום עד). If not found use ''."
+   },
+   "AI_DOC_ID": {
+    "type": "string",
+    "desc": "full document number. If multiple, strict order: 1.חשבונית מס 2.מס' חשבונית 3.מסמך 4.מספר מסמך 5.מסמך חיוב. If not found use ''."
+   },
+   "AI_ORDER_IDS": {
+    "type": "string",
+    "desc": "Purchase Order ID as in customer's records (מספר הזמנת לקוח / מס' הזמנת מקור / הזמנת רכש etc.), NOT issuer internal order ref. If multiple, extract only the FIRST. If not found use ''."
+   },
+   "AI_SHIPMENT_IDS": {
+    "type": "array<string>",
+    "desc": "linked shipment document numbers (מספר תעודת משלוח / ת. משלוח). All UNIQUE numbers as array of strings, no repeats. If not found return []."
+   },
+   "AI_TYPE": {
+    "type": "enum",
+    "values": [
+     "INVOICE",
+     "SHIPMENT",
+     "BALANCE_SHEET",
+     "ORDER",
+     "IRRELEVANT"
+    ],
+    "desc": "document classification: invoice/bill->INVOICE; shipping/delivery note->SHIPMENT; financial balance sheet (incl screenshots)->BALANCE_SHEET; purchase order->ORDER; irrelevant->IRRELEVANT."
+   }
+  },
+  "_response_schema_note": "DERIVED verbatim from the live prompt (CONFIG node) and the live JSON_INVOICE_EXTRACTION json_schema (Config1 node). LIVE AI_TYPE enum has NO 'RECEIPT'. Prompt field order: COMPANY_ID, DOC_AMOUNT, DOC_DATE, DOC_ID, ORDER_IDS, SHIPMENT_IDS, TYPE.",
+  "sets": [
+   "AI_COMPANY_ID",
+   "AI_DOC_AMOUNT",
+   "AI_DOC_DATE",
+   "AI_DOC_ID",
+   "AI_ORDER_IDS",
+   "AI_SHIPMENT_IDS",
+   "AI_TYPE",
+   "AI_EXTRACTION_COMPLETED"
+  ]
+ },
+ "select": {
+  "dimensions": [
+   {
+    "name": "company_id",
+    "label": "ח.פ / חברה",
+    "sources": [
+     "AI:AI_COMPANY_ID",
+     "KW:COMPANY_ID"
+    ],
+    "bs_source": null,
+    "normalizer": "companyid_last6",
+    "mismatch_mode": "id"
+   },
+   {
+    "name": "doc_id",
+    "label": "מספר מסמך",
+    "sources": [
+     "AI:AI_DOC_ID",
+     "KW:LOCAL_DOC_ID"
+    ],
+    "bs_source": null,
+    "normalizer": "docid_last5",
+    "mismatch_mode": "id"
+   },
+   {
+    "name": "date",
+    "label": "תאריך",
+    "sources": [
+     "AI:AI_DOC_DATE",
+     "BS:BS_LINE_DATE",
+     "KW:DOC_DATE"
+    ],
+    "normalizer": "date_ddmmyyyy",
+    "mismatch_mode": "data"
+   },
+   {
+    "name": "amount",
+    "label": "סכום",
+    "sources": [
+     "AI:AI_DOC_AMOUNT",
+     "BS:BS_LINE_AMOUNT",
+     "KW:DOC_TOTAL_AMOUNT"
+    ],
+    "normalizer": "amount_2dp",
+    "mismatch_mode": "data"
+   },
+   {
+    "name": "doc_type",
+    "label": "סוג מסמך",
+    "sources": [
+     "AI:AI_TYPE",
+     "KW:TIPE"
+    ],
+    "bs_source": null,
+    "normalizer": "uppercase",
+    "mismatch_mode": "data_no_bs",
+    "_note": "doc_type is HYBRID: contributes to dataMismatch (AI!=KW) and to allFourConfirmed, but has NO BS source and is NOT one of the '4' company/doc/date/amount dims. J.3 hybrid mode."
+   }
+  ],
+  "scoring": {
+   "tiers": [
+    {
+     "when": "idMismatch",
+     "score": 0,
+     "source": "ID_MISMATCH",
+     "summary_he": "נכשל: סתירה במזהי המסמך (חברה או מספר מסמך)."
+    },
+    {
+     "when": "aiBsMatch",
+     "score": 100,
+     "source": "AI+BS",
+     "summary_he": "הצלחה: התאמה מושלמת בין AI ל-BS."
+    },
+    {
+     "when": "!dataMismatch && allFourConfirmed",
+     "score": 100,
+     "source": "OTHER",
+     "summary_he": "הצלחה: כל המדדים תואמים ומוצלבים."
+    },
+    {
+     "when": "!dataMismatch",
+     "score": 50,
+     "source": "OTHER",
+     "summary_he": "חלקי: אין סתירות, אך חסר מידע מצליב."
+    },
+    {
+     "default": true,
+     "score": 0,
+     "source": "OTHER",
+     "summary_he": "נכשל: נמצאה סתירה בנתוני התאריך, הסכום או סוג המסמך."
+    }
+   ],
+   "predicates": {
+    "idMismatch": "for key in [company_id,doc_id]: unique(has-filtered [AI,KW]) > 1",
+    "dataMismatch": "for key in [date,amount]: unique(has-filtered [AI,BS,KW]) > 1; OR (has(typeAI)&&has(typeKW)&&typeAI!=typeKW)",
+    "allFourConfirmed": "for key in [company_id,doc_id,date,amount]: unique(has-filtered [AI,BS,KW])==1 AND count>=2; AND has(typeAI)&&has(typeKW)&&typeAI==typeKW",
+    "aiBsMatch": "has(date.AI)&&has(date.BS)&&date.AI==date.BS && has(amount.AI)&&has(amount.BS)&&amount.AI==amount.BS"
+   },
+   "date_outlier_days": 180,
+   "_date_outlier_note": "SIX_MONTHS_MS = 180*24*60*60*1000 in resolveDate(); on gap>180d prefers first non-future candidate else oldest.",
+   "trusted_supplier": {
+    "source_LIVE": "$('Get row(s) in sheet3').first().json.trusted_suppliers  (SHEET-backed, NOT companies table)",
+    "match": [
+     "companyId == normalizeCompanyID(COMPANY_ID||AI_COMPANY_ID)",
+     "sourceType == normalized(SOURCE_TYPE) where DRIVE/GMAIL substring-collapsed"
+    ],
+    "applies_when": "SELECTION_CERTAINTY != 100",
+    "boost_to": 100,
+    "sets_source": "TRUSTED_SUPPLIER"
+   }
+  },
+  "resync_fields": [
+   "AI_COMPANY_ID",
+   "COMPANY_ID",
+   "AI_DOC_ID",
+   "DOC_ID",
+   "AI_DOC_DATE",
+   "BS_LINE_DATE",
+   "DOC_DATE",
+   "AI_DOC_AMOUNT",
+   "BS_LINE_AMOUNT",
+   "DOC_TOTAL_AMOUNT",
+   "AI_SHIPMENT_IDS",
+   "AI_ORDER_IDS",
+   "SHIPMENT_DOC_ID",
+   "PURCHASE_ID"
+  ],
+  "_resync_note": "EXACT 14-field input to SELECTION_VALUES_HASH: selection_values.map(v => v?String(v):'').join('|'), from gdocAction(). DISTINCT from dimensions (J.3). Selection re-runs when SELECTION_VALUES_HASH changes.",
+  "outputs": [
+   {
+    "target": "COMPANY_ID",
+    "rule": "has(COMPANY_ID) ? COMPANY_ID : AI_COMPANY_ID  (RAW, not normalized)"
+   },
+   {
+    "target": "DOC_ID",
+    "rule": "docid_last5(AI_DOC_ID) || docid_last5(DOC_ID)  (NORMALIZED last-5)"
+   },
+   {
+    "target": "DOC_TOTAL_AMOUNT",
+    "rule": "amount_2dp(AI_DOC_AMOUNT) || amount_2dp(BS_LINE_AMOUNT) || amount_2dp(DOC_TOTAL_AMOUNT)"
+   },
+   {
+    "target": "DOC_DATE",
+    "rule": "resolveDate(date.AI, date.BS, date.KW) with 180-day outlier handling"
+   },
+   {
+    "target": "TYPE",
+    "rule": "has(typeAI) ? typeAI : (has(typeKW) ? typeKW : null)"
+   },
+   {
+    "target": "SHIPMENT_DOC_ID",
+    "rule": "if TYPE=='SHIPMENT': has(INV_ID_FOR_SHIP)?INV_ID_FOR_SHIP:null ; else extractFirstShipmentID( !isEmptyOrEmptyArray(AI_SHIPMENT_IDS)?AI_SHIPMENT_IDS : (has(SHIPMENT_DOC_ID)?SHIPMENT_DOC_ID:null) )"
+   },
+   {
+    "target": "PURCHASE_ID",
+    "rule": "!isEmptyOrEmptyArray(AI_ORDER_IDS) ? AI_ORDER_IDS : (has(PURCHASE_ID)?PURCHASE_ID:null)"
+   }
+  ],
+  "sets": [
+   "COMPANY_ID",
+   "DOC_ID",
+   "DOC_TOTAL_AMOUNT",
+   "DOC_DATE",
+   "TYPE",
+   "SHIPMENT_DOC_ID",
+   "PURCHASE_ID",
+   "SELECTION_CERTAINTY",
+   "SELECTION_COMPLETED",
+   "SELECTION_SOURCE",
+   "SELECTION_SCORE_DEBUG"
+  ],
+  "_selection_completed_rule": "SELECTION_COMPLETED = (finalScore > 0). Node skips items where PRIORITY_SYNC_COMPLETED===true.",
+  "normalizers": {
+   "docid_last5": "digitsOnly.slice(-5).padStart(5,'0')",
+   "companyid_last6": "digitsOnly.slice(-6).padStart(6,'0')",
+   "date_ddmmyyyy": "Excel-serial (5-digit) OR DD/MM/YYYY OR YYYY-MM-DD -> DD/MM/YYYY",
+   "amount_2dp": "parseFloat(strip non [0-9.-]).toFixed(2)",
+   "uppercase": "String(val).trim().toUpperCase()",
+   "has": "v != null && v !== '' && String(v).toLowerCase() !== 'unknown'"
+  }
+ },
+ "pipeline": {
+  "steps": [
+   {
+    "action": "restart_gdoc",
+    "guard": "STATUS=='ACTION_RESTART'",
+    "_note": "gdoc-only restart short-circuit at top of gdocAction"
+   },
+   {
+    "action": "get_short_doc_id",
+    "guard": "!isBlank(DOC_ID) && (!SHORT_DOC_ID || SHORT_DOC_ID != last5(alnum(DOC_ID)))",
+    "sets": "SHORT_DOC_ID"
+   },
+   {
+    "action": "update_name",
+    "guard": "!isBlank(DOC_ID) && NAME != (COMPANY_NAME-SHORT_DOC_ID)",
+    "sets": "NAME"
+   },
+   {
+    "action": "check_from_office",
+    "guard": "!isBlank(DOC_ID) && isBlank(FROM_OFFICE_CHECK)",
+    "sets": "FROM_OFFICE_CHECK"
+   },
+   {
+    "action": "find_link",
+    "guard": "linkMissing && !SEARCH_IN_DRIVE_COMPLETED && SHORT_DOC_ID && COMPANY_NAME",
+    "sets": "SEARCH_IN_DRIVE_COMPLETED"
+   },
+   {
+    "action": "update_status_missing_link",
+    "guard": "linkMissing && TYPE!='SHIPMENT' && !isBsLine && STATUS!='MISSING_LINK'"
+   },
+   {
+    "action": "no_action_link_not_found",
+    "guard": "linkMissing && TYPE!='SHIPMENT' && !isBsLine && STATUS=='MISSING_LINK'",
+    "terminal": true
+   },
+   {
+    "action": "get_api_tools_id",
+    "guard": "(LINK || (TYPE!='SHIPMENT' && !isBsLine)) && isBlank(API_TOOLS_ID) && !API_TOOLS_ID_COMPLETED",
+    "sets": "API_TOOLS_ID(+_COMPLETED)"
+   },
+   {
+    "action": "query_invoice_id",
+    "guard": "API_TOOLS_ID && !INVOICE_ID && !INVOICE_ID_COMPLETED",
+    "sets": "INVOICE_ID / INVOICE_ID_COMPLETED",
+    "kw_field": "INVOICE_ID"
+   },
+   {
+    "action": "query_doc_date",
+    "guard": "API_TOOLS_ID && !DOC_DATE && !DOC_DATE_COMPLETED",
+    "sets": "DOC_DATE / DOC_DATE_COMPLETED",
+    "kw_field": "DOC_DATE"
+   },
+   {
+    "action": "query_doc_total_amount",
+    "guard": "API_TOOLS_ID && !DOC_TOTAL_AMOUNT && !DOC_TOTAL_AMOUNT_COMPLETED && TYPE=='INVOICE'",
+    "sets": "DOC_TOTAL_AMOUNT / DOC_TOTAL_AMOUNT_COMPLETED",
+    "kw_field": "DOC_TOTAL_AMOUNT",
+    "_invoice_gated": true
+   },
+   {
+    "action": "query_purchase_id",
+    "guard": "API_TOOLS_ID && !PURCHASE_ID && !PURCHASE_ID_COMPLETED",
+    "sets": "PURCHASE_ID / PURCHASE_ID_COMPLETED",
+    "kw_field": "PURCHASE_ID"
+   },
+   {
+    "action": "query_shipment_id",
+    "guard": "API_TOOLS_ID && !SHIPMENT_DOC_ID && !SHIPMENT_ID_COMPLETED",
+    "sets": "SHIPMENT_DOC_ID / SHIPMENT_ID_COMPLETED",
+    "kw_field": "SHIPMENT_DOC_ID"
+   },
+   {
+    "action": "extract_invoice_google_ai",
+    "guard": "TYPE=='INVOICE' && !AI_EXTRACTION_COMPLETED",
+    "sets": "AI_* / AI_EXTRACTION_COMPLETED",
+    "_invoice_gated": true
+   },
+   {
+    "action": "update_company_doc_id",
+    "guard": "TYPE=='INVOICE' && !DOC_ID && (INVOICE_ID||AI_DOC_ID)",
+    "sets_intermediate": "NEW_DOC_ID = INVOICE_ID||AI_DOC_ID -> DOC_ID",
+    "_invoice_gated": true
+   },
+   {
+    "action": "action_extract_shipment_ids",
+    "guard": "TYPE=='INVOICE' && EXTRACT_SHIPMENT_COMPLETED !== true",
+    "sets": "EXTRACT_SHIPMENT_COMPLETED",
+    "_invoice_gated": true,
+    "_spawn_note": "J.4: same code-primitive-with-params as BS line-spawn (invoice -> SHIPMENT rows)."
+   },
+   {
+    "action": "select_invoice_values",
+    "guard": "!SELECTION_COMPLETED || SELECTION_VALUES_HASH != join('|', resync_fields)",
+    "sets": "SELECTION_* ; OLD_SELECTION_VALUES_HASH=prev ; SELECTION_VALUES_HASH=new"
+   },
+   {
+    "action": "action_priority_sync",
+    "guard": "activePrioritySync(true) && !PRIORITY_SYNC_COMPLETED",
+    "sets": "PRIORITY_SYNC_COMPLETED",
+    "_default_off": "activePrioritySync default OFF"
+   },
+   {
+    "action": "mark_completed",
+    "guard": "STATUS != 'COMPLETED' (after all above satisfied)",
+    "terminal": true
+   },
+   {
+    "action": "no_action_already_completed",
+    "guard": "STATUS == 'COMPLETED'",
+    "terminal": true
+   }
+  ],
+  "_shipment_only_steps_note": "gdocAction is SHARED by INVOICE and SHIPMENT (resolveDocType: INVOICE|SHIPMENT -> gdoc). Steps guarded by TYPE=='SHIPMENT' (shipment DOC_ID resolution via SHIPMENT_DOC_ID||parseAiShipmentIds(AI_SHIPMENT_IDS)[0]; the linkless-shipment drive-search gate) are OMITTED here as they are not on the INVOICE path. See oracle.md for the full shared sequence.",
+  "on_complete": "mark_completed",
+  "complete_when": "no explicit flag list; gdocAction returns mark_completed when it falls through all steps and STATUS!='COMPLETED'. (Contrast BS which gates on hasAllRequiredFields.)"
+ },
+ "side_effects": {
+  "priority_sync": {
+   "enabled_by": "activePrioritySync setting (default OFF)",
+   "action": "action_priority_sync",
+   "id_field": "DOC_ID",
+   "_endpoint_note": "endpoint/field_map NOT extracted in this Step-0 pass (priority_sync body lives in a separate handler; default-OFF). Flagged as gap in oracle.md."
+  },
+  "update_name": {
+   "pattern": "${COMPANY_NAME}-${SHORT_DOC_ID}"
+  },
+  "extract_shipment_ids": {
+   "source_field": "AI_SHIPMENT_IDS",
+   "child_type": "SHIPMENT",
+   "action": "action_extract_shipment_ids",
+   "_note": "modeled as spawn primitive per J.4; handler params not fully extracted here (out of Step-0 scope)."
+  }
+ },
+ "_match": "EXISTING behaviour. Clean field-ref form; top-level fixture_INVOICE.json is the verbatim Step-0 oracle.",
+ "base": "GLOBAL"
+}

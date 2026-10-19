@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+set -euo pipefail
+export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
+# onboarding — first-run REPORT for a fresh host/clone. All the actual work — bringing up
+# containers, restoring every enabled app's n8n blueprint (incl. the platform schema), and each
+# app's own first-run seeding — is `bbox run`'s job now (ensure_converged + run_app_hooks onboard,
+# both idempotent and safe to call unconditionally). This script does no seeding of its own: it
+# calls `bbox run`, waits for n8n to actually answer, and prints a readiness report.
+# With --auth-state: SKIP bring-up; just re-run the verify (cred/key readiness) report.
+# Usage: scripts/onboarding [--auth-state]
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "${SCRIPT_DIR}/lib.sh"   # read_env, DN, N8N_CONTAINER, colors
+N8N="${N8N_CONTAINER}"
+say(){ echo "${c1}[onboarding]${c0} $*"; }
+dc(){ dcx "$@"; }   # compiled .generated/ file list (scripts/lib.sh)
+# Poll n8n's REST API for REAL readiness (HTTP 200), not just container health — n8n reports
+# "healthy" before /rest fully serves, and n8n-push RESTARTS it. Returns non-zero on timeout.
+wait_n8n_rest(){ local t="${1:-60}" i; for i in $(seq 1 "$t"); do docker exec "${N8N}" wget -q -O /dev/null http://127.0.0.1:5678/rest/settings 2>/dev/null && return 0; sleep 3; done; return 1; }
+
+if [ "${1:-}" = "--auth-state" ]; then
+  say "auth-state check only"; exec bash "${REPO_ROOT}/bbox" app n8n verify
+fi
+
+# 1) prereqs
+command -v docker >/dev/null 2>&1 || { echo "docker not found — 'bbox install <debian|windows>'"; exit 1; }
+docker info >/dev/null 2>&1 || { echo "docker daemon not reachable — start Docker"; exit 1; }
+[ -f "${REPO_ROOT}/.env" ] || { [ -f "${REPO_ROOT}/.env.ex" ] && cp "${REPO_ROOT}/.env.ex" "${REPO_ROOT}/.env" && say "created .env from .env.ex — review secrets" || { echo "no .env / .env.ex"; exit 1; }; }
+ensure_network   # scripts/lib.sh — one implementation, shared with `bbox run`
+
+# 2) bring up — delegate to `bbox run`, the single canonical bring-up (authentik head start,
+#    `up --wait` gating on the SSO sentinel, blueprint convergence, per-app first-run seeding).
+#    One mechanism, no duplication; generous timeout for a cold first boot.
+say "bringing up the stack (cold/first-run boot — authentik migrations + blueprint restore can take a few min)…"
+BBOX_WAIT_TIMEOUT="${BBOX_WAIT_TIMEOUT:-600}" bash "${REPO_ROOT}/bbox" run \
+  || say "${cy}⚠ bring-up reported issues — continuing; check 'bbox status' / 'bbox logs authentik-bootstrap'${c0}"
+
+# 3) wait for n8n REST to actually serve (not just container health) — `bbox run` above may have
+#    restarted n8n internally while restoring its blueprint, so this is the real readiness gate.
+say "waiting for n8n REST to be ready…"
+wait_n8n_rest 80 && say "${cg}n8n REST ready${c0}" || say "${cy}n8n REST not ready yet${c0} (continuing — check 'bbox status')"
+
+# 4) verify readiness + re-auth links
+say "verifying credentials & keys…"
+bash "${REPO_ROOT}/bbox" app n8n verify || true
+
+echo ""
+# Final readiness assertion — surface a broken instance instead of a cheerful "done".
+# Ensure REST is up first + retry, so a slow restart doesn't masquerade as "could not reach".
+wait_n8n_rest 30 || true
+SETUP='?'
+for _ in 1 2 3; do
+  SETUP="$(docker exec "${N8N}" sh -c 'wget -q -O - http://127.0.0.1:5678/rest/settings 2>/dev/null | node -e '\''let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(JSON.parse(s).data.userManagement.showSetupOnFirstLoad?"yes":"no")}catch(e){process.stdout.write("?")}})'\''' 2>/dev/null || echo '?')"
+  [ "${SETUP}" != "?" ] && break
+  sleep 5
+done
+if [ "${SETUP}" = "yes" ]; then
+  say "${cr}⚠ NOT READY — n8n has NO owner account.${c0} Set N8N_OWNER_EMAIL/PASSWORD in .env, then re-run 'bbox onboarding'."
+elif [ "${SETUP}" = "?" ]; then
+  say "${cy}⚠ could not reach n8n to confirm readiness — check 'bbox status' / 'docker logs ${N8N}'.${c0}"
+else
+  say "${cg}onboarding done — owner is set.${c0} Log in to n8n with N8N_OWNER_EMAIL / N8N_OWNER_PASSWORD (.env)."
+  say "If any Google credential shows NOT connected: open http://127.0.0.1:5678 and reconnect it (OAuth)."
+  say "Fill any PLACEHOLDER keys in .env (GEMINI_API_KEY, GOOGLE_VISION_API_KEY) then re-run 'bbox n8n push'."
+
+  # Per-app first-run seeding (browser42 state restore, INDOX Reset + Setup, ...) already happened
+  # inside `bbox run` above (step 2) — every ENABLED app's own hooks/onboard, run once schema and
+  # blueprint are live. Nothing left for this script to trigger; it only reports readiness.
+  #
+  # This used to be ~55 lines here that knew two apps intimately: browser42's dump filename format
+  # and container name, INDOX's two n8n workflow ids, and a third hand-rolled copy of the n8n
+  # login-and-run dance. Onboarding is a report now, not an orchestrator — `bbox run` IS the
+  # orchestrator, for this script and for every other caller alike.
+
+  # 5) the performance profile's settings half USED TO BE APPLIED HERE. It is gone, and the reason
+  #    is worth keeping: those 8 `perf_*` rows went into a `settings` table that **nothing ever
+  #    read**. Measured — 0 of 82 live workflows mention `perf_`, no tracked workflow JSON does, and
+  #    the table held 0 `perf%` rows. An "authoritative" store that was empty, consulted by no one.
+  #
+  #    The mechanism that DOES apply these knobs is node substitution at push time
+  #    (`perf-profile-apply --stage`, driven by apps/n8n/perf-manifest.json), and it was
+  #    broken too: it read the pre-refactor `production/n8n/` path and returned silently when the
+  #    file was absent, so every `bbox n8n push` since commit 16b92ecd staged workflows at their
+  #    defaults. Both are fixed in perf-profile-apply; neither belongs in onboarding.
+fi

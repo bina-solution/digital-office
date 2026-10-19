@@ -1,0 +1,52 @@
+# GitHub Actions self-hosted runner for solomonBoltin/deployment-hacohen — DinD-isolated.
+# The CI stack (traefik/n8n/supabase/...) runs entirely inside the nested dockerd, so it
+# can never collide with this VPS's own traefik/n8n stacks or its ports, and the hard
+# cpus/mem caps below guarantee the website + existing services keep breathing.
+# KEY DinD details: shared work volume at the SAME path in BOTH containers, and NOT
+# under /tmp (docker:dind shadows /tmp with a tmpfs - run #64). The runner's work dir volume is mounted at the SAME path in the dind
+# container — compose bind-mounts from the checkout resolve identically in both namespaces.
+services:
+  dind:
+    image: docker:27-dind
+    container_name: gha-dind
+    privileged: true
+    environment:
+      - DOCKER_TLS_CERTDIR=
+    # BOTH hosts: tcp for the runner, unix for in-stack docker-provider consumers
+    # (traefik reads /var/run/docker.sock — tcp-only dockerd left it with ZERO routers,
+    # every request 404d; runs #67/#68).
+    command: ["dockerd", "--host=tcp://0.0.0.0:2375", "--host=unix:///var/run/docker.sock", "--tls=false", "--mtu=1400"]
+    volumes:
+      - dind-data:/var/lib/docker
+      - runner-work:/work
+    networks: [gha]
+    cpus: 1.6
+    mem_limit: 4500m
+    restart: unless-stopped
+
+  runner:
+    image: myoung34/github-runner:latest
+    container_name: gha-runner
+    depends_on: [dind]
+    environment:
+      RUNNER_SCOPE: repo
+      REPO_URL: https://github.com/solomonBoltin/deployment-hacohen
+      RUNNER_TOKEN: "__RUNNER_TOKEN__"
+      RUNNER_NAME: devops-vps-dind
+      LABELS: self-hosted,devops-vps
+      DOCKER_HOST: tcp://dind:2375
+      RUNNER_WORKDIR: /work
+      DISABLE_AUTO_UPDATE: "true"
+    volumes:
+      - runner-work:/work
+    networks: [gha]
+    cpus: 0.8
+    mem_limit: 1500m
+    restart: unless-stopped
+
+volumes:
+  dind-data:
+  runner-work:
+
+networks:
+  gha:

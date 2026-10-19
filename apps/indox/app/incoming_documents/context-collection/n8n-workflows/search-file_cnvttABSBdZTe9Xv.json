@@ -1,0 +1,401 @@
+{
+  "updatedAt": "2025-09-23T23:37:33.651Z",
+  "createdAt": "2025-09-23T22:44:43.601Z",
+  "id": "indoxV2SearchFile01",
+  "name": "Search File",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "resource": "fileFolder",
+        "searchMethod": "query",
+        "queryString": "=name contains '{{ $json.COMPANY_NAME }}' and name contains '{{$json.SHORT_DOC_ID }}'",
+        "limit": 1,
+        "filter": {},
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        48,
+        928
+      ],
+      "id": "9396d0b7-5111-49d9-a6a1-88bcc2db3743",
+      "name": "Search files and folders",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "KirWFwoFdEFmnN0R",
+          "name": "Google Drive person17@example.com"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "COMPANY_NAME",
+              "type": "any"
+            },
+            {
+              "name": "SHORT_DOC_ID",
+              "type": "any"
+            }
+          ]
+        }
+      },
+      "id": "aa7c9051-8ec6-4a6c-943a-73140eae42c4",
+      "typeVersion": 1.1,
+      "name": "Start",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "position": [
+        -736,
+        1072
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "bb6d03b8-6b51-4982-bc9c-191d2f44b382",
+              "leftValue": "={{ $json?.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        240,
+        928
+      ],
+      "id": "fa2a0c7c-7f9c-4596-bc56-66342a8f7b2a",
+      "name": "If Found File1"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ac25bf0a-b3ee-4934-aa43-7fb38129c726",
+              "name": "error",
+              "value": "missing company name / doc id ",
+              "type": "string"
+            },
+            {
+              "id": "5f60ca26-02f6-40c4-93a3-d2f9c6151832",
+              "name": "ok",
+              "value": false,
+              "type": "boolean"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        48,
+        1088
+      ],
+      "id": "0f201009-217c-4c68-b49c-e2da0c65ecf7",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ac25bf0a-b3ee-4934-aa43-7fb38129c726",
+              "name": "error",
+              "value": "file not found",
+              "type": "string"
+            },
+            {
+              "id": "2915607e-ece6-4fe3-ac87-349d7cbbbd87",
+              "name": "ok",
+              "value": false,
+              "type": "boolean"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        480,
+        944
+      ],
+      "id": "6fd3bb35-27bc-4be1-b769-7105fe14ef94",
+      "name": "Edit Fields1"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "2915607e-ece6-4fe3-ac87-349d7cbbbd87",
+              "name": "ok",
+              "value": true,
+              "type": "boolean"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        496,
+        784
+      ],
+      "id": "5af538df-976f-4d30-b350-20d956240219",
+      "name": "Edit Fields2"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        816,
+        1088
+      ],
+      "id": "9b10d583-8700-4b91-900c-0c45289a10a2",
+      "name": "End"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "7ea7854e-7301-4e26-82dd-48a29c239c89",
+              "leftValue": "={{ String($json.COMPANY_NAME) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "4f7cbd6c-1d8a-4bb7-b2f2-17f90b9c995f",
+              "leftValue": "={{ String($json.SHORT_DOC_ID) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -208,
+        1072
+      ],
+      "id": "50a4bd07-63c5-4385-a540-5c9e774dddf2",
+      "name": "If Input OK"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -512,
+        1072
+      ],
+      "id": "021f28d7-17e2-4a38-a594-64e92d9b38a2",
+      "name": "Loop Over Items"
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search files and folders": {
+      "main": [
+        [
+          {
+            "node": "If Found File1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Found File1": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Edit Fields1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields2": {
+      "main": [
+        [
+          {
+            "node": "End",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields1": {
+      "main": [
+        [
+          {
+            "node": "End",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "End",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Input OK": {
+      "main": [
+        [
+          {
+            "node": "Search files and folders",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "If Input OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "End": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": {
+    "Start": [
+      {
+        "json": {
+          "COMPANY_NAME": "סטנקו",
+          "SHORT_DOC_ID": 30353
+        }
+      }
+    ]
+  },
+  "versionId": "650b606f-e0a9-4a4b-9d48-ee2a8b0e9165",
+  "activeVersionId": "650b606f-e0a9-4a4b-9d48-ee2a8b0e9165",
+  "versionCounter": 70,
+  "triggerCount": 0,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2025-09-23T22:44:43.601Z",
+      "createdAt": "2025-09-23T22:44:43.601Z",
+      "role": "workflow:owner",
+      "workflowId": "indoxV2SearchFile01",
+      "projectId": "EChUnhWXmjrEc3fG",
+      "project": {
+        "updatedAt": "2024-09-26T18:07:08.765Z",
+        "createdAt": "2024-09-26T17:59:24.039Z",
+        "id": "EChUnhWXmjrEc3fG",
+        "name": "Shlomo Bolo <person8@example.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null
+      }
+    }
+  ]
+}

@@ -1,0 +1,70 @@
+# yaml-language-server: $schema=./schema.json
+title: "apitools is served WITHOUT SSO to any request whose Host header says apitools.localhost — on the production edge too"
+opened: 2026-09-30
+category: bug
+severity: high
+status: resolved
+summary: "Measured 2026-09-30 22:22 from outside: `curl -H 'Host: apitools.localhost' http://31.97.196.82/` → 200 (apitools answers), while `Host: console.localhost` → 302 to authentik. The hand-written `apitools-local` router carried only the retry middleware although app.json declares auth:sso and apitools has no auth of its own. Fixed in the compose (authentik@file added) and applied on the Mac engine; the VPS needs its manual redeploy."
+description: |
+  ## Measured
+
+  * Running containers, router labels (engine, 22:14): apitools-http / apitools-https carry
+    `authentik@file,apitools-retry@docker`; **apitools-local carries `apitools-retry@docker` only**
+    (apps/apitools/docker-compose.yml:134). The manifest (apps/apitools/app.json:83) says
+    `"auth": "sso"` for the host.
+  * Mac edge: `Host: apitools.localhost` → 200 (the outpost-readiness probe had listed the host as
+    "not served" — it expects a 302 from forward-auth and got the app instead).
+  * Production edge, from this Mac: `Host: apitools.localhost` → **200**; `Host: n8n.localhost` →
+    200 (n8n's own login page — n8n has its own auth, by design); `Host: console.localhost` → 302
+    to auth.staging.digital-office.co.il; `Host: apitools.digital-office.co.il` → 404 (the
+    identity layer does not know that host — the DGO Extend session's "permanently dark" finding).
+  * Nothing legitimate reaches apitools through the edge host without SSO: every internal caller
+    (console proxy, feature-validation server, agents) uses `http://apitools:8080`.
+
+  ## Why
+
+  A `-local` router is not "local". traefik's `web` entrypoint routes by the Host header, and the
+  header is whatever the client sends; `<host>.localhost` rules are reachable from the internet
+  by anyone who sets it. The compiled routers (`reconcile.routing_labels`) put the forward-auth
+  middleware on the -local twin for auth:sso hosts; the hand-written composes (emit_labels: false)
+  each carry their own labels, and this one dropped it. Gate G21 checks host declaration and router
+  naming, not that a router's middleware chain matches the manifest's `auth`.
+
+  ## Fix
+
+  * Done: `traefik.http.routers.apitools-local.middlewares=authentik@file,apitools-retry@docker`,
+    apitools recreated on the engine, `Host: apitools.localhost` → 302 to authentik.
+  * Owner: redeploy the VPS (manual) — until then the production exposure stands.
+  * Structural (open): a gate that, for every routing entry with auth:sso, requires the authentik
+    middleware on every router of that service whose rule names that host and whose rule has no
+    path restriction that the manifest exempts (webhook paths, public file links). The other
+    hand-written -local routers without it are by design: authentik (the IdP), n8n (own login),
+    forge (own login), drive-file (public links), n8n-hooks (webhooks), browser42-mcp (token).
+  ## The gate (2026-10-07, hp-laptop, branch dgo-pair)
+
+  G21 `route-claim-lint.py` has a fourth invariant: a host the manifest gates with `auth: sso` has
+  no hand-written router without `authentik@file`, unless the router is scoped to a path the routing
+  entry lists in `auth_exclude`. On the day it was written it reported four routers:
+
+      browser42-http        a whole host with NO middleware - a door, and closed: on a .localhost
+                            office its rule equals browser42-local's, so which of the two traefik
+                            picked decided whether the automation browser asked for a sign-in; on
+                            a domain office plain http asked for none
+      browser42-mcp-https   /mcp, checked for a bearer token by the app's own proxy - now declared
+      drive-file, -https    /file/d/, the public share links - now declared
+
+  The exceptions this record listed by name are what the rule yields without a list: authentik,
+  n8n and the forge are `auth: none` hosts, n8n's webhooks ride on one, and the two open paths are
+  lines in their manifests. Self-test 10/10 (the apitools-local shape among the cases).
+tasks:
+  - text: "apitools-local carries authentik@file; recreated on the Mac engine; edge probe → 302"
+    done: true
+  - text: "Redeploy the VPS so the production edge stops serving apitools to a spoofed Host header. DONE 2026-09-30 23:16 (coordinator: vps1's declared commit moved to the dgo head 01f93b4d via the dgo-extend API, converge ok); verified from outside 23:20: Host apitools.localhost → 302 to auth.staging.digital-office.co.il (was 200 at 22:22); console.localhost → 302; n8n.localhost → 200 (its own login, by design). apitools.digital-office.co.il still 404 at the identity layer — a different, pre-existing gap (the outpost on vps1 does not know the domain host; offices lane, DGO-6)"
+    done: true
+  - text: "Gate: G21 invariant 4 - an auth:sso host has no hand-written router without authentik@file unless its path is listed in the entry's auth_exclude (found and closed browser42-http)"
+    done: true
+references:
+  - apps/apitools/docker-compose.yml
+  - apps/apitools/app.json
+  - scripts/refactor/route-claim-lint.py
+  - issues/traefik-v3-ignores-the-request-port-so-every-ported-base-url-router-is-dead.yaml

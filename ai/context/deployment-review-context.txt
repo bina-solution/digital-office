@@ -1,0 +1,48 @@
+# Deployment Review Context (mid-depth)
+
+Mid-depth deployment review of `/root/deployment-hacohen` for an operator who wants a clear "what is the state and what should I touch" answer. Target runtime: **5–8 minutes**. Target output: **≤ 200 lines**, structured but compact. This is between the Sunday report (deep, ~12 min) and the quick health check (triage, ~2 min).
+
+## Baseline
+
+Read first:
+- `compose.yml` and `compose.override.yaml` — active service graph.
+- `context/deployment-context.txt` — expected inventory.
+- `git status -s` and `git -C /workspace log --oneline -10` — what is uncommitted vs deployed.
+
+## Required Output
+
+1. **State snapshot** — 1 paragraph: host load, disk %, container counts, n8n today's success/error counts.
+2. **Compose ↔ running drift** — table or bullets:
+   - services listed in `compose.yml` includes but not currently running,
+   - containers running but not in the active include list,
+   - containers in restart loops (`RestartCount > 5`).
+3. **Routing & exposure** — Traefik routers without auth middleware on a public host, services exposed on `0.0.0.0` that should be loopback, expired/near-expired certs if visible.
+4. **Resource posture** — services hitting CPU/memory limits (from `docker stats --no-stream`), volumes > 5 GB, biggest n8n / supabase tables if reachable.
+5. **Recent activity (last 24 h)** — error spikes per service, restart events, OOM kills if visible, top error signatures (≤3).
+6. **Doc & config drift** — files modified in workspace but not committed (`git status -s`), `.env` keys referenced in compose but missing, services in `context/deployment-context.txt` no longer present.
+7. **Action plan** — exactly 3 sections, max 5 bullets each:
+   - **Now** (do today, ≤15 min each)
+   - **This week**
+   - **Watchlist** (no action, but track)
+
+## Reporting rules
+
+- Every finding: severity (🟢/🟡/🔴) + 1-line evidence + recommended next step.
+- Trim everything ruthlessly. No filler, no restating section headers, no apologies for skipped checks.
+- If you skip a check, list it once at the end under "Not checked" with a reason.
+- No code fences in the final output.
+
+## Suggested evidence commands
+
+```
+docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.RunningFor}}'
+docker stats --no-stream --format 'table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}'
+docker system df -v | head -60
+docker inspect --format '{{.Name}} restarts={{.RestartCount}}' $(docker ps -aq) | sort -t= -k2 -n -r | head -10
+git -C /workspace status -s
+git -C /workspace log --oneline -10
+docker exec n8n-postgres-bina-deployment psql -U hacohen -d n8n -tAc \
+  "SELECT status, COUNT(*) FROM execution_entity WHERE \"startedAt\" > NOW() - INTERVAL '24 hours' GROUP BY status;"
+```
+
+Finish in ≤ 8 minutes. Cut before exceeding the budget.

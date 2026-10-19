@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+#: check the diagram sources with Archify's own validator — before they are committed
+#
+#   ./bbox archify validate            # every source in apps/archify/diagrams/
+#   ./bbox archify validate <name>     # one diagram (`app-move`, not the file name)
+#
+# The same validator the gallery runs, with its own sentences — so "the card says it was not
+# rendered" is something an author finds out here, not after a push. Runs inside the app's
+# container (that is where the pinned renderer is); exit 1 when any source fails.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # cn, say, colors
+
+C="$(cn archify)"
+[ -n "${C}" ] || { say "${cy}archify is not running here — switch it on (apps screen, or ./bbox apps enable archify && ./bbox run archify)${c0}"; exit 1; }
+
+docker exec -i -e ONLY="${1:-}" "${C}" node - <<'JS'
+const { execFileSync } = require("node:child_process");
+const { readdirSync } = require("node:fs");
+const SOURCE = /^([a-z0-9][a-z0-9-]*)\.(architecture|workflow|sequence|dataflow|lifecycle)\.json$/;
+const only = process.env.ONLY || "";
+let files = readdirSync("/diagrams").filter((f) => SOURCE.test(f)).sort();
+if (only) files = files.filter((f) => f.match(SOURCE)[1] === only);
+if (!files.length) { console.log(only ? `no diagram named '${only}' in apps/archify/diagrams/` : "no diagram sources yet"); process.exit(only ? 1 : 0); }
+let bad = 0;
+for (const f of files) {
+  const [, name, type] = f.match(SOURCE);
+  try {
+    const out = execFileSync(process.execPath, ["/opt/archify/bin/archify.mjs", "validate", type, `/diagrams/${f}`],
+      { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    console.log(`ok    ${name}  (${type})  ${(out.match(/\(([^)]*)\)\s*$/m) || [])[1] || ""}`);
+  } catch (e) {
+    bad += 1;
+    const said = [...new Set(String((e.stderr || "") + (e.stdout || "")).split("\n")
+      .map((l) => l.replace(/^\s*(?:-|\[[^\]]+\])\s*/, "").trim()).filter(Boolean))];
+    console.log(`FAIL  ${name}  (${type})`);
+    for (const line of said.slice(0, 8)) console.log(`        ${line}`);
+  }
+}
+console.log(`${files.length - bad}/${files.length} diagram source(s) valid`);
+process.exit(bad ? 1 : 0);
+JS

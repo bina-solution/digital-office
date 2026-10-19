@@ -1,0 +1,112 @@
+# Provider catalog — the GOOGLE family. FIVE distinct credential surfaces (the historical source
+# of most onboarding pain). The connections service gives each its own kind + lifecycle.
+
+- id: google-oauth-client
+  title: Google OAuth client (Sheets / Drive / Sheets-Trigger nodes)
+  title_he: מזהה OAuth של Google (Sheets / Drive)
+  kind: oauth-client
+  env: N8N_GOOGLE_OAUTH_CLIENT_ID
+  envs_extra: [N8N_GOOGLE_OAUTH_CLIENT_SECRET]
+  # consumers: DERIVED from each app\'s connections[] (see catalog()) — do not author
+  now: "owner must CREATE a Google Cloud project + OAuth consent screen + client (manual, Console UI,
+        documented in ai/context/setup-google-cloud-login.md; browser42-assisted). The id/secret go in
+        .env and compose assembles CREDENTIALS_OVERWRITE_DATA — n8n's Google creds then only hold tokens."
+  probe: {type: present}
+  wizard: "one-time guided capture; the PRODUCT should ship its own client so the business never sees
+           Google Cloud Console (Nango-style single redirect URI)"
+
+- id: gmail-oauth-client
+  title: Gmail OAuth client (Gmail node)
+  title_he: מזהה OAuth של Gmail
+  kind: oauth-client
+  env: N8N_GMAIL_OAUTH_CLIENT_ID
+  envs_extra: [N8N_GMAIL_OAUTH_CLIENT_SECRET]
+  # consumers: DERIVED from each app\'s connections[] (see catalog()) — do not author
+  optional: true
+  now: "same CREDENTIALS_OVERWRITE_DATA mechanism; only needed when GMAIL_BACKEND=oauth
+        (today's active backend is imap, so this is the fallback lane)"
+  probe: {type: present}
+  wizard: "same as google-oauth-client"
+
+- id: google-workspace-grant
+  title: Google account consent (refresh tokens for Gmail/Sheets/Drive/Sheets-Trigger)
+  title_he: חיבור חשבון Google (הרשאת Gmail · Sheets · Drive)
+  kind: oauth-grant
+  # consumers: DERIVED from each app\'s connections[] (see catalog()) — do not author
+  # as_instance flow mints one connection instance per protocol from the same token.
+  platform_protocols: [drive_google_oauth, mail_gmail_oauth]
+  now: "the ONE non-automatable step today: a human opens http://127.0.0.1:5678, opens each of the
+        4 Google creds (Gmail jft0/Sheets e2kn/Drive KirW/Trigger DfQP) and clicks through consent.
+        Refresh tokens are stored AES-encrypted in n8n's DB; on N8N_ENCRYPTION_KEY drift they cannot
+        decrypt -> PATCH data:{} + re-consent (bbox onboarding --auth-state prints re-auth links)."
+  probe: {type: http, url: "http://n8n:5678/healthz"}
+  wizard: "'Connect Google' button -> broker runs the consent redirect, stores + refreshes tokens in
+           the vault, injects into n8n creds; re-consent surfaces here as a red pill, not tribal knowledge"
+  # ── OAuth broker (owned by connections; no n8n-side connect step) ──
+  oauth:
+    authorize_url: https://accounts.google.com/o/oauth2/v2/auth
+    token_url: https://oauth2.googleapis.com/token
+    client_ref: google-oauth-client          # client id/secret resolved from that connection
+    scopes:
+      # openid+email: without them Google returns NO id_token, so every instance's account_hint
+      # falls back to the provider id — the account picker cannot say WHICH mailbox/drive it is.
+      - openid
+      - email
+      - https://www.googleapis.com/auth/drive
+      - https://www.googleapis.com/auth/spreadsheets
+      # mail.google.com is REQUIRED for IMAP/SMTP XOAUTH2, which is how the mail service talks to
+      # Gmail. gmail.modify is the API-only scope and XOAUTH2 rejects it — with modify alone the
+      # mail_gmail_oauth adapter cannot authenticate at all. Kept alongside for the n8n Gmail node,
+      # which still uses the API and ships until the routers are collapsed.
+      - https://mail.google.com/
+      - https://www.googleapis.com/auth/gmail.modify
+    extra: {access_type: offline, prompt: consent, include_granted_scopes: "true"}
+    # after token exchange, inject the grant into these n8n credentials (via the n8n REST API)
+    inject:
+      target: n8n
+      credential_ids: [KirWFwoFdEFmnN0R, e2knIZpw8YF0QBAB, 41BKgLp83YYyfEM3, DfQPc6wpof8GdkFo]  # Drive, Sheets, Gmail, Sheets-Trigger
+
+- id: google-document-ai
+  title: Google Document AI service account (remote OCR/extraction)
+  title_he: חשבון שירות Document AI (OCR בענן)
+  kind: sa-key
+  env: DOCUMENT_AI_SA_PRIVATE_KEY
+  envs_extra: [DOCUMENT_AI_SA_EMAIL]
+  # consumers: DERIVED from each app\'s connections[] (see catalog()) — do not author
+  optional: true
+  now: "service-account JSON key flattened to a single-line env (\\n escapes) -> cred
+        'Document AI Connection'(wxbv, type googleApi) via credential_overrides"
+  probe: {type: present}
+  wizard: "guided capture (upload SA JSON; we flatten + store)"
+
+- id: google-vision-key
+  title: Google Vision API key (cloud OCR)
+  title_he: מפתח Google Vision (OCR בענן)
+  kind: text-secret
+  env: GOOGLE_VISION_API_KEY
+  # consumers: DERIVED from each app\'s connections[] (see catalog()) — do not author
+  now: "plain env -> apitools /documentOcr. SECURITY: ocr_processor.py:19 ships a HARD-CODED leaked
+        fallback key used when env is unset — must be removed. OCR_ENGINE=local (Tesseract) bypasses."
+  # probe: contributed by the app (contributes.connection_probes) — gate G9
+  wizard: "guided capture; default OCR_ENGINE=local so it's optional"
+
+- id: gemini-key
+  title: Google AI Studio (Gemini) API key
+  title_he: מפתח Gemini (Google AI Studio) — חילוץ AI
+  kind: text-secret
+  env: GEMINI_API_KEY
+  # consumers: DERIVED from each app\'s connections[] (see catalog()) — do not author
+  now: "env -> cred 'ai-studio-bs-extraction'(6mfc, googlePalmApi) via credential_overrides; drives
+        invoice + balance-sheet AI extraction"
+  probe: {type: present}
+  wizard: "guided capture (AI Studio -> API keys)"
+
+- id: gsheet-sa-selector
+  title: Which Google credential row apitools uses
+  kind: config
+  env: GSHEET_CREDS_EMAIL
+  # consumers: DERIVED from each app\'s connections[] (see catalog()) — do not author
+  optional: true
+  now: "env names the n8n cred row apitools decrypts directly from n8n's DB (N8N_DB_DSN lane)"
+  probe: {type: present}
+  wizard: "advanced"

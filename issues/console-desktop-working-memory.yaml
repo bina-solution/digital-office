@@ -1,0 +1,79 @@
+# yaml-language-server: $schema=./schema.json
+title: "Console desktop mode — windows, stash rails, collections and an episodic timeline (Jenson 'working memory')"
+opened: "2026-09-25"
+category: feature
+severity: medium
+status: in-progress
+summary: "Turn the console into an optional multi-window desktop (spatial), attach per-object clip collections (associative) and add a private activity timeline joined with any-concurrency's system lanes (episodic), after Scott Jenson's Akademy 2026 talk."
+
+description: |
+  ## Why
+  Scott Jenson's KDE Akademy 2026 talk ("Are we really going to use the same Desktop UX forever?")
+  argues that the desktop should work as the user's **working memory**, in three parts:
+  spatial (organic window placement), associative (clips kept with their document) and episodic
+  (a private story of what you did). Today the console shows exactly one app in one `#frame`, keeps
+  no server-side state, and any-concurrency holds system spans only, in memory.
+
+  The full research and design is in `ai/context/console-desktop-working-memory.md`:
+  - §3 has every idea from the stage with stable IDs (P*, R*, S1–S14, A1–A9, E1–E8, Q1–Q5).
+  - §4 has the sources plus Jenson's prototype repos. They carry **no license**, so implement
+    clean-room.
+  - §5–§9 hold the platform facts, the design, the phases, the owner decisions and the risks.
+
+  ## Shape
+  - **Desktop mode.** An **opt-in mode beside the classic shell**, at ≥ 1280 px only. Classic
+    stays the default, so every harness contract that assumes one `#frame` keeps its meaning.
+  - **Where state lives:**
+    - The console owns the window manager (`static/desktop.js` / `desktop.css`, no new
+      dependencies).
+    - A new platform-base service (working name `memory`) owns layouts, collections and
+      episodes per user.
+    - any-concurrency stays the source of system lanes only. The personal join happens in the
+      viewer's browser, because any-concurrency broadcasts every span to every viewer.
+  - **Privacy.** Content-free signals (counts, durations, object ids; never text, keystrokes or
+    screenshots), owner-only access, 30-day retention, pause and forget.
+
+tasks:
+  - { text: "Toggle lives in the console settings view הגדרות מסוף (#/m/settings) — opt-in beside classic (D1 decided by the owner, 2026-09-25)", done: true }
+  - { text: "Account chip follows focus in the menu bar; account switches reload the service's windows (v2)", done: true }
+  - { text: "Owner decisions D2–D7 (doc §8): opt-in mode, memory service, layout URL, live-window budget, retention, AI model, theme", done: false }
+  - { text: "Phase 0 — sim serves every /a/ iframe (build.mjs patches the HTMLIFrameElement prototype, v2; not built here — no node)", done: true }
+  - { text: "Phase 0 — fix stale sim overlay/responsive.js:64 and switcher.js:29", done: false }
+  - { text: "Phase 0 — flow-qa `desktop` suite; target windows by app id instead of frame_locator('iframe')", done: false }
+  - { text: "Phase 0 — add an ultrawide (3440x1440) profile to scripts/ui-coverage/view-profiles.yaml", done: false }
+  - { text: "Phase 0 — a place to run proofs (node + playwright on the Mac, or the VPS / cloud sandbox)", done: false }
+  - { text: "Phase 1 — windows: move/resize/focus/close/maximize, snap halves, per-window bina:route, focused window mirrored to #/m/..., raise-on-release, middle-truncated titles (desktop.js v1, 2026-09-25)", done: true }
+  - { text: "Phase 1 — replace native confirm/alert/prompt on touched paths with the single toast channel (platform-ui-ux)", done: false }
+  - { text: "Phase 2 — focus zone + periphery, per-screen curve, tension grid + rails, dock on release, two columns or column + icon shelf, pull-back with no size jump (v1)", done: true }
+  - { text: "Phase 2 — stateless shake-to-stash (>=4 reversals of >=24px in 650ms), reduced-motion path (v1)", done: true }
+  - { text: "Phase 2 — live-iframe budget with sleeping windows (v1, default 10)", done: true }
+  - { text: "SSE read timeout in the console proxy (app.py:353-358) before any G30 change", done: false }
+  - { text: "Phase 3 — widget protocol bina:widget / bina:widget-action in the shell (v1, proven with the dev server player)", done: true }
+  - { text: "Phase 3 — first real app widgets: mail unread (mailview) and notifications unread post bina:widget (v2); INDOX still to do", done: false }
+  - { text: "Phase 4 — collection panel per window place: drops, paste, grab selection, folders, provenance + highlight, two-up view, local derive actions (desktop-memory.js v2, browser IndexedDB)", done: true }
+  - { text: "Phase 4 — server-side per-user store (the memory service) + JSON Canvas export", done: false }
+  - { text: "Phase 5 — content-free visit signals, sessions, anchors, story, records view with pause/export/wipe (desktop-memory.js v2)", done: true }
+  - { text: "Phase 5 — schema test rejecting free-text fields; calibrate anchor weights on labelled sessions", done: false }
+  - { text: "Phase 5 — timeline: you-lanes over any-concurrency system lanes on one ruler, restore-the-windows-from-this-moment (v2)", done: true }
+  - { text: "Phase 5 — object-id correlation between user places and system spans", done: false }
+  - { text: "Phase 6 — opt-in AI actions on a folder (table / compare / summarize / draft / map) producing derived items with parents[] provenance", done: false }
+
+references:
+  - platform-base/console/static/desktop.js
+  - platform-base/console/static/desktop.css
+  - digital-office/sim/console-dev-server.py
+  - ai/context/console-desktop-working-memory.md
+  - platform-base/console/static/index.html
+  - platform-base/console/static/app.js
+  - platform-base/console/app.py
+  - platform-base/console/gunicorn.conf.py
+  - platform-base/any-concurrency/app.py
+  - platform-base/any-concurrency/static/index.html
+  - issues/any-concurrency-resource-intensive.yaml
+  - ai/context/platform-navigation-design.md
+  - ai/context/console-url-state.md
+  - digital-office/sim/PORT-PLAN.md
+  - .claude/skills/platform-ui-ux/SKILL.md
+  - https://media.ccc.de/v/kde2026-7-are_we_really_going_to_use_the_same_desktop_ux_forever
+  - https://youtu.be/V7AfAcQwLW0
+  - https://github.com/scottjenson

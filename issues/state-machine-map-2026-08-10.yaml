@@ -1,0 +1,1196 @@
+# yaml-language-server: $schema=./schema.json
+title: INDOX document state machine — complete map, proven against the live stack, plus the minimal canonical state machine it should collapse into
+opened: '2026-08-10'
+category: bug
+severity: critical
+status: open
+summary: 'The status column has 19 live values. The 2-minute pickup admits FOUR of them. The hourly whole-corpus sweep that was the only delivery path for the other fifteen has been failing 2/2 in the observable window ("Task execution aborted because runner became unresponsive" at Call INDOX GETALL). The 5-minute tail drainer reaches 46 rows total. Net effect: 3,163 of 16,410 documents (19.3%) are in a status the machine cannot re-enter, and 2,002 of those have provable forward work. NEEDS_REVIEW is the largest single block (1,177 rows, growing ~100/hour, +100 during the four hours this map was measured). It is not a document verdict: 910 of 1,177 were written by ONE postgres node, "Terminalize Stalled", which fires every 2 minutes and parks any row whose updated_at is older than 6h — a statement about the PIPELINE''s latency stamped onto the DOCUMENT''s status column, in a value pickup will not re-deliver. It was introduced net-new on 2026-07-07 by an agent-co-authored commit; it is NOT part of the original Phase-3 status enum and it replaced nothing.'
+description: |
+  ## Snapshot
+
+  ```yaml
+  taken_at_utc: '2026-08-10T14:01:10.845919Z'
+  host: hacohen-vps stack on shlomo-laptop (WSL Ubuntu, docker -H unix:///run/bbox-docker.sock)
+  table: public.incoming_documents
+  total_rows: 16410
+  note: Counts drift while the pipeline runs. Every per-status number below comes from the 14:01:10Z snapshot unless a different timestamp is stated inline. NEEDS_REVIEW was 1077 at 13:20Z (owner's figure), 1079 at 13:35Z, 1104 at 13:44Z, 1128 at 13:50Z, 1158 at 13:53Z, 1174 at 13:58Z, 1177 at 14:01Z — that growth curve is itself a finding, not measurement noise.
+  ```
+
+  ## Method
+
+  ```yaml
+  principal_used: 'All incoming_documents queries were run as role `postgres` on database `postgres` inside supabase-db-shlomo-laptop. That is the SAME principal the pipeline uses: node "Get Changed Docs" carries credential `INDOX Supabase Postgres` (id yY8FYvp6Kz86pt2t), and pg_stat_activity shows the n8n containers (172.18.0.x) connected as `postgres`. Not supabase_admin, not the PostgREST `authenticator` role.'
+  live_vs_draft: workflow_entity.nodes is the DRAFT. The executing definition is workflow_history.nodes WHERE versionId = workflow_entity.activeVersionId. Every decide/routing claim below was read from workflow_history at the activeVersionId listed in `topology.live_versions`. Where the repo blueprint differs from live, the difference is called out explicitly (see `owner_draft_in_progress`).
+  eligibility_proof: The eligibility predicate was lifted VERBATIM out of the live "Get Changed Docs" query and re-run as a LEFT JOIN against the full table, so `eligible_now` per status is a measurement, not an inference.
+  decide_replay_validation: The SQL replay of docBaseDecide's gate order (used to compute "what would decide do with this row") independently reproduced the owner's own two measurements — 203 of 526 MISSING_COMPANY_ID and 80 of 164 MISSING_TYPE in the self-cancelling trap — to the row. That is the calibration proof for every replay figure here.
+  ```
+
+  ## Topology
+
+  ```yaml
+  live_versions:
+    indoxApiSupabase01: 6d27b0fb-ffdd-40bd-b559-2b291c086ff4
+    indoxV2Decide01: c30553c0-90a9-403e-b582-ae02f673b3db
+    indoxV2ActionsGlobal01: 41afcdbe-75fb-4ea5-aba0-7c823d966e39
+    indoxV2ActionsGDoc01: 53d903e7-3741-49c4-abc7-0a82ce4a6768
+    indoxV2ActionsShip01: 673f7230-58d4-4d01-9d48-96a093e1ad1d
+    indoxV2ActionsBS01: a6358115-b557-4449-8b8c-e8e23d64620f
+    indoxV2Driver01: 9c2e57f9-edc6-421e-b844-22536d9c0300
+    indoxV2TailDrain01: 580e9bf8-5750-43da-9f89-d3394d03c2ce
+  decide_chain:
+    proven_from: workflow_history.connections for c30553c0-90a9-403e-b582-ae02f673b3db
+    chain: When Called -> "Determine Action" (batch normalize + stateful dedup census, writes doc._dup) -> "Set decide mode (docbase)" -> "Call router_doc_base (decide)" [= indoxV2ActionsGlobal01 in mode=decide, node "Decide DOC BASE Action"] -> "Route By Type" -> {__route_bs__ | __route_gdoc__ | __route_shipment__ | fallback} -> per-type decide -> "Decided".
+    consequence: 'EVERY document passes through "Decide DOC BASE Action" first, unconditionally. The per-type decides are only reached when docBaseDecide returns null AND resolveDocType() maps TYPE to a known lane. That single fact explains most of the backlog geometry: a document blocked at the company/name/type gates never reaches its per-type decide at all.'
+  delivery_paths:
+  - id: P1
+    name: 2-minute narrow poll (PRIMARY)
+    where: indoxApiSupabase01 / trigger "Poll Line Changes" (every 2 minutes) -> node "Get Changed Docs" (postgres, id=indox-poll-q) -> node "Process Changed Doc" -> indoxV2Driver01
+    budget: LIMIT 40 per poll (= 1,200 dispatch slots/hour)
+    admits_by_status:
+    - IN_PROGRESS
+    - TO_EXTRACT
+    - null
+    - ''
+    also_admits:
+    - any row with updated_at > now() - interval '150 seconds' (the burst window)
+    - any row in the (COMPANY_ID, DOC_ID) collision subquery
+    hard_excludes:
+    - coalesce(STATUS,'') = 'MERGED'
+    - NEXT_RETRY_AT in the future, unless STATUS='ACTION_RESTART'
+    slices:
+    - s_burst(6)
+    - s_fin
+    - s_live
+    - s_new
+    - s_old
+    - s_stale
+    - s_adj
+    note: The `or "STATUS" = 'ACTION_RESTART'` clause is in the NEXT_RETRY_AT conjunct only. It removes a backoff block; it does NOT admit the status. See finding F3.
+  - id: P2
+    name: hourly whole-corpus sweep — BROKEN
+    where: indoxV2Driver01 / "Schedule Trigger" (hours=1, at minute 5) -> "GETALL Req" ({INLINE_ACTION:'GET_ALL'}) -> "Call INDOX GETALL" -> indoxApiRouter01 -> indoxApiSupabase01 "PG Get All"
+    query: select * from public.incoming_documents where "ID" <> '__bootstrap__' order by "ID" limit 20000       -- NO status filter at all
+    guard: node "Guard Get Size", CAP = 20000, throws rather than truncating
+    status: 'FAILING. Both trigger-mode driver executions in the retained window errored: exec 818825 (12:05:42Z, 502s) and exec 837800 (13:05:52Z, 82s), both with lastNodeExecuted = "Call INDOX GETALL" and error.message = "Task execution aborted because runner became unresponsive". 16,410 rows x ~40 columns cannot cross the executeWorkflow boundary into a task runner. 2 of 2 observed = 100% failure.'
+    why_it_matters: This is the ONLY path that ever delivered MISSING_COMPANY_ID / MISSING_TYPE / NEEDS_REVIEW / EXTRACTION_FAILED / UNKNOWN_COMPANY / API_TOOLS_FAILED / ACTION_RESTART / ACTION_REQUIRED / MISSING_LINK to decide. With it down, those statuses receive ZERO visits per hour.
+    headroom: 16410 / 20000 = 82.1% of CAP. Even if fixed, it dies for good at 20k rows.
+  - id: P3
+    name: 5-minute tail drainer (gated backfill)
+    where: 'indoxV2TailDrain01 / "Every 5 min" -> "Pick Drain Candidates" (LIMIT 25) -> "Driver: Run By ID" -> indoxV2Driver01'
+    predicate: TYPE in ('INVOICE','SHIPMENT','ORDER') AND STATUS not in ('COMPLETED','MERGED','DOUBLE','OLD','GARBAGE','PAUSE','MAX_ITERATIONS','ACTION_RESTART') AND lower(PER_TYPE_EXTRACTION_COMPLETED) = 'true' AND COMPANY_DOC_ID not shared across companies AND ID not in indox_dupid_targets_20260810
+    measured_reach_2026-08-10T13:57Z:
+      TO_EXTRACT: 35
+      NEEDS_REVIEW: 7
+      IN_PROGRESS: 3
+      API_TOOLS_FAILED: 1
+      MISSING_COMPANY_ID: 0
+      MISSING_TYPE: 0
+      EXTRACTION_FAILED: 0
+      UNKNOWN_COMPANY: 0
+      ACTION_RESTART: 0
+      MISSING_LINK: 0
+      ACTION_REQUIRED: 0
+    verdict: 46 rows total. P3 is not a rescue lane for any blocked status; it is a tail-finisher for typed, per-type-complete documents.
+  conclusion: Effective delivery today = P1 only. Fifteen of nineteen statuses have no working path back into the machine.
+  ```
+
+  ## Status vocabulary legend
+
+  ```yaml
+  class:
+    transient: the machine is expected to leave it on its own
+    terminal_by_design: intended to be final
+    terminal_by_accident: not intended to be final, but nothing can move it
+    absorbing_operator_only: only a human/UI write can move it
+    unreachable_action: the code can write it, but no decide branch emits the action that reaches the writer
+    read_only_or_test_only: read or seeded, never written by the live machine
+  eligible_now: measured against the LIVE Get Changed Docs predicate at 14:01:10Z
+  ```
+
+  ## Status vocabulary
+
+  ```yaml
+  - status: TO_EXTRACT
+    count: 6612
+    eligible_now: 6610
+    class: transient
+    written_by:
+    - 'syncV3Deliver0001 / ''Drive Row'' | ''Gmail Row'' | ''Link Row'' — STATUS: j.status_override||''IN_PROGRESS'''
+    - the override comes from scripts/ops/registry-add-readonly-discovery.py:99 ('status_override':'TO_EXTRACT')
+    git_origin: NEVER COMMITTED. `git log -S'TO_EXTRACT' --all` returns 0 commits; it exists only as uncommitted working-tree edits to apps/indox/app/incoming_documents/api/__init__.py and apps/indox/app/webapp/src/api.ts. The status is live in production and in the live n8n definitions, but has no git provenance in this repo.
+    decide_reads_it: no explicit branch — falls through to the data-driven gates
+    notes: healthy queue state; the reaper's second arm targets it (see F2)
+  - status: IN_PROGRESS
+    count: 307
+    eligible_now: 303
+    class: transient
+    written_by:
+    - indoxV2ActionsGlobal01 / 'Join  COMPANY_ID' (jsCode) — else-branch of the API_TOOLS_FAILED test
+    - indoxV2ActionsGlobal01 / 'Join Document Type' (jsCode) — same shape
+    - 'indoxV2ActionsGlobal01 / ''Build: UPDATE COMPANY_ID (Offline)'' — {{ $json.company_id ? ''IN_PROGRESS'' : <prev status> }}'
+    - 'indoxV2ActionsGDoc01 + indoxV2ActionsShip01 / ''Build: ... - LINK FOUND'' — STATUS=IN_PROGRESS'
+    - 'indoxV2ActionsGDoc01 + indoxV2ActionsShip01 / ''Build: ... - STATUS MISSING_COMPANY_ID'' — MISNAMED; writes IN_PROGRESS and resets 10 flags to false (the restart_gdoc handler)'
+    - 'indoxV2ActionsBS01 / four ''Build: ...'' nodes (EXTRACTED_LINES, EXTRACTED_LINES COMPLETED, ''3'', Restart BS)'
+    - 'indoxV2ActionsGlobal01 / ''Adjudicate Merge'' — promote branch: DOUBLE -> IN_PROGRESS when a row has no live twin'
+    - 'SyncProcBS000001 / ''Register''; SyncProcGDoc0001 / batch upsert; both Gmail downloaders (is_ok ? IN_PROGRESS : ACTION_REQUIRED)'
+    - syncV3Deliver0001 default when no status_override
+    git_origin: 414f49d3 phase3 <phase3@bina.local> 2026-04-30 (original Phase-3 enum)
+    decide_reads_it: no explicit branch
+    notes: the reaper's PRIMARY arm targets it (F2); 910 NEEDS_REVIEW rows came from here
+  - status: <NULL>
+    count: 54
+    eligible_now: 54
+    class: transient
+    written_by: nothing — rows that were inserted without a STATUS
+    decide_reads_it: no branch; treated as data-driven
+  - status: COMPLETED
+    count: 6321
+    eligible_now: 48
+    class: terminal_by_design
+    written_by:
+    - 'indoxV2ActionsGDoc01 + indoxV2ActionsShip01 / ''Build: ... - STATUS COMPLETED'''
+    - 'indoxV2ActionsBS01 / ''Build: ... - STATUS COMPLETED (BS)'''
+    - SyncProcGDoc0001 (conditional on log_item_data['Is OK'])
+    git_origin: 5cc1e400 solomonBoltin 2025-09-07 (predates the Phase-3 enum)
+    decide_reads_it: Yes, heavily — it is the guard on select_invoice_values, extract_per_type and mark_completed in every per-type decide, and it defines `terminal` in the pickup (the s_adj slice, which exists only so a finished document can still be adjudicated for doubles).
+    notes: the only genuinely healthy terminal
+  - status: MERGED
+    count: 184
+    eligible_now: 0
+    class: terminal_by_design
+    written_by: indoxApiSupabase01 / 'Build Merge Write' — the loser side of an adjudicated merge; also sets MERGED_INTO
+    git_origin: never committed as a status (uncommitted worktree edits only)
+    pickup: 'explicitly excluded: coalesce(STATUS,'''') <> ''MERGED'''
+    decide_reads_it: FIRST gate after the empty-ID check in docBaseRouterDecide -> 'no_action_merged'. Also skipped in indoxV2Decide01 'Determine Action' identity maps and in 'Adjudicate Merge'. Correct tombstone semantics.
+  - status: OLD
+    count: 78
+    eligible_now: 0
+    class: terminal_by_design
+    written_by: 'indoxV2ActionsGlobal01 / ''Build: Call Incoming Document Batch Update - STATUS COMPLETED3'' — MISNAMED node; writes STATUS=''OLD'' and IS_OLD=''TRUE'''
+    git_origin: 414f49d3 phase3 2026-04-30
+    decide_reads_it: anyOldDate() gate -> update_status_old_doc / no_action_old_date
+    notes: The date parser carries a sliding two-digit-year pivot fix; before it, dd/mm/yy dates parsed as 19yy and every such document was terminalised OLD.
+  - status: GARBAGE
+    count: 9
+    eligible_now: 0
+    class: terminal_by_design
+    written_by: 'indoxV2ActionsGlobal01 / ''Build: UPDATE STATUS GARBAGE'''
+    git_origin: 991c782c 2026-07-07 (same commit as NEEDS_REVIEW)
+    decide_reads_it: '[A5] gate on TYPE=''GARBAGE'' -> update_status_garbage / no_action_garbage'
+    defect: 12 rows carry TYPE='GARBAGE' with STATUS NEEDS_REVIEW (9) or ACTION_REQUIRED (3). The A5 gate would re-terminalise them, but pickup will not deliver either status, so they sit in the wrong terminal.
+  - status: PAUSE
+    count: 35
+    eligible_now: 0
+    class: absorbing_operator_only
+    written_by: 'NOTHING. Swept the whole repo: no writer exists in any workflow, script, or app.'
+    git_origin: 414f49d3 phase3 2026-04-30
+    decide_reads_it: 'docBaseDecide: if (doc.STATUS === ''PAUSE'') return ''no_action_paused'''
+    notes: Only reachable by a human editing the grid's STATUS enum. That is coherent — but it means PAUSE is an operator control, not a machine state, and should be modelled as such (a HOLD flag) rather than as a status value.
+  - status: DOUBLE
+    count: 320
+    eligible_now: 0
+    class: terminal_by_design for 307; terminal_by_accident for 13
+    written_by: 'indoxV2ActionsGlobal01 / ''Build: Call ... - STATUS MISSING_COMPANY_ID (DOC BASE)1'' — MISNAMED node; writes STATUS=''DOUBLE'' + DOUBLE_LINE_CONTEXT. Also written by ''Adjudicate Merge'' on the confirm-double branch.'
+    git_origin: 414f49d3 phase3 2026-04-30
+    decide_reads_it:
+    - 'docBaseDecide bizKey gate: unstamped + (bizCollision || STATUS=''DOUBLE'') -> resolve_double'
+    - 'docBaseDecide: stamped + STATUS=''DOUBLE'' -> no_action_double'
+    - 'per-type __terminalGuard: STATUS=''DOUBLE'' && merge_sig present -> no_action_double'
+    measured:
+      total: 320
+      with_merge_sig_stamped: 307
+      unstamped: 13
+      unstamped_with_no_usable_doc_id: 12
+      have_company_and_type: 229
+    verdict: 307 are correctly terminal BY DESIGN — 'Adjudicate Merge' confirmed them and queued them "for review". But there is NO review workflow and no UI action that resolves them, so "queued for review" is in practice a second, silent human-review pile alongside NEEDS_REVIEW. That duplication is the core of the simplification proposal.
+  - status: NEEDS_REVIEW
+    count: 1177
+    eligible_now: 3
+    class: terminal_by_accident
+    priority: '#1 — largest block, fastest growth, and the least legitimate'
+    written_by:
+    - node: indoxApiSupabase01 / 'Terminalize Stalled' (postgres, id=indox-terminalize) — THE REAPER
+      fired_by: 'trigger ''Poll Line Changes'' — the SAME 2-minute trigger that fires Get Changed Docs (proven from live connections: Poll Line Changes -> [Get Changed Docs, Terminalize Stalled])'
+      frequency: 720 times/day
+      statement: |
+        update incoming_documents set "STATUS"='NEEDS_REVIEW',
+          "REQUIRED_ACTION"=left(coalesce("REQUIRED_ACTION",'')||case when "STATUS"='IN_PROGRESS'
+            then ' [auto-terminalized: stalled IN_PROGRESS >6h]'
+            else ' [auto-terminalized: TO_EXTRACT unclaimed >6h - pickup is not draining the queue]' end,250)
+        where "ID" <> '__bootstrap__'
+          and (("STATUS"='IN_PROGRESS' and updated_at < now() - interval '6 hours')
+            or ("STATUS"='TO_EXTRACT' and updated_at < now() - interval '6 hours'
+                and not exists (select 1 from incoming_documents drain
+                                where drain.updated_at > now() - interval '30 minutes'
+                                  and drain."STATUS" in ('IN_PROGRESS','COMPLETED'))))
+          and ("NEXT_RETRY_AT" is null or "NEXT_RETRY_AT" <= now());
+      attribution: '910 of 1,177 rows carry the ''[auto-terminalized: stalled IN_PROGRESS >6h]'' marker. 0 carry the TO_EXTRACT marker.'
+    - node: errorHandler01 / 'Backoff + Dead-letter' (postgres)
+      rule: STATUS = CASE WHEN RETRY_COUNT+1 >= 5 THEN 'NEEDS_REVIEW' ELSE STATUS END, NEXT_RETRY_AT='infinity'
+      attribution: at most 269 rows have RETRY_COUNT >= 5; 204 are sealed at NEXT_RETRY_AT='infinity'
+    - node: syncV3FullTest01 (test fixture, scoped to SYNC_NAME='sv3f_handoff')
+    - node: scripts/ops/indox-rehash-missing.generated.sql:104-164 — 61 statements, ALL COMMENTED OUT, never run
+    unexplained_rows: 10
+    git_origin:
+      introducing_commit: 991c782cf6a1da80845fc4b1d7f606e4194bc3e7
+      author: user <person8@example.com>
+      date: 2026-07-07
+      subject: 'feat(n8n): v2 refactor blueprint lock-in — 133 workflows, live == repo'
+      agent_authored: true
+      evidence: 'The commit message body carries an explicit `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>` trailer and is written in agent style (structured bullet inventory + a "Verified pre-commit:" evidence block). 336 files changed, 62,453 insertions.'
+      it_replaced_nothing: Confirmed by diffing the pre-image. The introducing hunk in production/n8n/workflows/RqAY1Z1i2F7ZaPbe.json ("Error Handler") is a PURE 156-line insertion — every line is '+'. The before-side Error Handler had three nodes (Error Trigger, Telegram, GlitchTip) and no database node at all. The second site (the reaper, then at 45 minutes) landed in a brand-new file. There was no prior status written at either code point.
+      age_relative_to_the_enum: NEEDS_REVIEW is ~2 months YOUNGER than the rest of the vocabulary. Twelve of the nineteen statuses land in one commit, 414f49d3 by phase3 <phase3@bina.local> on 2026-04-30 (the original Phase-3 design). NEEDS_REVIEW is not in that design.
+      confirms_the_owner: '''NEEDS_REVIEW is madeup by some agent'' — proven.'
+    anatomy_at_14:01Z:
+      total: 1177
+      no_COMPANY_ID: 793
+      no_COMPANY_NAME_but_has_id: 260
+      no_TYPE: 795
+      BASE_EXTRACTION_COMPLETED_not_true: 686
+      no_API_TOOLS_ID: 686
+      SELECTION_COMPLETED_true: 5
+      completely_silent_no_ERROR_no_ACTION_LOG: 327
+      empty_ACTION_LOG: 666
+      all_have_a_LINK: 1184
+    what_it_should_be:
+      method: SQL replay of docBaseDecide's gate order, calibrated against the owner's own MISSING_COMPANY_ID/MISSING_TYPE figures
+      extract_base_doc__i.e._TO_EXTRACT_or_IN_PROGRESS: 746
+      get_company_name__i.e._UNKNOWN_COMPANY_lane: 270
+      figure_company_id__i.e._MISSING_COMPANY_ID_lane: 95
+      routes_to_per_type_decide: 39
+      update_status_garbage: 9
+      update_status_missing_type: 8
+      figure_company_offline: 6
+      extract_invoice_google_ai: 4
+      real_forward_work_total: 1168
+    growth: 'Arrivals per hour today (by updated_at): 05:00=232, 06:00=179, 07:00=152, 08:00=106, 09:00=85, 10:00=63, 11:00=36, 12:00=24, 13:00=135. ~1,073 rows parked today alone. The count rose 1077 -> 1177 during the four hours of this investigation.'
+    is_it_load_bearing:
+      answer: Almost not at all. It is read in five places and only ONE is a forward action.
+      reads:
+      - 'indoxV2ActionsGlobal01 / ''Decide DOC BASE Action'': [''MISSING_TYPE'',''EXTRACTION_FAILED'',''GARBAGE'',''MAX_ITERATIONS'',''NEEDS_REVIEW''].includes(_ff) -> ''file_to_failed_folder''. 74 NEEDS_REVIEW rows satisfy the full predicate — but pickup delivers 3, so this read is effectively dead.'
+      - apps/indox/app/incoming_documents/api/__init__.py:503 (_DASH_STATUS_GROUP -> 'attention') and :1673 (_FAILURE_MAP -> action/fixable) — display only
+      - apps/indox/app/webapp/src/pages/DashboardPage.tsx:19 — Hebrew label, display only
+      - scripts/acceptance-measure.py:26 — a count filter
+      - digital-office/sim/mocks/incoming.js — offline sim seed data
+      conclusion: Nothing depends on NEEDS_REVIEW as a state. Deleting the value costs one dashboard bucket and one entry in a failed-folder list. Deleting the WRITER costs nothing at all.
+    the_actual_defect: 'The reaper answers a question about the PIPELINE ("has this row moved lately?") by writing to a column that describes the DOCUMENT ("what is wrong with it?"), in a value the pickup predicate does not admit. It is therefore not a diagnostic, it is a delete. And it is self-amplifying: the slower the pipeline gets, the more rows it removes from the pipeline, which makes the pipeline slower. The node''s own comment concedes the premise is unsound — "updated_at is NOT a heartbeat - it is stamped when the row is claimed and never bumped mid-flight" — and records that at the original 45-minute budget this one statement parked 552 rows/hour while COMPLETED fell to 0/hr. Raising 45min -> 6h reduced the rate; it did not fix the mechanism.'
+  - status: MISSING_COMPANY_ID
+    count: 526
+    eligible_now: 0
+    class: terminal_by_accident
+    written_by:
+    - 'indoxV2ActionsGlobal01 / ''Build: Call ... - STATUS MISSING_COMPANY_ID (DOC BASE)'''
+    - 'indoxV2ActionsBS01 / ''Build: Call ... - STATUS MISSING_COMPANY_ID (BS)'''
+    git_origin: 414f49d3 phase3 2026-04-30
+    decide_gate: |
+      if (!doc.COMPANY_ID) {
+        if ((!doc.FIGURE_COMPANY_COMPLETED || doc.STATUS === 'ACTION_RESTART') && !!doc.LINK)
+          return 'figure_company_id';
+        if (!isBlank(doc.NAME) && !String(doc.ACTION_LOG||'').includes('FIGURE COMPANY OFFLINE'))
+          return 'figure_company_offline';
+        if (doc.STATUS !== 'MISSING_COMPANY_ID') return 'update_status_missing_company';
+        return 'no_action_awaiting_company_id';        // <-- SELF-CANCELLING
+      }
+    measured:
+      still_without_company_id: 503
+      already_have_a_company_id_but_still_parked: 23
+      FIGURE_COMPANY_COMPLETED_stamped_with_no_value: 387
+      no_LINK: 158
+      offline_resolver_never_tried: 300
+      in_the_self_cancelling_trap: 203
+      would_get_real_work_if_delivered: 323
+  - status: MISSING_TYPE
+    count: 164
+    eligible_now: 0
+    class: terminal_by_accident
+    written_by: 'indoxV2ActionsGlobal01 / ''Build: UPDATE STATUS MISSING_TYPE'''
+    git_origin: 414f49d3 phase3 2026-04-30
+    decide_gate: |
+      function unknownTypeAction(doc) {
+        if (!doc.FIGURE_TYPE_COMPLETED || doc.STATUS === 'ACTION_RESTART')
+          return 'figure_document_type';
+        if (doc.API_TOOLS_ID && !doc.AI_EXTRACTION_COMPLETED)
+          return 'extract_invoice_google_ai';
+        if (doc.STATUS !== 'MISSING_TYPE') return 'update_status_missing_type';
+        return 'no_action_unknown_document_type';      // <-- SELF-CANCELLING
+      }
+    measured:
+      still_without_a_type: 81
+      HAVE_a_type_now_but_still_parked: 83
+      FIGURE_TYPE_COMPLETED_stamped_with_no_type: 81
+      in_the_self_cancelling_trap: 80
+      gemini_fallback_still_available: 48
+  - status: UNKNOWN_COMPANY
+    count: 15
+    eligible_now: 0
+    class: terminal_by_accident
+    written_by: 'indoxV2ActionsGlobal01 / ''Build: Call ... - STATUS UNKNOWN_COMPANY'''
+    git_origin: 414f49d3 phase3 2026-04-30
+    decide_gate: |
+      if (isBlank(doc.COMPANY_NAME)) {
+        if (!doc.COMPANY_NAME_COMPLETED || doc.STATUS === 'ACTION_RESTART') return 'get_company_name';
+        return doc.STATUS !== 'UNKNOWN_COMPANY' ? 'update_status_unknwon_company'
+                                                : 'no_action_awaiting_company_name';
+      }
+    measured: 15 of 15 still have no COMPANY_NAME and 15 of 15 have COMPANY_NAME_COMPLETED stamped. 100% in the trap.
+    note: the action name carries a typo — 'update_status_unknwon_company' — mirrored in the switch key, so it works, but it is a landmine for any rename
+  - status: EXTRACTION_FAILED
+    count: 330
+    eligible_now: 0
+    class: terminal_by_accident
+    written_by:
+    - 'indoxV2ActionsBS01 / ''Build: Call ... - STATUS EXTRACTION_FAILED'' (the BS lane)'
+    - syncV3Deliver0001 / 'Drive Row' (jsCode) — oversize file (> list_ctx.max_bytes, default 10 MiB); also sets BASE_EXTRACTION_COMPLETED=true
+    git_origin: 414f49d3 phase3 2026-04-30
+    decide_gate: 'bsDecide: !BS_EXTRACTED_LINES && BS_EXTRACTED_LINES_COMPLETED -> update_status_extraction_failed / no_action_extraction_failed'
+    measured:
+      would_get_real_work_if_delivered: 330
+      with_a_LINK: 329
+    note: The syncV3Deliver oversize path stamps BASE_EXTRACTION_COMPLETED=true on a document that was never extracted — the completion-flag defect applied at ingest.
+  - status: API_TOOLS_FAILED
+    count: 25
+    eligible_now: 0
+    class: terminal_by_accident
+    written_by:
+    - indoxV2ActionsGlobal01 / 'Join  COMPANY_ID' (jsCode) — both the !result and result.ok===false branches
+    - indoxV2ActionsGlobal01 / 'Join Document Type' (jsCode)
+    - indoxV2Driver01 / 'Join  COMPANY_ID1' (jsCode)
+    - 'indoxV2ActionsGDoc01 + indoxV2ActionsShip01 / ''Build: Call ... - STATUS API_TOOLS_FAILED1'''
+    git_origin: 414f49d3 phase3 2026-04-30
+    decide_reads_it: NO BRANCH ANYWHERE. decide has no API_TOOLS_FAILED case; the row is evaluated purely on data.
+    measured: 24 of 25 would get real work if delivered (19 figure_company_offline, 5 update_status_missing_company, 1 per-type)
+  - status: ACTION_REQUIRED
+    count: 44
+    eligible_now: 0
+    class: terminal_by_accident
+    written_by:
+    - 'indoxGmailDocDownloader01 / ''Upsert Incoming Document'' — {{ $json.is_ok ? ''IN_PROGRESS'' : ''ACTION_REQUIRED'' }}'
+    - indoxGmailLinkDownloader01 / 'Upsert Incoming Document' — same shape
+    git_origin: 5cc1e400 solomonBoltin 2025-09-07
+    decide_reads_it: 'NO BRANCH. It is however used as a SENTINEL STRING in indoxApiSupabase01 ''Resolve IDs'' and ''Build Match Index SQL'': `const bad = v => ... || v===''ACTION_REQUIRED''` — the status literal leaked into the COMPANY_DOC_ID data column and the dedup key builder has to defend against it.'
+    note: 44 rows, all with a LINK, never revisited. This is a downloader failure code masquerading as a document status.
+  - status: MISSING_LINK
+    count: 29
+    eligible_now: 1
+    class: terminal_by_accident
+    written_by:
+    - 'indoxV2ActionsGDoc01 + indoxV2ActionsShip01 / ''Build: Call ... - STATUS MISSING_LINK'''
+    - 'indoxV2ActionsGDoc01 + indoxV2ActionsShip01 / ''Build: Create New Shipment Row1'' — MISNAMED node, writes MISSING_LINK on the synthetic shipment row it creates'
+    git_origin: 414f49d3 phase3 2026-04-30
+    decide_gate: 'invoiceDecide, non-BS-line: linkMissing && SEARCH_IN_DRIVE_COMPLETED -> update_status_missing_link / no_action_link_not_found'
+    measured: 29 of 29 have no LINK (consistent) and 29 of 29 have COMPANY_ID + COMPANY_NAME + a real TYPE
+  - status: ACTION_RESTART
+    count: 59
+    eligible_now: 0
+    class: terminal_by_accident
+    severity_note: THE CONTRADICTION THE OWNER PREDICTED
+    written_by:
+    - 'apps/indox/app/webapp/src/pages/DocumentDetailPage.tsx:135 — the operator Retry button: api.patchDocument(repo, id, { STATUS: ''ACTION_RESTART'' })'
+    - scripts/ui-coverage/_status_edit_probe.py:16,109 — manual probe
+    git_origin: 414f49d3 phase3 2026-04-30
+    decide_reads_it:
+    - 'docBaseDecide x3: `(!doc.FIGURE_COMPANY_COMPLETED || doc.STATUS === ''ACTION_RESTART'')`, same for COMPANY_NAME_COMPLETED and FIGURE_TYPE_COMPLETED — it is the ONLY mechanism that re-opens a stamped completion flag'
+    - 'gdocHead: `if (doc.STATUS === ''ACTION_RESTART'') return ''restart_gdoc''`'
+    - 'bsDecide: `if (doc.STATUS === ''ACTION_RESTART'') return ''restart_balance_sheet''`'
+    the_contradiction: ACTION_RESTART is NOT in the pickup's admitted-status list. The only clause that names it is inside the NEXT_RETRY_AT conjunct (`"NEXT_RETRY_AT" is null or "NEXT_RETRY_AT" <= now() or "STATUS" = 'ACTION_RESTART'`), which can only REMOVE a block — it cannot admit a row. So a document is ACTION_RESTART-eligible only for the 150 seconds after the button write, via the updated_at burst window. If that one poll misses it (40-row budget, 6 burst slots), the operator's Retry is silently lost forever, and every ACTION_RESTART special case in decide becomes unreachable by construction.
+    measured:
+      eligible_now: 0
+      last_writes: 23 rows at 2026-08-09 21:00Z, 5 at 20:00Z, 4 at 19:00Z, 27 on 2026-08-06. Nothing since.
+      would_get_real_work_if_delivered: 59
+      no_COMPANY_ID: 28
+      no_COMPANY_NAME: 15
+      no_TYPE: 8
+      BASE_EXTRACTION_not_done: 24
+    also_excluded_by: indoxV2TailDrain01 'Pick Drain Candidates' lists ACTION_RESTART in its NOT IN clause — the second lane refuses it too
+    verdict: the operator Retry button is, today, a no-op on 59 of 59 rows
+  - status: MAX_ITERATIONS
+    count: 121
+    eligible_now: 0
+    class: terminal_by_design
+    written_by: 'indoxV2ActionsGlobal01 / ''Build: Call Batch Update - MAX_ITERATIONS'' (also sets ERROR=''max actions per doc reached'')'
+    git_origin: 991c782c 2026-07-07 as a quoted status
+    decide_gate: |
+      const _iter = (String(normDoc.ACTION_LOG||'').match(/\d{13}/g) || []).length;
+      if (normDoc.STATUS === 'MAX_ITERATIONS') return 'no_action_max_iterations';
+      let _maxIter = Number(__CFG().max_actions_per_doc) || 50;
+      if (_iter >= _maxIter) return 'mark_max_iterations';
+    measured:
+      count_now: 121
+      fired_in_the_last_hour: 14
+      have_company_and_type: 94
+    concern: The counter is `ACTION_LOG.match(/\d{13}/g).length` — every 13-digit epoch-ms token in the log. Some handlers write more than one such token per visit, and the backfill markers ('BASE BACKFILL 20260809', 4,605 rows) contribute too, so the budget is not a clean count of decisions. 94 of 121 are documents that HAVE a company and a type — i.e. mostly-processed work retired by an arithmetic budget.
+  - status: MISSING_SHIPMENT
+    count: 0
+    class: unreachable_action
+    written_by: 'indoxV2ActionsGDoc01 + indoxV2ActionsShip01 / ''Build: Call ... - STATUS COMPLETED1'' (MISNAMED)'
+    why_unreachable: 'Its switch output is ''update_status_missing_shipment'', and NO decide function emits that action. Handled-but-never-emitted. Proven: 0 rows in the table.'
+  - status: MISSING
+    count: 0
+    class: unreachable_action
+    written_by: indoxV2Driver01 / 'Create New Shipment Row' — workflowInputs STATUS:'MISSING'
+    note: absent from _DASH_STATUS_GROUP, _FAILURE_MAP, api.ts and the Hebrew label map; would render as raw English
+  - status:
+    - TRASH
+    - FROM_OFFICE
+    - PROCESSING
+    - OTHER
+    - SOMETHING_ELSE
+    count: 0
+    class: read_only_or_test_only
+    note: TRASH and FROM_OFFICE are read by api/__init__.py and DashboardPage.tsx but have no writer. The rest are test fixtures.
+  ```
+
+  ## Status totals
+
+  ```yaml
+  circulating:
+    TO_EXTRACT: 6612
+    IN_PROGRESS: 307
+    null: 54
+    subtotal: 6973
+  terminal_by_design:
+    COMPLETED: 6321
+    MERGED: 184
+    OLD: 78
+    GARBAGE: 9
+    PAUSE: 35
+    MAX_ITERATIONS: 121
+    DOUBLE_stamped: 307
+    subtotal: 7055
+  terminal_by_accident:
+    NEEDS_REVIEW: 1177
+    MISSING_COMPANY_ID: 526
+    EXTRACTION_FAILED: 330
+    MISSING_TYPE: 164
+    ACTION_RESTART: 59
+    ACTION_REQUIRED: 44
+    MISSING_LINK: 29
+    API_TOOLS_FAILED: 25
+    UNKNOWN_COMPANY: 15
+    DOUBLE_unstamped: 13
+    subtotal: 2382
+  stranded_share: 2382 / 16410 = 14.5% of the corpus is in a state nothing can move; 2,002 of those have provable forward work
+  ```
+
+  ## Decide logic
+
+  ```yaml
+  entry: indoxV2ActionsGlobal01 / 'Decide DOC BASE Action' (code, id=dbdecidehead01), live version 41afcdbe
+  preamble:
+  - 'TEXT-boolean normalisation: every string value equal to ''true''/''false'' (case/space-insensitive) is coerced to a real boolean, because every *_COMPLETED column is TEXT and the literal string ''false'' is truthy in JS. Measured at the time of the fix: FIGURE_COMPANY_COMPLETED=''false'' on 878 rows, COMPANY_NAME_COMPLETED=''false'' on 911, FIGURE_TYPE_COMPLETED=''false'' on 874.'
+  - _dup arrives from indoxV2Decide01 'Determine Action' and is deleted from the output.
+  docBaseRouterDecide:
+    gates_in_execution_order:
+    - n: 1
+      cond: '!normDoc.ID'
+      action: no_action_delete_row
+      doc_type: '''empty'''
+      reachable: NO — pickup requires ID is not null and <> ''; measured 0 rows with an empty ID
+      routing_defect: DEAD *and* UNHANDLED. 'no_action_delete_row' IS in indoxV2Driver01 Switch1's output-0 action list, so it routes to the DOC BASE lane — but the '3a. DOC BASE Actions Switch' has no rule for it, so it falls to fallbackOutput 17 = 'Stop and Error - Unhandled DOC BASE ACTION'. If it ever fired it would hard-error the driver. Also note DOC_TYPE:'empty' while driver Switch1 output 3 tests DOC_TYPE==='empty_row' — a second, separate mismatch.
+    - n: 2
+      cond: normDoc.STATUS === 'MERGED'
+      action: no_action_merged
+      reachable: no via P1 (pickup excludes MERGED); yes via a direct per-type call
+      correct: true
+    - n: 3
+      cond: SOURCE_TYPE contains 'GMAIL' && SOURCE_ID present && ACTION_LOG lacks 'Apply Gmail Labels' && !__mergePending && (typed || TYPE='GARBAGE' || (no type && STATUS in [MISSING_TYPE,EXTRACTION_FAILED,GARBAGE,MAX_ITERATIONS]))
+      action: apply_gmail_labels
+      reachable: partly — the failure arm keys on 4 statuses pickup will not deliver, so only the `_typed` arm fires in practice (776 ACTION_LOG hits)
+    - n: 4
+      cond: SOURCE_TYPE='GOOGLE_DRIVE_FOLDER' && SYNC_NAME && CONNECTION && LINK && ACTION_LOG lacks marker && STATUS in [MISSING_TYPE,EXTRACTION_FAILED,GARBAGE,MAX_ITERATIONS,NEEDS_REVIEW]
+      action: file_to_failed_folder
+      reachable: NO in practice — every one of those five statuses is undeliverable. 74 NEEDS_REVIEW rows satisfy the predicate; 3 are eligible. 177 ACTION_LOG hits, all historical.
+    - n: 5
+      cond: TYPE === 'GARBAGE' (A5)
+      action: 'STATUS===''GARBAGE'' ? no_action_garbage : update_status_garbage'
+      reachable: yes for the no_action arm; the update arm is stranded for 12 rows (9 NEEDS_REVIEW + 3 ACTION_REQUIRED)
+    - n: 6
+      cond: STATUS === 'MAX_ITERATIONS'
+      action: no_action_max_iterations
+    - n: 7
+      cond: count(/\d{13}/g in ACTION_LOG) >= max_actions_per_doc (default 50)
+      action: mark_max_iterations
+      note: 14 firings in the last hour; see the MAX_ITERATIONS entry for the counter concern
+    - n: 8
+      cond: docBaseDecide(...) returns non-null
+      action: see docBaseDecide below
+    - n: 9
+      cond: otherwise
+      action: resolveDocType(TYPE) -> __route_gdoc__ | __route_shipment__ | __route_bs__ | unknownTypeAction(doc)
+    resolveDocType:
+      SHIPMENT: shipment
+      INVOICE: gdoc
+      ORDER: gdoc
+      BALANCE_SHEET: bs_doc
+      everything_else: unknown
+      unmapped_types_in_live_data:
+        IRRELEVANT: 4 rows (3 MISSING_TYPE, 1 MISSING_COMPANY_ID) — falls into unknownTypeAction and loops back to MISSING_TYPE forever
+        CENTRALIZED_INVOICE: 0 rows today, but it IS in the gmail-label `_typed` list and NOT in resolveDocType — a latent mismatch
+      ai_type_adoption: docBaseRouterDecide promotes AI_TYPE to TYPE when TYPE is blank/UNKNOWN/UNKNWON. 43 rows currently qualify.
+  docBaseDecide:
+    branches_in_order:
+    - id: D1
+      name: business-key adjudication gate
+      cond: dup.bizKey present
+      sub:
+      - unstamped && (dup.bizCollision || STATUS==='DOUBLE') -> resolve_double
+      - unstamped && no collision -> bizAdjudicated=true (silences the weak SHORT_DOC_ID detector for this row)
+      - stamped && STATUS==='DOUBLE' -> no_action_double
+      - stamped otherwise -> bizAdjudicated=true
+      reachability: resolve_double fired 1,045 (promote) + 396 (confirm-double) + 291 (confirm-keep) times historically; only 13 rows still owe adjudication
+    - id: D2
+      cond: dup.match && !bizAdjudicated
+      action: 'STATUS===''DOUBLE'' ? no_action_double : update_status_double'
+    - id: D3
+      cond: STATUS === 'PAUSE'
+      action: no_action_paused
+    - id: D4
+      cond: LINK && !BASE_EXTRACTION_COMPLETED
+      action: extract_base_doc
+      note: the busiest branch in the system — 10,893 ACTION_LOG hits, 44 in the last hour
+    - id: D5
+      cond: LINK && isBlank(API_TOOLS_ID) && ACTION_LOG lacks 'BASE APITOOLS RETRY'
+      action: extract_base_doc
+      note: one-shot rescue for the 412 rows with BASE_EXTRACTION_COMPLETED but no API_TOOLS_ID
+    - id: D6
+      cond: '!COMPANY_ID && ((!FIGURE_COMPANY_COMPLETED) || STATUS===''ACTION_RESTART'') && LINK'
+      action: figure_company_id
+    - id: D7
+      cond: '!COMPANY_ID && NAME && ACTION_LOG lacks ''FIGURE COMPANY OFFLINE'''
+      action: figure_company_offline
+      note: 254 ACTION_LOG entries recorded 'FIGURE COMPANY OFFLINE MISS c=0' — it ran and found nothing, and the marker then permanently disables it
+    - id: D8
+      cond: '!COMPANY_ID && STATUS !== ''MISSING_COMPANY_ID'''
+      action: update_status_missing_company
+    - id: D9
+      cond: '!COMPANY_ID (else)'
+      action: no_action_awaiting_company_id
+      classification: SELF-CANCELLING
+      trapped_rows: 203
+    - id: D10
+      cond: isBlank(COMPANY_NAME) && ((!COMPANY_NAME_COMPLETED) || STATUS==='ACTION_RESTART')
+      action: get_company_name
+    - id: D11
+      cond: isBlank(COMPANY_NAME) && STATUS !== 'UNKNOWN_COMPANY'
+      action: update_status_unknwon_company
+      note: typo preserved end-to-end (decide, switch key, node name)
+    - id: D12
+      cond: isBlank(COMPANY_NAME) (else)
+      action: no_action_awaiting_company_name
+      classification: SELF-CANCELLING
+      trapped_rows: 15
+    - id: D13
+      cond: anyOldDate([DOC_DATE, BS_LINE_DATE, AI_DOC_DATE, SELECTED_DOC_DATE]) || anyOldDate([TIMESTAMP])
+      action: 'STATUS!=''OLD'' ? update_status_old_doc : no_action_old_date'
+    - id: D14
+      cond: fallthrough
+      action: null (proceed to type routing)
+  unknownTypeAction:
+  - cond: '!FIGURE_TYPE_COMPLETED || STATUS===''ACTION_RESTART'''
+    action: figure_document_type
+  - cond: API_TOOLS_ID && !AI_EXTRACTION_COMPLETED
+    action: extract_invoice_google_ai
+  - cond: STATUS !== 'MISSING_TYPE'
+    action: update_status_missing_type
+  - cond: else
+    action: no_action_unknown_document_type
+    classification: SELF-CANCELLING
+    trapped_rows: 80
+  invoiceDecide:
+    terminal_guard: STATUS==='MERGED' -> no_action_merged; STATUS==='DOUBLE' && merge_sig -> no_action_double
+    gdocHead:
+    - cond: STATUS === 'ACTION_RESTART'
+      action: restart_gdoc
+      reachable: NO — pickup delivers 0 ACTION_RESTART rows
+    - cond: COMPANY_DOC_ID && SHORT_DOC_ID !== last5(COMPANY_DOC_ID)
+      action: get_short_doc_id
+    - cond: NAME !== `${COMPANY_NAME}-${SHORT_DOC_ID}`
+      action: update_name
+    - cond: isBlank(FROM_OFFICE_CHECK)
+      action: check_from_office
+    body:
+    - cond: linkMissing && !SEARCH_IN_DRIVE_COMPLETED && SHORT_DOC_ID && COMPANY_NAME
+      action: find_link
+    - cond: linkMissing && !isBsLine && STATUS!=='MISSING_LINK'
+      action: update_status_missing_link
+    - cond: linkMissing && !isBsLine (else)
+      action: no_action_link_not_found
+      classification: SELF-CANCELLING
+    - cond: isBlank(API_TOOLS_ID) && !API_TOOLS_ID_COMPLETED
+      action: get_api_tools_id
+    - cond: STATUS!=='COMPLETED' && API_TOOLS_ID && !PER_TYPE_EXTRACTION_COMPLETED
+      action: extract_per_type
+    - id: THE LEGACY EXTRACTOR BRANCH
+      cond: API_TOOLS_ID (i.e. per-type already stamped, or STATUS==='COMPLETED')
+      actions:
+      - '!INVOICE_ID && !INVOICE_ID_COMPLETED -> query_invoice_id'
+      - '!DOC_DATE && !DOC_DATE_COMPLETED -> query_doc_date'
+      - '!DOC_TOTAL_AMOUNT && !DOC_TOTAL_AMOUNT_COMPLETED -> query_doc_total_amount   (invoice/order only)'
+      - '!PURCHASE_ID && !PURCHASE_ID_COMPLETED -> query_purchase_id'
+      - '!SHIPMENT_DOC_ID && !SHIPMENT_ID_COMPLETED -> query_shipment_id'
+      see: findings.F5
+    - cond: '!AI_EXTRACTION_COMPLETED'
+      action: extract_invoice_google_ai
+    - cond: '!COMPANY_DOC_ID && (INVOICE_ID || AI_DOC_ID)'
+      action: update_company_doc_id
+    - cond: EXTRACT_SHIPMENT_COMPLETED !== true
+      action: action_extract_shipment_ids
+    gdocTail:
+    - cond: STATUS!=='COMPLETED' && !SELECTION_COMPLETED && PRIORITY_SYNC_COMPLETED!==true
+      action: select_invoice_values
+    - cond: cfg.activePrioritySync && !PRIORITY_SYNC_COMPLETED
+      action: action_priority_sync
+    - cond: STATUS !== 'COMPLETED'
+      action: mark_completed
+    - cond: else
+      action: no_action_already_completed
+  shipmentDecide:
+    same_as_invoice_except:
+    - no MISSING_LINK dead-end (a linkless shipment is legitimate)
+    - no query_doc_total_amount branch — so the GDOC switch's output 14 is emitted only on the invoice/order side
+    - resolves COMPANY_DOC_ID from SHIPMENT_DOC_ID or AI_SHIPMENT_IDS[0], with or without a link
+    - linkMissing && !SEARCH_IN_DRIVE_COMPLETED && !(SHORT_DOC_ID && COMPANY_NAME) -> no_action_link_not_found
+  bsDecide:
+    branches:
+    - cond: '!COMPANY_ID && STATUS!==''MISSING_COMPANY_ID'''
+      action: update_status_missing_company
+    - cond: '!COMPANY_ID (else)'
+      action: no_action_awaiting_company_id
+      classification: SELF-CANCELLING
+    - cond: STATUS==='ACTION_RESTART'
+      action: restart_balance_sheet
+      reachable: NO — 0 ACTION_RESTART rows delivered
+    - cond: API_TOOLS_ID && !PER_TYPE_EXTRACTION_COMPLETED && BS_EXTRACTION_VERIFIED!==true && STATUS!=='COMPLETED'
+      action: extract_per_type
+    - cond: '!BS_EXTRACTED_LINES && !BS_EXTRACTED_LINES_COMPLETED'
+      action: extract_balance_sheet
+    - cond: '!BS_EXTRACTED_LINES && BS_EXTRACTED_LINES_COMPLETED && STATUS!==''EXTRACTION_FAILED'''
+      action: update_status_extraction_failed
+    - cond: '!BS_EXTRACTED_LINES (else)'
+      action: no_action_extraction_failed
+      classification: SELF-CANCELLING
+    - cond: '!BS_EXTRACTION_VERIFIED'
+      action: update_status_extraction_failed / no_action_extraction_failed
+    - cond: '!BS_LINK_DOCUMENTS_COMPLETED'
+      action: link_documents
+    - cond: STATUS!=='COMPLETED' && hasAllRequiredFields(bs_doc)
+      action: mark_completed
+    - cond: STATUS==='COMPLETED'
+      action: no_action_already_completed
+    - cond: else
+      action: no_action_unhandled_state
+    note: bsDecide is the ONE decide with no dead branches and no unhandled actions — its switch handles all 13 emitted actions plus __unhandled_action__. It is the model the other three should follow.
+  no_action_semantics:
+    proven_from: live connections of indoxV2ActionsGlobal01 (41afcdbe)
+    fact: 'Every no_action_* output of ''3a. DOC BASE Actions Switch'' terminates in a noOp node with NO downstream connection: No Action: Double, Paused, Old Date, Awaiting Company ID1, Awaiting COMPANY_NAME, Unknown Document Type, MAX_ITERATIONS, Merged, Garbage — all have `main: []`.'
+    consequence: 'A no_action_* verdict writes NOTHING. updated_at is not bumped (trg_incdoc_touch only fires on UPDATE), so the row does not re-enter the 150-second burst window and goes permanently quiet. THAT is the mechanism behind "self-cancelling": the gate does not merely decline to act, it removes the row from the only remaining delivery path.'
+  ```
+
+  ## Action routing
+
+  ```yaml
+  driver_switch:
+    node: indoxV2Driver01 / 'Switch1' (5 outputs, fallback=extra)
+    outputs:
+    - i: 0
+      key: DOC BASE Actions
+      cond: 26-name ACTION allow-list contains $json.ACTION
+    - i: 1
+      key: G Doc Actions
+      cond: DOC_TYPE === 'gdoc'
+    - i: 2
+      key: BS Doc Actions
+      cond: DOC_TYPE === 'bs_doc'
+    - i: 3
+      key: empty_row
+      cond: DOC_TYPE === 'empty_row'
+      defect: DEAD — nothing ever emits DOC_TYPE 'empty_row'; the empty-ID branch emits 'empty'
+    - i: 4
+      key: Shipment Doc Actions
+      cond: DOC_TYPE === 'shipment'
+  doc_base_switch:
+    node: indoxV2ActionsGlobal01 / '3a. DOC BASE Actions Switch' (26 rules, fallbackOutput=17 = 'Stop and Error - Unhandled DOC BASE ACTION')
+    emitted_and_handled:
+    - update_status_double
+    - figure_company_id
+    - update_status_missing_company
+    - no_action_awaiting_company_id
+    - get_company_name
+    - update_status_unknwon_company
+    - no_action_awaiting_company_name
+    - figure_document_type
+    - update_status_missing_type
+    - update_status_old_doc
+    - mark_max_iterations
+    - no_action_max_iterations
+    - no_action_double
+    - no_action_old_date
+    - no_action_paused
+    - no_action_unknown_document_type
+    - extract_invoice_google_ai
+    - extract_base_doc
+    - resolve_double
+    - no_action_merged
+    - update_status_garbage
+    - no_action_garbage
+    - apply_gmail_labels
+    - file_to_failed_folder
+    - figure_company_offline
+    emitted_but_UNHANDLED:
+    - action: no_action_delete_row
+      result: falls to fallbackOutput 17 -> Stop and Error. Dead in practice (0 empty-ID rows) but it is a live landmine.
+  per_type_switch:
+    node: indoxV2ActionsGDoc01 + indoxV2ActionsShip01 / '3a. GDOC Action Switch1' (31 rules, fallbackOutput=27 = __unhandled_action__ -> Stop and Error)
+    handled_but_NEVER_EMITTED:
+    - key: no_action_awaiting_company_id
+      why: gdoc/shipment decide never returns it; only docBaseDecide and bsDecide do, and they route elsewhere
+    - key: no_action_awating_doc_id
+      why: typo'd key; no decide emits it
+    - key: update_status_api_tools_failed
+      why: no decide emits it — API_TOOLS_FAILED is written from jsCode Join nodes instead
+    - key: no_action_api_tools_failed
+      why: no decide emits it
+    - key: no_action_doc_date_missing
+      why: no decide emits it
+    - key: no_action_doc_total_amount_missing
+      why: no decide emits it
+    - key: update_status_missing_shipment
+      why: no decide emits it — and its handler is the only writer of STATUS='MISSING_SHIPMENT', which is why that status has 0 rows
+    emitted_by_only_one_side:
+    - key: query_doc_total_amount
+      note: invoiceDecide only; the shipment switch carries a dead copy
+    dead_outputs_total: 7
+  bs_switch:
+    node: indoxV2ActionsBS01 / '3b. BS Action Switch1' (14 rules, fallbackOutput=10)
+    result: CLEAN — every emitted action has a rule; no dead outputs.
+  misnamed_nodes:
+    severity: medium
+    impact: the ACTION_LOG audit trail records the wrong transition name for these
+    list:
+    - node: 'indoxV2ActionsGlobal01 / Build: Call ''Incoming Document Batch Update'' - STATUS COMPLETED3'
+      writes: OLD
+    - node: 'indoxV2ActionsGlobal01 / Build: Call ''Incoming Document Batch Update'' - STATUS MISSING_COMPANY_ID (DOC BASE)1'
+      writes: DOUBLE
+    - node: 'indoxV2ActionsGDoc01|Ship01 / Build: Call ''Incoming Document Batch Update'' - STATUS COMPLETED1'
+      writes: MISSING_SHIPMENT
+    - node: 'indoxV2ActionsGDoc01|Ship01 / Build: Create New Shipment Row1'
+      writes: MISSING_LINK
+    - node: 'indoxV2ActionsGDoc01|Ship01 / Build: Call ''Incoming Document Batch Update'' - STATUS MISSING_COMPANY_ID'
+      writes: IN_PROGRESS + resets 10 completion flags to false (this is the restart_gdoc handler)
+    evidence: ACTION_LOG token census shows 'STATUS COMPLETED3' (110 hits) — i.e. 110 documents whose log claims they were completed when they were retired as OLD
+  ```
+
+  ## Completion flags
+
+  ```yaml
+  principle_violated: a flag must record that a stage produced an ANSWER, not that it was ATTEMPTED
+  write_sites_and_conditionality:
+  - flag: BASE_EXTRACTION_COMPLETED
+    writer: indoxV2ActionsGlobal01 / 'Select Base Values' (jsCode)
+    conditional: false
+    stamped: 8681
+    stamped_but_empty: 412
+    empty_means: no API_TOOLS_ID
+  - flag: FIGURE_COMPANY_COMPLETED
+    writers:
+    - indoxV2ActionsGlobal01 / 'Join  COMPANY_ID' (jsCode, unconditional)
+    - 'indoxV2ActionsGlobal01 / ''Build: UPDATE COMPANY_ID'' (Set, ={{ true }})'
+    - indoxV2Driver01 / 'Join  COMPANY_ID1' (jsCode, unconditional)
+    - 'indoxV2ActionsGlobal01 / ''Select Base Values'' — CONDITIONAL: if (companyPick.val) set; else delete'
+    conditional: MIXED — two writers disagree
+    stamped: 3851
+    stamped_but_empty: 447
+  - flag: FIGURE_TYPE_COMPLETED
+    writers:
+    - '''Join Document Type'' (jsCode, unconditional)'
+    - '''Build: UPDATE DOCUMENT_TYPE'' (Set, ={{ true }})'
+    - '''Select Base Values'' — CONDITIONAL'
+    conditional: MIXED
+    stamped: 4314
+    stamped_but_empty: 547
+  - flag: COMPANY_NAME_COMPLETED
+    writers:
+    - '''Join COMPANY_NAME'' (jsCode)'
+    - '''Build: ... - COMPANY_NAME'' (={{ true }})'
+    conditional: false
+    stamped: 5919
+    stamped_but_empty: 16
+  - flag: AI_EXTRACTION_COMPLETED
+    writers:
+    - '''Build: ... - AI values (DOC BASE)'''
+    - '''Build: ... - AI values'' (gdoc)'
+    - (ship)
+    conditional: false
+    stamped: 4880
+    stamped_but_empty: 748
+  - flag: PER_TYPE_EXTRACTION_COMPLETED
+    writer: indoxV2ActionsGDoc01|Ship01|BS01 / 'Select Per Type Values' — `out.PER_TYPE_EXTRACTION_COMPLETED = true;` on the last line, unconditionally, after every pick
+    conditional: false
+    stamped: 1768
+    stamped_but_empty: 1228
+    empty_means: no DOC_ID
+    failure_rate: 69%
+  - flag: API_TOOLS_ID_COMPLETED
+    writer: '''Build: ... - API_TOOLS_ID'' (={{ true }})'
+    conditional: false
+    stamped: 4558
+    stamped_but_empty: 1
+  - flag: INVOICE_ID_COMPLETED
+    writer: '''Build: ... - Doc Date1'' (MISNAMED, ={{ true }})'
+    conditional: false
+  - flag: DOC_DATE_COMPLETED
+    writer: '''Build: ... - Doc Date'' (={{ true }})'
+    conditional: false
+  - flag: DOC_TOTAL_AMOUNT_COMPLETED
+    writer: '''Build: ... - Doc Total Amount'' (={{ true }})'
+    conditional: false
+  - flag: PURCHASE_ID_COMPLETED
+    writer: '''Build: ... - PURCHASE_ID'' (={{ true }})'
+    conditional: false
+  - flag: SHIPMENT_ID_COMPLETED
+    writer: '''Build: ... - SHIPMENT_ID_COMPLETED1'' (={{ true }})'
+    conditional: false
+  - flag: SEARCH_IN_DRIVE_COMPLETED
+    writers:
+    - '''Build: ... - SEARCH_IN_DRIVE_COMPLETED'''
+    - '''Build: ... - LINK FOUND'''
+    conditional: false
+  - flag: EXTRACT_SHIPMENT_COMPLETED
+    writer: '''Build: Mark Invoice Completed1'' (={{ true }})'
+    conditional: false
+  - flag: THUMBNAIL_COMPLETED
+    writers:
+    - '''Join  COMPANY_ID'''
+    - '''Build: UPDATE COMPANY_ID'''
+    conditional: false
+  - flag: SELECTION_COMPLETED
+    writers:
+    - '''Selection & Scoring Logic1'' — `SELECTION_COMPLETED = finalScore > 0` (CONDITIONAL) and a separate unconditional `= true`'
+    - '''Build: Batch Update - Selection & Score'' (={{ true }})'
+    conditional: MIXED
+    stamped: 6322
+    stamped_but_not_COMPLETED: 619
+  - flag: PRIORITY_SYNC_COMPLETED
+    writer: '''Build: Batch Update - priority_sync'' — ={{ !$json.error }}'
+    conditional: true
+    note: the ONLY cleanly answer-conditional flag in the system
+  tally: 17 flags. 13 stamped unconditionally, 3 mixed (two writers disagree), 1 correct.
+  aggregate_damage:
+    documents_carrying_at_least_one_false_completion: '>3,000 (sum of stamped_but_empty across the 8 measured flags, before de-duplication)'
+    worst_offender: PER_TYPE_EXTRACTION_COMPLETED — 1,228 of 1,768 stamped rows have no DOC_ID
+  ONLY_reset_mechanisms:
+  - STATUS='ACTION_RESTART' — re-opens FIGURE_COMPANY_COMPLETED, COMPANY_NAME_COMPLETED, FIGURE_TYPE_COMPLETED in docBaseDecide, and triggers restart_gdoc/restart_balance_sheet. Currently unreachable (F3).
+  - 'the restart_gdoc handler (''Build: ... - STATUS MISSING_COMPANY_ID'') sets 10 flags to false. Also unreachable, for the same reason.'
+  therefore: Every completion flag in this system is a one-way latch with exactly one reset key, and that key does not turn. That is why the flag defect is permanent rather than self-healing.
+  ```
+
+  ## Line context
+
+  ```yaml
+  bs_lines:
+    definition: a row with SOURCE_TYPE='BALANCE_SHEET' is a LINE RECORD extracted from a balance-sheet PDF, not a file of its own
+    counts:
+      bs_line_rows: 342
+      distinct_LINKED_BS_parents: 170
+      bs_typed_documents: 344
+      bs_lines_without_a_LINK: 340
+    by_status:
+      COMPLETED: 276
+      TO_EXTRACT: 22
+      MISSING_LINK: 14
+      DOUBLE: 12
+      MERGED: 9
+      IN_PROGRESS: 8
+      ACTION_RESTART: 1
+    handling:
+    - 'invoiceDecide: `const isBsLine = doc.SOURCE_TYPE === ''BALANCE_SHEET''` suppresses the MISSING_LINK dead-end and the file-backed steps for line records'
+    - the 14 BS lines sitting in MISSING_LINK are rows where that suppression did not apply (they were typed INVOICE/SHIPMENT before the isBsLine guard could act)
+  LINKED_BS:
+    role: back-pointer from a line record to its parent balance sheet
+    count: 2182
+    dedup_interaction: 'indoxV2Decide01 ''Determine Action'' EXCLUDES a row from the HASH identity map when LINKED_BS is non-blank: `const hash = (doc.HASH && isBlank(doc.LINKED_BS)) ? byHash.get(doc.HASH) : undefined`. Correct: every line extracted from the same balance sheet inherits the parent''s hash, so hash-matching them would mark all 342 as duplicates of each other. Measured: 1,746 rows have both LINKED_BS and a HASH; 13,955 have a HASH and no LINKED_BS. 17 DOUBLE rows also carry LINKED_BS.'
+  DOUBLE_LINE_CONTEXT:
+    two_distinct_shapes_share_one_column:
+    - shape: dedup snapshot — {idMatch, hashMatch, compShortDocMatch, match, matchedId}
+      written_by: 'docBaseDecide D2 -> ''Action: Handle Doubles'' -> ''Build: ... (DOC BASE)1'''
+      example_count: 10 rows with one particular value; ~325 rows total in this shape
+    - shape: adjudication record — {merge_sig, merge_key, kept, promoted|MERGE_CANDIDATES, unadjudicable}
+      written_by: indoxV2ActionsGlobal01 / 'Adjudicate Merge'
+      count: 1624
+    merge_key: '`${COMPANY_ID}\u0001${bizDocId}` — the business identity the group was adjudicated under. bizDocId = DOC_ID or COMPANY_DOC_ID, rejected if <3 alnum chars, all-zeros, equal to COMPANY_ID, or in (''unknown'',''action_required'',''null'',''none'').'
+    merge_sig: '`sort(join(''|'', ID+'':''+HASH))` over the candidate group — the group''s COMPOSITION. Re-adjudication fires only when the signature changes.'
+    silencing_rule: docBaseDecide treats the gate as satisfied only when merge_sig is present AND merge_key === the row's CURRENT bizKey. If extraction later corrects DOC_ID, the key changes and the gate legitimately re-fires.
+    counts:
+      rows_with_any_DOUBLE_LINE_CONTEXT: 1949
+      with_merge_sig: 1624
+      with_merge_key: 1624
+      rows_with_MERGED_INTO: 184
+  adjudication_verdicts:
+    node: indoxV2ActionsGlobal01 / 'Adjudicate Merge'
+    rules:
+    - '1 live candidate -> promote: DOUBLE -> IN_PROGRESS, stamp {merge_sig, merge_key, promoted:true}. 1,045 historical firings.'
+    - <=1 distinct real HASH in the group -> MERGE (same-hash tier)
+    - exactly 2 rows agreeing on TYPE + DOC_DATE + amount (blank agrees with anything) -> MERGE
+    - 'otherwise -> confirm: winner keeps STATUS + gets MERGE_CANDIDATES; every loser gets STATUS=''DOUBLE'' + the same context. 396 confirm-double + 291 confirm-keep firings.'
+    - a doc-id appearing under >=3 distinct companies is QUARANTINED (never auto-adjudicated) and stamped merge_sig:'none', unadjudicable
+    winner_selection: most _COMPLETED flags true, then STATUS='COMPLETED', then oldest created_at, then lowest ID
+    merge_write: indoxApiSupabase01 / 'Build Merge Write' — `update ... set STATUS='MERGED', MERGED_INTO=$1, ACTION_LOG=$2 where ID=$3`. NEVER deletes.
+    dead_end: The confirm branch is the only verdict with no downstream consumer. 307 rows sit in confirmed-DOUBLE with a full MERGE_CANDIDATES snapshot and no workflow, UI action, or query that resolves them. 229 of the 320 have a company and a type — i.e. they are real, adjudicated, evidence-complete documents waiting on a human decision that the product has no surface for.
+  interaction_with_pickup:
+  - the dup-detector arm of the eligibility predicate re-derives the same bizDocId rules in SQL (>=3 alnum, not all-zeros, not equal to COMPANY_ID, not in the sentinel list) and admits only rows with _n > 1 AND DOUBLE_LINE_CONTEXT not like '%merge_sig%'
+  - 'consequence: once adjudicated, a row leaves the dup arm permanently. Combined with STATUS=''DOUBLE'' not being an admitted status, the 307 confirmed doubles are unreachable — which is correct for a review queue and wrong for a status the machine is supposed to own.'
+  ```
+
+  ## Findings
+
+  ```yaml
+  - id: F1
+    severity: critical
+    title: The status vocabulary is 19 values wide; the working pickup admits 4
+    evidence: 'Live eligibility predicate re-run as a LEFT JOIN at 14:01:10Z. eligible_now: TO_EXTRACT 6610/6612, IN_PROGRESS 303/307, NULL 54/54, COMPLETED 48/6321 (adjudication slice), NEEDS_REVIEW 3/1177, MISSING_LINK 1/29, and ZERO for MISSING_COMPANY_ID (526), EXTRACTION_FAILED (330), DOUBLE (320), MERGED (184), MISSING_TYPE (164), MAX_ITERATIONS (121), OLD (78), ACTION_RESTART (59), ACTION_REQUIRED (44), PAUSE (35), API_TOOLS_FAILED (25), UNKNOWN_COMPANY (15), GARBAGE (9).'
+    consequence: every 'update_status_X' action in decide is a one-way door out of the machine
+  - id: F2
+    severity: critical
+    title: NEEDS_REVIEW is a pipeline-latency alarm written into the document's status column
+    evidence: '910 of 1,177 rows carry ''[auto-terminalized: stalled IN_PROGRESS >6h]'', written by indoxApiSupabase01 / ''Terminalize Stalled'', fired by the same 2-minute trigger as the pickup. 0 rows carry the TO_EXTRACT marker. Replaying decide over those rows: 746 want extract_base_doc, 270 want get_company_name, 95 want figure_company_id, 39 route to a per-type decide — 1,168 of 1,177 have real forward work and only 9 are genuinely garbage. 327 have neither an ERROR nor an ACTION_LOG: nothing ever ran on them, nothing ever failed.'
+    self_amplification: 'The reaper''s own trigger is the pickup''s trigger. When the pickup falls behind, the reaper removes the backlog from the pickup''s reach, which makes the pickup fall further behind. Arrivals today: 232/hr at 05:00 falling to 24/hr at 12:00, then 135 at 13:00 — the shape of a queue being eaten.'
+    git_provenance: 'introduced 2026-07-07 in 991c782c, agent-co-authored (Co-Authored-By: Claude Fable 5), net-new, replaced nothing, ~2 months younger than the rest of the enum'
+    load_bearing: no — 1 forward read (file_to_failed_folder, itself unreachable) and 4 display reads
+  - id: F3
+    severity: critical
+    title: The operator Retry button is a no-op — ACTION_RESTART is excluded by both pickup lanes
+    evidence: 'DocumentDetailPage.tsx:135 PATCHes STATUS=''ACTION_RESTART''. The live eligibility predicate does not list it as an admitted status; the only clause naming it sits inside the NEXT_RETRY_AT conjunct and can only remove a block. indoxV2TailDrain01 ''Pick Drain Candidates'' lists it in its NOT IN exclusion. Measured: 59 rows, 0 eligible; last writes were 2026-08-09 21:00Z and 2026-08-06.'
+    knock_on: ACTION_RESTART is the ONLY reset key for FIGURE_COMPANY_COMPLETED, COMPANY_NAME_COMPLETED and FIGURE_TYPE_COMPLETED, and the only trigger for restart_gdoc / restart_balance_sheet. Four decide branches and two per-type branches are therefore unreachable by construction. All 59 rows would get real work if delivered (24 extract_base_doc, 16 get_company_name, 15 per-type, 4 figure_company_id).
+  - id: F4
+    severity: critical
+    title: The hourly whole-corpus sweep — the only delivery path for the other 15 statuses — fails every time
+    evidence: 'indoxV2Driver01 ''Schedule Trigger'' (hours=1, minute 5) -> ''Call INDOX GETALL''. Both trigger-mode executions in the retained window errored: 818825 at 12:05:42Z (502s) and 837800 at 13:05:52Z (82s), decoded error.message = "Task execution aborted because runner became unresponsive", lastNodeExecuted = "Call INDOX GETALL". The query has no status filter (`select * ... limit 20000`); the table is 16,410 rows = 82.1% of the Guard Get Size CAP of 20,000.'
+    consequence: This is why F1 bites. As long as P2 was working, a blocked document was at least re-evaluated once an hour (and would still get no_action, but the machine had a chance to notice a data change). With P2 down, blocked = frozen. And even repaired, P2 dies permanently at 20k rows.
+  - id: F5
+    severity: high
+    title: The legacy single-value extractors are compensating for prematurely-stamped per-type extraction — and this is the exact branch
+    branch: indoxV2ActionsGDoc01 'Decide GDoc Action' / indoxV2ActionsShip01 'Decide Shipment Action', inside `if (doc.API_TOOLS_ID) { ... }`. That block is reached only when the line above it — `if (STATUS!=='COMPLETED' && API_TOOLS_ID && !PER_TYPE_EXTRACTION_COMPLETED) return 'extract_per_type'` — did NOT fire, i.e. per-type extraction is already STAMPED. So every query_* dispatch is by definition a hole left by a per-type run that stamped success without producing a value.
+    measured_cohort: '504 documents are STATUS<>''COMPLETED'', have an API_TOOLS_ID, have PER_TYPE_EXTRACTION_COMPLETED=''true'', and are typed INVOICE/ORDER/SHIPMENT. Of those: 170 would emit query_invoice_id, 73 query_doc_total_amount, 33 query_shipment_id, 24 query_purchase_id, 6 query_doc_date — 306 pending single-value dispatches.'
+    observed_rate: 'last 60 min: QueryTotalAmt 31, QueryDocDate 23, QueryShipmentId 21, QueryPurchaseId 12, QueryInvoiceId 1 = 88/hour. Hourly buckets 11:00-13:00 confirm 43-96/hour. Callers in the LIVE fleet: only indoxV2ActionsGDoc01 and indoxV2ActionsShip01 reference all five.'
+    conclusion: Deleting the five extractors would NOT take the count to zero; it would strand 306 documents. The count reaches zero only when PER_TYPE_EXTRACTION_COMPLETED stops being stamped on a null result. Fix the flag, then the branch dies on its own.
+  - id: F6
+    severity: high
+    title: The completion-flag defect is 13 of 17 flags, not three
+    evidence: see completion_flags above. PER_TYPE_EXTRACTION_COMPLETED 1228/1768 stamped-but-empty (69%), AI_EXTRACTION_COMPLETED 748/4880, SELECTION_COMPLETED 619/6322, FIGURE_TYPE_COMPLETED 547/4314, FIGURE_COMPANY_COMPLETED 447/3851, BASE_EXTRACTION_COMPLETED 412/8681, COMPANY_NAME_COMPLETED 16/5919, API_TOOLS_ID_COMPLETED 1/4558.
+    aggravating: '''Select Base Values'' already implements the CORRECT pattern (`if (companyPick.val) out.FIGURE_COMPANY_COMPLETED = true; else delete ...`), but ''Join  COMPANY_ID'' and ''Build: UPDATE COMPANY_ID'' write the same flag unconditionally on a different path. Two writers, opposite semantics, same column.'
+    and: the only reset key for any of them is ACTION_RESTART, which does not turn (F3)
+  - id: F7
+    severity: high
+    title: 'Self-cancelling gates: measured'
+    rows_in_the_trap:
+      no_action_awaiting_company_id: 203
+      no_action_unknown_document_type: 80
+      no_action_awaiting_company_name: 15
+      no_action_double: 307
+      total: 605
+    mechanism: the no_action_* noOp handlers have no downstream connection, so nothing is written, updated_at is not bumped, and the row leaves the 150-second burst window for good
+    corroboration: the SQL replay reproduced the owner's independent counts of 203 and 80 exactly
+  - id: F8
+    severity: medium
+    title: Seven dead switch outputs and one emitted-but-unhandled action
+    dead_outputs:
+    - no_action_awaiting_company_id (per-type)
+    - no_action_awating_doc_id
+    - update_status_api_tools_failed
+    - no_action_api_tools_failed
+    - no_action_doc_date_missing
+    - no_action_doc_total_amount_missing
+    - update_status_missing_shipment
+    emitted_but_unhandled:
+    - no_action_delete_row
+    dead_driver_output: Switch1 output 3 tests DOC_TYPE==='empty_row'; the only producer emits 'empty'
+    downstream_effect: update_status_missing_shipment being unemittable is why STATUS='MISSING_SHIPMENT' has 0 rows despite having a writer
+  - id: F9
+    severity: medium
+    title: Five nodes are named after a status they do not write, and the ACTION_LOG inherits the wrong name
+    evidence: see action_routing.misnamed_nodes. 110 documents carry the ACTION_LOG token 'STATUS COMPLETED3' — the node that retires them as OLD.
+  - id: F10
+    severity: medium
+    title: Two statuses are error codes from other subsystems wearing a document status
+    detail: 'ACTION_REQUIRED is a Gmail-downloader failure code (is_ok ? IN_PROGRESS : ACTION_REQUIRED) with no decide branch at all — and the literal string leaked into the COMPANY_DOC_ID data column, forcing indoxApiSupabase01 ''Resolve IDs'' and ''Build Match Index SQL'' to blacklist it in their key builders. API_TOOLS_FAILED is an apitools transport failure written from three jsCode Join nodes, also with no decide branch. Both are terminal purely because nothing reads them.'
+  - id: F11
+    severity: medium
+    title: PAUSE has no writer anywhere in the estate
+    evidence: full-repo sweep found reads in docBaseDecide, indoxV2TailDrain01, api/__init__.py, api.ts, DashboardPage.tsx and fixtures — and zero writes outside test seeds. 35 rows exist, all set by hand through the grid's STATUS <select>.
+    implication: PAUSE is an operator control, not a machine state — it belongs as a flag, not a status
+  - id: F12
+    severity: medium
+    title: The MAX_ITERATIONS budget counts log tokens, not decisions
+    evidence: '`(ACTION_LOG.match(/\d{13}/g)||[]).length >= 50`. 4,605 rows carry the ''BASE BACKFILL 20260809'' marker with its own timestamp; several handlers append more than one 13-digit token per visit. 121 rows are retired, 94 of them with a company AND a type, and the count grew 108 -> 121 during this investigation (14 firings in the last hour).'
+  - id: F13
+    severity: low
+    title: TYPE='IRRELEVANT' has no lane
+    evidence: resolveDocType maps it to 'unknown' -> unknownTypeAction -> MISSING_TYPE forever. 4 rows (3 MISSING_TYPE, 1 MISSING_COMPANY_ID). CENTRALIZED_INVOICE has the same gap (0 rows today) — it appears in the gmail-label `_typed` list but not in resolveDocType.
+  ```
+
+  ## Owner draft in progress
+
+  ```yaml
+  file: apps/indox/blueprint/n8n/indoxApiSupabase01.json (node "Get Changed Docs")
+  status: READ ONLY — the owner is editing this file; reporting, not writing
+  what_changed_vs_live:
+  - 'adds three derived columns to `elig`: needs_base, stamped_double, recov'
+  - recov = STATUS in ('NEEDS_REVIEW','EXTRACTION_FAILED','DOUBLE','ACTION_RESTART','UNKNOWN_COMPANY','API_TOOLS_FAILED','MISSING_COMPANY_ID','MISSING_TYPE')
+  - adds that same 8-status list to the admitted-status disjunction (4 -> 12 statuses)
+  - changes the hard exclusion from `coalesce(STATUS,'') <> 'MERGED'` to `not in ('MERGED','MAX_ITERATIONS','GARBAGE','OLD')`
+  - adds slice s_recov, ordered (needs_base desc, finisher desc, updated_at asc, rotation), key rn*6.0 + 0.6, rn <= 40
+  - adds `and not recov` to s_fin, s_live, s_new, s_old, s_stale, and `and not recov` to s_adj
+  measured_effect_if_deployed:
+    rows_newly_admitted: 2616
+    would_receive_REAL_forward_work: 2002
+    would_hit_a_self_cancelling_no_op: 614
+    slice_share: s_recov keys at rn*6 against rn*4 (three slices) and rn*12 (three slices) -> ~14.3% of the 40-row budget, ~5.7 slots/poll, ~171 rows/hour. At 2,616 rows that is a ~15-hour first pass.
+  verdict: correct direction, and it is the single highest-value change available — it converts 2,002 frozen documents into moving ones
+  three_things_to_check_before_it_ships:
+  - id: 1
+    issue: 614 of the 2,616 newly-admitted rows will bounce off a no_action_* gate on every visit and write nothing
+    detail: Because a no_action_* verdict writes nothing, those rows never leave `elig` and never leave s_recov, so they will consume s_recov slots forever at a fixed ~23% waste rate. Pair the widening with the F7 gate fix (`(!doc.FIGURE_COMPANY_COMPLETED || isBlank(doc.COMPANY_ID))` etc.), or add `and not stamped_double` -style exclusions for the three trapped cohorts, or s_recov will be permanently ~23% dead weight.
+  - id: 2
+    issue: stamped DOUBLE rows are admitted to `elig` but belong to NO slice
+    detail: s_recov excludes `stamped_double`; s_fin/s_live/s_new/s_old/s_stale/s_adj all carry `and not recov`. So 307 rows become eligible without ever being selectable. Harmless (they only widen a CTE) and arguably intended, but it should be deliberate — today they are simply invisible.
+  - id: 3
+    issue: the new hard exclusion removes MAX_ITERATIONS, GARBAGE and OLD from the burst window
+    detail: Live, those three could still enter via `updated_at > now() - 150s` or the dup arm (5 MAX_ITERATIONS rows were eligible at 13:35Z). The draft makes them unconditionally unreachable. That is defensible for GARBAGE/OLD; for MAX_ITERATIONS it removes the last path by which a mistakenly-retired document (94 of 121 have a company AND a type) could ever come back.
+  also_needed_for_the_widening_to_pay_off:
+  - F4 — repair or retire the hourly GET_ALL sweep; at 82% of CAP it is a scheduled failure either way
+  - F2 — stop the reaper writing NEEDS_REVIEW, or it will re-park the rows s_recov rescues (~100/hour vs ~171/hour rescued)
+  ```
+
+  ## Proposal
+
+  ```yaml
+  principle: 'A status must answer exactly one question: WHERE IS THIS DOCUMENT IN THE PIPELINE? It must never encode (a) which stage failed — that is REQUIRED_ACTION/ERROR, (b) how the pipeline is feeling — that is monitoring, (c) an operator preference — that is a flag. Every status the machine writes must be one the machine can read back. The invariant to enforce: *a status the pickup does not admit may only be written by a gate that is provably final for that document.*'
+  canonical_set:
+  - status: QUEUED
+    means: delivered, not yet worked
+    replaces:
+    - TO_EXTRACT
+    - 'NULL'
+    - ''
+    pickup: admitted
+    rows_today: 6973
+  - status: WORKING
+    means: the machine owns it; some stage is incomplete
+    replaces:
+    - IN_PROGRESS
+    - MISSING_COMPANY_ID
+    - UNKNOWN_COMPANY
+    - MISSING_TYPE
+    - MISSING_LINK
+    - EXTRACTION_FAILED
+    - API_TOOLS_FAILED
+    - ACTION_REQUIRED
+    - ACTION_RESTART
+    - NEEDS_REVIEW
+    - MISSING_SHIPMENT
+    - MISSING
+    pickup: admitted
+    why: Every one of these is "the machine has not finished". WHICH stage is blocked is already fully recoverable from the completion flags and the value columns — decide re-derives it from scratch on every visit and never trusts the status anyway (the status only appears in decide as a `!==` guard to avoid rewriting the same value). Deleting them loses no information the machine uses.
+    rows_today: 2582
+  - status: DONE
+    means: finished
+    replaces:
+    - COMPLETED
+    pickup: adjudication slice only
+    rows_today: 6321
+  - status: RETIRED
+    means: final, machine-decided, no human owed
+    replaces:
+    - OLD
+    - GARBAGE
+    - MAX_ITERATIONS
+    - MERGED
+    pickup: excluded
+    discriminator: RETIRED_REASON in (old_date, garbage, iteration_budget, merged_into)
+    rows_today: 392
+  - status: REVIEW
+    means: final for the machine, a human decision is owed
+    replaces:
+    - DOUBLE (confirmed)
+    - genuinely-unresolvable documents
+    pickup: excluded
+    discriminator: REVIEW_REASON in (double_confirmed, unresolvable)
+    rows_today: 307
+    note: This is the ONLY legitimate human-review pile, and it must be entered by a DECISION about the document (adjudication said 'two real candidates, pick one'), never by a timer.
+  result: 19 statuses -> 5. Every one of the five is either admitted by pickup or provably final by a decision about the document.
+  what_moves_out_of_STATUS:
+  - was: PAUSE
+    becomes: HOLD boolean column
+    why: operator preference, no writer in the estate (F11), orthogonal to pipeline position
+  - was: ACTION_RESTART
+    becomes: RESET_REQUESTED_AT timestamp
+    why: an operator INTENT, not a position. decide reads `RESET_REQUESTED_AT > flags_stamped_at` to re-open gates; pickup admits it because the row is WORKING, which fixes F3 without a status at all
+  - was: NEEDS_REVIEW
+    becomes: deleted; the reaper writes STALLED_SINCE and emits a metric
+    why: F2 — a latency alarm belongs in monitoring, and the document stays WORKING so it keeps being retried
+  - was: MISSING_* / *_FAILED
+    becomes: REQUIRED_ACTION text (already written) + the completion flags (already written)
+    why: no consumer reads them as state; the dashboard reads them for display and can read REQUIRED_ACTION instead
+  decide_structure:
+    shape: |-
+      One ordered list of (guard, action) rules over DATA ONLY. No rule may test STATUS except the four terminal gates (RETIRED, REVIEW, DONE, HOLD). Every gate becomes:
+        if (<value is absent>) {
+          if (<attempted recently && bounded>) return no_action_backoff;
+          return <resolver action>;
+        }
+      i.e. presence of the ANSWER is the gate, and the flag is only a rate limiter.
+    concrete_rules:
+    - delete the four `update_status_*` -> `no_action_awaiting_*` pairs (D8/D9, D11/D12, unknownTypeAction 3/4, bsDecide 1/2). A document with no company is simply still WORKING with a resolver that has run out of attempts; the status write bought nothing and cost delivery.
+    - make every completion flag answer-conditional at the WRITE site (the 'Select Base Values' pattern), and make every gate read `(!flag || isBlank(value))` at the READ site. Belt and braces, because 13 flags have to be corrected across six workflows.
+    - give each resolver a bounded attempt counter (ATTEMPTS_<stage>) and terminalise to REVIEW at the bound, instead of terminalising to a status that merely stops delivery.
+    - delete the 7 dead switch outputs and add a `no_action_delete_row` rule (or drop the branch — it is unreachable).
+    - rename the 5 misnamed Build nodes so ACTION_LOG is truthful.
+    - add IRRELEVANT and CENTRALIZED_INVOICE to resolveDocType, or make the default lane explicit.
+  pickup_structure:
+  - eligibility becomes `STATUS in ('QUEUED','WORKING') or (STATUS='DONE' and <needs adjudication>)`. Four terminal values are excluded and nothing else is.
+  - the hourly GET_ALL sweep is deleted, not repaired (F4). It cannot survive 20k rows and it duplicates what a status-driven pickup already does.
+  - the reaper stops writing STATUS. It writes STALLED_SINCE and increments a counter; the document stays WORKING and keeps being picked up.
+  migration_path_driven_by_the_machine:
+    constraint: no bulk UPDATE on incoming_documents; the state machine drives its own rows
+    method: Ship the collapse as a decide-side ALIAS plus a state-machine-driven rewrite. No row is edited by hand; each row rewrites its own status on its next visit.
+    steps:
+    - step: 1
+      name: widen eligibility (the owner's draft), so every legacy status is deliverable
+      effect: 2,002 documents start moving; 614 still bounce
+      risk: none to data — the predicate can only add rows
+    - step: 2
+      name: make the flag gates value-aware (F6) and delete the self-cancelling pairs (F7)
+      effect: the remaining 614 start moving; 306 legacy query_* dispatches (F5) stop being needed
+    - step: 3
+      name: stop the reaper writing STATUS (F2)
+      effect: ~100 rows/hour stop being removed from the machine
+    - step: 4
+      name: add the alias layer
+      detail: decide gains `const S = canon(doc.STATUS)` where canon() maps the 19 legacy values onto the 5 canonical ones, and every gate tests S. Writers start emitting canonical values. Pickup admits BOTH vocabularies during the overlap. A legacy row is rewritten to its canonical value the first time it is visited for any other reason — the machine migrates itself, one document per visit.
+    - step: 5
+      name: after the legacy counts reach zero, delete the alias and the legacy branches
+    no_document_can_be_stranded:
+      argument: The mapping is total and order-preserving, and every collapse is toward a MORE deliverable state, never a less deliverable one.
+      row_by_row:
+      - '6,973 QUEUED-class rows: already admitted, unchanged.'
+      - '2,582 WORKING-class rows: currently 0-eligible; after step 1 they are admitted. Strictly more delivery, never less.'
+      - '6,321 DONE rows: keep the adjudication slice verbatim, so double detection is unaffected.'
+      - '392 RETIRED rows: currently excluded (MERGED, OLD, GARBAGE, MAX_ITERATIONS). Excluded after. Unchanged — except MAX_ITERATIONS, where the 94 rows with a company AND a type should be re-admitted once by the step-2 rebuild before the budget is re-applied on a corrected counter (F12).'
+      - '307 REVIEW rows: currently excluded and unreachable. After: still excluded, but now visible in a named review queue with a REVIEW_REASON, which is the first time the product can act on them.'
+      - '35 PAUSE rows: become HOLD=true and STATUS=WORKING. They stay out of dispatch via the HOLD flag, so behaviour is identical, but they regain a status the machine understands.'
+      - '59 ACTION_RESTART rows: become WORKING + RESET_REQUESTED_AT. They gain delivery they do not have today (F3).'
+      invariant_check: No canonical value is less deliverable than the legacy value it replaces. Since strandedness is exactly 'not deliverable and not final-by-decision', and the mapping never reduces deliverability while every newly-final value (RETIRED, REVIEW) is entered only by an existing decision gate, no currently-live document can be stranded by the collapse.
+  measurable_acceptance:
+  - 'rows in a status with eligible_now = 0 and provable forward work: 2,002 -> 0'
+  - 'NEEDS_REVIEW arrivals/hour: ~100 -> 0'
+  - 'legacy Query* executions/hour: ~88 -> 0 (as a CONSEQUENCE of the flag fix, not by deleting the workflows)'
+  - 'stamped-but-empty completion flags: >3,000 -> 0 on new writes'
+  - 'hourly trigger-mode driver failures: 2/2 -> 0/0 (the trigger is deleted)'
+  - 'distinct STATUS values in the table: 19 -> 5'
+  ```
+references:
+- issues/completion-flags-record-attempts-not-answers.yaml — the flag defect, extended here from 3 instances to 13
+- issues/two-day-verdict-2026-08-10.yaml
+- issues/n8n-error-census-2026-08-09.yaml
+- live definitions read from n8n workflow_history at the activeVersionIds listed in topology.live_versions
+- 'git: 414f49d3 (phase3, 2026-04-30, the original enum) and 991c782c (2026-07-07, agent-co-authored, NEEDS_REVIEW)'

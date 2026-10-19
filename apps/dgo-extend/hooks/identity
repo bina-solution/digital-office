@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# `bbox dgo identity [public|mint|fingerprint] [--office <id>]` — this machine's office identity.
+#
+# It runs ON the machine (hooks do), which is the point: an office's identity is minted where the
+# office is, and `bbox dgo identity --office vps1` reads vps1's PUBLIC half through `computers`
+# without either side holding the other's key.
+#
+# Minting uses openssl and stores the keys in their own volume (`dgo_identity`), mode 600, root-only.
+set -euo pipefail
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+VERB="public"; OFFICE=""; FORCE=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    public|mint|fingerprint) VERB="$1" ;;
+    --force) FORCE="--force" ;;
+    --office) shift; OFFICE="${1:-}" ;;
+    *) echo "usage: bbox dgo identity [public|mint|fingerprint] [--office <id>] [--force]" >&2; exit 2 ;;
+  esac
+  shift
+done
+
+if [ -n "${OFFICE}" ]; then
+  # Ask that office's machine, through the one door to machines. The reply is PUBLIC material only.
+  exec curl -fsS -m 60 -X POST "http://computers:8977/api/computers/${OFFICE}/exec" \
+    -H 'content-type: application/json' \
+    -d "{\"command\":\"cd ${REPO_ROOT} && ./bbox dgo identity ${VERB}\",\"timeout\":120}" \
+    | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d.get("stdout","").strip() or d.get("reason",""));sys.exit(0 if d.get("code")==0 else 1)'
+fi
+
+VOL="$(docker volume ls --format '{{.Name}}' 2>/dev/null | grep -E '(^|_)dgo_identity$' | head -1 || true)"
+if [ -z "${VOL}" ]; then
+  # The identity volume the OFFICE will mount is `<compose project>_dgo_identity`, and docker adds
+  # that prefix itself. Minting into a bare `dgo_identity` produced an app that could not see its own
+  # key (measured: /api/identity returned the empty-string fingerprint), so the prefix is taken from
+  # a volume this office already has.
+  PREFIX="$(docker volume ls --format '{{.Name}}' 2>/dev/null | grep -E '_dgo_extend_state$' | head -1 | sed 's/_dgo_extend_state$//' || true)"
+  VOL="${PREFIX:+${PREFIX}_}dgo_identity"
+fi
+docker volume create "${VOL}" >/dev/null
+# The image the app already builds: it carries identity.py and openssl, so this needs no pull and no
+# `pip install` on a machine that has nothing installed yet.
+# The module is fed on STDIN rather than mounted: mounting the checkout into a throwaway container
+# means walking a tree that lives on a virtiofs share, and the identity is a 200-line script that
+# only needs openssl and its own volume.
+IMG="python:3.12-slim"
+exec docker run -i --rm -v "${VOL}:/identity" "${IMG}" \
+  python3 - --dir /identity --label "${DEPLOYMENT_NAME:-$(hostname)}" ${FORCE} "${VERB}" \
+  < "${REPO_ROOT}/apps/dgo-extend/identity.py"

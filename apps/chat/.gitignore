@@ -1,0 +1,8 @@
+/node_modules
+# compose bind source — contents ignored, directory ships so docker doesn't create it root-owned (G0).
+# data/.gitignore is itself `*` + `!.gitignore`, so admitting that one file ships the directory
+# while every real data file stays ignored.
+/data/*
+!/data/.gitignore
+.env
+src/data/test-subscribers.db

@@ -1,0 +1,70 @@
+{
+  "id": "notifications",
+  "title": {
+    "he": "התראות",
+    "en": "Notifications"
+  },
+  "layer": 2,
+  "kind": "service",
+  "version": "1.0.0",
+  "summary": {
+    "he": "מרכז ההתראות — שגיאות ואירועי מערכת",
+    "en": "Notification centre — errors and system events"
+  },
+  "capabilities": [
+    {
+      "name": "notify",
+      "type": "protocol",
+      "endpoint": "http://notifications:8977"
+    }
+  ],
+  "use": [
+    {
+      "capability": "error-tracking",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
+    }
+  ],
+  "connections": [
+    {
+      "id": "glitchtip-api-token",
+      "required": false
+    }
+  ],
+  "compose": "docker-compose.yml",
+  "routing": [
+    {
+      "host": "alerts-svc",
+      "port": 8977,
+      "auth": "sso",
+      "emit_labels": false,
+      "module": {
+        "group": "תשתית",
+        "icon": "bell",
+        "embed": true,
+        "alias": "alerts",
+        "id": "alerts",
+        "name": "התראות",
+        "desc": "מרכז התראות",
+        "order": 7,
+        "url_env": "NOTIFICATIONS_URL",
+        "url": "http://notifications:8977"
+      }
+    }
+  ],
+  "health": {
+    "structural": "auto",
+    "probe": {
+      "http": "http://notifications:8977/healthz",
+      "interval": "30s"
+    }
+  },
+  "data": {
+    "volumes": ["notifications_data"],
+    "on_uninstall": "keep"
+  },
+  "observability": {
+    "sentry_platform": "python"
+  }
+}

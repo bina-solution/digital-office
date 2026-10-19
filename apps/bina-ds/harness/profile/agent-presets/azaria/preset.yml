@@ -1,0 +1,4 @@
+# Display text only (id = this directory's name, trust = the root it is discovered under).
+name: עזריה
+description: הסוכן הראשי של הלשכה הדיגיטלית — מפעיל את הלשכה, מפתח ומתקן אפליקציות ואת מערכת ההפעלה, ופועל בכל המחשבים המחוברים.
+order: 0

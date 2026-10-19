@@ -1,0 +1,53 @@
+# yaml-language-server: $schema=./schema.json
+title: CLAUDE.md's "Docker 29 makes traefik find zero routers" does not reproduce on 29.1.3
+opened: '2026-08-21'
+severity: medium
+status: open
+summary: CLAUDE.md's "Docker 29 makes traefik find zero routers" does not reproduce on 29.1.3
+description: |
+  area: docs / baseline P0
+
+  ## Context
+
+  CLAUDE.md states at length that Docker 29 raises the daemon's hard minimum API to 1.40, that
+  traefik v3.3's 1.24 client is therefore refused, and that the result is traefik reporting
+  healthy while discovering ZERO routers and every *.localhost 404ing. `bbox baseline` P0 fails
+  fast on Docker 29 on the strength of it, and the note is repeated in scripts/lib.sh and in
+  bbox's need_docker error text.
+
+  Measured on portable-ubuntu, 2026-08-21. Docker Server 29.1.3, traefik:v3.3, socket mount
+  corrected first (an unrelated bug was mounting a DIRECTORY and producing the predicted symptom
+  for a completely different reason - see bbox-engine-split-cli-vs-containers.yaml):
+
+      curl -H 'Host: auth.localhost'       http://127.0.0.1/  -> 302   (authentik redirect)
+      curl -H 'Host: glitchtip.localhost'  http://127.0.0.1/  -> 200
+      curl -H 'Host: bogus.localhost'      http://127.0.0.1/  -> 404   (negative control)
+
+      traefik log:
+        routerName=authentik-https@docker  rule=Host(`auth.localhost`)
+        routerName=glitchtip-https@docker  rule=Host(`glitchtip.localhost`)
+
+  The docker provider discovers routers and routes correctly. Whatever was observed when the
+  note was written, it does not hold for 29.1.3.
+
+  ## Impact
+
+  The note is load-bearing and it is misleading. It sends anyone debugging a routing failure to
+  change their Docker version, and a P0 gate refuses to run on a daemon that demonstrably works.
+  On this one box the "traefik routes nothing" symptom had a different cause entirely, and the
+  note actively delayed finding it - the first hour went into the engine version instead of into
+  `docker inspect` on the traefik container, which showed the real problem immediately.
+
+  ## Fix
+
+  Re-test the claim against 29.x. Either pin it to the exact versions where it holds, or retire
+  it.
+
+  If the P0 stays, assert the OBSERVABLE thing rather than a version number - traefik discovers
+  more than zero routers, or a known Host routes:
+
+      curl -s -o /dev/null -w '%{http_code}' -H "Host: ${A_KNOWN_HOST}" http://127.0.0.1/
+
+  A version check cannot distinguish the three distinct causes of "nothing routes" seen on this
+  single machine (socket mounted as a directory, ufw dropping forward, and the hypothesised API
+  floor). A behavioural check catches all three and cannot go stale.

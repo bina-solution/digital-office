@@ -1,0 +1,383 @@
+# platform.state.yaml — DESIRED STATE. The only file the console writes.
+#
+# This is a plain declarative file. The platform NEVER runs git: commit it yourself when you
+# want history, or don't. `bbox reconcile` reads this + apps/*/app.json and converges Docker.
+#
+# Two things live here rather than in a manifest, on purpose:
+#   * enabled  — the PERSISTENT disposition (OSGi autostart setting). Disable keeps volumes;
+#                only `bbox apps uninstall --purge` removes data.
+#   * instances — configured connections of a multi-instance domain (Home Assistant config
+#                entries). Multi-instance is the DEFAULT; the manifest only says a domain
+#                supports instances, never which ones exist.
+#
+# schema_version is checked by the compiler so a future format change fails loudly.
+schema_version: 1
+
+apps:
+  # ── layer 1 — headless base (system: cannot be disabled) ───────────────────────
+  app-management:   { state: enabled, by: dgo-extend }   # the control plane — install/enable/disable/uninstall apps
+  traefik:          { enabled: true }   # the edge — provides routing/TLS/forward-auth
+  postgres:         { enabled: true }   # provides sql — the db, and only the db
+  redis:            { enabled: true }   # provides kv
+  authentik:        { enabled: true }   # provides identity + forward-auth
+  connections:      { enabled: true }   # secret-base
+  autoheal:         { state: disabled, by: user }   # restarts containers docker marked unhealthy (opt-in label)
+
+  # ── layer 2 — base apps ────────────────────────────────────────────────────────
+  console:          { enabled: true }
+  n8n:              { state: disabled, by: user }   # provides workflow + automation-stdlib
+  notifications:    { state: disabled, by: user }
+  any-concurrency:  { state: disabled, by: user }
+  machine:          { state: disabled, by: user }
+  data-management:  { state: disabled, by: user }   # data inventory, full backup and restore
+  bina-ui:          { enabled: true }   # build-time library, no container
+
+  # ── layer 3 — installable apps ─────────────────────────────────────────────────
+  apitools:         { state: disabled, by: user }   # provides ocr + ledger
+  my-docs:          { state: disabled, by: user }
+  indox:            { state: disabled, by: user }
+  # 2026-09-17 (owner): "בינה" — the office agent, the platform's primary app going forward. A
+  # customized DeepSeek Harness embedded in the console; see apps/bina-ds/README.md.
+  bina-ds:          { enabled: true }
+
+  # ── gallery — installable apps that ship DISABLED (the app-store surface).
+  #    Declared and present in the catalog; `bbox apps enable ollama` turns one on.
+  ollama:           { enabled: false }
+  openhands:        { enabled: false }
+  # Container management UI. Layer 3 because it is an OPTIONAL operator tool, not
+  # platform chassis — nothing declares a capability it provides.
+  portainer:        { enabled: false }
+  # QA/automation browser — an optional operator tool, not chassis. Nothing declares
+  # a dependency on its `browser` capability.
+  browser42:        { state: disabled, by: user }
+  # Cache/queue inspector. Extracted out of the layer-1 `redis` app: nothing depends on it,
+  # and its ~500 MB image should not be part of a default install.
+  redisinsight:     { enabled: false }
+  # Supabase on top of the platform db: kong + postgrest + storage + Studio. The db itself is
+  # layer-1 chassis (`postgres`); THIS is the optional observability/API surface over it.
+  supabase:         { state: disabled, by: user }
+  # Automation-only app (kind: blueprint, owns no container): the Google Drive/Sheets/Gmail MCP
+  # servers an n8n AI agent calls, plus an integration health probe. Enabling it imports its
+  # workflows into n8n; disabling/uninstalling removes them again.
+  google-workspace-agent: { enabled: false }
+  # 2026-09-17 product decision (owner): the FIRST RUN ships the platform + the four business
+  # apps (n8n, drive, mail, indox) and nothing else. Error tracking and WhatsApp chat are gallery
+  # apps — installed from the console when wanted, not part of the base download (5 containers
+  # and ~1 GB each). Same mechanism as every other gallery app: `bbox apps enable glitchtip|chat`.
+  glitchtip:        { enabled: false }
+  # Domain services. Each is ONE app owning its whole capability:
+  #   drive — local UI + native storage (:8975).
+  #   mail  — the whole mail capability in one app: inbox (abstraction API :8970) + mailview (UI,
+  #           mail.localhost) + mailserver (GreenMail backend) + webmail (Roundcube, email.localhost).
+  #           Was three apps (inbox+mailview+localmail); their cross-app edges are now internal.
+  drive:       { state: disabled, by: user }   # drive domain service (:8975)
+  mail:        { state: disabled, by: user }   # mail domain service — API + UI + local backend + webmail
+  chat:             { enabled: false }  # chat domain adapter (baileys) — gallery, see glitchtip note
+  # The third-party sample app. Ships DISABLED like everything else in the gallery — a fresh
+  # install should not start a demo nobody asked for; `bbox apps enable hello-bina` proves the
+  # install path when you want it.
+  hello-bina:       { state: disabled, by: dgo-extend }
+  computers:        { state: enabled, by: cli }   # added by cli
+  git:              { state: enabled, by: cli }   # added by cli
+  sites:            { state: disabled, by: cli }   # added by cli
+  domains:          { state: disabled, by: user }   # added by cli
+  telegram-tv:      { state: disabled, by: user }   # added by cli
+  project-pln:      { state: disabled, by: user }   # added by cli
+  dgo-extend:          { state: enabled, by: cli }   # added by cli
+  social-list:      { state: disabled, by: user }   # added by cli
+  digital-assets:   { state: enabled, by: cli }   # added by cli
+
+# Configured instances of multi-instance (kind: domain) capabilities.
+# `active` is the instance ops use when none is pinned; secrets live in the connections
+# vault keyed by instance id and are NEVER stored here.
+instances:
+  drive:
+    active: drive_local-local
+    entries:
+      - { id: drive_local-local, protocol: drive_local, label: "אחסון מקומי" }
+  mail:
+    active: mail_imap_local-local
+    entries:
+      - { id: mail_imap_local-local, protocol: mail_imap_local, label: "דואר מקומי" }
+  chat:
+    active: null
+    entries: []
+  # INDOX INSTANCES ARE NOT DECLARED HERE. `public.indox_instances` is the ONLY list of instances,
+  # and it is authoritative — an instance created at runtime exists there and can never appear in a
+  # file, so anything reading this block as a source of truth is reading a stale copy by
+  # construction. Two declarations of the same fact is exactly the duplication this migration
+  # exists to remove (2026-08-28, owner order).
+  #
+  # What remains below is a BOOTSTRAP SEED and nothing else: the list used to provision a FRESH
+  # machine, where the database does not exist yet and so cannot be asked. `apps/indox/hooks/
+  # apply-schema` consults it only when the registry is unreachable. Once the registry exists it
+  # wins, always, and a difference between the two is not a conflict to reconcile — the file is
+  # simply out of date.
+  #
+  # Unlike drive/mail/chat above, there is no `active` and no default: every entry is a live client
+  # running concurrently, and `bbox indox` requires an explicit -i precisely so a command aimed at
+  # nothing has nothing to fall back to.
+  #
+  # (The word here is INSTANCE. "Tenant" was borrowed vocabulary and it is what let a row-level
+  # `instance` COLUMN get invented alongside schema separation — two mechanisms for one idea.)
+  indox:
+    bootstrap_seed:
+      # levi is GONE (owner ruling 2026-08-31: a development experiment, not a client) and the
+      # permanent `test` instance replaces it — the tenant every suite provisions, seeds and
+      # resets so no test ever touches a real client's schema. Its schema name follows the
+      # registry's schema law (schema_name = 'indox_' || id, enforced by apply-schema).
+      - { id: hacohen, schema: indox_hacohen, label: "הכהן", enabled: true }
+      - { id: test, schema: indox_test, label: "בדיקות", enabled: true, purpose: test }
+
+remote:
+- office: vps1
+  label:
+    he: שרת פיתוח בינה סלושנס
+    en: שרת פיתוח בינה סלושנס
+  link: vps1
+  address: 10.79.2.2
+  commit: dad40e66b4dea1e100a6414779c827fd764ab446
+  fetched: 1791129653
+  apps:
+  - app: indox
+    alias: incoming
+    port: 8080
+    name: מסמכים
+    name_en: INDOX
+    icon: inbox
+    group: עסק
+    desc: עיבוד מסמכים אוטומטי (INDOX)
+    order: 0
+    module:
+      kind: embedded
+      path: /a/incoming/
+    health: /healthz
+    host: incoming-documents.localhost
+    identity:
+      to: akadmin
+  - app: my-docs
+    alias: pinkas
+    port: 8000
+    name: מסמכים שלי
+    name_en: My Docs
+    icon: file-text
+    group: עסק
+    desc: ניהול מסמכים עסקיים
+    order: 1
+    module:
+      kind: embedded
+      path: /a/pinkas/
+    health: /healthz
+    host: my-docs.localhost
+    identity:
+      to: akadmin
+  - app: drive
+    alias: drive
+    port: 8975
+    name: דרייב
+    name_en: Drive
+    icon: folder
+    group: עסק
+    desc: קבצים ומסמכים
+    order: 2
+    module:
+      kind: embedded
+      path: /a/drive/
+    health: /healthz
+    host: drive.localhost
+    identity:
+      to: akadmin
+  - app: mail
+    alias: mailview
+    port: 8976
+    name: מייל
+    name_en: Mail
+    icon: mail
+    group: עסק
+    desc: תיבת דואר עסקית
+    order: 3
+    module:
+      kind: embedded
+      path: /a/mailview/
+    health: /healthz
+    agent_api_port: 8970
+    host: mail.localhost
+    identity:
+      to: akadmin
+  - app: sites
+    alias: sites
+    port: 8979
+    name: אתרים
+    name_en: Sites
+    icon: browser
+    group: עסק
+    desc: האתרים של העסק — זמינות, ביקורים, אבטחה ו-SEO
+    order: 5
+    module:
+      kind: embedded
+      path: /a/sites/
+    health: /healthz
+    host: sites.localhost
+    identity:
+      to: akadmin
+  - app: any-concurrency
+    alias: any-concurrency
+    port: 8080
+    name: כל-מקביל
+    name_en: Any Concurrency
+    icon: activity
+    group: תשתית
+    desc: ציר-זמן מקביליות
+    order: 6
+    module:
+      kind: embedded
+      path: /a/any-concurrency/
+    health: /healthz
+    host: any-concurrency.localhost
+    identity:
+      to: akadmin
+  - app: domains
+    alias: domains
+    port: 8980
+    name: דומיינים
+    name_en: Domains
+    icon: link
+    group: עסק
+    desc: תוקף דומיינים, ספקי DNS ורשומות
+    order: 6
+    module:
+      kind: embedded
+      path: /a/domains/
+    health: /healthz
+    host: domains.localhost
+    identity:
+      to: akadmin
+  - app: notifications
+    alias: alerts
+    port: 8977
+    name: התראות
+    name_en: Notifications
+    icon: bell
+    group: תשתית
+    desc: מרכז התראות
+    order: 7
+    module:
+      kind: embedded
+      path: /a/alerts/
+    health: /healthz
+    host: alerts-svc.localhost
+    identity:
+      to: akadmin
+  - app: machine
+    alias: machine
+    port: 8080
+    name: מכונה
+    name_en: Machine
+    icon: server
+    group: תשתית
+    desc: מדדי מארח ו-Docker
+    order: 8
+    module:
+      kind: embedded
+      path: /a/machine/
+    health: /healthz
+    host: machine.localhost
+    identity:
+      to: akadmin
+  - app: app-management
+    alias: app-management
+    port: 8080
+    name: אפליקציות
+    name_en: App Management
+    icon: grid
+    group: תשתית
+    desc: כל האפליקציות — פתיחה, הפעלה, כיבוי, התקנה והסרה
+    order: 9
+    module:
+      kind: embedded
+      path: /a/app-management/
+    health: /healthz
+    host: apps.localhost
+    identity:
+      to: akadmin
+  - app: computers
+    alias: computers
+    port: 8977
+    name: מחשבים
+    name_en: Computers
+    icon: monitor
+    group: תשתית
+    desc: המכונה שמריצה את הלשכה ושרתים ב־SSH
+    order: 9
+    module:
+      kind: embedded
+      path: /a/computers/
+    health: /healthz
+    host: computers.localhost
+    identity:
+      to: akadmin
+  - app: connections
+    alias: connections
+    port: 8990
+    name: חיבורים ומפתחות
+    name_en: Connections
+    icon: key
+    group: הגדרות
+    desc: ניהול מפתחות גישה וחיבורים
+    order: 10
+    module:
+      kind: embedded
+      path: /a/connections/
+    health: /healthz
+    host: connections.localhost
+    identity:
+      to: akadmin
+  - app: dgo-extend
+    alias: dgo-extend
+    port: 8983
+    name: הרחבת הלשכה
+    name_en: Office extension
+    icon: building
+    group: תשתית
+    desc: לשכות נוספות, קישורים ואפליקציות שמונחות עליהן
+    order: 10
+    module:
+      kind: embedded
+      path: /a/dgo-extend/
+    health: /healthz
+    host: dgo-extend.localhost
+    identity:
+      to: akadmin
+  - app: hello-bina
+    alias: hello-bina
+    port: 80
+    name: שלום בינה
+    name_en: Hello Bina
+    icon: box
+    group: עסק
+    desc: אפליקציית דוגמה שהותקנה מקטלוג חיצוני
+    order: 80
+    module:
+      kind: embedded
+      path: /a/hello-bina/
+    health: /healthz
+    host: hello-bina.localhost
+    identity:
+      to: akadmin
+  - app: console
+    alias: console-home
+    port: 8000
+    name: המרכז
+    name_en: Console
+    icon: 🏠
+    group: ראשי
+    desc: מסך הבית של הלשכה — כל האפליקציות במקום אחד
+    order: 999
+    module:
+      kind: embedded
+      path: /a/console-home/
+    health: /healthz
+    host: console.localhost
+    identity:
+      to: akadmin
+  link_port: 9002

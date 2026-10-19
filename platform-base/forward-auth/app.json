@@ -1,0 +1,30 @@
+{
+  "id": "forward-auth",
+  "title": {
+    "he": "זהות וכניסה (Go)",
+    "en": "Forward-auth (Go)"
+  },
+  "layer": 1,
+  "kind": "service",
+  "version": "0.1.0",
+  "system": true,
+  "summary": {
+    "he": "שירות הזהות והכניסה כיום — בינארי Go יחיד שמחליף את authentik (core-006)",
+    "en": "The identity and forward-auth service — one Go binary, replacing authentik (core-006)"
+  },
+  "capabilities": [],
+  "use": [],
+  "connections": [],
+  "compose": "docker-compose.yml",
+  "health": {
+    "structural": "auto",
+    "probe": {
+      "http": "http://forward-auth:9078/healthz",
+      "interval": "30s"
+    }
+  },
+  "data": {
+    "on_uninstall": "keep",
+    "note": "Stateless: its data is authentik's own database (read at the window, never written) and the users file, which is a file outside the repository. Nothing here to keep or lose."
+  }
+}

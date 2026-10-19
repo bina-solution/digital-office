@@ -1,0 +1,13 @@
+stateDiagram-v2
+    [*] --> pending: gateway mints the enrollment token
+    pending --> claimed: node scans the QR and posts its public keys
+    claimed --> approved: gateway verifies token, tenant and reserved host
+    approved --> active: first WireGuard handshake
+    approved --> degraded: no handshake within 60 seconds
+    degraded --> active: handshake arrives late
+    active --> offline: no handshake for 3 keepalives
+    offline --> active: laptop wakes, handshake resumes
+    active --> revoked: owner revokes
+    pending --> expired: 15 minute TTL passes
+    revoked --> [*]
+    expired --> [*]

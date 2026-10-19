@@ -1,0 +1,54 @@
+GlitchTip Error Tracking Report — chat v0.7
+========================================================
+Generated: 2025-07-21
+Platform: GlitchTip @ https://glitchtip.hacohen.bina-solutions.co.il
+Project: chat (project ID: 3)
+
+1. WHATSAPP-HACOHANIM ISSUES (2 total — all test events)
+---------------------------------------------------------
+Issue #321 — Error: Direct Sentry test error from bot container
+  Type: Test event (manual docker exec)
+  Events: 1
+  Stack: [eval] → node internal VM
+
+Issue #320 — Startup test from v0.7 deployment
+  Type: Test message (Sentry.captureMessage)
+  Events: 1
+
+Conclusion: No real production errors. The bot is running cleanly.
+Sentry instrumentation covers: unhandledRejection, uncaughtException,
+onPrivateMessage, onGroupMessage, onMessage, auto-intake-doc, auto-intake-link.
+Sentry.flush() called on graceful shutdown to ensure buffered events are sent.
+
+2. KNOWN NON-CAPTURED BEHAVIOR
+-------------------------------
+- Baileys `bad-request` in executeInitQueries (level 50 log, every startup)
+  This is internal to Baileys, not a JS exception. The bot connects normally.
+  Not captured by Sentry — acceptable, cosmetic only.
+
+3. STARTUP HEALTH CHECKS (7/7 PASSING)
+---------------------------------------
+✔ N8N Settings API        — 9 admins loaded
+✔ N8N Company API         — 1203 companies loaded
+✔ N8N Upload-Doc webhook  — reachable
+✔ N8N Incoming-Doc webhook — reachable
+✔ Apitools OCR endpoint   — reachable
+✔ Apitools JSONQuery       — reachable
+✔ GlitchTip server        — healthy, DSN configured
+
+4. CROSS-PROJECT SUMMARY (other GlitchTip projects)
+----------------------------------------------------
+n8n (project 1): 50+ issues, 24,285 events
+  Top: OAuth grant errors (8,559), timeout errors (556), NodeApiError (415)
+
+apitools (project 2): 50+ issues, 412 events
+  Top: SystemExit:1 (289), 413 Request Entity Too Large (22), PDF conversion (6)
+
+librechat (project 4): 0 issues
+
+5. INTEGRATION STATUS
+---------------------
+SDK: @sentry/node ^8.0.0
+DSN: Configured via SENTRY_DSN env var (from CHAT_SENTRY_DSN in .env)
+Error handlers instrumented: 5 catch blocks in chat_bot.js + 2 global handlers in main.js
+Shutdown flush: Yes (Sentry.flush with 5s timeout)

@@ -1,0 +1,70 @@
+# yaml-language-server: $schema=./schema.json
+title: Nine scripts hardcode /opt/pw-browsers/chromium-1194 - the whole offline QA suite is unrunnable on a fresh machine
+opened: '2026-08-21'
+severity: medium
+status: in-progress
+summary: Nine scripts hardcode /opt/pw-browsers/chromium-1194 - the whole offline QA suite is unrunnable on a fresh machine
+description: |
+  area: digital-office / offline QA / portability
+  As first recorded — status: partially-fixed
+
+  ## Context
+
+  On portable-ubuntu, 2026-08-21, a fresh clone of platform-os-indox-final:
+
+      $ python3 digital-office/sim/flow-qa.py
+      playwright._impl._errors.Error: BrowserType.launch: Failed to launch chromium because
+      executable doesn't exist at /opt/pw-browsers/chromium-1194/chrome-linux/chrome
+
+  Nine tracked scripts carry that literal:
+
+      digital-office/sim/flow-qa.py:36
+      digital-office/sim/ui-map.py:30
+      digital-office/tooling/one.py:14
+      digital-office/tooling/run.py:14
+      digital-office/verify/flow_mock.py:11
+      digital-office/verify/flow_real.py:15
+      digital-office/verify/render_mock.py:9
+      digital-office/verify/sim_qa.py:8
+      digital-office/verify/compose_flows.py:10   (ffmpeg-1011, same shape)
+
+  It pins two things at once, and neither is recorded anywhere else in the repo:
+    - an absolute path under /opt, which is not writable without root, so a developer cannot
+      satisfy it even deliberately;
+    - a Playwright BUILD NUMBER (chromium-1194). No requirements file pins the playwright
+      version that would produce build 1194, so `pip install playwright` gets whatever is
+      current — 1234 at the time of writing — and the path can never match.
+
+  CLAUDE.md lists `python3 digital-office/sim/flow-qa.py` as one of the standard tasks and
+  calls the sim "the specification the live UI is ported toward"; sim/PORT-PLAN.md treats
+  `flow-qa.py --url <live>` as how a port is PROVEN rather than declared done. That proof
+  cannot be run by anyone who does not already have this directory.
+
+  ## Why the gates missed it
+
+  G10 portability-lint exists for exactly this ("host paths survive Linux/Windows/macOS") but
+  only checks PYTHONIOENCODING. G12 compile-lint parses digital-office's 11 python files, so
+  it sees them — a syntax check cannot see a dead path. And per CLAUDE.md no CI workflow runs
+  anything under digital-office/, so nothing ever executed these on a machine that lacked the
+  directory.
+
+  The repo already contains the correct pattern, in data/ui-map/ui-capture.py:714 —
+  $UI_CHROME_BIN, then a glob over chromium-*, then a fallback. The sim scripts simply never
+  adopted it.
+
+  ## Fixed
+
+  2026-08-21: digital-office/sim/flow-qa.py and digital-office/sim/ui-map.py now resolve via
+  $UI_CHROME_BIN -> glob /opt/pw-browsers/chromium-* -> None (let Playwright use its own
+  managed browser). Note executable_path=None is NOT the same as omitting the argument, so it
+  is only passed when a path resolved.
+
+  ## Remaining
+
+  The seven scripts under digital-office/{tooling,verify}/ still carry the literal. Half of
+  digital-office/verify/ is already documented as unrunnable as committed (it hardcodes
+  /home/user/deployment-hacohen and a reference/ directory that does not exist), so those
+  should be fixed together with that, or the tree should say plainly which parts are live.
+
+  Suggested: extend G10 to flag absolute paths under /opt, /home/<user> and /root in tracked
+  python — the two known offenders in this tree are both of that shape.

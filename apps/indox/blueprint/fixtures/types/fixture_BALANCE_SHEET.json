@@ -1,0 +1,90 @@
+{
+ "type": "BALANCE_SHEET",
+ "doc_class": "bs",
+ "version": 1,
+ "_match": "EXISTING behaviour. resolveDocType BALANCE_SHEET->bs_doc; bsDocAction.",
+ "detect": {
+  "keywords_ref": "bs_kws",
+  "strong_ref": "bs_strong",
+  "priority": 60,
+  "ai_type_map": [
+   "BALANCE_SHEET"
+  ]
+ },
+ "kw_extract": {
+  "fields": [],
+  "_note": "BS uses NO apitools field queries; it AI-extracts line items."
+ },
+ "bs_extract": {
+  "enabled": true,
+  "extractor_webhook": "bs_ex_2_dev",
+  "model": "models/gemini-3.1-pro-preview",
+  "cache": {
+   "key_prefix": "bs",
+   "table": "ai_extraction_cache"
+  },
+  "response_schema": {
+   "doc_header": "object(company, statement type, date, column ids)",
+   "transactions": "array<object>(unique_key, references, date, debit, credit, accumulated_balance, notes)",
+   "summary": "object(documentTotal, documentDate, totalsMatch, currency)"
+  },
+  "verify_gate": "summary.totalsMatch == true -> BS_EXTRACTION_VERIFIED"
+ },
+ "spawn": {
+  "_note": "IRREDUCIBLE code primitive (link_documents). Fixture supplies PARAMS only.",
+  "lines_field": "BS_EXTRACTED_LINES.transactions",
+  "child_type": "INVOICE",
+  "match": {
+   "COMPANY_ID": "$parent.COMPANY_ID",
+   "SHORT_DOC_ID": "last5($line.references)"
+  },
+  "child_field_map": {
+   "TYPE": "INVOICE",
+   "COMPANY_DOC_ID": "$line.references",
+   "LINKED_BS": "$parent.NAME",
+   "BS_LINE_AMOUNT": "$line.amount",
+   "BS_LINE_DATE": "$line.date",
+   "SOURCE_TYPE": "BALANCE_SHEET",
+   "SOURCE_ID": "$parent.ID",
+   "STATUS": "IN_PROGRESS"
+  },
+  "_spawned": "children are TYPE=INVOICE, re-enter the invoice fixture (doc_class:gdoc), guarded by isBsLine (no LINK/AI)."
+ },
+ "select": {
+  "_note": "BS itself does not run gdoc selection; its spawned invoice lines do."
+ },
+ "pipeline": {
+  "steps": [
+   {
+    "action": "extract_balance_sheet",
+    "guard": "!BS_EXTRACTED_LINES_COMPLETED",
+    "sets": "BS_EXTRACTED_LINES(_COMPLETED)",
+    "onFail": "update_status_extraction_failed"
+   },
+   {
+    "action": "verify_balance_sheet",
+    "guard": "BS_EXTRACTED_LINES && !BS_EXTRACTION_VERIFIED",
+    "sets": "BS_EXTRACTION_VERIFIED"
+   },
+   {
+    "action": "link_documents",
+    "guard": "BS_EXTRACTION_VERIFIED && !BS_LINK_DOCUMENTS_COMPLETED",
+    "sets": "BS_LINK_DOCUMENTS_COMPLETED",
+    "_engine": "bs collection (spawn primitive)"
+   },
+   {
+    "action": "mark_completed",
+    "guard": "hasAllRequiredFields(bs) && STATUS!='COMPLETED'",
+    "terminal": true
+   }
+  ],
+  "complete_when": [
+   "BS_EXTRACTED_LINES_COMPLETED",
+   "BS_EXTRACTION_VERIFIED",
+   "BS_LINK_DOCUMENTS_COMPLETED"
+  ],
+  "on_complete": "mark_completed"
+ },
+ "side_effects": {},
+ "base": "GLOBAL"
+}

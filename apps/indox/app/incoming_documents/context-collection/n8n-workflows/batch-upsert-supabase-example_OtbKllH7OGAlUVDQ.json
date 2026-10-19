@@ -1,0 +1,1066 @@
+{
+  "updatedAt": "2026-04-30T17:16:30.881Z",
+  "createdAt": "2026-04-30T12:53:45.461Z",
+  "id": "OtbKllH7OGAlUVDQ",
+  "name": "Batch Upsert Supabase (untested example)",
+  "description": null,
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        208
+      ],
+      "id": "be08102a-6ea4-4424-a317-b84ad065cf55",
+      "name": "When clicking 'Execute workflow'",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "httpMethod": "PUT",
+        "path": "incoming-documents/update",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "05826483-a175-4117-9f42-01bd2e0f7608",
+      "name": "Webhook - Update Document",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "26fb15c2-da6d-434b-a055-28460ebcfce9"
+    },
+    {
+      "parameters": {
+        "inputSource": "jsonExample",
+        "jsonExample": "{\n  \"NAME\": null,\n  \"COMPANY_ID\": null,\n  \"SHORT_DOC_ID\": null,\n  \"TYPE\": null,\n  \"STATUS\": null,\n  \"COMPANY_DOC_ID\": null,\n  \"LINK\": null,\n  \"DOC_DATE\": null,\n  \"DOC_TOTAL_AMOUNT\": null,\n  \"PURCHASE_ID\": null,\n  \"SHIPMENT_DOC_ID\": null,\n  \"LINKED_BS\": null,\n  \"BS_LINE_DATE\": null,\n  \"BS_LINE_AMOUNT\": null,\n  \"SOURCE_TYPE\": null,\n  \"SOURCE_ID\": null,\n  \"SOURCE_LINK\": null,\n  \"SIZE\": null,\n  \"HASH\": null,\n  \"TIMESTAMP\": null,\n  \"COMPANY_NAME\": null,\n  \"REQUIRED_ACTION\": null,\n  \"BS_EXTRACTED_LINES\": null,\n  \"TOTAL_AMOUNT\": null,\n  \"BS_EXTRACTION_VERIFIED\": null,\n  \"BS_LINE_NOTE\": null,\n  \"FROM_OFFICE\": null,\n  \"FROM_OFFICE_CHECK\": null,\n  \"BS_LINK_DOCUMENTS_COMPLETED\": null,\n  \"SEARCH_IN_DRIVE_COMPLETED\": null,\n  \"DOC_DATE_COMPLETED\": null,\n  \"DOC_TOTAL_AMOUNT_COMPLETED\": null,\n  \"PURCHASE_ID_COMPLETED\": null,\n  \"SHIPMENT_ID_COMPLETED\": null,\n  \"COMPANY_NAME_COMPLETED\": null,\n  \"API_TOOLS_ID_COMPLETED\": null,\n  \"API_TOOLS_ID\": null,\n  \"ID\": null,\n  \"EMPTY\": null,\n  \"BS_EXTRACTED_LINES_COMPLETED\": null,\n  \"BS_EXTRACTION_USE_CACHE\": null,\n  \"EX_INVOICE_ID\": null,\n  \"INVOICE_ID_COMPLETED\": null,\n  \"EX_IS_BS\": null,\n  \"EX_IS_BS_COMPLETED\": null,\n  \"FIGURE_TYPE_COMPLETED\": null,\n  \"DOUBLE_LINE_CONTEXT\": null,\n  \"FIGURE_COMPANY_COMPLETED\": null,\n  \"AI_COMPANY_ID\": null,\n  \"AI_TYPE\": null,\n  \"AI_DOC_ID\": null,\n  \"AI_DOC_DATE\": null,\n  \"AI_DOC_AMOUNT\": null,\n  \"AI_SHIPMENT_IDS\": null,\n  \"AI_ORDER_IDS\": null,\n  \"AI_EXTRACTION_COMPLETED\": null,\n  \"PRIORITY_SYNC_COMPLETED\": null,\n  \"SELECTED_COMPANY_ID\": null,\n  \"SELECTED_DOC_ID\": null,\n  \"SELECTED_DOC_AMOUNT\": null,\n  \"SELECTED_DOC_DATE\": null,\n  \"SELECTED_DOC_SHIPMENT_ID\": null,\n  \"SELECTED_DOC_ORDER_ID\": null,\n  \"SELECTION_CERTAINTY\": null,\n  \"SELECTION_SOURCE\": null,\n  \"SELECTION_COMPLETED\": null,\n  \"SELECTION_SCORE_DEBUG\": null\n}"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        400
+      ],
+      "id": "951b8b3f-01c5-441d-b86b-ca464ae479ee",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        320,
+        208
+      ],
+      "id": "0968e9dc-aa58-47b7-a037-0c8674607ee4",
+      "name": "Start"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Strip null/undefined entries from each item (mirrors gsheet 'Clean Nulls')\nfor (const item of $input.all()) {\n  const cleaned = Object.fromEntries(\n    Object.entries(item.json).filter(([, v]) => v !== null && v !== undefined)\n  );\n  item.json = cleaned;\n}\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        512,
+        208
+      ],
+      "id": "5400a6cd-1ddf-4e6f-9138-63794719511d",
+      "name": "Clean Nulls"
+    },
+    {
+      "parameters": {
+        "jsCode": "// If any selection / AI field is being set, force a re-sync to Priority\n// (mirrors gsheet 'Check Priority Sync')\nconst fieldsToCheck = [\n  'SELECTED_COMPANY_ID',\n  'SELECTED_DOC_DATE',\n  'AI_DOC_ID',\n  'SELECTED_DOC_ID',\n  'SELECTED_DOC_AMOUNT',\n  'SELECTED_DOC_SHIPMENT_ID',\n  'SELECTED_DOC_ORDER_ID',\n  'LINK',\n  'TYPE',\n  'SOURCE_TYPE',\n  'FROM_OFFICE_CHECK',\n  'SELECTION_CERTAINTY'\n];\n\nfor (const item of $input.all()) {\n  const isUpdated = fieldsToCheck.some(f => item.json[f] !== undefined && item.json[f] !== null);\n  if (isUpdated) {\n    item.json.PRIORITY_SYNC_COMPLETED = false;\n  }\n}\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        208
+      ],
+      "id": "2df6c056-e51f-4362-b415-1dce4e68b788",
+      "name": "Check Priority Sync"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// BUILD LOOKUP QUERY — Supabase GET(s) returning every existing row that\n// matches ANY input item by one of:\n//   1. id (numeric Supabase PK, if caller passes it back)\n//   2. COMPANY_ID + SHORT_DOC_ID\n//   3. COMPANY_ID + COMPANY_DOC_ID\n//   4. HASH\n//\n// BATCH SUPPORT: chunks the OR filter into multiple URLs (CHUNK_SIZE OR\n// clauses each) so PostgREST URL-length limits (~8KB on most reverse proxies)\n// don't cap batch size. Emits one item per chunk; the HTTP node calls each;\n// Resolve & Prepare Records aggregates `$input.all()`.\n//\n// If the batch has no usable lookup keys, emits a single `skipLookup: true`\n// item (Has Lookup Keys? IF routes around the HTTP call).\n// ============================================================================\n\nconst SUPABASE_URL = 'https://krvdyzrwstcqrvsaizrk.supabase.co';\nconst TABLE = 'incoming-documents';\nconst SELECT_COLS = 'id,COMPANY_ID,SHORT_DOC_ID,COMPANY_DOC_ID,HASH';\nconst CHUNK_SIZE  = 50;\n\nfunction has(v) {\n  return v !== undefined && v !== null && v !== '' && String(v).toLowerCase() !== 'unknown';\n}\n\n// PostgREST value quoting: wrap in double-quotes, escape inner quotes & backslashes\nfunction q(v) {\n  return '\"' + String(v).replace(/\\\\/g, '\\\\\\\\').replace(/\"/g, '\\\\\"') + '\"';\n}\n\nconst items = $input.all().map(i => i.json);\n\nconst ids        = new Set();\nconst hashes     = new Set();\nconst pairsShort = [];\nconst pairsDoc   = [];\n\nfor (const it of items) {\n  const pk = it.id ?? it.ID;\n  if (has(pk) && /^\\d+$/.test(String(pk))) ids.add(String(pk));\n  if (has(it.HASH)) hashes.add(String(it.HASH));\n  if (has(it.COMPANY_ID) && has(it.SHORT_DOC_ID))   pairsShort.push({ c: it.COMPANY_ID, s: it.SHORT_DOC_ID });\n  if (has(it.COMPANY_ID) && has(it.COMPANY_DOC_ID)) pairsDoc.push({   c: it.COMPANY_ID, d: it.COMPANY_DOC_ID });\n}\n\nconst orParts = [];\nif (ids.size)    orParts.push(`id.in.(${[...ids].join(',')})`);\nif (hashes.size) orParts.push(`HASH.in.(${[...hashes].map(q).join(',')})`);\nfor (const p of pairsShort) orParts.push(`and(COMPANY_ID.eq.${q(p.c)},SHORT_DOC_ID.eq.${q(p.s)})`);\nfor (const p of pairsDoc)   orParts.push(`and(COMPANY_ID.eq.${q(p.c)},COMPANY_DOC_ID.eq.${q(p.d)})`);\n\nif (!orParts.length) {\n  return [{ json: { skipLookup: true, itemCount: items.length } }];\n}\n\nconst chunks = [];\nfor (let i = 0; i < orParts.length; i += CHUNK_SIZE) chunks.push(orParts.slice(i, i + CHUNK_SIZE));\n\nreturn chunks.map((chunk, idx) => ({\n  json: {\n    skipLookup: false,\n    itemCount: items.length,\n    chunkIndex: idx,\n    chunkCount: chunks.length,\n    lookupUrl: `${SUPABASE_URL}/rest/v1/${TABLE}?select=${SELECT_COLS}&or=(${chunk.join(',')})`\n  }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        928,
+        208
+      ],
+      "id": "5bcffe41-0298-4004-bbcc-3afbc87f24f8",
+      "name": "Build Lookup Query"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "skip-lookup-check",
+              "leftValue": "={{ $json.skipLookup }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1136,
+        208
+      ],
+      "id": "3a38b0db-035c-4ce9-86d9-d6151d4ee8c3",
+      "name": "Has Lookup Keys?"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.lookupUrl }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1360,
+        144
+      ],
+      "id": "b0cf43d7-41c2-4eeb-bc07-0fc446f7fa5c",
+      "name": "Lookup Existing Rows",
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "OO5X9JLJWgtv8fZX",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// RESOLVE & PREPARE RECORDS  (single PK = Supabase `id`)\n// ----------------------------------------------------------------------------\n// Inputs:\n//   - 'Check Priority Sync' .all()  → cleaned input items\n//   - this node's input              → existing rows from Supabase lookup\n//                                      (may be MULTIPLE items, one per chunk;\n//                                       empty when 'Has Lookup Keys?' was false)\n//\n// Match priority (UPDATE if hit, otherwise INSERT — let Supabase auto-assign id):\n//   1. id (or legacy `ID`) provided AND found\n//   2. COMPANY_ID + SHORT_DOC_ID match\n//   3. COMPANY_ID + COMPANY_DOC_ID match\n//   4. HASH match\n//\n// AUTO TYPE COERCION (boolean / numeric / jsonb / text) is applied per\n// EXPECTED schema before sending to Supabase, so PostgREST won't reject\n// values like \"true\", \"2,435.00\", or stringified arrays.\n//\n// Output: single item with `records[]` (ready to upsert), `updatedIds[]`,\n// stats, warnings.\n// ============================================================================\n\nconst MAX_BATCH = 1000;\n\nconst STRIP_KEYS = new Set(['ID', 'row_number']);\n\n// Mirror of Analyze Schema EXPECTED — used for type coercion.\nconst EXPECTED = {\n  id: 'bigint',\n  NAME:'text', COMPANY_ID:'text', SHORT_DOC_ID:'text', TYPE:'text', STATUS:'text',\n  COMPANY_DOC_ID:'text', LINK:'text', DOC_DATE:'text', PURCHASE_ID:'text',\n  SHIPMENT_DOC_ID:'text', BS_LINE_DATE:'text', SOURCE_TYPE:'text', SOURCE_ID:'text',\n  SOURCE_LINK:'text', HASH:'text', TIMESTAMP:'text', COMPANY_NAME:'text',\n  REQUIRED_ACTION:'text', BS_LINE_NOTE:'text', FROM_OFFICE:'text', API_TOOLS_ID:'text',\n  EX_INVOICE_ID:'text', AI_COMPANY_ID:'text', AI_TYPE:'text', AI_DOC_ID:'text',\n  AI_DOC_DATE:'text', SELECTED_COMPANY_ID:'text', SELECTED_DOC_ID:'text',\n  SELECTED_DOC_DATE:'text', SELECTED_DOC_SHIPMENT_ID:'text', SELECTED_DOC_ORDER_ID:'text',\n  SELECTION_SOURCE:'text',\n  DOC_TOTAL_AMOUNT:'numeric', BS_LINE_AMOUNT:'numeric', TOTAL_AMOUNT:'numeric',\n  AI_DOC_AMOUNT:'numeric', SELECTED_DOC_AMOUNT:'numeric', SIZE:'numeric',\n  SELECTION_CERTAINTY:'numeric',\n  LINKED_BS:'boolean', BS_EXTRACTION_VERIFIED:'boolean', FROM_OFFICE_CHECK:'boolean',\n  BS_LINK_DOCUMENTS_COMPLETED:'boolean', SEARCH_IN_DRIVE_COMPLETED:'boolean',\n  DOC_DATE_COMPLETED:'boolean', DOC_TOTAL_AMOUNT_COMPLETED:'boolean',\n  PURCHASE_ID_COMPLETED:'boolean', SHIPMENT_ID_COMPLETED:'boolean',\n  COMPANY_NAME_COMPLETED:'boolean', API_TOOLS_ID_COMPLETED:'boolean', EMPTY:'boolean',\n  BS_EXTRACTED_LINES_COMPLETED:'boolean', BS_EXTRACTION_USE_CACHE:'boolean',\n  INVOICE_ID_COMPLETED:'boolean', EX_IS_BS:'boolean', EX_IS_BS_COMPLETED:'boolean',\n  FIGURE_TYPE_COMPLETED:'boolean', FIGURE_COMPANY_COMPLETED:'boolean',\n  AI_EXTRACTION_COMPLETED:'boolean', PRIORITY_SYNC_COMPLETED:'boolean',\n  SELECTION_COMPLETED:'boolean',\n  BS_EXTRACTED_LINES:'jsonb', AI_SHIPMENT_IDS:'jsonb', AI_ORDER_IDS:'jsonb',\n  DOUBLE_LINE_CONTEXT:'jsonb', SELECTION_SCORE_DEBUG:'jsonb'\n};\n\nfunction has(v) {\n  return v !== undefined && v !== null && v !== '' && String(v).toLowerCase() !== 'unknown';\n}\nfunction norm(v) {\n  return v === undefined || v === null ? '' : String(v).toLowerCase();\n}\n\n// AUTO TYPE COERCION — returns { value, warning|null }. On failure returns the\n// original value (PostgREST will surface the column) — we never silently drop.\nfunction coerce(name, v) {\n  if (v === null || v === undefined || v === '') return { value: null, warning: null };\n  const t = EXPECTED[name];\n  if (!t) return { value: typeof v === 'object' ? JSON.stringify(v) : v, warning: null };\n\n  if (t === 'boolean') {\n    if (typeof v === 'boolean') return { value: v, warning: null };\n    const s = String(v).trim().toLowerCase();\n    if (['true','1','yes','y','t'].includes(s))  return { value: true,  warning: null };\n    if (['false','0','no','n','f'].includes(s))  return { value: false, warning: null };\n    return { value: v, warning: `${name}: cannot coerce \"${v}\" to boolean` };\n  }\n\n  if (t === 'numeric' || t === 'bigint') {\n    if (typeof v === 'number') return { value: v, warning: null };\n    const cleaned = String(v).replace(/,/g, '').trim();\n    if (cleaned === '') return { value: null, warning: null };\n    const n = Number(cleaned);\n    if (Number.isFinite(n)) return { value: t === 'bigint' ? Math.trunc(n) : n, warning: null };\n    return { value: v, warning: `${name}: cannot coerce \"${v}\" to ${t}` };\n  }\n\n  if (t === 'jsonb') {\n    if (Array.isArray(v) || (typeof v === 'object' && v !== null)) return { value: v, warning: null };\n    if (typeof v === 'string') {\n      const s = v.trim();\n      if (s.startsWith('[') || s.startsWith('{')) {\n        try { return { value: JSON.parse(s), warning: null }; }\n        catch (e) { return { value: [s], warning: `${name}: jsonb parse failed, wrapped string in array` }; }\n      }\n      return { value: [s], warning: null };\n    }\n    return { value: [v], warning: null };\n  }\n\n  // text (default)\n  if (typeof v === 'object') return { value: JSON.stringify(v), warning: null };\n  return { value: String(v), warning: null };\n}\n\n// --- gather inputs ---\nconst items = $('Check Priority Sync').all().map(i => i.json);\n\n// Aggregate existing rows across (potentially multiple) lookup chunks.\nlet existing = [];\nfor (const inp of $input.all()) {\n  const j = inp.json;\n  if (!j) continue;\n  if (Array.isArray(j))           existing.push(...j);\n  else if (Array.isArray(j.data)) existing.push(...j.data);\n  else if (j.id !== undefined)    existing.push(j);\n}\nexisting = existing.filter(r => r && r.id !== undefined && r.id !== null);\n\nif (!items.length) {\n  return [{ json: { success: true, upsertCount: 0, message: 'No items provided', records: [], updatedIds: [], stats: {} } }];\n}\nif (items.length > MAX_BATCH) {\n  return [{ json: { success: false, error: `Batch size ${items.length} exceeds limit ${MAX_BATCH}`, records: [], updatedIds: [] } }];\n}\n\n// --- build lookup indexes over existing rows ---\nconst byId        = new Map();\nconst byCompShort = new Map();\nconst byCompDoc   = new Map();\nconst byHash      = new Map();\n\nfor (const r of existing) {\n  byId.set(String(r.id), r);\n  if (has(r.HASH)) byHash.set(norm(r.HASH), r);\n  if (has(r.COMPANY_ID) && has(r.SHORT_DOC_ID))\n    byCompShort.set(`${norm(r.COMPANY_ID)}||${norm(r.SHORT_DOC_ID)}`, r);\n  if (has(r.COMPANY_ID) && has(r.COMPANY_DOC_ID))\n    byCompDoc.set(`${norm(r.COMPANY_ID)}||${norm(r.COMPANY_DOC_ID)}`, r);\n}\n\nconst stats = { total: items.length, byId: 0, byCompanyShort: 0, byCompanyDoc: 0, byHash: 0, created: 0, rejected: 0, coerced: 0 };\nconst warnings  = [];\nconst errors    = [];\nconst records   = [];\nconst updatedIds = [];\n\nfor (let idx = 0; idx < items.length; idx++) {\n  const item = items[idx];\n  let resolvedId = null;\n  let matchMethod = null;\n\n  // 1. direct id (or legacy ID). If caller supplied an id, it MUST exist —\n  //    Supabase identity columns accept explicit values, so we reject\n  //    unknown ids to prevent inserting with a stale id.\n  const rawPk = item.id ?? item.ID;\n  if (has(rawPk)) {\n    if (!/^\\d+$/.test(String(rawPk))) {\n      stats.rejected++;\n      errors.push(`Item #${idx}: id \"${rawPk}\" is not numeric (Supabase id is bigint)`);\n      continue;\n    }\n    const hit = byId.get(String(rawPk));\n    if (!hit) {\n      stats.rejected++;\n      errors.push(`Item #${idx}: id \"${rawPk}\" not found — refusing to insert with caller-supplied id`);\n      continue;\n    }\n    resolvedId = hit.id;\n    matchMethod = 'id';\n    stats.byId++;\n  }\n\n  if (resolvedId === null && has(item.COMPANY_ID) && has(item.SHORT_DOC_ID)) {\n    const hit = byCompShort.get(`${norm(item.COMPANY_ID)}||${norm(item.SHORT_DOC_ID)}`);\n    if (hit) { resolvedId = hit.id; matchMethod = 'company-short'; stats.byCompanyShort++; }\n  }\n  if (resolvedId === null && has(item.COMPANY_ID) && has(item.COMPANY_DOC_ID)) {\n    const hit = byCompDoc.get(`${norm(item.COMPANY_ID)}||${norm(item.COMPANY_DOC_ID)}`);\n    if (hit) { resolvedId = hit.id; matchMethod = 'company-doc'; stats.byCompanyDoc++; }\n  }\n  if (resolvedId === null && has(item.HASH)) {\n    const hit = byHash.get(norm(item.HASH));\n    if (hit) { resolvedId = hit.id; matchMethod = 'hash'; stats.byHash++; }\n  }\n\n  // --- Uniqueness guard against DIFFERENT existing rows ---\n  const collisions = [];\n  if (has(item.COMPANY_ID) && has(item.SHORT_DOC_ID)) {\n    const hit = byCompShort.get(`${norm(item.COMPANY_ID)}||${norm(item.SHORT_DOC_ID)}`);\n    if (hit && hit.id !== resolvedId) collisions.push(`COMPANY_ID+SHORT_DOC_ID already on id=${hit.id}`);\n  }\n  if (has(item.COMPANY_ID) && has(item.COMPANY_DOC_ID)) {\n    const hit = byCompDoc.get(`${norm(item.COMPANY_ID)}||${norm(item.COMPANY_DOC_ID)}`);\n    if (hit && hit.id !== resolvedId) collisions.push(`COMPANY_ID+COMPANY_DOC_ID already on id=${hit.id}`);\n  }\n  if (has(item.HASH)) {\n    const hit = byHash.get(norm(item.HASH));\n    if (hit && hit.id !== resolvedId) collisions.push(`HASH already on id=${hit.id}`);\n  }\n  if (collisions.length) {\n    stats.rejected++;\n    errors.push(`Item #${idx}: uniqueness violation — ${collisions.join('; ')}`);\n    continue;\n  }\n\n  // build record with type coercion\n  const record = {};\n  for (const [k, v] of Object.entries(item)) {\n    if (STRIP_KEYS.has(k) || k === 'id') continue;\n    const { value, warning } = coerce(k, v);\n    record[k] = value;\n    if (warning) { warnings.push(`Item #${idx}: ${warning}`); stats.coerced++; }\n  }\n  record.TIMESTAMP = new Date().toISOString();\n\n  if (resolvedId !== null) {\n    record.id = resolvedId;\n    updatedIds.push(resolvedId);\n    console.log(`[${matchMethod}] UPDATE id=${resolvedId}`);\n  } else {\n    matchMethod = 'create';\n    stats.created++;\n    console.log(`[create] INSERT (auto id)`);\n  }\n\n  records.push(record);\n}\n\nconsole.log(`Upsert ready: total=${stats.total} byId=${stats.byId} byCompShort=${stats.byCompanyShort} byCompDoc=${stats.byCompanyDoc} byHash=${stats.byHash} new=${stats.created} rejected=${stats.rejected} coerced=${stats.coerced}`);\n\nif (!records.length) {\n  return [{ json: {\n    success: false,\n    error: errors.length ? `All ${errors.length} item(s) rejected` : 'No valid records to upsert',\n    errors: errors.length ? errors : undefined,\n    stats,\n    warnings: warnings.length ? warnings : undefined,\n    records: [],\n    updatedIds: []\n  }}];\n}\n\nreturn [{\n  json: {\n    success: true,\n    upsertCount: records.length,\n    stats,\n    warnings: warnings.length ? warnings : undefined,\n    errors: errors.length ? errors : undefined,\n    records,\n    updatedIds\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1584,
+        208
+      ],
+      "id": "38aa9b59-16e9-48b7-a7fa-e9584fa072f2",
+      "name": "Resolve & Prepare Records"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "check-success",
+              "leftValue": "={{ $json.success }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1808,
+        208
+      ],
+      "id": "90792fbc-79df-4dc3-ad11-ee820dfbf1fb",
+      "name": "Success?"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://krvdyzrwstcqrvsaizrk.supabase.co/rest/v1/incoming-documents?on_conflict=id",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "resolution=merge-duplicates,return=representation"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.records.toJsonString() }}",
+        "options": {}
+      },
+      "id": "48704b24-64ed-4472-b37c-a0a72cbb0d5b",
+      "name": "Supabase Upsert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2032,
+        144
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "OO5X9JLJWgtv8fZX",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Emit one item per updated record so 'process_lock unlock' runs once per id.\n// (Mirrors the gsheet workflow which called unlock per UPDATE.)\nconst prev = $('Resolve & Prepare Records').first().json;\nconst ids  = Array.isArray(prev.updatedIds) ? prev.updatedIds : [];\nif (!ids.length) return [];\nreturn ids.map(id => ({ json: { id: String(id) } }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2256,
+        256
+      ],
+      "id": "e203cb54-3c69-452e-872b-de70030fafd3",
+      "name": "Split Updated IDs"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "processLock01",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/processLock01",
+          "cachedResultName": "process_lock"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "PROCESS": "doc_step",
+            "KEY": "={{ String($json.id) }}",
+            "ACTION": "unlock"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "PROCESS",
+              "displayName": "PROCESS",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "KEY",
+              "displayName": "KEY",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "ACTION",
+              "displayName": "ACTION",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        2480,
+        256
+      ],
+      "id": "ffafba6f-40e0-4dd1-8e77-9474b3637044",
+      "name": "Call 'process_lock' unlock"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Final summary output — runs in PARALLEL with the unlock side-effect branch\n// so it always emits, even when updatedIds is empty (all-INSERT batch).\nconst prev = $('Resolve & Prepare Records').first().json;\nreturn [{ json: {\n  success: true,\n  upsertCount: prev.upsertCount,\n  updatedCount: (prev.updatedIds || []).length,\n  createdCount: prev.stats ? prev.stats.created : 0,\n  rejectedCount: prev.stats ? (prev.stats.rejected || 0) : 0,\n  coercedCount: prev.stats ? (prev.stats.coerced || 0) : 0,\n  stats: prev.stats,\n  warnings: prev.warnings,\n  errors: prev.errors,\n  updatedIds: prev.updatedIds\n}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2256,
+        64
+      ],
+      "id": "9c0e80ea-f0ed-4683-924d-4e35372cf51e",
+      "name": "Output"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: {\n  success: false,\n  error: $json.error || 'Upsert preparation failed'\n}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2032,
+        352
+      ],
+      "id": "d8c1efea-eebb-42cf-b728-b54ce39d6d03",
+      "name": "Error"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// BUILD INTROSPECTION SQL — read columns of public.\"incoming-documents\".\n// Returns 0 rows if the table doesn't exist.\n// ============================================================================\n\nconst SUPABASE_PROJECT_REF = 'krvdyzrwstcqrvsaizrk';\nconst TABLE = 'incoming-documents';\n\nconst sql = `select column_name, data_type from information_schema.columns where table_schema = 'public' and table_name = '${TABLE}' order by ordinal_position;`;\n\nreturn [{ json: {\n  url: `https://api.supabase.com/v1/projects/${SUPABASE_PROJECT_REF}/database/query`,\n  query: sql\n}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        640
+      ],
+      "id": "d12e2f38-1463-4d82-8d9e-361b3e31f3be",
+      "name": "Build Introspection SQL"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_SUPABASE_PERSONAL_ACCESS_TOKEN"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { query: $json.query }.toJsonString() }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        448,
+        640
+      ],
+      "id": "5a83ac84-aa2e-45ed-b914-7f1b49746174",
+      "name": "Run Introspection",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// ANALYZE SCHEMA — single source of truth for the expected table.\n// Compares Supabase information_schema rows to EXPECTED list.\n//\n// Outcomes (`action`):\n//   - 'create'   → table missing; build full CREATE TABLE DDL + indexes\n//   - 'ok'       → exact match; nothing to do\n//   - 'mismatch' → table exists but columns differ; do not modify, report diff\n// ============================================================================\n\nconst SUPABASE_PROJECT_REF = 'krvdyzrwstcqrvsaizrk';\nconst TABLE = 'incoming-documents';\n\n// --- EXPECTED SCHEMA -------------------------------------------------------\n// 'id' is the Supabase PK (bigint identity). All other columns are derived\n// from the jsonExample in the 'When Executed by Another Workflow' trigger\n// (which mirrors the gsheet header row) plus type hints by naming convention.\nconst EXPECTED = {\n  id: 'bigint',\n  NAME:'text', COMPANY_ID:'text', SHORT_DOC_ID:'text', TYPE:'text', STATUS:'text',\n  COMPANY_DOC_ID:'text', LINK:'text', DOC_DATE:'text', PURCHASE_ID:'text',\n  SHIPMENT_DOC_ID:'text', BS_LINE_DATE:'text', SOURCE_TYPE:'text', SOURCE_ID:'text',\n  SOURCE_LINK:'text', HASH:'text', TIMESTAMP:'text', COMPANY_NAME:'text',\n  REQUIRED_ACTION:'text', BS_LINE_NOTE:'text', FROM_OFFICE:'text', API_TOOLS_ID:'text',\n  EX_INVOICE_ID:'text', AI_COMPANY_ID:'text', AI_TYPE:'text', AI_DOC_ID:'text',\n  AI_DOC_DATE:'text', SELECTED_COMPANY_ID:'text', SELECTED_DOC_ID:'text',\n  SELECTED_DOC_DATE:'text', SELECTED_DOC_SHIPMENT_ID:'text', SELECTED_DOC_ORDER_ID:'text',\n  SELECTION_SOURCE:'text',\n  DOC_TOTAL_AMOUNT:'numeric', BS_LINE_AMOUNT:'numeric', TOTAL_AMOUNT:'numeric',\n  AI_DOC_AMOUNT:'numeric', SELECTED_DOC_AMOUNT:'numeric', SIZE:'numeric',\n  SELECTION_CERTAINTY:'numeric',\n  LINKED_BS:'boolean', BS_EXTRACTION_VERIFIED:'boolean', FROM_OFFICE_CHECK:'boolean',\n  BS_LINK_DOCUMENTS_COMPLETED:'boolean', SEARCH_IN_DRIVE_COMPLETED:'boolean',\n  DOC_DATE_COMPLETED:'boolean', DOC_TOTAL_AMOUNT_COMPLETED:'boolean',\n  PURCHASE_ID_COMPLETED:'boolean', SHIPMENT_ID_COMPLETED:'boolean',\n  COMPANY_NAME_COMPLETED:'boolean', API_TOOLS_ID_COMPLETED:'boolean', EMPTY:'boolean',\n  BS_EXTRACTED_LINES_COMPLETED:'boolean', BS_EXTRACTION_USE_CACHE:'boolean',\n  INVOICE_ID_COMPLETED:'boolean', EX_IS_BS:'boolean', EX_IS_BS_COMPLETED:'boolean',\n  FIGURE_TYPE_COMPLETED:'boolean', FIGURE_COMPANY_COMPLETED:'boolean',\n  AI_EXTRACTION_COMPLETED:'boolean', PRIORITY_SYNC_COMPLETED:'boolean',\n  SELECTION_COMPLETED:'boolean',\n  BS_EXTRACTED_LINES:'jsonb', AI_SHIPMENT_IDS:'jsonb', AI_ORDER_IDS:'jsonb',\n  DOUBLE_LINE_CONTEXT:'jsonb', SELECTION_SCORE_DEBUG:'jsonb'\n};\n\n// --- gather actual columns -------------------------------------------------\nconst raw = $input.all().map(i => i.json);\nlet rows = [];\nif (raw.length === 1 && Array.isArray(raw[0])) rows = raw[0];\nelse if (raw.length === 1 && raw[0] && Array.isArray(raw[0].data)) rows = raw[0].data;\nelse rows = raw;\nrows = Array.isArray(rows) ? rows.filter(r => r && r.column_name) : [];\n\nconst actual = {};\nfor (const r of rows) actual[r.column_name] = r.data_type;\n\n// --- build CREATE TABLE DDL (used when table missing) ----------------------\nfunction colDef(name, type) {\n  if (name === 'id') return `  \"id\" bigint generated by default as identity primary key`;\n  return `  \"${name}\" ${type}`;\n}\nconst createCols = Object.entries(EXPECTED).map(([n, t]) => colDef(n, t)).join(',\\n');\nconst createSql = `\ncreate table if not exists \"${TABLE}\" (\n${createCols}\n);\n\ncreate unique index if not exists incoming_documents_company_short_uniq\n  on \"${TABLE}\" (\"COMPANY_ID\", \"SHORT_DOC_ID\")\n  where \"COMPANY_ID\" is not null and \"SHORT_DOC_ID\" is not null;\n\ncreate unique index if not exists incoming_documents_company_doc_uniq\n  on \"${TABLE}\" (\"COMPANY_ID\", \"COMPANY_DOC_ID\")\n  where \"COMPANY_ID\" is not null and \"COMPANY_DOC_ID\" is not null;\n\ncreate unique index if not exists incoming_documents_hash_uniq\n  on \"${TABLE}\" (\"HASH\")\n  where \"HASH\" is not null;\n`.trim();\n\n// --- decide action ---------------------------------------------------------\nconst url = `https://api.supabase.com/v1/projects/${SUPABASE_PROJECT_REF}/database/query`;\n\nif (rows.length === 0) {\n  return [{ json: { action: 'create', url, query: createSql, expectedColumnCount: Object.keys(EXPECTED).length } }];\n}\n\nconst missing   = [];\nconst extra     = [];\nconst wrongType = [];\n\nfor (const [name, expType] of Object.entries(EXPECTED)) {\n  if (!(name in actual)) missing.push({ name, expected: expType });\n  else if (actual[name] !== expType) wrongType.push({ name, expected: expType, actual: actual[name] });\n}\nfor (const name of Object.keys(actual)) {\n  if (!(name in EXPECTED)) extra.push({ name, type: actual[name] });\n}\n\nif (!missing.length && !extra.length && !wrongType.length) {\n  return [{ json: { action: 'ok', message: 'Schema matches expectations', columnCount: rows.length } }];\n}\n\nreturn [{ json: {\n  action: 'mismatch',\n  message: 'Table exists but does not match expected schema',\n  missingColumns: missing,\n  extraColumns: extra,\n  wrongTypeColumns: wrongType,\n  expectedColumnCount: Object.keys(EXPECTED).length,\n  actualColumnCount: rows.length\n}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        640
+      ],
+      "id": "c2dd61f7-c0e7-4c1b-9f7f-a4a69d94eb32",
+      "name": "Analyze Schema"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "is-create",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "create",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "create"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "is-ok",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "ok",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "ok"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "is-mismatch",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "mismatch",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "mismatch"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        896,
+        640
+      ],
+      "id": "ea4345da-2dc4-479d-9fcc-438864733ea9",
+      "name": "Route by Action"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_SUPABASE_PERSONAL_ACCESS_TOKEN"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { query: $json.query }.toJsonString() }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1120,
+        544
+      ],
+      "id": "f3290fb4-b04b-4130-8088-8773f7e61c27",
+      "name": "Apply Create Schema",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { success: true, action: 'create', message: 'Table created with expected schema and unique indexes', expectedColumnCount: $('Analyze Schema').first().json.expectedColumnCount, response: $json } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        544
+      ],
+      "id": "3ae9317c-dc2a-4646-93a7-6c5313bf6209",
+      "name": "Schema Created Result"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { success: true, action: 'ok', message: $json.message || 'Schema matches expectations', columnCount: $json.columnCount } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        640
+      ],
+      "id": "eb2ac496-a2e7-4411-a340-ae88070c4d2f",
+      "name": "Schema OK Result"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Report mismatch — DOES NOT modify the table.\nconst d = $json;\nconst lines = [];\nif (d.missingColumns && d.missingColumns.length)\n  lines.push('MISSING (in expected, not in DB):\\n' + d.missingColumns.map(c => `  - ${c.name} ${c.expected}`).join('\\n'));\nif (d.extraColumns && d.extraColumns.length)\n  lines.push('EXTRA (in DB, not in expected):\\n' + d.extraColumns.map(c => `  - ${c.name} ${c.type}`).join('\\n'));\nif (d.wrongTypeColumns && d.wrongTypeColumns.length)\n  lines.push('WRONG TYPE:\\n' + d.wrongTypeColumns.map(c => `  - ${c.name}: expected ${c.expected}, got ${c.actual}`).join('\\n'));\n\nreturn [{ json: {\n  success: false,\n  action: 'mismatch',\n  error: `Table \"incoming-documents\" exists but does not match expected schema (expected ${d.expectedColumnCount} cols, got ${d.actualColumnCount}). Fix manually or drop & re-run setup.`,\n  report: lines.join('\\n\\n'),\n  missingColumns: d.missingColumns,\n  extraColumns: d.extraColumns,\n  wrongTypeColumns: d.wrongTypeColumns\n}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        736
+      ],
+      "id": "1e8154e6-408a-4494-b615-d6671a8331fa",
+      "name": "Report Schema Mismatch"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// BUILD DEDUPE DDL — for each rule, deletes all rows in a duplicate group\n// EXCEPT the one with the highest `id` (assumed newest).\n// Run BEFORE applying unique indexes when duplicates exist.\n// ============================================================================\n\nconst SUPABASE_PROJECT_REF = 'krvdyzrwstcqrvsaizrk';\nconst TABLE = 'incoming-documents';\n\nconst sql = `\n-- 1. dedupe (COMPANY_ID, SHORT_DOC_ID): keep row with max(id) per group\ndelete from \"${TABLE}\" t\nusing (\n  select id\n  from (\n    select id,\n           row_number() over (partition by \"COMPANY_ID\", \"SHORT_DOC_ID\" order by id desc) as rn\n    from \"${TABLE}\"\n    where \"COMPANY_ID\" is not null and \"SHORT_DOC_ID\" is not null\n  ) s\n  where rn > 1\n) d\nwhere t.id = d.id;\n\n-- 2. dedupe (COMPANY_ID, COMPANY_DOC_ID): keep row with max(id) per group\ndelete from \"${TABLE}\" t\nusing (\n  select id\n  from (\n    select id,\n           row_number() over (partition by \"COMPANY_ID\", \"COMPANY_DOC_ID\" order by id desc) as rn\n    from \"${TABLE}\"\n    where \"COMPANY_ID\" is not null and \"COMPANY_DOC_ID\" is not null\n  ) s\n  where rn > 1\n) d\nwhere t.id = d.id;\n\n-- 3. dedupe HASH: keep row with max(id) per group\ndelete from \"${TABLE}\" t\nusing (\n  select id\n  from (\n    select id,\n           row_number() over (partition by \"HASH\" order by id desc) as rn\n    from \"${TABLE}\"\n    where \"HASH\" is not null\n  ) s\n  where rn > 1\n) d\nwhere t.id = d.id;\n\n-- 4. now create the unique indexes (safe — duplicates are gone)\ncreate unique index if not exists incoming_documents_company_short_uniq\n  on \"${TABLE}\" (\"COMPANY_ID\", \"SHORT_DOC_ID\")\n  where \"COMPANY_ID\" is not null and \"SHORT_DOC_ID\" is not null;\n\ncreate unique index if not exists incoming_documents_company_doc_uniq\n  on \"${TABLE}\" (\"COMPANY_ID\", \"COMPANY_DOC_ID\")\n  where \"COMPANY_ID\" is not null and \"COMPANY_DOC_ID\" is not null;\n\ncreate unique index if not exists incoming_documents_hash_uniq\n  on \"${TABLE}\" (\"HASH\")\n  where \"HASH\" is not null;\n`.trim();\n\nreturn [{ json: {\n  url: `https://api.supabase.com/v1/projects/${SUPABASE_PROJECT_REF}/database/query`,\n  query: sql\n}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        960
+      ],
+      "id": "018d5e91-b4b2-4b8c-a7fb-47759c333b73",
+      "name": "Build Dedupe + Schema DDL"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_SUPABASE_PERSONAL_ACCESS_TOKEN"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { query: $json.query }.toJsonString() }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        448,
+        960
+      ],
+      "id": "a8b3ecf3-4788-495a-b6f7-ba378155aa71",
+      "name": "Apply Dedupe + Schema",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: {\n  success: true,\n  message: 'Duplicates removed (kept highest id per group) and unique indexes enforced',\n  response: $json\n}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        960
+      ],
+      "id": "42735368-f2b4-4e83-b43f-c49f42a041e9",
+      "name": "Dedupe + Schema Result"
+    },
+    {
+      "parameters": {
+        "path": "incoming-documents/get",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        0,
+        1440
+      ],
+      "id": "6e6d0b75-7b40-4cba-a9ba-103f17ab5b31",
+      "name": "Webhook - Get Documents",
+      "webhookId": "c0c0c0c0-0001-4000-8000-000000000002"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// BUILD GET QUERY — flexible PostgREST GET against \"incoming-documents\".\n// Accepts (per input item):\n//   - id              → single fetch by primary key (number or numeric string)\n//   - filter          → raw PostgREST filter, e.g. 'COMPANY_ID=eq.123'\n//   - select          → columns to return (default '*')\n//   - order           → e.g. 'id.desc'\n//   - limit, offset   → pagination (default limit=1000)\n//   - companyId       → shortcut for COMPANY_ID=eq.<value>\n//   - hash            → shortcut for HASH=eq.<value>\n//\n// If no input is provided, fetches first 1000 rows ordered by id desc.\n// Always emits at least one item (so downstream nodes don't halt).\n// ============================================================================\n\nconst SUPABASE_URL = 'https://krvdyzrwstcqrvsaizrk.supabase.co';\nconst TABLE = 'incoming-documents';\nconst DEFAULT_LIMIT = 1000;\n\nlet src = $input.first()?.json ?? {};\nif (src.body && typeof src.body === 'object') src = { ...src, ...src.body };\nif (src.query && typeof src.query === 'object') src = { ...src, ...src.query };\n\nconst params = [];\nparams.push(`select=${encodeURIComponent(src.select || '*')}`);\n\nif (src.id !== undefined && src.id !== null && src.id !== '') {\n  params.push(`id=eq.${encodeURIComponent(src.id)}`);\n}\nif (src.companyId) {\n  params.push(`COMPANY_ID=eq.${encodeURIComponent(src.companyId)}`);\n}\nif (src.hash) {\n  params.push(`HASH=eq.${encodeURIComponent(src.hash)}`);\n}\nif (src.filter) {\n  // raw filter, caller is responsible for URL-encoding values\n  params.push(src.filter);\n}\n\nparams.push(`order=${encodeURIComponent(src.order || 'id.desc')}`);\nparams.push(`limit=${Number(src.limit) || DEFAULT_LIMIT}`);\nif (src.offset) params.push(`offset=${Number(src.offset)}`);\n\nconst url = `${SUPABASE_URL}/rest/v1/${TABLE}?${params.join('&')}`;\nreturn [{ json: { url, params: src } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        1360
+      ],
+      "id": "e4125128-1bbf-4f68-89c7-be2ce031c182",
+      "name": "Build Get Query"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        448,
+        1360
+      ],
+      "id": "e0e0ad34-3258-44fd-aba0-6056700ab0bb",
+      "name": "Run Get",
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "OO5X9JLJWgtv8fZX",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize GET response: always emit one summary item with rows[] + count.\n// Keeps the workflow alive even when zero rows are returned.\nlet rows = [];\nfor (const inp of $input.all()) {\n  const j = inp.json;\n  if (!j) continue;\n  if (Array.isArray(j))           rows.push(...j);\n  else if (Array.isArray(j.data)) rows.push(...j.data);\n  else                            rows.push(j);\n}\nrows = rows.filter(r => r && typeof r === 'object');\nreturn [{ json: { success: true, count: rows.length, rows } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        1360
+      ],
+      "id": "035e653c-3945-4a07-be48-253ed6eef226",
+      "name": "Get Result"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        896,
+        1360
+      ],
+      "id": "696317db-7b21-4ec9-b567-2c045b054778",
+      "name": "Respond to Get Webhook"
+    }
+  ],
+  "connections": {
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook - Update Document": {
+      "main": [
+        [
+          {
+            "node": "Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Clean Nulls",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clean Nulls": {
+      "main": [
+        [
+          {
+            "node": "Check Priority Sync",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Priority Sync": {
+      "main": [
+        [
+          {
+            "node": "Build Lookup Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Lookup Query": {
+      "main": [
+        [
+          {
+            "node": "Has Lookup Keys?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Lookup Keys?": {
+      "main": [
+        [
+          {
+            "node": "Lookup Existing Rows",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Resolve & Prepare Records",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lookup Existing Rows": {
+      "main": [
+        [
+          {
+            "node": "Resolve & Prepare Records",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve & Prepare Records": {
+      "main": [
+        [
+          {
+            "node": "Success?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Success?": {
+      "main": [
+        [
+          {
+            "node": "Supabase Upsert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase Upsert": {
+      "main": [
+        [
+          {
+            "node": "Output",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Split Updated IDs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Updated IDs": {
+      "main": [
+        [
+          {
+            "node": "Call 'process_lock' unlock",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Introspection SQL": {
+      "main": [
+        [
+          {
+            "node": "Run Introspection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Introspection": {
+      "main": [
+        [
+          {
+            "node": "Analyze Schema",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Schema": {
+      "main": [
+        [
+          {
+            "node": "Route by Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Action": {
+      "main": [
+        [
+          {
+            "node": "Apply Create Schema",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Schema OK Result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Report Schema Mismatch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply Create Schema": {
+      "main": [
+        [
+          {
+            "node": "Schema Created Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Dedupe + Schema DDL": {
+      "main": [
+        [
+          {
+            "node": "Apply Dedupe + Schema",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply Dedupe + Schema": {
+      "main": [
+        [
+          {
+            "node": "Dedupe + Schema Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook - Get Documents": {
+      "main": [
+        [
+          {
+            "node": "Build Get Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Get Query": {
+      "main": [
+        [
+          {
+            "node": "Run Get",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Get": {
+      "main": [
+        [
+          {
+            "node": "Get Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Result": {
+      "main": [
+        [
+          {
+            "node": "Respond to Get Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": {
+    "When Executed by Another Workflow": [
+      {
+        "json": {
+          "NAME": "test1",
+          "COMPANY_ID": 638709840,
+          "SHORT_DOC_ID": "12345",
+          "AI_COMPANY_ID": "512663543",
+          "AI_TYPE": "INVOICE",
+          "AI_DOC_ID": "34983",
+          "AI_DOC_DATE": "18/02/2026",
+          "AI_DOC_AMOUNT": "2,435.00",
+          "AI_SHIPMENT_IDS": [
+            "32886"
+          ],
+          "AI_ORDER_IDS": "30541",
+          "AI_EXTRACTION_COMPLETED": true
+        }
+      },
+      {
+        "json": {
+          "NAME": "test2",
+          "COMPANY_ID": 6387098420,
+          "SHORT_DOC_ID": "12346",
+          "AI_COMPANY_ID": "512663543",
+          "AI_TYPE": "INVOICE",
+          "AI_DOC_ID": "34983",
+          "AI_DOC_DATE": "18/02/2026",
+          "AI_DOC_AMOUNT": "2,435.00",
+          "AI_SHIPMENT_IDS": [
+            "32886"
+          ],
+          "AI_ORDER_IDS": "30541",
+          "AI_EXTRACTION_COMPLETED": true
+        }
+      }
+    ]
+  },
+  "versionId": "13ea92f5-a19e-47ac-a2e5-eb9435ea9983",
+  "activeVersionId": null,
+  "versionCounter": 5,
+  "triggerCount": 0,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-04-30T12:53:45.461Z",
+      "createdAt": "2026-04-30T12:53:45.461Z",
+      "role": "workflow:owner",
+      "workflowId": "OtbKllH7OGAlUVDQ",
+      "projectId": "EChUnhWXmjrEc3fG",
+      "project": {
+        "updatedAt": "2024-09-26T18:07:08.765Z",
+        "createdAt": "2024-09-26T17:59:24.039Z",
+        "id": "EChUnhWXmjrEc3fG",
+        "name": "Shlomo Bolo <person8@example.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null
+      }
+    }
+  ]
+}

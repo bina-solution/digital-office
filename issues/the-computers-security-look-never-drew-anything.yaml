@@ -1,0 +1,61 @@
+# yaml-language-server: $schema=./schema.json
+title: "The computers screen's security look never drew anything: it read a key the fetch helper does not return"
+opened: 2026-10-07
+category: bug
+severity: high
+status: in-progress
+summary: "Since the audit was added to apps/computers on 2026-09-29, pressing «אבטחה» on a machine opened a window that stayed on «בודק את המחשב…» for good. `openAudit` read `r.body`; the page's `api()` answers `{ok, status, d}`. The service ran the audit and answered correctly every time — the screen threw on the first property and showed nothing. No test ran the screen against an answer, so nothing said so for eight days."
+description: |
+  ## What was seen
+
+  Found on 2026-10-07 while the row's buttons were being reworked (hub DGO-413), by opening the look
+  over a canned answer in the shape `GET /api/computers/{id}/audit` returns:
+
+      Page.evaluate: TypeError: Cannot read properties of undefined (reading 'findings')
+          at openAudit (…/a/computers/static/app.js:426:19)
+
+  ## Why
+
+  `apps/computers/static/app.js` has one fetch helper and it returns `{ ok, status, d }`. Every other
+  caller reads `r.d`. `openAudit` — added in the same commit as the audit endpoint, 7045a9a7 — read
+  `r.body` in three places:
+
+  * on success `const d = r.body` is `undefined`, so `d.findings` throws inside an async click
+    handler: an unhandled rejection in the console, and the window keeps its "checking…" line;
+  * on failure `r.body && …` is always false, so the reason shown was `"HTTP " + r.status` — a status
+    code where the service had sent a Hebrew sentence and ssh's own words.
+
+  So the half of the app that asks "is this MACHINE safe" (SSH passwords, firewall, pending updates,
+  ports open to the world) has never been readable in the office. The endpoint itself was fine:
+  `log.info("audit %s: %s errors, %s warnings")` was written on every press.
+
+  ## The fix (dgo-pair)
+
+  * `openAudit` reads `r.d`; a look that could not run says the service's reason, never a status.
+  * The summary counts in Hebrew («שגיאה אחת, אזהרה אחת»), not «1 שגיאות».
+  * `apps/computers/tools/ui-selfcheck.mjs` — the shipped `app.js` evaluated in a Node VM against
+    canned answers, 33 assertions; gate G72 discovers and runs it. Ten mutants of the screen
+    (including this bug, both branches) were each caught by name.
+
+  ## Proof
+
+      node apps/computers/tools/ui-selfcheck.mjs      → computers ui-selfcheck: 33 checks passed
+      the same file against the committed app.js      → exit 1
+      rendered over the canned answer, 1440 and 390   → the three findings, errors first
+
+  ## Still true
+
+  The look has not been pressed against a real machine from this office: hp-laptop runs no SSH
+  server by its owner's ruling, so its only row is «ללא SSH» and carries no «אבטחה» action. The
+  MacBook office lists machines; it shows this fix once it has pulled the branch.
+tasks:
+  - text: "Read the answer where the helper puts it (success and failure)"
+    done: true
+  - text: "A self-check that runs the screen against an answer, run by the gate suite"
+    done: true
+  - text: "Press «אבטחה» on a real machine in an office that lists one, after it has pulled"
+    done: false
+references:
+  - apps/computers/static/app.js
+  - apps/computers/tools/ui-selfcheck.mjs
+  - scripts/refactor/plane-tests-lint.py

@@ -1,0 +1,103 @@
+/* ── the sync page (SyncStatePage) — its own sheet, built from the Bina tokens in index.css ──────
+   One rhythm: 12px inside a card, 14px between cards, 26px numbers on the summary, one button
+   family in a footer, key-over-value facts in a hairline grid, Hebrew reasons with the count in
+   front. What this replaces read as a wall of small grey text with English database strings and a
+   lone summary tile floating under the row (owner, 2026-09-02: "it looks like shit again"). */
+
+/* summary: five state tiles, then ONE strip for the pass — a strip cannot wrap into a lone tile */
+.sync-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,128px),1fr));gap:10px;margin:2px 0 10px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px 11px;
+  box-shadow:var(--shadow);display:flex;flex-direction:column;gap:3px;min-width:0;text-align:start;font:inherit}
+.kpi .k{font-size:12px;color:var(--muted);font-weight:600;display:flex;align-items:center;gap:6px;white-space:nowrap}
+.kpi .v{font-size:26px;font-weight:800;line-height:1.15;letter-spacing:-.02em;color:var(--ink)}
+/* the office's legend (see .statebar in index.css): waits = lime, in motion = sky, done = olive */
+.kpi.to_sync .v{color:var(--amber)} .kpi.in_progress .v{color:var(--blue)} .kpi.synced .v{color:var(--ok)}
+.kpi.failed .v{color:var(--red)} .kpi.review .v{color:var(--violet)}
+.sw{width:9px;height:9px;border-radius:3px;flex:none;display:inline-block}
+.sw.to_sync{background:var(--lime)} .sw.in_progress{background:var(--sky)} .sw.synced{background:var(--ok)}
+.sw.failed{background:var(--red)} .sw.review{background:var(--violet)}
+.passline{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:1px;background:var(--line);
+  border:1px solid var(--line);border-radius:12px;overflow:hidden;box-shadow:var(--shadow);margin-bottom:16px}
+.passline .cell{background:var(--surface);padding:10px 14px;min-width:0;display:flex;flex-direction:column;gap:2px}
+.passline .k{font-size:11.5px;color:var(--muted);font-weight:600;display:flex;align-items:center;gap:6px}
+.passline .k .dg-ic{width:13px;height:13px}
+.passline .v{font-size:15px;font-weight:700;letter-spacing:-.01em;color:var(--ink)}
+.passline .v.muted{color:var(--muted);font-weight:500}
+.passline .s{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.passline .s a.link{display:inline-flex;align-items:center;gap:4px;white-space:nowrap;font-size:12px}
+
+/* the header's controls: the switch is a switch, one primary verb, the rest quiet */
+.switchlbl{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;color:var(--ink);cursor:pointer;
+  white-space:nowrap}
+.switchlbl .switch{flex:none}
+
+/* pipe cards: two-up when there is room, so seven pipes are four rows instead of seven ribbons */
+.pipes{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,540px),1fr));gap:14px;align-items:start}
+.pipe{margin:0;padding:16px 18px 14px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.pipe.paused{opacity:.72}
+.pipe-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
+.pipe-head .name{font-size:16px;font-weight:800;letter-spacing:-.01em;color:var(--ink);overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.pipe-head .spacer{flex:1}
+.pipe-head .connline{font-size:12.5px}
+
+/* facts: where it reads from and where it files to — key over value, hairline grid, one line each */
+/* three facts sit in one row (drive), four go 2×2 (mail) — never 3+1, never a lone cell; one column
+   when the card is narrow */
+.pipe-facts{display:grid;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.pipe-facts.c3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.pipe-facts.c4{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media (max-width:520px){.pipe-facts.c3,.pipe-facts.c4{grid-template-columns:minmax(0,1fr)}}
+.pipe-facts .f{background:var(--surface-2);padding:7px 11px;min-width:0}
+.pipe-facts .k{font-size:11px;color:var(--muted);font-weight:600;display:flex;align-items:center;gap:5px;white-space:nowrap}
+.pipe-facts .k .dg-ic{width:12px;height:12px}
+/* The value is the location's own NAME on one line and its ancestors on the next, NOT the joined
+   path in one clamped block: a 2-line clamp of "חשבוניות הכנסים/כרטסות ספקים - בבקשה להכניס לחודש"
+   ends inside the leaf, which is the only part that tells two siblings apart. The name is never
+   clamped away — the crumb is what gives up room. Full path + id in the tooltip. */
+.pipe-facts .v{font-size:12.5px;font-weight:600;margin-top:2px;color:var(--ink);min-width:0}
+.pipe-facts .v .nm{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.35}
+.pipe-facts .v .in{display:block;font-size:11px;font-weight:500;color:var(--muted);line-height:1.3;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pipe-facts .v .in::before{content:"‹ "}
+.pipe-facts .v.pin{color:var(--amber)}
+.pipe-facts .v.none,.pipe-facts .v.wait{color:var(--muted);font-weight:500}
+
+/* reasons: Hebrew, the count first, the original sentence one hover away */
+.pipe .reasons{display:flex;gap:6px;flex-wrap:wrap;margin:0}
+.pipe .reason{display:inline-flex;align-items:center;gap:7px;max-width:100%;background:var(--danger-soft);color:var(--red);
+  border:1px solid var(--plum-line);border-radius:var(--radius-pill);padding:3px 6px 3px 10px;font-size:12px;font-weight:600;
+  font-family:inherit;cursor:pointer;line-height:1.4;direction:rtl}
+.pipe .reason .n{background:var(--surface);border-radius:var(--radius-pill);padding:0 7px;font-weight:800;font-size:11.5px;flex:none;
+  font-variant-numeric:tabular-nums}
+.pipe .reason .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:rtl;unicode-bidi:normal;
+  font-family:inherit;font-size:inherit;max-width:none}
+.pipe .reason .t.raw{direction:ltr;unicode-bidi:isolate;font-family:var(--mono);font-size:11px;max-width:320px}
+/* what waits for a person is an outline, what failed is filled (index.css, .reason.review) */
+.pipe .reason.review{background:var(--surface);color:var(--violet)} .pipe .reason.review .n{background:var(--violet-soft)}
+.pipe .reason.transient{background:var(--warn-soft);color:var(--amber);border-color:var(--lime-line)}
+
+/* the activity line: at most four facts, one row, the table link at the far end */
+.pipe-activity{display:flex;align-items:center;gap:14px;flex-wrap:wrap;font-size:12.5px;color:var(--muted)}
+.pipe-activity .it{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.pipe-activity .it b{color:var(--ink);font-weight:600}
+.pipe-activity .it .dg-ic{width:13px;height:13px;opacity:.8}
+.pipe-activity .spacer{flex:1}
+.pipe-activity a.link,.pipe-activity .link{display:inline-flex;align-items:center;gap:4px;white-space:nowrap;font-size:12.5px}
+
+/* the footer: one button family, the primary verb first, the destructive verb last */
+.pipe-foot{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding-top:12px;border-top:1px solid var(--line)}
+.pipe-foot .spacer{flex:1}
+.pipe-foot .btn.sm{height:30px;padding:0 12px;font-size:12.5px}
+.pipe-foot .btn.sm .dg-ic{width:14px;height:14px}
+
+/* the items drawer: a Hebrew reason with the original under it */
+.reason-cell .he{display:block}
+.reason-cell .raw{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;
+  font-family:var(--mono);font-size:11px;color:var(--muted);direction:ltr;unicode-bidi:isolate;overflow-wrap:anywhere}
+
+@media (max-width:640px){
+  .kpi .v{font-size:22px}
+  .pipe{padding:14px 14px 12px}
+  .pipe-activity{gap:10px}
+}

@@ -1,0 +1,89 @@
+# The edge. Moved verbatim out of the root compose.yml during the platform-OS refactor;
+# its ./traefik bind became ./config (the dir moved into the app).
+services:
+  traefik-deployment:
+    image: traefik:v3.3
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          # 512M -> 384M, 2026-08-06. Measured high-water 167MiB (~2.3x headroom retained).
+          memory: 384M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    restart: unless-stopped
+    container_name: traefik-${DEPLOYMENT_NAME:-bina-deployment}
+    command:
+    - --providers.docker=true
+    - --api.dashboard=${TRAEFIK_API_DASHBOARD:-false}
+    - --api.insecure=${TRAEFIK_API_INSECURE:-false}
+    - --entrypoints.web.address=:80
+    - --entrypoints.websecure.address=:443
+    - --entrypoints.postgres.address=:5432
+    - --entrypoints.redis.address=:6379
+    - --entrypoints.websecure.transport.respondingTimeouts.readTimeout=600s
+    - --entrypoints.websecure.transport.respondingTimeouts.writeTimeout=600s
+    - --entrypoints.websecure.transport.respondingTimeouts.idleTimeout=600s
+    - --entrypoints.web.transport.respondingTimeouts.readTimeout=600s
+    - --entrypoints.web.transport.respondingTimeouts.writeTimeout=600s
+    - --entrypoints.web.transport.respondingTimeouts.idleTimeout=600s
+    - --serversTransport.forwardingTimeouts.dialTimeout=30s
+    - --serversTransport.forwardingTimeouts.responseHeaderTimeout=600s
+    - --serversTransport.forwardingTimeouts.idleConnTimeout=600s
+    - --certificatesresolvers.myresolver.acme.httpchallenge=true
+    - --certificatesresolvers.myresolver.acme.httpchallenge.entrypoint=web
+    - --certificatesresolvers.myresolver.acme.email=${TRAEFIK_ACME_EMAIL:person194@example.com}
+    - --certificatesresolvers.myresolver.acme.storage=/etc/traefik/acme.json
+    - --providers.docker.exposedbydefault=false
+    - --providers.file.directory=/etc/traefik/
+    - --log.level=INFO
+    - --accesslog=true
+    - --metrics.prometheus=true
+    environment:
+    - BBOX_SSO=${BBOX_SSO:-on}
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    ports:
+    - 80:80
+    - 443:443
+    # The HOST side of the two TCP passthroughs is overridable: on a machine where the port is already
+    # taken (a native Windows PostgreSQL under WSL mirrored networking shares the host's port space —
+    # measured on hp-laptop, 2026-10-04) the bind fails and traefik never starts, taking :80 with it.
+    - ${TRAEFIK_POSTGRES_HOST_PORT:-5432}:5432
+    - ${TRAEFIK_REDIS_HOST_PORT:-6379}:6379
+    volumes:
+    # The HOST side is the project's own socket; the CONTAINER side stays /var/run/docker.sock so
+    # traefik's own config needs no change. Docker Desktop's WSL integration re-binds
+    # /var/run/docker.sock inside the distro whenever it starts, and a traefik pointed there reads
+    # DESKTOP's container list instead of this stack's. It does not error — it finds zero matching
+    # labels and serves 404 for every *.localhost while reporting healthy. Measured 2026-07-30:
+    # opening Docker Desktop and stopping its stray containers took the entire site down while all
+    # 39 real containers stayed up. The default keeps hosts without a project socket working.
+    - ${BBOX_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock
+    - ./config:/etc/traefik
+    networks:
+    - traefik-network
+    labels:
+    - traefik.enable=${TRAEFIK_API_DASHBOARD:-false}
+    - traefik.http.routers.traefik-local.rule=Host(`traefik.localhost`)
+    - traefik.http.routers.traefik-local.entrypoints=web
+    - traefik.http.routers.traefik-local.service=traefik-deployment
+    - traefik.http.routers.traefik-local.middlewares=authentik@file
+    - traefik.http.routers.traefik-http.rule=Host(`${TRAEFIK_API_BASE_URL}`)
+    - traefik.http.routers.traefik-http.entrypoints=web
+    - traefik.http.routers.traefik-http.service=traefik-deployment
+    - traefik.http.routers.traefik-http.middlewares=authentik@file
+    - traefik.http.routers.traefik-https.rule=Host(`${TRAEFIK_API_BASE_URL}`)
+    - traefik.http.routers.traefik-https.entrypoints=websecure
+    - traefik.http.routers.traefik-https.tls=true
+    - traefik.http.routers.traefik-https.tls.certresolver=myresolver
+    - traefik.http.routers.traefik-https.service=traefik-deployment
+    - traefik.http.routers.traefik-https.middlewares=authentik@file
+    - traefik.http.services.traefik-deployment.loadbalancer.server.port=8080
+networks:
+  traefik-network:
+    external: true

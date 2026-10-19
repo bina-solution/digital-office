@@ -1,0 +1,95 @@
+{
+  "id": "console",
+  "title": {
+    "he": "המרכז",
+    "en": "Console"
+  },
+  "layer": 2,
+  "kind": "service",
+  "version": "1.0.0",
+  "system": true,
+  "summary": {
+    "he": "מעטפת מערכת העסק — כל האפליקציות במקום אחד",
+    "en": "The unified business-system shell"
+  },
+  "capabilities": [
+    {
+      "name": "shell",
+      "type": "protocol",
+      "endpoint": "http://console:8000"
+    }
+  ],
+  "use": [
+    {
+      "capability": "secrets",
+      "strength": "requires",
+      "after": true
+    },
+    {
+      "capability": "identity",
+      "strength": "requires",
+      "after": true
+    },
+    {
+      "capability": "ledger",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
+    },
+    {
+      "capability": "notify",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
+    },
+    {
+      "capability": "ui-kit",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
+    }
+  ],
+  "connections": [],
+  "compose": "docker-compose.yml",
+  "routing": [
+    {
+      "host": "console",
+      "port": 8000,
+      "auth": "sso",
+      "emit_labels": false,
+      "module": {
+        "group": "ראשי",
+        "icon": "home",
+        "embed": false,
+        "name": "המרכז",
+        "desc": "מסך הבית של הלשכה — כל האפליקציות במקום אחד",
+        "alias": "console-home"
+      }
+    }
+  ],
+  "health": {
+    "structural": "auto",
+    "probe": {
+      "http": "http://console:8000/healthz",
+      "interval": "30s"
+    }
+  },
+  "data": {
+    "volumes": [],
+    "on_uninstall": "keep"
+  },
+  "observability": {
+    "sentry_platform": "python"
+  },
+  "reserved_paths": [
+    "/api/me",
+    "/api/version",
+    "/api/modules",
+    "/api/connections",
+    "/api/conn",
+    "/api/svc",
+    "/api/office",
+    "/healthz",
+    "/a"
+  ]
+}

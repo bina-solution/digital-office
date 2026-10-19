@@ -1,0 +1,798 @@
+{
+ "anchor_utc": "2026-08-31T03:42:14Z",
+ "files": {
+  "invoice/files/agn-3.plb.pdf": {
+   "lane": "pipeline/bare plb_inv",
+   "kind": "invoice",
+   "md5_old": "ff0d250b06ef388f35002ad8c9f79097",
+   "md5_new": "ff0d250b06ef388f35002ad8c9f79097",
+   "doc_date": "2026-07-24",
+   "replacements": [
+    {
+     "from": "22/04/25",
+     "to": "24/07/26"
+    },
+    {
+     "from": "31/08/25",
+     "to": "01/12/26"
+    }
+   ],
+   "applied": [
+    {
+     "from": "07/07/26",
+     "to": "24/07/26"
+    },
+    {
+     "from": "14/11/26",
+     "to": "01/12/26"
+    }
+   ]
+  },
+  "order/files/PO25010001.plb.png": {
+   "lane": "pipeline/bare plb_ord",
+   "kind": "invoice",
+   "md5_old": "412e30c41c6beb277cfc544a9aef2f71",
+   "md5_new": "412e30c41c6beb277cfc544a9aef2f71",
+   "doc_date": "2026-07-24",
+   "replacements": [
+    {
+     "from": "05/11/2025",
+     "to": "24/07/2026"
+    }
+   ],
+   "applied": [
+    {
+     "from": "07/07/2026",
+     "to": "24/07/2026"
+    }
+   ]
+  },
+  "shipment/files/by-gy-4.plb.pdf": {
+   "lane": "pipeline/bare plb_shp",
+   "kind": "invoice",
+   "md5_old": "cf3c430def778ef5499c4498485e03c3",
+   "md5_new": "cf3c430def778ef5499c4498485e03c3",
+   "doc_date": "2026-07-24",
+   "replacements": [
+    {
+     "from": "18/11/25",
+     "to": "24/07/26"
+    },
+    {
+     "from": "17/11/25",
+     "to": "23/07/26"
+    },
+    {
+     "from": "17/11/2025",
+     "to": "23/07/2026"
+    }
+   ],
+   "applied": [
+    {
+     "from": "07/07/26",
+     "to": "24/07/26"
+    },
+    {
+     "from": "06/07/26",
+     "to": "23/07/26"
+    },
+    {
+     "from": "06/07/2026",
+     "to": "23/07/2026"
+    }
+   ]
+  },
+  "invoice/files/dltvt-tyyr-2.pdf": {
+   "lane": "gdoc/lifecycle gdt_lc_1",
+   "kind": "invoice",
+   "md5_old": "a9522b5539f068ed5ba3245d3bf390a6",
+   "md5_new": "a9522b5539f068ed5ba3245d3bf390a6",
+   "doc_date": "2026-07-24",
+   "replacements": [
+    {
+     "from": "08/12/25",
+     "to": "24/07/26"
+    },
+    {
+     "from": "30/04/26",
+     "to": "14/12/26"
+    }
+   ],
+   "applied": [
+    {
+     "from": "23/07/26",
+     "to": "24/07/26"
+    },
+    {
+     "from": "13/12/26",
+     "to": "14/12/26"
+    }
+   ]
+  },
+  "invoice/files/khpr-mnhm-5.pdf": {
+   "lane": "gdoc/batch gdx_inv1",
+   "kind": "invoice",
+   "md5_old": "0aee9ce9d8573d5c8654ffae2e8a255f",
+   "md5_new": "f5981fd4dc89567986ca6b98c1e225bd",
+   "doc_date": "2026-07-24",
+   "replacements": [
+    {
+     "from": "30/10/25",
+     "to": "24/07/26"
+    },
+    {
+     "from": "31/01/26",
+     "to": "25/10/26"
+    }
+   ],
+   "applied": [
+    {
+     "from": "30/10/25",
+     "to": "24/07/26"
+    },
+    {
+     "from": "31/01/26",
+     "to": "25/10/26"
+    }
+   ]
+  },
+  "invoice/files/nbl-3.pdf": {
+   "lane": "gdoc/batch gdx_inv2",
+   "kind": "invoice",
+   "md5_old": "ad49de65cef6356a80a8db0f7c215bd9",
+   "md5_new": "ac4a81d60aa71f3170a061dda9504c9c",
+   "doc_date": "2026-07-24",
+   "replacements": [
+    {
+     "from": "30/06/25",
+     "to": "24/07/26"
+    }
+   ],
+   "applied": [
+    {
+     "from": "30/06/25",
+     "to": "24/07/26"
+    }
+   ]
+  },
+  "invoice/files/agn-3.pdf": {
+   "lane": "gdoc/batch gdx_inv3",
+   "kind": "invoice",
+   "md5_old": "c002271f87774fab6fd8a39cde1ddb1a",
+   "md5_new": "4e322472d1ba9aa154344b98d6a7c4fd",
+   "doc_date": "2026-07-24",
+   "replacements": [
+    {
+     "from": "22/04/25",
+     "to": "24/07/26"
+    },
+    {
+     "from": "31/08/25",
+     "to": "02/12/26"
+    }
+   ],
+   "applied": [
+    {
+     "from": "22/04/25",
+     "to": "24/07/26"
+    },
+    {
+     "from": "31/08/25",
+     "to": "02/12/26"
+    }
+   ]
+  },
+  "invoice/files/arkhh-3.pdf": {
+   "lane": "gdoc/batch gdx_inv4",
+   "kind": "invoice",
+   "md5_old": "89eeb4ebe8a619495113003a08f7d5bd",
+   "md5_new": "ff74e3ac5cfd3f3ae4dda765f53b797f",
+   "doc_date": "2026-07-24",
+   "replacements": [
+    {
+     "from": "29/05/25",
+     "to": "24/07/26"
+    },
+    {
+     "from": "10/06/25",
+     "to": "05/08/26"
+    }
+   ],
+   "applied": [
+    {
+     "from": "29/05/25",
+     "to": "24/07/26"
+    },
+    {
+     "from": "10/06/25",
+     "to": "05/08/26"
+    }
+   ]
+  },
+  "invoice/files/ysh-krtvn-4.pdf": {
+   "lane": "gdoc/batch gdx_inv5",
+   "kind": "invoice",
+   "md5_old": "b6562a2de2b759061ca882211c3935ec",
+   "md5_new": "23926e05c7bef57c9658bd2de9d3a55b",
+   "doc_date": "2026-07-24",
+   "replacements": [
+    {
+     "from": "14/01/26",
+     "to": "24/07/26"
+    },
+    {
+     "from": "01/05/26",
+     "to": "08/11/26"
+    }
+   ],
+   "applied": [
+    {
+     "from": "14/01/26",
+     "to": "24/07/26"
+    },
+    {
+     "from": "01/05/26",
+     "to": "08/11/26"
+    }
+   ]
+  },
+  "order/files/PO25010001.png": {
+   "lane": "gdoc/batch gdx_ord1",
+   "kind": "invoice",
+   "md5_old": "b9464eb97cd8c1e4d4a159dbf052fa8b",
+   "md5_new": "689605391ec16349d4c9cafdbccb2bc2",
+   "doc_date": "2026-07-24",
+   "replacements": [
+    {
+     "from": "05/11/2025",
+     "to": "24/07/2026"
+    }
+   ],
+   "applied": [
+    {
+     "from": "05/11/2025",
+     "to": "24/07/2026"
+    }
+   ]
+  },
+  "order/files/PO25010002.png": {
+   "lane": "gdoc/batch gdx_ord2",
+   "kind": "invoice",
+   "md5_old": "dfc0b5dc09b2d447072c9d1e46e304c0",
+   "md5_new": "3603fce7abf5cce3d371b7c697834580",
+   "doc_date": "2026-07-24",
+   "replacements": [
+    {
+     "from": "12/11/2025",
+     "to": "24/07/2026"
+    }
+   ],
+   "applied": [
+    {
+     "from": "12/11/2025",
+     "to": "24/07/2026"
+    }
+   ]
+  },
+  "order/files/PO25010003.png": {
+   "lane": "gdoc/batch gdx_ord3",
+   "kind": "invoice",
+   "md5_old": "6914b4fb4859b12d733a1ea677f69e8a",
+   "md5_new": "7e2344311dd82aa62a15747fe736b966",
+   "doc_date": "2026-07-24",
+   "replacements": [
+    {
+     "from": "20/11/2025",
+     "to": "24/07/2026"
+    }
+   ],
+   "applied": [
+    {
+     "from": "20/11/2025",
+     "to": "24/07/2026"
+    }
+   ]
+  },
+  "order/files/PO25010004.png": {
+   "lane": "gdoc/batch gdx_ord4",
+   "kind": "invoice",
+   "md5_old": "630424cdcecaf4575d831840fcd65144",
+   "md5_new": "8110ee5e0574c250eeb535fef81c7e0e",
+   "doc_date": "2026-07-24",
+   "replacements": [
+    {
+     "from": "28/11/2025",
+     "to": "24/07/2026"
+    }
+   ],
+   "applied": [
+    {
+     "from": "28/11/2025",
+     "to": "24/07/2026"
+    }
+   ]
+  },
+  "order/files/PO25010005.png": {
+   "lane": "gdoc/batch gdx_ord5",
+   "kind": "invoice",
+   "md5_old": "038832298c1fe369a5e169e6a8ef7e72",
+   "md5_new": "bc5c09ec6a49aa6ee2add458b45dbae8",
+   "doc_date": "2026-07-24",
+   "replacements": [
+    {
+     "from": "03/12/2025",
+     "to": "24/07/2026"
+    }
+   ],
+   "applied": [
+    {
+     "from": "03/12/2025",
+     "to": "24/07/2026"
+    }
+   ]
+  },
+  "shipment/files/by-gy-4.pdf": {
+   "lane": "gdoc/batch gdx_shp1",
+   "kind": "invoice",
+   "md5_old": "e9a1a37d9f1cdf482f8972d693ee322b",
+   "md5_new": "de04b17aebd589fd9412e7d9434f04f2",
+   "doc_date": "2026-07-24",
+   "replacements": [
+    {
+     "from": "18/11/25",
+     "to": "24/07/26"
+    },
+    {
+     "from": "17/11/25",
+     "to": "23/07/26"
+    },
+    {
+     "from": "17/11/2025",
+     "to": "23/07/2026"
+    }
+   ],
+   "applied": [
+    {
+     "from": "18/11/25",
+     "to": "24/07/26"
+    },
+    {
+     "from": "17/11/25",
+     "to": "23/07/26"
+    },
+    {
+     "from": "17/11/2025",
+     "to": "23/07/2026"
+    }
+   ]
+  },
+  "shipment/files/dyavr-4.pdf": {
+   "lane": "gdoc/batch gdx_shp2",
+   "kind": "invoice",
+   "md5_old": "d8f747e336963861d4dbb832067ed7b2",
+   "md5_new": "45cb7a0f1237ce00d6d824d3655eaee3",
+   "doc_date": "2026-07-24",
+   "replacements": [
+    {
+     "from": "18/01/26",
+     "to": "24/07/26"
+    }
+   ],
+   "applied": [
+    {
+     "from": "18/01/26",
+     "to": "24/07/26"
+    }
+   ]
+  },
+  "shipment/files/mbnh-drvm-1.pdf": {
+   "lane": "gdoc/batch gdx_shp3",
+   "kind": "invoice",
+   "md5_old": "7d1a77ed777d6f7908838c59e9c4f6e7",
+   "md5_new": "7abd920f1ec199714638708e2d5619b6",
+   "doc_date": "2026-07-24",
+   "replacements": [
+    {
+     "from": "09/06/25",
+     "to": "24/07/26"
+    },
+    {
+     "from": "10/06/25",
+     "to": "25/07/26"
+    }
+   ],
+   "applied": [
+    {
+     "from": "09/06/25",
+     "to": "24/07/26"
+    },
+    {
+     "from": "10/06/25",
+     "to": "25/07/26"
+    }
+   ]
+  },
+  "shipment/files/sbh-5.pdf": {
+   "lane": "gdoc/batch gdx_shp4",
+   "kind": "invoice",
+   "md5_old": "bea501c3aa57efab7ac989dd2f8d72d0",
+   "md5_new": "a6e8757dac1fad94dd86db2a5d74aea2",
+   "doc_date": "2026-07-24",
+   "replacements": [
+    {
+     "from": "09/04/26",
+     "to": "24/07/26"
+    }
+   ],
+   "applied": [
+    {
+     "from": "09/04/26",
+     "to": "24/07/26"
+    }
+   ]
+  },
+  "shipment/files/pvlyrn-5.pdf": {
+   "lane": "gdoc/batch gdx_shp5",
+   "kind": "invoice",
+   "md5_old": "f179978fac0b23ee13198712f6d41c6e",
+   "md5_new": "3a5d9556bdf6974b7a1ed61feeacd61a",
+   "doc_date": "2026-07-24",
+   "replacements": [
+    {
+     "from": "03/06/25",
+     "to": "24/07/26"
+    }
+   ],
+   "applied": [
+    {
+     "from": "03/06/25",
+     "to": "24/07/26"
+    }
+   ]
+  },
+  "balance_sheet/files/asyp-shr-ts-1.plp.pdf": {
+   "lane": "pipeline/bare plb_bs",
+   "kind": "invoice",
+   "md5_old": "4546e87e19dd8f631af71cae821215ee",
+   "md5_new": "69c64aa0a2c90b3c3d52e915254f36ed",
+   "doc_date": "2026-07-24",
+   "replacements": [
+    {
+     "from": "07/09/25",
+     "to": "24/07/26"
+    }
+   ],
+   "applied": [
+    {
+     "from": "07/09/25",
+     "to": "24/07/26"
+    }
+   ]
+  },
+  "balance_sheet/files/asyp-shr-ts-2.plp.pdf": {
+   "lane": "pipeline/batch plx_bs1",
+   "kind": "invoice",
+   "md5_old": "f9be02ca35980a5d88f465f032ea44c9",
+   "md5_new": "135e58b91372c4478d41ddd312e3822e",
+   "doc_date": "2026-07-24",
+   "replacements": [
+    {
+     "from": "05/11/25",
+     "to": "24/07/26"
+    }
+   ],
+   "applied": [
+    {
+     "from": "05/11/25",
+     "to": "24/07/26"
+    }
+   ]
+  },
+  "balance_sheet/files/khhn-pvr-1.plp.pdf": {
+   "lane": "pipeline/batch plx_bs2",
+   "kind": "invoice",
+   "md5_old": "309174d1dc307eefadef29665e569818",
+   "md5_new": "7bd8dc45f2cc620f2b0df3e031eeced9",
+   "doc_date": "2026-07-24",
+   "replacements": [
+    {
+     "from": "03/11/25",
+     "to": "24/07/26"
+    }
+   ],
+   "applied": [
+    {
+     "from": "03/11/25",
+     "to": "24/07/26"
+    }
+   ]
+  },
+  "invoice/files/khpr-mnhm-5.plp.pdf": {
+   "lane": "pipeline/batch plx_inv1",
+   "kind": "invoice",
+   "md5_old": "a8896d6be4077e033a54c7d66bbed47c",
+   "md5_new": "79ad3744942f505e6f6f5d46b0416b5c",
+   "doc_date": "2026-07-24",
+   "replacements": [
+    {
+     "from": "30/10/25",
+     "to": "24/07/26"
+    }
+   ],
+   "applied": [
+    {
+     "from": "30/10/25",
+     "to": "24/07/26"
+    }
+   ]
+  },
+  "invoice/files/nbl-3.plp.pdf": {
+   "lane": "pipeline/batch plx_inv2",
+   "kind": "invoice",
+   "md5_old": "f30232c557ca9dd8594fc9a72b029ce6",
+   "md5_new": "3c85f298a238a2b626cc206fbd95aebd",
+   "doc_date": "2026-07-24",
+   "replacements": [
+    {
+     "from": "30/06/25",
+     "to": "24/07/26"
+    }
+   ],
+   "applied": [
+    {
+     "from": "30/06/25",
+     "to": "24/07/26"
+    }
+   ]
+  },
+  "invoice/files/agn-3.plp.pdf": {
+   "lane": "pipeline/batch plx_inv3",
+   "kind": "invoice",
+   "md5_old": "1143befa40539b4d1186a0dadb634bde",
+   "md5_new": "3a6dc7b0867f6a0c7a293739c223029b",
+   "doc_date": "2026-07-24",
+   "replacements": [
+    {
+     "from": "22/04/25",
+     "to": "24/07/26"
+    }
+   ],
+   "applied": [
+    {
+     "from": "22/04/25",
+     "to": "24/07/26"
+    }
+   ]
+  },
+  "invoice/files/arkhh-3.plp.pdf": {
+   "lane": "pipeline/batch plx_inv4",
+   "kind": "invoice",
+   "md5_old": "deef9e77db547c190f417741f3e17dbd",
+   "md5_new": "4f2dd58cabf4904353ad2421d249861e",
+   "doc_date": "2026-07-24",
+   "replacements": [
+    {
+     "from": "29/05/25",
+     "to": "24/07/26"
+    }
+   ],
+   "applied": [
+    {
+     "from": "29/05/25",
+     "to": "24/07/26"
+    }
+   ]
+  },
+  "invoice/files/ysh-krtvn-4.plp.pdf": {
+   "lane": "pipeline/batch plx_inv5",
+   "kind": "invoice",
+   "md5_old": "a63ff4a011bb611b4a04a9d6e07ad9f9",
+   "md5_new": "2cfbe77299eb0305f103325bbbef18a7",
+   "doc_date": "2026-07-24",
+   "replacements": [
+    {
+     "from": "14/01/26",
+     "to": "24/07/26"
+    }
+   ],
+   "applied": [
+    {
+     "from": "14/01/26",
+     "to": "24/07/26"
+    }
+   ]
+  },
+  "order/files/PO25010001.plp.png": {
+   "lane": "pipeline/batch plx_ord1",
+   "kind": "invoice",
+   "md5_old": "8a241fd887bd7fe3cacd5304692a259a",
+   "md5_new": "e02925c1c5c74986b7edde7525f8a3c4",
+   "doc_date": "2026-07-24",
+   "replacements": [
+    {
+     "from": "05/11/2025",
+     "to": "24/07/2026"
+    }
+   ],
+   "applied": [
+    {
+     "from": "05/11/2025",
+     "to": "24/07/2026"
+    }
+   ]
+  },
+  "order/files/PO25010002.plp.png": {
+   "lane": "pipeline/batch plx_ord2",
+   "kind": "invoice",
+   "md5_old": "c1d0b3ab47cdc84a0b1127b035cb2467",
+   "md5_new": "4faafdec9259c825e7b3aecea121c10e",
+   "doc_date": "2026-07-24",
+   "replacements": [
+    {
+     "from": "12/11/2025",
+     "to": "24/07/2026"
+    }
+   ],
+   "applied": [
+    {
+     "from": "12/11/2025",
+     "to": "24/07/2026"
+    }
+   ]
+  },
+  "order/files/PO25010003.plp.png": {
+   "lane": "pipeline/batch plx_ord3",
+   "kind": "invoice",
+   "md5_old": "97c1501d832010ff42d9ce176ed32f3e",
+   "md5_new": "b4d64ec7dfc76bf7be9486234c28607e",
+   "doc_date": "2026-07-24",
+   "replacements": [
+    {
+     "from": "20/11/2025",
+     "to": "24/07/2026"
+    }
+   ],
+   "applied": [
+    {
+     "from": "20/11/2025",
+     "to": "24/07/2026"
+    }
+   ]
+  },
+  "order/files/PO25010004.plp.png": {
+   "lane": "pipeline/batch plx_ord4",
+   "kind": "invoice",
+   "md5_old": "82ef464e35c7c3610e85305ef2abcb03",
+   "md5_new": "be20df77ce3fc2ccf56b9152366ea82a",
+   "doc_date": "2026-07-24",
+   "replacements": [
+    {
+     "from": "28/11/2025",
+     "to": "24/07/2026"
+    }
+   ],
+   "applied": [
+    {
+     "from": "28/11/2025",
+     "to": "24/07/2026"
+    }
+   ]
+  },
+  "order/files/PO25010005.plp.png": {
+   "lane": "pipeline/batch plx_ord5",
+   "kind": "invoice",
+   "md5_old": "efec35d22958b2ea302404380661c353",
+   "md5_new": "9707f2ee773cea753609f2f284626776",
+   "doc_date": "2026-07-24",
+   "replacements": [
+    {
+     "from": "03/12/2025",
+     "to": "24/07/2026"
+    }
+   ],
+   "applied": [
+    {
+     "from": "03/12/2025",
+     "to": "24/07/2026"
+    }
+   ]
+  },
+  "shipment/files/by-gy-4.plp.pdf": {
+   "lane": "pipeline/batch plx_shp1",
+   "kind": "invoice",
+   "md5_old": "079ebe20f211d4d5570e6a39c24dce17",
+   "md5_new": "8778fefcd50bfb7b70676535eec22071",
+   "doc_date": "2026-07-24",
+   "replacements": [
+    {
+     "from": "18/11/25",
+     "to": "24/07/26"
+    }
+   ],
+   "applied": [
+    {
+     "from": "18/11/25",
+     "to": "24/07/26"
+    }
+   ]
+  },
+  "shipment/files/dyavr-4.plp.pdf": {
+   "lane": "pipeline/batch plx_shp2",
+   "kind": "invoice",
+   "md5_old": "76c98a92a0ad96baa64ba522f26b001b",
+   "md5_new": "4a3539d561b33aac8ae27a718c71efc6",
+   "doc_date": "2026-07-24",
+   "replacements": [
+    {
+     "from": "18/01/26",
+     "to": "24/07/26"
+    }
+   ],
+   "applied": [
+    {
+     "from": "18/01/26",
+     "to": "24/07/26"
+    }
+   ]
+  },
+  "shipment/files/mbnh-drvm-1.plp.pdf": {
+   "lane": "pipeline/batch plx_shp3",
+   "kind": "invoice",
+   "md5_old": "0b14590000fc5e79129b06fc44ded387",
+   "md5_new": "7cd35533a3d0e4b6d09de8cc156916bd",
+   "doc_date": "2026-08-01",
+   "replacements": [
+    {
+     "from": "09/06/25",
+     "to": "01/08/26"
+    }
+   ],
+   "applied": [
+    {
+     "from": "24/07/26",
+     "to": "01/08/26"
+    }
+   ]
+  },
+  "shipment/files/sbh-5.plp.pdf": {
+   "lane": "pipeline/batch plx_shp4",
+   "kind": "invoice",
+   "md5_old": "aaecf6986c38bbe4ce0c4301d2360b53",
+   "md5_new": "0f2368b1ea86cc3c0bc1629d42626b34",
+   "doc_date": "2026-07-24",
+   "replacements": [
+    {
+     "from": "09/04/26",
+     "to": "24/07/26"
+    }
+   ],
+   "applied": [
+    {
+     "from": "09/04/26",
+     "to": "24/07/26"
+    }
+   ]
+  },
+  "shipment/files/pvlyrn-5.plp.pdf": {
+   "lane": "pipeline/batch plx_shp5",
+   "kind": "invoice",
+   "md5_old": "81f410fecfbf9771f246aee424bf87c0",
+   "md5_new": "bc50db46343cbb2bd5d64fe3e0bfa663",
+   "doc_date": "2026-07-24",
+   "replacements": [
+    {
+     "from": "03/06/25",
+     "to": "24/07/26"
+    }
+   ],
+   "applied": [
+    {
+     "from": "03/06/25",
+     "to": "24/07/26"
+    }
+   ]
+  }
+ },
+ "old_window_months": 6,
+ "_readme": "Generated by scripts/refresh-corpus-dates.py. doc_date is the date now PRINTED on the document; the E2E lanes that assert COMPLETED depend on it staying inside settings.OldDocumentMonthsBack."
+}

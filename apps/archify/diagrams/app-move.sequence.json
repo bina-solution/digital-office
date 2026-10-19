@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Moving an app to a linked office",
+    "subtitle": "project-pln, MacBook -> hp-laptop, 2026-10-05: one API call, no shell on either machine",
+    "output": "app-move.html",
+    "viewBox": [1080, 900],
+    "column_fit": "spread",
+    "animation": "trace",
+    "quality_profile": "showcase"
+  },
+  "participants": [
+    { "id": "caller", "type": "external", "label": "Owner / agent", "sublabel": "apps screen or API" },
+    { "id": "srcApps", "type": "backend", "label": "app-management", "sublabel": "source office" },
+    { "id": "srcData", "type": "database", "label": "data-management", "sublabel": "source office" },
+    { "id": "door", "type": "security", "label": "Link door", "sublabel": "WireGuard + Host" },
+    { "id": "dstApps", "type": "backend", "label": "app-management", "sublabel": "target office" },
+    { "id": "dstData", "type": "database", "label": "data-management", "sublabel": "target office" },
+    { "id": "app", "type": "frontend", "label": "The app", "sublabel": "its own hooks" }
+  ],
+  "segments": [
+    { "from": 162, "to": 290, "label": "1 - export here" },
+    { "from": 302, "to": 690, "label": "2 - bring it up there, with its data" },
+    { "from": 702, "to": 800, "label": "3 - switch off here" }
+  ],
+  "messages": [
+    { "id": "ask-move", "from": "caller", "to": "srcApps", "y": 186, "label": "POST /apps/<id>/move {to}", "variant": "emphasis" },
+    { "id": "export", "from": "srcApps", "to": "srcData", "y": 228, "label": "export --app (hooks/backup)", "variant": "default" },
+    { "id": "archive-ready", "from": "srcData", "to": "srcApps", "y": 270, "label": "archive + facts", "variant": "return" },
+    { "id": "ask-enable", "from": "srcApps", "to": "door", "y": 326, "label": "enable {restore: archive}", "variant": "emphasis" },
+    { "id": "stamped", "from": "door", "to": "dstApps", "y": 368, "label": "+ X-DGO-Office (who asked)", "variant": "security" },
+    { "id": "bring-up", "from": "dstApps", "to": "app", "y": 410, "label": "prepare, containers, healthy", "variant": "default" },
+    { "id": "ask-pull", "from": "dstApps", "to": "dstData", "y": 452, "label": "pull from the office that asked", "variant": "emphasis" },
+    { "id": "fetch", "from": "dstData", "to": "door", "y": 494, "label": "GET each artifact", "variant": "dashed" },
+    { "id": "serve", "from": "door", "to": "srcData", "y": 536, "label": "download, sha256 on arrival", "variant": "dashed" },
+    { "id": "restore", "from": "dstData", "to": "app", "y": 578, "label": "import --app (hooks/restore)", "variant": "emphasis" },
+    { "id": "facts", "from": "app", "to": "dstData", "y": 620, "label": "facts equal, one by one", "variant": "return" },
+    { "id": "onboard", "from": "dstApps", "to": "app", "y": 662, "label": "sign-in, onboard", "variant": "default" },
+    { "id": "placed", "from": "dstApps", "to": "srcApps", "y": 724, "label": "200: restored", "variant": "return" },
+    { "id": "moved", "from": "srcApps", "to": "caller", "y": 776, "label": "moved; off here, data kept", "variant": "return" }
+  ],
+  "activations": [
+    { "participant": "srcApps", "from": 180, "to": 784, "type": "backend" },
+    { "participant": "srcData", "from": 222, "to": 276, "type": "database" },
+    { "participant": "dstApps", "from": 362, "to": 730, "type": "backend" },
+    { "participant": "dstData", "from": 446, "to": 626, "type": "database" },
+    { "participant": "srcData", "from": 530, "to": 560, "type": "database" },
+    { "participant": "app", "from": 404, "to": 668, "type": "frontend" }
+  ],
+  "cards": [
+    { "dot": "emerald", "title": "No shell anywhere", "items": ["Three steps, each a verb that already existed", "The other office is reached through the door a tile already uses", "A long step answers 202 and is followed at /job"] },
+    { "dot": "amber", "title": "Nothing is deleted", "items": ["A failure before step 3 leaves the app running where it was", "The source keeps its volumes until somebody uninstalls it", "The target refuses if it already holds data of that app"] },
+    { "dot": "rose", "title": "Who may do what", "items": ["Only an office that GIVES its app-management can be placed on", "The door, not the caller, names the office a request came from", "An archive may touch only what the target's manifest says the app owns"] }
+  ]
+}

@@ -1,0 +1,5 @@
+# `go build .` in this directory writes the binary beside its source, so it is ignored here rather
+# than in the repo root: the name `forward-auth` is also this service's, and a root-level entry for a
+# word that generic would swallow somebody else's file.
+forward-auth
+forward-auth.exe

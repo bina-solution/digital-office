@@ -1,0 +1,120 @@
+# Routing labels below were lifted from production/compose.override.yml during the
+# platform-OS refactor so this app owns its own wiring (app.json: emit_labels=false).
+services:
+  any-concurrency:
+    container_name: any-concurrency-${DEPLOYMENT_NAME:-bina-deployment}
+    # The image CI publishes for this commit (DGO-41). `pull_policy: missing` means it is
+    # fetched only when it is not here already, so a checkout that has built it is untouched;
+    # the `build:` below stays as the fallback. Needs the GHCR package readable — a package made
+    # from a private repo is private, so `docker login ghcr.io` on a machine that must pull.
+    image: ghcr.io/solomonboltin/digital-office/any-concurrency:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    build:
+      context: .
+      dockerfile: Dockerfile
+    hostname: any-concurrency
+    networks:
+    - traefik-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.75'
+          memory: 384M
+        reservations:
+          cpus: '0.05'
+          memory: 64M
+    environment:
+    # NOTE: env naming a layer-3 app is contributed BY that app (contributes.env in its
+    # app.json) and merged in via .generated/routing.override.yml — see gate G9.
+    - SENTRY_DSN=${ANY_CONCURRENCY_SENTRY_DSN:-}
+    - DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-bina-deployment}
+    - PG_HOST=n8n-postgres
+    - PG_PORT=5432
+    - PG_USER=${POSTGRES_USER:-root}
+    - PG_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+    - PG_DB=${POSTGRES_DB:-n8n}
+    - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}@redis:6379/0
+    # Scheme MUST be per-environment, not hardcoded: this repo serves n8n over https behind traefik
+    # on the VPS, but *.localhost has no valid cert in dev, so a hardcoded https:// here 404s/cert-
+    # errors the "open in n8n" deep link locally. Mirrors the exact pattern n8n's own
+    # docker-compose.yml uses for N8N_EDITOR_BASE_URL/WEBHOOK_URL (apps/n8n/docker-compose.yml).
+    - N8N_URL=${N8N_OAUTH_BASE:-${N8N_PROTOCOL:-https}://${N8N_BASE_URL:-n8n.${DEPLOYMENT_DOMAIN:-localhost}}}
+    - POLL_INTERVAL_S=2
+    - TRAEFIK_CONTAINER=traefik-${DEPLOYMENT_NAME:-bina-deployment}
+    - ENABLE_N8N=1
+    - ENABLE_TRAEFIK=1
+    - ENABLE_WA=1
+    - ENABLE_APITOOLS=1
+    - ENABLE_DOCKER=1
+    - TRAEFIK_BUFFER=20000
+    - DOCKER_BUFFER=5000
+    # ── extra request-timeline lanes ────────────────────────────────────────────────────────
+    # The `custom` source tails ONE container (CUSTOM_CONTAINER, contributed by apitools). Any
+    # further container that emits the same gunicorn JSON access line gets its own lane, its own
+    # ring buffer and its own health entry — declared as `CUSTOM_SOURCE_<APP>=<container>=<lane>`.
+    #
+    # Those declarations are NOT listed here on purpose: naming `mailapi`/`drive` in a layer-2
+    # compose is exactly what gate G9 forbids (uninstall the app and the base still refers to it).
+    # Each app declares its own lane in ITS app.json `contributes.env`, and reconcile.py merges it
+    # onto this service — same inversion apitools already uses for APITOOLS_CONTAINER.
+    # CUSTOM_SOURCES below is the operator escape hatch for a container no app declares (e.g. a
+    # standalone deployment); it is a comma list of `container[=lane]` and is empty by default.
+    - CUSTOM_SOURCES=${ANY_CONCURRENCY_CUSTOM_SOURCES:-}
+    # Default ring size for a lane that does not set CUSTOM_BUFFER_<LANE>. Deliberately below the
+    # 20000 the single `custom` slot uses: this container is capped at 384M and now holds one ring
+    # per lane, and a chatty service fills a ring in minutes rather than hours.
+    - CUSTOM_BUFFER_DEFAULT=${CUSTOM_BUFFER_DEFAULT:-8000}
+    # ── per-task spans for the task runners ────────────────────────────────────────────────
+    # n8n's task broker logs only rejections and errors, and the JS runner logs nothing at all
+    # per task, so a SUCCEEDING task is invisible in every log on the box. n8n does record it —
+    # on its internal event bus, whose writer is unlicensed — as a requested/received pair
+    # carrying taskId. Reading that file is the only way to draw what the runners actually ran.
+    - N8N_EVENTLOG_DIR=/n8n-data
+    # `file=lane` pins every task in that file to one runner lane. This is exact, not a guess:
+    # one broker per n8n process means a task logged by worker-1 was necessarily served by
+    # worker-1's own sidecar. Requires N8N_EVENTBUS_LOGWRITER_LOGBASENAME per worker -- note n8n
+    # APPENDS `-worker` to the basename on worker processes, so basename `n8nEventLog-w1` writes
+    # the file `n8nEventLog-w1-worker.log`. Verified by listing the volume, not assumed.
+    - N8N_EVENTLOG_FILES=${N8N_EVENTLOG_FILES:-n8nEventLog.log=runner-main,n8nEventLog-w1-worker.log=runner-1,n8nEventLog-w2-worker.log=runner-2}
+    volumes:
+    # Project socket on the host side — see the note in platform-base/traefik/docker-compose.yml.
+    - ${BBOX_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
+    # n8n's user folder, READ-ONLY: the event-bus log lives here and every n8n process (main and
+    # every worker) shares this one volume. Read-only is the whole safety story — this service
+    # never writes into n8n's state, and mounting it changes nothing about n8n itself.
+    - n8n_storage:/n8n-data:ro
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - python -c "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://localhost:8080/healthz',timeout=3).status==200
+        else 1)"
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-5s}
+      retries: 5
+      start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '3'
+    labels:
+    - traefik.enable=true
+    - traefik.http.routers.any-concurrency-local.rule=Host(`any-concurrency.localhost`)
+    - traefik.http.routers.any-concurrency-local.entrypoints=web
+    - traefik.http.routers.any-concurrency-local.service=any-concurrency
+    - traefik.http.routers.any-concurrency-local.middlewares=authentik@file
+    - traefik.http.routers.any-concurrency-https.rule=Host(`${ANY_CONCURRENCY_BASE_URL}`)
+    - traefik.http.routers.any-concurrency-https.entrypoints=websecure
+    - traefik.http.routers.any-concurrency-https.tls=true
+    - traefik.http.routers.any-concurrency-https.tls.certresolver=myresolver
+    - traefik.http.routers.any-concurrency-https.service=any-concurrency
+    - traefik.http.routers.any-concurrency-https.middlewares=authentik@file
+    - traefik.http.services.any-concurrency.loadbalancer.server.port=8080
+volumes:
+  # Declared by apps/n8n too; compose `include` merges the identical definition, and both
+  # resolve to the one project volume <project>_n8n_storage that n8n already owns and writes.
+  n8n_storage: null
+networks:
+  traefik-network:
+    external: true

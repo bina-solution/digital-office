@@ -1,0 +1,13 @@
+# Large reference captures (regenerate via `bbox ui-map`; the mockup is built from them but doesn't ship them)
+reference/ui-map-latest/
+reference/real-screenshots/
+reference/mockup-screenshots/
+tooling/dist.html
+verify/out/mock/
+verify/out/diff/
+verify/out/*.png
+verify/out/scores.json
+verify/out/flows/
+verify/out/flows-real/
+verify/out/flows-compare/
+verify/out/sim-qa/

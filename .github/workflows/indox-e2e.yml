@@ -1,0 +1,399 @@
+name: indox-e2e
+
+# FAST lane: the INDOX full-system E2E on a fresh machine — LEAN stack only (traefik, redis,
+# n8n + workers/runners, supabase-db, storage, demo-docs file server, apitools with local
+# Tesseract OCR). No authentik/glitchtip/browser42/etc — those belong to ci-verify (the
+# deployment lane). Everything INDOX needs is created by the workflows themselves
+# (INDOX Seed Fixtures): zero special setup commands here.
+#
+# Two jobs:
+#   images — CONTENT-ADDRESSED prebake: apitools tagged by its production/apitools tree hash,
+#            n8n by apps/n8n tree hash + N8N_VERSION. If both tags already exist in GHCR the
+#            job is seconds; otherwise it builds ONLY the missing one (buildx + GHA cache).
+#   e2e    — pull-only lean bring-up (~4.5min setup vs ~13min with on-runner builds) + the
+#            full battery. Publishes results + final indox table CSV back to the branch.
+#
+# apitools and chat are in-tree (baked into this repo, no submodules), so a plain
+# checkout has everything the build needs — no submodule token or fetch step required.
+
+on:
+  push:
+    branches: [main, shlomo-laptop, release-v2-lockin, platform-os-refactor]
+    paths-ignore: ['.ci-cd/**']
+  workflow_dispatch:
+
+concurrency:
+  group: indox-e2e-${{ github.ref }}
+  # queue, never kill: a manual dispatch or new push must not cancel a live burn-in run
+  cancel-in-progress: false
+
+permissions:
+  contents: write   # publish step commits .ci-cd/indox-e2e back to the branch
+  checks: write
+  packages: write   # images job pushes to GHCR
+
+env:
+  REG: ghcr.io/solomonboltin/deployment-hacohen
+
+jobs:
+  # ── ensure content-addressed images exist in GHCR (build only on miss) ──
+  images:
+    # settable to 'devops-vps' (self-hosted DinD runner on bina-devops-vps) via repo
+    # variable INDOX_E2E_RUNNER - e.g. while GitHub-hosted minutes are billing-blocked.
+    runs-on: [self-hosted, portable]
+    timeout-minutes: 45
+    outputs:
+      apitools_tag: ${{ steps.tags.outputs.apitools }}
+      n8n_tag: ${{ steps.tags.outputs.n8n }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute content-addressed tags
+        id: tags
+        run: |
+          set -euo pipefail
+          AP="$(bash scripts/ci/apitools-tag.sh)"
+          # hash ONLY the n8n image's build inputs (Dockerfile + the two COPY'd paths) —
+          # hashing all of apps/n8n would rebuild on every workflow/fixture change
+          N8N_TREE=$( (git rev-parse HEAD:apps/n8n/Dockerfile                        HEAD:apps/n8n/extensions/bina-solutions-nodes                        HEAD:apps/n8n/seed-community-nodes.sh) | git hash-object --stdin | cut -c1-12)
+          N8N_VER=$(grep -E '^N8N_VERSION=' .env.ex | cut -d= -f2)
+          echo "apitools=${AP}" >> "$GITHUB_OUTPUT"
+          echo "n8n=${N8N_TREE}-${N8N_VER}" >> "$GITHUB_OUTPUT"
+          echo "apitools tag: ${AP} | n8n tag: ${N8N_TREE}-${N8N_VER}"
+
+      - name: Login GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check which images already exist
+        id: need
+        run: |
+          set -euo pipefail
+          need_ap=1; need_n8n=1
+          docker manifest inspect "$REG/apitools:${{ steps.tags.outputs.apitools }}" >/dev/null 2>&1 && need_ap=0
+          docker manifest inspect "$REG/n8n:${{ steps.tags.outputs.n8n }}" >/dev/null 2>&1 && need_n8n=0
+          echo "apitools=$need_ap" >> "$GITHUB_OUTPUT"
+          echo "n8n=$need_n8n"     >> "$GITHUB_OUTPUT"
+          echo "build needed — apitools: $need_ap, n8n: $need_n8n"
+
+      - uses: docker/setup-buildx-action@v3
+        if: steps.need.outputs.apitools == '1' || steps.need.outputs.n8n == '1'
+
+      - name: Build + push apitools
+        if: steps.need.outputs.apitools == '1'
+        uses: docker/build-push-action@v6
+        with:
+          context: apps/apitools
+          push: true
+          tags: ${{ env.REG }}/apitools:${{ steps.tags.outputs.apitools }}
+          cache-from: type=gha,scope=apitools
+          cache-to: type=gha,scope=apitools,mode=max
+
+      - name: Read N8N_VERSION
+        if: steps.need.outputs.n8n == '1'
+        id: n8nv
+        run: echo "v=$(grep -E '^N8N_VERSION=' .env.ex | cut -d= -f2)" >> "$GITHUB_OUTPUT"
+
+      - name: Build + push n8n
+        if: steps.need.outputs.n8n == '1'
+        uses: docker/build-push-action@v6
+        with:
+          context: apps/n8n
+          push: true
+          build-args: |
+            N8N_VERSION=${{ steps.n8nv.outputs.v }}
+          tags: ${{ env.REG }}/n8n:${{ steps.tags.outputs.n8n }}
+          cache-from: type=gha,scope=n8n
+          cache-to: type=gha,scope=n8n,mode=max
+
+  # ── the battery: pull-only bring-up, full suite, results published to the repo ──
+  e2e:
+    needs: images
+    # settable to 'devops-vps' (self-hosted DinD runner on bina-devops-vps) via repo
+    # variable INDOX_E2E_RUNNER - e.g. while GitHub-hosted minutes are billing-blocked.
+    runs-on: [self-hosted, portable]
+    # no on-runner builds anymore: setup ~5min + battery worst-case (fail-fast:
+    # 360+480+900 = 29min) + dump margin
+    timeout-minutes: 60
+    env:
+      # SERVICES is DERIVED from the capability graph — see the "Derive SERVICES" step below.
+      # It used to be hand-written here, which is a second source of truth for "what does this
+      # lane need" and drifts silently: indox's manifest has always `use`d the drive capability,
+      # but the hand-written list never gained `drive`, so the lane started without it and every
+      # suite died on its first drive call. It was also missing `connections` (the secrets broker)
+      # and `kong` (which ci-env.sh points INCOMING_DOCS_SUPABASE_URL at).
+      #
+      # LANE_ROOTS: the apps this lane exercises. indox pulls in its whole required closure
+      # (n8n, supabase, connections, redis, apitools, drive, mail); traefik is the edge and
+      # any-concurrency the execution-metrics tail — neither is a capability indox `use`s, so
+      # they are named as roots explicitly.
+      LANE_ROOTS: indox,traefik,any-concurrency
+      # Deliberate trim: UIs and replicas the lean lane does not exercise. Trimming stays
+      # possible and REVIEWABLE in the diff; forgetting to ADD is now impossible.
+      LANE_EXCLUDE: studio,meta,mailview,webmail,redisinsight,n8n-worker-2,n8n-worker-2-runners,incoming-documents
+      # services are compiled into .generated/ — ./scripts/dc supplies the -f list and
+      # --project-directory; OVERLAYS appends the CI-images profile on top.
+      OVERLAYS: platform/profiles/ci-images.yml
+      COMPOSE_PATH_SEPARATOR: ";"
+      APITOOLS_IMAGE_TAG: ${{ needs.images.outputs.apitools_tag }}
+      N8N_IMAGE_TAG: ${{ needs.images.outputs.n8n_tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: INDOX Python contract suite
+        run: |
+          set -euo pipefail
+          python3 -m pip install --user -r apps/indox/app/requirements-dev.txt
+          mkdir -p ci-artifacts
+          PYTHONPATH=apps/indox/app python3 -m pytest \
+            apps/indox/app/incoming_documents/tests \
+            -q --junitxml=ci-artifacts/indox-python.junit.xml
+
+      # fresh-machine semantics on persistent (self-hosted DinD) runners: prior runs leave
+      # named volumes (n8n encryption key, supabase db init state) that poison the next
+      # bring-up with THIS run's freshly generated .env (run #65: "Mismatching encryption
+      # keys"). Containers + volumes wiped; images kept as the pull cache. No-op on
+      # GitHub-hosted (always a fresh VM).
+      - name: Reset docker state (persistent-runner fresh-machine semantics)
+        run: |
+          docker rm -f $(docker ps -aq) 2>/dev/null || true
+          docker volume prune -af 2>/dev/null || docker volume prune -f || true
+          docker network prune -f || true
+
+      # apitools/docker-compose.yml is now part of this repo (no longer a submodule), so it's
+      # present after checkout — no fetch step needed. The image comes prebuilt from GHCR.
+      - name: Login GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # chat is not in indox's capability closure (LANE_ROOTS above), so the derived
+      # SERVICES never names it. The old "Strip chat" step edited
+      # production/compose{,.override}.yml, both of which the refactor removed.
+
+      - name: Cap CPU limits to the 2-vCPU runner
+        run: |
+          set -euo pipefail
+          python3 scripts/ci/cap-cpus.py
+
+      - name: Generate CI .env
+        env:
+          N8N_ENCRYPTION_KEY_SECRET: ${{ secrets.N8N_ENCRYPTION_KEY }}
+        run: |
+          chmod +x scripts/ci-env.sh
+          ./scripts/ci-env.sh
+          # Point the INDOX BFF and apitools at the supabase service aliases. Without these two
+          # the documents grid and apitools' DB calls resolve on the wrong network and every
+          # suite dies at its first Drive/list call with "incorrect host (domain) value" — the
+          # cause of the red runs #128-#135. baseline.sh and ui-map.yml already do this; this
+          # lane was the one that didn't, which is why green was only ever provable locally.
+          for kv in "INCOMING_DOCS_SUPABASE_URL=http://supabase-kong:8000" "APITOOLS_DB_HOST=supabase-db"; do
+            k="${kv%%=*}"
+            grep -q "^${k}=" .env && sed -i "s#^${k}=.*#${kv}#" .env || echo "${kv}" >> .env
+          done
+
+      - name: Derive SERVICES from the capability graph
+        run: |
+          set -euo pipefail
+          # The one source of truth for "what must this lane start" is apps/*/app.json, not a
+          # list in this file. reconcile.py resolves LANE_ROOTS' required closure (same strength
+          # / ops-negotiation / ordering as a real bring-up) and expands each app to its compose
+          # services; --exclude applies the deliberate lean-lane trim.
+          # LANE_ROOTS/LANE_EXCLUDE reach the script through the job env, and the script itself
+          # fails on an empty result and writes SERVICES to $GITHUB_ENV + the step summary. The
+          # four lines that used to follow this one were the remains of the inline form it
+          # replaced — a dangling `--for "$LANE_ROOTS" … )"` continuation that is a shell syntax
+          # error, then three lines re-doing the script's job against a SERVICES this shell never
+          # set. Under `set -euo pipefail` that step could only ever fail. ci-verify.yml and
+          # ui-map.yml call the same script the same way, and neither carries the leftovers.
+          bash scripts/ci/derive-services.sh
+
+      - name: "TIMED: pull prebuilt images"
+        timeout-minutes: 6
+        run: |
+          t0=$(date +%s)
+          . ./scripts/lib.sh && ensure_network   # one implementation (scripts/lib.sh)
+          # --ignore-pull-failures: apitools + n8n are prebaked by the images job and pull from GHCR,
+          # and every first-party service names its published image (DGO-41) — but those packages are
+          # PRIVATE, so a step that has not logged in to GHCR gets "pull access denied" on the ones it
+          # asks for, and a commit need not have every image pushed. Whatever is missing is one of the
+          # "tiny builds" the NEXT step builds on-demand during `up`. Without this flag the whole lane
+          # dies here on a service that was never meant to be pulled. (--ignore-buildable would
+          # over-skip apitools/n8n too and defeat the prebake, so ignore only the failures.)
+          ./scripts/dc pull -q --ignore-pull-failures $SERVICES \
+            || ./scripts/dc pull --ignore-pull-failures $SERVICES
+          echo "PULL_SECONDS=$(( $(date +%s) - t0 ))" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: "TIMED: bring up lean stack (prebuilt + tiny builds)"
+        timeout-minutes: 8
+        run: |
+          set -euo pipefail
+          chmod +x bbox scripts/* 2>/dev/null || true
+          t0=$(date +%s)
+          ./scripts/dc up -d --wait --wait-timeout 300 $SERVICES || true
+          # stuck-"Created" stragglers are a known compose disease on slow runners: keep
+          # re-issuing `up -d` until EVERY required service is actually running.
+          for i in $(seq 1 12); do
+            ./scripts/dc up -d $SERVICES >/dev/null 2>&1 || true
+            ok=1
+            for svc in $SERVICES; do
+              st=$(./scripts/dc ps -a --format '{{.Service}} {{.State}}' | awk -v s="$svc" '$1==s{print $2}')
+              [ "$st" = "running" ] || { ok=0; echo "  waiting: $svc (${st:-absent})"; }
+            done
+            [ "$ok" = 1 ] && break
+            sleep 10
+          done
+          echo "UP_SECONDS=$(( $(date +%s) - t0 ))" | tee -a "$GITHUB_STEP_SUMMARY"
+          ./scripts/dc ps
+          # fail loudly if something never started
+          for svc in $SERVICES; do
+            st=$(./scripts/dc ps -a --format '{{.Service}} {{.State}}' | awk -v s="$svc" '$1==s{print $2}')
+            [ "$st" = "running" ] || { echo "::error::service $svc not running (state=${st:-absent})"; exit 1; }
+          done
+
+      - name: "TIMED: n8n blueprint push"
+        timeout-minutes: 4
+        run: |
+          t0=$(date +%s)
+          # Tee'd so the publish step can put the REASON in the repo. When this step fails the
+          # battery never starts, and the only trace left in .ci-cd was "battery step likely never
+          # ran" — true, useless, and unreadable without opening the Actions log.
+          mkdir -p ci-artifacts
+          set -o pipefail
+          ./bbox n8n push all 2>&1 | tee ci-artifacts/n8n-push.log
+          echo "PUSH_SECONDS=$(( $(date +%s) - t0 ))" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: "TIMED: INDOX E2E suites (TRUE PARALLEL; self-preparing; local OCR; drive=local)"
+        # parallel: wall ≈ slowest suite × contention. Budgets scaled 1.5× for the 2-vCPU
+        # runner (gdoc 900→1350s = 22.5min worst case) + margin for verdict + dump.
+        timeout-minutes: 45
+        env:
+          # self-hosted DinD topology: the stack's published ports live in the dind
+          # container's namespace, not the runner's localhost (run #66 burned the whole
+          # detect budget on localhost; run #67: 5678 isn't published in the CI compose
+          # set at all — GitHub-hosted actually uses the detector's traefik fallback,
+          # port 80 + Host: n8n.localhost). Mirror that exact path at the dind host.
+          # Empty on GitHub-hosted.
+          INDOX_TEST_BASE: ${{ vars.INDOX_E2E_RUNNER != '' && 'http://dind' || '' }}
+          INDOX_TEST_HOST: ${{ vars.INDOX_E2E_RUNNER != '' && 'n8n.localhost' || '' }}
+        run: |
+          t0=$(date +%s)
+          mkdir -p ci-artifacts
+          ./bbox indox test all --parallel --budget-scale 1.5 --junit ci-artifacts/indox-e2e.junit.xml 2>&1 | tee ci-artifacts/battery.log
+          rc=${PIPESTATUS[0]}
+          echo "SUITES_SECONDS=$(( $(date +%s) - t0 ))" | tee -a "$GITHUB_STEP_SUMMARY"
+          exit $rc
+
+      # sync-v3 100% node-coverage gate: every node in the sync-v3 workflows must have
+      # executed during the battery above; a node nobody runs = a branch nobody tests.
+      - name: sync-v3 node-coverage gate (100% required)
+        run: python3 apps/indox/hooks/sync-coverage.py --since-minutes 60 2>&1 | tee ci-artifacts/sync-v3-coverage.txt
+
+      # ESTATE-WIDE node coverage. The gate above requires 100% of the sync-v3 workflows; this one
+      # measures every indox workflow the battery touched and holds a ratchet floor.
+      #
+      # Two assertions, and the first matters more than the number:
+      #   * an EMPTY SCAN IS A RED. scripts/n8n-node-coverage.py globbed *.json for weeks after
+      #     blueprints became .workflow.ts, matched nothing, and exited "no workflow files found" —
+      #     which is how "279/624 = 44.7%" kept being quoted long after nothing could reproduce it.
+      #     A measurement over zero inputs is not a low score, it is no score.
+      #   * a RATCHET, not a target: scripts/ci/node-coverage-floor.json may only be RAISED. A drop
+      #     means a suite stopped exercising something it used to, which is the regression a
+      #     coverage number exists to catch.
+      #
+      # Placed AFTER the battery on purpose: it counts executions, so before the suites run it
+      # would read zero and pass vacuously — the exact failure it exists to catch.
+      - name: indox node-coverage gate (ratchet floor)
+        run: python3 scripts/refactor/node-coverage-gate.py 2>&1 | tee ci-artifacts/indox-node-coverage.txt
+
+      # apitools' OWN feature-validation suites — the only OCR/extraction coverage the estate has.
+      #
+      # This step used to boot a compose stack out of `legacy/feature-validation/` and run its
+      # `run-suites.sh`: a LIVE lane reading from the PARKED tree, declared as an exception in
+      # legacy/README.md and gate G34. That is the same shape that kept `attic/` alive for 293
+      # files. The suites validate apitools, so they now live with it — apps/apitools/
+      # feature-validation/ — and the harness is the platform's ONE test entrypoint,
+      # apps/apitools/hooks/test. Nothing in this lane reads from legacy/ any more.
+      #
+      # The hook brings up its own feature-validation-api sidecar (and waits for it), so this step
+      # is a single command; `bbox test apitools` is the identical spelling a human types locally.
+      # External-key / orchestration cases are gated (skipped) via the capability mechanism, so a
+      # keyless CI run asserts only what it can actually run. Report-only for now
+      # (continue-on-error) — flip to a hard gate once the local-OCR suites are green.
+      - name: "Feature validation (apitools OCR suites; external/orchestration gated)"
+        if: always()
+        continue-on-error: true
+        timeout-minutes: 20
+        env:
+          FV_CAPABILITIES: local
+        run: |
+          set -uo pipefail
+          ./bbox test apitools || echo "feature-validation had failures (see report) — non-gating"
+
+      - name: Publish feature-validation report
+        if: always() && hashFiles('ci-artifacts/feature-validation.junit.xml') != ''
+        uses: mikepenz/action-junit-report@v5
+        with:
+          report_paths: ci-artifacts/feature-validation.junit.xml
+          check_name: feature-validation
+          detailed_summary: true
+          include_passed: true
+          fail_on_failure: false
+
+      - name: Publish results + final indox table CSV to repo
+        if: always()
+        run: ./scripts/ci-publish-e2e-results ci
+
+      - name: Publish INDOX E2E report
+        if: always() && hashFiles('ci-artifacts/indox-e2e.junit.xml') != ''
+        uses: mikepenz/action-junit-report@v5
+        with:
+          report_paths: ci-artifacts/indox-e2e.junit.xml
+          check_name: indox-e2e
+          detailed_summary: true
+          include_passed: true
+          fail_on_failure: false
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: indox-e2e-${{ github.run_number }}
+          path: ci-artifacts/
+          if-no-files-found: ignore
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          # errored executions grouped: which workflows error-loop and how often
+          docker exec n8n-postgres-ci psql -U hacohen -d n8n -t -A -c "
+            SELECT count(*)||'x  '||w.name FROM execution_entity e
+            JOIN workflow_entity w ON w.id=e.\"workflowId\"
+            WHERE e.status='error' GROUP BY w.name ORDER BY count(*) DESC LIMIT 15;" || true
+          # last 10 errored executions with node + message (null-safe: coalesce EACH part)
+          docker exec n8n-postgres-ci psql -U hacohen -d n8n -t -A -c "
+            SELECT e.id||' :: '||coalesce(w.name,'?')||' :: '||coalesce(substring(d.data from '\"lastNodeExecuted\",\"([^\"]+)\"'),'?')||' :: '||coalesce(substring(d.data from '\"message\",\"([^\"]{1,160})'),'?') FROM execution_entity e
+            JOIN execution_data d ON d.\"executionId\"=e.id
+            LEFT JOIN workflow_entity w ON w.id=e.\"workflowId\"
+            WHERE e.status='error' ORDER BY e.id DESC LIMIT 10;" || true
+          echo "==== docker ps -a ===="; docker ps -a || true
+          for c in n8n-ci n8n-worker-1-ci supabase-db-ci supabase-storage-ci indox-demo-docs-ci apitools; do
+            echo "==== logs: $c ===="; docker logs --tail 50 "$c" 2>&1 || true
+          done
+
+      - name: Teardown
+        if: always()
+        # the publish step force-checkouts the branch tip (restoring the stripped whatsapp
+        # include) so compose down can fail parsing — fall back to force-removing everything
+        # (safe: on self-hosted the nested dockerd exists ONLY for this CI)
+        run: |
+          ./scripts/dc down -v --remove-orphans || {
+            docker rm -f $(docker ps -aq) 2>/dev/null || true
+            docker volume prune -af 2>/dev/null || docker volume prune -f || true
+          }

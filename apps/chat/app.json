@@ -1,0 +1,249 @@
+{
+  "id": "chat",
+  "title": {
+    "he": "צ׳אט",
+    "en": "Chat"
+  },
+  "layer": 3,
+  "kind": "adapter",
+  "version": "0.7.4",
+  "summary": {
+    "he": "שירות צ׳אט — צ׳אט מקומי, וואטסאפ וטלגרם דרך חיבורים, ובוטים שניתן לשייך לכל חיבור",
+    "en": "The chat service — local chat plus WhatsApp and Telegram via connections, with bots attachable per connection"
+  },
+  "capabilities": [
+    {
+      "name": "chat",
+      "type": "service",
+      "interface": "chat.v1",
+      "endpoint": "http://chat:3000",
+      "required_ops": [
+        "send",
+        "sendDocument",
+        "state",
+        "qr",
+        "disconnect"
+      ],
+      "optional_ops": [
+        "broadcast",
+        "createGroup",
+        "groupParticipants"
+      ],
+      "contract": "platform-service.v1"
+    }
+  ],
+  "engine": {
+    "id": "chat_local",
+    "profiles": [
+      {
+        "id": "admin",
+        "display_name": "מנהל",
+        "admin": true
+      },
+      {
+        "id": "user2",
+        "display_name": "משתמש 2"
+      },
+      {
+        "id": "hacohenbot1",
+        "display_name": "בוט הכהנים"
+      }
+    ]
+  },
+  "use": [
+    {
+      "capability": "workflow",
+      "strength": "requires",
+      "after": true
+    },
+    {
+      "capability": "secrets",
+      "strength": "requires",
+      "after": true
+    },
+    {
+      "capability": "notify",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
+    },
+    {
+      "capability": "indox-api",
+      "strength": "requires",
+      "after": false,
+      "dependency": "weak",
+      "ops": [
+        "documents",
+        "upload"
+      ]
+    },
+    {
+      "capability": "kv",
+      "strength": "requires",
+      "after": true
+    },
+    {
+      "capability": "sql",
+      "strength": "requires",
+      "after": true
+    }
+  ],
+  "connections": [
+    {
+      "id": "whatsapp-baileys",
+      "required": false,
+      "note": "Per-ACCOUNT, never per-install: the chat app serves its local backend with no device at all. A QR pairing is needed only when a WhatsApp account is actually connected, so an unpaired device is not an install blocker."
+    },
+    {
+      "id": "bs-webhook",
+      "required": false,
+      "note": "Only used when chat posts documents INTO the INDOX webhook. INDOX may not even be installed, and the value is auto-minted when it is missing — never a step for the operator."
+    },
+    {
+      "id": "chat-auth",
+      "required": true,
+      "as": {
+        "CHAT_AUTH_PASS": "AUTH_PASSWORD",
+        "CHAT_AUTH_USER": "AUTH_USERNAME"
+      }
+    },
+    {
+      "id": "settings-auth",
+      "required": true,
+      "as": {
+        "SETTINGS_AUTH_PASS": "N8N_SETTINGS_PASS",
+        "SETTINGS_AUTH_USER": "N8N_SETTINGS_USER"
+      }
+    },
+    {
+      "id": "chat-relay-key",
+      "required": true
+    }
+  ],
+  "blueprints": {
+    "n8n": "blueprint/n8n"
+  },
+  "compose": "docker-compose.yml",
+  "routing": [
+    {
+      "host": "chat",
+      "port": 3000,
+      "auth": "sso",
+      "emit_labels": false,
+      "module": {
+        "group": "עסק",
+        "icon": "message",
+        "embed": true,
+        "alias": "chat",
+        "id": "chat",
+        "service": "chat",
+        "name": "צ׳אט",
+        "desc": "שיחות מרובות ספקים (וואטסאפ / טלגרם / מקומי)",
+        "order": 4,
+        "url_env": "CHAT_URL",
+        "url": "http://chat:3000"
+      },
+      "sso": {
+        "slug": "chat",
+        "default_host": "chat.localhost",
+        "display_name": "Chat",
+        "local_twin": true,
+        "base_url_env": "CHAT_APP_BASE_URL"
+      }
+    }
+  ],
+  "health": {
+    "structural": "auto",
+    "probe": {
+      "http": "http://chat:3000/",
+      "interval": "30s"
+    }
+  },
+  "data": {
+    "volumes": [
+      "wa_media",
+      "chat_relay_git",
+      "chat_relay_media"
+    ],
+    "on_uninstall": "prompt",
+    "paths": [
+      "apps/chat/data"
+    ],
+    "sql": [
+      {
+        "instance": "supabase-db",
+        "database": "postgres",
+        "tables": [
+          "chat_*"
+        ],
+        "note": "created by chatapi/db/schema.sql"
+      },
+      {
+        "instance": "supabase-db",
+        "database": "buzz",
+        "note": "the chat-relay (buzz) engine's own database - 43 migrations, a partitioned events table and its own extensions; created by chat-relay-init, migrated by BUZZ_AUTO_MIGRATE. See ai/context/chat-buzz-engine-plan.md"
+      }
+    ]
+  },
+  "observability": {
+    "sentry_platform": "node"
+  },
+  "contributes": {
+    "env": {
+      "any-concurrency": {
+        "WA_CONTAINER": "chat-${DEPLOYMENT_NAME:-bina-deployment}"
+      },
+      "connections": {
+        "WA_BOT_URL": "${WA_BOT_URL:-http://chat:3000}",
+        "WA_SESSION_DIR": "/wa/auth_info"
+      }
+    },
+    "volumes": {
+      "connections": [
+        "./apps/chat/data:/wa:ro"
+      ]
+    },
+    "connection_providers": [
+      {
+        "id": "chat-relay-key",
+        "automint": {
+          "type": "hex",
+          "bytes": 32
+        },
+        "title": "Chat relay signing key",
+        "kind": "token",
+        "env": "CHAT_RELAY_KEY",
+        "now": "env -> BUZZ_RELAY_PRIVATE_KEY on the chat-relay container. The relay's OWN identity: it signs the kind:13534 membership roster and every relay-authored system event. MUST be stable across restarts - a new key makes every event the relay previously signed unverifiable, so this is auto-minted once and then left alone, exactly like a profile's api key (never re-mint, engine/bootstrap.js).",
+        "probe": {
+          "type": "http",
+          "url": "http://chat-relay:8080/_readiness"
+        },
+        "wizard": "auto-mint (the owner never types it)"
+      },
+      {
+        "id": "chat-auth",
+        "automint": {
+          "type": "password",
+          "chars": 24
+        },
+        "title": "Chat admin basic-auth",
+        "kind": "password",
+        "pillar": "app-password",
+        "app": {
+          "name": "Chat",
+          "url_env": "CHAT_APP_BASE_URL",
+          "user_env": "CHAT_AUTH_USER"
+        },
+        "env": "CHAT_AUTH_PASS",
+        "envs_extra": [
+          "CHAT_AUTH_USER"
+        ],
+        "now": "env -> the chat service's express-session login AND n8n cred 'Chat Auth'(BmKl) via credential_overrides (n8n's 'WhatsApp Send Document' workflow calls the chat service with it). NOTE: .env.ex ships AUTH_PASSWORD=12345.",
+        "probe": {
+          "type": "present"
+        },
+        "wizard": "auto-mint"
+      }
+    ]
+  }
+}

@@ -1,0 +1,97 @@
+{
+  "$comment": [
+    "INDOX's VIEWS — layer 2 of the column model: WHERE a column appears, never what it means.",
+    "",
+    "display.json says what a column IS (its Hebrew label, its logical type, its value domain).",
+    "This file says where it SHOWS: which columns a screen opens with, in what order, how wide,",
+    "and how the rows are sorted. Splitting the two is what lets one table carry more than one",
+    "reading of itself — a triage view and an audit view over the same 126 columns — which is",
+    "impossible while 'visible' is a property of the column rather than of the view.",
+    "",
+    "GLOBAL, like the catalog. An instance is a tenant of the same product, not a different",
+    "product, so a view is authored once and every tenant gets it.",
+    "",
+    "THE URL IS THE OTHER HALF. What is here are the SHIPPED DEFAULTS; an operator's own",
+    "deviation — a hidden column, a resize, a different sort — lives in the address bar, which is",
+    "already this console's contract ('the view lives in the URL'). That is deliberate: it is",
+    "shareable, it restores an exact screen, and it needs no per-user table, no migration and no",
+    "server state. The named view is where you start; the URL is where you are.",
+    "",
+    "A column NOT listed in a view still exists — it is simply not on screen, and the column",
+    "picker offers it. Never delete a column from the catalog to hide it."
+  ],
+  "tables": {
+    "incoming_documents": {
+      "default_view": "triage",
+      "views": {
+        "triage": {
+          "label": "טריאז'",
+          "type": "table",
+          "description": "מה צריך אותי עכשיו — מי, מה, איפה בצינור, מאיזה תאריך, והאם נשבר.",
+          "sort": [["created_at", "desc"]],
+          "columns": [
+            { "key": "THUMBNAIL", "width": 64 },
+            { "key": "ID", "width": 200 },
+            { "key": "NAME", "width": 250 },
+            { "key": "COMPANY_NAME", "width": 175 },
+            { "key": "TYPE", "width": 115 },
+            { "key": "STATUS", "width": 155 },
+            { "key": "DOC_DATE", "width": 120 },
+            { "key": "ERROR", "width": 58 }
+          ]
+        },
+        "extraction": {
+          "label": "חילוץ",
+          "type": "table",
+          "description": "מה כל מנוע חילוץ אמר, זה לצד זה — לבדיקת מחלוקות בין AI, מקומי והנבחר.",
+          "sort": [["created_at", "desc"]],
+          "columns": [
+            { "key": "ID", "width": 200 },
+            { "key": "NAME", "width": 220 },
+            { "key": "AI_COMPANY_ID", "width": 130 },
+            { "key": "LOCAL_COMPANY_ID", "width": 130 },
+            { "key": "COMPANY_ID", "width": 130 },
+            { "key": "AI_DOC_ID", "width": 130 },
+            { "key": "LOCAL_DOC_ID", "width": 130 },
+            { "key": "DOC_ID", "width": 130 },
+            { "key": "AI_DOC_AMOUNT", "width": 120 },
+            { "key": "LOCAL_DOC_AMOUNT", "width": 120 },
+            { "key": "SELECTION_CERTAINTY", "width": 110 },
+            { "key": "SELECTION_SOURCE", "width": 120 }
+          ]
+        },
+        "sync": {
+          "label": "סנכרון",
+          "type": "table",
+          "description": "מאיפה הגיע כל מסמך ולאן נשלח — למעקב אחרי צינור מסוים.",
+          "sort": [["created_at", "desc"]],
+          "columns": [
+            { "key": "ID", "width": 200 },
+            { "key": "NAME", "width": 240 },
+            { "key": "SOURCE_TYPE", "width": 120 },
+            { "key": "SYNC_NAME", "width": 150 },
+            { "key": "SENDER", "width": 200 },
+            { "key": "RECEIVED_DATE", "width": 130 },
+            { "key": "PRIORITY_SYNC_COUNT", "width": 110 },
+            { "key": "STATUS", "width": 155 }
+          ]
+        }
+      }
+    },
+    "settings": {
+      "default_view": "all",
+      "views": {
+        "all": {
+          "label": "הגדרות",
+          "type": "table",
+          "sort": [["key", "asc"]],
+          "columns": [
+            { "key": "key", "width": 320 },
+            { "key": "value", "width": 520 },
+            { "key": "updated_at", "width": 160 }
+          ]
+        }
+      }
+    }
+  }
+}

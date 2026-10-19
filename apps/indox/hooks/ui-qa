@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+#: run the INDOX UI acceptance harness (the 100 user stories) + scorecard
+# bbox indox ui-qa — the INDOX UI acceptance harness (thin wrapper → python).
+#
+#   bbox indox ui-qa                      # every section
+#   bbox indox ui-qa dashboard documents  # named sections (dashboard|documents|flows|quality)
+#
+# Drives the LIVE app at http://<incoming-documents-ip>:8080 on the traefik network — no
+# Authentik hop, no password, nothing interactive, so it is CI-able. READ-ONLY: it creates no
+# documents and edits no rows, which is why it needs no cleanup pass (unlike the other e2e
+# suites, whose QA_E2E_ data cleanup.py removes).
+#
+# Exit 0 only when every mechanical story passes. Stories that cannot be judged mechanically
+# print as MANUAL rather than being skipped — see the module docstring for why.
+#
+# Stories + findings log: ai/context/archive/indox-pre-2026-09/indox-ui-qa-stories.md
+set -euo pipefail
+HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT_DIR="$(cd "${HOOK_DIR}/../../.." && pwd)"
+. "${REPO_ROOT_DIR}/scripts/lib.sh"   # npath(), colors
+cd "${REPO_ROOT_DIR}"
+export PYTHONIOENCODING=utf-8 PYTHONUNBUFFERED=1
+# npath: on Windows `pwd` is an MSYS path (/c/Users/…) and python.exe reads that as C:\c\Users\…,
+# which is what made every INDOX suite die with "can't open file" before running a single check.
+exec python3 "$(npath "${REPO_ROOT_DIR}")/scripts/ui-coverage/e2e/test_indox_ui.py" "$@"

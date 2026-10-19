@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# `bbox dgo test <n>` — the acceptance gate of build phase n (DGO-5).
+#
+# The phase's tests live in tests/phaseN.py and are run against the DECLARED offices, so "phase 1
+# passes" always means "it passes on the offices this office actually declares". No phase argument
+# runs every phase that has a test file.
+set -euo pipefail
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+N="${1:-}"
+if [ -z "${N}" ]; then
+  echo "usage: bbox dgo test <phase> | fresh | pair" >&2
+  ls "${REPO_ROOT}/apps/dgo-extend/tests"/phase*.py 2>/dev/null | sed 's#.*/phase#  phase #; s#\.py$##' >&2
+  echo "  fresh   two brand-new offices (throwaway, this office's own image) through the real pairing API" >&2
+  echo "  pair    the same two offices paired through their OWN SCREENS in a browser, recorded to a film" >&2
+  exit 2
+fi
+# `pair` is the same two throwaway offices as `fresh`, driven the way a PERSON drives them: the
+# /connect page of each, the buttons the owner presses, and a video of the whole thing. It is what
+# catches a flow that is correct over HTTP and unusable on screen (tests/pair-video.sh says why).
+if [ "${N}" = "pair" ]; then
+  shift || true
+  exec bash "${REPO_ROOT}/apps/dgo-extend/tests/pair-video.sh" "$@"
+fi
+# `fresh` is not a phase of the build: it is two BRAND-NEW offices as real processes, which no phase
+# has — the phases run on the offices this office already declares (tests/fresh-offices.sh says why).
+if [ "${N}" = "fresh" ]; then
+  shift || true
+  exec bash "${REPO_ROOT}/apps/dgo-extend/tests/fresh-offices.sh" "$@"
+fi
+# The RUNNER is tests/phase0.py: it owns the frame (helpers + main) and imports phase<N>.py for that
+# phase's checks, so a new phase is one file and never a copy of the runner.
+FILE="${REPO_ROOT}/apps/dgo-extend/tests/phase${N}.py"
+RUNNER="${REPO_ROOT}/apps/dgo-extend/tests/phase0.py"
+if [ ! -f "${FILE}" ]; then
+  echo "no acceptance test for phase ${N} yet" >&2
+  ls "${REPO_ROOT}/apps/dgo-extend/tests"/phase*.py 2>/dev/null | sed 's#.*/phase#  phase #; s#\.py$##' >&2
+  exit 2
+fi
+shift || true
+exec python3 "${RUNNER}" "${N}" "$@"

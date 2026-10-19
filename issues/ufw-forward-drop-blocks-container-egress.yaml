@@ -1,0 +1,93 @@
+# yaml-language-server: $schema=./schema.json
+title: ufw's DROP forward policy blocks all container egress under Docker 29 - every image build dies on DNS
+opened: '2026-08-21'
+severity: high
+status: resolved
+summary: ufw's DROP forward policy blocks all container egress under Docker 29 - every image build dies on DNS
+description: |
+  area: host prerequisites / image builds / CI
+
+  ## Context
+
+  Measured on portable-ubuntu, 2026-08-21. Every first-party image build failed:
+
+      #69 28.74 WARNING: Retrying ... [Errno -3] Temporary failure in name resolution': /simple/flask/
+      ERROR: Could not find a version that satisfies the requirement flask (from versions: none)
+
+  55 such failures in a single `bbox run`. Not transient and not load - the box was idle for
+  the measurement below: load 1.8, conntrack 51/262144, 24 GB disk free.
+
+  From a container on the DEFAULT BRIDGE:
+
+      icmp 8.8.8.8      ok      <- ufw's before-rules ACCEPT echo-request in FORWARD
+      dns  pypi.org     FAIL
+      tcp  1.1.1.1:443  FAIL
+      tcp  1.1.1.1:80   FAIL
+
+  From a container with --network host, DNS resolves normally. That isolates it to the FORWARD
+  path, and ICMP-passes/everything-else-drops is the signature of ufw's default forward policy.
+
+      /etc/ufw/ufw.conf     ENABLED=yes
+      /etc/default/ufw      DEFAULT_FORWARD_POLICY="DROP"
+      systemctl is-active ufw -> active
+
+  Docker 28 inserts its ACCEPT rules at the TOP of the FORWARD chain - the long-standing
+  "Docker bypasses ufw" behaviour. Docker 29 moved firewall handling to native nftables, so its
+  rules no longer land ahead of ufw's iptables-nft FORWARD policy and the DROP wins.
+
+  Worth noting how this presents: the daemon pulls images fine (that is host-side), so the
+  stack appears to start normally and only the BUILD steps fail, with a DNS error that reads
+  like a flaky network rather than a firewall.
+
+  ## Impact
+
+  No image can be built on this host, and RUNTIME egress is blocked too - anything calling an
+  external API fails. All five CI lanes are `runs-on: [self-hosted, portable]`, i.e. this box,
+  so CI cannot go green here either until it is fixed.
+
+  ## Fix
+
+  Host-side, narrowest first (needs root):
+
+      sudo ufw route allow in on docker0
+      sudo ufw reload
+
+  Or run the project's own Docker 28.5.2 engine (binaos-docker.service), which uses the classic
+  iptables path - see binaos-docker-bridge-not-persistent.yaml.
+
+  Either way `bbox verify` should test this directly: a container that cannot resolve a name is
+  a host-readiness fact the platform can check in one second and currently does not.
+
+  ## Workaround
+
+  Build-time only, no root: give every building service `build: { network: host }` through an
+  OVERLAYS file. Proven on 2026-08-21 - any-concurrency built clean immediately afterwards.
+  It does NOT help runtime egress.
+  Note this cannot be passed to `bbox run` - see bbox-run-ignores-overlays.yaml.
+
+  ## Where it stands (2026-10-07, branch dgo-pair) - read against the tree, not re-measured
+
+  What this asked of the platform is there, and went further than a check:
+
+  - THE CHECK. `bbox_container_dns_broken` (scripts/lib.sh) asks a container on the default bridge
+    to resolve a name, once per run - and looks twice before believing it, because an unpullable
+    probe image is not a broken bridge. `bbox baseline` scores the same question as
+    `P0 container-egress`.
+  - WHAT THE BRING-UP DOES WITH THE ANSWER. `bbox run` says "default-bridge egress is dead on this
+    host - building first-party images over the host network" and builds them that way
+    (`ccr_build_serial`, `--network host`). It refused outright for one day and that was undone:
+    refusing stopped a host that can build perfectly well and left 19 of 42 services unbuilt.
+  - RUNTIME is not on docker0. Every service sits on the stack's own network, which the code
+    records as measured on this very box: docker0 pings 1.1.1.1 and cannot open TCP/443 or UDP/53,
+    the same probe on traefik-network succeeds on both, and a full `bbox run` then completed 40 of
+    42 services with 0 DNS failures.
+  - The workaround above is no longer needed, and its last line no longer holds: `bbox run`
+    honours OVERLAYS (bbox-run-ignores-overlays.yaml, resolved).
+
+  What is left is the host's own and optional: `ufw route allow in on docker0`, or the project's
+  engine instead of the system one (binaos-docker-bridge-not-persistent.yaml).
+tasks:
+- text: "The platform checks container name resolution on the default bridge (bbox_container_dns_broken; baseline P0 container-egress)"
+  done: true
+- text: "A host whose default bridge has no egress still builds: first-party images are built over the host network, said in the bring-up"
+  done: true

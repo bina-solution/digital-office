@@ -1,0 +1,91 @@
+# Deployment Context — deployment-hacohen (baseline inventory)
+
+Single Debian host, one Docker Compose project rooted at `/root/deployment-hacohen`,
+behind Traefik v3.3. Branch: `COPILOT`. Run ALL compose cmds from repo root.
+
+## Domains
+- Prod:  `<svc>.${DEPLOYMENT_DOMAIN}`        (DEPLOYMENT_DOMAIN = hacohen.bina-solutions.co.il)
+- Dev:   `<svc>.dev.${DEPLOYMENT_DOMAIN}`     (DEV_DOMAIN = dev.<…>)
+- Local: `<svc>.localhost`
+- Containers: `<svc>-${DEPLOYMENT_NAME:-bina-deployment}` (a few use bare names: `apitools`, `feature-validation-api`, `*-validator`)
+- SSL: Let's Encrypt HTTP-01, resolver `myresolver`, `traefik/acme.json`.
+
+## Compose layout
+```
+compose.yml                      # traefik only + includes the two envs
+production/compose.yml           # includes per-service prod stacks
+production/compose.override.yml  # prod Traefik labels / routing / env
+development/compose.yml          # includes per-service dev stacks
+development/compose.override.yml # dev routing (*.dev.<domain>)
+.env / .env.ex                   # config (DEPLOYMENT_DOMAIN, *_BASE_URL, secrets)
+traefik/                         # traefik-dynamic.yaml, acme.json
+```
+
+## Traefik
+- Entrypoints: web :80, websecure :443, postgres :5432, redis :6379 (TCP via ALPN).
+- 600s read/write/idle timeouts. Dashboard gated by `TRAEFIK_API_DASHBOARD`.
+- `exposedbydefault=false` — only labelled services are routed.
+
+## PRODUCTION services (production/compose.yml includes)
+| Service | Route | Notes |
+|---|---|---|
+| traefik | traefik.<dom> | reverse proxy + SSL (root compose.yml) |
+| portainer | portainer.<dom> | container mgmt |
+| redis + redisinsight | redisinsight.<dom> | cache/queue (n8n, locks, actions); GUI |
+| supabase | supabase-studio.<dom> | INDOX data layer: db (Postgres 15, hostname `supabase-db`) + studio + kong + rest + storage + meta. n8n drives schema+CRUD via the Postgres node straight to `supabase-db`. Part of the MAIN compose (production/compose.yml include) → `bbox run` brings it up, `bbox reset` (down -v) WIPES it. Env from root `.env` SUPABASE_*. |
+| n8n | n8n.<dom> | queue mode: main + n8n-worker-1 + n8n-task-runners + n8n-postgres (PG17). 61 active workflows. |
+| chat | chat.<dom> | WhatsApp mgmt app (CHAT_APP_BASE_URL) |
+| apitools | apitools.<dom> | Hebrew OCR/PDF API. Endpoints: /documentOcr, /documentJsonQuery, /findOptionMatching, /columnExtraction |
+| inbox | (internal — no route) | IMAP/SMTP replacement for the Gmail API layer used by INDOX (build: `apps/inbox`, hostname `mailapi:8970`, on traefik-network). App-password auth (no OAuth/Gmail-API quota); single account from `.env` `GMAIL_IMAP_USER`/`GMAIL_IMAP_APP_PW`. 10-conn read pool + 1 write-lock conn. Endpoints: `/search` `/message`(+`?meta=true` metadata-only, no attachment bytes) `/labels` `/labels/add` `/labels/remove` `/append` `/send` `/healthz` `/stats`. Canonical contract (id=Gmail hex, labels=names) shared with the OAuth backend via the n8n `gmail api` router (`gmailApiRouter01` → `gmailApiImap01` active / `gmailApiOauth01` fallback). |
+| authentik | auth.<dom> | SSO: server + worker + postgres (+bootstrap). Traefik ForwardAuth middleware `authentik` |
+| glitchtip | glitchtip.<dom> | error tracking: web + worker + migrate + postgres + valkey |
+| homepage | home.<dom> | dashboard (Docker label auto-discovery) |
+| any-concurrency | any-concurrency.<dom> | concurrency/timeline observability |
+| machine | machine.<dom> | host metrics + Docker dashboard (FastAPI) |
+| browser42 | browser42.<dom> | "cloak-stack" stealth-Chromium + Playwright-MCP + noVNC live-view + tab-reaper, fronted by an internal Caddy. Caddy routes `/view` (Authentik-gated) + `/mcp` (Bearer `BROWSER42_MCP_TOKEN`, no SSO); fallback `b42.<dom>` no-auth for bootstrap. Build: `production/browser42`. |
+
+In-tree services: `production/apitools` and `production/chat` are baked into this
+repo as regular files (no longer git submodules — no `.gitmodules`).
+
+## DEVELOPMENT services (development/compose.yml includes, *.dev.<dom>)
+| Service | Route | Notes |
+|---|---|---|
+| openhands | openhands.dev | self-hosted OpenHands v1.8.0 + dispatcher + llm-gateway + agent-proxy + docker-proxy. The "private Copilot" agent (Telegram/WhatsApp → develops/operates the deployment). |
+| open-pilot | autopilot.dev | earlier coding-agent attempt |
+| supabase (dev) | supabase.dev / supabase-studio.dev | full self-hosted stack (development/supabase, own .env). NOTE: the INDOX PRODUCTION supabase is now a first-class production service (see production table) — this dev entry is the separate full-feature dev stack. |
+| feature-validation | fv.dev | test framework: feature-validation-api + per-suite validators |
+| incoming-documents | incoming-documents.dev | FastAPI rewrite of the n8n doc system; includes Redpanda/Kafka |
+| ktivayehudit-clone2 | ktivayehudit-clone2.dev | scraped WordPress site clone |
+| filesystem-mcp-sse | (internal) | MCP server |
+| chess / hello-world | chess.dev / hello.dev | demos |
+
+## Networks
+- `traefik-network` (external) — all services + routing. Create once: `docker network create traefik-network`.
+- Per-stack internal nets: authentik, glitchtip, supabase, librechat (legacy).
+
+## Auth posture
+- ForwardAuth (`middlewares=authentik`): homepage, redisinsight, machine, traefik dashboard, etc.
+- Own auth (no ForwardAuth): n8n, authentik, portainer, glitchtip, supabase-studio (basic auth).
+
+## What it does (business)
+Hebrew financial-document automation: invoices / delivery notes / purchase orders /
+balance sheets arrive via Gmail + Drive → apitools OCR + Gemini/Ollama extraction →
+n8n "Incoming Documents" orchestrator (Google-Sheets state, Redis locks, Kafka) →
+exposed to AI agents via n8n MCP servers + WhatsApp bot.
+
+## Run commands (from repo root)
+```
+docker compose up -d                 # all
+docker compose up -d <svc>           # one
+docker compose up -d --build <svc>   # rebuild
+docker compose ps / logs -f <svc>
+./bbox n8n pull|push <app>|all      # workflows as code (apps/*/blueprint/n8n/*.workflow.ts)
+./scripts/collect-logs.sh / pg-maintenance.sh / safe-clean.sh / storage-report
+```
+
+## Notes
+- Declarative goal: clone + `docker compose up` should bring the whole stack live from `.env`.
+  Gaps today: credential seeding not automated; n8n workflows not auto-imported on boot;
+  some Drive/Sheet/label/Telegram IDs hardcoded in workflow nodes.
+- Disabled/legacy (compose files present, not in active includes): librechat, rocketchat,
+  ollama, plane/playwright MCP, log-collector, searxng, firecrawl.

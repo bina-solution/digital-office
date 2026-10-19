@@ -1,0 +1,478 @@
+# social-list — the platform catalogue. DATA, not code: a spec that changes (a new banner size, a
+# new post type, an API that opened or closed) is an edit here, never a release of the adapters.
+#
+# Every entry answers the same questions, because the screens, the adapters and digital-assets all
+# read them from here and nowhere else:
+#
+#   kinds     HOW the office speaks for an account — each kind is exactly one connection PROTOCOL,
+#             and the account's protocol picks the adapter:
+#               browser  the office browser (browser42): the owner logs in ONCE in its live view and
+#                        portal scripts (scripts/<platform>.yaml) act in that session. The default for
+#                        every network — the office's own browser is how it works everywhere.
+#               api      the platform's own API, with a credential in the vault — an alternative where
+#                        a network offers one.
+#             There is no third kind: nothing is "prepared for the owner to click". An op the office
+#             cannot do yet is `no` with the reason, and it becomes `yes` when its script is written.
+#   tos       what the platform's terms say about automating its website (research/platforms.md) —
+#             INFORMATION shown next to the network, not a switch:
+#               ban   the rules single out automating the site/an account (X, Discord, WhatsApp)
+#               risk  a broad "no automated access without permission" clause (Facebook, Instagram,
+#                     YouTube)
+#               low   GitHub, the office's own test network
+#             Whatever the level, the office browser acts at a person's pace, only on actions the
+#             owner (or digital-assets on the owner's behalf) started, and a WRITE runs unwatched only
+#             after one watched run verified its script.
+#   profile   the editable fields, their limits, and the avatar/banner renditions.
+#   posts     the post types and their limits.
+#   ops       op × kind → "yes" | limited | "no" (+ why). A missing op is marked `na: true`.
+#   urls      where a human sees the same thing (profile, profile_edit, compose).
+#
+# Specs were read on 2026-09-29 (research/platforms.md carries the evidence tag of every number:
+# [V] read on the official page, [S] official snippet, [2] secondary, [?] unverified).
+version: 3
+checked: "2026-09-29"
+
+#: The abstract op vocabulary — the whole of `social.v1`.
+ops:
+  profile.get:           {he: "קריאת פרופיל",        kind: read}
+  profile.update.name:   {he: "שם תצוגה",            kind: write}
+  profile.update.bio:    {he: "תיאור קצר",           kind: write}
+  profile.update.avatar: {he: "תמונת פרופיל",        kind: write}
+  profile.update.banner: {he: "תמונת נושא",          kind: write}
+  profile.update.links:  {he: "קישורים",             kind: write}
+  profile.update.handle: {he: "שם משתמש",            kind: write, risky: true}
+  post.list:             {he: "פוסטים אחרונים",       kind: read}
+  post.create.text:      {he: "פוסט טקסט",           kind: write}
+  post.create.image:     {he: "פוסט עם תמונה",       kind: write}
+  post.create.video:     {he: "פוסט וידאו",          kind: write}
+  post.update:           {he: "עריכת פוסט",          kind: write}
+  post.delete:           {he: "מחיקת פוסט",          kind: write, risky: true}
+  comment.list:          {he: "תגובות",              kind: read}
+  comment.create:        {he: "כתיבת תגובה",         kind: write}
+  comment.delete:        {he: "מחיקת תגובה",         kind: write, risky: true}
+  reaction.create:       {he: "לייק / תגובת רגש",     kind: write}
+  insights.get:          {he: "נתוני חשיפה",          kind: read}
+
+support:
+  "yes":     {he: "נתמך"}
+  limited:   {he: "חלקי"}
+  "no":      {he: "עוד לא"}
+
+kinds:
+  browser: {he: "דפדפן הלשכה", short: "דפדפן"}
+  api:     {he: "API רשמי", short: "API"}
+
+tos_levels:
+  ban:  {he: "תנאי השימוש של הרשת אוסרים אוטומציה של האתר — הלשכה פועלת בקצב של אדם, רק בפעולות שהבעלים יזם"}
+  risk: {he: "תנאי השימוש אוסרים גישה אוטומטית ללא רשות — הלשכה פועלת בקצב של אדם, רק בפעולות שהבעלים יזם"}
+  low:  {he: "אין הגבלה מיוחדת על פעולות מעטות מחשבון הבעלים"}
+
+platforms:
+
+  # ── the office's own test network (fixture.py) ─────────────────────────────────────────────────
+  - id: fixture
+    name: {he: "רשת בדיקה", en: "Test network"}
+    color: "var(--olive)"       # the office's own: a token of its palette (a network's entry below is that network's mark)
+    monogram: "ב"
+    test: true
+    tos: {level: low}
+    origin: "{browser_self}/fixture"
+    kinds:
+      browser: {protocol: social_fixture_browser, recommended: true}
+      api:     {protocol: social_fixture_api, needs: []}
+    profile:
+      fields:
+        name:   {max_len: 50}
+        handle: {max_len: 30, pattern: "^[a-z0-9_.-]+$"}
+        bio:    {max_len: 160}
+        links:  {max: 3}
+      avatar: {w: 400, h: 400, aspect: "1:1", shape: circle, max_mb: 2}
+      banner: {w: 1500, h: 500, aspect: "3:1", max_mb: 5}
+    posts:
+      - {id: text,  he: "טקסט", text_max: 500}
+      - {id: image, he: "תמונה", text_max: 500, images_max: 4, aspects: ["1:1", "16:9", "4:5"]}
+    ops:
+      profile.get:           {api: "yes", browser: "yes"}
+      profile.update.name:   {api: "yes", browser: "yes"}
+      profile.update.bio:    {api: "yes", browser: "yes"}
+      profile.update.avatar: {api: "yes", browser: "yes"}
+      profile.update.banner: {api: "yes", browser: "yes"}
+      profile.update.links:  {api: "yes", browser: "no"}
+      profile.update.handle: {api: "yes", browser: "no"}
+      post.list:             {api: "yes", browser: "yes"}
+      post.create.text:      {api: "yes", browser: "yes"}
+      post.create.image:     {api: "yes", browser: "yes"}
+      post.create.video:     {api: "no",  browser: "no", na: true}
+      post.update:           {api: "yes", browser: "no"}
+      post.delete:           {api: "yes", browser: "yes"}
+      comment.list:          {api: "yes", browser: "no"}
+      comment.create:        {api: "yes", browser: "no"}
+      comment.delete:        {api: "yes", browser: "no"}
+      reaction.create:       {api: "yes", browser: "no"}
+      insights.get:          {api: "yes", browser: "no"}
+    urls:
+      profile: "{origin}/"
+      profile_edit: "{origin}/settings"
+      compose: "{origin}/"
+
+  # ── the channels digital-assets was built around (the website belongs to `sites`) ──────────────
+  - id: facebook
+    name: {he: "פייסבוק", en: "Facebook"}
+    color: "#1877f2"
+    monogram: "f"
+    tos: {level: risk}
+    origin: "https://www.facebook.com"
+    kinds:
+      browser:
+        protocol: social_facebook_browser
+        recommended: true
+        note: {he: "הדפדפן של הלשכה כבר מחובר לפייסבוק של הבעלים — הדרך הקצרה. פרסום ועריכת פוסט נצפו עובדים (2026-09-22)."}
+      api:
+        protocol: social_facebook_page_token
+        needs: [page_id, page_token]
+        help_url: "https://developers.facebook.com/docs/pages-api/getting-started"
+        note: {he: "טוקן עמוד עם pages_manage_posts, pages_read_engagement, pages_manage_metadata. אפליקציית Meta במצב פיתוח שהבעלים מנהל אותה — כנראה בלי בדיקת אפליקציה (לא אומת)."}
+    profile:
+      fields:
+        name:   {max_len: 75, note: {he: "שינוי שם עמוד הוא בקשה שפייסבוק מאשרת"}}
+        handle: {min_len: 5, max_len: 50, pattern: "^[A-Za-z0-9.]+$"}
+        bio:    {max_len: 101}
+        links:  {max: 1}
+      avatar: {w: 720, h: 720, aspect: "1:1", shape: circle, max_mb: 4, note: {he: "מוצגת 176×176 במחשב"}}
+      banner: {w: 1640, h: 624, aspect: "851:315", min: "400x150", safe_area: "640x312 center"}
+    posts:
+      - {id: text,  he: "טקסט", text_max: 63206}
+      - {id: image, he: "תמונה", text_max: 63206, images_max: 10, aspects: ["1:1", "4:5", "1.91:1"]}
+      - {id: video, he: "וידאו / ריל", text_max: 63206, aspects: ["9:16", "16:9", "1:1"]}
+      - {id: link,  he: "קישור", text_max: 63206}
+    ops:
+      profile.get:           {api: "yes", browser: "yes"}
+      profile.update.name:   {api: "no",  browser: "limited", why: {he: "שם עמוד משתנה רק בבקשה שפייסבוק מאשרת"}}
+      profile.update.bio:    {api: "yes", browser: "yes"}
+      profile.update.avatar: {api: "yes", browser: "yes"}
+      profile.update.banner: {api: "yes", browser: "yes"}
+      profile.update.links:  {api: "yes", browser: "yes"}
+      profile.update.handle: {api: "no",  browser: "limited"}
+      post.list:             {api: "yes", browser: "yes"}
+      post.create.text:      {api: "yes", browser: "yes"}
+      post.create.image:     {api: "yes", browser: "yes"}
+      post.create.video:     {api: "yes", browser: "no", why: {he: "העלאת וידאו בדפדפן עוד לא נבנתה"}}
+      post.update:           {api: "limited", browser: "yes", why: {he: "ב-API — רק פוסטים שאותה אפליקציה יצרה"}}
+      post.delete:           {api: "yes", browser: "yes"}
+      comment.list:          {api: "yes", browser: "limited"}
+      comment.create:        {api: "yes", browser: "limited"}
+      comment.delete:        {api: "yes", browser: "no"}
+      reaction.create:       {api: "limited", browser: "limited"}
+      insights.get:          {api: "yes", browser: "no"}
+    urls:
+      profile: "https://www.facebook.com/{handle}"
+      profile_edit: "https://www.facebook.com/{handle}/about"
+      compose: "https://www.facebook.com/"
+
+  - id: instagram
+    name: {he: "אינסטגרם", en: "Instagram"}
+    color: "#d62976"
+    monogram: "i"
+    tos: {level: risk}
+    origin: "https://www.instagram.com"
+    kinds:
+      browser:
+        protocol: social_instagram_browser
+        recommended: true
+        note: {he: "עריכת פרופיל אפשרית רק בדפדפן (ל-API אין עריכת פרופיל) — סיכון תנאי שימוש, פעולות מעטות בלבד."}
+      api:
+        protocol: social_instagram_graph
+        needs: [ig_user_id, access_token]
+        help_url: "https://developers.facebook.com/docs/instagram-platform/content-publishing"
+        note: {he: "חשבון עסקי או יוצר. פרסום תמונה/קרוסלה/ריל, מחיקה, תגובות ונתונים. תמונה לפרסום חייבת כתובת ציבורית."}
+    profile:
+      fields:
+        name:   {max_len: 30}
+        handle: {max_len: 30, pattern: "^[A-Za-z0-9._]+$"}
+        bio:    {max_len: 150}
+        links:  {max: 5}
+      avatar: {w: 320, h: 320, aspect: "1:1", shape: circle, max_mb: 8}
+    posts:
+      - {id: image, he: "תמונה", text_max: 2200, images_max: 1, aspects: ["1:1", "4:5", "1.91:1"]}
+      - {id: carousel, he: "קרוסלה", text_max: 2200, images_max: 10, aspects: ["1:1", "4:5"]}
+      - {id: reel,  he: "ריל", text_max: 2200, aspects: ["9:16"], video_max_s: 180}
+      - {id: story, he: "סטורי", aspects: ["9:16"]}
+    ops:
+      profile.get:           {api: "yes", browser: "yes"}
+      profile.update.name:   {api: "no",  browser: "yes"}
+      profile.update.bio:    {api: "no",  browser: "yes"}
+      profile.update.avatar: {api: "no",  browser: "yes"}
+      profile.update.banner: {api: "no",  browser: "no", na: true, why: {he: "לאינסטגרם אין תמונת נושא"}}
+      profile.update.links:  {api: "no",  browser: "yes"}
+      profile.update.handle: {api: "no",  browser: "limited"}
+      post.list:             {api: "yes", browser: "yes"}
+      post.create.text:      {api: "no",  browser: "no", na: true, why: {he: "באינסטגרם כל פוסט הוא תמונה או וידאו"}}
+      post.create.image:     {api: "yes", browser: "yes"}
+      post.create.video:     {api: "yes", browser: "no"}
+      post.update:           {api: "no",  browser: "yes", why: {he: "ה-API לא עורך כיתוב"}}
+      post.delete:           {api: "yes", browser: "yes"}
+      comment.list:          {api: "yes", browser: "limited"}
+      comment.create:        {api: "yes", browser: "limited"}
+      comment.delete:        {api: "limited", browser: "no"}
+      reaction.create:       {api: "no",  browser: "limited"}
+      insights.get:          {api: "yes", browser: "no"}
+    urls:
+      profile: "https://www.instagram.com/{handle}/"
+      profile_edit: "https://www.instagram.com/accounts/edit/"
+      compose: "https://www.instagram.com/"
+
+  - id: x
+    name: {he: "X (טוויטר)", en: "X"}
+    color: "#0f1419"
+    monogram: "X"
+    tos: {level: ban}
+    origin: "https://x.com"
+    kinds:
+      browser:
+        protocol: social_x_browser
+        recommended: true
+        note: {he: "הדפדפן של הלשכה, בחשבון שהבעלים התחבר אליו פעם אחת. כללי האוטומציה של X אוסרים הפעלת האתר בסקריפט — הלשכה פועלת בקצב של אדם, רק בפעולות שהבעלים יזם."}
+      api:
+        protocol: social_x_oauth
+        needs: [access_token]
+        help_url: "https://docs.x.com/x-api/introduction"
+        note: {he: "תשלום לפי שימוש (מ-2026-02): ‎$0.015 לפוסט, ‎$0.20 לפוסט עם קישור. עדכון פרופיל רק דרך נקודות v1.1 ישנות — לא אומת שהן עובדות."}
+    profile:
+      fields:
+        name:   {max_len: 50}
+        handle: {min_len: 5, max_len: 15, pattern: "^[A-Za-z0-9_]+$"}
+        bio:    {max_len: 160}
+        location: {max_len: 30}
+        links:  {max: 1}
+      avatar: {w: 400, h: 400, aspect: "1:1", shape: circle, max_mb: 2}
+      banner: {w: 1500, h: 500, aspect: "3:1", max_mb: 5}
+    posts:
+      - {id: text,  he: "פוסט", text_max: 280}
+      - {id: image, he: "פוסט עם תמונות", text_max: 280, images_max: 4, aspects: ["16:9", "1:1"]}
+      - {id: video, he: "פוסט וידאו", text_max: 280, video_max_s: 140}
+    ops:
+      profile.get:           {api: "yes", browser: "yes"}
+      profile.update.name:   {api: "limited", browser: "yes"}
+      profile.update.bio:    {api: "limited", browser: "yes"}
+      profile.update.avatar: {api: "limited", browser: "yes"}
+      profile.update.banner: {api: "limited", browser: "yes"}
+      profile.update.links:  {api: "limited", browser: "yes"}
+      profile.update.handle: {api: "no",  browser: limited}
+      post.list:             {api: "yes", browser: "yes"}
+      post.create.text:      {api: "yes", browser: "yes"}
+      post.create.image:     {api: "yes", browser: "yes"}
+      post.create.video:     {api: "yes", browser: "no", why: {he: "העלאת וידאו בדפדפן עוד לא נבנתה"}}
+      post.update:           {api: "limited", browser: limited, why: {he: "עריכה רק למנויי פרימיום, בשעה הראשונה"}}
+      post.delete:           {api: "yes", browser: "yes"}
+      comment.list:          {api: "limited", browser: limited}
+      comment.create:        {api: "limited", browser: "yes", why: {he: "מ-2026-02 תשובה דרך ה-API רק כשהכותב המקורי תייג אתכם"}}
+      comment.delete:        {api: "limited", browser: "yes"}
+      reaction.create:       {api: "no",  browser: "yes", why: {he: "לייקים הוסרו מגישת ה-API העצמית ב-2026-04"}}
+      insights.get:          {api: "yes", browser: "no"}
+    urls:
+      profile: "https://x.com/{handle}"
+      profile_edit: "https://x.com/settings/profile"
+      compose: "https://x.com/compose/post"
+
+  - id: youtube
+    name: {he: "יוטיוב", en: "YouTube"}
+    color: "#ff0000"
+    monogram: "Y"
+    tos: {level: risk}
+    origin: "https://www.youtube.com"
+    kinds:
+      api:
+        protocol: social_youtube_oauth
+        needs: [access_token, channel_id]
+        help_url: "https://developers.google.com/youtube/v3/docs"
+        note: {he: "תיאור הערוץ, תמונת נושא, העלאות (פרטיות עד שהפרויקט עובר ביקורת), תגובות ונתונים. שם ותמונת פרופיל — לא דרך ה-API."}
+      browser:
+        protocol: social_youtube_browser
+        recommended: true
+        note: {he: "הדפדפן של הלשכה ב-YouTube Studio — שם, תמונות, תיאור ופוסטים בלשונית הקהילה, גם מה שאין לו API."}
+    profile:
+      fields:
+        name:   {max_len: 100, note: {he: "אפשר לשנות פעמיים ב-14 יום"}}
+        handle: {min_len: 3, max_len: 30}
+        bio:    {max_len: 1000}
+        links:  {max: 14}
+      avatar: {w: 800, h: 800, aspect: "1:1", shape: circle, max_mb: 15}
+      banner: {w: 2560, h: 1440, aspect: "16:9", min: "2048x1152", safe_area: "1235x338 center", max_mb: 6}
+    posts:
+      - {id: video, he: "סרטון", text_max: 5000, aspects: ["16:9"]}
+      - {id: short, he: "שורט", text_max: 5000, aspects: ["9:16"], video_max_s: 180}
+      - {id: community, he: "פוסט בלשונית הקהילה", text_max: 5000}
+    ops:
+      profile.get:           {api: "yes", browser: "yes"}
+      profile.update.name:   {api: "no",  browser: "yes"}
+      profile.update.bio:    {api: "yes", browser: "yes"}
+      profile.update.avatar: {api: "no",  browser: "yes"}
+      profile.update.banner: {api: "limited", browser: "yes", why: {he: "שני שלבים (channelBanners.insert ואז bannerExternalUrl) — לא אומת"}}
+      profile.update.links:  {api: "no",  browser: "yes"}
+      profile.update.handle: {api: "no",  browser: "limited"}
+      post.list:             {api: "yes", browser: "yes"}
+      post.create.text:      {api: "no",  browser: "limited", why: {he: "ללשונית הקהילה אין API"}}
+      post.create.image:     {api: "no",  browser: "limited"}
+      post.create.video:     {api: "limited", browser: "no", why: {he: "העלאה דרך API נשארת פרטית עד שהפרויקט עובר ביקורת; 100 ביום"}}
+      post.update:           {api: "yes", browser: "limited"}
+      post.delete:           {api: "yes", browser: "limited"}
+      comment.list:          {api: "yes", browser: "limited"}
+      comment.create:        {api: "yes", browser: "limited"}
+      comment.delete:        {api: "yes", browser: "no"}
+      reaction.create:       {api: "limited", browser: "limited"}
+      insights.get:          {api: "yes", browser: "no"}
+    urls:
+      profile: "https://www.youtube.com/@{handle}"
+      profile_edit: "https://studio.youtube.com/"
+      compose: "https://www.youtube.com/upload"
+
+  - id: github
+    name: {he: "גיטהאב", en: "GitHub"}
+    color: "#24292f"
+    monogram: "G"
+    tos: {level: low}
+    origin: "https://github.com"
+    kinds:
+      api:
+        protocol: social_github_token
+        needs: [token]
+        help_url: "https://docs.github.com/en/rest/orgs/orgs#update-an-organization"
+        note: {he: "טוקן גישה (ארגון: ציינו את שמו). שם, תיאור, אתר, גרסאות (Releases), דיונים ותגובות. תמונת פרופיל — רק בדפדפן."}
+      browser:
+        protocol: social_github_browser
+        recommended: true
+        note: {he: "הדפדפן של הלשכה, בחשבון שהבעלים התחבר אליו פעם אחת — פרופיל, תמונה ותמונת השיתוף של מאגר."}
+    profile:
+      fields:
+        name:   {max_len: 255}
+        handle: {max_len: 39, pattern: "^[A-Za-z0-9-]+$"}
+        bio:    {max_len: 160}
+        links:  {max: 4}
+      avatar: {w: 500, h: 500, aspect: "1:1", shape: rounded, max_mb: 1}
+      banner: {w: 1280, h: 640, aspect: "2:1", max_mb: 1, note: {he: "תמונת השיתוף של מאגר (social preview)"}}
+    posts:
+      - {id: release,    he: "גרסה (Release)", text_max: 125000}
+      - {id: discussion, he: "דיון (Discussions)", text_max: 65536}
+    ops:
+      profile.get:           {api: "yes", browser: "yes"}
+      profile.update.name:   {api: "yes", browser: "yes"}
+      profile.update.bio:    {api: "yes", browser: "yes"}
+      profile.update.avatar: {api: "no",  browser: "yes"}
+      profile.update.banner: {api: "no",  browser: "limited"}
+      profile.update.links:  {api: "yes", browser: "yes"}
+      profile.update.handle: {api: "no",  browser: "no", why: {he: "שינוי שם ארגון שובר קישורים — רק בידי אדם"}}
+      post.list:             {api: "yes", browser: "yes"}
+      post.create.text:      {api: "yes", browser: "limited"}
+      post.create.image:     {api: "limited", browser: "limited"}
+      post.create.video:     {api: "no",  browser: "no", na: true}
+      post.update:           {api: "yes", browser: "limited"}
+      post.delete:           {api: "yes", browser: "limited"}
+      comment.list:          {api: "yes", browser: "yes"}
+      comment.create:        {api: "yes", browser: "yes"}
+      comment.delete:        {api: "yes", browser: "limited"}
+      reaction.create:       {api: "yes", browser: "yes"}
+      insights.get:          {api: "limited", browser: "no"}
+    urls:
+      profile: "https://github.com/{handle}"
+      profile_edit: "https://github.com/settings/profile"
+      compose: "https://github.com/{handle}"
+
+  - id: discord
+    name: {he: "דיסקורד", en: "Discord"}
+    color: "#5865f2"
+    monogram: "D"
+    tos: {level: ban}
+    origin: "https://discord.com"
+    kinds:
+      browser:
+        protocol: social_discord_browser
+        recommended: true
+        needs: [guild_id, channel_id]
+        note: {he: "הדפדפן של הלשכה בחשבון של הבעלים — שם השרת, סמל, ומודעות בערוץ. דיסקורד אוסרת אוטומציה של חשבון משתמש — הלשכה פועלת בקצב של אדם, רק בפעולות שהבעלים יזם."}
+      api:
+        protocol: social_discord_bot
+        needs: [bot_token, guild_id, channel_id]
+        help_url: "https://discord.com/developers/docs/resources/guild#modify-guild"
+        note: {he: "בוט עם Manage Server ו-Send Messages — חינם ומלא."}
+    profile:
+      fields:
+        name:   {min_len: 2, max_len: 100}
+        bio:    {max_len: 120, note: {he: "תיאור השרת — לשרתי קהילה"}}
+      avatar: {w: 1024, h: 1024, aspect: "1:1", shape: rounded, max_mb: 8}
+      banner: {w: 960, h: 540, aspect: "16:9", note: {he: "דורש שרת ברמת בוסט 2"}}
+    posts:
+      - {id: text,  he: "הודעה בערוץ", text_max: 2000}
+      - {id: image, he: "הודעה עם תמונה", text_max: 2000, images_max: 10}
+    ops:
+      profile.get:           {api: "yes", browser: "yes"}
+      profile.update.name:   {api: "yes", browser: "yes"}
+      profile.update.bio:    {api: "yes", browser: limited, why: {he: "תיאור שרת קיים רק בשרתי קהילה"}}
+      profile.update.avatar: {api: "yes", browser: "yes"}
+      profile.update.banner: {api: "yes", browser: limited, why: {he: "דורש שרת ברמת בוסט 2"}}
+      profile.update.links:  {api: "no",  browser: "no", na: true}
+      profile.update.handle: {api: "no",  browser: "no", na: true}
+      post.list:             {api: "yes", browser: "yes"}
+      post.create.text:      {api: "yes", browser: "yes"}
+      post.create.image:     {api: "yes", browser: "yes"}
+      post.create.video:     {api: "yes", browser: "no", why: {he: "העלאת וידאו בדפדפן עוד לא נבנתה"}}
+      post.update:           {api: "yes", browser: "yes"}
+      post.delete:           {api: "yes", browser: "yes"}
+      comment.list:          {api: "yes", browser: limited}
+      comment.create:        {api: "yes", browser: limited}
+      comment.delete:        {api: "yes", browser: limited}
+      reaction.create:       {api: "yes", browser: "yes"}
+      insights.get:          {api: "no",  browser: "no"}
+    urls:
+      profile: "https://discord.com/channels/{guild_id}"
+      profile_edit: "https://discord.com/channels/{guild_id}"
+      compose: "https://discord.com/channels/{guild_id}/{channel_id}"
+
+  - id: whatsapp
+    name: {he: "וואטסאפ", en: "WhatsApp"}
+    color: "#25d366"
+    monogram: "W"
+    tos: {level: ban}
+    origin: "https://web.whatsapp.com"
+    kinds:
+      browser:
+        protocol: social_whatsapp_browser
+        recommended: true
+        note: {he: "WhatsApp Web בדפדפן של הלשכה — הבעלים מקשר פעם אחת בסריקת קוד QR מהטלפון. פרופיל, אודות, תמונה וסטטוס. התקנון אוסר אוטומציה — הלשכה פועלת בקצב של אדם, רק בפעולות שהבעלים יזם."}
+      api:
+        protocol: social_whatsapp_cloud
+        needs: [phone_number_id, access_token]
+        help_url: "https://developers.facebook.com/docs/whatsapp/cloud-api/reference/business-profiles"
+        note: {he: "רק אם המספר על WhatsApp Cloud API: אודות, תיאור, כתובת, אתרים ותמונה."}
+    profile:
+      fields:
+        name:   {max_len: 25, note: {he: "שם תצוגה עסקי עובר אישור של Meta"}}
+        bio:    {max_len: 139, note: {he: "'אודות'"}}
+        description: {max_len: 512}
+        links:  {max: 2}
+      avatar: {w: 640, h: 640, aspect: "1:1", shape: circle, max_mb: 5}
+    posts:
+      - {id: status,  he: "סטטוס", text_max: 700}
+      - {id: channel, he: "עדכון בערוץ", text_max: 4096}
+    ops:
+      profile.get:           {api: "yes", browser: "yes"}
+      profile.update.name:   {api: "limited", browser: limited, why: {he: "שם תצוגה עסקי עובר אישור של Meta"}}
+      profile.update.bio:    {api: "yes", browser: "yes"}
+      profile.update.avatar: {api: "yes", browser: "yes"}
+      profile.update.banner: {api: "no",  browser: "no", na: true, why: {he: "לוואטסאפ אין תמונת נושא"}}
+      profile.update.links:  {api: "yes", browser: "no", why: {he: "אתרים בפרופיל העסקי — רק באפליקציה בטלפון"}}
+      profile.update.handle: {api: "no",  browser: "no", na: true}
+      post.list:             {api: "no",  browser: "no"}
+      post.create.text:      {api: "no",  browser: limited, why: {he: "סטטוס טקסט"}}
+      post.create.image:     {api: "no",  browser: limited, why: {he: "סטטוס עם תמונה"}}
+      post.create.video:     {api: "no",  browser: "no"}
+      post.update:           {api: "no",  browser: "no", why: {he: "סטטוס אינו נערך"}}
+      post.delete:           {api: "no",  browser: limited}
+      comment.list:          {api: "no",  browser: "no", na: true}
+      comment.create:        {api: "no",  browser: "no", na: true}
+      comment.delete:        {api: "no",  browser: "no", na: true}
+      reaction.create:       {api: "no",  browser: "no", na: true}
+      insights.get:          {api: "limited", browser: "no"}
+    urls:
+      profile: "https://wa.me/{phone}"
+      profile_edit: "https://web.whatsapp.com/"
+      compose: "https://web.whatsapp.com/"

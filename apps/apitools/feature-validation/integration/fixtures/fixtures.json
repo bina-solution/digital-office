@@ -1,0 +1,163 @@
+[
+  {
+    "name": "n8n-health",
+    "type": "http",
+    "integration": "n8n",
+    "description": "N8N health endpoint",
+    "method": "GET",
+    "url": "${N8N_URL}/healthz",
+    "assertions": [
+      {"name": "status_ok", "source": "status_code", "operator": "equals", "expected": 200}
+    ]
+  },
+  {
+    "name": "n8n-api-workflows",
+    "type": "http",
+    "integration": "n8n",
+    "description": "N8N API – list workflows",
+    "method": "GET",
+    "url": "${N8N_URL}/api/v1/workflows",
+    "headers": {"X-N8N-API-KEY": "${N8N_API_KEY}"},
+    "skip_if_no_env": "N8N_API_KEY",
+    "assertions": [
+      {"name": "status_ok", "source": "status_code", "operator": "equals", "expected": 200},
+      {"name": "has_data", "source": "body.data", "operator": "not_none"}
+    ]
+  },
+  {
+    "name": "redis-ping",
+    "type": "redis",
+    "integration": "redis",
+    "description": "Redis PING command",
+    "command": "PING",
+    "assertions": [
+      {"name": "connected", "source": "result", "operator": "equals", "expected": true}
+    ]
+  },
+  {
+    "name": "redis-set-get",
+    "type": "redis",
+    "integration": "redis",
+    "description": "Redis SET/GET roundtrip",
+    "command": "SET_GET",
+    "assertions": [
+      {"name": "roundtrip_ok", "source": "result", "operator": "equals", "expected": true}
+    ]
+  },
+  {
+    "name": "postgres-connectivity",
+    "type": "postgres",
+    "integration": "postgres",
+    "description": "Postgres SELECT 1",
+    "query": "SELECT 1 AS ok",
+    "assertions": [
+      {"name": "query_ok", "source": "result", "operator": "truthy"},
+      {"name": "has_rows", "source": "row_count", "operator": "gt", "expected": 0}
+    ]
+  },
+  {
+    "name": "postgres-n8n-tables",
+    "type": "postgres",
+    "integration": "postgres",
+    "description": "Postgres – verify N8N tables exist",
+    "query": "SELECT count(*) AS cnt FROM information_schema.tables WHERE table_schema='public'",
+    "assertions": [
+      {"name": "has_tables", "source": "rows.0.cnt", "operator": "gt", "expected": 0}
+    ]
+  },
+  {
+    "name": "apitools-ocr",
+    "type": "http",
+    "integration": "apitools",
+    "description": "Apitools Google OCR – upload test image",
+    "method": "POST",
+    "url": "${APITOOLS_BASE_URL}/documentOcr",
+    "files": {"file": "fixtures/test-image.png"},
+    "assertions": [
+      {"name": "status_ok", "source": "status_code", "operator": "equals", "expected": 200},
+      {"name": "has_file_hash", "source": "body.file_hash", "operator": "not_none"}
+    ]
+  },
+  {
+    "name": "whatsapp-connection",
+    "type": "whatsapp",
+    "integration": "whatsapp",
+    "description": "WhatsApp connection state",
+    "action": "state",
+    "assertions": [
+      {"name": "state_reachable", "source": "status_code", "operator": "equals", "expected": 200},
+      {"name": "is_connected", "source": "is_connected", "operator": "truthy"}
+    ]
+  },
+  {
+    "name": "whatsapp-send",
+    "type": "whatsapp",
+    "integration": "whatsapp",
+    "description": "WhatsApp send document to 050-000-0002",
+    "action": "send",
+    "phone": "050-000-0002",
+    "message": "Integration test – feature validation ✓",
+    "test_file": "fixtures/test-image.png",
+    "assertions": [
+      {"name": "send_ok", "source": "result", "operator": "truthy"}
+    ]
+  },
+  {
+    "name": "n8n-gsheet",
+    "type": "n8n_webhook",
+    "integration": "gsheet",
+    "description": "N8N Google Sheets integration via webhook workflow",
+    "webhook_path": "test-integration/gsheet",
+    "workflow_id": "hnwYN84KY6f51yvX",
+    "method": "POST",
+    "body": {"action": "read"},
+    "timeout": 90,
+    "assertions": [
+      {"name": "webhook_ok", "source": "status_code", "operator": "equals", "expected": 200},
+      {"name": "has_data", "source": "body", "operator": "not_none"}
+    ]
+  },
+  {
+    "name": "n8n-gdrive",
+    "type": "n8n_webhook",
+    "integration": "gdrive",
+    "description": "N8N Google Drive integration via webhook workflow",
+    "webhook_path": "test-integration/gdrive",
+    "workflow_id": "KYkrZgyWks1GwBIq",
+    "method": "POST",
+    "body": {"action": "list"},
+    "assertions": [
+      {"name": "webhook_ok", "source": "status_code", "operator": "equals", "expected": 200},
+      {"name": "has_data", "source": "body", "operator": "not_none"}
+    ]
+  },
+  {
+    "name": "n8n-gmail",
+    "type": "n8n_webhook",
+    "integration": "gmail",
+    "description": "N8N Gmail integration via webhook workflow (OAuth2 credential may need re-auth)",
+    "webhook_path": "test-integration/gmail",
+    "workflow_id": "clTrnzBP2ufCTgy5",
+    "method": "POST",
+    "body": {"action": "list-labels"},
+    "assertions": [
+      {"name": "webhook_ok", "source": "status_code", "operator": "equals", "expected": 200},
+      {"name": "has_data", "source": "body", "operator": "not_none"}
+    ]
+  },
+  {
+    "name": "n8n-gemini",
+    "type": "n8n_webhook",
+    "integration": "gemini",
+    "description": "N8N Gemini AI integration via webhook workflow",
+    "webhook_path": "test-integration/gemini",
+    "workflow_id": "vG8Dr0HfGiWFcOLX",
+    "method": "POST",
+    "body": {"prompt": "Reply with the single word OK"},
+    "timeout": 90,
+    "assertions": [
+      {"name": "webhook_ok", "source": "status_code", "operator": "equals", "expected": 200},
+      {"name": "has_response", "source": "body", "operator": "not_none"}
+    ]
+  }
+]

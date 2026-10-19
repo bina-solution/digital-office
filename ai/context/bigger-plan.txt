@@ -1,0 +1,28 @@
+# Bigger plan — roadmap
+
+Goal: a fully functional, secured, **fully declarative** business-cloud deployment
+(clone + `docker compose up` brings everything live from `.env`).
+Core stack: n8n, Portainer, RedisInsight, GlitchTip, Homepage, Authentik SSO
+(+ apitools, WhatsApp; LibreChat/Ollama now legacy).
+
+## Centralized agent
+- Central agent with full SSH access to the host, n8n MCP, Google Drive MCP, plus docs/context.
+  (In progress: development/openhands — dispatcher + agent-runner.)
+
+## Feature-validation = main live observability service
+- Daily report of all feature validations → Homepage + Telegram channel.
+- Run n8n workflows tagged `feature-validation` via fixtures.
+- Add curl health checks (with fixtures).
+- New `online-tools` domain: curl the prod health endpoint of every service.
+- host-health suite: storage-left, cpu-usage, ram-usage.
+- tool-health suite: curl per service + n8n workflow check for n8n.
+- integrations-health suite: gdrive, gmail, gsheet, whatsapp-baileys, telegram-bot (n8n workflow / curl).
+- API: run_all, run_by_tag, run_by_name. Scheduling + hardening. Status webpage (githubstatus-style).
+- Fix extract-aligned to 100%; split extract-column into its own solution.
+
+## Networking / security
+- Centralized outgoing-traffic proxy for easy monitoring of egress.
+- Secure & optimise the Traefik network.
+
+## Misc
+- Add chat to GlitchTip.

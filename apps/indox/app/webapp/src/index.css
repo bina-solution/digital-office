@@ -1,0 +1,1681 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Bina design system — self-contained copy of development/design/bina-ui.css.
+   Apps stay separate/installable (no runtime coupling), so each bundles its own
+   copy of the tokens + components. RTL Hebrew.
+   ──────────────────────────────────────────────────────────────────────────── */
+:root{
+  --radius:16px; --radius-sm:9px; --radius-pill:999px;
+  --font:"Segoe UI",system-ui,-apple-system,"Noto Sans Hebrew","Assistant",Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+/* The colours — light and dark — are the office's palette: the block below (a copy of
+   platform-base/bina-ui/theme-tokens.css, kept by G27). Nothing in this app names a colour of its
+   own; G82 counts. (This sheet was light-only by decision while the console was; both follow the
+   reader now, from the same block.) */
+/* @bina-theme-tokens:start */
+/* OLIVE GROVE — the one palette of the office (the owner, 2026-10-07 · DGO-450). Four hues, sampled
+   from his mock-up, and the ground they stand on. A screen never writes a colour: it names one of
+   these. Each hue is the colour itself (a FILL — a button, a bar, a dot), «-d» for text and thin
+   lines on the ground (4.5:1 or more), «-soft» and «-line» for a tint and its hairline, and «-ink»
+   for what is written ON the fill. The role names every screen already uses point at them:
+   (no backtick in this block: one of its copies lives inside a script's template string)
+     olive  the brand and the main action · what is well, what is done
+     sky    what is in motion, what only informs · a link
+     lime   look here — a warning, something waiting
+     plum   a person must act — a failure, a removal, the one final action
+   Contrast, measured (WCAG): ink on the ground 13.7 · muted 4.65 · light text on olive 5.51 and on
+   plum 9.54 · ink on lime 6.88 · its ink on sky 6.32 · sky-d 4.61 · lime-d 4.70 · violet 5.32 ·
+   on the desk: its ink 6.32 (dark: 13.96), and 11.2 where the sky pales (dark: 5.12). */
+:root,:root[data-theme="light"]{
+  color-scheme:light;
+  accent-color:var(--accent);   /* the browser's OWN controls - a checkbox, a radio, a range, a progress bar - on both grounds: said once, here (it was said for eight single controls, and every other one was the browser's blue) */
+  --bg:#f3f5f7; --surface:#fff; --surface-2:#f9fafb; --ink:#1f2a17; --muted:#6a7068; --line:#dcdfde;
+  --olive:#56693f; --olive-d:#475734; --olive-soft:#e7eae4; --olive-line:#bfc6b6; --olive-ink:#f3f5f7;
+  --sky:#7baae3; --sky-d:#2a6fc4; --sky-soft:#edf3fb; --sky-line:#cddff4; --sky-ink:#13263f;
+  --lime:#a9b84c; --lime-d:#69732e; --lime-soft:#f3f5e6; --lime-line:#dee4bb; --lime-ink:#1f2a17;
+  --plum:#5b3349; --plum-d:#4a303b; --plum-soft:#e8e2e6; --plum-line:#c1b1ba; --plum-ink:#f3f5f7;
+  --accent:var(--olive); --accent-d:var(--olive-d); --accent-soft:var(--olive-soft); --accent-ink:var(--olive-ink);
+  --blue:var(--sky-d); --amber:var(--lime-d); --red:var(--plum);
+  --violet:#7c5c6d;   /* plum, lifted a fifth toward white: someone has to look — nothing has failed */
+  --ok:var(--olive); --warn:var(--lime-d); --danger:var(--plum); --info:var(--sky-d);
+  --ok-soft:var(--olive-soft); --warn-soft:var(--lime-soft); --danger-soft:var(--plum-soft); --info-soft:var(--sky-soft);
+  --red-soft:var(--plum-soft); --amber-soft:var(--lime-soft); --blue-soft:var(--sky-soft); --violet-soft:var(--plum-soft);
+  --side:var(--olive); --side-ink:#f3f5f7; --side-mut:#dce1da; --side-line:#788765;
+  --desk:var(--sky); --desk-ink:var(--sky-ink);   /* desktop mode's ground is the sky (the owner, DGO-452), and what is written straight on it */
+  --scrim:rgba(31,42,23,.5);                      /* what dims a screen behind a pop-up */
+  --shadow:0 1px 3px rgba(31,42,23,.08),0 6px 24px rgba(31,42,23,.06);
+  --shadow-lg:0 20px 60px rgba(31,42,23,.28);
+  /* ONE COLOUR AND ONE ANIMAL PER OFFICE (the owner, 2026-10-09 · flt-002). When offices are linked,
+     a person reads WHICH office a thing belongs to without opening it, so each office gets a hue of
+     its own. The hue is an IDENTITY and never a health state: an office that stopped answering keeps
+     its colour, and the quiet mark is the one that says "not answering". Each is an ALIAS of the
+     palette's own hue — no fourth value is invented, and because the ground re-points the hue, the
+     office mark follows the ground by itself. Each office's animal (elephant, deer, eagle) is a
+     glyph of bina-icons.js. */
+  --office-hp:var(--muted);   /* hp · elephant — grey: the heavy laptop at home, in the palette's own grey */
+  --office-mac:var(--lime);   /* macbook · deer — yellow: the palette has one yellow and it is lime. A FILL, so what is written ON it is --lime-ink, never this */
+  --office-vps:var(--sky-d);  /* vps · eagle — deep sky blue, «the eagle in the clouds». THE OWNER'S OWN CHOICE (2026-10-09, in writing: vps = נשר + כחול-שמיים) — this line is the colour he picked, not a default kept for him */
+}
+
+/* ── A LINKED OFFICE'S MARK, BY NAME (flt-004) ───────────────────────────────────────────────
+   The link carries a NAME — mark: {color, animal} in the catalog, from the office's own identity
+   — and never a value: the office that DRAWS a linked tile owns the pixels, so it paints the name
+   with its own palette. These seven rules are that translation, one per family above; a screen sets
+   data-office-hue="lime" and paints var(--office-hue).
+   A name this file does not know paints nothing, which is why the vocabulary in
+   apps/dgo-extend/identity.py may only name families that exist here — and why --red and --ok
+   are not among them: they mean «danger» and «it is well» on every screen in the office. */
+[data-office-hue="grey"]   { --office-hue:var(--muted); }
+[data-office-hue="lime"]   { --office-hue:var(--lime); }
+[data-office-hue="sky"]    { --office-hue:var(--sky-d); }
+[data-office-hue="olive"]  { --office-hue:var(--olive-d); }
+[data-office-hue="plum"]   { --office-hue:var(--plum); }
+[data-office-hue="blue"]   { --office-hue:var(--blue); }
+[data-office-hue="violet"] { --office-hue:var(--violet); }
+/* the dark ground is the same four hues on the palette's own ink, and the SAME legend. Olive on that
+   ink is 2.5:1, so its text step there is olive LIFTED — its own hue and saturation, lighter (7.14
+   on a card, 4.82 on its own tint) — and the brand, the main action and «it is well» take that step.
+   Lime stays «look here» and the sky «in motion», as on the light ground: were lime the accent here
+   (it was, for a day), a warning, a selection and «it is well» were one colour. Each «-d» on its
+   own «-soft» there, measured: olive 4.82 · sky 4.62 · lime 4.63 · plum 4.71. */
+@media (prefers-color-scheme:dark){
+  :root{ color-scheme:dark;
+         --bg:#141b0f; --surface:#1f2a17; --surface-2:#192213; --ink:#f3f5f7; --muted:#a2a8a2; --line:#414a3b;
+         --olive-d:#a5ba8c; --olive-soft:#384629; --olive-line:#56693f;
+         --sky-d:#7baae3; --sky-soft:#2e3f38; --sky-line:#4d6a8c;
+         --lime-d:#a9b84c; --lime-soft:#3b4622; --lime-line:#69732e;
+         --plum-d:#ad99a4; --plum-soft:#402f33; --plum-line:#7c5c6d;
+         --accent:var(--olive-d); --accent-ink:var(--surface);
+         --red:#ad99a4; --violet:#bdadb6; --danger:#ad99a4; --ok:var(--olive-d); --side:var(--surface);
+         --desk:var(--sky-ink); --desk-ink:var(--ink); --scrim:rgba(0,0,0,.6);
+         --shadow:0 1px 3px rgba(0,0,0,.4),0 6px 24px rgba(0,0,0,.3);
+         --shadow-lg:0 20px 60px rgba(0,0,0,.55); }
+}
+:root[data-theme="midnight"]{
+  color-scheme:dark;
+  --bg:#141b0f; --surface:#1f2a17; --surface-2:#192213; --ink:#f3f5f7; --muted:#a2a8a2; --line:#414a3b;
+  --olive-d:#a5ba8c; --olive-soft:#384629; --olive-line:#56693f;
+  --sky-d:#7baae3; --sky-soft:#2e3f38; --sky-line:#4d6a8c;
+  --lime-d:#a9b84c; --lime-soft:#3b4622; --lime-line:#69732e;
+  --plum-d:#ad99a4; --plum-soft:#402f33; --plum-line:#7c5c6d;
+  --accent:var(--olive-d); --accent-ink:var(--surface);
+  --red:#ad99a4; --violet:#bdadb6; --danger:#ad99a4; --ok:var(--olive-d); --side:var(--surface);
+  --desk:var(--sky-ink); --desk-ink:var(--ink); --scrim:rgba(0,0,0,.6);
+  --shadow:0 1px 3px rgba(0,0,0,.4),0 6px 24px rgba(0,0,0,.3);
+  --shadow-lg:0 20px 60px rgba(0,0,0,.55);
+}
+/* THE KEYBOARD'S RING - what the browser draws around the stop the keyboard is on, in the palette, wherever
+   a part draws none of its own. It has no specificity at all (:where), so any rule of a part wins. Two
+   screens said this for themselves; on the others nearly every stop wore the browser's ring (DGO-455).
+   A field keeps the offset it has - fourteen rules draw a field's own outline and say no offset. An area
+   (a scroll box, a table) takes the ring inside, where nothing clips it; a control takes it outside,
+   where a filled button does not hide it. */
+:where(:focus-visible){outline:2px solid var(--accent)}
+:where(:focus-visible:not(a,button,summary,[role=button],input,select,textarea)){outline-offset:-2px}
+:where(a,button,summary,[role=button]):focus-visible{outline-offset:2px}
+/* HEBREW AT A HEAVY WEIGHT - on Windows, where the first family of --font is installed. "Segoe UI" has its
+   Hebrew in Light, Regular, Semibold and Bold. Asked for 800 or 900 the browser takes the family's Black
+   face, which has none, and so has every family after it - so the Hebrew of every title at 800 was drawn in
+   the system's last-resort serif, thin, beside Latin in Black: «חשבונות ומראות» at 20px is 150px wide at 700
+   and 120px at 800 (Chrome 154; the screens ask for 800 in 167 places, the question's title among them).
+   These faces give the family's HEBREW RANGE the faces that have it. A family a sheet names is no longer the
+   system's for those characters, so every weight and both styles are named, each as the system resolves it:
+   measured, only upright 800 and 900 change. Any other character is not theirs and goes on to the next
+   family the screen names - system-ui in --font, on Windows the same faces, Black included - which is why
+   G27 asks that system-ui follows wherever a screen names this family itself. Where the family is not
+   installed nothing here resolves and nothing changes. */
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Light");font-weight:100 300;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI");font-weight:400;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Semibold");font-weight:500 600;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Bold");font-weight:700 900;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Light Italic");font-weight:100 300;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Italic");font-weight:400;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Semibold Italic");font-weight:500 600;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Bold Italic");font-weight:700 900;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+/* @bina-theme-tokens:end */
+
+*{box-sizing:border-box}
+/* ── C16 · the shell owns the viewport, and nothing escapes it ──────────────────────────────────
+   A data app must have exactly ONE thing that scrolls at a time: the data. When the page can grow
+   past the viewport as well, you get two scrollbars stacked on the same axis — the grid's, and the
+   document's behind it — and the wheel obeys whichever the pointer happens to be over. That is the
+   single most disorienting thing a table screen can do, and it is always caused by the same thing:
+   something inside declaring a fixed height instead of taking the height it is given. */
+html,body{margin:0;height:100%;overflow:hidden}
+/* height, not min-height: min-height:100vh lets the shell GROW past the viewport, which is exactly
+   the second scrollbar. 100dvh so a phone's collapsing address bar doesn't leave a dead strip. */
+.app-shell{height:100dvh;max-height:100dvh;min-height:0;overflow:hidden}
+/* The menu owns a fixed column; the app owns everything else. `min-width:0` on the content
+   column is what lets a wide table scroll instead of pushing the menu off the screen. */
+.app-shell.flex{display:flex;flex-direction:row;align-items:stretch}
+.app-shell .side{flex:none;width:252px;border-inline-end:1px solid var(--line)}
+.app-main{flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden}
+/* A wide window keeps the menu; a narrow one keeps only its icons — the console's rail rule,
+   in the app rather than in the component, because the app owns its own column widths. */
+@media (max-width:900px){
+  .app-shell .side{width:64px}
+  .app-shell .side .bnv-label{display:none}
+  .app-shell .side .bnv-item{width:44px;height:44px;min-height:44px;justify-content:center;padding:0;gap:0}
+  .app-shell .side .bnv-head b{display:none}
+  .app-shell .side .bnv-foot-text{display:none}
+}
+@media (max-width:560px){ .app-shell .side{width:56px} }
+body{background:var(--bg);color:var(--ink);font-family:var(--font);font-size:14px;line-height:1.5;
+     -webkit-font-smoothing:antialiased}
+.mono{font-family:var(--mono)}
+a{color:var(--accent-d);text-decoration:none} a:hover{text-decoration:underline}
+
+/* page shell — width:100% is REQUIRED: .wrap is a flex item (flex-1 child of the
+   flex-col root), and `margin:0 auto` on a flex item shrinks it to content width
+   (auto cross-axis margins override align-items:stretch) — without width:100% the
+   content collapsed to ~668px and left a huge empty band. Fill the shell, cap wide
+   for readable line-lengths, and align with the full-width tabstrip. */
+.wrap{width:100%;max-width:1440px;margin:0 auto;padding:22px 26px 44px;
+      flex:1;min-height:0;overflow:auto}
+/* a page that fills: its own content column stretches, so the region it hands the grid is the
+   leftover height rather than a number invented up-front */
+.wrap:has(> .page-fill){overflow:hidden;padding-bottom:18px}
+.page-fill{height:100%;display:flex;flex-direction:column;min-height:0}
+
+/* header — anchored with a bottom rule like morning's page-title band, so titles
+   don't float and every page reads as the same product */
+.app-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;
+            margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.app-header h1{font-size:22px;font-weight:800;margin:0;letter-spacing:-.01em}
+.app-header .sub{color:var(--muted);font-size:13px;margin-top:3px}
+.app-header .actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+
+/* time-window segmented control — the exact visual mailview ships (its `.seg`,
+   itself lifted from platform-base/any-concurrency), renamed `.winseg` here
+   because this stylesheet already owns `.statebar .seg` for the 4-state sync
+   bar and a bare `.seg` rule would restyle it. Speaks only in design tokens.
+   RTL: no left/right anywhere — inline-flex in a dir="rtl" document lays the
+   options out right-to-left by itself (הכל → 30 דק׳ → שעה → היום → החודש). */
+.winseg{display:inline-flex;background:var(--surface-2);border:1px solid var(--line);
+  border-radius:11px;padding:3px;gap:2px}
+.winseg button{border:none;background:transparent;color:var(--muted);font-family:inherit;
+  font-size:12.5px;font-weight:700;padding:5px 11px;border-radius:8px;cursor:pointer;transition:.12s}
+.winseg button:hover{color:var(--ink)}
+.winseg button.on{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px var(--line)}
+/* A window switch is a server round trip. Dim the control while it is in
+   flight so a second click is visibly not being taken. */
+.winseg.busy{opacity:.55;pointer-events:none}
+
+/* hero */
+.hero{background:var(--olive);color:var(--olive-ink);border-radius:18px;
+      padding:22px 24px;box-shadow:var(--shadow);margin:14px 0 20px}
+.hero h2{margin:0 0 4px;font-size:20px} .hero p{margin:0;opacity:.9;font-size:13px}
+
+/* cards */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+      padding:18px 20px;box-shadow:var(--shadow);margin-bottom:16px}
+.card > h3{margin:0 0 12px;font-size:15px;font-weight:700}
+.card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
+
+/* group label */
+.group-label{margin:22px 4px 8px;font-size:12px;color:var(--accent-d);font-weight:700;
+             letter-spacing:.06em;text-transform:uppercase}
+
+/* stats */
+.stats{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:12px 0}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-pill);
+      padding:5px 13px;font-size:12px;color:var(--muted);display:inline-flex;gap:7px;align-items:center;box-shadow:var(--shadow)}
+.stat b{font-size:15px;color:var(--ink)}
+
+/* pills / status */
+.pill{padding:2px 10px;border-radius:var(--radius-pill);font-size:11px;font-weight:700;white-space:nowrap;display:inline-block}
+.pill.ok,.pill.healthy{background:var(--accent-soft);color:var(--accent-d)}
+.pill.warn,.pill.needs_action,.pill.degraded{background:var(--warn-soft);color:var(--amber)}
+.pill.bad,.pill.missing{background:var(--danger-soft);color:var(--red)}
+.pill.unset,.pill.muted{background:var(--bg);color:var(--muted)}
+.dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex:none}
+.dot.healthy,.dot.ok{background:var(--accent)} .dot.needs_action,.dot.warn{background:var(--amber)}
+.dot.missing,.dot.degraded,.dot.bad{background:var(--red)} .dot.unset{background:var(--line)}
+
+/* callout */
+.callout{border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:12px 16px;font-size:13px;
+         color:var(--muted);margin:12px 0;box-shadow:var(--shadow)}
+.callout.warn{background:var(--warn-soft);border-color:var(--lime-line)} .callout.warn b{color:var(--amber)}
+.callout.ok{background:var(--accent-soft);border-color:var(--olive-line)} .callout.ok b{color:var(--accent-d)}
+.callout.bad{background:var(--danger-soft);border-color:var(--plum-line);color:var(--red)} .callout.bad b{color:var(--red)}
+
+/* buttons */
+.btn{background:var(--accent);color:var(--accent-ink);font-weight:700;border:none;border-radius:var(--radius-sm);
+     padding:8px 15px;cursor:pointer;font-family:inherit;font-size:13px;transition:background .12s,color .12s;line-height:1;
+     display:inline-flex;align-items:center;gap:6px;text-decoration:none}
+.btn:hover{background:var(--accent-d);text-decoration:none}
+.btn:disabled{background:var(--line);color:var(--muted);cursor:not-allowed}
+.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--ink)}
+.btn.ghost:hover{background:var(--surface-2);border-color:var(--muted);color:var(--ink)}
+/* a second verb beside the main one (run the chosen documents): the sky, and what is written on it */
+.btn.blue{background:var(--sky);color:var(--sky-ink)} .btn.blue:hover{filter:brightness(.94)}
+/* the one FINAL verb of a screen — a purge, the emergency stop, a confirmed removal. It was an
+   inline style in four places. */
+.btn.danger:not(.ghost){background:var(--red);color:var(--surface)} .btn.danger:not(.ghost):hover{background:var(--plum-d)}
+.btn.sm{padding:5px 11px;font-size:12px}
+.link{color:var(--accent-d);font-size:12px;font-weight:600;cursor:pointer;user-select:none;background:none;border:none;font-family:inherit}
+.link:hover{text-decoration:underline}
+.link.danger{color:var(--red)}
+
+/* fields */
+.field{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
+.field label{font-size:12px;color:var(--muted);font-weight:600}
+input,select,textarea{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 11px;
+     font-family:inherit;font-size:13px;color:var(--ink);width:100%}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
+input.mono,textarea.mono{font-family:var(--mono);font-size:12px}
+input:disabled{background:var(--surface-2);color:var(--muted)}
+
+/* table */
+.table{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--line);
+       border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow)}
+.table th,.table td{padding:11px 13px;text-align:start;font-size:13px;border-bottom:1px solid var(--line);vertical-align:middle}
+.table th{background:var(--surface-2);color:var(--muted);font-weight:600;font-size:11px;letter-spacing:.04em}
+.table tr:last-child td{border-bottom:none}
+.table tr:hover td{background:var(--surface-2)}
+/* wrap a plain table so wide content scrolls INSIDE instead of overflowing the
+   page on narrow screens (the data grid handles its own scroll) */
+.tbl-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:var(--radius)}
+/* clickable tables signal it: pointer + green wash on hover (morning parity) */
+.table.clickable tbody tr{cursor:pointer}
+.table.clickable tbody tr:hover td{background:var(--accent-soft)}
+/* shared empty-row treatment (centered, 40px) — no per-call inline padding */
+.table td.empty,.empty{padding:40px;text-align:center;color:var(--muted)}
+code{color:var(--ink);background:var(--surface-2);border:1px solid var(--line);padding:1px 6px;border-radius:5px;font-size:12px;font-family:var(--mono)}
+
+/* modal */
+.modal-ov{position:fixed;inset:0;background:var(--scrim);display:flex;align-items:center;justify-content:center;z-index:50}
+.modal{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:22px;width:min(420px,92vw);box-shadow:var(--shadow-lg)}
+.modal-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.modal-h h3{margin:0;font-size:16px}
+
+.muted{color:var(--muted)} .small{font-size:12px} .spin{color:var(--muted);padding:20px;text-align:center}
+
+/* ── App-specific additions (built from Bina tokens) ─────────────────────────── */
+
+/* small uppercase tag (backend name, pk marker) */
+.tag{font-size:11px;font-weight:700;letter-spacing:.03em;padding:2px 9px;border-radius:var(--radius-pill);
+     background:var(--surface-2);border:1px solid var(--line);color:var(--muted);display:inline-block;white-space:nowrap}
+.tag.pk{background:var(--warn-soft);border-color:var(--lime-line);color:var(--amber);text-transform:uppercase;font-size:10px;padding:1px 6px}
+
+/* definition-list rows */
+.kv{display:flex;justify-content:space-between;gap:12px;padding:4px 0;font-size:13px;border-bottom:1px dashed var(--line)}
+.kv:last-child{border-bottom:none}
+.kv dt{color:var(--muted)} .kv dd{margin:0;text-align:end}
+
+/* toolbar row above tables */
+.toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+
+/* code / JSON blocks. Each line is set by what it holds (a line of JSON left to right, a Hebrew line right to
+   left): on the page's own direction every line of JSON stood with its comma at its beginning. */
+.codeblock{font-family:var(--mono);font-size:12px;white-space:pre-wrap;word-break:break-word;
+           background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:10px 12px;color:var(--ink);margin:0;
+           unicode-bidi:plaintext;text-align:start}
+
+/* side drawer (upsert panel) */
+.drawer-ov{position:fixed;inset:0;z-index:50;display:flex;justify-content:flex-start}
+.drawer-ov .scrim{position:absolute;inset:0;background:var(--scrim)}
+.drawer{position:relative;background:var(--surface);height:100%;width:100%;max-width:440px;
+        box-shadow:var(--shadow-lg);display:flex;flex-direction:column}
+.drawer-h{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--line)}
+.drawer-h h3{margin:0;font-size:15px;font-weight:700}
+.drawer-body{flex:1;overflow-y:auto;padding:16px 18px}
+.drawer-foot{padding:14px 18px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:10px}
+
+/* toggle switch (polling on/off) */
+.switch{position:relative;display:inline-flex;height:20px;width:36px;align-items:center;border-radius:var(--radius-pill);
+        border:none;cursor:pointer;background:var(--line);transition:background .15s;padding:0}
+.switch.on{background:var(--accent)}
+.switch:disabled{opacity:.5;cursor:not-allowed}
+.switch .knob{position:absolute;height:14px;width:14px;border-radius:50%;background:var(--surface);box-shadow:0 1px 2px var(--scrim);
+              inset-inline-start:3px;transition:inset-inline-start .15s}
+.switch.on .knob{inset-inline-start:19px}
+
+/* ── section tab-strip (light horizontal nav — replaces the dark topbar so the
+      app reads as a section of the console, not a second dark chrome) ─────── */
+/* the top tab strip is gone: the menu is the office's shared side menu
+   (.bnv / .bnv-item, platform-base/bina-ui/bina-nav.css, gate G27) and it
+   scrolls, which the strip could not — at 390px its last two tabs were
+   unreachable. */
+
+/* live beat pill (freshness + pause toggle for polling views) */
+.live{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700;color:var(--accent-d);
+      background:var(--accent-soft);border-radius:var(--radius-pill);padding:4px 11px;border:none;cursor:pointer;font-family:inherit}
+.live.paused{color:var(--muted);background:var(--bg)}
+.live .beat{width:9px;height:9px;border-radius:50%;background:currentColor;animation:beat 1.6s infinite}
+.live.paused .beat{animation:none}
+@keyframes beat{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 45%,transparent)}70%{box-shadow:0 0 0 9px transparent}100%{box-shadow:0 0 0 0 transparent}}
+
+/* numbers / IDs / amounts — LTR-isolated inside RTL text */
+.num{direction:ltr;unicode-bidi:isolate;font-variant-numeric:tabular-nums}
+
+/* HUD big-stat cards — a KPI STRIP that spans the full content width (CSS Grid,
+   auto-fit minmax) instead of a flex row that clumps to one side. 2026 dashboard
+   pattern: 4-6 metric cards across the top, density over whitespace. */
+.hud{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:12px;margin:4px 0 18px}
+/* SIX number tiles stand 6, 3 or 2 across — never 5 and one alone. auto-fit gave 5 + 1 at every frame between
+   956 and 1147px, which is the console on a 1366px laptop (the dashboard; seen in the simulation, 2026-10-10). */
+.hud:has(> :nth-child(6):last-child){grid-template-columns:repeat(6,minmax(0,1fr))}
+@media (max-width:1099px){.hud:has(> :nth-child(6):last-child){grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:519px){.hud:has(> :nth-child(6):last-child){grid-template-columns:repeat(2,minmax(0,1fr))}}
+/* …and FOUR stand 4 or 2 across — never 3 and one alone: auto-fit gave that at every frame from 560 to 802px
+   (the extraction screen in a small window, on a tablet, on a phone lying down; measured in the simulation's
+   copy of this sheet, 2026-10-10). */
+.hud:has(> :nth-child(4):last-child){grid-template-columns:repeat(4,minmax(0,1fr))}
+@media (max-width:819px){.hud:has(> :nth-child(4):last-child){grid-template-columns:repeat(2,minmax(0,1fr))}}
+.bigstat{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px 20px;
+         box-shadow:var(--shadow);position:relative;overflow:hidden}
+.bigstat .k{font-size:12.5px;color:var(--muted);font-weight:600}
+.bigstat .v{font-size:30px;font-weight:800;line-height:1.1;letter-spacing:-.02em;margin-top:5px}
+.bigstat.run .v{color:var(--blue)} .bigstat.ok .v{color:var(--ok)}
+.bigstat.err .v{color:var(--red)} .bigstat.wait .v{color:var(--amber)}
+.bigstat.run::after{content:"";position:absolute;inset-inline-start:0;top:0;bottom:0;width:3px;background:var(--blue)}
+
+/* sync 4-state segmented bar. The office's legend, as fills: what WAITS is lime, what is IN MOTION
+   is the sky, what is done is olive, what failed is plum, what needs a person is violet. */
+.statebar{display:flex;height:12px;border-radius:6px;overflow:hidden;background:var(--bg);border:1px solid var(--line)}
+.statebar .seg{height:100%;min-width:0}
+.statebar .seg.to_sync{background:var(--lime)}
+.statebar .seg.in_progress{background:var(--sky)}
+.statebar .seg.synced{background:var(--ok)}
+.statebar .seg.failed{background:var(--red)}
+.statebar .seg.review{background:var(--violet)}
+/* a segment that OPENS the items behind it */
+.statebar button.seg{border:0;padding:0;cursor:pointer;transition:filter .12s}
+.statebar button.seg:hover{filter:brightness(1.15)}
+.statelegend{display:flex;gap:16px;flex-wrap:wrap;margin-top:11px}
+.statelegend .li{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.statelegend .li b{font-size:15px;color:var(--ink)}
+.statelegend .sw{width:10px;height:10px;border-radius:3px;flex:none}
+.statelegend .sw.to_sync{background:var(--lime)} .statelegend .sw.in_progress{background:var(--sky)}
+.statelegend .sw.synced{background:var(--ok)} .statelegend .sw.failed{background:var(--red)}
+.statelegend .sw.review{background:var(--violet)}
+/* a legend entry that is a BUTTON (opens the items drawer on that state) keeps the legend's look */
+.statelegend button.li{background:none;border:0;padding:2px 4px;border-radius:6px;font-family:inherit;cursor:pointer}
+.statelegend button.li:hover{background:var(--surface-2);color:var(--ink)}
+.statelegend button.li[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent-d)}
+
+/* ── the sync page: summary strip, cards, pickers ────────────────────────────────────────── */
+.syncsum{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));gap:10px;margin-bottom:14px}
+.syncsum .cell{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 13px;
+  box-shadow:var(--shadow);min-width:0}
+.syncsum .cell .k{font-size:11.5px;color:var(--muted);font-weight:600;display:flex;align-items:center;gap:6px}
+.syncsum .cell .v{font-size:17px;font-weight:800;margin-top:3px;letter-spacing:-.01em;line-height:1.25;word-break:break-word}
+.syncsum .cell .s{font-size:11.5px;color:var(--muted);margin-top:2px;word-break:break-word}
+/* connection health dot + the connection it belongs to */
+.hdot{width:9px;height:9px;border-radius:50%;display:inline-block;flex:none;background:var(--line)}
+.hdot.ok{background:var(--ok)} .hdot.bad{background:var(--red)}
+.hdot.busy{animation:pipepulse 1.2s ease-in-out infinite}
+.connline{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);max-width:100%;min-width:0}
+.connline .nm{font-weight:700;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* reason chips — the top three reasons over a pipe's red items */
+.reasons{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.reason{display:inline-flex;align-items:center;gap:6px;max-width:100%;background:var(--danger-soft);color:var(--red);
+  border:1px solid var(--plum-line);border-radius:var(--radius-pill);padding:2px 9px;font-size:11.5px;font-weight:600;
+  font-family:inherit;cursor:pointer}
+.reason:hover{filter:brightness(.97)}
+.reason .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:360px;direction:ltr;unicode-bidi:isolate}
+/* «needs a person» is not «failed»: violet is plum's own lighter step, so the two also differ in
+   FORM — what failed is filled, what waits for a look is an outline. */
+.reason.review{background:var(--surface);color:var(--violet)}
+/* the location picker (folders / labels): armed field, current value, search, tree.
+   REWRITTEN — the previous rules truncated the folder's own NAME and spent 40% of every row on an
+   invisible id. Measured on this drawer at 440px: the name column was 202px of 342, the
+   `opacity:0` id took 140px, and every path deeper than two levels was cut mid-leaf. */
+
+/* one line per destination; the picker below serves whichever line is armed */
+.fieldrows{display:flex;flex-direction:column}
+.fieldrow{display:flex;align-items:center;gap:9px;width:100%;text-align:start;background:var(--surface);
+  border:1px solid var(--line);border-bottom-width:0;padding:7px 10px;font:inherit;font-size:12.5px;
+  color:var(--ink);cursor:pointer;min-width:0;position:relative;min-height:34px}
+.fieldrow:first-child{border-radius:10px 10px 0 0}
+.fieldrow:last-child{border-bottom-width:1px;border-radius:0 0 10px 10px}
+.fieldrow:hover{background:var(--surface-2)}
+.fieldrow.on{background:var(--accent-soft);border-color:var(--accent);z-index:1}
+.fieldrow.on+.fieldrow{border-top-color:var(--accent)}
+.fieldrow .fk{flex:none;width:96px;color:var(--muted);font-size:11px;font-weight:700;white-space:nowrap}
+.fieldrow.on .fk{color:var(--accent-d)}
+.fieldrow .fv{flex:1;min-width:0;display:flex;align-items:baseline;gap:6px;overflow:hidden}
+.fieldrow .none{color:var(--muted);font-weight:400}
+.fieldrow .pin{color:var(--amber);font-weight:700;white-space:nowrap;flex:none;font-size:11px}
+.fieldrow>.dg-ic{flex:none;color:var(--muted)}
+
+.picker{border:1px solid var(--accent);border-radius:10px;background:var(--surface);overflow:hidden;
+  box-shadow:0 0 0 2px var(--accent-soft);margin-top:10px}
+.picker .ptop{display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--accent-soft);
+  border-bottom:1px solid var(--line);font-size:12px;color:var(--accent-d);font-weight:700}
+.picker .ptop .sp{flex:1}
+/* the chosen value: its NAME on the first line, its path on the second, the id on hover only —
+   it used to be one line whose left 46% was the identifier */
+.picker .cur{padding:8px 10px;border-bottom:1px solid var(--line);background:var(--surface-2);
+  min-width:0;position:relative}
+.picker .cur .l1{display:flex;align-items:center;gap:7px;min-width:0}
+.picker .cur .l1 .dg-ic{flex:none;color:var(--muted)}
+.picker .cur .nm{font-weight:700;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.picker .cur .l2{font-size:11px;color:var(--muted);margin-top:1px;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap;padding-inline-start:21px}
+.picker .cur .pin{color:var(--amber);font-weight:700;white-space:nowrap;flex:none}
+.picker .srch{display:flex;align-items:center;gap:7px;padding:0 10px;border-bottom:1px solid var(--line)}
+.picker .srch>.dg-ic{flex:none;color:var(--muted)}
+.picker .srch:focus-within{background:var(--surface-2)}
+.picker input.q{border:0;border-radius:0;padding:7px 0;width:100%;font-size:12.5px;background:transparent}
+.picker input.q:focus{outline:none}
+.picker .list{max-height:264px;overflow:auto;padding:4px}
+.picker .grp{font-size:10.5px;font-weight:700;letter-spacing:.04em;color:var(--muted);padding:7px 8px 3px;
+  position:sticky;top:0;background:var(--surface);z-index:1}
+.picker .state{padding:10px;font-size:12px;color:var(--muted)}
+.picker .state.bad{color:var(--red)}
+.picker .pfoot{display:flex;align-items:center;gap:8px;padding:6px 10px;border-top:1px solid var(--line);
+  background:var(--surface-2);font-size:11px;color:var(--muted)}
+.picker .pfoot .sp{flex:1}
+.kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--line);border-radius:4px;padding:0 4px;
+  background:var(--surface);color:var(--muted)}
+
+/* a row is a DIV holding two real buttons — the chevron opens the branch, the rest picks it */
+.optrow{display:flex;align-items:center;border-radius:6px;min-width:0;min-height:30px}
+.optrow:hover{background:var(--surface-2)}
+.optrow.on{background:var(--accent-soft)}
+.optrow.cursor{outline:2px solid var(--accent);outline-offset:-2px}
+.picker .opt{display:flex;align-items:center;gap:7px;flex:1;text-align:start;background:none;border:0;
+  border-radius:6px;padding:4px 7px;font-family:inherit;font-size:12.5px;color:var(--ink);cursor:pointer;
+  min-width:0;position:relative;min-height:30px}
+.optrow.on .opt{color:var(--accent-d)}
+.picker .opt>.dg-ic{flex:none;color:var(--muted)}
+.optrow.on .opt>.dg-ic{color:var(--accent-d)}
+.picker .opt .cnt{flex:none;font-size:10px;color:var(--muted);background:var(--bg);
+  border-radius:var(--radius-pill);padding:0 6px;font-variant-numeric:tabular-nums}
+.picker .opt mark{background:var(--lime-line);color:var(--ink);border-radius:3px;padding:0 1px;font-weight:800}
+/* THE fix: shrink 1 vs 100000 — every missing pixel comes out of the ancestors, so the item's own
+   name is the LAST thing to be truncated instead of the first. Not scoped to the list: the field
+   lines and the review rows name the same folder and must show it the same way. */
+.leaf{flex:0 1 auto;min-width:4ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.crumb{flex:0 100000 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-size:11px;color:var(--muted)}
+.optrow.on .leaf{font-weight:800}
+/* "‹" marks the crumb as "and it lives inside…", so a name and its path are never read as siblings */
+.picker .opt .crumb::before,.fieldrow .crumb::before,.review .crumb::before{content:"‹ "}
+/* the identifier: absolutely positioned, so it costs NO width and still answers on hover */
+.picker .opt .idhov,.picker .cur .idhov{position:absolute;inset-inline-start:6px;top:50%;
+  transform:translateY(-50%);font-family:var(--mono);font-size:10px;color:var(--muted);
+  direction:ltr;unicode-bidi:isolate;background:var(--surface);border:1px solid var(--line);
+  border-radius:5px;padding:1px 5px;opacity:0;pointer-events:none;transition:opacity .12s;
+  max-width:62%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.picker .opt:hover .idhov,.picker .opt:focus .idhov,.picker .cur:hover .idhov{opacity:1}
+/* depth is an indent and a hairline, not a repeated path string */
+.optrow .tw{flex:none;display:flex;align-items:center}
+.optrow .tw i{display:block;width:13px;height:20px;border-inline-start:1px solid var(--line);margin-inline-start:6px}
+.chev{flex:none;width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;
+  border:0;background:none;padding:0;color:var(--muted);cursor:pointer;border-radius:4px}
+.chev:hover{background:var(--bg);color:var(--ink)}
+.chev .dg-ic{width:12px;height:12px;transition:transform .12s}
+.chev.closed .dg-ic{transform:rotate(90deg)}
+.chev.leafnode{visibility:hidden;cursor:default}
+/* a line that names the connection above a picker */
+.pickhead{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;color:var(--muted);
+  margin:6px 0 4px;flex-wrap:wrap}
+/* the editor holds three destinations and a review; 440px is what cut the names in the first place */
+.sync-drawer{max-width:640px;container-type:inline-size}
+@container (max-width:400px){
+  .fieldrow{flex-wrap:wrap;align-items:flex-start;padding-top:5px;padding-bottom:6px}
+  .fieldrow .fk{width:auto;flex:1 0 100%}
+  .fieldrow .fv{flex:1 1 100%}
+  .fieldrow>.dg-ic{position:absolute;inset-inline-end:9px;top:9px}
+}
+
+/* the review step: every field that will be written */
+.review{border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.review .row{display:flex;justify-content:space-between;gap:12px;padding:6px 10px;border-bottom:1px dashed var(--line);
+  font-size:12.5px}
+.review .row:last-child{border-bottom:0}
+.review .row .k{color:var(--muted)}
+/* was one ellipsised line holding the joined path — the same end-truncation the list rows had */
+.review .row .v{font-weight:600;min-width:0;display:flex;align-items:baseline;gap:6px;
+  justify-content:flex-end;overflow:hidden}
+.review .row.derived .v{color:var(--blue)}
+/* an icon-only button: square, quiet, named on hover — the pager's own look, reused */
+.icbtn{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;padding:0;
+  border-radius:8px;background:transparent;border:1px solid transparent;color:var(--muted);cursor:pointer;font:inherit}
+.icbtn:hover{background:var(--surface-2);color:var(--ink);border-color:var(--line)}
+.icbtn:disabled{opacity:.4;cursor:not-allowed}
+/* inline icon inside running text / a text button — sits on the baseline, not above it. `display` is what
+   makes that true: the base sheet turns every svg into a block, and a block has no baseline to sit on - in a
+   link or a tab (not a flex row, as a button is) the icon took a line of its own, over or under its label */
+.btn .dg-ic,.link .dg-ic,.stab .dg-ic,.chip .dg-ic,.tab .dg-ic{width:14px;height:14px;vertical-align:-2px;display:inline-block}
+.link .dg-ic{margin-inline-end:3px}
+a.link .dg-ic{margin-inline-end:0;margin-inline-start:3px}
+.cal-ic{display:inline-flex;align-items:center;gap:6px}
+
+/* per-sync card meta row */
+.sync-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.sync-meta .name{font-size:15px;font-weight:800;color:var(--ink)}
+
+/* ── test-suite runner (בדיקות) ─────────────────────────────────────────────── */
+/* run progress bar (determinate on completion, indeterminate while running) */
+.progress{height:12px;border-radius:6px;overflow:hidden;background:var(--bg);border:1px solid var(--line);position:relative}
+.progress .bar{height:100%;background:var(--accent);transition:width .4s ease;width:0}
+.progress .bar.err{background:var(--red)}
+.progress.indet .bar{width:35%;background:linear-gradient(90deg,transparent,var(--accent),transparent);animation:indet 1.1s linear infinite}
+@keyframes indet{0%{margin-inline-start:-35%}100%{margin-inline-start:100%}}
+
+/* inline spinner (running badge) */
+.spinner{width:13px;height:13px;border-radius:50%;border:2px solid var(--line);border-top-color:var(--accent);
+         display:inline-block;animation:spin .8s linear infinite;vertical-align:middle;flex:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* mini pass/fail meter (per suite last-run ratio) */
+.meter{height:7px;border-radius:4px;background:var(--bg);overflow:hidden;border:1px solid var(--line);min-width:70px;flex:1}
+.meter .fill{height:100%;background:var(--accent)}
+.meter .fill.bad{background:var(--red)}
+.meter-row{display:flex;align-items:center;gap:8px;min-width:150px}
+
+/* suite groups (subsystem sections: סנכרון / מכונת מצבים) */
+.suitegroup{margin-top:20px}
+.suitegroup:first-of-type{margin-top:10px}
+.suitegroup-h{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 2px 8px}
+.runpanel{border-inline-start:3px solid var(--accent)}
+
+/* ── settings sub-nav (הגדרות) — light inner tab row, no second chrome ─────── */
+.subnav{display:flex;align-items:center;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--line);margin:6px 0 18px}
+.subnav .stab{padding:9px 14px;font-size:13px;font-weight:600;color:var(--muted);background:none;border:none;
+              border-bottom:2px solid transparent;margin-bottom:-1px;cursor:pointer;font-family:inherit;white-space:nowrap}
+.subnav .stab:hover{color:var(--ink)}
+.subnav .stab.active{color:var(--ink);border-bottom-color:var(--accent)}
+/* count badge — a distinct pill so the number reads as a count, not part of the
+   Hebrew label (was rendering glued, e.g. "חברות7") */
+.subnav .stab .n{margin-inline-start:7px;font-size:11px;color:var(--muted);font-weight:700;
+                 background:var(--surface-2);border:1px solid var(--line);border-radius:var(--radius-pill);
+                 padding:1px 7px;min-width:20px;text-align:center;display:inline-block;line-height:1.5}
+.subnav .stab.active .n{background:var(--accent-soft);border-color:var(--olive-line);color:var(--accent-d)}
+
+/* editable setting row (scalar/toggle + inline save) */
+.setrow{display:flex;align-items:center;gap:12px;padding:11px 2px;border-bottom:1px dashed var(--line);flex-wrap:wrap}
+.setrow:last-child{border-bottom:none}
+.setrow .key{font-weight:700;font-family:var(--mono);font-size:12.5px;min-width:190px}
+.setrow .ctl{display:flex;align-items:center;gap:8px;margin-inline-start:auto;flex-wrap:wrap}
+.setrow input{width:auto;min-width:120px}
+
+/* read-only structural setting (large JSON) — collapsible */
+.rosetting{border-bottom:1px dashed var(--line);padding:8px 2px}
+.rosetting:last-child{border-bottom:none}
+.rosetting summary{cursor:pointer;font-family:var(--mono);font-size:12.5px;color:var(--ink);display:flex;align-items:center;gap:8px}
+.rosetting summary::-webkit-details-marker{display:none}
+.rosetting summary .len{color:var(--muted);font-size:11px;font-weight:600}
+
+/* dense config table (companies — SELECT *) */
+.dense{overflow-x:auto}
+.dense .table td,.dense .table th{padding:7px 10px;font-size:12px;white-space:nowrap;max-width:280px;overflow:hidden;text-overflow:ellipsis}
+.btn.sm.ghost.danger{color:var(--red);border-color:var(--plum-line)}
+.btn.sm.ghost.danger:hover{background:var(--danger-soft);color:var(--red);border-color:var(--plum-line)}
+@keyframes btoast{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   <DataGrid> — reusable Supabase-grade table (RTL, Bina tokens)
+   ═══════════════════════════════════════════════════════════════════════════ */
+.dg-root{display:flex;flex-direction:column;gap:0;background:var(--surface);border:1px solid var(--line);
+         border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;position:relative}
+
+/* toolbar */
+.dg-toolbar{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--line);
+            background:var(--surface-2);flex-wrap:wrap}
+.dg-search-wrap{position:relative;display:flex;align-items:center;min-width:200px;flex:0 0 auto}
+.dg-search-icon{position:absolute;inset-inline-start:9px;color:var(--muted);pointer-events:none;display:inline-flex}
+.dg-search-icon .dg-ic{width:14px;height:14px}
+.dg-search{padding-inline-start:28px;padding-inline-end:26px;height:32px;width:230px;font-size:13px}
+.dg-search-clear{position:absolute;inset-inline-end:6px;background:none;border:none;color:var(--muted);
+                 cursor:pointer;padding:2px;line-height:0;display:inline-flex}
+.dg-search-clear .dg-ic{width:13px;height:13px}
+.dg-search-clear:hover{color:var(--ink)}
+.dg-chips{display:flex;gap:6px;flex-wrap:wrap;flex:1 1 auto;min-width:0}
+.dg-chip{display:inline-flex;align-items:center;gap:6px;background:var(--accent-soft);color:var(--accent-d);
+         border-radius:var(--radius-pill);padding:3px 10px;font-size:11.5px;font-weight:600;white-space:nowrap}
+.dg-chip-x{background:none;border:none;color:var(--accent-d);cursor:pointer;padding:0;line-height:0;opacity:.7;display:inline-flex}
+.dg-chip-x .dg-ic{width:11px;height:11px}
+.dg-chip-x:hover{opacity:1}
+.dg-count{color:var(--muted);font-size:12.5px;font-weight:600;white-space:nowrap;margin-inline-start:auto}
+
+/* column picker */
+.dg-colpick{position:relative}
+.dg-colpick-menu{position:absolute;inset-inline-end:0;top:calc(100% + 6px);z-index:20;background:var(--surface);
+                border:1px solid var(--line);border-radius:var(--radius-sm);box-shadow:var(--shadow-lg);
+                padding:8px;min-width:210px;max-height:340px;overflow-y:auto}
+.dg-colpick-actions{display:flex;gap:12px;padding:4px 6px 8px;border-bottom:1px solid var(--line);margin-bottom:6px}
+.dg-colpick-item{display:flex;align-items:center;gap:8px;padding:5px 6px;font-size:12.5px;cursor:pointer;border-radius:6px}
+.dg-colpick-item:hover{background:var(--surface-2)}
+.dg-colpick-item input{width:auto}
+.dg-colpick-item span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* scroll viewport */
+.dg-scroll{overflow:auto;position:relative;background:var(--surface)}
+.dg-table{position:relative}
+
+/* header (grid, sticky) */
+.dg-head{display:grid;position:sticky;top:0;z-index:3;background:var(--surface-2);
+         border-bottom:1px solid var(--line)}
+.dg-hcell{position:relative;display:flex;align-items:center;min-width:0;border-inline-start:1px solid var(--line);
+          background:var(--surface-2)}
+.dg-hcell:first-child{border-inline-start:none}
+.dg-hcell-fixed{justify-content:center}
+.dg-hbtn{flex:1;min-width:0;display:flex;align-items:center;gap:5px;background:none;border:none;cursor:pointer;
+         font-family:inherit;padding:9px 11px;color:var(--muted);font-weight:700;font-size:11px;letter-spacing:.03em;
+         text-align:start;overflow:hidden}
+.dg-hbtn:hover{color:var(--ink)}
+.dg-hlabel{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dg-sort{color:var(--accent-d);font-weight:800;flex:none;font-size:12px}
+.dg-resizer{position:absolute;inset-inline-start:0;top:0;height:100%;width:7px;cursor:col-resize;
+            touch-action:none;user-select:none;z-index:1}
+.dg-resizer:hover,.dg-resizer.active{background:var(--accent)}
+
+/* body + virtualized rows */
+.dg-body{position:relative;width:100%}
+.dg-row{display:grid;position:absolute;top:0;inset-inline-start:0;width:100%;border-bottom:1px solid var(--line)}
+.dg-row:hover .dg-cell,.dg-row:hover .dg-cell-fixed{background:var(--surface-2)}
+.dg-row-sel .dg-cell,.dg-row-sel .dg-cell-fixed{background:var(--accent-soft)}
+.dg-cell-wrap{min-width:0;border-inline-start:1px solid var(--line)}
+.dg-cell-wrap:first-child{border-inline-start:none}
+.dg-cell{display:flex;align-items:center;gap:6px;height:100%;padding:0 11px;min-width:0;font-size:12.5px;
+         color:var(--ink);overflow:hidden}
+.dg-cell-fixed{display:flex;align-items:center;justify-content:center;height:100%;border-inline-start:1px solid var(--line)}
+.dg-cell-fixed:first-child{border-inline-start:none}
+.dg-cell-val{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.dg-cell-editable{cursor:cell}
+.dg-cell-editable:hover{outline:1px dashed var(--accent);outline-offset:-2px}
+.dg-cell-saving{opacity:.6}
+.dg-null{color:color-mix(in srgb,var(--muted) 50%,transparent)}
+/* A VERB RENDERED INSIDE A CELL. It is a real <button> so the keyboard and a screen reader
+   can reach it, which a clickable <span> never offered — but it must not look like a control
+   pasted into a table, so it inherits the cell's type and carries only its own colour. */
+.dg-verb,.cfg-del{background:none;border:0;padding:0;font:inherit;cursor:pointer}
+.cfg-del{color:var(--muted);line-height:0;display:inline-flex}
+.cfg-del .dg-ic{width:15px;height:15px}
+.cfg-del:hover{color:var(--red)}
+.dg-null .dg-ic{width:18px;height:18px;opacity:.8}
+.cfg-note.bad{color:var(--red)} .cfg-note.ok{color:var(--accent-d)}
+.dg-check{width:auto;cursor:pointer}
+.dg-expand-btn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:2px 4px;line-height:1}
+.dg-expand-btn:hover{color:var(--accent-d)}
+
+/* inline editor */
+.dg-cell-editing{padding:0 4px}
+.dg-editor{height:30px;padding:2px 6px;font-size:12.5px;border:2px solid var(--accent);border-radius:6px;width:100%}
+.dg-editor-area{height:96px;padding:6px;resize:none}
+.dg-spin{width:12px;height:12px;border-radius:50%;border:2px solid var(--line);border-top-color:var(--accent);
+         display:inline-block;animation:spin .8s linear infinite;flex:none}
+
+/* empty / error / loading states */
+.dg-state{padding:34px 20px;text-align:center;color:var(--muted);font-size:13px}
+.dg-state-error{color:var(--red)}
+
+/* footer / pagination */
+.dg-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 12px;
+         border-top:1px solid var(--line);background:var(--surface-2);flex-wrap:wrap}
+.dg-pagesize{display:flex;align-items:center;gap:7px}
+.dg-pagesize select{width:auto;height:30px;padding:2px 8px;font-size:12.5px}
+.dg-pager{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.dg-pageinfo{color:var(--ink);font-size:12.5px;font-weight:600;padding:0 8px;white-space:nowrap}
+/* compact 32px square icon pager — matches the console datagrid footer */
+.dg-pager button{width:32px;height:32px;padding:0;border-radius:8px;display:inline-flex;align-items:center;
+                 justify-content:center;font-size:15px;line-height:1;background:var(--surface);
+                 border:1px solid var(--line);color:var(--ink);cursor:pointer}
+.dg-pager button:hover:not(:disabled){background:var(--accent-soft);color:var(--accent-d);border-color:var(--accent)}
+.dg-pager button:disabled{opacity:.4;cursor:default}
+
+/* toasts */
+.dg-toast-wrap{position:fixed;inset-block-end:20px;inset-inline-start:20px;z-index:200;display:flex;
+               flex-direction:column;gap:8px;pointer-events:none}
+.dg-toast{padding:10px 15px;border-radius:var(--radius-sm);font-size:13px;font-weight:600;box-shadow:var(--shadow-lg);
+          animation:dgtoast .2s ease;max-width:360px}
+.dg-toast.ok{background:var(--accent-soft);color:var(--accent-d);border:1px solid var(--olive-line)}
+.dg-toast.bad{background:var(--danger-soft);color:var(--red);border:1px solid var(--plum-line)}
+.dg-toast.warn{background:var(--warn-soft);color:var(--amber);border:1px solid var(--lime-line)}
+/* The wrap is pointer-events:none so a toast never eats a click meant for the grid under
+   it. A toast that OFFERS an action has to take that back for the button itself — a child
+   may re-enable hit-testing inside a none parent — or the undo is visible and dead. */
+.dg-toast:has(.dg-toast-act){display:flex;align-items:center;gap:12px}
+.dg-toast-act{pointer-events:auto;cursor:pointer;background:none;border:0;padding:0;
+              font:inherit;color:inherit;text-decoration:underline;text-underline-offset:3px}
+.dg-toast-act:hover{opacity:.75}
+.dg-toast-act:focus-visible{outline:2px solid currentColor;outline-offset:2px;border-radius:3px}
+@keyframes dgtoast{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+/* ── dashboard (לוח בקרה) ────────────────────────────────────────────────── */
+/* responsive card grid that fills the width (two-up on desktop, stacks on narrow).
+   min(100%,…) guarantees a single column never exceeds the viewport on tiny screens. */
+.dash-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:16px;margin-bottom:16px}
+/* status+extraction: give the (longer) status column a bit more room when there IS
+   room for two, but still collapse to one column below ~760px */
+@media (min-width:760px){.dash-grid-wide{grid-template-columns:minmax(0,1.35fr) minmax(0,1fr)}}
+.bigstat .bs-sub{font-size:11.5px;color:var(--muted);font-weight:600;margin-top:2px}
+
+/* horizontal bar list (status / type / company / extraction distributions) */
+.barlist{display:flex;flex-direction:column;gap:9px;margin-top:4px}
+.barrow{display:grid;grid-template-columns:120px 1fr auto;align-items:center;gap:10px}
+/* a label that does not fit loses its END: the box that is cut is the label itself (its <bdi>, which
+   reads the way its own first letter does) — cut by the right-to-left box around it, «Google
+   Workspace» lost the side it starts on */
+.bar-label{font-size:12.5px;color:var(--ink);font-weight:600;display:flex;min-width:0}
+.bar-label bdi{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar-track{height:16px;border-radius:6px;background:var(--bg);overflow:hidden;border:1px solid var(--line)}
+.bar-fill{height:100%;border-radius:6px 0 0 6px;transition:width .5s ease;background:var(--ok)}
+.bar-fill.in_progress{background:var(--sky)} .bar-fill.to_sync{background:var(--lime)}   /* the legend of .statebar */
+.bar-fill.failed{background:var(--red)}
+.bar-fill.run{background:var(--violet)}
+.bar-val{font-size:12.5px;font-weight:700;color:var(--ink);min-width:34px;text-align:end}
+
+/* ── small screens: tighten gutters + bar rows so everything fits phones ────── */
+@media (max-width:640px){
+  .wrap{padding:16px 14px 32px}
+  .barrow{grid-template-columns:minmax(64px,108px) 1fr auto;gap:8px}
+  .app-header h1{font-size:20px}
+  .scorehero .score-big{font-size:34px}
+  /* the settings' five sub-tabs stood on THREE lines of a phone, above the table they choose: one line that scrolls */
+  .subnav{flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
+  .subnav::-webkit-scrollbar{display:none}
+}
+
+/* A SHORT frame — a window in desktop mode. A page laid out for a tall frame spent a window of
+   580 x 530 on its heading and three rows of tall tiles, and the smallest (380 x 224) on the
+   heading alone (photographed 2026-10-07). There the heading is tighter and the leading numbers
+   are compact tiles, three to a row of that window. */
+@media (max-height:699px){
+  .wrap{padding-top:10px}
+  .app-header{margin-bottom:10px;padding-bottom:8px;gap:6px 12px}
+  .app-header h1{font-size:17px}
+  .app-header .sub{font-size:12px;margin-top:0}
+  .hud{grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));gap:8px;margin:2px 0 12px}
+  .bigstat{padding:8px 12px;border-radius:12px}
+  .bigstat .v{font-size:20px;margin-top:2px}
+  .bigstat .bs-sub{margin-top:0}
+}
+
+/* extraction big-score hero */
+.scorehero{display:flex;align-items:baseline;gap:10px;padding:6px 0 14px;border-bottom:1px dashed var(--line);margin-bottom:12px}
+.scorehero .score-big{font-size:40px;font-weight:800;letter-spacing:-.02em;line-height:1;color:var(--accent-d)}
+.scorehero .score-sub{font-size:12.5px;color:var(--muted);font-weight:600}
+
+/* ── .chip — a toggle chip, owned by this stylesheet ────────────────────────
+   It carried a `bt-` prefix only because the component that first needed one happened to be
+   the retired bina-table. Two screens use it for their own filter chips — the action log's
+   focus toggles and the settings quick filters — so it outlives that component under a
+   neutral name rather than being deleted with it. */
+.chip{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-pill);
+      padding:5px 13px;font-family:inherit;font-size:12.5px;font-weight:600;color:var(--muted);cursor:pointer}
+.chip:hover{color:var(--ink);background:var(--surface-2)}
+.chip.on,.chip.active{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+/* a count that is itself the finding (pairs of duplicate rows): the chip is the failure's colour */
+.chip.bad{background:var(--red);border-color:var(--red);color:var(--surface)}
+.chip .num{font-weight:800;margin-inline-start:6px}
+.chip.atl-chip-progress .num{color:var(--ok)}
+.chip.atl-chip-blocked .num{color:var(--amber)}
+.chip.atl-chip-no_action .num{color:var(--muted)}
+.chip.on .num,.chip.active .num{color:inherit}
+
+/* ── יומן פעולות — the action-log view ───────────────────────────────────────
+   The TABLE is <DataGrid>, so nothing here restyles a grid: these rules cover
+   the page's own chrome (the class chips, the header line, the drill-down
+   drawer's timeline) and are built from the tokens above plus classes this
+   stylesheet already owns — .chip for the chips, .drawer-* for the panel,
+   .pill for the class badges. No new palette: the three action classes reuse
+   the SAME three colours a status pill uses — green for work that happened,
+   amber for work that was blocked, grey for a deliberate no-op — so a colour
+   means one thing across the whole app. */
+.atl-bar{align-items:flex-start;justify-content:space-between;margin-bottom:12px}
+.atl-chips{display:flex;gap:8px;flex-wrap:wrap}
+.atl-summary{display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:12.5px;
+             color:var(--ink);margin-inline-start:auto}
+.atl-summary b{font-size:15px}
+.atl-note{cursor:help;border-bottom:1px dotted var(--line)}
+/* the date prefix a timestamp cell grows once the window spans more than today */
+.atl-date{color:var(--muted)}
+/* raw workflow vocabulary (English) inside an RTL grid cell */
+.atl-label{font-size:12px;direction:ltr;unicode-bidi:isolate}
+.atl-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;
+          flex-wrap:wrap;padding:10px 2px 0}
+.atl-foot kbd{font-family:var(--mono);font-size:11px;background:var(--surface-2);
+              border:1px solid var(--line);border-radius:5px;padding:1px 5px;color:var(--ink)}
+
+/* ── the drill-down: one document's whole history ──────────────────────────── */
+.atl-drawer{max-width:560px}
+.atl-doc{padding-bottom:12px;border-bottom:1px dashed var(--line);margin-bottom:14px}
+.atl-doc-name{font-weight:700;font-size:14px;margin-bottom:6px;word-break:break-word}
+.atl-doc-meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.atl-doc-classes{display:flex;gap:6px;flex-wrap:wrap}
+
+/* A REAL timeline, not a table: the rail carries the order, the dot carries the class, and
+   the gap between steps is rendered as loudly as the steps because on a stuck document the
+   WAIT is the finding. `border-inline-start` puts the rail on the reading edge in RTL. */
+.atl-list{list-style:none;margin:0;padding:0}
+.atl-step{position:relative;padding:0 22px 16px 0;border-inline-start:none;
+          margin-inline-start:7px}
+.atl-step::before{content:"";position:absolute;inset-inline-end:6px;top:14px;bottom:-2px;
+                  width:2px;background:var(--line)}
+.atl-step:last-child::before{display:none}
+.atl-dot{position:absolute;inset-inline-end:2px;top:5px;width:10px;height:10px;border-radius:50%;
+         background:var(--line);border:2px solid var(--surface);box-shadow:0 0 0 1px var(--line)}
+.atl-step.cls-progress .atl-dot{background:var(--ok)}
+.atl-step.cls-blocked .atl-dot{background:var(--amber)}
+.atl-step-body{min-width:0}
+.atl-step-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.atl-step-time{font-size:11.5px;color:var(--muted)}
+.atl-gap{font-size:11.5px;font-weight:700;color:var(--blue);background:var(--info-soft);
+         border-radius:var(--radius-pill);padding:1px 7px}
+.atl-step-label{font-family:var(--mono);font-size:12.5px;color:var(--ink);
+                direction:ltr;unicode-bidi:isolate;text-align:start;word-break:break-word;
+                margin-top:2px}
+
+@media (max-width:640px){
+  .atl-summary{margin-inline-start:0}
+  .atl-drawer{max-width:100%}
+}
+
+/* per-case result rows in the live run panel */
+.caselist{margin-top:8px}
+.caserow{display:flex;align-items:flex-start;gap:10px;padding:8px 2px;border-bottom:1px dashed var(--line);font-size:13px}
+.caserow:last-child{border-bottom:none}
+.caserow .mk{width:16px;flex:none;font-weight:800;line-height:1.5}
+.caserow .mk.ok{color:var(--accent-d)} .caserow .mk.bad{color:var(--red)}
+.caserow .nm{font-weight:600;color:var(--ink);word-break:break-word}
+.caserow .meta{color:var(--muted);font-size:12px;margin-inline-start:auto;white-space:nowrap;flex:none}
+.caserow .fa{margin-top:4px;color:var(--red);font-size:12px}
+.caserow .fa .row{display:block;margin-top:2px}
+
+/* ── THE DOCUMENT SCREEN ──────────────────────────────────────────────────────────────────────
+   Rebuilt 2026-09-02 (evening) as ONE surface rather than a card with a viewer bolted inside it.
+   The owner's words were "two scrollers, one left one right … inconsistent, uncompleted, not
+   professional", and every one of those was a measurable thing rather than a matter of taste:
+
+     · TWO FAT SCROLLBARS MEETING IN THE MIDDLE. The stage scrolls LTR so its bar sits on its
+       right edge (measured x=631); the data column is RTL so its bar sits on its left edge
+       (x=654). Two 15px grey bars, 23px apart, straddling the divider. Both panes must scroll
+       independently — that part is right — so the fix is to stop drawing them as bars: thin,
+       transparent-track, low-contrast thumbs that read as hairlines and darken under the hand.
+     · FOUR BUTTON LANGUAGES IN ONE ROW. Heights measured 35 / 26 / 28 / 29px, radii 0 and 8px,
+       three different backgrounds — and the row WRAPPED to 70px tall. Every control here is now
+       one family: the app's own `.winseg` segmented control (the same one the time-window switch
+       uses elsewhere) plus `.icbtn`, on a single 28px rhythm, in one row that never wraps.
+     · DOUBLE FRAMING. The card drew a border and the stage drew another one inside it. The card
+       is the frame now, and the stage is its interior: toolbar, document, status line, separated
+       by hairlines — the shape of every document viewer people already know.
+
+   The layout contract underneath is unchanged and still enforced: the shell owns the viewport,
+   height flows .app-shell → .wrap → .page-fill → .doc-split → .doc-stagecol → .stage, no viewport
+   units below the shell (scripts/ops/lint_viewport_units.py), every shrinkable child gets
+   min-height:0, and a scroll container centres NOTHING — its child carries margin:auto. */
+.doc-page{container-type:inline-size;container-name:docpage}
+.doc-split{display:grid;
+  grid-template-columns:minmax(0,var(--doc-a,1fr)) 12px minmax(0,var(--doc-b,1fr));
+  flex:1 1 auto;min-height:0}
+.doc-data{min-width:0;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:14px;
+  padding-inline-end:10px}
+.doc-data > .card{margin:0}
+.doc-stagecol{min-width:0;min-height:0;display:flex;flex-direction:column}
+
+/* The two inner scrollbars are unavoidably adjacent — so they are drawn as hairlines, not bars.
+   Firefox takes the two-property form; WebKit/Blink needs the pseudo-elements, and the padding
+   trick (transparent border + background-clip) is what carries a 3px thumb inside a 9px track. */
+.doc-data,.stage{scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+.doc-data::-webkit-scrollbar,.stage::-webkit-scrollbar{width:9px;height:9px}
+.doc-data::-webkit-scrollbar-track,.stage::-webkit-scrollbar-track{background:transparent}
+.doc-data::-webkit-scrollbar-thumb,.stage::-webkit-scrollbar-thumb{
+  background:var(--line);background-clip:content-box;border:3px solid transparent;border-radius:99px}
+.doc-data:hover::-webkit-scrollbar-thumb,.stage:hover::-webkit-scrollbar-thumb{
+  background:var(--muted);background-clip:content-box;border:3px solid transparent}
+
+/* the divider: a hairline at rest, the accent under the hand, a real 12px hit area either way */
+.doc-gutter{align-self:stretch;border:none;padding:0;background:transparent;cursor:col-resize;
+  position:relative;display:flex;align-items:center;justify-content:center;touch-action:none}
+.doc-gutter::before{content:"";width:1px;height:100%;background:var(--line);border-radius:1px;
+  transition:background .12s,width .12s}
+.doc-gutter:hover::before,.doc-gutter:focus-visible::before{background:var(--accent);width:3px}
+.doc-gutter:focus-visible{outline:none}
+
+/* Narrow: one column, the document FIRST — on a small screen the paper is the point. The gutter
+   has nothing to separate, so it goes rather than becoming a stray row. A CONTAINER query, so the
+   answer follows the space this screen actually has (the console iframe, standalone, or a drawer
+   later) instead of the window, which is not the question being asked. */
+@container docpage (max-width:1100px){
+  .doc-split{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,55fr) minmax(0,45fr)}
+  .doc-stagecol{order:-1}
+  .doc-gutter{display:none}
+  .doc-data{padding-inline-end:0}
+}
+@supports not (container-type:inline-size){
+  @media (max-width:1100px){
+    .doc-split{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,55fr) minmax(0,45fr)}
+    .doc-stagecol{order:-1}
+    .doc-gutter{display:none}
+  }
+}
+
+/* ── the stage (components/DocumentStage.tsx): toolbar · document · status ─────────────────── */
+.doc-stage{margin:0;padding:0;overflow:hidden;display:flex;flex-direction:column;
+  min-height:0;flex:1 1 auto}
+
+.stage-bar{display:flex;align-items:center;gap:8px;flex-wrap:nowrap;padding:8px 10px;
+  border-bottom:1px solid var(--line);background:var(--surface)}
+/* one rhythm for every control in the bar: 28px tall, the same radius, the same hover */
+/* ONE height for every control in this row: the winseg shells and the icon buttons both come
+   out at 32px, which is also the >=30px tap target the platform checklist asks for at 640px. */
+.stage-bar .winseg{padding:2px;border-radius:10px;flex:none}
+.stage-bar .winseg button{height:26px;padding:0 10px;display:inline-flex;align-items:center;
+  gap:5px;white-space:nowrap}
+.stage-bar .icbtn{width:32px;height:32px;flex:none}
+.stage-tools{display:flex;align-items:center;gap:8px;margin-inline-start:auto;flex:none}
+/* the zoom cluster reads as ONE control: −, the value, + */
+.stage-zoom .val{min-width:54px;justify-content:center;font-variant-numeric:tabular-nums;
+  font-size:12px}
+.stage-sep{width:1px;align-self:stretch;background:var(--line);margin:2px 0;flex:none}
+/* the sources may shrink before anything else, and their labels shorten before they wrap */
+.stage-sources{min-width:0;overflow:hidden}
+.stage-src-short{display:none}
+@container docpage (max-width:860px){
+  .stage-src-long{display:none}
+  .stage-src-short{display:inline}
+  .stage-zoom .val{min-width:44px}
+}
+
+/* THE SCROLLER. No align-items, no justify-content — the canvas centres itself with margin:auto.
+   Centring an OVERFLOWING child with alignment is what put the top of every tall document above
+   scrollTop 0, where no scrollbar can reach it (measured −141px, −163px). `direction:ltr` because
+   this holds an image, not text: RTL scroll origins differ between engines and every scrollLeft in
+   DocumentStage would be wrong. `scrollbar-gutter:stable` keeps the usable width independent of
+   whether the page currently overflows, so the fit cannot twitch as the scrollbar comes and goes. */
+/* The ground is DARKER than the page deliberately. A white document on a near-white surface has
+   no edge: you cannot see where the paper stops, which is most of why this screen read as
+   unfinished. Every document viewer people already use — Acrobat, Preview, the validation screens
+   of Rossum and ABBYY — puts the page on a grey desk for exactly this reason. */
+.stage{flex:1 1 auto;min-height:0;overflow:auto;scrollbar-gutter:stable;position:relative;
+  direction:ltr;background:var(--line);display:flex;padding:16px;overscroll-behavior:contain}
+.stage:focus-visible{outline:2px solid var(--accent);outline-offset:-3px}
+
+/* the page itself: paper on a surface, so the document reads as the object and the stage as the
+   desk it lies on. `container-type:size` lets the image size off the canvas in BOTH axes, which is
+   what keeps a rotated page fitting without JavaScript measuring anything. */
+.stage-canvas{position:relative;margin:auto;flex:none;container-type:size;background:var(--surface);
+  box-shadow:var(--shadow)}
+.stage-canvas img{position:absolute;top:50%;left:50%;transform-origin:center center;display:block;
+  max-width:none;user-select:none;width:100cqw;height:100cqh}
+.stage-canvas.rot90 img,.stage-canvas.rot270 img{width:100cqh;height:100cqw}
+/* a real PDF (the extraction dataset): the embedded viewer fills the stage and owns its own zoom */
+.stage-frame{flex:1 1 auto;min-height:0;width:100%;border:none;background:var(--surface)}
+.stage-skeleton{position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(100deg,transparent 20%,color-mix(in srgb,var(--surface) 55%,transparent) 50%,transparent 80%),
+             var(--surface-2);
+  background-size:220% 100%;animation:stageshine 1.1s ease-in-out infinite}
+@keyframes stageshine{from{background-position:180% 0}to{background-position:-80% 0}}
+@media (prefers-reduced-motion:reduce){.stage-skeleton{animation:none}}
+.stage-empty{margin:auto;padding:44px 24px;max-width:420px;text-align:center;color:var(--muted);
+  display:flex;flex-direction:column;align-items:center;gap:10px;direction:rtl}
+.stage-empty svg{opacity:.5}
+.stage-empty-note{font-size:13.5px;line-height:1.6}
+
+/* the status line: ONE line about what you are looking at. It used to be two lines of dense
+   Hebrew hanging under the frame, which reads as debug output; the full sentence is the tooltip. */
+.stage-note{flex:none;display:flex;align-items:center;gap:7px;padding:7px 12px;
+  border-top:1px solid var(--line);background:var(--surface);font-size:12px;color:var(--muted)}
+.stage-note .t{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.stage-note svg{width:13px;height:13px;flex:none;opacity:.7}
+
+
+/* ── expanded: the document takes the whole width ─────────────────────────────────────────────
+   Reading a dense aging report at half a screen is a squint. The split ratio underneath is
+   untouched, so leaving expanded returns to the operator's own layout rather than a default. */
+.doc-page.is-expanded .doc-split{grid-template-columns:minmax(0,1fr)}
+.doc-page.is-expanded .doc-data,.doc-page.is-expanded .doc-gutter{display:none}
+
+/* take hold of the page: scrollbars alone are not how anyone reads a zoomed document */
+.stage-canvas{cursor:grab}
+.stage.is-panning,.stage.is-panning .stage-canvas{cursor:grabbing}
+.stage.is-panning img{pointer-events:none}
+
+/* a cold overlay costs seconds; after 2.5s the stage says what it is waiting for rather than
+   shimmering forever, which reads as a hang */
+.stage-slow{position:absolute;inset-inline:0;bottom:16px;margin:0 auto;width:max-content;
+  max-width:86%;display:flex;align-items:center;gap:8px;direction:rtl;
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-pill);
+  padding:7px 14px;font-size:12.5px;color:var(--ink);box-shadow:var(--shadow)}
+
+/* the legend sits where the colours are. The drawing is apitools' own, on the picture itself (its
+   green boxes and its blue ones); the two swatches name them in the office's green and blue. */
+.stage-legend{display:inline-flex;align-items:center;gap:10px;margin-inline-start:auto;flex:none}
+.stage-legend .k{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
+.stage-legend .sw{width:9px;height:9px;border-radius:2px;flex:none}
+.stage-legend .sw.anchor{background:var(--ok)}
+.stage-legend .sw.value{background:var(--blue)}
+
+/* BLOCK MODE — for a page that scrolls as a whole and so has no height to hand down (the
+   extraction tester). The stage takes a page-shaped slice of its own WIDTH: container-relative,
+   and therefore honest at any window, where a viewport unit would be exactly the lie the layout
+   contract exists to remove. */
+.doc-stage.is-block{flex:none}
+.doc-stage.is-block .stage{flex:none;aspect-ratio:1/1.15}
+
+/* the hero strip: one bordered grid, hairline-separated fact cells */
+.doc-hero{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;
+          background:var(--line);border:1px solid var(--line);border-radius:var(--radius);
+          overflow:hidden;box-shadow:var(--shadow)}
+.doc-fact{background:var(--surface);padding:10px 12px;min-width:0}
+.doc-fact .k{font-size:11px;color:var(--muted);font-weight:600;margin-bottom:3px}
+.doc-fact .v{font-size:14px;font-weight:700;letter-spacing:-.01em;word-break:break-word;line-height:1.35}
+.doc-fact .s{font-size:11px;color:var(--muted);margin-top:2px;word-break:break-word}
+/* a KEY fact this document type should carry, and does not — the absence is the finding */
+.doc-fact.miss{background:var(--warn-soft)}
+.doc-fact.miss .v{color:var(--amber);font-weight:600}
+
+/* two compact cards side by side inside the data column; stacks when the column is narrow */
+.doc-duo{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;align-items:start}
+.doc-duo > .card{margin:0;height:100%}
+
+/* foldable full-detail cards (editor / history / attempts) — <summary> wraps the card's own h3 */
+.doc-fold > summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px}
+.doc-fold > summary::-webkit-details-marker{display:none}
+.doc-fold > summary::before{content:"◀";font-size:10px;color:var(--muted);transition:transform .15s ease}
+.doc-fold[open] > summary::before{transform:rotate(-90deg)}
+.doc-fold > summary h3{margin:0;font-size:15px;font-weight:700}
+
+/* the engine-comparison matrix (AI | local | final) */
+.exm{width:100%;border-collapse:collapse;font-size:12.5px}
+.exm th,.exm td{padding:6px 8px;border-bottom:1px dashed var(--line);text-align:start;vertical-align:top}
+.exm thead th{color:var(--muted);font-weight:600;font-size:11px;border-bottom:1px solid var(--line)}
+.exm tbody th{color:var(--ink);font-weight:600;white-space:nowrap}
+.exm tr:last-child td,.exm tr:last-child th{border-bottom:none}
+.exm td.val{font-family:var(--mono);direction:ltr;unicode-bidi:isolate;text-align:start;word-break:break-word}
+.exm td.same{color:var(--accent-d)}
+.exm td.diff{color:var(--amber);background:var(--warn-soft)}
+.exm td.final{font-weight:700}
+.exm td.none{color:var(--muted)}
+
+/* the aging-report lines table: scrolls INSIDE its frame, sticky header, junk rows tinted */
+.bslines{max-height:46vh;overflow:auto;border:1px solid var(--line);border-radius:10px}
+.bslines table{width:100%;border-collapse:collapse;font-size:12.5px}
+.bslines th{position:sticky;top:0;background:var(--surface-2);z-index:1;font-size:11px;
+            color:var(--muted);font-weight:600;padding:7px 9px;text-align:start;
+            border-bottom:1px solid var(--line);white-space:nowrap}
+.bslines td{padding:6px 9px;border-bottom:1px dashed var(--line);vertical-align:top}
+.bslines tr:last-child td{border-bottom:none}
+.bslines tr.junk td{background:var(--warn-soft)}
+.bslines .lid{font-family:var(--mono);direction:ltr;unicode-bidi:isolate;white-space:nowrap}
+.bschips{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+
+/* ── documents CARD VIEW [2026-08-24] — real thumbnails, selection overlay ── */
+.doccards{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;
+          padding:4px 0 24px}
+.doccard{position:relative;background:var(--surface);border:1px solid var(--line);
+         border-radius:12px;overflow:hidden;box-shadow:var(--shadow);
+         display:flex;flex-direction:column;transition:border-color .12s ease}
+.doccard.sel{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.doccard-check{position:absolute;top:8px;inset-inline-start:8px;z-index:2;
+               background:color-mix(in srgb, var(--surface) 82%, transparent);
+               border-radius:7px;padding:4px 6px;line-height:1;cursor:pointer}
+.doccard-check input{cursor:pointer}
+.doccard-img{position:relative;display:block;width:100%;height:150px;border:none;padding:0;
+             background:var(--surface-2);cursor:pointer;overflow:hidden}
+.doccard-img img{width:100%;height:100%;object-fit:cover;object-position:top;display:block}
+.doccard-img .doccard-fallback{display:none;position:absolute;inset:0;place-items:center;
+                               align-content:center;gap:4px;opacity:.55;text-align:center}
+.doccard-img.noimg .doccard-fallback{display:grid}
+.doccard-body{padding:9px 11px 11px;display:flex;flex-direction:column;gap:5px;min-width:0}
+.doccard-name{font-size:12.5px;font-weight:700;line-height:1.35;overflow:hidden;
+              display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word}
+.doccard-meta{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.doccard-sub{font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ── floating pipeline bar (PipelineBar) — minimized pill + expandable card ── */
+.pipefab{position:fixed;bottom:14px;inset-inline-end:16px;z-index:55;
+  display:inline-flex;align-items:center;gap:8px;padding:7px 13px;
+  background:var(--surface);border:1px solid var(--line);border-radius:999px;
+  box-shadow:var(--shadow-lg);font:inherit;font-size:12.5px;font-weight:700;color:var(--ink);
+  cursor:pointer;transition:box-shadow .15s ease,transform .15s ease}
+.pipefab:hover{transform:translateY(-1px)}
+.pipefab-dot{width:9px;height:9px;border-radius:50%;background:var(--muted);flex:none}
+.pipefab-dot.idle{background:var(--ok)}
+.pipefab-dot.bad{background:var(--red)}
+.pipefab-dot.run{background:var(--sky);animation:pipepulse 1.4s ease-in-out infinite}
+@keyframes pipepulse{0%,100%{opacity:1}50%{opacity:.35}}
+.pipefab-err{background:var(--red);color:var(--surface);border-radius:999px;padding:1px 7px;font-size:11px}
+.pipecard{position:fixed;bottom:14px;inset-inline-end:16px;z-index:55;
+  width:min(560px,calc(100vw - 32px));display:flex;flex-wrap:wrap;align-items:center;gap:10px;
+  padding:10px 14px;background:var(--surface);border:1px solid var(--line);border-radius:14px;
+  box-shadow:var(--shadow-lg);font-size:12.5px}
+.pipecard-h{flex-basis:100%;display:flex;align-items:center;gap:8px;
+  padding-bottom:7px;border-bottom:1px solid var(--line)}
+
+/* repo selector inside the grid toolbar — reads as the table's TITLE, not a form field */
+.reposel{appearance:none;-webkit-appearance:none;-moz-appearance:none;
+  background:transparent;border:1px solid transparent;border-radius:8px;
+  font:inherit;font-size:13.5px;font-weight:800;color:var(--ink);
+  padding:5px 9px;padding-inline-end:26px;cursor:pointer;max-width:240px;flex:none;
+  /* the arrow is DRAWN (two halves of a triangle), not a picture: a picture cannot name a token */
+  background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);
+  background-repeat:no-repeat;background-position:left 8px center,left 13px center;background-size:5px 5px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.reposel:hover{background-color:var(--surface-2);border-color:var(--line)}
+.reposel:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+
+/* icon buttons (grid pager, toolbar link, pipeline collapse) — glyph only, name on hover */
+.dg-pgbtn{padding:4px 7px;line-height:0;display:inline-flex;align-items:center}
+.dg-ic{width:16px;height:16px;flex:none}
+
+/* ── SyncFlow: the sync screen's time window + what actually moved in it ──────────────────────
+   Replaced the two run bars, which drew run-unit counters the engine writes only as 0/0 then N/N
+   (so: indeterminate, then a permanent full green bar per pipe that had ever run). This strip is
+   one row: the window chips, the counted files, and the estate's source→INDOX position. */
+.syncflow{display:grid;gap:8px;margin:10px 0 4px}
+.syncflow-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.syncflow-nums{display:inline-flex;align-items:center;gap:8px;font-size:13px;
+  font-variant-numeric:tabular-nums}
+.syncflow-nums .sep{color:var(--line)}
+.syncflow-nums .ok{color:var(--ok)}
+.syncflow-nums .run{color:var(--accent)}
+.syncflow-bar{display:flex;align-items:center;gap:10px}
+.syncflow-bar .progress{flex:1;min-width:180px}
+.syncflow-runs{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.syncflow-run{display:inline-flex;align-items:center;gap:6px;padding:2px 8px;border-radius:999px;
+  background:var(--surface-2);border:1px solid var(--line)}
+
+/* ── the shared side menu (platform-base/bina-ui/bina-nav.css, gate G27) ── */
+/* @bina-nav:start */
+/* ── §1 the vocabulary ────────────────────────────────────────────────────── */
+.bnv{
+  --bnv-bg:var(--surface-2);
+  --bnv-ink:var(--ink);
+  --bnv-ink-2:var(--muted);
+  --bnv-hover:color-mix(in srgb, var(--bnv-ink) 6%, transparent);
+  --bnv-active:color-mix(in srgb, var(--bnv-ink) 10%, transparent);
+  --bnv-brand:var(--accent);
+  --bnv-brand-ink:var(--accent-d);
+  --bnv-brand-soft:var(--accent-soft);
+  --bnv-line:var(--line);
+
+  /* geometry — the rail (§3) and the sizes (§4) change THESE, never a rule */
+  --bnv-pad:8px 10px;
+  --bnv-gap:2px;
+  --bnv-row-w:100%;
+  --bnv-row-h:36px;
+  --bnv-row-pad:7px 8px;
+  --bnv-row-gap:8px;
+  --bnv-row-justify:flex-start;
+  --bnv-head-h:52px;
+  --bnv-head-pad:4px 6px 10px;
+  --bnv-head-justify:flex-start;
+  --bnv-primary-w:100%;
+  --bnv-primary-h:44px;
+  --bnv-primary-pad:10px 12px;
+  --bnv-primary-justify:flex-start;
+  --bnv-foot-align:stretch;
+  /* what a rail takes away — `none` per part, because only the owner of a rule may say what
+     that rule's display IS. A `display:none!important`-style override cannot be undone by a
+     narrower container, and a phone must be able to bring these back.
+     A rail takes away WORDS, never a way in: the names, the group heads, the search's field, and
+     «הצג עוד» (which is words) — so the rows «הצג עוד» folds are all there in a rail (`--bnv-rest`),
+     the search stays as its magnifier, and the collapse control stays, turned round, under the
+     avatar. It used to take those three away too: a rail had no search, was missing the folded
+     rows, and — once a person had chosen it — nothing left to press that would bring the menu back. */
+  --bnv-text:block;
+  --bnv-ghead:flex;
+  --bnv-field:block;     /* the search's field */
+  --bnv-more:block;
+  --bnv-rest:none;       /* the rows folded behind «הצג עוד», while they are folded */
+  --bnv-head-dir:row;    /* the brand row: avatar · name · collapse — a rail stacks what is left of it */
+  --bnv-turn:none;       /* the collapse control's arrow */
+  --bnv-side:252px;      /* read by .appgrid — the only width the host asks for */
+  --bnv-off:-100%;       /* where a closed drawer parks; flipped for RTL below */
+
+  background:var(--bnv-bg);
+  color:var(--bnv-ink);
+  display:flex;
+  flex-direction:column;
+  gap:var(--bnv-gap);
+  box-sizing:border-box;
+  height:100%;
+  min-height:0;
+  padding:var(--bnv-pad);
+  font-size:14px;
+  overflow:hidden;
+}
+
+/* ── §2 the parts ─────────────────────────────────────────────────────────── */
+.bnv-scroll{
+  flex:1;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+  gap:var(--bnv-gap);
+  overflow-y:auto;
+  overflow-x:hidden;
+  overscroll-behavior:contain;
+  scrollbar-width:thin;
+}
+.bnv-list{display:flex;flex-direction:column;gap:var(--bnv-gap);min-width:0}
+
+/* brand row: square avatar · name (+ one line of context) · the collapse control */
+.bnv-head{
+  display:flex;
+  flex-direction:var(--bnv-head-dir);
+  align-items:center;
+  justify-content:var(--bnv-head-justify);
+  gap:10px;
+  min-height:var(--bnv-head-h);
+  padding:var(--bnv-head-pad);
+  flex:none;
+  overflow:hidden;
+}
+.bnv-avatar{
+  width:28px;height:28px;border-radius:8px;flex:none;
+  display:grid;place-items:center;overflow:hidden;
+  background:var(--bnv-brand-soft);color:var(--bnv-brand-ink);
+  font-weight:800;font-size:14px;line-height:1;
+}
+.bnv-avatar img{width:100%;height:100%;object-fit:cover;display:block}
+.bnv-head-text{flex:1;min-width:0;display:var(--bnv-text)}
+/* (a brand line reads its own way — `dir=auto`, so what is cut is its end — and still sits on the menu's side) */
+.bnv-head b,.bnv-head small{text-align:-webkit-match-parent;text-align:match-parent}
+.bnv-head b{display:block;font-size:16px;line-height:22px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bnv-head small{display:block;color:var(--bnv-ink-2);font-size:11px;line-height:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bnv-collapse{
+  flex:none;width:28px;height:28px;padding:0;border:0;border-radius:8px;
+  background:transparent;color:var(--bnv-ink-2);
+  display:grid;place-items:center;cursor:pointer;
+}
+.bnv-collapse:hover{background:var(--bnv-hover);color:var(--bnv-ink)}
+.bnv-collapse:focus-visible{outline:2px solid var(--bnv-ink);outline-offset:-2px}
+.bnv-collapse svg{width:16px;height:16px;transform:var(--bnv-turn)}
+
+/* the ONE flat primary action — the same object in every app, at finger size */
+.bnv-primary{
+  box-sizing:border-box;flex:none;width:var(--bnv-primary-w);min-height:var(--bnv-primary-h);
+  display:flex;align-items:center;justify-content:var(--bnv-primary-justify);gap:8px;
+  padding:var(--bnv-primary-pad);border:0;border-radius:10px;
+  background:var(--bnv-brand-soft);color:var(--bnv-brand-ink);
+  font:inherit;font-size:14px;line-height:22px;font-weight:600;
+  text-align:start;text-decoration:none;cursor:pointer;
+}
+.bnv-primary:hover{background:color-mix(in srgb, var(--bnv-brand) 16%, transparent)}
+.bnv-primary:active{background:color-mix(in srgb, var(--bnv-brand) 24%, transparent)}
+.bnv-primary:focus-visible{outline:2px solid var(--bnv-brand);outline-offset:2px}
+.bnv-primary .bnv-label{flex:1}
+.bnv-primary[aria-disabled="true"],.bnv-primary:disabled{opacity:.5;cursor:default}
+
+/* a group: a named block of rows, with its own header */
+.bnv-group{display:flex;flex-direction:column;gap:var(--bnv-gap);min-width:0}
+.bnv-ghead{display:var(--bnv-ghead);align-items:center;gap:2px;min-height:28px;padding:6px 6px 0;flex:none}
+.bnv-gtitle{
+  flex:1;min-width:0;display:var(--bnv-text);
+  color:var(--bnv-ink-2);font-size:11px;line-height:16px;font-weight:600;letter-spacing:.04em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+/* a group action is a small icon button, and there are never more than two */
+.bnv-act{
+  flex:none;width:26px;height:26px;padding:0;border:0;border-radius:7px;
+  background:transparent;color:var(--bnv-ink-2);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;
+}
+.bnv-act:hover{background:var(--bnv-hover);color:var(--bnv-ink)}
+.bnv-act:focus-visible{outline:2px solid var(--bnv-ink);outline-offset:-2px}
+.bnv-act svg{width:15px;height:15px}
+
+/* search lives IN the menu — which is what frees the top of the page for content.
+   Its magnifier is a button (it puts the keyboard in the field), and in a rail it is the whole box:
+   the field is gone (`--bnv-field`), and a press opens the menu over the page, on the field. */
+.bnv-search{
+  display:flex;align-items:center;justify-content:var(--bnv-row-justify);flex:none;
+  margin:0 2px;min-height:34px;
+  border:1px solid var(--bnv-line);border-radius:8px;background:var(--bnv-bg);cursor:pointer;
+}
+.bnv-search button{
+  flex:none;align-self:stretch;width:30px;padding:0;border:0;border-radius:7px;
+  background:transparent;color:var(--bnv-ink-2);
+  display:inline-flex;align-items:center;justify-content:center;cursor:pointer;
+}
+.bnv-search button:hover{color:var(--bnv-ink)}
+.bnv-search button:focus-visible{outline:2px solid var(--bnv-ink);outline-offset:-2px}
+.bnv-search svg{width:15px;height:15px;flex:none}
+.bnv-search input{
+  display:var(--bnv-field);
+  flex:1;min-width:0;padding:7px 0;padding-inline-end:9px;border:0;background:transparent;color:inherit;
+  font:inherit;font-size:13px;line-height:20px;cursor:text;
+}
+.bnv-search input:focus{outline:none}
+.bnv-search:focus-within{border-color:color-mix(in srgb, var(--bnv-brand) 45%, transparent)}
+.bnv-search[hidden]{display:none}
+
+/* the row */
+.bnv-item{
+  box-sizing:border-box;
+  width:var(--bnv-row-w);
+  min-width:0;
+  min-height:var(--bnv-row-h);
+  display:flex;
+  align-items:center;
+  justify-content:var(--bnv-row-justify);
+  gap:var(--bnv-row-gap);
+  padding:var(--bnv-row-pad);
+  border:0;
+  border-radius:8px;
+  background:transparent;
+  color:var(--bnv-ink-2);
+  font:inherit;
+  font-size:14px;
+  line-height:22px;
+  font-weight:500;
+  text-align:start;
+  text-decoration:none;
+  cursor:pointer;
+}
+.bnv-item:hover{background:var(--bnv-hover);color:var(--bnv-ink)}
+.bnv-item:active{background:var(--bnv-active)}
+.bnv-item.is-active,.bnv-item[aria-current="page"]{
+  background:var(--bnv-active);
+  color:var(--bnv-ink);
+  font-weight:500;
+}
+.bnv-item:focus-visible{outline:2px solid var(--bnv-ink);outline-offset:-2px}
+.bnv-item[aria-disabled="true"],.bnv-item:disabled{opacity:.5;cursor:default}
+
+/* a REMOTE app — one that runs on a LINKED office, not on this machine
+   (ai/context/dgo-remote-apps.md §4). The row is a row like any other: same height, same hover,
+   same active tint. What says "not this machine" is one corner bracket in the logo's apps-line
+   colour, mirrored at the row's inline-start corner in BOTH directions (logical properties only —
+   this component has no physical direction anywhere, and the mark is not going to be the first).
+   The colour is the palette's «look here» in its line step (the lime the mark's apps carry). */
+.bnv-item.is-remote{position:relative}
+.bnv-item.is-remote::after{
+  content:"";position:absolute;inset-block-start:3px;inset-inline-start:3px;
+  width:7px;height:7px;pointer-events:none;
+  border-block-start:2px solid var(--lime-d);
+  border-inline-start:2px solid var(--lime-d);
+  border-start-start-radius:3px;
+}
+/* the office did not answer: the mark goes quiet, the row keeps its place — a tile that vanishes
+   is a tile nobody can ask about. The state is FORM here, not words: the office's tag (capped at
+   5em below — "MacBook לא זמינה" was drawn as "…acBook") turns the failure colour and the row dims;
+   the sentence is the row's tooltip. */
+.bnv-item.is-remote.is-offline::after{border-color:var(--bnv-ink-2)}
+/* …and the mark takes the OFFICE's own colour where the row knows which office it is: the shell adds
+   `office-<id>` (console/static/app.js, remoteCls) and the hue is the palette's family
+   `--office-hp/-mac/-vps` — declared in theme-tokens.css and nowhere else (G27/G82). An office with no
+   token keeps the lime this mark ships with, so a fourth office needs one token and no CSS. */
+.bnv-item.office-hp.is-remote::after{border-color:var(--office-hp)}
+.bnv-item.office-mac.is-remote::after{border-color:var(--office-mac)}
+.bnv-item.office-vps.is-remote::after{border-color:var(--office-vps)}
+.bnv-item.is-offline :is(.bnv-ic,.bnv-label){opacity:.72}
+.bnv-item.is-offline .bnv-meta{color:var(--danger)}
+/* `hidden` is how the search filters rows, and it has to beat `display:flex` above */
+.bnv-item[hidden],.bnv-empty[hidden],.bnv-group[hidden]{display:none}
+.bnv-ic{width:18px;height:18px;flex:none;display:inline-flex;align-items:center;justify-content:center}
+.bnv-ic svg,.bnv-ic .ic-svg{width:18px;height:18px;display:block}
+/* the label is what gives way — never the row, never the container.
+   A label that is a NAME someone gave (a folder, a mailbox) carries `dir="auto"`: it is cut at ITS
+   end, not the row's — «Plane — HP ומק» lost its first letters in a narrow rail («…ne — HP ומק») —
+   and `match-parent` keeps it on the row's reading edge whichever way it reads. */
+.bnv-label{flex:1;min-width:0;display:var(--bnv-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  text-align:-webkit-match-parent;text-align:match-parent}
+/* the SECOND column: a count, a size, a time. Tabular, so a list of them aligns. */
+.bnv-meta{
+  flex:none;display:var(--bnv-text);color:var(--bnv-ink-2);
+  font-size:12px;line-height:18px;font-variant-numeric:tabular-nums;
+}
+/* A REMOTE row's meta is a NAME, not a count — and a name may be long ("שרת פיתוח בינה סלושנס").
+   With `flex:none` (above) it held its full width, so the LABEL took the loss: measured on the live
+   rail (218px), `מסמכים שלי` — 73px of text — was drawn in 44px, while the office name kept 124px.
+   That inverts what a row is for: the app is the subject, the office is commentary.
+
+   `flex:0 1 auto` alone does NOT fix it, and that is worth writing down: the row is not overflowing
+   (18 + 8 + 44 + 8 + 124 + 16 = 218), so there is no shrink pressure to resolve — the label simply
+   sits at min-content while the meta takes what it asks for. Nothing is "squeezed out" to shrink.
+
+   So the meta gets a CAP of `min(40%, 5em)` — and the measurement is why it is a formula and not a
+   percentage. At the console's live rail (218px), a 40% cap left the office 81px and still ellipsized
+   the app name by 16px (`חיבורים ומפתחות`, 103px). Swept on the live row: 40% → name 87 (clipped),
+   30% → 107 (fits) + office 61, 26% → 115 + 53, 22% → 124 + 44. `5em` is 60px of office at this
+   font — the shortest tag that still names an office — and it leaves the label 107px, its full
+   width. The percentage half keeps a WIDE rail from giving the office an unbounded share; `flex:0 8`
+   then resolves what is left in the label's favour. `.is-remote` and not every meta on purpose: a
+   count has no office to name, and its fixed slot is what makes a column of them line up. */
+.bnv-item.is-remote .bnv-meta{
+  flex:0 8 auto;min-width:0;max-inline-size:min(40%,5em);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+/* trailing slot: a badge, a dot, a chevron. `nowrap` so it can never wrap into a second line. */
+.bnv-tail{flex:none;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;color:var(--bnv-ink-2);font-size:12px}
+.bnv-item:hover .bnv-tail,.bnv-item.is-active .bnv-tail{color:inherit}
+.bnv-badge{
+  flex:none;min-width:18px;height:18px;padding:0 5px;border-radius:999px;
+  background:var(--bnv-brand-soft);color:var(--bnv-brand-ink);
+  font-size:11px;line-height:18px;font-weight:700;text-align:center;
+}
+.bnv-item:hover .bnv-badge,.bnv-item.is-active .bnv-badge{background:color-mix(in srgb, var(--bnv-brand) 22%, transparent)}
+
+/* Priority+: the rows that did not fit, and the one row that reveals them. (A rail has no such
+   row to press — it is words — so there the folded rows are simply there: `--bnv-rest`.) */
+.bnv-rest{display:var(--bnv-rest);flex-direction:column;gap:var(--bnv-gap);min-width:0}
+.bnv-rest.is-open{display:flex}
+.bnv-more{
+  display:var(--bnv-more);flex:none;width:100%;min-height:28px;padding:4px 8px;border:0;border-radius:8px;
+  background:transparent;color:var(--bnv-ink-2);font:inherit;font-size:12px;font-weight:600;
+  text-align:start;cursor:pointer;
+}
+.bnv-more:hover{background:var(--bnv-hover);color:var(--bnv-ink)}
+.bnv-empty{padding:6px 8px;color:var(--bnv-ink-2);font-size:12px;line-height:18px}
+
+.bnv-foot{
+  flex:none;margin-top:auto;padding-top:10px;border-top:1px solid var(--bnv-line);
+  min-width:0;display:flex;flex-direction:column;gap:var(--bnv-gap);align-items:var(--bnv-foot-align);
+}
+.bnv-foot-text{
+  display:var(--bnv-text);padding:0 8px;max-width:100%;color:var(--bnv-ink-2);
+  font-size:11px;line-height:16px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.bnv-sep{height:1px;background:var(--bnv-line);margin:6px 8px;flex:none}
+
+/* ── §3 the rail: one state, two triggers, a list of values ────────────────── */
+/* `.bnv.is-rail` — a rail somebody chose: the menu's own collapse control (remembered per app),
+   or a host that collapses the menu by itself.
+   `.rail-host .bnv` — a host whose grid column decides and cannot put a class on the aside.
+   Both write the SAME values as the medium size class in §4, so the rail exists once.
+   The values are a rail's while it is SHUT. Opened — by its collapse control, or by its search —
+   it is the whole menu again, the values above, standing over the page (the rule under these).
+   `:where()` keeps that condition out of the selector's weight: the drawer of a phone-sized frame
+   must still out-rank a rail saved on a desktop. */
+:is(.bnv.is-rail,.rail-host .bnv):where(:not(.is-open)){
+  --bnv-pad:12px 10px;
+  --bnv-gap:6px;
+  --bnv-row-w:36px;
+  --bnv-row-h:36px;
+  --bnv-row-pad:0;
+  --bnv-row-gap:0;
+  --bnv-row-justify:center;
+  --bnv-head-h:36px;
+  --bnv-head-pad:0 0 10px;
+  --bnv-head-justify:center;
+  --bnv-primary-w:36px;
+  --bnv-primary-h:36px;
+  --bnv-primary-pad:0;
+  --bnv-primary-justify:center;
+  --bnv-foot-align:center;
+  --bnv-text:none;
+  --bnv-ghead:none;
+  --bnv-field:none;
+  --bnv-more:none;
+  --bnv-rest:flex;
+  --bnv-head-dir:column;
+  --bnv-turn:rotate(180deg);
+}
+/* An OPENED rail: the whole menu, standing over the page until a row is picked or it is shut — the
+   way to a rail's search, and to the names of its rows. (The rail by width says the same in §4.) */
+:is(.bnv.is-rail,.rail-host .bnv).is-open{position:fixed;inset-block:0;inset-inline-start:0;z-index:60;width:min(84vw,320px);box-shadow:var(--shadow-lg)}
+
+/* ── §4 the sizes ─────────────────────────────────────────────────────────── */
+/* The app declares ONE container (`.bnv-host`, on the element that wraps the shell) and one grid
+   (`.appgrid`, whose side column is `--bnv-side`). From there: ≥840px the full menu, 600–839px the
+   rail, <600px a drawer over one pane. Nothing here names a breakpoint of the WINDOW: the menu
+   answers the space it is actually given, so the same app is right in a 940px pane, in a 2000px
+   desktop, and on a 390px phone — which is exactly what a viewport query cannot do. */
+.bnv-host{container-type:inline-size;container-name:bnav}
+.appgrid{
+  display:grid;
+  grid-template-columns:var(--bnv-side,252px) minmax(0,1fr);
+  min-width:0;
+}
+/* …and its `min-height:0` (an app may scroll inside a fixed shell) carries NO weight, so that a
+   page which scrolls can say `min-height:100dvh` of its grid wherever it likes. At one class this
+   line beat a page that said so ABOVE the block: the menu's panel ended where the content did, half
+   way down the screen. Three pages moved their two lines below the block for it; the fourth — the
+   apps screen, whose list is short for as long as it loads — never did. */
+:where(.appgrid){min-height:0}
+/* THE MENU STAYS. Where the PAGE scrolls, the menu's cell is as tall as the page and the menu left
+   with it: by the end of a long list the notifications' filters and the apps' sections were a
+   screen and a half up, over a column left empty (2026-10-09, the live office: 2360px of page). It
+   is a frame tall at the most, and holds on to the frame's top. `:where()` keeps this at one class:
+   the drawer and the opened rail — `position:fixed`, at two classes and more — still say where
+   THEY stand. */
+:where(.appgrid) > .bnv{position:sticky;inset-block-start:0;max-height:100dvh}
+/* Which column the CONTENT is in — owned here, not by each app.
+   The menu is `position:fixed` below 600px, and a fixed child is not a grid item: the browser
+   places the remaining in-flow child (the content) into COLUMN 1, which is the side column. So the
+   content inherited the menu's width — 252px on a desktop, 56/64px in the rail, and 0px once the
+   phone collapses the side column. Measured 2026-10-01 at 390x844: `.pg` was 24px wide, mailview's
+   phone score was clipping 0.0/15, and every adopter's phone layout was a sliver.
+   It survived a green map because the DESKTOP profile has a fine pointer and a static aside: there
+   the menu IS a grid item, the content auto-places into column 2, and nothing looks wrong. */
+.appgrid > :not(.bnv):not(.bnv-scrim):not(.bnv-burger):not(.bnv-drawer){
+  grid-column:2;
+  min-width:0;
+}
+/* the burger: shown only where the menu is a drawer, and it is row-sized there */
+.bnv-burger{
+  display:none;flex:none;width:44px;height:44px;padding:0;border:0;border-radius:10px;
+  background:transparent;color:inherit;align-items:center;justify-content:center;cursor:pointer;
+}
+.bnv-burger:hover{background:color-mix(in srgb, currentColor 8%, transparent)}
+.bnv-burger:focus-visible{outline:2px solid currentColor;outline-offset:-2px}
+.bnv-burger svg{width:20px;height:20px}
+.bnv-scrim{
+  position:fixed;inset:0;z-index:55;border:0;padding:0;
+  background:var(--scrim);   /* the palette's own: mixed from the menu's ink it was a WHITE veil wherever that ink is light */
+  opacity:0;visibility:hidden;transition:opacity .18s ease;
+}
+.bnv-scrim.is-open{opacity:1;visibility:visible}
+
+/* medium — the rail, chosen by container width instead of by a class */
+@container bnav (max-width:839px){
+  .appgrid{--bnv-side:56px}
+  .bnv:where(:not(.is-open)){
+    --bnv-pad:12px 10px;
+    --bnv-gap:6px;
+    --bnv-row-w:36px;
+    --bnv-row-h:36px;
+    --bnv-row-pad:0;
+    --bnv-row-gap:0;
+    --bnv-row-justify:center;
+    --bnv-head-h:36px;
+    --bnv-head-pad:0 0 10px;
+    --bnv-head-justify:center;
+    --bnv-primary-w:36px;
+    --bnv-primary-h:36px;
+    --bnv-primary-pad:0;
+    --bnv-primary-justify:center;
+    --bnv-foot-align:center;
+    --bnv-text:none;
+    --bnv-ghead:none;
+    --bnv-field:none;
+    --bnv-more:none;
+    --bnv-rest:flex;
+    --bnv-head-dir:column;
+    --bnv-turn:rotate(180deg);
+  }
+  .bnv.is-open{position:fixed;inset-block:0;inset-inline-start:0;z-index:60;width:min(84vw,320px);box-shadow:var(--shadow-lg)}
+}
+/* …and a rail somebody CHOSE takes a rail's column — where the frame is wide enough to have given the
+   menu its whole one (below that the two size classes already say). Nothing said it: the icons of a
+   chosen rail stood in a column 252px wide. */
+@container bnav (min-width:840px){
+  .appgrid:has(> .bnv.is-rail){--bnv-side:56px}
+}
+/* compact — one pane, and the menu becomes a drawer over it.
+   `:is(.bnv,.bnv.is-rail,.rail-host .bnv)` is deliberate: a rail saved on a desktop must NOT
+   survive into a phone, so this block has to out-rank the class trigger and the host class. */
+@container bnav (max-width:599px){
+  .appgrid{--bnv-side:0px}
+  .bnv-burger{display:inline-flex}
+  :is(.bnv,.bnv.is-rail,.rail-host .bnv){
+    position:fixed;inset-block:0;inset-inline-start:0;z-index:60;
+    width:min(84vw,320px);box-sizing:border-box;
+    transform:translateX(var(--bnv-off,-100%));
+    transition:transform .18s ease;
+    --bnv-pad:8px 10px;
+    --bnv-gap:2px;
+    --bnv-row-w:100%;
+    --bnv-row-h:44px;
+    --bnv-row-pad:10px 8px;
+    --bnv-row-gap:8px;
+    --bnv-row-justify:flex-start;
+    --bnv-head-h:52px;
+    --bnv-head-pad:4px 6px 10px;
+    --bnv-head-justify:flex-start;
+    --bnv-primary-w:100%;
+    --bnv-primary-h:44px;
+    --bnv-primary-pad:10px 12px;
+    --bnv-primary-justify:flex-start;
+    --bnv-foot-align:stretch;
+    --bnv-text:block;
+    --bnv-ghead:flex;
+    --bnv-field:block;
+    --bnv-more:block;
+    --bnv-rest:none;
+    --bnv-head-dir:row;
+    --bnv-turn:none;
+  }
+  /* The shadow is the OPEN drawer's. On the parked one it still painted: a 40px grey band down the
+     screen edge, over the page, in every app that carries this menu (seen in five, 2026-10-06). */
+  :is(.bnv,.bnv.is-rail,.rail-host .bnv).is-open{
+    transform:none;
+    box-shadow:var(--shadow-lg);
+  }
+}
+/* in RTL the drawer parks on the other side — the only direction-dependent line in this file */
+:is([dir="rtl"],:dir(rtl)) .bnv{--bnv-off:100%}
+
+/* touch: the same rows, sized for a finger. bina keeps 36px on every pointer; a phone needs 44. */
+@media (pointer:coarse){
+  .bnv-item{min-height:44px;padding:10px 8px}
+  .bnv-primary{min-height:44px}
+  .bnv-search{min-height:44px}
+  .bnv-act{width:36px;height:36px}
+  :is(.bnv.is-rail,.rail-host .bnv):where(:not(.is-open)) .bnv-item{width:44px;height:44px;min-height:44px}
+  /* THE RAIL IS A RAIL ONLY IN THE RAIL RANGE. This rule used to read `(max-width:839px)`, which
+     also covers the compact range — and because it comes AFTER the compact block (§4), the same
+     specificity meant it won there: on any touch device narrower than 600px `--bnv-side` was 64px
+     instead of 0, so the drawer opened over a content column 64px wide.
+     Measured 2026-10-01 on the office's own capture at 390x844 (`is_mobile`/`has_touch`, i.e. the
+     profile the phone map uses): `.pg` came out 64px wide and mailview scored clipping 0.0/15 —
+     "text cut with no way to reach it" was not the app's layout, it was this line. The desktop
+     capture never saw it (fine pointer), which is why it survived a green map on both profiles. */
+  @container bnav (min-width:600px) and (max-width:839px){
+    .appgrid{--bnv-side:64px}
+  }
+  @container bnav (min-width:840px){
+    .appgrid:has(> .bnv.is-rail){--bnv-side:64px}
+  }
+}
+/* a SHORT panel — the menu of a window dragged small. Its head, its button and its foot are most
+   of 224px, and the rows were left a sliver to scroll in (measured 2026-10-07 in the drive's
+   menu: 20px for 416px of rows). There the PANEL scrolls, rows and all. */
+@media (max-height:399px){
+  .bnv{overflow-y:auto;overscroll-behavior:contain}
+  .bnv-scroll{flex:none;overflow:visible}
+  /* …and the page's own menu buttons are a cursor's size there, not a finger's: 44px of a head is a
+     fifth of such a window (a touch screen keeps the finger's size — it is not this window). */
+  @media (pointer:fine){.bnv-burger{width:32px;height:32px;border-radius:8px}}
+}
+@media (prefers-reduced-motion:reduce){
+  .bnv,.bnv *,.bnv-scrim{transition:none!important;animation:none!important}
+}
+/* @bina-nav:end */
+
+/* INDOX's own palette on the component's tokens — the component never names a colour. */
+.app-shell .side{--bnv-bg:var(--surface-2);--bnv-ink:var(--ink);--bnv-ink-2:var(--muted);--bnv-line:var(--line)}
+.app-shell .side .logo{width:28px;height:28px;border-radius:8px;background:var(--accent-soft);color:var(--accent-d);display:grid;place-items:center;font-weight:800;font-size:14px;flex:none}
+.app-shell .side .bnv-foot .pill{margin-inline-start:6px}

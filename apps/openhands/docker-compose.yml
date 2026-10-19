@@ -1,0 +1,260 @@
+services:
+  openhands:
+    image: ghcr.io/openhands/openhands:1.8.0
+    container_name: openhands-${DEPLOYMENT_NAME:-bina-deployment}
+    restart: unless-stopped
+    depends_on:
+      openhands-init:
+        condition: service_completed_successfully
+    environment:
+    - LLM_API_KEY=${DEEPSEEK_API_KEY}
+    - LLM_BASE_URL=${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+    - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+    - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+    - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    - GEMINI_API_KEY=${GEMINI_API_KEY:-${GOOGLE_API_KEY:-}}
+    - LITELLM_PROXY_API_KEY=${DEEPSEEK_API_KEY}
+    - WORKSPACE_BASE=/opt/workspace_base
+    - WORKSPACE_MOUNT_PATH=/opt/workspace_base
+    - SANDBOX_VOLUMES=/root/deployment-hacohen:/workspace/project:rw,/root/deployment-hacohen:/root/deployment-hacohen:rw
+    - SANDBOX_USER_ID=0
+    - SANDBOX_LOCAL_RUNTIME_URL=http://host.docker.internal
+    - AGENT_SERVER_USE_HOST_NETWORK=false
+    - AGENT_SERVER_IMAGE_REPOSITORY=openhands-agent-fixed
+    - AGENT_SERVER_IMAGE_TAG=latest
+    - OH_ENABLE_VNC=true
+    - ENABLE_BROWSER=true
+    - OH_AGENT_SERVER_ENV={"OH_ENABLE_VNC":"1","NOVNC_PORT":"8011","DEEPSEEK_API_KEY":"${DEEPSEEK_API_KEY}","OPENAI_API_KEY":"${OPENAI_API_KEY:-}","GEMINI_API_KEY":"${GEMINI_API_KEY:-${GOOGLE_API_KEY:-}}","LLM_API_KEY":"${DEEPSEEK_API_KEY}","LLM_BASE_URL":"${DEEPSEEK_BASE_URL:-https://api.deepseek.com}"}
+    - SANDBOX_CONTAINER_URL_PATTERN=https://${OPENHANDS_BASE_URL:-openhands.${DEPLOYMENT_DOMAIN:-localhost}}/agent/{port}
+    - MAX_NUM_SANDBOXES=3
+    - SANDBOX_STARTUP_GRACE_SECONDS=300
+    - INIT_GIT_IN_EMPTY_WORKSPACE=0
+    - FILE_STORE=local
+    - FILE_STORE_PATH=/.openhands-state
+    - JWT_SECRET=${OPENHANDS_JWT_SECRET:-openhands-dev-secret-change-me}
+    - MAX_CONCURRENT_CONVERSATIONS=5
+    - MAX_BUDGET_PER_TASK=5.0
+    - MAX_ITERATIONS=500
+    - OPENHANDS_LOG_LEVEL=DEBUG
+    - LOG_LEVEL=DEBUG
+    - MCP_SHTTP_SERVERS=["http://host.docker.internal:8931/mcp/shttp","http://host.docker.internal:8932/mcp/shttp"]
+    volumes:
+    - /var/run/docker.sock:/var/run/docker.sock
+    - /root/deployment-hacohen:/opt/workspace_base:rw
+    - openhands_state:/.openhands-state
+    - openhands_config:/.openhands
+    ports:
+    - 3000:3000
+    - 127.0.0.1:3001:3000
+    extra_hosts:
+    - host.docker.internal:host-gateway
+    networks:
+    - traefik-network
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 8G
+        reservations:
+          cpus: '1'
+          memory: 2G
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+  openhands-init:
+    image: python:3-alpine
+    container_name: openhands-init-${DEPLOYMENT_NAME:-bina-deployment}
+    environment:
+    - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+    - GEMINI_API_KEY=${GEMINI_API_KEY:-${GOOGLE_API_KEY:-}}
+    - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+    - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    - LLM_GATEWAY_URL=${LLM_GATEWAY_URL:-http://llm-gateway:4000}
+    - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:-sk-REDACTED-key-4}
+    volumes:
+    - ./generate-settings.sh:/generate-settings.sh:ro
+    - openhands_state:/.openhands-state
+    - openhands_config:/.openhands
+    entrypoint:
+    - sh
+    - -c
+    command:
+    - "CONFIG_HASH=$$(cat /generate-settings.sh | md5sum | awk '{print $$1}')\nKEYS_HASH=$$(echo\
+      \ \"$${DEEPSEEK_API_KEY}$${GEMINI_API_KEY}$${OPENAI_API_KEY}$${ANTHROPIC_API_KEY}\"\
+      \ | md5sum | awk '{print $$1}')\nNEW_HASH=\"$${CONFIG_HASH}-$${KEYS_HASH}\"\n\
+      OLD_HASH=$$(cat /.openhands/.seed-hash 2>/dev/null || echo '')\nif [ \"$$NEW_HASH\"\
+      \ != \"$$OLD_HASH\" ]; then\n  echo \"[openhands-init] Config or keys changed\
+      \ \u2192 regenerating profiles...\"\n  sh /generate-settings.sh\n  echo \"$$NEW_HASH\"\
+      \ > /.openhands/.seed-hash\nelse\n  echo \"[openhands-init] settings.json up-to-date,\
+      \ skipping.\"\nfi\n"
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: '1'
+  llm-gateway-init:
+    image: python:3-alpine
+    container_name: llm-gateway-init-${DEPLOYMENT_NAME:-bina-deployment}
+    environment:
+    - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+    - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+    - GEMINI_API_KEY=${GEMINI_API_KEY:-${GOOGLE_API_KEY:-}}
+    - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+    - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:-sk-REDACTED-key-4}
+    volumes:
+    - ./generate-litellm-config.py:/generate-litellm-config.py:ro
+    - llm_gateway_config:/app
+    entrypoint:
+    - sh
+    - -c
+    command:
+    - 'pip install -q pyyaml 2>/dev/null
+
+      python3 /generate-litellm-config.py
+
+      echo "[llm-gateway-init] done"
+
+      '
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: '1'
+  llm-gateway:
+    image: llm-gateway-local:latest
+    container_name: llm-gateway-${DEPLOYMENT_NAME:-bina-deployment}
+    restart: unless-stopped
+    depends_on:
+      llm-gateway-init:
+        condition: service_completed_successfully
+    environment:
+    - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:-sk-REDACTED-key-4}
+    - LITELLM_PORT=4000
+    - LITELLM_NUM_WORKERS=2
+    volumes:
+    - llm_gateway_config:/app:ro
+    command:
+    - --config
+    - /app/litellm-config.yaml
+    - --port
+    - '4000'
+    networks:
+    - traefik-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '2'
+  agent-proxy:
+    build:
+      context: ./agent-proxy
+      dockerfile: Dockerfile
+    image: deployment-hacohen-agent-proxy:latest
+    container_name: agent-proxy-${DEPLOYMENT_NAME:-bina-deployment}
+    restart: unless-stopped
+    environment:
+    - AGENT_HOST=host.docker.internal
+    - PROXY_PORT=8802
+    extra_hosts:
+    - host.docker.internal:host-gateway
+    networks:
+    - traefik-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+  docker-proxy:
+    build:
+      context: ./docker-proxy
+      dockerfile: Dockerfile
+    image: deployment-hacohen-docker-proxy:latest
+    container_name: docker-proxy-${DEPLOYMENT_NAME:-bina-deployment}
+    restart: unless-stopped
+    ports:
+    - 2375:2375
+    volumes:
+    - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+    - traefik-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 64M
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '1'
+  dispatcher:
+    build:
+      context: ./dispatcher
+      dockerfile: Dockerfile
+    image: deployment-hacohen-dispatcher:latest
+    container_name: dispatcher-${DEPLOYMENT_NAME:-bina-deployment}
+    restart: unless-stopped
+    depends_on:
+      openhands:
+        condition: service_started
+    environment:
+    - OPENHANDS_URL=http://openhands-${DEPLOYMENT_NAME:-bina-deployment}:3000
+    - OPENHANDS_PUBLIC_URL=https://${OPENHANDS_BASE_URL:-openhands.${DEPLOYMENT_DOMAIN:-localhost}}
+    - DISPATCHER_TOKEN=${DISPATCHER_TOKEN:-dispatcher-dev-token}
+    - DISPATCHER_MAX_CONCURRENT=3
+    - DISPATCHER_TIMEOUT_MS=600000
+    - DISPATCHER_PORT=8800
+    - DISPATCHER_DEFAULT_MODEL=DeepSeek V4 Pro
+    - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+    - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+    - GEMINI_API_KEY=${GEMINI_API_KEY:-${GOOGLE_API_KEY:-}}
+    - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+    # The dispatcher's own public base. It used to exist nowhere but as a literal inside
+    # eight .js files, so every link the Telegram bot handed out pointed at the ORIGINAL
+    # deployment's domain no matter which deployment sent it.
+    - DISPATCH_PUBLIC_URL=https://${DISPATCH_BASE_URL:-dispatch.${DEPLOYMENT_DOMAIN:-localhost}}
+    # the bare domain, for the example traefik rule the bot hands to other agents
+    - DEPLOYMENT_DOMAIN=${DEPLOYMENT_DOMAIN:-localhost}
+    - TELEGRAM_WEBHOOK_URL=${TELEGRAM_WEBHOOK_URL:-https://${DISPATCH_BASE_URL:-dispatch.${DEPLOYMENT_DOMAIN:-localhost}}/telegram-webhook}
+    - OPENHANDS_STATE_PATH=/.openhands-state
+    volumes:
+    - openhands_state:/.openhands-state
+    - /var/run/docker.sock:/var/run/docker.sock:ro
+    - /root/deployment-hacohen/ai/obsidian:/root/deployment-hacohen/ai/obsidian:rw
+    - /root/deployment-hacohen/.github/skills:/root/deployment-hacohen/.github/skills:ro
+    - /root/deployment-hacohen/apps/openhands/downloads:/root/deployment-hacohen/apps/openhands/downloads:rw
+    networks:
+    - traefik-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+volumes:
+  openhands_state: null
+  openhands_config: null
+  llm_gateway_config: null
+networks:
+  traefik-network:
+    external: true

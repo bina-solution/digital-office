@@ -1,0 +1,66 @@
+# yaml-language-server: $schema=./schema.json
+title: bbox n8n push dies with a raw EACCES stack when .generated/n8n is root-owned
+opened: '2026-08-27'
+severity: medium
+status: in-progress
+summary: '`bbox n8n push <app> <wfId>` compiles every .workflow.ts in the app into .generated/n8n/<app>/*.json before pushing. If any of those files is owned by root — which happens whenever a bbox/compile verb was previously run under sudo or `wsl -u root` — the compile step fails with an unhandled Node EACCES and a stack trace. The CLI neither repairs the condition nor explains it, and the operator is left to fix .generated/ by hand, which is exactly what the platform rule forbids.'
+description: |
+  id: n8n-push-cannot-recover-root-owned-generated · area: platform-base/n8n · component: platform-base/n8n/tooling/wrap.mjs
+  As first recorded — status: mitigated
+
+  ## Mitigated
+
+  ```yaml
+  2026-08-27
+  ...
+  ```
+
+  ## Mitigation
+
+  `ensure_generated_writable` in scripts/lib.sh, called at the top of the n8n push-app and pull hooks. It finds the first entry under the tree not owned by the invoking user (`find ! -user $(id -u) -print -quit` — cheap, and it walks the TREE rather than probing the top directory, which was the first version's bug: .generated/ stayed writable while .generated/n8n/<app>/*.json underneath was root-owned), then repairs ownership with a throwaway `docker run --rm -v <dir>:/g alpine chown -R $(id -u):$(id -g) /g`. No sudo — bbox already talks to a root docker daemon, and a sudo prompt would hang agents and CI, which have no tty. No hardcoded uid — it comes from `id` at runtime, so nothing in the repo names a user. No-op on Docker Desktop, where the file-sharing layer fakes ownership anyway. Proven end-to-end: poisoned .generated/n8n to root:root, confirmed the EACCES condition, ran a real `bbox n8n push indox indoxApi01` — it repaired both .generated and .push-cache and completed. A clean run prints nothing and costs nothing measurable (25s, unchanged). This is a MITIGATION, not the cure: containers still run as root and still poison the tree. The cure is that app-management/data-management should not hold a read-write bind mount of the repo at all (see the tenancy review's layer model — services write layer 4, never layer 3).
+
+  ## Observed
+
+  ```yaml
+  when: 2026-08-27, deployment-hacohen (shlomo-laptop)
+  command: ./bbox n8n push indox indoxApi01
+  output: |
+    Error: EACCES: permission denied, open
+      '/mnt/c/.../deployment-hacohen/.generated/n8n/indox/BaseDocEx01.json'
+        at Object.writeFileSync (node:fs:2430:20)
+        at compileDir (.../platform-base/n8n/tooling/wrap.mjs:187:12)
+    Node.js v22.23.2
+  notes: 'The named workflow (indoxApi01) had nothing to do with the failure — compileDir writes the whole app, so ONE root-owned file from an unrelated workflow blocks every push for that app. A second, quieter instance of the same class: platform-base/n8n/.push-cache/<app>.tsv is also written unconditionally, and when root-owned it prints "touch: cannot touch ...: Permission denied" AFTER a successful push — so the push succeeds but its sha cache is silently not updated, which makes the next `bbox n8n status` report false drift.'
+  ```
+
+  ## Impact
+
+  - Every push for the affected app fails until someone touches .generated/ by hand.
+  - The error names a file the operator did not ask to write, so the diagnosis is non-obvious.
+  - It invites the exact repair the platform forbids. On 2026-08-17 the same EACCES led to `rm -rf .generated/`, which broke the live console (it bind-mounts .generated/registry and fell back to the INSTALL screen).
+  - The stale .push-cache variant is worse than a hard failure — it is silent and produces misleading drift in `bbox n8n status`.
+
+  ## Expected
+
+  - Detect the unwritable compiled output and repair it as part of the CLI's own job, or
+  - fail with a diagnosis naming the cause and the supported fix, never a raw Node stack.
+  - Same treatment for platform-base/n8n/.push-cache — a cache it cannot update must be a loud failure, not a warning after "ok".
+
+  ## Suggested fix
+
+  In wrap.mjs compileDir, wrap the writeFileSync in a try/catch for EACCES/EPERM and attempt an in-place repair of the CLI's OWN output directory (it is gitignored, self-regenerating, and entirely owned by this tool). If repair is not possible, exit non-zero with: "compiled output under .generated/n8n/<app> is not writable (owned by another user — a previous bbox run under sudo/root). Run `bbox n8n repair-generated <app>`." — and add that verb, so the operator has a supported route and never needs to touch .generated/ directly. Separately: make the .push-cache write failure fatal rather than a post-success warning.
+
+  ## Prevention
+
+  Never invoke bbox/compile verbs through sudo or `wsl -u root`; that root-run is what poisons the directory for every later non-root push.
+tasks:
+- text: '[x] self-heal preflight in the push + pull hooks (ensure_generated_writable, lib.sh)'
+  done: false
+- text: '[x] covers .push-cache too, so the silent stale-sha / false-drift case is repaired as well'
+  done: false
+- text: '[ ] EACCES/EPERM handling inside wrap.mjs compileDir, for callers that bypass the hooks'
+  done: false
+- text: '[ ] guard: bbox refuses to run its compile verbs as uid 0, naming why'
+  done: false
+- text: '[ ] CURE: app-management / data-management stop holding a read-write mount of the repo'
+  done: false

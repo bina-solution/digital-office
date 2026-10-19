@@ -1,0 +1,50 @@
+## Dynamic configuration — the authentik forwardAuth middleware.
+##
+## This lives in traefik's FILE provider, not on authentik-server's docker labels, and that is the
+## whole point.
+##
+## When this middleware was defined by labels, it existed only while traefik's docker snapshot
+## contained the authentik-server container. Any moment it did not — a recreate, a decorated
+## duplicate left by an interrupted `bbox run`, a reload racing a container event — traefik could not
+## resolve `authentik@docker`, and traefik's response to an unresolvable middleware is to DISCARD THE
+## WHOLE ROUTER. A discarded router means the host does not exist, so all 14 SSO-gated hosts served a
+## bare `404 page not found` while the stack reported itself healthy. Measured 2026-07-30: 3,718
+## router rejections across ~30 minutes of container churn, every gated surface dark, nothing in
+## `bbox status` showing it.
+##
+## Defined here, it is part of traefik's static-ish dynamic config and ALWAYS exists. Routers are
+## never discarded. If authentik itself is down or still starting, the forwardAuth call fails and the
+## browser gets a 502 naming the auth service — a legible error instead of a 404 that reads as
+## "this app was never deployed".
+##
+## Referenced as `authentik@file` (the provider suffix is required to cross from a docker-provider
+## router to a file-provider middleware; a bare `authentik` on a docker router resolves to
+## `authentik@docker` and would silently reintroduce the bug).
+http:
+  middlewares:
+    authentik:
+{{- if eq (env "BBOX_SSO") "off" }}
+      headers:
+        customRequestHeaders:
+          X-authentik-username: akadmin
+          X-authentik-name: Developer
+          X-authentik-email: akadmin@localhost
+          X-authentik-groups: authentik Admins
+          X-authentik-uid: dev
+{{- else }}
+      forwardAuth:
+        address: http://authentik-server:9000/outpost.goauthentik.io/auth/traefik
+        trustForwardHeader: true
+        authResponseHeaders:
+          - X-authentik-username
+          - X-authentik-groups
+          - X-authentik-email
+          - X-authentik-name
+          - X-authentik-uid
+          - X-authentik-jwt
+          - X-authentik-meta-jwks
+          - X-authentik-meta-outpost
+          - X-authentik-meta-provider
+          - X-authentik-meta-app
+          - X-authentik-meta-version
+{{- end }}

@@ -1,0 +1,43 @@
+# apitools-asr — the office's speech-to-text service (apps/apitools/asr/app.py).
+#
+# A SECOND container for the same app, and the split is a memory decision with an operational
+# consequence (same reasoning as sites/sites-render): the model is ~1 GB resident, peaks at ~2.5 GB
+# while it loads, and holds a whole core while it transcribes. In the apitools image it would fight
+# OCR and the Postgres pool for the same cgroup; apart, it can be capped, idled and unloaded on its
+# own without touching the document pipeline.
+#
+# No ffmpeg on purpose: PyAV (faster-whisper's decoder) ships the FFmpeg libraries and already
+# resamples to the 16 kHz mono that Whisper's mel front end is defined on. The main apitools image
+# dropped ffmpeg for the same reason.
+FROM python:3.12-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PORT=8987 \
+    LOG_LEVEL=INFO
+
+# libgomp1: CTranslate2 (faster-whisper's backend) links OpenMP, and the manylinux wheel does not
+# bundle it — without this the import fails with "libgomp.so.1: cannot open shared object file".
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libgomp1 \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY asr/requirements.txt ./asr/requirements.txt
+RUN pip install --no-cache-dir -r asr/requirements.txt
+
+COPY asr ./asr
+
+# /data holds the pinned model, the uploads and the job records. The model is fetched once from
+# Hugging Face at the pinned revision and then never again; inference itself needs no network.
+VOLUME ["/data"]
+EXPOSE 8987
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+    CMD python -c "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://localhost:8987/healthz',timeout=8).status==200 else 1)"
+
+CMD ["python", "-m", "asr.app"]

@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+#: run the mail app E2E suite (Mail Label Engine / organizer) + scorecard
+# bbox mail test — thin wrapper → python (same shape as apps/indox/hooks/test).
+set -euo pipefail
+HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$(cd "${HOOK_DIR}/../../.." && pwd)/scripts/lib.sh"   # npath()
+export PYTHONIOENCODING=utf-8 PYTHONUNBUFFERED=1
+exec python3 "$(npath "${HOOK_DIR}")/test.py" "$@"

@@ -1,0 +1,12 @@
+# git — provider API calls AND the smart-HTTP git proxy are both httpx.
+#
+# httpx and not requests, deliberately: the proxy has to stream a request body UPSTREAM and a
+# response body DOWNSTREAM without buffering either (`client.stream`, async iterators over the raw
+# bytes), because a `git push` of a large pack would otherwise be held whole in this container's
+# 192M. requests cannot do the upstream half of that at all.
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+httpx==0.28.1
+# The GitHub App credential is an RS256 JWT signed with the installation's private key — that is the
+# only part of the auth surface the stdlib cannot do. `[crypto]` pulls the cryptography backend.
+PyJWT[crypto]==2.10.1

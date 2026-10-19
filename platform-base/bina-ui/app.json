@@ -1,0 +1,36 @@
+{
+  "id": "bina-ui",
+  "title": {
+    "he": "ספריית ממשק",
+    "en": "Bina UI"
+  },
+  "layer": 2,
+  "kind": "library",
+  "version": "1.0.0",
+  "summary": {
+    "he": "רכיבי ממשק משותפים — טבלאות, עיצוב",
+    "en": "Shared UI components — tables, design tokens"
+  },
+  "capabilities": [
+    {
+      "name": "ui-kit",
+      "type": "protocol",
+      "required_ops": [
+        "bina-table",
+        "bina-ui-css",
+        "revo-grid"
+      ]
+    }
+  ],
+  "use": [],
+  "connections": [],
+  "compose": null,
+  "routing": [],
+  "health": {
+    "structural": "auto"
+  },
+  "data": {
+    "volumes": [],
+    "on_uninstall": "keep"
+  }
+}

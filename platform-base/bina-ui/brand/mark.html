@@ -1,0 +1,19 @@
+<!--
+  brand/mark.html — the office's ONE mark, as a screen draws it inline.
+
+  The «iO» mark (designed in digital-office/brand/io/final/, the dev workbench) is shipped here in
+  the three forms a surface needs: this inline form, whose three parts wear the PALETTE's tokens
+  through their classes (`.t` the tile, `.m` the mark, `.a` the accent — platform-base/console/static/
+  style.css:.logo), and the two image files beside it, `logo.svg` / `logo-dark.svg` / `favicon.svg`,
+  which carry the palette's VALUES because an image file cannot name a token.
+
+  COPIED, NOT LINKED (see bina-page.css for why): every screen that shows the mark carries the
+  region between the two markers verbatim, and gate G27 (scripts/refactor/theme-token-lint.py)
+  keeps every copy byte-identical. Edit the mark HERE, then:
+
+      python3 scripts/refactor/theme-token-lint.py --fix
+
+  The site (digital-office.co.il) and the simulator take the same files: the site copies the SVGs
+  into its assets; the simulator embeds the console, so it inherits the inline copy.
+-->
+<!-- @bina-brand:start --><svg viewBox="53.57 53.57 892.86 892.86" aria-hidden="true" focusable="false"><rect class="t" x="53.57" y="53.57" width="892.86" height="892.86" rx="196.43"/><rect x="267.32" y="276.79" width="71.25" height="71.25" rx="19.24" class="a"/><rect x="267.32" y="419.29" width="71.25" height="285" rx="19.24" class="m"/><path d="M429.06 276.79H675.59A19.24 19.24 0 0 1 694.82 296.02V685.05A19.24 19.24 0 0 1 675.59 704.29H429.06A19.24 19.24 0 0 1 409.82 685.05V296.02A19.24 19.24 0 0 1 429.06 276.79ZM500.31 348.04A19.24 19.24 0 0 0 481.07 367.27V613.8A19.24 19.24 0 0 0 500.31 633.04H604.34A19.24 19.24 0 0 0 623.57 613.8V367.27A19.24 19.24 0 0 0 604.34 348.04Z" class="m"/><rect x="516.7" y="419.29" width="71.25" height="142.5" rx="19.24" class="a"/></svg><!-- @bina-brand:end -->

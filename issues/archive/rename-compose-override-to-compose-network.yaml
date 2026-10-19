@@ -1,0 +1,133 @@
+# yaml-language-server: $schema=../schema.json
+title: "Rename compose.override.yml → compose.network.yml (it's a mandatory routing layer, not an override)"
+opened: "2026-06-16"
+category: chore
+severity: low
+status: closed  # 2026-07-30 triage: STALE — the file to rename is gone. production/compose.override.yml, production/compose.yml, development/compose.override.yml and production/chat/.../dev_agent.js no longer exist; the root compose.yml holds only the shared external network and includes nothing, and routing labels now live in each app's own docker-compose.yml compiled to .generated/.
+summary: "Rename `production/compose.override.yml` to `compose.network.yml` and update its single explicit `include:` + all doc/script references; the file holds the core Traefik/routing/healthcheck layer and abuses Docker Compose's magic `*.override.*` auto-merge filename for something that is required, not optional."
+
+description: |
+  ## What we have today
+  `production/compose.override.yml` is a ~520-line file containing the **core
+  routing/network layer** for the whole stack: per-service Traefik labels
+  (routers, entrypoints, TLS/certresolver, middlewares like `authentik` and the
+  n8n push-origin fix), Traefik healthchecks, Homepage discovery labels,
+  `depends_on`, and a large block of service `environment:` overrides (notably
+  the full n8n / n8n-worker / task-runner config). It contains **no `networks:`
+  definitions** — the only network, `traefik-network`, is declared `external` in
+  the root [compose.yml](compose.yml).
+
+  Crucially, it is **not** loaded via Docker's magic auto-merge. The repo-root
+  [compose.yml:1-7](compose.yml#L1-L7) pulls it in **explicitly**:
+
+  ```yaml
+  include:
+  - path:
+    - production/compose.yml
+    - production/compose.override.yml   # ← explicit, ordered include
+  ```
+
+  ## Why the current name is wrong (the actual problem)
+  `compose.override.yml` / `compose.override.yaml` (and `docker-compose.override.yml`)
+  is a **reserved, magic filename** in Docker Compose. When you run `docker compose`
+  in a directory without `-f`, Compose auto-discovers the base file **and**
+  auto-merges a sibling `compose.override.*` on top of it. The convention's
+  intended purpose is *optional, environment-/developer-specific overrides* that
+  can be present or absent.
+
+  This file is the opposite of that: it is **mandatory** — drop it and every
+  service loses its Traefik router and is unreachable. Calling a required layer
+  `.override.` is misleading on several fronts:
+
+  1. **Semantic lie.** The name says "optional local tweaks"; the contents are
+     "the production routing plane." New readers (and the automated
+     report/review agents — see references) repeatedly misread it.
+  2. **Magic-filename footgun.** Because the base ([production/compose.yml](production/compose.yml))
+     uses **relative** includes, `production/` is itself a valid compose project
+     dir. Anyone who runs `cd production && docker compose up` today gets
+     `compose.yml` + `compose.override.yml` **auto-merged** by the magic rule —
+     an implicit, undocumented second code path that happens to *partially*
+     work (it omits the root `traefik-deployment` service). The full stack is
+     only ever meant to come up from the **repo root**. The magic name invites
+     the wrong invocation.
+  3. **Occupies the slot for a real override.** As long as this file squats the
+     `compose.override.*` name, we can't introduce a genuine per-developer
+     `compose.override.yml` (the conventional, git-ignored local-tweaks file)
+     without it being silently merged into production routing.
+
+  Renaming to `compose.network.yml` makes the role explicit (Traefik/routing +
+  homepage labels + healthchecks) and frees the magic slot. Because the file is
+  already pulled in by an **explicit** `include:`, the rename is functionally a
+  one-line path change plus reference hygiene — Compose merge order and rendered
+  config are unchanged (verify with `docker compose config`).
+
+  ## Behavioral change to be aware of
+  After the rename, `cd production && docker compose up` will **no longer**
+  auto-merge the routing layer (the magic name is gone), so it would bring up
+  services **without** their Traefik labels. That implicit path is already
+  incomplete (no root Traefik) and unsupported, but we should state plainly in
+  the README that the **only** supported invocation is from the repo root via
+  the root `compose.yml` include.
+
+  ## Naming note (minor)
+  The content is mostly Traefik **routing labels** + homepage labels +
+  healthchecks + env, and defines **no Docker networks**, so `compose.network.yml`
+  is slightly loose; `compose.routing.yml` / `compose.traefik.yml` /
+  `compose.labels.yml` would be more literal. Going with `compose.network.yml`
+  per the request, but flag this for a 1-minute bikeshed before committing — it's
+  a rename, so the name should be the one we want to keep.
+
+  ## Scope of references to update (audited)
+  - **Functional (must change):**
+    - [compose.yml:4](compose.yml#L4) — the explicit `include:` path.
+    - [production/chat/src/whatsapp/group_agent/dev_agent.js:331](production/chat/src/whatsapp/group_agent/dev_agent.js#L331)
+      — the in-bot DEPLOY COMMAND hardcodes
+      `docker compose -f /workspace/compose.yml -f /workspace/compose.override.yaml up -d`.
+      Note this is **already stale** (points at a root-level `compose.override.yaml`
+      with the wrong extension/path — the file lives at `production/compose.override.yml`).
+      Fix the path AND the new name in the same pass.
+  - **Docs / context (should change so agents stop misreading it):**
+    README.md; production/authentik/README.md; production/homepage/README.md +
+    production/homepage/config/services.yaml (comment); ai/context/deployment-context.txt,
+    deployment-report-context.txt, deployment-review-context.txt, deploy.propmt.txt;
+    ai/context/setup-project-development-on-windows.md.
+  - **Sibling for symmetry (decide):** `development/compose.override.yml` is the
+    dev mirror (referenced by the commented dev `include:` block in
+    [compose.yml:5-7](compose.yml#L5-L7)). Rename it to `development/compose.network.yml`
+    too, or the two envs diverge in naming.
+  - **Historical reports (leave as-is):** data/reports/*.md and the obsidian notes
+    reference the old name as point-in-time records — do not rewrite history.
+  - **Other open issues that cite the path** (update their `references:`):
+    issues/local-routers-host-spoof-bypass.yaml, issues/collapse-local-auth-via-deployment-domain.yaml.
+
+  ## Suggested execution
+  1. `git mv production/compose.override.yml production/compose.network.yml`
+     (and the dev sibling if in scope).
+  2. Update [compose.yml:4](compose.yml#L4) include path.
+  3. `docker compose config` before/after — assert the rendered config is byte-identical.
+  4. Fix dev_agent.js deploy command (path + name + stale extension).
+  5. Sweep doc/context references; leave historical reports untouched.
+  6. Add a README line: full stack comes up from repo root only; `compose.network.yml`
+     is a required layer, not an optional override.
+
+tasks:
+  - { text: "git mv production/compose.override.yml → production/compose.network.yml", done: false }
+  - { text: "Update the explicit include path in root compose.yml:4", done: false }
+  - { text: "Run docker compose config before/after and confirm rendered output is unchanged", done: false }
+  - { text: "Fix dev_agent.js:331 DEPLOY COMMAND (correct path + new name + stale .yaml/root-path bug)", done: false }
+  - { text: "Sweep doc/context references (README, authentik/homepage READMEs, ai/context/*.txt, services.yaml comment); leave data/reports/* historical", done: false }
+  - { text: "Decide + apply the development/compose.override.yml rename for symmetry", done: false }
+  - { text: "Update references in the two sibling issues that cite the old path", done: false }
+  - { text: "Add README note: stack starts from repo root only; this is a required layer, not an optional override", done: false }
+
+references:
+  - compose.yml
+  - production/compose.override.yml
+  - production/compose.yml
+  - production/chat/src/whatsapp/group_agent/dev_agent.js
+  - development/compose.override.yml
+  - README.md
+  - ai/context/deployment-context.txt
+  - issues/local-routers-host-spoof-bypass.yaml
+  - issues/collapse-local-auth-via-deployment-domain.yaml
+  - https://docs.docker.com/compose/how-tos/multiple-compose-files/merge/

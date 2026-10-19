@@ -1,0 +1,9 @@
+{
+ "row.title": "מיומנות",
+ "row.running": "טוען מיומנות",
+ "row.failed": "טעינת המיומנות נכשלה",
+ "row.stopped": "טעינת המיומנות הופסקה",
+ "row.instructions": "הוראות",
+ "row.inspect": "בדיקה",
+ "menu.userOnly": "למשתמש בלבד"
+}

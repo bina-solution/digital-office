@@ -1,0 +1,169 @@
+#!/usr/bin/env bash
+#: project — write what linked offices give into this office's desired state, from the machine itself
+#
+#   ./bbox dgo project            # pull each linked office's catalog now; write the `remote:` block if it changed
+#   ./bbox dgo project --check    # say what would change and write nothing (exit 1 when it differs)
+#   ./bbox dgo project --quiet    # the first form with one line of output — what `bbox run` calls
+#
+# WHY THIS EXISTS
+#   A linked office's apps become tiles and routes here through ONE file: the `remote:` block of
+#   platform.state.yaml (apps/dgo-extend/projection.py owns its shape and its writer). The app
+#   writes that file by reaching "the machine that runs this office" through `computers` — an SSH
+#   door. Two offices in a row had no usable door (measured 2026-10-05): a Windows host has no sshd
+#   at all, and the MacBook's record of itself was stuck on a changed host key. On both the catalogs
+#   arrived, the screen said "up, 9 apps", and no tile ever appeared — with nothing saying why.
+#
+#   The app now writes it through the control plane (no door to the machine is involved), so on a
+#   healthy office this verb finds the file already right. It stays because it IS on the machine —
+#   `bbox run` runs it there: it asks the app which block the projection wants (`desired`) and hands
+#   that to the compiler's own verbs (`reconcile.py remote-get` / `remote-set`), the same reader and
+#   writer the control plane uses. One writer, two ways to reach it — the second one needs nothing
+#   but the checkout.
+#
+# WHAT IT DOES NOT DO
+#   It starts nothing and leaves nothing running: no service, no timer, no listener, no key. An
+#   office with a working door is still projected every minute by the app; an office without one is
+#   projected when somebody runs `bbox run` (or this verb). The rule for WHEN the file may change is
+#   the projection's, unchanged: a peer that did not answer never empties the block.
+set -uo pipefail
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+MODE="apply"; QUIET=0
+for arg in "$@"; do
+  case "${arg}" in
+    --check) MODE="check" ;;
+    --quiet) QUIET=1 ;;
+    -h|--help) sed -n '2,6p' "${BASH_SOURCE[0]}" | sed -E 's/^#:? ?//'; exit 0 ;;
+    *) echo "usage: bbox dgo project [--check] [--quiet]" >&2; exit 2 ;;
+  esac
+done
+
+CONTAINER="$(docker ps --filter 'name=^dgo-extend-' --format '{{.Names}}' 2>/dev/null | head -1)"
+if [ -z "${CONTAINER}" ]; then
+  # the first run of an office, or an office that does not run this app: there is no link to project
+  [ "${QUIET}" = "1" ] || echo "dgo project: the app is not running here — nothing to project yet"
+  exit 0
+fi
+
+# ONE projection pass, asked of the app: it pulls every peer over the link and answers what it wants
+# declared. (It also tries its own door; where that works the file is already right when we look.)
+RESULT="$(docker exec "${CONTAINER}" python3 -c "
+import urllib.request
+req = urllib.request.Request('http://127.0.0.1:8983/api/link/remote/sync', data=b'{}', method='POST',
+                             headers={'content-type': 'application/json'})
+print(urllib.request.urlopen(req, timeout=240).read().decode())
+" 2>/dev/null)" || RESULT=""
+
+export DGO_PROJECT_RESULT="${RESULT}"
+# `cd` first: the python below is handed no host path at all — the checkout is its working
+# directory, which every shell and every python spell the same way (gate G10).
+cd "${REPO_ROOT}" || exit 1
+python3 - "${MODE}" "${QUIET}" <<'PY'
+import json
+import os
+import subprocess
+import sys
+
+repo, mode, quiet = os.getcwd(), sys.argv[1], sys.argv[2] == "1"
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
+
+def say(text):
+    if not quiet:
+        print(text)
+
+
+try:
+    res = json.loads(os.environ.get("DGO_PROJECT_RESULT") or "")
+except ValueError:
+    print("dgo project: the app did not answer a projection pass — nothing written")
+    sys.exit(0)
+if not isinstance(res, dict) or "desired" not in res:
+    print("dgo project: this app's code predates `desired` — rebuild it (`bbox run dgo-extend`) and run this again")
+    sys.exit(0)
+desired, errors = res.get("desired") or [], res.get("errors") or {}
+
+
+def compiler(*args, stdin=None):
+    """The compiler's own verb, on the checkout this hook stands in — the ONE reader and the ONE
+    writer of the block. The app reaches the same two verbs through the control plane."""
+    return subprocess.run([sys.executable, os.path.join(repo, "platform", "manager", "reconcile.py"), *args],
+                          cwd=repo, input=stdin, capture_output=True, text=True, encoding="utf-8", errors="replace")
+
+
+def names(block):
+    return [f"{e.get('office')}:{a.get('alias')}" for e in block for a in (e.get("apps") or [])]
+
+
+r = compiler("remote-get")
+try:
+    have = json.loads(r.stdout) if r.returncode == 0 else None
+except ValueError:
+    have = None
+if not isinstance(have, list):
+    print(f"dgo project: platform.state.yaml could not be read ({(r.stderr or r.stdout).strip()[-200:]}) — nothing written")
+    sys.exit(1)
+
+# THE PROJECTION'S RULE, unchanged: a block that has apps is written; an EMPTY one is written only
+# when no peer failed (nothing is linked, or the peers publish nothing); a peer that did not answer
+# leaves the file as it is — the compiler must not lose a route because an office was asleep.
+if desired:
+    want = desired
+elif not errors:
+    want = []
+else:
+    print(f"dgo project: {', '.join(sorted(errors))} did not answer — the declared block is left as it is "
+          f"({len(names(have))} remote app(s))")
+    sys.exit(0)
+
+
+def declared(block):
+    """The block without `fetched` — the moment of the pull, which is new on every pass. It is a
+    reading, not a declaration (the compiler's writer makes the same distinction)."""
+    return json.dumps([{k: v for k, v in e.items() if k != "fetched"} for e in block],
+                      sort_keys=True, ensure_ascii=False)
+
+
+if declared(have) == declared(want):
+    say(f"dgo project: up to date — {len(names(have))} remote app(s) declared")
+    sys.exit(0)
+
+gained = sorted(set(names(want)) - set(names(have)))
+lost = sorted(set(names(have)) - set(names(want)))
+change = (f"+{len(gained)} −{len(lost)}" + (f"  new: {', '.join(gained[:12])}" if gained else "")
+          + (f"  gone: {', '.join(lost[:12])}" if lost else "")
+          + ("  (same apps; an address, a door or a field changed)" if not gained and not lost else ""))
+if mode == "check":
+    print(f"dgo project: platform.state.yaml differs from what the links give ({change}) — nothing written (--check)")
+    sys.exit(1)
+
+# The compiler VALIDATES before it writes: a block it could not plan is refused here, with its own
+# sentences, and the file is not touched — another office's catalog must never be what keeps this
+# office from compiling.
+state_file = os.path.join(repo, "platform.state.yaml")
+with open(state_file, encoding="utf-8", newline="") as f:
+    before = f.read()
+w = compiler("remote-set", stdin=json.dumps(want))
+if w.returncode != 0:
+    print("dgo project: the compiler refuses the block the links give — nothing written:")
+    for line in (w.stderr or w.stdout or "").strip().splitlines()[:6]:
+        print("  ", line[:200])
+    sys.exit(1)
+
+# COMPILED HERE, not left for "the next run". `bbox run` renders BEFORE it calls the prepare hooks, so
+# a block written during prepare was applied one run late — the tiles of a newly paired office
+# appeared on the SECOND `bbox run`. And if the render still fails with the block in place, the file
+# goes back exactly as it was, and says so: `bbox run` stops on a failed render.
+r = compiler("render")
+if r.returncode != 0:
+    with open(state_file, "w", encoding="utf-8", newline="") as f:
+        f.write(before)
+    again = compiler("render")
+    print("dgo project: the render failed with the block the links give — platform.state.yaml was put back as it was"
+          + ("" if again.returncode == 0 else " (and the render still fails: run `python3 platform/manager/reconcile.py render`)"))
+    for line in ((r.stderr or r.stdout or "").strip().splitlines()[-4:]):
+        print("  |", line[:200])
+    sys.exit(1)
+print(f"dgo project: {len(names(want))} remote app(s) declared in platform.state.yaml and compiled ({change}) — "
+      f"`bbox run` brings them up")
+PY

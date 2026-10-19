@@ -1,0 +1,251 @@
+{
+  "id": "indox",
+  "title": {
+    "he": "מסמכים",
+    "en": "INDOX"
+  },
+  "layer": 3,
+  "kind": "service",
+  "version": "2.3.0",
+  "summary": {
+    "he": "עיבוד מסמכים נכנסים מקצה לקצה — סנכרון, חילוץ, תיוק ותצוגה.. בקרוב גם מרכז ניהול מסמכים כללים של העסק ",
+    "en": "End-to-end incoming-document processing — sync, extract, file and browse"
+  },
+  "capabilities": [
+    {
+      "name": "indox-api",
+      "type": "protocol",
+      "endpoint": "http://incoming-documents:8080",
+      "required_ops": [
+        "documents",
+        "sync-state",
+        "settings",
+        "tests"
+      ],
+      "optional_ops": [
+        "upload"
+      ]
+    }
+  ],
+  "use": [
+    {
+      "capability": "identity",
+      "strength": "requires",
+      "after": true
+    },
+    {
+      "capability": "workflow",
+      "strength": "requires",
+      "after": true
+    },
+    {
+      "capability": "sql",
+      "strength": "requires",
+      "after": true
+    },
+    {
+      "capability": "secrets",
+      "strength": "requires",
+      "after": true
+    },
+    {
+      "capability": "kv",
+      "strength": "requires",
+      "after": true
+    },
+    {
+      "capability": "data-api",
+      "strength": "requires",
+      "after": true,
+      "ops": [
+        "rest"
+      ]
+    },
+    {
+      "capability": "ocr",
+      "strength": "requires",
+      "after": true,
+      "ops": [
+        "documentOcr",
+        "documentJsonQuery"
+      ]
+    },
+    {
+      "capability": "drive",
+      "strength": "requires",
+      "after": true,
+      "ops": [
+        "list",
+        "download",
+        "upload",
+        "move"
+      ],
+      "engine": "drive_local",
+      "profile": "admin",
+      "upload_folder": "indox/uploads",
+      "note": "INDOX uploads go to the drive app's local engine (admin profile) into the auto-created indox/uploads folder. INDOX depends only on local engines for its own storage; remote engines (drive, mail) are separately proven to work."
+    },
+    {
+      "capability": "mail",
+      "strength": "requires",
+      "after": true,
+      "ops": [
+        "search",
+        "get",
+        "addLabels",
+        "listLabels"
+      ]
+    },
+    {
+      "capability": "mail-organizer",
+      "strength": "requires",
+      "after": true,
+      "ops": [
+        "organizerDefaults",
+        "organizerSettings"
+      ]
+    },
+    {
+      "capability": "chat",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak",
+      "ops": [
+        "sendDocument"
+      ]
+    },
+    {
+      "capability": "notify",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
+    }
+  ],
+  "connections": [
+    {
+      "id": "google-workspace-grant",
+      "required": false,
+      "note": "Per-SYNC, never per-install: INDOX runs on the local drive + local mail engines out of the box (see use[].drive note). This credential is needed only once a sync is created against a specific external account, so it must not be an install blocker. Google Drive/Sheets/Gmail sources only."
+    },
+    {
+      "id": "gemini-key",
+      "required": false,
+      "note": "Optional accelerator, not a requirement: extraction reaches the same score on the local OCR engine (apitools declares this required:false for the same reason). Needed only when a repo is configured to extract with Gemini."
+    },
+    {
+      "id": "gmail-app-password",
+      "required": false,
+      "note": "Per-SYNC, never per-install: INDOX runs on the local drive + local mail engines out of the box (see use[].drive note). This credential is needed only once a sync is created against a specific external account, so it must not be an install blocker. Gmail (IMAP) sources only; the local mailbox needs no credential."
+    },
+    {
+      "id": "supabase-service-key",
+      "required": true
+    },
+    {
+      "id": "redis-password",
+      "required": true
+    },
+    {
+      "id": "n8n-encryption-key",
+      "required": true
+    }
+  ],
+  "compose": "docker-compose.yml",
+  "blueprints": {
+    "n8n": "blueprint/n8n",
+    "requires_stdlib": ">=1.0"
+  },
+  "routing": [
+    {
+      "host": "incoming-documents",
+      "port": 8080,
+      "auth": "sso",
+      "service": "incoming-documents",
+      "emit_labels": false,
+      "module": {
+        "group": "עסק",
+        "icon": "inbox",
+        "embed": true,
+        "alias": "incoming",
+        "id": "incoming",
+        "name": "מסמכים",
+        "desc": "עיבוד מסמכים אוטומטי (INDOX)",
+        "order": 0,
+        "url_env": "INCOMING_UI_URL",
+        "url": "http://incoming-documents:8080"
+      },
+      "sso": {
+        "slug": "incoming-documents",
+        "base_url_env": "INCOMING_DOCS_BASE_URL",
+        "default_host": "incoming-documents.localhost",
+        "display_name": "Incoming Documents",
+        "local_twin": false
+      }
+    }
+  ],
+  "health": {
+    "structural": "auto",
+    "probe": {
+      "exec": "apps/indox/hooks/extract-gate",
+      "interval": "0",
+      "timeout": "4800s"
+    }
+  },
+  "data": {
+    "volumes": [],
+    "on_uninstall": "prompt",
+    "sql": [
+      {
+        "instance": "supabase-db",
+        "database": "postgres",
+        "tables": [
+          "incoming_documents",
+          "incoming_documents_archive",
+          "trusted_suppliers",
+          "companies",
+          "settings",
+          "settings_history",
+          "ai_extraction_cache",
+          "sync_ledger",
+          "sync_pipe_state",
+          "sync_attempt",
+          "sync_cursor",
+          "tag_rules",
+          "bs_extracted_lines",
+          "indox_action_execution_log",
+          "indox_priority_local",
+          "indox_dashboard_stats",
+          "indox_sync_stats",
+          "merge_audit"
+        ],
+        "shared_tables": [
+          "ai_extraction_cache"
+        ],
+        "note": "SHARED vs PER-INSTANCE: every table here is per-instance (one copy in each indox_<id> schema) EXCEPT those in shared_tables, which live once in public and are addressed by every instance. ai_extraction_cache is shared on purpose (owner, 2026-08-28): it is keyed by content hash, so the same supplier PDF arriving at two clients is OCR'd once rather than twice. It must never be schema-qualified — indoxApi01's Build Table Get / Build Table Upsert hold the SHARED map that enforces this. [2026-08-27] Five tables were live but UNDECLARED, so data-management scored them UNCLAIMED and they were in no export, backup or deployment transfer: incoming_documents_archive (15,366 rows, and registered as a repo the console can switch to), indox_action_execution_log (485k rows, the action-log source of truth), indox_priority_local (the ERP stand-in), and the two live aggregates indox_dashboard_stats / indox_sync_stats. settings_history is new in the same change. Nineteen further public.* tables carry the indox_/incoming_ prefix and are deliberately NOT listed: they are dated scratch from past migrations (see the stale list in the tenancy review) and declaring them would enshrine debris in every future backup."
+      }
+    ]
+  },
+  "observability": {
+    "sentry_platform": "python",
+    "sentry_project": "incoming-docs"
+  },
+  "contributes": {
+    "env": {
+      "any-concurrency": {
+        "SPAN_SOURCE_INDOX": "http://incoming-documents:8080/incomingDocuments/timeline/spans",
+        "SPAN_BUFFER_INDOX": "20000"
+      }
+    },
+    "volumes": {
+      "n8n:n8n": [
+        "./apps/indox/blueprint/demo-docs:/home/node/.n8n-files/demo-docs:ro"
+      ],
+      "n8n:n8n-worker-1": [
+        "./apps/indox/blueprint/demo-docs:/home/node/.n8n-files/demo-docs:ro"
+      ],
+      "n8n:n8n-worker-2": [
+        "./apps/indox/blueprint/demo-docs:/home/node/.n8n-files/demo-docs:ro"
+      ]
+    }
+  }
+}

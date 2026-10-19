@@ -1,0 +1,324 @@
+:root{
+  /* the colours are the office's palette, in the generated block below — this file writes none */
+  --font:"Segoe UI",system-ui,-apple-system,"Noto Sans Hebrew","Assistant",Arial,sans-serif;
+}
+/* @bina-theme-tokens:start */
+/* OLIVE GROVE — the one palette of the office (the owner, 2026-10-07 · DGO-450). Four hues, sampled
+   from his mock-up, and the ground they stand on. A screen never writes a colour: it names one of
+   these. Each hue is the colour itself (a FILL — a button, a bar, a dot), «-d» for text and thin
+   lines on the ground (4.5:1 or more), «-soft» and «-line» for a tint and its hairline, and «-ink»
+   for what is written ON the fill. The role names every screen already uses point at them:
+   (no backtick in this block: one of its copies lives inside a script's template string)
+     olive  the brand and the main action · what is well, what is done
+     sky    what is in motion, what only informs · a link
+     lime   look here — a warning, something waiting
+     plum   a person must act — a failure, a removal, the one final action
+   Contrast, measured (WCAG): ink on the ground 13.7 · muted 4.65 · light text on olive 5.51 and on
+   plum 9.54 · ink on lime 6.88 · its ink on sky 6.32 · sky-d 4.61 · lime-d 4.70 · violet 5.32 ·
+   on the desk: its ink 6.32 (dark: 13.96), and 11.2 where the sky pales (dark: 5.12). */
+:root,:root[data-theme="light"]{
+  color-scheme:light;
+  accent-color:var(--accent);   /* the browser's OWN controls - a checkbox, a radio, a range, a progress bar - on both grounds: said once, here (it was said for eight single controls, and every other one was the browser's blue) */
+  --bg:#f3f5f7; --surface:#fff; --surface-2:#f9fafb; --ink:#1f2a17; --muted:#6a7068; --line:#dcdfde;
+  --olive:#56693f; --olive-d:#475734; --olive-soft:#e7eae4; --olive-line:#bfc6b6; --olive-ink:#f3f5f7;
+  --sky:#7baae3; --sky-d:#2a6fc4; --sky-soft:#edf3fb; --sky-line:#cddff4; --sky-ink:#13263f;
+  --lime:#a9b84c; --lime-d:#69732e; --lime-soft:#f3f5e6; --lime-line:#dee4bb; --lime-ink:#1f2a17;
+  --plum:#5b3349; --plum-d:#4a303b; --plum-soft:#e8e2e6; --plum-line:#c1b1ba; --plum-ink:#f3f5f7;
+  --accent:var(--olive); --accent-d:var(--olive-d); --accent-soft:var(--olive-soft); --accent-ink:var(--olive-ink);
+  --blue:var(--sky-d); --amber:var(--lime-d); --red:var(--plum);
+  --violet:#7c5c6d;   /* plum, lifted a fifth toward white: someone has to look — nothing has failed */
+  --ok:var(--olive); --warn:var(--lime-d); --danger:var(--plum); --info:var(--sky-d);
+  --ok-soft:var(--olive-soft); --warn-soft:var(--lime-soft); --danger-soft:var(--plum-soft); --info-soft:var(--sky-soft);
+  --red-soft:var(--plum-soft); --amber-soft:var(--lime-soft); --blue-soft:var(--sky-soft); --violet-soft:var(--plum-soft);
+  --side:var(--olive); --side-ink:#f3f5f7; --side-mut:#dce1da; --side-line:#788765;
+  --desk:var(--sky); --desk-ink:var(--sky-ink);   /* desktop mode's ground is the sky (the owner, DGO-452), and what is written straight on it */
+  --scrim:rgba(31,42,23,.5);                      /* what dims a screen behind a pop-up */
+  --shadow:0 1px 3px rgba(31,42,23,.08),0 6px 24px rgba(31,42,23,.06);
+  --shadow-lg:0 20px 60px rgba(31,42,23,.28);
+  /* ONE COLOUR AND ONE ANIMAL PER OFFICE (the owner, 2026-10-09 · flt-002). When offices are linked,
+     a person reads WHICH office a thing belongs to without opening it, so each office gets a hue of
+     its own. The hue is an IDENTITY and never a health state: an office that stopped answering keeps
+     its colour, and the quiet mark is the one that says "not answering". Each is an ALIAS of the
+     palette's own hue — no fourth value is invented, and because the ground re-points the hue, the
+     office mark follows the ground by itself. Each office's animal (elephant, deer, eagle) is a
+     glyph of bina-icons.js. */
+  --office-hp:var(--muted);   /* hp · elephant — grey: the heavy laptop at home, in the palette's own grey */
+  --office-mac:var(--lime);   /* macbook · deer — yellow: the palette has one yellow and it is lime. A FILL, so what is written ON it is --lime-ink, never this */
+  --office-vps:var(--sky-d);  /* vps · eagle — deep sky blue, «the eagle in the clouds». THE OWNER'S OWN CHOICE (2026-10-09, in writing: vps = נשר + כחול-שמיים) — this line is the colour he picked, not a default kept for him */
+}
+
+/* ── A LINKED OFFICE'S MARK, BY NAME (flt-004) ───────────────────────────────────────────────
+   The link carries a NAME — mark: {color, animal} in the catalog, from the office's own identity
+   — and never a value: the office that DRAWS a linked tile owns the pixels, so it paints the name
+   with its own palette. These seven rules are that translation, one per family above; a screen sets
+   data-office-hue="lime" and paints var(--office-hue).
+   A name this file does not know paints nothing, which is why the vocabulary in
+   apps/dgo-extend/identity.py may only name families that exist here — and why --red and --ok
+   are not among them: they mean «danger» and «it is well» on every screen in the office. */
+[data-office-hue="grey"]   { --office-hue:var(--muted); }
+[data-office-hue="lime"]   { --office-hue:var(--lime); }
+[data-office-hue="sky"]    { --office-hue:var(--sky-d); }
+[data-office-hue="olive"]  { --office-hue:var(--olive-d); }
+[data-office-hue="plum"]   { --office-hue:var(--plum); }
+[data-office-hue="blue"]   { --office-hue:var(--blue); }
+[data-office-hue="violet"] { --office-hue:var(--violet); }
+/* the dark ground is the same four hues on the palette's own ink, and the SAME legend. Olive on that
+   ink is 2.5:1, so its text step there is olive LIFTED — its own hue and saturation, lighter (7.14
+   on a card, 4.82 on its own tint) — and the brand, the main action and «it is well» take that step.
+   Lime stays «look here» and the sky «in motion», as on the light ground: were lime the accent here
+   (it was, for a day), a warning, a selection and «it is well» were one colour. Each «-d» on its
+   own «-soft» there, measured: olive 4.82 · sky 4.62 · lime 4.63 · plum 4.71. */
+@media (prefers-color-scheme:dark){
+  :root{ color-scheme:dark;
+         --bg:#141b0f; --surface:#1f2a17; --surface-2:#192213; --ink:#f3f5f7; --muted:#a2a8a2; --line:#414a3b;
+         --olive-d:#a5ba8c; --olive-soft:#384629; --olive-line:#56693f;
+         --sky-d:#7baae3; --sky-soft:#2e3f38; --sky-line:#4d6a8c;
+         --lime-d:#a9b84c; --lime-soft:#3b4622; --lime-line:#69732e;
+         --plum-d:#ad99a4; --plum-soft:#402f33; --plum-line:#7c5c6d;
+         --accent:var(--olive-d); --accent-ink:var(--surface);
+         --red:#ad99a4; --violet:#bdadb6; --danger:#ad99a4; --ok:var(--olive-d); --side:var(--surface);
+         --desk:var(--sky-ink); --desk-ink:var(--ink); --scrim:rgba(0,0,0,.6);
+         --shadow:0 1px 3px rgba(0,0,0,.4),0 6px 24px rgba(0,0,0,.3);
+         --shadow-lg:0 20px 60px rgba(0,0,0,.55); }
+}
+:root[data-theme="midnight"]{
+  color-scheme:dark;
+  --bg:#141b0f; --surface:#1f2a17; --surface-2:#192213; --ink:#f3f5f7; --muted:#a2a8a2; --line:#414a3b;
+  --olive-d:#a5ba8c; --olive-soft:#384629; --olive-line:#56693f;
+  --sky-d:#7baae3; --sky-soft:#2e3f38; --sky-line:#4d6a8c;
+  --lime-d:#a9b84c; --lime-soft:#3b4622; --lime-line:#69732e;
+  --plum-d:#ad99a4; --plum-soft:#402f33; --plum-line:#7c5c6d;
+  --accent:var(--olive-d); --accent-ink:var(--surface);
+  --red:#ad99a4; --violet:#bdadb6; --danger:#ad99a4; --ok:var(--olive-d); --side:var(--surface);
+  --desk:var(--sky-ink); --desk-ink:var(--ink); --scrim:rgba(0,0,0,.6);
+  --shadow:0 1px 3px rgba(0,0,0,.4),0 6px 24px rgba(0,0,0,.3);
+  --shadow-lg:0 20px 60px rgba(0,0,0,.55);
+}
+/* THE KEYBOARD'S RING - what the browser draws around the stop the keyboard is on, in the palette, wherever
+   a part draws none of its own. It has no specificity at all (:where), so any rule of a part wins. Two
+   screens said this for themselves; on the others nearly every stop wore the browser's ring (DGO-455).
+   A field keeps the offset it has - fourteen rules draw a field's own outline and say no offset. An area
+   (a scroll box, a table) takes the ring inside, where nothing clips it; a control takes it outside,
+   where a filled button does not hide it. */
+:where(:focus-visible){outline:2px solid var(--accent)}
+:where(:focus-visible:not(a,button,summary,[role=button],input,select,textarea)){outline-offset:-2px}
+:where(a,button,summary,[role=button]):focus-visible{outline-offset:2px}
+/* HEBREW AT A HEAVY WEIGHT - on Windows, where the first family of --font is installed. "Segoe UI" has its
+   Hebrew in Light, Regular, Semibold and Bold. Asked for 800 or 900 the browser takes the family's Black
+   face, which has none, and so has every family after it - so the Hebrew of every title at 800 was drawn in
+   the system's last-resort serif, thin, beside Latin in Black: «חשבונות ומראות» at 20px is 150px wide at 700
+   and 120px at 800 (Chrome 154; the screens ask for 800 in 167 places, the question's title among them).
+   These faces give the family's HEBREW RANGE the faces that have it. A family a sheet names is no longer the
+   system's for those characters, so every weight and both styles are named, each as the system resolves it:
+   measured, only upright 800 and 900 change. Any other character is not theirs and goes on to the next
+   family the screen names - system-ui in --font, on Windows the same faces, Black included - which is why
+   G27 asks that system-ui follows wherever a screen names this family itself. Where the family is not
+   installed nothing here resolves and nothing changes. */
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Light");font-weight:100 300;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI");font-weight:400;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Semibold");font-weight:500 600;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Bold");font-weight:700 900;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Light Italic");font-weight:100 300;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Italic");font-weight:400;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Semibold Italic");font-weight:500 600;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Bold Italic");font-weight:700 900;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+/* @bina-theme-tokens:end */
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);
+  font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+h1,h2,h3{margin:0}
+button{font-family:inherit;cursor:pointer;border:none;border-radius:8px}
+input,select{font-family:inherit;font-size:14px;border:1px solid var(--line);
+  border-radius:8px;padding:8px 10px;width:100%;background:var(--surface);color:var(--ink)}
+input:focus,select:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
+
+/* One primary vertical nav in the product = the console's. מסמכים שלי's own navigation is a horizontal
+   light tab-strip (not a second dark vertical sidebar) so it never competes with the console rail. */
+#app{display:flex;flex-direction:column;min-height:100vh}
+.side{background:var(--surface);color:var(--ink);display:flex;flex-direction:row;align-items:center;
+  flex-wrap:wrap;gap:6px;padding:10px 30px;border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:9px;font-size:18px;padding:0 4px 0 0;margin-inline-end:8px}
+.brand .logo{background:var(--accent);color:var(--accent-ink);width:28px;height:28px;border-radius:8px;
+  display:grid;place-items:center;font-weight:800;font-size:15px}
+/* the tabs are ONE row at every width — they scroll inside the bar. Five of them need 516px: on
+   a 390px phone the page was 138px wider than the screen (measured 2026-10-07), and wrapped — as
+   the simulation's overlay made them — they were two rows of a small window. */
+.side nav{display:flex;flex-direction:row;gap:4px;min-width:0;overflow-x:auto;scrollbar-width:none}
+.side nav::-webkit-scrollbar{display:none}
+.side nav a{color:var(--muted);text-decoration:none;padding:8px 14px;border-radius:8px;font-weight:600;white-space:nowrap}
+.side nav a:hover{background:var(--accent-soft);color:var(--accent-d)}
+.side nav a.active{background:var(--accent);color:var(--accent-ink)}
+.block{width:100%}
+.primary{background:var(--accent);color:var(--accent-ink);font-weight:700;padding:10px 14px}
+.primary:hover{background:var(--accent-d)}
+.side .primary.block{width:auto;margin:0;margin-inline-start:auto;padding:8px 16px}   /* new-doc → inline, pushed to the far edge */
+.side .user{display:none}   /* the console already shows the signed-in user */
+
+.main{padding:26px 30px;max-width:1120px}
+/* the page's name is one line at every width: beside a long hint it broke in two («לוח / בקרה»
+   in a 380px window) — the hint goes under it instead */
+.topbar{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:2px 12px;
+  border-bottom:1px solid var(--line);padding-bottom:16px;margin-bottom:22px}
+.topbar h1{font-size:24px;font-weight:800;white-space:nowrap}
+.topbar .hint{color:var(--muted);font-size:12.5px}
+.view.hidden{display:none}
+
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;box-shadow:var(--shadow)}
+.stat .n{font-size:28px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+.stat .l{color:var(--muted);font-size:12.5px;margin-top:6px}
+.stat.draft .n{color:var(--muted)} .stat.issued .n{color:var(--blue)}
+.stat.paid .n{color:var(--accent)} .stat.cancelled .n{color:var(--red)}
+
+/* ── rich dashboard ── */
+.stats{display:flex;flex-direction:column;gap:18px;margin-bottom:24px}
+.dash-top{display:grid;grid-template-columns:1.1fr 2fr;gap:16px}
+/* the one number the screen leads with stands on the kit's display: olive, its ink, its quieter ink */
+.hero-card{background:var(--olive);color:var(--olive-ink);border-radius:18px;
+  padding:22px 26px;box-shadow:var(--shadow);display:flex;flex-direction:column;justify-content:center}
+.hero-card .hc-label{font-size:13px;color:var(--side-mut);font-weight:600;letter-spacing:.02em}
+.hero-card .hc-amount{font-size:38px;font-weight:800;line-height:1.1;margin-top:8px}
+.hero-card .hc-sub{font-size:13px;color:var(--side-mut);margin-top:12px}
+.hero-card .hc-sub b{color:var(--olive-ink);font-weight:700}
+.kpi-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px 18px;
+  box-shadow:var(--shadow);display:flex;flex-direction:column;justify-content:center}
+.kpi .kv{font-size:23px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+.kpi .kl{color:var(--muted);font-size:12.5px;margin-top:8px}
+.chart-card{background:var(--surface);border:1px solid var(--line);border-radius:16px;
+  padding:18px 24px 14px;box-shadow:var(--shadow)}
+.cc-head{display:flex;justify-content:space-between;font-weight:700;margin-bottom:16px}
+.cc-head .muted{font-weight:400;font-size:12.5px}
+.bars{display:flex;align-items:flex-end;gap:10px;height:132px}
+.bar-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:7px;height:100%}
+.bar-wrap{flex:1;width:100%;display:flex;align-items:flex-end;justify-content:center}
+.bar{width:70%;max-width:32px;background:var(--olive);
+  border-radius:6px 6px 0 0;min-height:3px}
+.bar-lbl{font-size:11px;color:var(--muted)}
+.num{font-variant-numeric:tabular-nums;direction:ltr;unicode-bidi:isolate}
+
+h2{font-size:16px;font-weight:700;margin:8px 0 12px}
+.tablewrap{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;box-shadow:var(--shadow)}
+table.data{width:100%;border-collapse:collapse}
+table.data th{text-align:right;font-size:12px;color:var(--muted);font-weight:600;
+  padding:11px 14px;border-bottom:1px solid var(--line);background:var(--surface-2)}
+table.data td{padding:11px 14px;border-bottom:1px solid var(--line);font-size:13.5px}
+table.data tr:last-child td{border-bottom:none}
+table.data tbody tr{cursor:pointer}
+table.data tbody tr:hover{background:var(--accent-soft)}
+td.num{font-variant-numeric:tabular-nums;font-family:ui-monospace,Menlo,Consolas,monospace}
+.muted{color:var(--muted)}
+.empty{padding:40px;text-align:center;color:var(--muted)}
+
+.chip{display:inline-block;font-size:11.5px;font-weight:700;padding:3px 10px;border-radius:999px}
+.chip.draft{background:var(--bg);color:var(--muted)}
+.chip.issued{background:var(--info-soft);color:var(--blue)}
+.chip.sent{background:var(--violet-soft);color:var(--violet)}
+.chip.paid{background:var(--accent-soft);color:var(--accent-d)}
+.chip.cancelled{background:var(--danger-soft);color:var(--red)}
+
+.filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+.filters button{background:var(--surface);border:1px solid var(--line);color:var(--muted);padding:7px 14px;font-weight:600;font-size:13px}
+.filters button.on{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+
+.overlay{position:fixed;inset:0;background:var(--scrim);z-index:40}
+.overlay.hidden,.editor.hidden,.drawer.hidden{display:none}
+.editor{position:fixed;inset:0 0 0 auto;width:min(560px,94vw);background:var(--surface);
+  z-index:50;display:flex;flex-direction:column;box-shadow:var(--shadow-lg)}
+.editor-h,.drawer-h{display:flex;justify-content:space-between;align-items:center;
+  padding:18px 22px;border-bottom:1px solid var(--line)}
+.editor-h h2{font-size:18px}
+.editor-b{padding:20px 22px;overflow:auto;flex:1;display:flex;flex-direction:column;gap:16px}
+.editor-b label{display:block;font-size:12.5px;color:var(--muted);font-weight:600}
+.editor-b label input,.editor-b label select{margin-top:5px}
+.editor-b fieldset{border:1px solid var(--line);border-radius:10px;padding:14px;margin:0}
+.editor-b legend{font-size:12.5px;color:var(--muted);font-weight:700;padding:0 6px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+table.lines{width:100%;border-collapse:collapse}
+table.lines th{font-size:11.5px;color:var(--muted);text-align:right;padding:4px 6px;font-weight:600}
+table.lines td{padding:3px 4px}
+table.lines td input{padding:6px 8px}
+table.lines td.lt{font-variant-numeric:tabular-nums;white-space:nowrap;padding-inline:8px}
+/* a price is typed, not stepped by an agora: the stepper's room cut «12500.5» to «2500.5» in its field */
+table.lines input[data-k="unit_price"]{appearance:textfield;-moz-appearance:textfield}
+table.lines input[data-k="unit_price"]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.x{background:var(--danger-soft);color:var(--red);width:28px;height:28px;border-radius:7px;font-weight:800}
+@media (pointer:coarse){.x{width:30px;height:30px}}   /* (what a finger hits is 30px each way: a line's «×» was 28) */
+#addLine{background:var(--accent-soft);color:var(--accent-d);font-weight:700;padding:7px 12px;margin-top:8px}
+.totals{background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:12px 14px;
+  display:flex;flex-direction:column;gap:5px;font-variant-numeric:tabular-nums}
+.totals .tl{display:flex;justify-content:space-between;font-size:13px}
+.totals .tl.grand{font-weight:800;font-size:16px;border-top:1px dashed var(--line);padding-top:8px;margin-top:3px}
+.editor-f{display:flex;gap:10px;justify-content:flex-start;padding:16px 22px;border-top:1px solid var(--line)}
+/* while the editor is open the office's notice sits above its bar: at its usual corner it lay over
+   «שמור טיוטה» — the very button a refused save sends a person back to */
+body:has(.editor:not(.hidden)) #bina-tell{inset-block-end:84px}
+.ghost{background:var(--bg);color:var(--ink);font-weight:600;padding:10px 16px}
+.ghost:hover{background:var(--line)}
+
+.drawer{position:fixed;inset:0 0 0 auto;width:min(860px,96vw);background:var(--surface);
+  z-index:50;display:flex;flex-direction:column;box-shadow:var(--shadow-lg)}
+.dnum{font-size:19px;font-weight:800;font-family:ui-monospace,Menlo,Consolas,monospace;margin-inline-end:12px}
+.conv-from{display:inline-block;font-size:11.5px;color:var(--muted);margin-inline-start:10px}
+.drawer-actions{display:flex;gap:8px;flex-wrap:wrap;padding:14px 22px;border-bottom:1px solid var(--line)}
+.drawer-b{flex:1;display:grid;grid-template-columns:1fr 260px;overflow:hidden}
+#dPdf{border:none;width:100%;height:100%;background:var(--muted)}
+.events{border-inline-start:1px solid var(--line);padding:16px;overflow:auto}
+.events h3{font-size:13px;color:var(--muted);margin-bottom:10px}
+.events ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:11px}
+.events li{font-size:12.5px;position:relative;padding-inline-start:16px}
+.events li::before{content:"";position:absolute;inset-inline-start:0;top:5px;width:7px;height:7px;
+  border-radius:50%;background:var(--accent)}
+.events li .t{color:var(--muted);font-size:11px}
+
+
+/* narrow: the name and «מסמך חדש» share the first line, the tabs are the second */
+@media (max-width:720px){.side{padding-inline:12px}.side nav{order:3;flex-basis:100%}
+  .drawer-b{grid-template-columns:1fr}#dPdf{height:52vh}.main{padding:18px}}
+/* a NARROW frame — a phone, a small window: a line's description takes a line of its own and the numbers
+   the next. In one row the numbers' columns are fixed and the description got what was left: 35px at 390 */
+@media (max-width:560px){table.lines,table.lines thead,table.lines tbody{display:block}
+  table.lines tr{display:grid;grid-template-columns:52px minmax(56px,1fr) 88px 30px;align-items:center;gap:2px 6px}   /* (the last is the «×»: 30px under a finger) */
+  table.lines tbody tr{padding-block:6px;border-top:1px dashed var(--line)}
+  table.lines th:first-child,table.lines td:first-child{grid-column:1/-1}
+  table.lines th,table.lines td{padding:2px 0;width:auto!important}table.lines td.lt{padding-inline:4px}
+  /* the numbers get every pixel of their field: a thinner edge, and no stepper (a phone has its own keys) */
+  table.lines td input[type=number]{padding-inline:6px;appearance:textfield;-moz-appearance:textfield}
+  table.lines td input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}}
+/* a SHORT frame — a window in desktop mode: the bar and the page's heading are a line each */
+@media (max-height:699px){.side{padding-block:6px}.side nav a{padding-block:5px}.side .primary.block{padding-block:5px}
+  .main{padding-block:12px}.topbar{padding-bottom:8px;margin-bottom:12px}.topbar h1{font-size:18px}}
+/* …and SHORTER still — the smallest window: an open panel's head and bar took 153 of its 224 pixels */
+@media (max-height:420px){.editor-h,.drawer-h{padding-block:6px}.editor-f{padding-block:8px}.editor-b{padding-block:10px;gap:10px}}
+
+/* onboarding + settings + entity pages */
+.onboard{position:fixed;inset:0;background:var(--olive);
+  z-index:70;display:grid;place-items:center;padding:20px;overflow:auto}
+.onboard.hidden{display:none}
+.onboard-card{background:var(--surface);border-radius:16px;padding:32px;max-width:560px;width:100%;box-shadow:var(--shadow-lg)}
+.onboard-card .brand.big{font-size:26px;margin-bottom:14px}
+.onboard-card h2{font-size:22px;margin-bottom:6px}
+.onboard-card .sub{color:var(--muted);margin:0 0 20px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px}
+.row2 label{display:block;font-size:12.5px;color:var(--muted);font-weight:600}
+.row2 label input,.row2 label select{margin-top:5px}
+.listhead{display:flex;gap:12px;margin-bottom:16px;align-items:center}
+.listhead input{max-width:320px;min-width:0}
+.listhead .primary{margin-inline-start:auto;flex:none;white-space:nowrap}   /* at phone width the search gives way, not the button's label */
+.card-form{background:var(--surface);border:1px solid var(--line);border-radius:12px;
+  padding:22px;max-width:640px;box-shadow:var(--shadow)}
+.card-form .primary{margin-top:6px}
+
+/* ── A2 · stroke icons ─────────────────────────────────────────────────────────
+   Replaces the glyphs (⬇ ✉ ✓ ⊘ ✕ ▪ ⇕ ▲ ▼) that were doing an icon's job as text. They inherit
+   currentColor and are sized against the type around them rather than against whatever the font
+   stack decided the character should be. */
+.ic-svg{width:15px;height:15px;flex:none;display:inline-block;vertical-align:-2px}
+button .ic-svg{margin-inline-end:5px}
+button.x .ic-svg,.ghost#closeEditor .ic-svg,.ghost#closeDrawer .ic-svg{margin:0}
+button .ic-svg.ic-end{margin-inline:5px 0}   /* a mark AFTER the label («הפק מסמך» and its way forward) */
+/* the nav bullet was a ▪ character; a real dot sizes and colours with its label */
+.nav-dot{
+  width:6px;height:6px;border-radius:50%;background:currentColor;
+  display:inline-block;vertical-align:middle;margin-inline-end:8px;opacity:.55;
+}
+.side nav a.active .nav-dot{opacity:1}

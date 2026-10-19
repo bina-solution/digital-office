@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# first-party-images — every image this repo BUILDS, derived from the compose config.
+#
+#   ./scripts/first-party-images            list them
+#   ./scripts/first-party-images --rmi       delete them (forces a true from-source rebuild)
+#
+# Why this exists: a "clean rebuild" sweep written as
+#     docker images | grep '^deployment-hacohen-' | xargs docker rmi
+# silently MISSES every service that declares an explicit `image:` tag. Two did —
+# incoming-documents-local and my-docs-local — so a rebuild advertised as "from nothing" quietly
+# reused day-old images for those two apps. Ask compose what it builds instead of guessing from
+# a name prefix.
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "${SCRIPT_DIR}/lib.sh"
+
+imgs="$(dcx config --format json 2>/dev/null | python3 "$(npath "${SCRIPT_DIR}")/built-images.py")"
+
+[ -n "${imgs}" ] || die "could not resolve any built images from the compose config"
+
+if [ "${1:-}" = "--rmi" ]; then
+  # shellcheck disable=SC2086 — one image per line, intentionally word-split
+  echo "${imgs}" | xargs -r docker rmi -f
+else
+  echo "${imgs}"
+fi

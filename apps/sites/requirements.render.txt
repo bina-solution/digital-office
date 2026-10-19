@@ -1,0 +1,13 @@
+# sites-render — the browser container.
+#
+# `beautiful-score` is NOT on PyPI (pypi.org/pypi/beautiful-score → 404, checked 2026-09-23), even
+# though the project's own README says `pip install beautiful-score`. So the one honest pin is the
+# source archive at an IMMUTABLE commit: the v0.7.0 tag, resolved to its commit sha. A tag can be
+# moved; a commit cannot, and a beauty score is only comparable across runs if the formula behind it
+# is the same formula.
+#
+# When the project is published, this line becomes `beautiful-score[render]==X.Y.Z` and nothing else
+# changes.
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+beautiful-score[render] @ https://github.com/solomonBoltin/beautiful/archive/8722d4d7a8278a507eefd826486e8748f427e932.tar.gz

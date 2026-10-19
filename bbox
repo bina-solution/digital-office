@@ -1,0 +1,1069 @@
+#!/usr/bin/env bash
+# bbox — the deployment CLI. Single entry point for operating this self-hosted stack
+# (n8n + apitools + authentik + browser42 + …). Runs on Linux: the Debian VPS in production, and the
+# WSL distro on Windows — where the entry point is bbox.cmd, never Git-Bash (see scripts/lib.sh).
+#
+#   bbox <command> [args]              lifecycle: run | stop | reset | status | logs
+#   bbox <group> <subcommand> [args]   groups: n8n | b42 | install
+#   bbox onboarding [--auth-state]     first-run orchestration
+#
+# Thin dispatcher: delegates to scripts/* and existing tools; the blueprint (git) is the
+# source of truth (see ai/context/automation-iac.md). Run `bbox help` for the full tree.
+set -euo pipefail
+# Physical (`pwd -P`): relative bind sources resolve against this path on the Docker host, and a
+# symlinked spelling (/workspace/office inside bina-ds) is a path only the caller has — see lib.sh.
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+SCRIPTS="${REPO_ROOT}/scripts"
+. "${SCRIPTS}/lib.sh"   # Git-Bash guard, engine selection, read_env, DN, colors, ok/warn/bad/log, running, pgq
+say() { echo "${c1}[bbox]${c0} $*"; }
+die() { echo "${cr}[bbox] error:${c0} $*" >&2; exit 1; }
+dc()  { dcx "$@"; }   # compiled .generated/ file list + --project-directory (scripts/lib.sh)
+
+# ── macOS: bbox runs INSIDE the project engine's guest, never on the host ────────────────────
+# On macOS the engine is Docker 28 inside a Lima/vz Linux guest (packaging/macos/engine.yaml) —
+# the twin of the WSL distro on Windows. The repo is mounted at the same path in the guest, so
+# every verb is handed across exactly as bbox.cmd hands to WSL: one checkout, one engine, and every
+# Linux assumption in this file (systemd drop-in, /run/bbox-docker.sock, GNU coreutils) holds
+# unchanged. Docker Desktop is never used. Only the engine's own lifecycle runs on the host:
+# `bbox engine …` and its alias `bbox install macos`. See packaging/macos.md.
+if [ "$(uname -s 2>/dev/null)" = Darwin ] && [ -z "${BBOX_IN_GUEST:-}" ]; then
+  case "${1:-}" in
+    engine)  shift; exec bash "${REPO_ROOT}/packaging/macos/engine.sh" "$@" ;;
+    install) [ "${2:-}" = macos ] && exec bash "${REPO_ROOT}/packaging/macos/engine.sh" start ;;
+    # The office agent's CLI runs HERE, on the host: it is plain python speaking agent.v1 to the
+    # provider on 127.0.0.1 (Lima forwards the guest's loopback port), so there is nothing to hand
+    # across. Measured 2026-09-30: through the guest, a call cost a hand-off, two bash start-ups and
+    # four docker round trips before the first byte — minutes under load; natively it is one socket.
+    agent)   shift; exec python3 "$(npath "${REPO_ROOT}/scripts")/agent.py" "$@" ;;
+  esac
+  exec bash "${REPO_ROOT}/packaging/macos/engine.sh" exec -- ./bbox "$@"
+fi
+
+# ensure_project_engine — make the PROJECT ENGINE answer on ${BBOX_DOCKER_SOCK}.
+#
+# Vocabulary, because conflating these is what makes this hard to read: `docker` is the CLI, which
+# does no work and only dials a socket; `dockerd` is the ENGINE, which owns the images, containers
+# and volumes; a socket is just an address. The PROJECT ENGINE is the one dockerd this stack uses.
+# Docker Desktop's engine is a different dockerd with its own data — never used.
+#
+# Why a private address at all: Docker Desktop's WSL integration re-binds /var/run/docker.sock
+# INSIDE the distro, so that address does not reliably reach the project engine. See the long note
+# on bbox_select_engine in scripts/lib.sh.
+#
+# There are exactly TWO cases here, and the difference is not "which engine" — it is "does an engine
+# exist yet":
+#
+#   1. An engine is already running (VPS, WSL) → teach IT the extra address. Never start a second
+#      one: two dockerds sharing /var/lib/docker corrupt it, and two engines cannot both publish
+#      :80 for traefik anyway.
+#   2. No engine exists at all (the cloud sandbox boots without one) → start one. You cannot add a
+#      flag to a service that does not exist.
+#
+# A dedicated engine with its own data-root is deliberately NOT an option: it would be no more
+# isolated from Docker Desktop than the project engine already is, and it would start empty, so
+# every image would rebuild and every volume would need migrating.
+ensure_project_engine() {
+  local sock="${BBOX_DOCKER_SOCK:-/run/bbox-docker.sock}" sudo=""
+  # ROOT IS A ONE-TIME BOOTSTRAP COST, NOT AN ONGOING REQUIREMENT. Creating the address needs root
+  # once; after that the socket is root:docker rw, so any user in the `docker` group runs the stack
+  # with no privilege at all. This is not a third behaviour — it is the message you get before the
+  # first successful provision.
+  #
+  # Establish privilege up front rather than discovering it halfway through: the old form set
+  # sudo="sudo -n" without checking it works, so an unprivileged run got a raw "permission denied"
+  # from tee and a half-written drop-in. Nothing here is required for the stack to come up — the
+  # selector still finds whatever engine answers — so this degrades to one honest line.
+  if [ "$(id -u)" != 0 ]; then
+    if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+      sudo="sudo -n"
+    else
+      say "${cy}cannot provision ${sock} (needs root or passwordless sudo) — using whichever daemon answers${c0}"
+      return 0
+    fi
+  fi
+
+  # systemd host (Debian VPS, modern WSL): extend the unit that already owns the data-root.
+  if command -v systemctl >/dev/null 2>&1 && systemctl cat docker.service >/dev/null 2>&1; then
+    local dir=/etc/systemd/system/docker.service.d conf want
+    want="$(printf '%s\n' '[Service]' \
+      'Environment=DOCKER_MIN_API_VERSION=1.24' \
+      'ExecStart=' \
+      "ExecStart=/usr/bin/dockerd -H fd:// -H unix://${sock} --containerd=/run/containerd/containerd.sock")"
+    conf="${dir}/10-bbox-endpoint.conf"
+    # Only rewrite+restart when it actually differs — otherwise every `bbox run` would bounce the
+    # daemon and take all 39 containers with it.
+    if [ "$(${sudo} cat "${conf}" 2>/dev/null)" != "${want}" ]; then
+      say "teaching docker.service to listen on ${sock}…"
+      ${sudo} mkdir -p "${dir}"
+      printf '%s\n' "${want}" | ${sudo} tee "${conf}" >/dev/null
+      ${sudo} systemctl daemon-reload
+      ${sudo} systemctl restart docker.service
+    fi
+    for _ in $(seq 1 30); do [ -S "${sock}" ] && break; sleep 1; done
+    return 0
+  fi
+
+  # No systemd (cloud sandbox, older WSL): we own the daemon, so start it ourselves — on the
+  # project socket AND the conventional one.
+  #
+  # `setsid`, not just `nohup`. nohup only ignores SIGHUP; the process stays in the caller's
+  # SESSION, and when that session is torn down the whole group goes with it. Measured on WSL,
+  # where a `wsl.exe -- <cmd>` invocation owns a session: dockerd started with nohup died minutes
+  # after the invoking shell went away, and took all 37 containers down with it — cleanly, as
+  # `Exited (0)`, which reads like somebody ran `bbox stop`. Any environment where this runs
+  # detached from a login shell has the same exposure.
+  say "no docker daemon — starting dockerd on ${sock} (DOCKER_MIN_API_VERSION=1.24)…"
+  if command -v setsid >/dev/null 2>&1; then
+    ${sudo} setsid env DOCKER_MIN_API_VERSION=1.24 dockerd -H "unix://${sock}" -H unix:///var/run/docker.sock >"${BBOX_TMP:-/tmp}/dockerd.log" 2>&1 </dev/null &
+  else
+    ${sudo} env DOCKER_MIN_API_VERSION=1.24 nohup dockerd -H "unix://${sock}" -H unix:///var/run/docker.sock >"${BBOX_TMP:-/tmp}/dockerd.log" 2>&1 &
+  fi
+  for _ in $(seq 1 30); do [ -S "${sock}" ] && break; sleep 1; done
+}
+
+need_docker() {
+  command -v docker >/dev/null 2>&1 || die "docker not found — run: bbox install <debian|windows>"
+  # Provision the project endpoint BEFORE selecting, not as a fallback after Desktop has already
+  # taken /var/run/docker.sock. Selecting first would bind this run to the conventional socket
+  # whenever Desktop happens to be closed, and the NEXT run — Desktop now open — would resolve
+  # somewhere else. Same stack, same host, different engine depending on whether a GUI was running.
+  # Provisioning first makes the choice independent of that entirely. It is idempotent: the drop-in
+  # is only rewritten when it differs, so this is a no-op on every run after the first.
+  if [ ! -S "${BBOX_DOCKER_SOCK:-/run/bbox-docker.sock}" ] && command -v dockerd >/dev/null 2>&1; then
+    ensure_project_engine || true
+  fi
+  # Resolves and EXPORTS DOCKER_HOST to an endpoint that is provably not Docker Desktop.
+  bbox_select_engine && return 0
+  # Nothing of ours answers: either no daemon at all, or the only one answering is Docker
+  # Desktop's, which is not ours to deploy into.
+  command -v dockerd >/dev/null 2>&1 && { ensure_project_engine; bbox_select_engine && return 0; }
+  # Still nothing of ours. dockerd is absent, or it is up but only Docker Desktop answers and the
+  # project endpoint could not be provisioned (no root, no systemd, no dockerd binary).
+  #
+  # DOCKER_MIN_API_VERSION only helps up to Docker 28. On 29 the daemon's hard minimum is 1.40 and
+  # the variable is capped there, so the flag ensure_project_engine sets is accepted and silently
+  # does nothing — traefik v3.3's 1.24 client is refused, the docker provider never loads, and every
+  # *.localhost host 404s while traefik reports healthy. If that happens the daemon is what to
+  # change, not the flag; run Docker 28.x, which is what the production VPS runs.
+  die "the project engine is not reachable (tried ${BBOX_DOCKER_SOCK:-/run/bbox-docker.sock}, \$DOCKER_HOST, /var/run/docker.sock). Docker Desktop's engine, if running, is deliberately NOT used: every image and volume this stack owns belongs to the project engine. Start the docker service, or set BBOX_DOCKER_HOST to choose an endpoint explicitly."
+}
+# ensure_network and run_app_hooks moved to scripts/lib.sh — `scripts/onboarding` needs both, and
+# a second copy of either is how the two paths drift.
+#
+# ensure_volumes is GONE, and both premises of the comment that justified it were false.
+#
+# It created a bare `wa_media` because that volume was `external: true` and shared with
+# development/agent-runner. Neither holds now: apps/chat/docker-compose.yml declares `wa_media: null`
+# under a comment that says exactly why — "NOT `external: true` … Only this app writes it, nothing
+# pre-seeds it, nothing shares it, so compose should own it exactly like mail_state or n8n_storage"
+# — and development/agent-runner was deleted with attic/. The compose file was fixed; this was not.
+#
+# Measured cost of leaving it: the engine carried BOTH `deployment-hacohen_wa_media` (compose's, the
+# real one chat uses) and a bare `wa_media` that bbox minted on every run and nothing ever read.
+#
+# A volume belongs to the app that declares it — chat already declares it in app.json's
+# `data.volumes`, which is the contract app-management's _remove_volumes reads on uninstall.
+# traefik REFUSES to use its ACME account if acme.json is group/world readable:
+#   "unable to get ACME account: permissions 644 for /etc/traefik/acme.json are too open, please use 600"
+# and the consequence is not a warning — it SKIPS the resolver, so every router that names
+# `myresolver` falls back to traefik's self-signed TRAEFIK DEFAULT CERT and the whole deployment
+# serves an untrusted certificate. The site works; the browser warns; nothing says why.
+#
+# The file is GITIGNORED (it accumulates the ACME account key and every issued TLS private key), and
+# git could not carry the mode anyway — it records only the executable bit, so while this was tracked
+# every clone landed at 644 and no deployment could obtain a real certificate on first bring-up.
+# Creating it here at 0600 is therefore the only place the mode can live.
+# .generated/ is COMPILED from apps/*/app.json + platform.state.yaml, and it is gitignored — so it
+# is the one part of a deployment that `git pull` cannot update. compose_args() (scripts/lib.sh)
+# renders it only when it is MISSING, which self-heals a fresh clone and nothing else: a compiled
+# config that is merely STALE is used forever.
+#
+# That is not a cosmetic staleness. Rename an app — as `whatsapp-hacohanim` -> `chat` did — and the
+# stale include list still names apps/whatsapp-hacohanim/docker-compose.yml. Compose does not skip a
+# missing include; it ABORTS THE WHOLE `up` with "no such file or directory" and starts ZERO
+# services. Observed on the 2026-07-29 from-scratch re-stage: pull, `bbox onboarding`, and not one
+# container came up. Add an app instead of renaming one and it is worse — the bring-up succeeds and
+# silently runs the OLD topology.
+#
+# So render on bring-up, with the same guarantee ensure_network gives, and FAIL rather
+# than continue: bringing the stack up on a configuration that does not match the repo is the exact
+# fault this prevents. `bbox rollback` deliberately does not come through here — it restores an
+# older .generated/ ON PURPOSE, and re-rendering would silently undo it.
+ensure_rendered() {
+  ( cd "${REPO_ROOT}" && python3 platform/manager/reconcile.py render ) >/dev/null \
+    || die "reconcile render failed — refusing to bring up a stale .generated/ (run: python3 platform/manager/reconcile.py render)"
+}
+# A FRESH GlitchTip is EMPTY: 0 orgs, 0 projects, 0 DSN keys, 0 API tokens. In that state the
+# whole alert path is dead in both directions — every app's Sentry event is REJECTED (no project
+# key to authenticate against) and `notifications` (התראות) gets 401 from the issues API (no
+# token), so it polls nothing. `glitchtip-push` closes both, but it was only ever invoked from
+# scripts/ci-verify.sh — never from bring-up. So every non-CI deployment ran with a decorative
+# GlitchTip: containers healthy, dashboards up, alert path dead. That is exactly what bit us on
+# 2026-07-17 — ~1,700 real errors, התראות showed 0.
+#
+# So provision it from bring-up, with the same guarantee ensure_network gives.
+# Idempotent by construction: the ORM work is get_or_create and the DSN public keys are
+# DETERMINISTIC (sha256(GLITCHTIP_SECRET_KEY:name)), so re-running rewrites the same values and
+# the DSNs already in .env stay valid across `down -v`. Runs unconditionally rather than
+# only-if-empty: it is also the self-heal when .env lost the values but the DB still has them.
+# The compose files size some services (apitools, n8n workers) for a big prod host: their
+# deploy.resources.limits.cpus is env-driven (APITOOLS_CPUS etc.), and perf-profile-apply is a NO-OP
+# when PERFORMANCE_PROFILE is unset — so a clean `cp .env.ex .env && bbox run` leaves them at the
+# compose defaults (apitools cpus 4), and `docker compose up` then ABORTS on any host with fewer
+# cores: "range of CPUs is from 0.01 to 2.00". A fresh install must size itself to the host. If the
+# operator has not chosen a profile, pick one by core count and apply it before compose up.
+#
+# --env-only, because at THIS point no container is running. The profile's other half writes 8 perf
+# knobs into INDOX's `settings` table, which does not exist until the schema migration runs during
+# onboarding — so from bring-up it could only ever fail, and it did, on every from-scratch install:
+# "settings upsert (8 keys): ERROR: relation settings does not exist". Invisibly, because of the
+# `>/dev/null 2>&1` below. scripts/onboarding applies the settings half once the schema is there.
+ensure_perf_profile() {
+  if grep -qE "^PERFORMANCE_PROFILE=.+" "${REPO_ROOT}/.env" 2>/dev/null; then
+    python3 "$(npath "${SCRIPTS}")/perf-profile-apply" --env-only >/dev/null 2>&1 || true
+    bbox_clamp_cpus_to_host
+    # A profile somebody chose is applied — and when it is not the one this machine would be given,
+    # that is SAID, once, in one line. It was silent, and an office could run for days on a profile
+    # nobody had picked for it: hp-laptop (6 cores, a 9.7 GiB VM) ran `ci-small`, the default the
+    # .env generator writes for CI, while the selector's answer for it is `wsl-10g`.
+    local cur fit
+    cur="$(grep -E '^PERFORMANCE_PROFILE=.+' "${REPO_ROOT}/.env" | tail -1 | cut -d= -f2- | tr -d "\"'[:space:]")"
+    fit="$(python3 "$(npath "${REPO_ROOT}")/platform/manager/select-profile.py" 2>/dev/null || true)"
+    if [ -n "${fit}" ] && [ "${fit}" != "${cur}" ]; then
+      say "profile: ${cur} (set in .env) — this machine ($(ncores) cores) would be sized ${fit}; PERFORMANCE_PROFILE=${fit} in .env adopts it"
+    fi
+    return 0
+  fi
+  # Resolve from the `requires:` envelope declared by each profile in perf-profiles.yml — cores
+  # AND memory. This replaced:
+  #     prof="prod"; [ $n -le 4 ] && prof="vps"; [ $n -le 2 ] && prof="ci-small"
+  # which selected on core count alone and never looked at memory, even though every profile has
+  # always declared host_mem. A 6-core / 9.7 GiB WSL2 VM was therefore handed `prod` (host_mem:
+  # 16G) and the whole stack was sized for 65% more memory than the machine has — the origin of
+  # APITOOLS_MEM=8G on a 9.7 GiB box, and of a declared-limit sum at 4.46x physical.
+  #
+  # Adding a profile must never require editing this function again: the envelope lives with the
+  # profile. Do not reintroduce a hard-coded name or a `if mem > X` here.
+  n="$(ncores)"
+  prof="$(python3 "$(npath "${REPO_ROOT}")/platform/manager/select-profile.py" 2>/dev/null)"
+  if [ -z "$prof" ]; then
+    # Selector unavailable (no python3, missing file). Fall back to the SMALLEST profile, never
+    # the largest: under-sizing is slow, over-sizing is what tears the host down.
+    prof="ci-small"
+    say "${cy}profile selector unavailable — falling back to the floor profile (${prof}).${c0}"
+  fi
+  say "no PERFORMANCE_PROFILE set — sizing to this host (${n} cores → ${prof})"
+  printf '\nPERFORMANCE_PROFILE=%s\n' "$prof" >> "${REPO_ROOT}/.env"
+  python3 "$(npath "${SCRIPTS}")/perf-profile-apply" --env-only >/dev/null 2>&1 || say "${cy}perf-profile-apply had a warning — check cpus limits vs host${c0}"
+  # and clamp on THIS path too: a machine that had no profile yet is precisely the one that has
+  # never been sized to itself, and docker ABORTS `up` on a single limit above the host's cores.
+  bbox_clamp_cpus_to_host
+}
+# ensure_sso_current — sign-in serves the hosts this deployment declares NOW, not the set its server
+# loaded at boot. The condition, the probe and the cure are the sign-in app's own
+# (`<its dir>/hooks/refresh`, where the whole story is written down); this only says WHEN, and
+# reaches that app by the ROLE it plays — whichever enabled app provides `forward-auth` — the same
+# lookup `ensure_converged` makes for the control plane, so no app is named here (gate G31). The
+# control plane runs the same hook after it compiles a new host, which is why it is a hook and not
+# a function of this file: a host declared from the apps screen needs it as much as one declared
+# from this CLI.
+ensure_sso_current() {
+  local id root hook
+  id="$(cd "${REPO_ROOT}" && python3 platform/manager/reconcile.py capability-provider --capability forward-auth 2>/dev/null)"
+  [ -n "${id}" ] || return 0
+  for root in platform-base apps; do
+    hook="${REPO_ROOT}/${root}/${id}/hooks/refresh"
+    [ -x "${hook}" ] && { bash "${hook}" || true; return 0; }
+  done
+  return 0
+}
+# ensure_converged — every enabled app's declared state is REAL, as part of `bbox run` itself.
+#
+# THE GAP THIS CLOSES. AGENTS.md's own goal is "fully declarative — git clone + ./bbox run brings
+# the whole stack live". It didn't: `bbox run` brought up containers and stopped, so an app that
+# declares `blueprints.n8n` (its automations) had them imported only at the moment its state
+# transitioned to enabled — never again. `bbox reset` wipes the volumes while platform.state.yaml
+# still says enabled: n8n comes back with zero workflows, no transition fires because none
+# happened, and nothing notices. A memory of exactly this ("bbox first run needs onboarding")
+# existed because the platform never healed the gap it recorded.
+#
+# THE MECHANISM ALREADY EXISTS, correctly, in app-management — reconcile_once() (this repo's
+# control-plane owner of "App lifecycle") walks every ENABLED app's OWN manifest, and for each one
+# that declares blueprints.n8n, asks n8n whether it actually holds those workflows
+# (_blueprint_present) before doing anything. Only a genuine gap triggers an import, scoped to that
+# one app (`apps/n8n/hooks/push --app <id>`). This is NOT bbox re-deciding what an app
+# needs — it is bbox asking the app that already owns that decision to act on its own answer.
+#
+# So this is one HTTP call to the control plane already running in the stack, not new logic here:
+# POST /api/reconcile on app-management, documented "safe to call repeatedly; a converged estate
+# reports nothing done" — which is exactly why calling it on EVERY `bbox run` costs nothing extra
+# on an already-provisioned stack (one bounded round of presence checks, no imports, no restarts)
+# and does the real work exactly when something is actually missing.
+ensure_converged() {
+  # Reached by CAPABILITY, not by name — bbox does not know which app is the control plane, only
+  # that whichever enabled app declares "control-plane" (if any) is the one to ask. Resolving that
+  # is the manifest-aware compiler's job, not the CLI's; hardcoding the app id here is precisely the
+  # layer-0-carries-app-knowledge defect gate G31 (layer0-lint) exists to catch.
+  local cp_id; cp_id="$(cd "${REPO_ROOT}" && python3 platform/manager/reconcile.py capability-provider --capability control-plane 2>/dev/null)"
+  [ -n "${cp_id}" ] || return 0
+  local am; am="$(cn "${cp_id}" 2>/dev/null)"
+  [ -n "${am}" ] || return 0
+  local out
+  # [2026-08-23] A 500 FROM /api/reconcile IS A REPORT, NOT A CRASH — read the body.
+  # app-management returns `jsonify(ok=not rep["errors"], **rep), (200 if not rep["errors"] else
+  # 500)`, so a 500 means reconcile RAN and is telling us which apps failed to converge. urllib
+  # raises HTTPError on 500, the old bare `except` printed "ERR HTTP Error 500: INTERNAL SERVER
+  # ERROR", and the body — the only place the actual errors exist — was discarded.
+  # Measured on a fresh `down -v` bring-up: that one opaque line was all the operator got, and the
+  # consequence was concrete. Convergence is what imports every app's blueprints into n8n, and it
+  # runs BEFORE the onboard hooks on purpose; when it silently failed, indox's onboard hook
+  # reached for a workflow n8n did not have yet ("workflow not found: IndoxResetFull01") and the
+  # blueprints only arrived later. The ordering was right the whole time. The failure was unread.
+  out="$(docker exec "${am}" python3 -c '
+import urllib.request, urllib.error
+try:
+    r = urllib.request.urlopen(urllib.request.Request(
+        "http://127.0.0.1:8080/api/reconcile", data=b"", method="POST"), timeout=1200)
+    print(r.read().decode())
+except urllib.error.HTTPError as e:
+    body = ""
+    try:
+        body = e.read().decode()[:2000]
+    except Exception:
+        pass
+    print("ERR HTTP", e.code, body)
+except Exception as e:
+    print("ERR", e)
+' 2>/dev/null)"
+  case "${out}" in
+    *'"converged": []'*|*'"converged":[]'*) : ;;   # nothing to do — the common case, say nothing
+    ERR*) say "${cy}convergence check failed: ${out#ERR }${c0}" ;;
+    *) say "converged: ${out}" ;;
+  esac
+}
+# ── the app command surface, read from the apps themselves ────────────────────────────────────
+# bbox must not contain a list of apps, their aliases, or their verbs. These three helpers derive
+# all of it: app_resolve maps a CLI token to an app via `id` or the `cli.alias` the app declares;
+# app_verbs lists the files in its hooks/ directory; app_help_block renders the help section. Add
+# an app, or a verb, and the CLI picks it up with no edit here.
+#
+# `#:` is the convention for a hook's one-line summary — its first line after the shebang. Hooks
+# without one still work; they simply appear without a description.
+
+#: app_resolve <token> -> "<root> <id> <fallback-or-id>", non-zero when the token is not an app
+app_resolve() {
+  local tok="${1:?}"
+  # npath: this path is an ARGUMENT to a native binary, and on Windows python3 mis-resolves the
+  # /c/... form. Gate G10 catches exactly this.
+  python3 - "$(npath "${REPO_ROOT}")" "${tok}" <<'PY' 2>/dev/null
+import json, pathlib, sys
+repo, tok = pathlib.Path(sys.argv[1]), sys.argv[2]
+for root in ("apps", "platform-base"):
+    for m in sorted((repo / root).glob("*/app.json")):
+        try: d = json.loads(m.read_text(encoding="utf-8"))
+        except Exception: continue
+        cli = d.get("cli") or {}
+        if tok == d.get("id") or tok == cli.get("alias"):
+            print(f"{root} {d['id']} {cli.get('fallback') or d['id']}")
+            raise SystemExit(0)
+raise SystemExit(1)
+PY
+}
+
+#: app_verbs <root> <id> — the app's verbs, i.e. the executable files in its hooks/ directory
+app_verbs() {
+  local d="${REPO_ROOT}/${1}/${2}/hooks"
+  [ -d "${d}" ] || return 0
+  # BASE NAMES: a verb is `doc-trace`, whether the file is doc-trace, doc-trace.py or doc-trace.mjs.
+  # Listing raw filenames offered `.py` verbs nobody could type and hid the ones they could.
+  ( cd "${d}" && ls 2>/dev/null | grep -v '^__pycache__$' | sed -E 's/\.(py|mjs|sh)$//' | sort -u )
+}
+
+app_verbs_line() { local v; v="$(app_verbs "$1" "$2" | tr '\n' ' ')"; [ -n "${v}" ] && printf '  (%s)' "${v% }"; }
+
+#: app_help_block — the `apps` section of `bbox help`, generated from every app that has hooks
+app_help_block() {
+  local root aid alias tok verbs vb desc
+  for root in apps platform-base; do
+    for d in "${REPO_ROOT}/${root}"/*/hooks; do
+      [ -d "${d}" ] || continue
+      aid="$(basename "$(dirname "${d}")")"
+      verbs="$(app_verbs "${root}" "${aid}")"
+      [ -n "${verbs}" ] || continue
+      alias="$(python3 -c "import json,sys;print((json.load(open(sys.argv[1],encoding='utf-8')).get('cli') or {}).get('alias') or '')" "$(npath "${REPO_ROOT}/${root}/${aid}/app.json")" 2>/dev/null)"
+      tok="${alias:-${aid}}"
+      printf '\n%s%s%s%s\n' "${c1}" "${tok}" "${c0}" "$([ -n "${alias}" ] && printf '  (%s)' "${aid}")"
+      while IFS= read -r vb; do
+        [ -n "${vb}" ] || continue
+        # Resolve the real file: app_verbs yields BASE names, so `accept` is accept.py. Reading
+        # "${d}/${vb}" directly failed under `set -e` and killed the whole listing after the first
+        # extensionless miss — indox's section rendered as a heading with nothing under it.
+        f=""; for e in "" .sh .py .mjs; do [ -f "${d}/${vb}${e}" ] && { f="${d}/${vb}${e}"; break; }; done
+        desc="$(sed -n '2,4p' "${f:-/dev/null}" 2>/dev/null | sed -n 's/^#: *//p' | head -1 || true)"
+        printf '  %-34s %s\n' "bbox ${tok} ${vb}" "${desc}"
+      done <<EOF
+${verbs}
+EOF
+    done
+  done
+}
+
+# ensure_glitchtip_provisioned moved to platform-base/glitchtip/hooks/prepare.
+# One app's provisioning, its own four services, and a fallback re-run were three
+# separate things layer 0 knew about glitchtip. run_app_hooks invokes it generically now.
+confirm() { # confirm "msg" ; honor --force/$2
+  [ "${FORCE:-0}" = "1" ] && return 0
+  printf '%s [y/N] ' "$1"; read -r ans </dev/tty 2>/dev/null || ans=""
+  case "$ans" in y|Y|yes|YES) return 0;; *) return 1;; esac
+}
+
+usage() {
+  cat <<EOF
+${c1}bbox${c0} — deployment CLI  (DEPLOYMENT_NAME=${DN})
+
+${c1}Lifecycle${c0}
+  bbox run [svc...]        bring the stack up (docker compose up -d; ensures traefik-network)
+  bbox stop               bring the stack down (containers removed, data volumes KEPT)
+  bbox reset [--force]     ${cr}DESTROY all data${c0} (docker compose down -v) — asks to confirm
+  bbox status             deployment health overview (containers + n8n + creds)
+  bbox agent <verb>       the office agent from the terminal: list|new|send|follow|watch|show|log|wait|cancel|
+                          rename|fork|cmd|goal|model|presets|upload|login|doctor  (bbox agent --help)
+  bbox remote [office [alias [path]]]  the apps of a LINKED office, and one call through the link
+  bbox dialable [-Check|-Undo]  can another office DIAL this one? On Windows: switches WSL to mirrored
+                          networking (asks first; restarts WSL). Elsewhere it says what is true here.
+  bbox verify [dependencies]  readiness gate: host + stack + n8n creds/keys (exits non-zero if broken)
+  bbox update <app…>      deploy a rebuilt app and PROVE it landed: build, replace only when the
+                          built image differs from the one the container runs, wait for its
+                          healthcheck, roll back if it never gets healthy. An app that updates
+                          ITSELF declares a `hooks/update` and is handed to that door instead
+                          (which continues the conversation that asked).
+  bbox logs [svc] [-f]    show logs (all services, or one)
+
+${c1}Move this deployment to another machine${c0}
+  bbox export [--mode full|config] [--quiesce] [--out DIR]
+                          snapshot EVERYTHING a zip of this folder would miss — the databases,
+                          n8n workflows+credentials, documents, auth users, sync cursors — into
+                          exports/ (gitignored), so zipping the folder now carries the deployment.
+                          ${cy}full${c0} = with execution history + OCR caches; ${cy}config${c0} = without them.
+  bbox import [DIR]       restore an archive into THIS checkout. Refuses to overwrite the
+                          deployment it came from. Verifies every artifact's sha256 first, then
+                          diffs per-table row counts and credential ciphertext against the source.
+
+${c1}Healthy baseline${c0}  (the one-command fresh proof — ai/context/healthy-baseline.md)
+  bbox baseline           ${cg}fresh${c0} reset→build→up→ci-verify→indox test→any-concurrency+notifications
+                          →ui-map→scorecard. Green only if ALL five baseline criteria pass.
+  bbox ui-map             capture the whole platform UI → one big map image + coverage
+                          --profile mobile|tablet|desktop (view-profiles.yaml; default desktop)
+  bbox seed               seed demo data so every UI renders real content
+
+${c1}n8n${c0}  (LIVE is the source of truth; blueprints are CODE — *.workflow.ts. Agents: pull → edit → push, always.)
+  bbox n8n pull <app> [wfId ...]   live → code, just what you'll edit (whole app when no ids)
+  bbox n8n pull all                whole estate + credentials + manifest (routed by app:* tags)
+  bbox n8n push <app> <wfId ...>   push exactly those via the n8n API (no restart, hot triggers)
+  bbox n8n push <app> [--all]      changed-only (sha cache) / force whole app
+  bbox n8n push all                FULL reconciler: owner+creds+schema+import+publish+RESTART
+  bbox n8n status                  co-op sync: who changed what live, drift, published, creds, key
+  bbox n8n test <app> <wfId>       trigger + verdict (exit 0=inform/don't block, 1=fix+iterate)
+  bbox n8n plan <app> <wfId>       infer how to test + suggested payload (--json)
+  bbox n8n execute -n <node.json> <input.json>   run ONE node on your items (--ex-link keeps it)
+  bbox n8n exec list|get ...       execution diagnosis via the API
+  bbox n8n code validate|info|search|docs <args>   offline authoring intelligence (537 schemas)
+  bbox n8n code render|compile|verify <src> [out]  transformer pipeline (verify = CI gate)
+  bbox n8n verify                  cred connect-tests + missing-key warnings + re-auth links
+  bbox n8n clean-recreate [--force]   wipe n8n then restore EXACTLY from blueprint
+  bbox n8n load-dump <f>           one-off ingest of a prod n8n Postgres dump
+  bbox n8n automations reset [--force]  ${cr}clean app STATE${c0} (sheet rows+log tabs cleared, Drive
+                          folders emptied, Gmail auto-labels stripped, Redis caches cleared) for a
+                          clean re-onboarding. Dry-run without --force. (≠ 'bbox reset' = infra wipe)
+
+${c1}apps + catalog${c0}  (the app store: a SIGNED index, install by reference)
+  bbox apps list|validate            resolved plan / manifest validation
+  bbox apps enable|disable <app>     persistent disposition (data always kept)
+  bbox catalog keygen               create this deployment's ed25519 signing key
+  bbox catalog build                compile apps/ -> .generated/catalog (index + artifacts + signature)
+  bbox catalog verify [ref]         check the signature AND every per-entry sha256
+  bbox catalog list [ref]           entries in an index (path or URL)
+  bbox catalog show <id>            ${cg}pre-install disclosure${c0} — credentials first, then powers, routes, cost
+  bbox catalog trust <key-id> <hex> pin a publisher's public key (the one trust decision)
+  bbox app install <ref>            install by catalog id, http(s) URL or local path/dir
+                                    (--dry-run to disclose only; --sha256 for an unsigned artifact)
+
+${c1}install${c0}
+  bbox install debian     git + docker + gemini CLI (Debian/Ubuntu)
+  bbox install windows    WSL host prep (metadata mount) + git/docker inside the distro — run via
+                          bbox.cmd from CMD, NOT Docker Desktop (see ai/context/running-on-wsl.md)
+  bbox install macos      the project engine on a Mac: Lima/vz guest + Docker 28 pinned, no admin,
+                          NOT Docker Desktop (see packaging/macos.md). Same as: bbox engine start
+  bbox engine <verb>      macOS only — start | stop | status | shell | socket | doctor | destroy
+
+${c1}onboarding${c0}
+  bbox onboarding             first-run: prereqs → run → wait healthy → n8n push → verify
+  bbox onboarding --auth-state  just re-check creds + print re-auth links
+EOF
+  # The app section is GENERATED from apps/*/hooks and platform-base/*/hooks. It used to be typed
+  # here — b42's four verbs and indox's six — which meant `bbox help` was a second place that had
+  # to be edited when an app changed, and it silently went stale when one didn't.
+  printf '
+%sapps%s  (bbox <app> <verb>; an app.json may declare a shorter alias)
+' "${c1}" "${c0}"
+  app_help_block
+}
+
+cmd="${1:-help}"; shift || true
+# global --force flag
+FORCE=0; args=(); for a in "$@"; do [ "$a" = "--force" ] && FORCE=1 || args+=("$a"); done; set -- "${args[@]+"${args[@]}"}"
+
+case "${cmd}" in
+  run)
+    need_docker
+    # one heavy job at a time on this engine (heavy_admit, scripts/lib.sh) — a run builds and starts
+    heavy_admit "bbox run $*"
+    # Fresh cloud sandbox with no .env yet → generate a secretless one (localhost/http) and re-exec so
+    # DN and every read_env pick it up. On a laptop/VPS you bring your own .env; we never overwrite it.
+    #
+    # The macOS engine (BBOX_IN_GUEST, see packaging/macos.md) is the same shape as the sandbox — a
+    # fresh Linux guest with no .env and a *.localhost edge — so `git clone` + `./bbox run` on a Mac
+    # gets the same generated .env: random secrets, DEPLOYMENT_NAME=local, and the auth redirect
+    # carrying the host port the edge is forwarded to (8080). Set BUSINESS_NAME in it afterwards.
+    if [ ! -f "${REPO_ROOT}/.env" ] && { ccr_have_proxy_ca || [ -n "${BBOX_IN_GUEST:-}" ]; }; then
+      if [ -n "${BBOX_IN_GUEST:-}" ]; then
+        say "no .env — generating a local one for the macOS engine (scripts/ci-env.sh, DEPLOYMENT_NAME=local, edge on :8080)…"
+        ( cd "${REPO_ROOT}" && CI_DEPLOYMENT_NAME=local CI_EDGE_PORT=8080 bash scripts/ci-env.sh ) >/dev/null 2>&1 || say "${cy}ci-env.sh reported an issue${c0}"
+      else
+        say "no .env — generating a secretless cloud .env (scripts/ci-env.sh)…"
+        ( cd "${REPO_ROOT}" && bash scripts/ci-env.sh ) >/dev/null 2>&1 || say "${cy}ci-env.sh reported an issue${c0}"
+      fi
+      exec "${REPO_ROOT}/bbox" run "$@"
+    fi
+    ensure_rendered; ensure_network; ensure_perf_profile
+    # A name this stack needs, held under ANOTHER compose project, is said HERE — the compile
+    # is current, and no hook has run and nothing has been built yet: over such a container compose
+    # aborts partway and leaves half a stack (lib.sh: foreign_containers).
+    held="$(foreign_containers)"
+    [ -z "${held}" ] || die "another compose project holds container names this stack needs:
+$(printf '%s\n' "${held}" | sed 's/^/    /')
+  Bring that project down where it was started, or remove just these containers (their volumes are kept):
+    docker rm -f $(printf '%s\n' "${held}" | awk '{print $1}' | tr '\n' ' ')
+  then run this again."
+    # `|| true`: a failed bootstrap is LOUD (run_app_hooks names the app) but must not deny
+    # every later app its own prepare, nor abort a bring-up that is otherwise fine.
+    run_app_hooks prepare || true   # each app's OWN bootstrap; bbox names none of them
+    # Cloud-sandbox accommodations (see scripts/lib.sh). Each is a GUARDED NO-OP on a normal
+    # Windows/VPS host, so this block changes nothing there. On a MITM-proxy sandbox it: caps the
+    # postgres nofile ulimit to what the kernel allows, CA-shadows the base images, and pre-builds
+    # the first-party images serially — so a plain `bbox run` just works instead of failing on
+    # in-container pip/npm TLS, a rlimit denial, or a concurrent-npm OOM.
+    ccr_clamp_nofile || true
+    # [2026-08-23] A host whose DEFAULT BRIDGE has no egress still builds fine over the host
+    # network. Measured on portable-ubuntu: a docker0 container pings 1.1.1.1 but cannot open
+    # TCP/443 or UDP/53, while the stack's own user-defined network reaches both -- so nothing
+    # the platform RUNS is affected and only `docker build`, which uses docker0, fails.
+    # This replaces a hard refusal added a day earlier. Refusing was wrong twice: it stopped a
+    # host that can build perfectly well, and it left 19 of 42 services unbuilt -- including
+    # app-management, so the console's apps screen had no catalog to read and showed nothing.
+    if ! ccr_have_proxy_ca && bbox_container_dns_broken; then
+      say "${cy}default-bridge egress is dead on this host — building first-party images over the host network${c0}"
+      if ccr_build_serial; then BBOX_PREBUILT=1; else
+        say "${cy}some first-party builds failed — see above; continuing to up${c0}"
+      fi
+    fi
+    if ccr_have_proxy_ca && [ "${CCR_BASES_READY:-0}" != 1 ]; then
+      say "MITM egress proxy detected — CA-shadowing bases + serial-building first-party images…"
+      ccr_shadow_bases || true
+      # If a needed base image couldn't be pulled, the network policy is blocking registries — stop
+      # now with the clear hint rather than grinding through builds that can't fetch their layers.
+      [ "${CCR_REGISTRY_BLOCKED:-0}" = 1 ] && die "base images unavailable — fix the environment's network policy (see hint above), then re-run 'bbox run'"
+      ccr_build_serial || say "${cy}some first-party builds failed — see above; continuing to up${c0}"
+    fi
+    # The authentik-first HEAD START used to sit here: four of one app's services started by name,
+    # then a 15s sleep, because its first-boot migrations and serial blueprint application are
+    # CPU-heavy and racing the whole stack stretched init from a few minutes to ~20. It is now
+    # platform-base/authentik/hooks/prepare, invoked generically by the run_app_hooks call above —
+    # the app starts what it owns and blocks on its OWN SSO sentinel, so the behaviour is intact
+    # and this file names no app to get it. The `$#` guard went with it: a prepare hook is the
+    # app's own business on every bring-up, targeted or not, and it no-ops when it is already up.
+    # GlitchTip BEFORE the whole-stack wait, for the same reason authentik gets a head start:
+    # something downstream cannot be healthy until it is done.
+    #
+    # `notifications` (התראות) polls GET /organizations/<slug>/issues/, and its health is
+    # deliberately RED whenever it is not polling — blind is not healthy, that check exists
+    # because ~1,700 errors once went unreported behind a green container. But the org it polls is
+    # created by glitchtip-push, which ran AFTER `up --wait`. So on every fresh deploy the wait
+    # could not succeed: notifications 404'd on an org that provisioning had not created yet, the
+    # full timeout burned (300s warm, 600s cold), `bbox run` printed "not all services healthy",
+    # and only the provisioning step after it made the deployment correct. First impression of a
+    # one-command install: a stack that reports itself broken and then quietly fixes itself.
+    #
+    # Observed on the 2026-07-29 staging re-stage, and it is not a rename artefact — a genuinely
+    # fresh company hits it identically: its org slug (COMPANY_SLUG) has never existed either.
+    #
+    # So: bring glitchtip's own services up, wait for THEM, provision, and only then wait on the
+    # stack. Provisioning writes <APP>_SENTRY_DSN + GLITCHTIP_API_TOKEN into .env, and the `up`
+    # below re-creates consumers — so notifications gets both its token and an org that exists,
+    # on its FIRST start. `$#` guard: a targeted `bbox run <svc>` is not a whole-stack bring-up.
+    say "bringing up the stack (${DN})… waiting for healthy (SSO gated by authentik-bootstrap)"
+    # --wait blocks until every service is healthy/completed; the authentik-bootstrap sentinel
+    # only goes healthy once the embedded outpost serves all gated hosts → no post-up 404 window.
+    #
+    # ONE GENERIC CEILING. This used to be a cold/warm decision made HERE, by probing one app's
+    # postgres volume by name — the CLI both knowing which app dominates a cold start (identity:
+    # migrations, serial blueprints, embedded-outpost sync, measured past 300s on a fresh `reset`)
+    # and knowing which volume proves it has booted before. Two pieces of one app's knowledge, in
+    # the file that is supposed to hold none.
+    #
+    # That decision now belongs to the app that owns the volume: its hooks/prepare picks its own
+    # cold/warm allowance and BLOCKS on its own readiness sentinel, before this line is reached.
+    # So the slow initialiser is already done by the time we wait on the stack, and what is left
+    # here is a ceiling for everything else. Callers wanting more headroom on a cold runner still
+    # export BBOX_WAIT_TIMEOUT — scripts/onboarding, scripts/baseline.sh and ci-verify.yml all set
+    # 600 — which is a generic knob, not an app talking to the CLI about itself.
+    # `--build`: without it, `up -d` starts whatever image already exists under a service's tag and
+    # never asks whether the Dockerfile it names has moved since. That is exactly how a VPS redeploy
+    # goes stale silently — `git pull && bbox run` moves the checkout and the schema (whatever hook
+    # applies it) forward, but a first-party service keeps serving the OLD image, because nothing
+    # ever told compose to look again. Found the hard way: staging's `incoming-documents` ran code
+    # from before a schema migration landed, while its Postgres was already migrated — one write
+    # path 400'd on every call, surfaced to a user as "the database is unavailable" with a perfectly
+    # healthy database. Docker's own build cache is what keeps this cheap on the common `bbox run`
+    # where nothing changed — a cache hit per service is a filesystem walk plus a manifest compare,
+    # not a rebuild; the redeploy case is the one this exists for, not the routine one it also runs on.
+    _wt="${BBOX_WAIT_TIMEOUT:-300}"
+    # [2026-08-23] --build is deliberate (see above) and stays the default. It is dropped in
+    # exactly one case: the serial host-network build above already rebuilt every first-party
+    # image this run, and on a host with a dead default bridge compose's own build CANNOT
+    # succeed -- it uses docker0 and dies in pip with "Temporary failure in name resolution".
+    # Measured: the serial pass tagged incoming-documents/machine/mailapi/mailview/notifications
+    # fine, then `up --build` rebuilt them over docker0 and failed. Skipping it here loses
+    # nothing: the freshness guarantee --build exists for was just provided seconds earlier.
+    _bf="--build"; [ -n "${BBOX_PREBUILT:-}" ] && _bf=""
+    dc up -d ${_bf} --wait --wait-timeout "${_wt}" "$@" \
+      || say "${cy}not all services healthy within ${_wt}s — check 'bbox status' / 'bbox logs'${c0}"
+    # Safety net: --wait can return (timeout) with services still 'Created' that were waiting on a
+    # slow depends_on (e.g. n8n workers wait for n8n main service_healthy; first-run migrations +
+    # image builds can exceed the window). A plain `up -d` now starts them — their deps have since
+    # gone healthy. Without this the queue never drains (workers stuck Created). Idempotent no-op
+    # when everything is already running.
+    #
+    # Provision GlitchTip BEFORE that `up`, not after: glitchtip-push writes <APP>_SENTRY_DSN and
+    # GLITCHTIP_API_TOKEN into .env, and containers only read .env at (re)create time. Compose
+    # resolves .env on every invocation and recreates whatever's config hash changed, so the `up`
+    # below is what actually hands `notifications` its poller token. Provisioning after it would
+    # write the values and leave every consumer running on the stale (empty) env until the next
+    # unrelated restart — green config, dead runtime. Safe here: `--wait` above already returned,
+    # so glitchtip is healthy (migrations done) and its ORM is usable.
+    #
+    # Now a FALLBACK. The whole-stack wait is no longer the first chance to provision — the
+    # glitchtip phase above is — so this only fires for a targeted `bbox run <svc>`, or when
+    # glitchtip was still coming up during that phase. Skipped when it already ran: it is
+    # idempotent (get_or_create + DETERMINISTIC DSNs), but it is also a minute of ORM work.
+    # …and make sure SSO is actually serving the hosts this deployment declares, not the ones
+    # authentik-server happened to load at boot. Runs after the wait: the sentinel must have
+    # applied the blueprints and computed its host list before there is anything to check.
+    ensure_sso_current
+    dc up -d "$@" >/dev/null 2>&1 || true
+    # NOTE: the INDOX UI 'בדיקות' (tests) tab drives the n8n E2E suites via lane webhooks (part of
+    # the core n8n stack) — it does not need feature-validation-api. That service is
+    # apps/apitools/feature-validation, a CI/dev quality tool reached via `bbox test apitools`
+    # (apps/apitools/hooks/test); it is intentionally NOT part of the default bring-up.
+    ensure_converged
+    # Each enabled app's own first-run seeding (schema, demo state, whatever it declares it needs).
+    # `ensure_converged` above already guarantees n8n holds every enabled app's blueprint — including,
+    # via the schema-apply now folded into `apps/n8n/hooks/push` itself, the platform schema
+    # every app's onboard hook can assume exists — so ordering is correct by construction, not by
+    # phase placement. `|| true`: onboard hooks are LOUD on failure (run_app_hooks names the app) but
+    # must not fail a `bbox run` that otherwise brought the stack up fine — each hook is responsible
+    # for being safe to call unconditionally (i.e. a no-op once its own app is already onboarded).
+    run_app_hooks onboard || true
+    # Last, so it is the last thing on the screen: are the hosts sign-in is DECLARED on hosts the
+    # edge routes (gate G70)? The one failure here that comes up green — every container healthy,
+    # a bare 404 at the first login. Said, not fatal: the office is up either way. Whole-stack
+    # runs only — a targeted `bbox run <svc>` may leave a router's container down on purpose.
+    [ $# -gt 0 ] || python3 "$(npath "${REPO_ROOT}/scripts/refactor/declared-host-routing-lint.py")" --quiet || true
+    say "up. check health with: bbox status" ;;
+  stop)
+    need_docker; say "stopping the stack (containers removed, data kept)…"; dc down "$@"; say "stopped."
+    # `down` stops what THIS compose project owns. A container another project holds under one of
+    # this stack's names goes on serving, and "stopped." would be a lie about it.
+    held="$(foreign_containers)"
+    [ -z "${held}" ] || printf '%s\n' "${held}" | sed "s/^/  ${cy}still there — held by another compose project:${c0} /" ;;
+  reset)
+    need_docker
+    echo "${cr}This DESTROYS all data for '${DN}' (docker compose down -v: postgres, redis, n8n, browser42 profile, …).${c0}"
+    confirm "Proceed?" || { say "aborted."; exit 0; }
+    say "wiping…"; dc down -v --remove-orphans "$@"
+    # `down -v` only removes containers labelled with THIS compose project. A service whose
+    # container_name carries no ${DEPLOYMENT_NAME} suffix, created by a DIFFERENT project or
+    # invocation (a pre-refactor run, the CI overlay, a manual docker run), is not owned by that
+    # line — it survives, and the next `bbox run` dies with "container name already in use".
+    #
+    # DERIVED, not enumerated. This was a hand-kept list of four names, and it had already drifted:
+    # it still removed `chat` and `chat-ci` after apps/chat moved to
+    # `container_name: chat-${DEPLOYMENT_NAME:-...}`, so two of its four entries could never match
+    # anything, while a NEW fixed-name service would have been missed entirely. The compiled compose
+    # already knows every container_name; ask it, and the answer cannot go stale.
+    # DN is passed EXPLICITLY: lib.sh sets it as a shell variable, not an exported one, so a bare
+    # subprocess sees it empty — and an empty suffix makes the filter match nothing, which would
+    # have force-removed EVERY container in the stack instead of the two bare-named ones.
+    dc config --format json 2>/dev/null \
+      | DN="${DN}" python3 -c 'import json,sys,os
+try: d=json.load(sys.stdin)
+except Exception: sys.exit(0)
+dn=os.environ.get("DN","")
+if not dn: sys.exit(0)          # never guess: no deployment name, nothing is safe to force-remove
+for s in (d.get("services") or {}).values():
+    n=s.get("container_name")
+    # only the ones compose cannot reclaim by project label: no deployment suffix
+    if n and not n.endswith("-"+dn): print(n)' 2>/dev/null \
+      | while read -r c; do [ -n "$c" ] && docker rm -f -v "$c" >/dev/null 2>&1 || true; done
+    say "reset done. 'bbox run' for a fresh stack, then 'bbox n8n push' + 'bbox onboarding'." ;;
+  agent)
+    # the office agent, through the agent.v1 contract (ai/context/agent-contract.md) — provider-agnostic.
+    # No docker probe: the CLI speaks HTTP to the provider on the host's loopback; only `login` (once)
+    # reaches into the engine, and does so by itself.
+    exec python3 "$(npath "${REPO_ROOT}/scripts/agent.py")" "$@" ;;
+  remote)
+    # the apps of a LINKED office, and one authenticated call through the link (DGO-32/37; the
+    # remote-apps contract §6–7). Discovery is the compiled registry plus the link plane's own
+    # `GET /api/link`, and the reach decision — this process, or a container on the office network —
+    # is the CLI's own, because `<alias>.<office>` is a docker network alias and resolves nowhere else.
+    exec python3 "$(npath "${REPO_ROOT}/scripts/remote.py")" "$@" ;;
+  dialable)
+    # Whether another office can DIAL this one is a fact of the MACHINE, so the verb acts where the
+    # machine is. On Windows that is bbox.cmd (scripts/windows/wsl-mirrored.ps1): WSL's networking
+    # mode is a file in the user's Windows profile and a restart of WSL — neither reachable from
+    # inside the distro, so bbox.cmd answers this verb itself and it only arrives HERE when somebody
+    # typed it in a Linux shell. Elsewhere there is nothing to switch; this says which case it is.
+    if grep -qi microsoft /proc/version 2>/dev/null; then
+      say "WSL is in '$(wslinfo --networking-mode 2>/dev/null || echo unknown)' networking. To change it run ${c1}bbox.cmd dialable${c0} from CMD or PowerShell (it asks before it restarts WSL)."
+    elif [ -n "${BBOX_IN_GUEST:-}" ]; then
+      if [ -n "${BBOX_HOST_LAN_ADDR:-}" ] && [ -n "${BBOX_HOST_UDP_PORT:-}" ]; then
+        say "the macOS engine forwards UDP ${BBOX_HOST_UDP_PORT} from ${BBOX_HOST_LAN_ADDR} into this office: it can be dialed there."
+      else
+        say "on macOS this is the engine's: it forwards no UDP port inward, so this office dials and cannot be dialed (ai/context/dgo-pairing-contract.md, \"the engine's half\")."
+      fi
+    else
+      say "a Linux machine can be dialed as it is: 'bbox run' declares a local office's LAN address by itself; a public server's address is its owner's to declare (DGO_WG_ENDPOINT / DGO_WG_PUBLISH_PORT in .env)."
+    fi ;;
+  status)
+    need_docker
+    # …and the compose PROJECT these answers are about: a checkout reached by a path compose names
+    # differently talks to a project of its own, and "0 containers" from it reads as "the office is down".
+    say "deployment ${DN} · compose project $(dcx config --format json 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin).get("name") or "?")' 2>/dev/null || echo '?')"
+    total=$(docker ps -a --format '{{.Names}}' | grep -c -- "-${DN}$" || true)
+    up=$(docker ps --format '{{.Names}}\t{{.Status}}' | grep -- "-${DN}" | grep -c 'Up' || true)
+    healthy=$(docker ps --format '{{.Status}}' | grep -c 'healthy' || true)
+    echo "  containers: ${cg}${up} up${c0} / ${total} (${healthy} healthy; one-shot init containers exit 0)"
+    # only flag genuine problems: not Up and not a clean Exited (0) init container
+    docker ps -a --format '{{.Names}}\t{{.Status}}' | grep -- "-${DN}" | grep -viE 'Up |Exited \(0\)' | sed "s/^/  ${cr}DOWN:${c0} /" || true
+    # …the ones another compose project holds under this stack's names (lib.sh: foreign_containers)
+    held="$(foreign_containers)"
+    [ -z "${held}" ] || printf '%s\n' "${held}" | sed "s/^/  ${cr}held by another compose project:${c0} /"
+    # …and the ones that are up but are not what the files say now (lib.sh: stale_containers)
+    stale="$(stale_containers | tr '\n' ' ')"
+    [ -z "${stale}" ] || echo "  ${cy}not what the files say now:${c0} ${stale}— ${c1}bbox run${c0} re-creates exactly these"
+    [ -x "${REPO_ROOT}/apps/n8n/hooks/status" ] && bash "${REPO_ROOT}/apps/n8n/hooks/status" --brief || true ;;
+  verify)
+    sub="${1:-dependencies}"
+    case "${sub}" in
+      dependencies|deps) bash "${SCRIPTS}/verify-dependencies" ;;
+      *) die "unknown: bbox verify ${sub}  (dependencies)" ;;
+    esac ;;
+  logs)
+    need_docker; dc logs --tail=200 "$@" ;;
+
+  update)
+    # bbox update <app|service> […] — apply a rebuilt image to the RUNNING office and prove it
+    # landed: build, compare the image the container runs against the one just built, replace only
+    # when they differ (or --force), wait for the container's own healthcheck, roll back if it never
+    # gets healthy. Written because `dc up -d --build <app>` did nothing twice in one hour and read
+    # as success (see scripts/app-update.sh). bina-ds is handed to its own self-update door.
+    need_docker
+    # `--force` is bbox's own global flag and is consumed before dispatch (line ~509), so it is
+    # handed to the verb through the environment rather than re-parsed.
+    APP_UPDATE_FORCE="${FORCE}" \
+      bash -c 'cd "$1" && exec bash "$2" "${@:3}"' _ "${REPO_ROOT}" "$(npath "${SCRIPTS}/app-update.sh")" "$@" ;;
+
+  export|import)
+    # Move a whole deployment to another machine. See scripts/deployment-archive.py for why a zip
+    # of this folder is not a backup: every database, workflow, credential, document, auth user and
+    # sync cursor lives in a docker named volume OUTSIDE the tree.
+    #
+    # Dispatched here rather than as an app verb because the archive spans every app — but it owns
+    # no app knowledge: the inventory comes from each app's `data.volumes` (gate G26 keeps that
+    # honest) and the store-specific work comes from each app's own hooks/backup + hooks/restore.
+    need_docker
+    ( cd "${REPO_ROOT}" && exec python3 "$(npath "${SCRIPTS}/deployment-archive.py")" "${cmd}" "$@" ) ;;
+
+  app)
+    # bbox app install <ref> — install an app that is NOT a folder in this repo (roadmap item 5).
+    # Checked BEFORE the <id> <verb> form: `install` is a reserved word here, not an app id (no app
+    # may be called that), so there is no ambiguity to resolve.
+    if [ "${1:-}" = "install" ]; then
+      shift
+      ( cd "${REPO_ROOT}" && exec python3 "$(npath "${REPO_ROOT}/platform/manager/appinstall.py")" "$@" )
+      exit $?
+    fi
+    # bbox app <id> <verb> [args] — run an app's OWN hook.
+    #
+    # An app is a folder; its tooling belongs inside it, not in a shared scripts/ pile named by
+    # convention. Hooks live at <root>/<id>/hooks/<verb> where <root> is apps/ or platform-base/,
+    # so deleting an app takes its tooling with it. Falls back to the legacy scripts/<id>-<verb>
+    # while the migration is in progress, and says which one it ran.
+    aid="${1:-}"; verb="${2:-}"; shift 2 2>/dev/null || true
+    [ -n "${aid}" ] && [ -n "${verb}" ] || die "usage: bbox app <id> <verb> [args]"
+    hook=""
+    for root in apps platform-base; do
+      for ext in "" .sh .py .mjs; do
+        [ -f "${REPO_ROOT}/${root}/${aid}/hooks/${verb}${ext}" ]           && { hook="${REPO_ROOT}/${root}/${aid}/hooks/${verb}${ext}"; break 2; }
+      done
+    done
+    if [ -z "${hook}" ]; then
+      for legacy in "${SCRIPTS}/${aid}-${verb}" "${SCRIPTS}/${aid}-${verb}.py" "${SCRIPTS}/${aid}-${verb}.sh"; do
+        [ -f "${legacy}" ] && { hook="${legacy}"; break; }
+      done
+    fi
+    [ -n "${hook}" ] || die "no hook '${verb}' for app '${aid}' (looked in {apps,platform-base}/${aid}/hooks/ and scripts/)"
+    # .mjs runs under node. It was already in the resolution list above and in app_verbs(), so a
+    # .mjs hook was offered by `bbox help` and then handed to bash, which choked on line 2 of every
+    # one of them. Both existing .mjs hooks carry "run via node directly" in their headers for
+    # exactly this reason; they are reachable now.
+    case "${hook}" in
+      *.py)  exec python3 "$(npath "${hook}")" "$@" ;;
+      *.mjs) exec node "$(npath "${hook}")" "$@" ;;
+      *)     exec bash "${hook}" "$@" ;;
+    esac ;;
+
+  n8n)
+    sub="${1:-}"; shift || true
+    case "${sub}" in
+      # ── Blueprint verbs are EXPLICITLY TARGETED (owner mandate 2026-08-16, plan in
+      # ai/context/n8n-as-code-migration.md): bare `push`/`pull` is a hard error — say WHAT.
+      #   bbox n8n push <app>    rapid per-app deploy: compile .workflow.ts → n8n API update+activate
+      #                          (no restart, hot triggers) — the everyday dev verb
+      #   bbox n8n push all      full instance reconciler (owner/creds/schema/gates/import/RESTART)
+      #   bbox n8n pull <app>    live → that app's blueprint as .workflow.ts code files
+      #   bbox n8n pull all      live → every blueprint, routed by each workflow's app:* tag
+      pull)
+        # bbox n8n pull <app> [wfId ...]  — the agent's FIRST step, always (live is truth):
+        # pull what you are about to edit, edit the code, push immediately.
+        tgt="${1:-}"; shift || true
+        case "${tgt}" in
+          all)  bash "${REPO_ROOT}/apps/n8n/hooks/pull" "$@" ;;
+          "")   die "bbox n8n pull needs a target: 'all' (estate + credentials + manifest) or '<app> [wfId ...]' (e.g. 'bbox n8n pull indox indoxV2Driver01')." ;;
+          *)    [ "${tgt}" = "base" ] && tgt="n8n"
+                bash "${REPO_ROOT}/apps/n8n/hooks/pull-app" "${tgt}" "$@" ;;
+        esac ;;
+      push)
+        # bbox n8n push <app> <wfId> [...] — push exactly what you edited (agent default).
+        # No ids = changed-only. --all = whole app. 'all' = full instance reconciler.
+        tgt="${1:-}"; shift || true
+        case "${tgt}" in
+          all)  bash "${REPO_ROOT}/apps/n8n/hooks/push" "$@" ;;
+          "")   die "bbox n8n push needs a target: 'all' (full reconciler + RESTART) or '<app> [wfId ...]' (e.g. 'bbox n8n push indox indoxV2Driver01')." ;;
+          *)    [ "${tgt}" = "base" ] && tgt="n8n"
+                # [2026-08-23] RE-EMIT --force. bbox strips it globally (see the "global --force
+                # flag" line near the top: it sets FORCE=1 and REMOVES the token from "$@"), so
+                # push-app -- which parses --force itself and guards its whole conflict check on
+                # it -- never saw the flag. The failure was quiet and expensive: the push reports
+                # "CONFLICT <wf> - changed LIVE (likely a human in the editor)" and prescribes
+                # `bbox n8n pull <app> <wf>` instead. That pull round-trips the workflow through
+                # n8n, and n8n does not store the .workflow.ts decorator comments -- pulling three
+                # indox action workflows here removed 151 lines of source, including notes nothing
+                # else records. So the documented remedy destroyed source while the escape hatch
+                # that avoids it was disabled by an argument parser two hundred lines away.
+                _force=(); [ "${FORCE}" = "1" ] && _force=(--force)
+                bash "${REPO_ROOT}/apps/n8n/hooks/push-app" "${tgt}" "$@" "${_force[@]+"${_force[@]}"}" ;;
+        esac ;;
+      code)
+        # toolchain + authoring intelligence: render|compile|verify <src> [out]
+        #                                     validate|info|schema|search|docs|guides <args>
+        node "${REPO_ROOT}/apps/n8n/tooling/wrap.mjs" "$@" ;;
+      test|plan|exec)
+        # live testing + diagnosis (agent exit semantics: 0 = don't block, 1 = iterate)
+        #   bbox n8n test <app> <wfId> [--prod] · plan <app> <wfId> [--json] · exec list|get ...
+        if [ "${sub}" = "exec" ]; then
+          bash "${REPO_ROOT}/apps/n8n/hooks/test-app" exec "$@"
+        else
+          _app="${1:-}"; shift || true
+          [ -n "${_app}" ] || die "bbox n8n ${sub} needs: <app> <wfId> [flags]"
+          bash "${REPO_ROOT}/apps/n8n/hooks/test-app" "${sub}" "$@"
+        fi ;;
+      execute)
+        # run ONE node against a set of items (throwaway workflow, removed by default)
+        #   bbox n8n execute -n <node.json> <input.json> [--ex-link]
+        bash "${REPO_ROOT}/apps/n8n/hooks/execute-node" "$@" ;;
+      status)          bash "${REPO_ROOT}/apps/n8n/hooks/status" "$@" ;;
+      verify)          bash "${REPO_ROOT}/apps/n8n/hooks/verify" "$@" ;;
+      clean-recreate)  [ "${FORCE}" = "1" ] && bash "${REPO_ROOT}/apps/n8n/hooks/clean-recreate" --yes || bash "${REPO_ROOT}/apps/n8n/hooks/clean-recreate" "$@" ;;
+      load-dump)       bash "${REPO_ROOT}/apps/n8n/hooks/load-dump" "$@" ;;
+      automations)
+        a2="${1:-}"; shift || true
+        case "${a2}" in
+          reset)
+            # app-STATE reset (not infra). Dry-run by default; needs --force to mutate.
+            extra=(--dry-run); [ "${FORCE}" = "1" ] && extra=(--force)
+            bash "${SCRIPTS}/automations-reset" "${extra[@]}" "$@" ;;
+          *) die "unknown: bbox n8n automations ${a2:-<none>}  (reset)" ;;
+        esac ;;
+      *)
+        # PER-APP blueprint: `bbox n8n <app> push|pull` — e.g. `bbox n8n indox push`,
+        # `bbox n8n base pull`. An app OWNS its workflows (manifest `blueprints.n8n`), so the
+        # blueprint verbs are scoped to one app instead of one global pile. `base` is the alias
+        # for the n8n app's own central blueprint (shared stdlib + platform/CI workflows).
+        v2="${1:-}"
+        case "${v2}" in
+          push)
+            # legacy order alias — same rapid API path as `bbox n8n push <app>`
+            shift || true
+            _app="${sub}"; [ "${_app}" = "base" ] && _app="n8n"
+            bash "${REPO_ROOT}/apps/n8n/hooks/push-app" "${_app}" "$@" ;;
+          pull|unpush)
+            shift || true
+            _app="${sub}"; [ "${_app}" = "base" ] && _app="n8n"
+            bash "${REPO_ROOT}/apps/n8n/hooks/${v2}" --app "${_app}" "$@" ;;
+          *) die "unknown: bbox n8n ${sub:-<none>} ${v2:-}  (push all|<app> · pull all|<app> · code · status|verify|clean-recreate|load-dump|automations)" ;;
+        esac ;;
+    esac ;;
+
+  seed)
+    # seed the platform with demo data so every UI renders real content (same path local + CI).
+    need_docker; bash "${SCRIPTS}/ui-coverage/seed.sh" "$@" ;;
+
+  ui-map)
+    # capture the whole platform UI into one map image + coverage. Reads a running stack; drives
+    # inventory → seed → resolve → sharded containerized capture → report → compose. No browser42.
+    need_docker; heavy_admit "ui-map $*"; bash "${SCRIPTS}/ui-coverage/ui-map.sh" "$@" ;;
+
+  baseline)
+    # prove a HEALTHY BASELINE in one fresh command: reset → build → up → ci-verify → indox test →
+    # any-concurrency + notifications review → ui-map → scorecard. See ai/context/healthy-baseline.md.
+    need_docker; heavy_admit "baseline $*"; bash "${SCRIPTS}/baseline.sh" "$@" ;;
+
+  test)
+    # bbox test <app> [args] — ONE way to test any app. Every app that has tests exposes them at
+    # <root>/<id>/hooks/test, so the command is identical whether the app is an automation app
+    # (indox), a service+UI app (drive, mail) or a base app. This is just the canonical spelling
+    # of `bbox app <id> test`; it exists so "how do I test app X" has a single answer.
+    aid="${1:-}"; shift || true
+    [ -n "${aid}" ] || die "usage: bbox test <app> [args]   (apps with tests: $(for d in apps/*/hooks/test platform-base/*/hooks/test; do [ -e "$d" ] && basename "$(dirname "$(dirname "$d")")"; done | tr '\n' ' '))"
+    hook=""
+    for root in apps platform-base; do
+      [ -f "${REPO_ROOT}/${root}/${aid}/hooks/test" ] && { hook="${REPO_ROOT}/${root}/${aid}/hooks/test"; break; }
+    done
+    [ -n "${hook}" ] || die "app '${aid}' has no tests (expected ${aid}/hooks/test)"
+    exec bash "${hook}" "$@" ;;
+
+  install)
+    sub="${1:-}"; shift || true
+    case "${sub}" in
+      debian)  bash "${REPO_ROOT}/debian-install.sh" "$@" ;;
+      windows) bash "${SCRIPTS}/install-windows" "$@" ;;
+      # Reaching here means we are already inside the guest (the host intercepts `install macos`
+      # above and starts the engine) — so there is nothing left to install.
+      macos)   say "already inside the macOS project engine — nothing to install" ;;
+      *) die "unknown: bbox install ${sub:-<none>}  (debian|windows|macos)" ;;
+    esac ;;
+
+  apply)
+    # Apply a plan written by `bbox plan` — refuses if the catalog/state moved underneath, so a
+    # stale plan can never be mistaken for a deliberate one.
+    need_docker
+    ( cd "${REPO_ROOT}" && python3 platform/manager/reconcile.py apply "$@" ) || exit 1
+    dc up -d --remove-orphans ;;
+
+  generations)
+    # every `reconcile render` archives the previous .generated/ — list what we can roll back to
+    ( cd "${REPO_ROOT}" && python3 platform/manager/reconcile.py generations "$@" ) ;;
+
+  rollback)
+    # restore a previous rendered configuration, then converge Docker onto it.
+    # NOTE: this rolls back the CONFIGURATION, not your data — volumes are untouched.
+    need_docker
+    ( cd "${REPO_ROOT}" && python3 platform/manager/reconcile.py rollback "$@" ) || exit 1
+    say "bringing the stack onto the restored configuration…"
+    dc up -d --remove-orphans ;;
+
+  reconcile)
+    # platform-OS: compile apps/*/app.json + platform.state.yaml -> .generated/ -> docker.
+    # `bbox reconcile` with no verb renders; pass plan|render|up|validate explicitly.
+    need_docker
+    ( cd "${REPO_ROOT}" && python3 platform/manager/reconcile.py "${1:-render}" ) ;;
+
+  apps)
+    sub="${1:-list}"; shift || true
+    case "${sub}" in
+      # `"$@"` is passed on: `plan` grew flags (--json) that are the CLI's own answer to "which apps
+      # does this office show, machine-readable", and a wrapper that swallows them makes the flag
+      # exist and do nothing.
+      list)     ( cd "${REPO_ROOT}" && python3 platform/manager/reconcile.py plan "$@" ) ;;
+      validate) ( cd "${REPO_ROOT}" && python3 platform/manager/reconcile.py validate ) ;;
+      # The disposition write is reconcile.py's, not ours. It used to be twenty lines of inline
+      # python here doing its own regex surgery on platform.state.yaml — one of FOUR independent
+      # writers of that file, in two incompatible shapes, against a single shared reader. The CLI
+      # has no business owning the format of the platform's desired state.
+      enable|disable)
+        app="${1:?usage: bbox apps ${sub} <app-id>}"
+        _dispo=enabled; [ "${sub}" = disable ] && _dispo=disabled
+        # --create: the FIRST enable of a newly added app is precisely the case this verb exists
+        # for — apps/<id>/app.json is on disk and platform.state.yaml has no entry for it yet.
+        # Without the flag set-state refuses with "not found in platform.state.yaml (use --create
+        # to add it)", which is advice this wrapper had no way to act on.
+        ( cd "${REPO_ROOT}" && python3 platform/manager/reconcile.py set-state --app "${app}" --state "${_dispo}" --by cli --create ) \
+          || die "could not set '${app}' to ${_dispo}"
+        say "${cy}state written. Containers and n8n blueprints are NOT converged by this command —${c0}"
+        say "${cy}  run 'bbox run', or use the apps screen, which does the whole lifecycle.${c0}"
+        ( cd "${REPO_ROOT}" && python3 platform/manager/reconcile.py render ) ;;
+      install) ( cd "${REPO_ROOT}" && exec python3 "$(npath "${REPO_ROOT}/platform/manager/appinstall.py")" "$@" ) ;;
+      *) die "unknown: bbox apps ${sub}  (list|validate|enable|disable|install)" ;;
+    esac ;;
+
+  catalog)
+    # platform-OS: the SIGNED app catalog (F-Droid index-v2 model) — build it from apps/, verify a
+    # signature + every per-entry hash, and disclose what an app will do before it is installed.
+    ( cd "${REPO_ROOT}" && exec python3 "$(npath "${REPO_ROOT}/platform/manager/catalog.py")" "$@" ) ;;
+
+  onboarding|onboard)
+    bash "${SCRIPTS}/onboarding" "$@" ;;
+
+  help|-h|--help|"") usage ;;
+
+  # ── generic app dispatch ─────────────────────────────────────────────────────────────────────
+  # Anything not matched above is an APP ID or an app's declared alias, and the next word is a verb:
+  #
+  #   bbox <id|alias> <verb> [args]   →   <root>/<id>/hooks/<verb> [args]
+  #
+  # This is the whole reason `bbox` no longer has a `case` per app. It used to carry a 40-line
+  # `indox)` block and a 20-line `b42)` block, and their verbs again in the help heredoc, so adding
+  # an app meant editing the CLI in three places — the exact coupling G31 forbids everywhere else.
+  # An app's command surface is now the set of files in its hooks/ directory, and nothing else.
+  #
+  # `cli.fallback` (app.json) lets one implementation answer several verbs: browser42 declares
+  # fallback "state", so `bbox b42 dump` runs `hooks/state dump` without four files of boilerplate.
+  *)
+    _res="$(app_resolve "${cmd}")" || die "unknown command '${cmd}'. Run 'bbox help'."
+    _root="${_res%% *}"; _aid="${_res#* }"; _aid="${_aid%% *}"; _fb="${_res##* }"
+    [ "${_fb}" = "${_aid}" ] && _fb=""
+    verb="${1:-}"; shift || true
+    hook=""
+    if [ -n "${verb}" ]; then
+      for _ext in "" .sh .py .mjs; do
+        [ -e "${REPO_ROOT}/${_root}/${_aid}/hooks/${verb}${_ext}" ]         && { hook="${REPO_ROOT}/${_root}/${_aid}/hooks/${verb}${_ext}"; break; }
+      done
+    elif [ -z "${_fb}" ]; then
+      # No verb and no declared fallback: the usage line is the answer.
+      die "usage: bbox ${cmd} <verb> [args]$(app_verbs_line "${_root}" "${_aid}")"
+    fi
+    # `bbox <app>` with no verb runs the app's declared fallback with no arguments — a short name is a
+    # command (`bbox dgo`), not a usage error. Only an app that declares `cli.fallback` gets this;
+    # everything else keeps the explicit-verb contract.
+    if [ -z "${hook}" ] && [ -n "${_fb}" ]; then
+      # no hooks/<verb> — hand the verb to the declared fallback as its first argument
+      hook="${REPO_ROOT}/${_root}/${_aid}/hooks/${_fb}"; set -- "${verb}" "$@"
+    fi
+    [ -n "${hook}" ] && [ -e "${hook}" ] || die "unknown: bbox ${cmd} ${verb}$(app_verbs_line "${_root}" "${_aid}")"
+    case "${hook}" in
+      *.py)  exec python3 "$(npath "${hook}")" "$@" ;;
+      *.mjs) exec node "$(npath "${hook}")" "$@" ;;
+      *)     exec bash "${hook}" "$@" ;;
+    esac ;;
+esac

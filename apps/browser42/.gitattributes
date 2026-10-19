@@ -1,0 +1,6 @@
+# browser42 entrypoint + edge config must stay LF — CRLF breaks the container
+# entrypoint ("bad interpreter: /usr/bin/env bash^M") on Windows checkouts.
+*.sh text eol=lf
+hooks/* text eol=lf
+Dockerfile* text eol=lf
+caddy/Caddyfile text eol=lf

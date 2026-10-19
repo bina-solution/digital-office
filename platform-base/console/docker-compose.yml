@@ -1,0 +1,80 @@
+# console — the unified business-system shell (המרכז). One RTL Hebrew webapp federating every module
+# behind Authentik SSO, at console.localhost / ${CONSOLE_BASE_URL}. Proxies the connections plane.
+services:
+  console:
+    build: {context: ., dockerfile: Dockerfile}
+    image: deployment-hacohen-console
+    container_name: console-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: console
+    restart: unless-stopped
+    environment:
+      # NOTE: env naming a layer-3 app is contributed BY that app (contributes.env in its
+      # app.json) and merged in via .generated/routing.override.yml — see gate G9.
+      - SENTRY_DSN=${CONSOLE_SENTRY_DSN:-}
+      - DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-bina-deployment}
+      - PORT=8000
+      - CONNECTIONS_URL=${CONNECTIONS_URL:-http://connections:8990}
+      # --- glibc allocator containment. Third instance of the defect proved on
+      # `incoming-documents` 2026-08-11 (full derivation in apps/indox/docker-compose.yml).
+      #
+      # MEASURED 2026-08-11 23:18, 25h uptime, RestartCount=0: 15 glibc 64MB arena heaps whose
+      # rw-p regions span 572.2 MiB of address space — more than DOUBLE this service's 256M cap —
+      # against a resident 129.6 MiB. `memory.events` reads `max 7857`: this cgroup has hit its
+      # ceiling 7,857 times, the highest count in the stack, i.e. it lives in near-continuous
+      # reclaim.
+      #
+      # ROOT CAUSE: glibc sizes its arena limit off the HOST's core count. `nproc` reports 6 in
+      # here, so it permits 8 x 6 = 48 arenas, while `cpu.max` is `50000 100000` = 0.5 CPU — half
+      # a core cannot run two threads at once, so every arena past the second is a private free
+      # list that is never reused and never returned to the kernel.
+      - MALLOC_ARENA_MAX=2
+      - MALLOC_MMAP_THRESHOLD_=131072
+      - MALLOC_TRIM_THRESHOLD_=131072
+    volumes:
+      - ../../.generated/registry:/app/generated:ro   # compiled registries (see gate G9)
+    networks: [traefik-network]
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://localhost:8000/healthz',timeout=3).status==200 else 1)\""]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-5s}
+      retries: 5
+      start_period: 8s
+    deploy: {resources: {limits: {cpus: '0.5', memory: 256M}}}
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik-network
+      - traefik.http.services.console.loadbalancer.server.port=8000
+      - traefik.http.routers.console-local.rule=Host(`console.localhost`)
+      - traefik.http.routers.console-local.entrypoints=web
+      - traefik.http.routers.console-local.service=console
+      # gate localhost too (matches my-docs-local): the shell reads identity from the SSO headers.
+      - traefik.http.routers.console-local.middlewares=authentik@file
+      # [2026-08-24] THE MISSING THIRD ROUTER. G6's own description states the platform standard:
+      # "services declare three routers -- <name>-local on <host>.localhost, plus -http and -https
+      # on ${APP_BASE_URL}". The console declared only two. Its siblings all have the -http twin
+      # (apitools, app-management, authentik, chat, data-management), which is why
+      # http://apps.localhost works; console had no HTTP router for ${CONSOLE_BASE_URL}, so with
+      # CONSOLE_BASE_URL=console2.localhost the ONLY way in was https://console2.localhost, whose
+      # certificate is `CN=TRAEFIK DEFAULT CERT` -- ACME (myresolver) cannot issue for a .localhost
+      # name. Measured before the fix:
+      #     http  console.localhost   302 -> authentik   (works)
+      #     http  console2.localhost  404                (no router at all)
+      #     https console.localhost   404
+      #     https console2.localhost  302, self-signed certificate
+      # Carries authentik@file, which G6 REQUIRES: if this rule ever coincides with -local's
+      # (CONSOLE_BASE_URL=console.localhost on a DEPLOYMENT_DOMAIN=localhost box) the two routers
+      # share a rule, and a rule may not be authenticated only when traefik happens to pick the
+      # other twin. Purely additive -- no existing route is repointed or removed.
+      - traefik.http.routers.console-http.rule=Host(`${CONSOLE_BASE_URL:-console.${DEPLOYMENT_DOMAIN:-localhost}}`)
+      - traefik.http.routers.console-http.entrypoints=web
+      - traefik.http.routers.console-http.service=console
+      - traefik.http.routers.console-http.middlewares=authentik@file
+      - traefik.http.routers.console-https.rule=Host(`${CONSOLE_BASE_URL:-console.${DEPLOYMENT_DOMAIN:-localhost}}`)
+      - traefik.http.routers.console-https.entrypoints=websecure
+      - traefik.http.routers.console-https.tls=true
+      - traefik.http.routers.console-https.tls.certresolver=myresolver
+      - traefik.http.routers.console-https.service=console
+      - traefik.http.routers.console-https.middlewares=authentik@file
+    logging: {driver: json-file, options: {max-size: 5m, max-file: '3'}}
+networks:
+  traefik-network: {external: true}

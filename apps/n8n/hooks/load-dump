@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+set -euo pipefail
+export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
+
+# n8n-load-dump — ONE-OFF ingest of a full n8n Postgres dump (e.g. from remote prod) into the local
+# n8n database, to seed real state before exercising the blueprint pull/reset/push strategy.
+# This is NOT part of the move/duplicate strategy — it's only how we get prod state in the first time.
+#
+# PREREQUISITES (or the test is invalid):
+#   1. .env N8N_ENCRYPTION_KEY MUST equal the SOURCE instance's key — else credential secrets won't
+#      decrypt and credential preservation can't be verified.
+#   2. N8N_VERSION (.env) MUST be >= the source's n8n version — n8n only migrates schema FORWARD.
+#   3. The stack must be up (docker compose up -d) so the n8n-postgres container exists.
+#
+# Usage: ./bbox n8n load-dump <dump-file>
+#   Accepts: plain .sql, gzipped .sql.gz, or a pg_dump custom-format archive (-Fc, magic 'PGDMP').
+
+DUMP="${1:?usage: ./bbox n8n load-dump <dump-file>}"
+[ -f "$DUMP" ] || { echo "Error: dump not found: $DUMP" >&2; exit 1; }
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # read_env, DN, N8N_CONTAINER, PG_CONTAINER
+N8N="${N8N_CONTAINER}"; PG="${PG_CONTAINER}"
+PGUSER="$(read_env POSTGRES_USER)"; PGUSER="${PGUSER:-hacohen}"
+PGDB="$(read_env POSTGRES_DB)"; PGDB="${PGDB:-n8n}"
+log(){ echo "[load-dump] $*"; }
+
+[ -n "$(read_env N8N_ENCRYPTION_KEY)" ] || { echo "Error: N8N_ENCRYPTION_KEY not set in .env (must match the SOURCE instance)." >&2; exit 1; }
+log "Target: $PG  db=$PGDB  user=$PGUSER   (n8n container: $N8N)"
+log "Reminder: .env N8N_ENCRYPTION_KEY must equal the source's, and N8N_VERSION must be >= source's."
+docker ps --format '{{.Names}}' | grep -Fxq "$PG" || { echo "Error: $PG not running. Run 'docker compose up -d' first." >&2; exit 1; }
+
+# 1) Stop n8n services so nothing touches the DB mid-restore (leave postgres up).
+log "Stopping n8n main + workers + task-runners..."
+dcx stop n8n n8n-worker-1 n8n-worker-2 n8n-task-runners >/dev/null 2>&1 || true
+
+# 2) Drop & recreate the n8n database (terminate any leftover connections first).
+log "Recreating database '$PGDB'..."
+docker exec "$PG" psql -U "$PGUSER" -d postgres -v ON_ERROR_STOP=1 -c \
+  "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='$PGDB' AND pid<>pg_backend_pid();" >/dev/null
+docker exec "$PG" psql -U "$PGUSER" -d postgres -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS \"$PGDB\";" >/dev/null
+docker exec "$PG" psql -U "$PGUSER" -d postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE \"$PGDB\" OWNER \"$PGUSER\";" >/dev/null
+
+# 3) Restore — detect format. (.gz -> gunzip on host; PGDMP -> pg_restore; else plain psql.)
+log "Restoring dump into '$PGDB'..."
+case "$DUMP" in
+  *.gz)
+    gunzip -c "$DUMP" | docker exec -i "$PG" psql -U "$PGUSER" -d "$PGDB" --set ON_ERROR_STOP=0 -q >/tmp/_load.log 2>&1 || true ;;
+  *)
+    if [ "$(head -c 5 "$DUMP" | tr -d '\0')" = "PGDMP" ]; then
+      docker exec -i "$PG" pg_restore -U "$PGUSER" -d "$PGDB" --no-owner --no-privileges >/tmp/_load.log 2>&1 < "$DUMP" || true
+    else
+      docker exec -i "$PG" psql -U "$PGUSER" -d "$PGDB" --set ON_ERROR_STOP=0 -q >/tmp/_load.log 2>&1 < "$DUMP" || true
+    fi ;;
+esac
+errs=$(grep -ciE 'ERROR' /tmp/_load.log 2>/dev/null || echo 0)
+[ "$errs" -gt 0 ] && log "WARNING: ${errs} ERROR line(s) during restore — see /tmp/_load.log (often harmless: roles/owners). Review before trusting." || log "Restore clean."
+
+# 4) Start n8n — forward migrations run now if the dump came from an older version.
+log "Starting n8n (forward migrations apply now)..."
+dcx up -d n8n n8n-worker-1 n8n-worker-2 n8n-task-runners >/dev/null 2>&1 || true
+for i in $(seq 1 90); do [ "$(docker inspect "$N8N" --format '{{.State.Health.Status}}' 2>/dev/null)" = healthy ] && break; sleep 2; done
+log "n8n health: $(docker inspect "$N8N" --format '{{.State.Health.Status}}' 2>/dev/null || echo unknown)"
+
+# 5) Report what landed.
+docker exec "$PG" psql -U "$PGUSER" -d "$PGDB" -tAc \
+  "select 'workflows='||count(*)||' active='||count(*) filter (where active) from workflow_entity;" 2>/dev/null | sed 's/^/[load-dump] /' || true
+docker exec "$PG" psql -U "$PGUSER" -d "$PGDB" -tAc "select 'credentials='||count(*) from credentials_entity;" 2>/dev/null | sed 's/^/[load-dump] /' || true
+log "Next: verify creds decrypt -> docker exec $N8N n8n export:credentials --all --decrypted --output=/tmp/d.json"
+log "Then: ./bbox n8n pull all  (build blueprint)  →  reset  →  ./bbox n8n push all  (prove the strategy)"

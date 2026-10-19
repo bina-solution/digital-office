@@ -1,0 +1,53 @@
+-- [2026-08-21, owner order] Drop the ACTION_LOG column, its append trigger, and the merge
+-- function behind it.
+--
+-- WHAT IT WAS. One TEXT column per document holding that document's entire history as a
+-- comma-separated string: ', <label>, <timestamp>, <execution id>'. 20 MB of a 180 MB table,
+-- 535 bytes on the average row -- paid again on every GET and every executeWorkflow hop.
+--
+-- WHY IT COULD GO. Everything the state machine actually derived from it now lives somewhere
+-- that answers the question directly:
+--
+--   "was this action already dispatched?"  -> public.indox_action_execution_log, joined as
+--                                             ACTION_HISTORY by indoxV2Driver01 ::
+--                                             'Get Action History' (newest 10 per document)
+--   "how many steps has this document had?" -> ITERATION_COUNT, a real counter: +1 per dispatch
+--                                             in indoxV2ActionRouter01 :: 'Log Action Start',
+--                                             reset by the four restart nodes
+--   "were gmail labels applied / was it filed?" -> GMAIL_LABELS_COMPLETED and
+--                                             FAILED_FOLDER_COMPLETED, the last two actions in
+--                                             the machine that had no completion column
+--   "has this document been touched at all?" -> ITERATION_COUNT > 0 OR
+--                                             BASE_EXTRACTION_COMPLETED, in indoxApi01 ::
+--                                             'Get Changed Docs'
+--
+-- All 66 writers were removed first and the freeze was measured: one 800-document cycle moved
+-- 51 documents and logged 71 dispatches while the column's md5 stayed byte-identical.
+--
+-- THE TRIGGER goes with it. incdoc_action_log_append() existed (migration 2026-08-10) because
+-- ~40 router 'Build:' nodes rebuilt the row without carrying the column forward and wrote ''
+-- over it, erasing loop breakers stored inside the string -- 322 of 380 documents in the retry
+-- cohort were looping forever on a 2-character log. A breaker kept in a column other writers
+-- wipe is not a breaker; the invariant was enforced below every writer instead. With the column
+-- gone, that entire class of bug goes with it.
+--
+-- HISTORY IS NOT LOST. public._actionlog_backup_20260820 holds ("ID", "ACTION_LOG") for all
+-- 39,102 rows as of 2026-08-20 and is deliberately NOT dropped here. The two completion columns
+-- were backfilled from the union of that column and the dispatch log, because neither source was
+-- complete alone: 1,633 failed-folder documents were known only to ACTION_LOG, 17 only to the
+-- dispatch log.
+--
+-- WHAT THE UI LOSES, stated plainly: node-level labels ('Extract Base Doc', 'Update NAME',
+-- 'COMPANY RESOLVER <hash>') were never actions and get no dispatch row, so the document page
+-- now shows dispatched actions only. Nothing decided on them -- verified across the whole
+-- estate before the removal -- but an operator sees less detail than before. In exchange the
+-- page gains per-action duration and completion, and loses the "⚠ this may be incomplete"
+-- caveat the 6,000-char middle-trim forced on it.
+--
+-- ORDER MATTERS: the BFF and webapp must already be deployed without the column. A Flask
+-- endpoint still selecting it 500s the moment this runs.
+
+DROP TRIGGER IF EXISTS trg_incdoc_action_log_append ON public.incoming_documents;
+DROP FUNCTION IF EXISTS public.incdoc_action_log_append();
+
+ALTER TABLE public.incoming_documents DROP COLUMN IF EXISTS "ACTION_LOG";

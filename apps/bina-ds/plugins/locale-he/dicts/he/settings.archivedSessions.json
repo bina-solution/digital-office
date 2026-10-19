@@ -1,0 +1,17 @@
+{
+ "nav": "שיחות בארכיון",
+ "search": "חיפוש בשיחות בארכיון",
+ "loading": "קורא שיחות…",
+ "empty": "אין שיחות בארכיון.",
+ "unavailable": "אי אפשר לשחזר כאן אף שיחה מהארכיון.",
+ "emptySearch": "אין שיחות תואמות.",
+ "unarchive": "שחזור מהארכיון",
+ "unarchiveNamed": "שחזור {title} מהארכיון",
+ "ungrouped": "ללא קבוצה",
+ "time.now": "עכשיו",
+ "time.minutes": "{n} דק׳",
+ "time.hours": "{n} שע׳",
+ "time.days": "{n} ימים",
+ "time.months": "{n} חוד׳",
+ "time.years": "{n} שנים"
+}

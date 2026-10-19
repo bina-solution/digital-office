@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+#: tasks — read and move work items in the office's Plane (read/write counterpart of `plan`)
+#
+# The verb the owner's own `bbox agent tasks` and this agent's skill call. Same shape as hooks/plan:
+# the applier is piped into the CONTAINER over stdin and talks to Plane from inside, with the token
+# coming from the credential plane — no secret is ever an argument, and nothing needs to be installed
+# on the host.
+#
+#   ./bbox project-pln tasks list --project DGO --mine
+#   ./bbox project-pln tasks list --project DGO --state unstarted --json
+#   ./bbox project-pln tasks show DGO-12
+#   ./bbox project-pln tasks start|done|take|comment DGO-12 [--comment "…"]
+#   ./bbox project-pln tasks attach DGO-12 <file> [<file>…]     # a request's files, on its item
+#   …add `--as azaria` to act as that office agent (its own vault account).
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # say, colors, dcx, read_env
+
+SVC=project-pln
+APP_DIR="${REPO_ROOT}/apps/project-pln"
+APPLIER="${APP_DIR}/tasks.py"
+AS_SLUG=""
+PASSTHRU=()
+for a in "$@"; do
+  case "${a}" in
+    -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    *) PASSTHRU+=("${a}") ;;
+  esac
+done
+[ ${#PASSTHRU[@]} -gt 0 ] || { sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 2; }
+# `--as <slug>`: whose token to act with. Kept as a shell-level convenience so the value can default
+# from the environment (the skill sets it) without the applier having to know about .env at all.
+for i in "${!PASSTHRU[@]}"; do
+  if [ "${PASSTHRU[$i]}" = "--as" ] && [ $((i + 1)) -lt ${#PASSTHRU[@]} ]; then
+    AS_SLUG="${PASSTHRU[$((i + 1))]}"
+  fi
+done
+WORKSPACE="${PLANE_LOCAL_WORKSPACE:-$(read_env PLANE_LOCAL_WORKSPACE)}"
+if [ -z "${WORKSPACE}" ]; then
+  WORKSPACE="$(python3 -c 'import sys,yaml;print((yaml.safe_load(open(sys.argv[1],encoding="utf-8")).get("workspace") or {}).get("slug",""))' "$(npath "${APP_DIR}")/bootstrap.yaml" 2>/dev/null)"
+fi
+WORKSPACE="${WORKSPACE:-bina}"
+[ -f "${APPLIER}" ] || { say "${cr}[project-pln] ${APPLIER} is missing${c0}"; exit 1; }
+
+. "${APP_DIR}/where.sh"          # PLN_IN, PLN_API — here, or behind the link
+# `attach`: its files are THIS machine's and the applier runs in the container. Each is streamed in
+# under a directory of this run and named to the applier by where it landed; removed afterwards.
+STAGE=""
+if [ "${PASSTHRU[0]}" = attach ]; then
+  STAGE="/tmp/plane-attach-$$"
+  for i in "${!PASSTHRU[@]}"; do
+    f="${PASSTHRU[$i]}"
+    [ "${i}" -gt 0 ] && [ -f "${f}" ] || continue
+    dcx exec -T "${PLN_IN}" sh -c 'mkdir -p "$1" && cat > "$1/$2"' sh "${STAGE}" "$(basename "${f}")" <"${f}" \
+      && PASSTHRU[$i]="${STAGE}/$(basename "${f}")"
+  done
+fi
+OUT="$(mktemp)"
+# The console's own public address — the one the OWNER's browser types. Derived from what the office
+# declares (`CONSOLE_BASE_URL` + `AUTH_PROTOCOL`), never guessed: the link a work item is reported at
+# is a console deep link, so it opens Plane inside the office, framed and signed in by the office's
+# own SSO, instead of a bare second tab that asks for a sign-in of its own (DGO-11, the owner: «i need
+# it opening the plane inside the dgo by default»). A `CONSOLE_BASE_URL` that already carries a port
+# (an edge that landed on :8080) is used as it is.
+CONSOLE_HOST="$(read_env CONSOLE_BASE_URL)"
+case "${CONSOLE_HOST}" in
+  http://*|https://*) CONSOLE_URL="${CONSOLE_HOST}" ;;
+  "")                 CONSOLE_URL="" ;;
+  *)                  CONSOLE_URL="$(read_env AUTH_PROTOCOL):"; CONSOLE_URL="${CONSOLE_URL:-http:}//${CONSOLE_HOST}" ;;
+esac
+dcx exec -T \
+  -e PLANE_API_URL="${PLN_API}" \
+  -e PLANE_WORKSPACE="${WORKSPACE}" \
+  -e PLANE_AS="${AS_SLUG:-local}" \
+  -e CONSOLE_URL="${CONSOLE_URL}" \
+  -e PLANE_LOCAL_API_TOKEN="${PLANE_LOCAL_API_TOKEN:-}" \
+  "${PLN_IN}" python3 - "${PASSTHRU[@]}" <"${APPLIER}" >"${OUT}" 2>&1
+RC=$?
+[ -z "${STAGE}" ] || dcx exec -T "${PLN_IN}" rm -rf "${STAGE}" >/dev/null 2>&1
+# The applier writes JSON on stdout under --json and log lines prefixed `[project-pln]` around it:
+# the log lines are shown, the JSON is passed through untouched so a caller can pipe it to a parser.
+if grep -q '^\[project-pln\]' "${OUT}"; then
+  sed -n 's/^\[project-pln\] //p' "${OUT}" | sed 's/^/  /' >&2
+fi
+grep -v '^\[project-pln\]' "${OUT}"
+rm -f "${OUT}"
+exit "${RC}"

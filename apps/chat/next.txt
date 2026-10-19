@@ -1,0 +1,654 @@
+תפריט 
+1. -> קליטת דוח גיול -> הזנת מסמך -> הזנת ח.פ ->  הודעת אישור 
+2. קליטת חשבונית /ת. משלוח-> הזנת מסמך -> הודעת אישור 
+כל זה יופיע רק למספרים שמוגדרים כמנהלים 
+המסמכים ישמרו לדרייב ויופעו במסמכים נכנסים 
+שיפורים שאני חושב שאפשר לעשות מראש 
+- אפשר לעשות שמסמכים רגילים יקלטו בקבוצה ככה שתוכל להעביר מלא, לכתוב אישור וכולם יקלטו ולא יצתרכו לנווט בתפריט ולשלוח אחד אחד 
+- אפשר לעשות שאם יש ח.פ של החברה בדוח גיול לא יצתרכו לשלוח, זה נראה לי יחסוך מלא
+- קליטת מסמכים מקבוצות, הגדרת קבוצות לפי סימון בשם / פרטים של קבוצה. טעינת כל המסמכים מהקבוצות המוגדרות חילוץ חברה / מספר מסמך אם מסמך תקין יוצר שורה במסמכים נכנסים 
+לחשוב על מקרי קצה / סוגי קבצים  
+
+integration points:
+- get companies from n8n settings webhook
+- document query: find match for one of companies in document
+- upload balance sheet to google drive with name == "{company-name}-{message date.month - 1 ( eg: 02=01, 01=12)}" -> link
+- create balance sheet in incoming docs (name, company id, link)
+- upload document to google drive -> link
+- create document in incoming docs 
+
+
+settings get companies:
+get: https://n8n.hacohen.bina-solutions.co.il/webhook/company
+output ex -> {"companies":{"קרמיק דיפו":{"identifiers":["513825943","קרמיק דיפו בע\"מ"],"mails":[]},"וינרסקי":{"identifiers":["510975147"],"mails":[]},"טמבור":{"identifiers":["512401241","557658069"],"mails":["tambour.co.il"]},"פלמרכז":{"identifiers":["513354977"],"mails":[]},"נגב":{"identifiers":["520035973","קבוצת נגב"],"mails":[]},"אלרם":{"identifiers":["512705492"],"mails":["dvakim.com"]},"אבני סלע":{"identifiers":["511744450"],"mails":["rockstone.co.il"]},"פל ים":{"identifiers":["513327064"],"mails":["t-p-y.co.il"]},"דיאור":{"identifiers":["513105494"],"mails":["di-or.co.il"]},"טסה":{"identifiers":["512396276"],"mails":["tassa.co.il"]},"ברסיס":{"identifiers":["514263250"],"mails":["barsys.co.il"]},"נוימן":{"identifiers":["510818859"],"mails":["neumansteel.co.il"]},"פלסאון":{"identifiers":["514930718"],"mails":[]},"חמת הפצה":{"identifiers":["510923410"],"mails":[]},"אלי אנגל":{"identifiers":["514606946"],"mails":["engelelectric.co.il"]},"אורבונד":{"identifiers":["511581084"],"mails":["knauf.com"]},"אגן":{"identifiers":["511301129"],"mails":["agan-engineering.co.il"]},"א. פתיה":{"identifiers":["510564693","7570317"],"mails":["39611150","fetaya.com"]},"פוליביד":{"identifiers":["570047217"],"mails":["polybid.co.il"]},"קיסנר":{"identifiers":["512711250"],"mails":["kisner.co.il"]},"שם טוב":{"identifiers":["513768994"],"mails":["pirzulst.co.il"]},"סאבקו":{"identifiers":["514349471","סאבקו"],"mails":["sabeco.co.il"]},"זלמן סחר":{"identifiers":["516009677"],"mails":["person22@example.com"]},"מיקו":{"identifiers":["513049973","פתרונות מקצועיים לבניה"],"mails":["mikopro.com"]},"וורקר":{"identifiers":["513026229"],"mails":["worker.co.il"]},"פאר נשר":{"identifiers":["514698042"],"mails":[]},"יחזקאל אהרון":{"identifiers":["511027419"],"mails":["yac.co.il"]},"שידב":{"identifiers":["512196718"],"mails":["shidav.co.il"]},"השחל":{"identifiers":["510616956"],"mails":["hashahal.com"]},"פרקט פוריו":{"identifiers":["516386919"],"mails":["parket4u.co.il"]},"אם טי אי":{"identifiers":["512119157"],"mails":["person23@example.com"]},"דב זייף":{"identifiers":["058382102"],"mails":[]},"טיח הארץ":{"identifiers":["514697606"],"mails":["tth.co.il"]},"וירט":{"identifiers":["512361510"],"mails":["person24@example.com"]},"לכ כלי עבודה":{"identifiers":["516620499"],"mails":["lkltd.com"]},"סמיקום":{"identifiers":["511364952"],"mails":[]},"פרומט":{"identifiers":["511973158"],"mails":["ferromat.co.il"]},"כראדי":{"identifiers":["514120856"],"mails":[]},"עשינו עסק":{"identifiers":["514414176"],"mails":["aesek.co.il"]},"טיטניום":{"identifiers":["512254301"],"mails":[]},"אפולו":{"identifiers":["512097858"],"mails":[]},"סטנקו":{"identifiers":["513670646"],"mails":["stanco.co.il"]},"תרמוקיר":{"identifiers":["510890619"],"mails":["termokir.co.il"]},"וולפמן":{"identifiers":["512194515"],"mails":["yow.co.il"]},"איטונג":{"identifiers":["511212615"],"mails":["ytong.co.il"]},"גולדמן":{"identifiers":["513997379","גולדמן"],"mails":["redback.co.il"]},"דלקו":{"identifiers":["514202803"],"mails":[]},"פעמית":{"identifiers":["511749780"],"mails":["peamit.co.il"]},"שוני":{"identifiers":["513414631"],"mails":["nyga.co.il"]},"לוירון":{"identifiers":["511744898"],"mails":["leviron.co.il"]},"אסקו":{"identifiers":["514436104"],"mails":["aresco.co.il"]},"יעקבי":{"identifiers":["510558398","89408700"],"mails":["jacobi.co.il"]},"אברבוך":{"identifiers":["514772367"],"mails":["averbuch.co.il"]},"צינור וברז":{"identifiers":["512600297"],"mails":["tzinorvberez.co.il"]},"בי גי":{"identifiers":["514291418"],"mails":["b-gtech.com"]},"גולבי":{"identifiers":["514452838"],"mails":["gulevy.com"]},"וילה דקו":{"identifiers":["514043710"],"mails":["person25@example.com","person26@example.com"]},"כהן פור":{"identifiers":["513381830"],"mails":["person27@example.com"]},"כלי יהודה":{"identifiers":["515953412"],"mails":["person28@example.com"]},"מנדלסון":{"identifiers":["513660373"],"mails":[]},"אס אלקטרו סליל":{"identifiers":["513076117"],"mails":["electro-slill.co.il"]},"פורום":{"identifiers":["511640229"],"mails":["person29@example.com"]},"רוזנפלד":{"identifiers":["514779065"],"mails":["rozenfeld.co.il"]},"נעה פרזול":{"identifiers":["513421974"],"mails":["@noap.co.il"]},"אשטרום":{"identifiers":["520037151"],"mails":[]},"דלתות תייר":{"identifiers":["511634388"],"mails":["tayar-doors.co.il"]},"ירדן":{"identifiers":["557367216"],"mails":["person30@example.com"]},"ויצנר":{"identifiers":["510704786","מסמי יואל"],"mails":["person31@example.com"]},"צינומטל":{"identifiers":["520041047","צינומטל"],"mails":["zinometal.com"]},"אילן ברכה":{"identifiers":["513473520"],"mails":["nglltd.com"]},"במביפלסט":{"identifiers":["510557598"],"mails":["banias.co.il"]},"המקווה בניה":{"identifiers":["512584772","51-2584772"],"mails":[]},"פיניקס קרמיקה":{"identifiers":["514892033"],"mails":["azmarketing.co.il"]},"בלומברג":{"identifiers":["515196459"],"mails":[]},"חשמל ישיר":{"identifiers":["514130137"],"mails":[]},"גמל מפעלים":{"identifiers":["510106933","גמל מפעלים"],"mails":["cgwheels.com"]},"פרו דסק":{"identifiers":["515820223"],"mails":["alltoo....
+
+integration demos:
+document query:
+- upload doc, query company, query paramaeter:
+{
+  "nodes": [
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.bina-solutions.co.il/documentOcr",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "dont_return_ocr",
+              "value": "={{true}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "93a9b3b8-0c49-4109-96cb-f612eb5f32c6",
+      "name": "Document OCR",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        320,
+        320
+      ],
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.bina-solutions.co.il/documentJsonQuery",
+        "sendBody": true,
+        "specifyBody": "=json",
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "jsonBody": "={\n  \"file_id\": \"{{ $('Document OCR').item.json.file_hash }}\",\n  \"ocr_json_query\": {{ $('Start').item.json.settings.shipping_id_query.toJsonString() }}\n}",
+        "options": {}
+      },
+      "id": "957f68fb-fd4c-48b8-a5ad-480a157b6320",
+      "name": "Extract ShipmentId",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        912,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.bina-solutions.co.il/documentJsonQuery",
+        "sendBody": true,
+        "specifyBody": "=json",
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "jsonBody": "={\n  \"file_id\": \"{{ $json.file_hash }}\" ,\n  \"ocr_json_query\": {\n    \"action\": \"find option\",\n    \"action_value\": {{ $('Start').item.json.settings.all_companies_identifiers.toJsonString() }},\n    \"value_validations\": [],\n  \"is_rtl\": true\n  }\n}",
+        "options": {}
+      },
+      "id": "3af65af3-4e5b-4f69-b0c8-794a66ec503c",
+      "name": "Extract CompanyName",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        528,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.bina-solutions.co.il/documentJsonQuery",
+        "sendBody": true,
+        "specifyBody": "=json",
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "jsonBody": "={\n  \"file_id\": \"{{ $('Document OCR').item.json.file_hash }}\",\n  \"ocr_json_query\": {{ $('Start').item.json.settings.invoice_id_query.toJsonString() }}\n}",
+        "options": {}
+      },
+      "id": "0f16f2fa-2fd4-49df-b88b-5c55a16ebf69",
+      "name": "Extract InvoceId",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "12890821-9ec6-4903-97b2-4b381cbea935",
+              "name": "shipment_id",
+              "value": "={{ $('Extract ShipmentId').item.json.result.result || null}}",
+              "type": "string"
+            },
+            {
+              "id": "8e399b64-64a3-4d82-b518-36cae6a7080c",
+              "name": "invoice_id",
+              "value": "={{ $('Extract InvoceId').item.json.result.result || null}}",
+              "type": "string"
+            },
+            {
+              "id": "66ed4a36-afe7-4868-baba-7a27ac7ef1b8",
+              "name": "company_name",
+              "value": "={{ $('Start').first().json.settings.company_name_by_identifier[($('Extract CompanyName').item.json.result.result.matches[0].option || null)] || null}}",
+              "type": "string"
+            },
+            {
+              "id": "6e4838af-f851-47a4-b4d8-06f712073c10",
+              "name": "company_id",
+              "value": "={{ $('Extract CompanyName').item.json.result.result.matches[0].option }}",
+              "type": "string"
+            },
+            {
+              "id": "ca5b8b32-3727-4df8-a16e-34b3197c4b73",
+              "name": "purchase_id",
+              "value": "={{ $('Extract Purchase ID').item.json.result.result.matches[0].option }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d453eb88-e87c-4472-ad0e-c09d1d8087a6",
+      "name": "Map Extractions",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        320,
+        544
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ecec4f66-9319-49a4-8e06-cfd9a9cd111d",
+              "name": "document_id",
+              "value": "={{ $json.invoice_id || $json.shipment_id }}",
+              "type": "string"
+            },
+            {
+              "id": "9400ab30-9ea1-42df-9597-fa6615b4842b",
+              "name": "document_type",
+              "value": "={{ $json.invoice_id ? 'invoice' : \n$json.shipment_id ? 'shipment' : 'unknown' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "095851cb-5773-4c64-aab5-adb7f796f76c",
+      "name": "Document Properties",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        512,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "242f1212-bdbb-4ec7-baf4-9ee3d7a707b9",
+              "name": "is_ok",
+              "value": "={{ ($json.document_id) ? true : false }}",
+              "type": "boolean"
+            },
+            {
+              "id": "be327f21-a075-42a0-8a5a-cd42d6af370c",
+              "name": "error",
+              "value": "={{ !$json.company_name ? 'Missing company name' : '' }}\n{{ !$json.document_id ? ( !$json.company_name ? ', ' : '' ) + 'Missing document ID' : '' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "dbacd759-22a3-4e43-a12a-72758b78ba3b",
+      "name": "Validate Document",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        704,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://apitools.hacohen.bina-solutions.co.il/documentJsonQuery",
+        "sendBody": true,
+        "specifyBody": "=json",
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "jsonBody": "={\n  \"file_id\": \"{{ $('Document OCR').item.json.file_hash }}\",\n  \"ocr_json_query\": {{ $('Start').first().json.settings.purchase_order_id_query.toJsonString() }}\n}",
+        "options": {}
+      },
+      "id": "4dc7c3a4-5063-4ad4-91d9-27af09ca05e7",
+      "name": "Extract Purchase ID",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1104,
+        320
+      ]
+    }
+  ],
+  "connections": {
+    "Document OCR": {
+      "main": [
+        [
+          {
+            "node": "Extract CompanyName",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract ShipmentId": {
+      "main": [
+        [
+          {
+            "node": "Extract Purchase ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract CompanyName": {
+      "main": [
+        [
+          {
+            "node": "Extract InvoceId",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract InvoceId": {
+      "main": [
+        [
+          {
+            "node": "Extract ShipmentId",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map Extractions": {
+      "main": [
+        [
+          {
+            "node": "Document Properties",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Document Properties": {
+      "main": [
+        [
+          {
+            "node": "Validate Document",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Document": {
+      "main": [
+        []
+      ]
+    },
+    "Extract Purchase ID": {
+      "main": [
+        [
+          {
+            "node": "Map Extractions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "30342e13e092126eac92127e378e6dd1890df95a8e63e0df1898c292ceda7afb"
+  }
+}
+
+json query ex's:
+{
+  "nodes": [
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"invoice_id_query\": {\n    \"action\": \"find after\",\n    \"action_value\": [\n        \"חשבונית מס זיכוי מס':\",\n            \"חשבונית מס זיכוי\",\n\n      \"חשבונית מס מרוכזת מספר:\",\n            \"חשבונית מס מרכזת\",\n      \"חשבונית מס/קבלה מס':\",\n        \"חשבונית מס מספר:\",\n        \"חשבונית מס/קבלה\",\n      \"חשבונית מס / קבלה\",\n        \"חשבונית מס מספר\",\n        \"חשבונית מס מס':\",\n        \"חשבונית מס\\\"\",\n        \"חשבונית מס -\",\n        \"חשבונית מס :\",\n        \"חשבונית זיכוי\",\n        \"חשבונית מס'\",\n        \"חשבונית מס\"\n    ], \n    \"value_validations\": [\n        { \"validation_type\":\"has_number\" },\n        { \"validation_type\": \"length_greater_than\", \"validation_value\": 3 },\n        { \"validation_type\": \"length_less_than\", \"validation_value\": 20 }\n    ],\n    \"is_rtl\": true\n  }\n}\n",
+        "options": {}
+      },
+      "id": "2e003373-9c22-4787-9c4f-bac00f5bffd7",
+      "name": "Invoice Id Query",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        416,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"shipping_id_query\": {\n    \"action\": \"find after\",\n    \"action_value\": [\n        \"תעודת משלוח מספר\",\n        \"משלוח מספר\",\n        \"תעודת משלוח מס':\",\n        \"תעודת משלוח מס'\",\n        \"משלוח מספר    \",\n         \"משלוח מס' :    \",\n       \"תעודת משלוח מס'\",\n        \"תעודת משלוח                \",\n        \"תעודת משלוח מס\",\n        \"תעודת משלוח\",\n        \"מספר משלוח\",\n        \"משלוח מס'\"\n\n    ],\n    \"value_validations\": [\n        {\n            \"validation_type\": \"has_number\"\n        },\n        {\n            \"validation_type\": \"length_greater_than\",\n            \"validation_value\": 3\n        },\n        { \"validation_type\": \"length_less_than\", \"validation_value\": 20 }\n    ],\n    \"is_rtl\": true\n  }\n}\n\n",
+        "options": {}
+      },
+      "id": "90546e5e-e458-4422-bb93-be1762b7f190",
+      "name": "Shipping Id Query",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        592,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"centralized_invoice_id_query\": {\n    \"action\": \"find after\",\n    \"action_value\": [\n        \"חשבונית מס מרכזת\"\n    ],\n    \"value_validations\": [\n        {\n            \"validation_type\": \"has_number\"\n        },\n        {\n            \"validation_type\": \"length_greater_than\",\n            \"validation_value\": 3\n        },\n        { \"validation_type\": \"length_less_than\", \"validation_value\": 20 }\n    ],\n    \"is_rtl\": true\n  }\n}\n\n",
+        "options": {}
+      },
+      "id": "37872530-0480-4127-8c70-5d6b95e03648",
+      "name": "Centralized Invoice Id Query",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        768,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"purchase_order_id_query\": {\n    \"action\": \"find after\",\n    \"action_value\": [\n        \"הזמנת רכש\"\n    ],\n    \"value_validations\": [\n        {\n            \"validation_type\": \"has_number\"\n        },\n        {\n            \"validation_type\": \"length_greater_than\",\n            \"validation_value\": 3\n        },\n        { \"validation_type\": \"length_less_than\", \"validation_value\": 20 }\n    ],\n    \"is_rtl\": true\n  }\n}\n\n",
+        "options": {}
+      },
+      "id": "b0129eb6-32ac-456b-8af9-28781a7d0512",
+      "name": "Purchase Order Id Query",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        976,
+        208
+      ]
+    }
+  ],
+  "connections": {
+    "Invoice Id Query": {
+      "main": [
+        [
+          {
+            "node": "Shipping Id Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shipping Id Query": {
+      "main": [
+        [
+          {
+            "node": "Centralized Invoice Id Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Centralized Invoice Id Query": {
+      "main": [
+        [
+          {
+            "node": "Purchase Order Id Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Purchase Order Id Query": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "30342e13e092126eac92127e378e6dd1890df95a8e63e0df1898c292ceda7afb"
+  }
+}
+
+get link demo:
+import requests
+import os
+import base64
+import mimetypes
+
+
+def get_file_link(filepath, n8n_url, username, password):
+    # Read the file's binary content, then encode it into a Base64 text string.
+    #  returns
+    try:
+        with open(filepath, 'rb') as f:
+            file_content_binary = f.read()
+            file_content_base64 = base64.b64encode(file_content_binary).decode('utf-8')
+
+        # Guess the file's MIME type (e.g., 'application/pdf')
+        mime_type, _ = mimetypes.guess_type(filepath)
+        if mime_type is None:
+            mime_type = 'application/octet-stream'  # Default if type is unknown
+
+        # Create the JSON payload
+        payload = {
+            "fileName": os.path.basename(filepath),
+            "mimeType": mime_type,
+            "content": file_content_base64
+        }
+
+        # Send the JSON data to the webhook with Basic Auth
+        headers = {'Content-Type': 'application/json'}
+        response = requests.post(n8n_url, json=payload, headers=headers, auth=(username, password))
+
+        # Check for HTTP errors
+        response.raise_for_status()
+
+        return response.json().get("webViewLink")
+
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Error: {e}")
+        return None
+
+if __name__ == "__main__":
+    N8N_URL = "https://n8n.hacohen.bina-solutions.co.il/webhook-test/upload-document"
+    filepath = "file.png"
+    username = "admin"
+    password = "password"
+    response = get_file_link(filepath, N8N_URL, username, password)
+    if response:
+        print(f"✅ Success! Link: {response}")
+
+    else:
+        print("❌ Failed to upload the file.")
+
+
+
+
+
+
+
+
+lets start with somthing basic that works for balance sheet uploading from whatsapp 
+make seperated class for n8n settings, incoming documents api webhooks / api tools so it can be adjusted later to the real service 
+
+
+
+
+
+
+solomonBoltin: lets code review the #file:chat project
+
+GitHub Copilot: I'll scan the project's key config and entry files to understand runtime, dependencies, and containerization before diving into the source modules; I’ll read package.json, README, Dockerfile, docker-compose, and PM2 config. Next, I’ll read the core source files to understand the app flow (entrypoint, API, WhatsApp bot, services, middleware) so I can give a thorough review with specific findings. I’ll inspect core data, messaging, and service modules next to pinpoint reliability/security/perf issues across message sending, persistence, and external integrations. I’ll review the remaining service modules used above (companies_api, document_query_api, document_storage, incoming_documents_api, settings_api), plus tests, to complete coverage. I'll quickly open `src/data/subscribers.test.js` and `jest.e2e.config.js` to check test coverage and configuration. I’ll review the WhatsApp Hacohanim project end-to-end and highlight strengths, risks, and concrete improvements; I’ll cover architecture, reliability, security, containerization, dependencies, and tests.
+
+## Checklist
+- Architecture and flow: entrypoints, bot, API/admin UI
+- Reliability and error handling
+- Security (auth, sessions, uploads, secrets)
+- Performance and scalability
+- Config and environment management
+- Containerization and deployment
+- Dependencies hygiene
+- Tests and DX
+- Notable bugs and quick fixes
+
+## High-impact findings
+- Session cookie secure flag is hardcoded off. In api.js, `secure: false` is used unconditionally. Use secure and sameSite in production to prevent cookie theft.
+- PM2 config is stale. ecosystem.config.js runs `index.js` but the app entry is main.js. This will break PM2-based runs.
+- E2E tests expect a live server. api.test.js uses `supertest('http://localhost:3000')`, which requires the app to be running separately, making CI fragile. You already export `app` in api.js; prefer `supertest(app)` for serverless tests.
+- Company lookup flow can fail on manual input. `src/services/companies_api.findCompanyByInput` operates on an in-memory cache that may be empty; chat_bot.js uses it in `handleBalanceSheetCompany` without ensuring `fetchCompanies()` ran. This will return null even when the input is correct.
+- Implicit global variable. In main.js, `v = "0.3"` is undeclared (no `const/let`), creating a global.
+- Docker Compose service isn’t exposed. docker-compose.yml doesn’t declare ports or Traefik labels, so the admin UI may not be reachable unless something else wires it. Also, no env vars are provided.
+- Defaults point to production endpoints. `CONFIG` defaults N8N and OCR endpoints to real production URLs. Safer to require explicit env overrides for production-only services when running locally.
+
+## Architecture and flow
+- Entry (main.js) starts both the Express admin panel (api.js) and Baileys bot (baileyes_app.js). Clean separation with controller/middleware and a view layer (`EJS`).
+- Global state (globals.js) centralizes WhatsApp connection state and supports “connected” hooks—sensible choice for a single-process bot.
+- WhatsApp integration (`baileys`) is set up robustly:
+  - Multi-file auth state persisted under `data/auth_info`.
+  - Detects `DisconnectReason`, prunes creds on logout, and uses exponential backoff up to 60s—good resiliency pattern.
+- Bot logic (chat_bot.js) is modular, with explicit states and admin-only actions. Media handling is careful: buffers content, writes to uploads, and pipes into document processing.
+
+## Reliability and error handling
+- Decent try/catch coverage across controllers and bot handlers; consistent 4xx/5xx responses.
+- Document pipeline has clear steps and error boundaries (OCR, query, ID extraction, upload, post record). Nice.
+- Daily message limit is time-based via setInterval clearing a map every 24h, but:
+  - It doesn’t reset on date change if the process runs >24h (it clears at its own 24h cadence, not necessarily midnight), and data is lost on restart. If you want a true per-day limit, compare dates, and reset per sender when the stored date changes.
+
+## Security
+- Admin auth: session-based for UI, Basic Auth for API—fine pattern. Rate limits on both API and login—good.
+- Sessions: in-memory store; acceptable for a single instance but not production-grade. Consider Redis or a MemoryStore that prunes (e.g., `memorystore`).
+- Cookies:
+  - Set `secure: CONFIG.IS_PRODUCTION`, `sameSite: 'lax'` or `'strict'` to mitigate CSRF.
+  - Consider CSRF protection (`csurf`) for admin POSTs since UI relies on cookies.
+- Uploads:
+  - Multer storage isolates a `documents` subdir for the document route with type and size checks (PDF, JPEG, PNG, 10MB)—good.
+  - Filenames are prefixed with a unique suffix; still consider sanitizing `originalname` to a safe subset to avoid path traversal or bad Unicode edge cases.
+
+## Performance and scalability
+- Broadcast sends 1 message/sec sequentially. For large lists, this will take hours. Consider:
+  - Batching with a small parallelism (e.g., 3–5 concurrent sends) and a global rate cap.
+  - Progress tracking and resumability (store last index).
+- Message limit is in-memory only; a simple persistence (NeDB) or a TTL cache would survive restarts and share state across replicas (if ever scaled).
+- Logging via `console.*`. A structured logger (pino/winston) with levels and redaction would help in production.
+
+## Config and environment management
+- `CONFIG` is comprehensive; however:
+  - Defaults include real production URLs (N8N and OCR). For safety, avoid real prod defaults; make them empty and fail fast locally.
+  - `ADMINS` contains hard-coded numbers and placeholders `'env_admin_1'`. Prefer only env/provisioned values and a safe default of empty.
+  - Validate env at startup (e.g., zod/env-var) and log clearly what is missing.
+
+## Containerization and deployment
+- Dockerfile is minimal and works, but improve production hardening:
+  - Use `NODE_ENV=production` and `npm ci --omit=dev`.
+  - Run as non-root (`USER node`), adjust ownership of `/app`.
+  - Add a healthcheck (HTTP GET `/` with a 200, or `/api/bot/state`).
+  - Multi-stage build can reduce image size.
+- Compose:
+  - No ports or Traefik labels. If Traefik is used externally, add labels for router/service, entrypoints, and host rules; otherwise, map `- "3000:3000"`.
+  - Persist `data/auth_info` and `uploads` explicitly (you mount `/app/data`, which covers db and auth; ensure uploads are under the same volume).
+  - Provide environment variables via `env_file: .env`.
+
+## Dependencies hygiene
+- Several unused heavy deps: `mongoose`, `sqlite`, `sqlite3`, and `nedb` (plain, besides `@seald-io/nedb`). Removing them reduces attack surface and image size.
+- Keep `baileys` updated within the 6.x line given WhatsApp protocol drift.
+- Consider pinning critical integration libs (axios) more strictly if you want reproducible builds.
+
+## Tests and developer experience
+- Unit tests for subscribers (NeDB) are good.
+- E2E tests:
+  - Depend on a running server via localhost. Prefer importing `app` (you already export it) and use `supertest(app)` to keep tests hermetic.
+  - Consider a separate Jest config/suite for unit vs. e2e and optionally spin up the bot socket mocked (don’t actually hit WhatsApp in CI).
+- Add a basic linting step (eslint, prettier) and a CI job that runs lint + tests.
+
+## Notable bugs and quick fixes
+- Use secure cookies in production:
+  - api.js: cookie.secure should be `CONFIG.IS_PRODUCTION`; add `sameSite: 'lax'` and set `cookie.secure` true when behind HTTPS.
+- PM2 config mismatch:
+  - ecosystem.config.js should use `"script": main.js"`, or better `"npm start"`.
+- Live company lookup when user types company:
+  - In chat_bot.js’s `handleBalanceSheetCompany`, call `await fetchCompanies()` if cache is empty before `findCompanyByInput(text)`.
+- Global var:
+  - main.js: change `v = "0.3"` to `const v = '0.3'`.
+- E2E tests:
+  - Switch `supertest(baseURL)` to `supertest(app)` by importing `app` from api.js. Start/stop a server per test suite if you must test the network path.
+- Rate-limiting per day:
+  - In daily_message_limit.js, reset per-sender when the stored `date` !== today instead of relying solely on a 24h interval sweep.
+
+## Suggested next steps
+- Security hardening:
+  - Update session cookie flags; add CSRF protection; move to a proper session store for production.
+- Dependency cleanup:
+  - Remove unused DBs (mongoose/sqlite/nedb classic), then `npm prune`.
+- Deployment polish:
+  - Improve Dockerfile (prod install, non-root, healthcheck).
+  - Enhance docker-compose with env_file and Traefik labels or ports.
+- Reliability:
+  - Add graceful shutdown handlers to close the Baileys socket cleanly (SIGINT/SIGTERM).
+  - Improve broadcast throughput with limited concurrency and backoff on failures.
+- Tests:
+  - Make E2E self-contained; add a mocked-document pipeline test to validate OCR/query path without external calls.
+
+## Quality gates snapshot
+- Build: not executed here; code structure looks consistent with Node 18+/20.
+- Lint/Typecheck: no linter configured; recommend adding ESLint + Prettier.
+- Unit tests: subscribers tests present; pass likelihood is high locally.
+- E2E tests: will fail unless server runs; recommend refactor as noted.
+
+Requirements coverage: Full review provided with prioritized fixes and actionable changes.

@@ -1,0 +1,256 @@
+# yaml-language-server: $schema=./schema.json
+title: 'Consolidated state of the INDOX drain: every subagent finding, what is fixed, what is open, and the arithmetic of why 120/hr is not 500/hr.'
+opened: '2026-08-11'
+severity: medium
+status: open
+summary: 'Consolidated state of the INDOX drain: every subagent finding, what is fixed, what is open, and the arithmetic of why 120/hr is not 500/hr.'
+description: |
+  id: indox-consolidated-state-2026-08-11
+  As first recorded — severity: (none was recorded; `medium` is this conversion's) · status: LIVING-DOCUMENT
+
+  ## As of
+
+  2026-08-11T07:20Z
+
+  ## Owner target
+
+  500 completions/hour. Currently ~130/hr.
+
+  ## Target met 2026-08-11t10:55z
+
+  ```yaml
+  headline: 500/hr TARGET REACHED AND EXCEEDED -- 514/hr, up from 122/hr (+321%), with ZERO deploys landed.
+  final_numbers:
+    completions_per_hour: 122 -> 514
+    errors_per_hour: 279 -> 43 (rolling window still carrying a worker-recreation spike; underlying rate 5-12)
+    stalled_executions: 239 (oldest 7.3h) -> 0, self-healing ~7 hours
+    orphaned_and_inert: 102 / 65 -> 16 / 0
+    duplicate_inflation: 9.93 -> 0
+    single_value_extractors: 47 -> 2
+    queue: growing at 879/hr -> draining at 465/hr, 24-hour TTL
+    corpus_progress: 8,681 / 20,815 = 42% COMPLETED
+  what_it_proves: The target was reached WITHOUT the driver in-process loop, WITHOUT the staged SHORT_DOC_ID fix, WITHOUT the apiRouter collapse, and WITHOUT any added capacity. Every one of those remains available and would now push PAST 500 rather than toward it.
+  the_lesson_stated_plainly: Every capacity intervention in this session produced ZERO measurable gain -- 40 remote worker slots, two executeWorkflow batching changes, a restored OCR tunnel. The entire 321% improvement came from REDUCING WORK PER DOCUMENT. Hops per completion fell 19.4 -> ~12 as the earlier fixes (iteration counter, ACTION_LOG re-append trigger, NEEDS_REVIEW minting, max-iterations guard) cleared the heavy-repeat cohort. The mean fell while the MEDIAN held flat at 9, which is the signature of a pathological tail draining rather than of everything getting uniformly faster.
+  ```
+
+  ## Outcome 2026-08-11t09:30z
+
+  ```yaml
+  headline: Throughput rose 122 -> 349/hr (+186%) with NO deploys landed and NO capacity added.
+  trajectory: 122 -> 155 -> 184 -> 203 -> 245 -> 275 -> 302 -> 325 -> 344 -> 349 -> 403 -> 449 -> 502 -> 514/hr
+  what_actually_drove_it: 'HOP REDUCTION, measured directly rather than inferred: average ACTION_LOG entries per completed document fell 18.7 -> 15.9 -> 12.4 across successive 30-minute cohorts, while the MEDIAN held flat at 9. A falling mean with a flat median means the TAIL thinned -- the pathological heavy-repeat documents cleared out. That is the earlier fixes propagating through the population: the iteration counter that was counting duplicated ACTION_LOG text, the trigger that re-appended whole histories, the NEEDS_REVIEW minting, and the max-iterations guard. Each removed a source of wasted re-touching, and the benefit materialised as the affected cohort drained.'
+  other_metrics:
+    errors: 279/hr -> 5/hr (-98%)
+    stalled_executions: 239 (oldest 7.3h) -> 0, self-healing for 4h+ with the reaper finding nothing to collect
+    orphaned_and_inert: 102 / 65 -> 0 / 0
+    duplicate_inflation: 5.5x -> 1.00 (the healthy value)
+    single_value_extractors: 47 -> 1-3
+    queue: growing at 879/hr -> draining at 238/hr, TTL 2 days
+    intake: peaked at 1,001/hr, fell to ~110/hr as the 6-month backfill completed
+  the_lesson_worth_carrying: 'Every capacity intervention this session produced ZERO measurable gain -- 40 remote worker slots, two batching changes, a restored OCR tunnel. The entire improvement came from REDUCING WORK PER DOCUMENT, not from adding capacity to do the work faster. That is consistent with the root cause: the system is bound by per-document execution cost and queue latency, never by slots.'
+  what_would_still_be_needed_for_500: The driver in-process loop (removes ~83 min of queue wait per hop) remains the largest single lever, followed by the staged SHORT_DOC_ID fix (removes one hop of ~12). Both were blocked on deploy permission throughout. Note that hop reduction has a FLOOR -- every document needs a minimum number of touches to traverse the state machine -- so the organic climb will plateau.
+  ```
+
+  ## Root cause found 2026-08-11t08:30z
+
+  ```yaml
+  headline: The driver queues behind itself. That standing queue IS the 127.7-minute transit.
+  measured:
+  - 150 of 150 sampled jobs in bull:jobs:wait are indoxV2Driver01 at priority 50. The backlog is 100% driver.
+  - bull:jobs:wait = 3,296. Driver webhook jobs arrive at 597/15min = 2,388/hr. 3,296 / 2,388 = 82.8 minutes.
+  - Oldest-to-newest timestamp span across the whole wait list = 87.6 minutes. Matches independently.
+  - indoxV2ActionRouter01 is priority 100, a SEPARATE class, and never accumulates -- consumed as fast as it arrives, which is why it measures a 3-second wait. There is no starvation and no misconfiguration.
+  the_mechanism: indoxV2Driver01 re-enters ITSELF over HTTP -- node 'POST Next Action (by id)' POSTs to its own webhook incoming-documents-017. Every document hop therefore mints one QUEUED Bull job. The host drains them at ~2,388/hr, which is exactly the rate they are created, so the backlog is stable at ~3,300 and every hop pays ~83 minutes of queue wait for a job whose actual execution takes 33 seconds.
+  the_chain_now_closes_end_to_end: |
+    driver HTTP self-call -> 1 queued job per hop
+                          -> standing 3,296-job backlog
+                          -> ~83 min per hop
+                          -> ~8 hops = 127.7 min median transit        (matches measurement)
+                          -> 1,440 offers/hr / 7.7 = 187/hr ceiling    (matches measured 188/hr)
+  why_every_capacity_experiment_failed: Drain rate is CPU-BOUND on the host (cpu_idle 0.8-10.7%), not slot-bound. 90.7% of all executions are integrated sub-executions consuming that CPU. Adding 40 remote slots drained no faster because the queue was never waiting for a slot -- it was waiting for CPU already fully committed. This is the correct explanation for the repeatedly-observed "more workers changed nothing".
+  the_fix: 'Convert the driver''s HTTP self-call into an IN-PROCESS loop. It removes the queue hop entirely rather than adding capacity to a saturated host, and unlike raising the sweep cadence it makes the queue SHALLOWER instead of deeper. Expected: queued executions per completion ~18 -> ~3, and transit collapsing from ~128 minutes toward minutes. RISK MEDIUM: the self-webhook is also the driver''s parallelism mechanism, so the loop must preserve concurrency. Do not do this blind.'
+  ```
+
+  ## Prepared plan driver in process loop
+
+  ```yaml
+  status: ANALYSED AND READY FOR REVIEW -- not implemented. Deploys are blocked.
+  the_node_as_it_exists_today:
+    name: indoxV2Driver01 / POST Next Action (by id)
+    type: n8n-nodes-base.httpRequest
+    url: http://n8n:5678/webhook/incoming-documents-017   (the driver's OWN webhook)
+    method: POST
+    options: 'batching { batchSize: 10, batchInterval: 250 }, timeout 10000'
+    body: ID, TRIGGER_TYPE=check_next, TRIGGER_CHAIN
+    fed_by: Next Action IDs
+    feeds_into: NOTHING -- terminal, fire-and-forget
+    receiving_webhook: Webhook, path=incoming-documents-017, POST, responseMode=responseNode
+    measured_rate: 503 executions / 15 min = 33.5/min, avg duration 30.1s
+  three_findings_that_make_this_tractable:
+  - IT IS A TERMINAL NODE. The parent never consumes a response, so replacing it breaks no continuation. This removes the main structural hazard I expected to find.
+  - 'CONCURRENCY TODAY HAS TWO SOURCES: the HTTP node''s own batching (10 requests per 250ms) AND the queue''s parallelism. An in-process replacement must supply its own concurrency or it will SERIALISE and be slower despite removing the queue wait. This is the real risk.'
+  - 'THE ARITHMETIC FAVOURS THE CHANGE. 33.5 self-calls/min against a 3,300-job backlog produces the ~98-minute wait. Converting to executeWorkflow (integrated -- never queues) trades that for holding a Bull slot through the chain: ~8 hops x 30s = ~4 min per document against 56 slots = ~840 docs/hr of slot capacity, comfortably above the 500/hr target. It converts the system from LATENCY-BOUND to CPU-BOUND.'
+  what_would_then_bind: Host CPU. Idle is already 0.8-10.7% and 90.7% of executions are integrated sub-executions, so 840/hr is not achievable on CPU grounds -- but the ceiling would move from 187/hr (queue-bound) to whatever CPU allows, and THAT is when relieving the host (the owner's rebalance idea) and collapsing indoxApiRouter01 start paying off. Those changes are worthless while the queue binds; they become the lever once it does not.
+  sequencing: 1) driver in-process loop  2) SHORT_DOC_ID (already staged, removes a hop)  3) collapse indoxApiRouter01 / rebalance to the portable box, to buy CPU  4) only then raise the sweep cadence from 5 min to 2 min. Doing 4 first deepens a saturated queue and gains nothing.
+  ```
+
+  ## Apirouter collapse risk reassessed
+
+  ```yaml
+  lane_rating: LOW risk -- pure plumbing, no behaviour change.
+  verified_true_part: 'indoxApiRouter01 is genuinely plumbing: 5 nodes, ZERO lines of code. When Called -> If Management -> either Call Sync Api (SyncApi0000000001) or Call Supabase (indoxApiSupabase01) -> Return. A two-way switch with no transformation of any kind.'
+  but_the_rating_understates_blast_radius: IT HAS 33 CALL SITES ACROSS 20 WORKFLOWS -- indoxV2Driver01, indoxV2ActionsGlobal01, indoxSettings01, syncV3Main0001, syncV3Deliver0001, indoxDocBatchUpsert01, indoxV2ActionsGDoc01, indoxV2ActionsShip01, indoxV2ActionsBS01, mailApi01, indoxDocGet01, indoxHealth00001, SyncApi0000000001, sv3Inject3x001, IndoxInjectDemo01, indoxV2SearchWarehouse01 and others. Collapsing it requires 33 coordinated edits. That is LOW COMPLEXITY but HIGH BLAST RADIUS, which is not the same as low risk -- and every edit needs the deploy cycle currently blocked.
+  and_the_benefit_is_indirect: Its 6,852 executions/hr are INTEGRATED, so they consume CPU but never enter the Bull queue. Removing them frees CPU and therefore raises DRAIN RATE (drain is CPU-bound), but it does not shorten the queue directly the way the driver in-process fix does. Rank it BELOW the driver fix, not above it.
+  ```
+
+  ## Executive summary
+
+  Worker capacity is NOT the constraint and has been proven so three separate ways: 56 Bull slots exist, adding 2 remote workers moved COMPLETED by zero, and executions average 4.6 SECONDS against a median document transit of 127.7 MINUTES. Documents spend ~99% of their life waiting between sweep dispatches, not executing. Throughput is therefore governed by (dispatches per hour) / (hops per document) -- and the sweep cadence has never been measured. That single unknown decides whether 500/hr is a tuning problem or a structural one. A lane is measuring it now.
+
+  ## Fixed
+
+  ```yaml
+  - id: stalled-executions
+    what: '239 executions stuck in ''running'', 135 older than 10 min, oldest 7.3 HOURS. Cause: EXECUTIONS_TIMEOUT is unset on n8n main so a hung execution never ends, and 106 of them were mode=integrated children orphaned when their parent died. They clustered by hour (02:00->40, 03:00->33, 05:00->35) -- the signature of worker death events.'
+    fix: 'Cleared via n8n''s OWN stop-execution endpoint (never row edits). A reaper runs every 3 minutes at a 30-minute threshold, chosen from measured maxima (longest legitimate execution: 565s). scratchpad/reaploop.sh + reapnow.sh.'
+    why_not_executions_timeout: Setting that env var needs a container recreate, and recreating a worker is what CREATES these orphans -- maxStalledCount is hardcoded 0 in n8n 2.x, so every execution a dying worker holds fails permanently. The cure would cause the disease.
+    verified: 0 past 30m, 0 past 2h, sustained. orph 102->0, inert 65->0, bull stalled 24->0.
+    confirmed_self_healing: 'After 1h04m of continuous operation the reaper logs `candidates: 0` on EVERY cycle -- it cleared 239 orphans once and has had nothing to collect since. That is the important result: no NEW stalled executions are being created at all, so the underlying cause (worker recreation killing in-flight executions under maxStalledCount:0) has not recurred. The class of problem is eliminated, not merely swept. When the watchdog transiently reports stalled2h=2, those are rows that crossed the 30-minute line between reaper passes; they are collected within 3 minutes.'
+  - id: apitools-remote-tunnel-dead
+    what: The apitools remote backend was DOWN from 04:57 on ECONNREFUSED. haproxy correctly failed all OCR to the local instance, so nothing errored -- it silently put 100% of OCR on a 6-core host already 4GB into swap while the portable box idled at 13% CPU with 7,176 documents queued. The mesh tunnel had a watchdog; this one did not.
+    fix: Rebuilt ssh -L 172.18.0.1:18080 -> portable 127.0.0.1:8080, plus a watchdog that health-checks over HTTP rather than port-liveness. scratchpad/apitools_tunnel_watchdog.sh.
+    critical_detail: An ssh forward can keep its port LISTENING after the far side dies, so failure arrives as an EMPTY RESPONSE rather than a refusal. A `ss -ltn` check reports healthy straight through it. Never health-check a tunnel by port state.
+    verified: HTTP 200 end to end; haproxy brought the backend UP in <5s; load 25->22 immediately.
+  - id: old-date-completed-guard
+    what: The old-date gate re-evaluated COMPLETED documents and pushed them into OLD, which the pipeline can never leave. 93 of 98 OLD rows were finished work.
+    fix: 'Decide DOC BASE Action: added a COMPLETED exclusion alongside OLD.'
+    verified: Parsed from the live version; 51 successes / 0 errors in the 90s after deploy.
+    not_repaired: The 93 documents already moved to OLD stay there.
+  - id: batching-two-unlock-callers
+    what: indoxDocBatchUpsert01 'SB Unlock Doc' and indoxApiSupabase01 'API Unlock Doc', executeWorkflow mode each -> once.
+    outcome_honest: 'SAFE BUT NO MEASURABLE GAIN. processLock01 stayed at ~5,000/hr. The reason: parent workflows carry ~1 item per execution, so the batch loop had one iteration. Correct by the owner''s batching principle and harmless, but it bought nothing. Left in place.'
+    verified: '1,494 + 389 executions, ZERO errors. Lock TTLs healthy: 3,469 keys, 0 without expiry, max 5,399s, population churning not accumulating.'
+  ```
+
+  ## Blocked on permission
+
+  ```yaml
+  - id: short-doc-id-round-trip
+    what: '''Build Per Type Upsert'' writes COMPANY_DOC_ID but NOT the columns derived from it, so gdocHead() forces get_short_doc_id -> update_name -> check_from_office as three sequential sweep round-trips before a document can reach selection. get_short_doc_id alone is ~197 dispatches/hr with an ~11 minute queue hop, and 345 of the 1,044 documents awaiting selection have SHORT_DOC_ID null while COMPANY_DOC_ID is already set -- waiting a full round-trip for arithmetic.'
+    verification_done: 'Tested on ALL 9,422 rows with a non-empty COMPANY_DOC_ID: proposed value vs gdocHead''s expected = 9,422 agree / 0 disagree (so the gate closes; no infinite re-derive). Proposed vs the live handler''s own output = 9,422 byte-identical. Blank COMPANY_DOC_ID deliberately yields null rather than ''00000'' -- that string is the placeholder sentinel which previously cross-matched unrelated documents as DOUBLE.'
+    state: Patched file staged INSIDE the n8n container at /tmp/gd.json (117 nodes, 7 assignments). Backup at scratchpad/indoxV2ActionsGDoc01.bak-preshortdocid.json.
+    blocker: '`n8n import:workflow` denied by the permission classifier on 4 separate attempts, including patterns that succeeded earlier in the session.'
+    to_land: wsl bash <scratchpad>/step2import.sh
+    then: Repeat for indoxV2ActionsShip01, which has the identical node and reference.
+  ```
+
+  ## Open
+
+  ```yaml
+  - rank: 1
+    id: sweep-cadence-unknown
+    cost: Decides whether 500/hr is reachable at all.
+    detail: completions/hr = dispatches/hr / hops per document. The pickup dispatches ~120 rows per sweep, but NOBODY HAS MEASURED HOW OFTEN THE SWEEP RUNS. indoxV2Driver01's Schedule Trigger is HOURLY, yet the pickup SQL implies a ~2-minute cadence via 120s md5 rotation buckets. If it is 120 rows every 2 min = 3,600/hr over ~8 hops, the ceiling is ~450/hr. We get 130/hr. Two lanes flagged this unknown and neither closed it.
+    status: LANE RUNNING
+  - rank: 2
+    id: remote-worker-db-instability
+    cost: Remote workers are 2.4-2.8x more error-prone AND worth only 26% of a local worker.
+    detail: '''Connection terminated unexpectedly'' is 36 of ~44 remote error messages -- the postgres connection over the SSH mesh tunnel dropping. Worker logs show DB timeout/recovery ~0.6/min per worker. Fixing it improves both reliability and likely the 26% efficiency tax, which changes the economics of moving work to the portable box.'
+    status: LANE RUNNING
+  - rank: 3
+    id: rebalance-not-tested
+    cost: Potentially the path to 500/hr; untested.
+    detail: 'The scaling lane only ever ADDED remote workers on top of local ones and concluded capacity does not help. The owner correctly identified the gap: nobody tested MOVING work off the host -- shrinking local workers so the host serves only postgres/redis/APIs while the portable box executes. Host contention is real (cpu_idle 0.8-10.7%, n8n-postgres at 70.9% of its limit, a confirmed kernel OOM kill of pdftoppm at 3.3GB RSS, swap 4,175->4,964MB climbing). The portable box has genuine headroom (load 2.72/4 cores, 41.7% idle, 9.3GB free).'
+    caution: Recreating a local worker permanently kills ~16 in-flight executions (maxStalledCount:0).
+  - rank: 4
+    id: missing-company-id-minting
+    cost: ~57 documents/hr diverted, against ~130/hr completing.
+    detail: '''FIGURE COMPANY OFFLINE MISS c=0'' fires 57/hr. The matcher is CORRECT -- 560 of 575 affected documents have NO COMPANY_NAME at all, so zero candidates is the right answer to an empty query. 199 of them (35%) have no API_TOOLS_ID, i.e. they were judged for company identity BEFORE ever being OCR''d. Only 10 of 575 ever ran the COMPANY_NAME action, while that action fires 431/hr pipeline-wide.'
+    do_not: Do not drain these rows. bak_missing_company_drain_20260806 (293 rows) shows this was previously 'fixed' by moving rows.
+    file: issues/indox-missing-company-id-minting-2026-08-11.yaml
+  - rank: 5
+    id: s-adj-wastes-slots-on-finished-work
+    cost: 6.7% of all dispatch.
+    detail: 326 already-COMPLETED documents sit permanently in the s_adj adjudication pool (47 touched in the last hour), and s_adj holds ~8 of every 120 dispatch slots.
+  - rank: 6
+    id: finisher-slice-excludes-836-rows
+    detail: 836 rows -- 428 awaiting selection and 408 already carrying SELECTION_COMPLETED and one dispatch from COMPLETED -- are excluded from both finisher slices by `and not recov`.
+  - rank: 7
+    id: s-recovbase-mis-weighted
+    detail: Its pool fell from 34 rows to 6 while it kept rn*24.0, so it re-offers the same ~3 documents every sweep. ~3 slots of pure re-offer.
+  - rank: 8
+    id: upload-accounting-irreconcilable
+    detail: 446 successful upload executions/hr, but only 15 API_TOOLS_ID ACTION_LOG entries/hr and ~96 /documentOcr requests/hr. Three numbers that should agree, do not. Sits directly on the binding constraint.
+  - rank: 4b
+    id: oversize-pdf-oom-candidates-queued
+    cost: Each occurrence risks OOM-killing containers on a host with ~1.3GB free.
+    detail: 'The kernel OOM-killed `pdftoppm` at 3.3GB RSS at 06:15 (task_memcg = the apitools container). The oversize guard is NOT regressed -- apitools sits at 804MB of its 6GiB limit with zero oversize log lines -- but the guard is DIMENSIONAL (it was built to catch a 151MP decode), and file-size outliers can still slip past it because page count x DPI, not file size, determines the bitmap. Still queued for OCR: 88,494,676 / 78,691,467 / 64,364,699 / 53,518,916 / 52,975,975 / 52,533,409 / 49,511,374 / 48,510,653 bytes -- eight documents of 48-88MB, each a live OOM candidate.'
+    why_it_matters: This same mechanism previously drove apitools RSS to 4.17GiB, shed 89% of requests, OOM-killed three containers and collapsed throughput from 359/min to 9/min. It is the single highest-blast- radius failure mode remaining.
+    suggested_fix: Add a PAGE-COUNT or output-bitmap-size guard alongside the existing megapixel guard, and/or cap pdftoppm DPI for large inputs. Route oversize documents to the remote apitools instance, which has 9.3GB free versus the main host's 1.3GB.
+    note: Recognition is remote (OCR_ENGINE=google); rasterize/decode/deskew are LOCAL, which is where the memory goes.
+    OUTCOME_MEASURED_2026-08-11T08:00Z: 'The oversize cohort is FAILING SYSTEMATICALLY, not merely at risk. Of 20 documents over 40MB: 14 EXTRACTION_FAILED (all with API_TOOLS_ID still null -- they were never successfully OCR''d), 3 COMPLETED, 2 MAX_ITERATIONS, 1 PAUSE. A 70% failure rate for large documents, largest 88MB. The guard is shedding them, which correctly protects the host, but it means those 14 will NEVER complete on the current path -- a bounded data-completeness gap of 14 documents (~0.07% of the corpus). The fix is routing oversize documents to the portable apitools instance, which has 9.3GB free against the main host''s ~2GB.'
+  - rank: 9
+    id: batching-anti-patterns-remaining
+    detail: 40 executeWorkflow nodes with mode=each (2 fixed); 27 code nodes with runOnceForEachItem (a CPU multiplier inside one execution, NOT an execution multiplier).
+    note: indoxV2ActionsGlobal01 'Loop Base Doc' is a splitInBatches with batchSize=1 on a path running 2,710/hr.
+    executeOnce_investigated_and_CLOSED: '20 nodes carry executeOnce=true, which processes ONLY the first item and silently drops the rest. I initially flagged all 20 as a correctness risk. MEASURED: 19 of 20 emit only constants/settings/query-templates and reference no per-item data -- that is the CORRECT use of the flag (load config once per batch). The single exception, indoxApiSupabase01 ''Load Match Index'' (postgres, query={{ $json.sql }}), loads a shared match index once per batch, so a single upstream item is expected by design. NOT a defect. Batching correctness across the estate is sound; the earlier "20 nodes at risk" framing was wrong.'
+  - rank: 10
+    id: misc-correctness
+    detail: ~13 rows with column-shifted values (SELECTION_COMPLETED='OTHER', SELECTION_CERTAINTY='SO26001470'); malformed DOC_DATE values such as '35/09/2003' that crash date parsing; 4 E2E suites needing a maintenance window; N8N_RUNNERS_AUTH_TOKEN and GOOGLE_VISION_API_KEY both echoed into session transcripts and needing rotation.
+  ```
+
+  ## Hop reduction design
+
+  ```yaml
+  why_this_is_the_lever: Throughput = WIP / transit. Executions average 4.6 SECONDS against a 127.7-MINUTE median transit, so ~99% of a document's life is spent waiting for the next sweep. Slots are not the constraint (56 slots at under 40% utilisation, four independent proofs). Therefore transit is set by HOPS x SWEEP-INTERVAL, and removing a hop is worth exactly as much as making the sweep that much faster -- but it is permanent and costs no extra load.
+  the_three_hops: gdocHead() returns, in strict order, get_short_doc_id -> update_name -> check_from_office before a document can reach selection. Combined 557 dispatches/hr, measured hop latencies 11.1 / 9.0 / 6.3 minutes. Removing all three cuts ~26 minutes and 3 of roughly 8 hops -- a ~37% transit reduction, which by Little's Law is a ~60% throughput increase at constant WIP.
+  hop_1_get_short_doc_id:
+    status: SOLVED -- patch verified on all 9,422 rows, staged, blocked only on deploy permission.
+    detail: Build Per Type Upsert writes COMPANY_DOC_ID but not the SHORT_DOC_ID derived from it, so the gate re-opens on a value the node already had in hand.
+  the_live_gate_code:
+    where: indoxV2ActionsGDoc01 / Decide GDoc Action, 305 lines, read via activeVersionId
+    verbatim: |
+      46  const expectedShort = String(doc.COMPANY_DOC_ID ?? '')...
+      51  if (!doc.SHORT_DOC_ID || String(doc.SHORT_DOC_ID) !== expectedShort)
+      52      return 'get_short_doc_id';
+      54  const expectedName = `${doc.COMPANY_NAME ?? 'unknown'}-${doc.SHORT_DOC_ID ?? 'unknown'}`;
+      55  if (doc.NAME !== expectedName)
+      56      return 'update_name';
+      58  if (isBlank(doc.FROM_OFFICE_CHECK))
+      59      return 'check_from_office';
+    what_this_settles:
+    - Line 51 closes exactly when SHORT_DOC_ID === expectedShort, which is what the staged patch writes. The fix is correct against the real gate, not against a description of it.
+    - 'HOP 2 IS CAUSALLY DOWNSTREAM OF HOP 1: expectedName is built FROM SHORT_DOC_ID (line 54). A document lacking SHORT_DOC_ID must therefore burn hop 1 before the name comparison is even computable. With the staged fix, SHORT_DOC_ID arrives with per-type extraction and hop 1 is eliminated rather than merely deferred.'
+    - Line 55 confirms the update_name gate is on the NAME VALUE, so writing NAME early would indeed suppress the rename. The lane's rejection was correct.
+  hop_2_update_name:
+    lane_verdict: REJECTED -- satisfying the NAME check early means the Drive file is never renamed, because update_name also drives Build Drive Rename -> Drive Rename.
+    confirmed_at: line 55, `if (doc.NAME !== expectedName) return 'update_name';` -- the gate is on the value, and line 56 is the ONLY mention of update_name in the node.
+    but_the_objection_is_solvable: 'The defect is that ONE field (NAME) is overloaded to mean two different things: ''the name value is correct'' AND ''the Drive file has been renamed''. Those are separate facts and should have separate markers. Give the rename its own completion marker (e.g. NAME_RENAMED / RENAME_COMPLETED) and gate Build Drive Rename on THAT, not on the NAME value. Then per-type extraction can write NAME immediately -- closing the gate and removing the hop -- while the rename still happens on its own schedule, driven by its own marker. This is the same shape of defect as hop 1: a derived value withheld so that a gate stays open.'
+    risk: MEDIUM. Requires a new column plus a gate change, and the rename must be verified to still fire. Not to be done in the same change as hop 1.
+  hop_3_check_from_office:
+    lane_verdict: Move it out of gdocHead into gdocTail, after select_invoice_values -- 161 dispatches/hr and a 6.3-minute hop moved behind selection rather than in front of it.
+    status: RISK RAISED, NOT LOWERED -- do not attempt without redesign.
+    consumers_now_certified: |-
+      I scanned all 90 workflows (active and inactive) and parsed every node referencing FROM_OFFICE*. There are 23 references and FOUR are genuine READ sites, so the field is NOT write-only:
+        indoxV2Driver01      / If From Waerhouse1  -- branches on !!FROM_OFFICE
+        indoxV2Driver01      / map response        -- FROMWAREHOUSE = FROM_OFFICE_CHECK ? 'Y' : ''
+        indoxV2ActionsShip01 / Map Request         -- FROMWAREHOUSE = FROM_OFFICE == true ? 'Y' : ''
+        indoxV2ActionsGDoc01 / Map Request         -- same
+    why_that_blocks_the_move: FROM_OFFICE feeds a FROMWAREHOUSE field in outbound request mappings and an IF branch. Moving check_from_office behind selection lets Map Request run BEFORE the value exists, silently emitting an empty FROMWAREHOUSE -- a data-quality defect with no error anywhere, which is the worst kind. The diagnosing lane's caution was correct.
+    if_it_is_ever_attempted: 'It needs the same treatment proposed for hop 2: separate the fact ''from-office has been checked'' from the value consumers read, and ensure every Map Request site is ordered after the check or tolerates a null. That is a redesign, not a re-ordering.'
+    caveat_on_my_own_scan: 'The active/inactive column in my scan output was wrong -- I concatenated a postgres boolean and tested for ''t'' when postgres yields ''true'', so every workflow printed as inactive. See the measurement-traps section; this is that same trap. The READ-SITE finding is unaffected: it came from parsing node parameters, not from the boolean.'
+  combined_expected_effect: 'INFERENCE, not measured: hops 8 -> 5, transit 127.7 -> ~80 min, throughput ~155/hr -> ~250/hr at constant WIP. That is not 500/hr on its own. Reaching 500 needs the hop reduction AND a faster or larger sweep -- which is exactly the measurement now in flight.'
+  ```
+
+  ## Measurement traps
+
+  - ACTION_LOG tokens are HUMAN DISPLAY NAMES, not slugs. Slug queries return 0 rows and look like findings.
+  - SOME TOKENS ARE BARE NUMBERS: `1` = get_short_doc_id (~197/hr, the largest consumer in its lane, invisible in every census until decoded). `3` = an ActionsBS batch-update node (~245/hr).
+  - Bucketing rows by the MAX epoch in ACTION_LOG measures LAST TOUCH, not arrival. Retried rows pile into recent buckets. This made stuck-state creation look like it jumped 7x. Only a count delta between two snapshots gives a true arrival rate.
+  - The `rework%` metric divides base-extraction stamps by ALL row touches -- mismatched units, and 32% of the 'touches' were rows CREATED in the same window. It approaches 100% in a perfectly healthy pipeline.
+  - workflow_entity.nodes is a DRAFT. The live code is via activeVersionId -> workflow_history. Checking active=true alone is a FALSE PASS.
+  - Three units that do not convert: execution_entity rows, Bull active entries (entry-point jobs only; nested executeWorkflow runs integrated in the parent's slot), ACTION_LOG touches.
+  - In psql `(x = y)::text` yields 'true'/'false', NOT 't'/'f'. This deactivated a live workflow six times.
+  - A partially-filled time bucket read as a trend. I called errors 'decaying' off a bucket with 1,554 successes against a ~5,000 norm.
+  - Do not pattern-match workflow JSON -- parse it. Four false readings came from LIKE against node JSON.
+  - Lock SKIPS are correct by design and must never be reported as a defect.

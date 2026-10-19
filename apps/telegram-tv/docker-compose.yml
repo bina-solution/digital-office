@@ -1,0 +1,103 @@
+# telegram-tv — one container, deliberately.
+#
+# The work here is: answer HTTP (the UI), talk MTProto to Telegram, and hand byte ranges to a video
+# element. All three are I/O-bound and share one asyncio loop — Telethon IS an asyncio client, so
+# putting it in a second container would mean inventing a protocol between two processes just to move
+# bytes between them. One process, one loop, no internal API.
+#
+# The memory number is the one worth explaining: Telethon keeps a small entity cache, the catalogue
+# is sqlite, and posters are cached on disk — none of it grows with the size of a film, because
+# nothing here ever holds a film. 512M is headroom for the asyncio buffers while several players are
+# seeking at once, not a working set.
+services:
+  telegram-tv:
+    # The image CI publishes for this commit (DGO-41); `pull_policy: missing` fetches it only when
+    # it is not here already, and the `build:` below stays the fallback.
+    image: ghcr.io/solomonboltin/digital-office/telegram-tv:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: telegram-tv-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: telegram-tv
+    restart: unless-stopped
+    environment:
+      - SENTRY_DSN=${TELEGRAM_TV_SENTRY_DSN:-}
+      - DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-bina-deployment}
+      # the credential plane: accounts, session strings and api credentials live there, never here
+      - CONNECTIONS_URL=${CONNECTIONS_URL:-http://connections:8990}
+      - TV_DATA_DIR=/data
+      - TV_POSTER_DIR=/data/posters
+      - TV_ACTIVE_PATH=/data/active.json
+      # how much of a chat one sync reads, and how many dialogs it looks at
+      - TV_DISCOVER_LIMIT=${TV_DISCOVER_LIMIT:-30}
+      - TV_SYNC_LIMIT=${TV_SYNC_LIMIT:-400}
+      - TV_DIALOG_LIMIT=${TV_DIALOG_LIMIT:-500}
+      # how many chats ONE sync reads films from (0 = no cap). Telegram throttles per account, and a
+      # library of hundreds of channels would otherwise mean hours per sync and flood waits; the next
+      # sync continues from where this one stopped (rotation, not the same head every time).
+      - TV_SYNC_MAX_CHATS=${TV_SYNC_MAX_CHATS:-15}
+      # how long a "does this chat have video" answer stays valid, in hours (full sync ignores it)
+      - TV_PEEK_REFRESH_HOURS=${TV_PEEK_REFRESH_HOURS:-168}
+      # pause between two Telegram reads — cheaper than being throttled (measured 14s flood sleeps)
+      - TV_REQUEST_PAUSE=${TV_REQUEST_PAUSE:-0.7}
+      # auto-sync on boot only when the library is this stale (hours)
+      - TV_AUTOSYNC_HOURS=${TV_AUTOSYNC_HOURS:-6}
+      # dialog kinds worth recording: channels and groups publish catalogues, private chats do not
+      - TV_DISCOVER_KINDS=${TV_DISCOVER_KINDS:-channel,group}
+      # the smallest file that can be a film — stickers and three-second clips are delivered as
+      # video/webm documents, and without a floor a sticker pack becomes a library (2 MiB default)
+      - TV_MIN_MOVIE_BYTES=${TV_MIN_MOVIE_BYTES:-2097152}
+      # the local cache of played files, and what it may hold. This is the difference between a seek
+      # that waits on Telegram and one that is instant (measured link: 0.9-1.6 MiB/s).
+      - TV_CACHE_DIR=/data/cache
+      - TV_ARTWORK_DIR=/data/artwork
+      - TV_CACHE_BYTES=${TV_CACHE_BYTES:-3221225472}
+      - TV_CACHE_MAX_FILE=${TV_CACHE_MAX_FILE:-419430400}
+      - TV_MAX_SESSIONS=${TV_MAX_SESSIONS:-3}
+      - TV_SESSION_IDLE_SECONDS=${TV_SESSION_IDLE_SECONDS:-45}
+      # how the app reaches itself for the ffmpeg path (it reads its own range endpoint)
+      - TV_SELF_URL=${TV_SELF_URL:-http://127.0.0.1:8982}
+      # the largest slice one HTTP range response may carry (the browser asks for the next one)
+      - TV_STREAM_WINDOW=${TV_STREAM_WINDOW:-16777216}
+      # api credentials used only if the owner does not supply their own in the wizard
+      - TV_DEFAULT_API_ID=${TV_DEFAULT_API_ID:-414329}
+      - TV_DEFAULT_API_HASH=${TV_DEFAULT_API_HASH:-af17b872310e6467fcd3d0aa82dc0d56}
+      - LOG_LEVEL=${TELEGRAM_TV_LOG_LEVEL:-INFO}
+    volumes:
+      # the catalogue cache, the poster cache and the active-account pointer. Losing this loses a
+      # re-scan, not the films: the films are in Telegram and the login is in the vault.
+      - telegram_tv_data:/data
+    networks:
+      - traefik-network
+    healthcheck:
+      # python, never curl: python:3.12-slim has no curl (gate G18). /healthz answers on the PROCESS,
+      # so an expired Telegram session never puts this container into a restart loop.
+      test: ["CMD", "python", "-c", "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://localhost:8982/healthz',timeout=8).status==200 else 1)"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          # Raised from 0.5/512M when ffmpeg arrived: two artwork workers plus a remux per viewer are
+          # real CPU, and a starved remux is a stutter. Still modest — the host has four cores and
+          # 4.9 GiB, and this app must not be the reason the office swaps.
+          cpus: '1.0'
+          memory: 768M
+        reservations:
+          cpus: '0.02'
+          memory: 64M
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+
+volumes:
+  telegram_tv_data:
+
+networks:
+  traefik-network:
+    external: true

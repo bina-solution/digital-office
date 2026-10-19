@@ -1,0 +1,145 @@
+# yaml-language-server: $schema=./schema.json
+title: "authentik-bootstrap: unhealthy for ~15 hours because the embedded outpost never learned two new gated hosts (digital-assets, social-list) — and nothing acted on it"
+opened: 2026-09-30
+category: bug
+severity: high
+status: resolved
+summary: "authentik-bootstrap-local reports `running unhealthy` with a failing streak of 4851 probes (≈15 h), every probe saying `outpost not serving: digital-assets.localhost,social-list.localhost`. Its last successful run configured the outpost for the 21 gated hosts of 2026-09-22; the two auth:sso apps added since are in the compiled gated list the probe reads but were never pushed into the outpost, so their SSO gate is not served. No autoheal label, no console card, no alert: Docker said so for 15 hours and nothing listened. Same silent-failure family as the Plane API death (issue plane-api-dead-for-ten-hours…)."
+description: |
+  ## Measured (2026-09-30 15:27, macOS engine)
+
+  * `docker inspect authentik-bootstrap-local`: running, health=unhealthy, FailingStreak=4851,
+    RestartCount=0, StartedAt 2026-09-22T09:08:05Z.
+  * Health log (every ~11 s): `exit=1 outpost not serving: digital-assets.localhost,social-list.localhost`.
+  * Container log, last lines (from its last run): `gated hosts (21): any-concurrency.localhost, …`,
+    `outpost ready: all 21 gated hosts served`, `SSO fully ready — embedded outpost serving all gated hosts`.
+  * The two hosts belong to apps/digital-assets and apps/social-list (both routed with auth:sso),
+    added after that run. The probe derives the gated list from the compiled registry (23 hosts now);
+    the outpost's application set still has 21.
+
+  ## Why it is structural
+
+  * The gated-host list is DERIVED (compiler → registry), but the outpost's application set is pushed
+    only by the bootstrap's run: adding an auth:sso route changes the input and nothing re-runs the
+    step. A derived fact with a one-shot writer drifts on the first change.
+  * The container has no `binaos.autoheal` label and no surface in the console's health card, so an
+    unhealthy bootstrap is invisible unless someone runs `docker ps`. A probe whose failure nobody
+    can see is not a probe — the same lesson as the Plane API healthcheck.
+
+  ## Fix
+
+  1. Now: re-run the outpost sync at a quiet moment (restart authentik-bootstrap or its outpost
+     hook); expect `outpost ready: all 23 gated hosts served`; verify digital-assets.localhost and
+     social-list.localhost 302 to authentik when unauthenticated.
+  2. The reconcile step that adds/removes an auth:sso route triggers the outpost sync (or the
+     bootstrap's probe repairs, not only reports: on "not serving X" it pushes X and re-probes).
+  3. Surface it: `binaos.autoheal=true` on the container, and the platform health card lists every
+     unhealthy platform-base container, not only apps.
+
+  ## The 21:11 → 22:14 run (2026-09-30), measured — what a recreate actually costs and where it stalls
+
+  * bootstrap.sh applies THREE blueprint files in sequence (deployment-apps.yaml 12 KB →
+    zz-generated-apps.yaml 31 KB → zzz-migrations.yaml 2 KB) and each `ak apply_blueprint` boots a
+    full Django/authentik process first; then two more `ak` boots (password step, gated-host list).
+    Under load 60 (four agent turns + n8n workers) the three applies took 21:35 → 21:56; at load
+    4–10 the tail took four minutes. A recreate under load is not "stuck", it is an hour long.
+  * After the apply the embedded outpost (inside authentik-server) did NOT pick up the changed /
+    new providers by itself: `outpost-ready.py --wait` sat at "waiting on 6" (alerts-svc,
+    apitools, data-management, plane.console.localhost:8080 — all six ATTACHED to the outpost in
+    the DB) and would have given up at 120 × 5 s, exited 1 and restarted the container into the
+    same hour-long apply — a loop. `docker restart authentik-server-local` made the outpost reload:
+    "SSO fully ready — all 38 gated hosts served" within a minute. Second time today the server
+    restart was the lever (also 20:39). The signal path apply → outpost_send_update → the embedded
+    outpost's websocket is what fails under load; the lever belongs in the platform (bbox), the
+    bootstrap has no docker socket.
+  * DGO-60 landed (a7f2b2a5): `.generated/authentik-bootstrap.override.yml` carries a digest of
+    bootstrap.sh, outpost-ready.py and blueprints/*.yaml as a label, so `dc up` recreates the
+    bootstrap exactly when what it applies changed. The first `dc up -d authentik-bootstrap` after
+    it recreates the container once (one apply at quiet load, ~5 min).
+  ## The 01:13 → 04:29 pass (2026-10-01) — how a bootstrap pass re-ignites a wedge, and the two levers
+
+  * Recreated 01:13 by the git lane (forge SSO) while three other lanes recreated services in the same
+    minute → load 105, swap 3 GB. Diagnostics with `timeout N docker exec … manage shell|apply_blueprint`
+    left 12 Django processes inside the 384 MiB container; the lane killed them, the kill also hit
+    the bootstrap's own `blueprints_ok` shell, bootstrap.sh's retry loop started attempt 2 from
+    file 1 (RestartCount stayed 0 — it is the loop, not a container restart), and each pass under
+    swap took > 1 h while feeding the load that slowed it. Stopped it 03:07 (`dc stop`), SSO kept
+    serving the loaded providers; re-ran ONE pass at load 7 (03:36 → 04:29): 40 gated hosts,
+    "SSO fully ready", no server restart needed.
+  * authentik-server ran two uvicorn workers in 768 MiB; under load gunicorn killed and re-booted a
+    worker ten times in three hours (WORKER TIMEOUT → SIGKILL → Booting worker), each boot a full
+    Django start and a moment the embedded outpost answers 502 / "does not know the host".
+    `AUTHENTIK_WEB__WORKERS=1` (compose, overridable with BBOX_AUTHENTIK_WEB_WORKERS) from 04:30:
+    healthy, zero kills since.
+  * Rule for the lanes: never kill processes inside authentik-bootstrap while it applies, never
+    recreate it under load; one pass at load < 10, owned by one session. A recreate now also takes
+    the engine's heavy slot (894b8071), so two sessions cannot recreate at once any more.
+  ## The cause (2026-10-06, hp-laptop) — it was never the load
+
+  * "After the apply the embedded outpost did NOT pick up the changed / new providers by itself …
+    all six ATTACHED to the outpost in the DB" is one bug, and it is in the blueprint this platform
+    compiles: the outpost was given TWO providers for one host. authentik files the outpost's
+    applications under host[:port]; its refresh stops the application it held for a host once per
+    provider of that host, and the second stop of the same application waits for ever
+    (2024.12.5 internal/outpost/proxyv2/refresh.go + ttlcache v3.3.0 `Stop()`). The refresh never
+    returns, so nothing declared after start-up is ever loaded — and a restart "fixes" it because
+    the first load has nothing to stop.
+  * Where the pairs came from: on an office whose edge is on `.localhost` port 80, every app's own
+    provider and its -local twin are the same host (15 hosts on hp-laptop); on an office with a
+    port or a domain, a container with yesterday's environment applied a NEW app's `!Env` host as
+    its `.localhost` default — the twin's host again.
+  * Measured on hp-laptop: five starts of the server, each with provider fetches at start-up, one
+    more five minutes later, then none; a new host not served in 345 s, nor after re-saving the
+    outpost, nor after `outpost_send_update`. With one provider per host: a new host 302 seven
+    seconds after the render, 404 again after it was withdrawn, the server never restarted.
+  * Fixed in the compiler (`render_authentik`: one provider for a host on the outpost, a twin only
+    where it is another host, an installable app's host as a literal) with `hooks/refresh` waiting
+    for the outpost to learn before it restarts anything. `ai/context/platform-os-release-plan.md`
+    G7.3 has the numbers.
+  * And "a recreate under load is an hour long … would have exited 1 and restarted the container
+    into the same hour-long apply — a loop" (above) is closed from both ends the same day: an app
+    switched on no longer re-creates this container at all (the compiled blueprint left its
+    recreate inputs — the worker's apply, seconds after the file changes, is the apply; the probe
+    reads the hosts of the render from the blueprint itself, so the hook can ask at once), and
+    bootstrap.sh no longer exits when the outpost is slow to serve what was applied: it says so and
+    stays up, unhealthy, for the hook — which has the engine — to act on. Measured on hp-laptop:
+    the same install 4 min 22 s -> 30 s, no sign-in container touched.
+  ## The last task, decided (2026-10-07, hp-laptop): no `binaos.autoheal` on the sentinel
+
+  * WHAT THE LABEL WOULD DO. autoheal has one verb - restart - and the sentinel reports `unhealthy`
+    whenever a declared host is not served, which includes the whole of its own apply once that
+    outlasts `start_period: 240s` + 6 x 10 s. On a cold start or a loaded machine that is routine
+    (more than five minutes on this laptop, 21 minutes under load on 2026-09-30). Restarted at about
+    six and a half minutes, the apply starts over from the first blueprint - the loop of the 01:13
+    pass above - up to three times before the breaker says anything.
+  * WHAT ACTS INSTEAD. `platform-base/authentik/hooks/refresh` - wait, re-apply, restart the
+    server, in the order of what each costs - on every bring-up and after every compile. Since
+    2026-10-06 the sentinel deliberately stays up, unhealthy, "for the hook to act on"; a restart by
+    anything else cuts across that.
+  * WHAT IS VISIBLE. Checked on hp-laptop: the apps catalogue has a row for the identity app (layer
+    1, `running 4/4`, its `health` taken from its four containers - the sentinel is one of them), so
+    an unhealthy sentinel is the red badge on that row; the machine screen counts and filters every
+    container on the engine. Six containers carry the restart label today (the n8n workers and
+    runners, Plane); the sentinel is not one of them and stays that way.
+  * WHAT IS STILL MISSING is wider than this issue: nobody is TOLD. autoheal is the only thing that
+    posts a container's health to the notification centre, and only for containers it may restart -
+    so one that must not be restarted (this one, every database) can be unhealthy for hours with
+    two screens showing it and no notice sent. That is hub item sec-021.
+tasks:
+  - text: "Re-run the outpost sync at a quiet moment; verify 23 hosts served and the two hosts gate (302 to authentik unauthenticated)"
+    done: true
+  - text: "Reconcile: adding/removing an auth:sso route triggers the outpost sync (or the probe repairs instead of only reporting)"
+    done: true
+  - text: "The outpost reload after an apply must not depend on a hand restart of authentik-server: bbox (which has the socket) restarts it when outpost-ready reports 'waiting on' for > 3 min with every missing host attached in the DB; the bootstrap itself must not exit 1 into an hour-long re-apply loop"
+    done: true
+  - text: "An unhealthy platform-base container is visible: the apps catalogue carries the identity app's health (its four containers, the sentinel among them) and the machine screen counts and filters every container"
+    done: true
+  - text: "DECIDED AGAINST binaos.autoheal on authentik-bootstrap: a restart mid-apply starts the apply over, and hooks/refresh is what acts. The missing NOTICE for a container that may not be restarted is hub item sec-021"
+    done: true
+references:
+  - platform-base/authentik/docker-compose.yml
+  - platform-base/authentik/bootstrap.sh
+  - platform-base/authentik/outpost-ready.py
+  - apps/digital-assets/app.json
+  - apps/social-list/app.json
+  - issues/plane-api-dead-for-ten-hours-while-docker-said-healthy.yaml

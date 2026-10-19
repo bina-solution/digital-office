@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+#: snapshot error-tracking state — full mode only; config mode lets hooks/prepare rebuild it
+#
+# backup <outdir> <mode>   — invoked by scripts/deployment-archive.py, never by hand.
+#
+# `config` mode carries NOTHING here, and that is a decision this app is entitled to make about
+# itself: hooks/prepare already re-provisions the org, the projects, the poller token and every DSN
+# from scratch on the target, and it is idempotent BY CONSTRUCTION because the DSN public keys are
+# deterministic — sha256(GLITCHTIP_SECRET_KEY:name). GLITCHTIP_SECRET_KEY travels in .env, so the
+# rebuilt DSNs are byte-identical to the ones already written into the source machine's .env and
+# every app keeps reporting to a project that exists. Re-deriving 112 MB of event history would be
+# the only thing lost, and event history is telemetry, not deployment state.
+#
+# `full` mode carries the database so past errors and their resolution status survive the move.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+. "${REPO_ROOT}/scripts/archive-lib.sh"   # archive_require / archive_stop / archive_project
+
+OUT="${1:?usage: backup <outdir> <mode>}"
+MODE="${2:-full}"
+echo "SKIPVOL glitchtip_postgres_data"
+if [ "${MODE}" != "full" ]; then
+  echo "[glitchtip/backup] config mode — not carried; hooks/prepare re-provisions org + deterministic DSNs"
+  exit 0
+fi
+
+C="$(archive_require glitchtip-postgres)"
+[ -n "${C}" ] || { echo "[glitchtip/backup] no glitchtip-postgres container running" >&2; exit 1; }
+# The credentials are the container's own, which is the only place they are guaranteed current —
+# .env and the compose default have disagreed before.
+U="$(docker exec "${C}" printenv POSTGRES_USER 2>/dev/null | tr -d '\r')"; U="${U:-glitchtip}"
+D="$(docker exec "${C}" printenv POSTGRES_DB   2>/dev/null | tr -d '\r')"; D="${D:-glitchtip}"
+
+docker exec "${C}" pg_dump -U "${U}" -d "${D}" -Fc --no-owner --no-acl > "${OUT}/glitchtip.dump.part" \
+  || { echo "[glitchtip/backup] pg_dump failed" >&2; rm -f "${OUT}/glitchtip.dump.part"; exit 1; }
+mv "${OUT}/glitchtip.dump.part" "${OUT}/glitchtip.dump"
+echo "ARTIFACT glitchtip.dump"
+
+q() { docker exec "${C}" psql -U "${U}" -d "${D}" -tAc "$1" 2>/dev/null | tr -d '\r' | tr -d ' '; }
+echo "FACT organizations $(q 'select count(*) from organizations_organization;')"
+echo "FACT projects $(q 'select count(*) from projects_project;')"
+echo "FACT project_keys $(q 'select count(*) from projects_projectkey;')"
+echo "FACT issues $(q 'select count(*) from issue_events_issue;')"
+exit 0

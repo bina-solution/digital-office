@@ -1,0 +1,6 @@
+# domains — HTTP to the providers, and a DNS client that is written here (dnsq.py) rather than
+# installed: the office must be able to ask the world what a domain resolves to, and a resolver
+# library would have pulled in a dependency tree for six record types.
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+requests==2.32.3

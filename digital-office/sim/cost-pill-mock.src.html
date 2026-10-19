@@ -1,0 +1,182 @@
+<!doctype html>
+<!--
+  cost-pill-mock — the office console, on the screen the owner sent, with the price pill applied.
+
+  WHAT THIS IS. A demo of ONE display change: the composer's token figure ("1.9 מיליון") becomes the
+  conversation's price in the office's currency. It is built, never hand-typed:
+
+    python3 digital-office/sim/build-cost-pill-mock.py          # → ci-artifacts/cost-pill-mock/
+
+  THREE THINGS IT REFUSES TO PARAPHRASE.
+    * The pixels inside the app area are the OWNER'S OWN SCREENSHOT (cropped to the region between
+      the console's top bar and its tab bar), and the original chip is still there — the dark
+      rectangle the price sits on is the screen's own background colour, sampled from the shot.
+    * The pill's styles are lifted from the plugin itself (plugins/cost-meter/lib/client.js), so the
+      demo cannot drift from the product it demonstrates.
+    * The number is COMPUTED by the plugin's own modules, running in this page (lib/pricing.js and
+      lib/cost.js, loaded as Blob modules from the text below). Nothing here types a price.
+
+  The shell chrome (top bar, tab bar) is drawn from the office palette, because a static crop cannot
+  have it: the screenshot's own chrome is the phone's browser and the console's bars, which are not
+  the subject of the change.
+-->
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <title>עלות השיחה במקום מונה הטוקנים — הדמייה</title>
+  <link rel="stylesheet" href="../../platform-base/bina-ui/theme-tokens.css" />
+  <style>
+    /* The shell's chrome, drawn. The palette is the office's; nothing here is a colour of its own. */
+    body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font); display: flex; gap: 28px; padding: 24px; align-items: flex-start; justify-content: center; flex-wrap: wrap; }
+    .phone { width: 390px; flex: none; border-radius: 22px; overflow: hidden; background: #151517; box-shadow: 0 18px 40px rgba(0,0,0,.28); }
+    .shell-top { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+    .shell-top b { font-size: 17px; }
+    .shell-top .search { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 4px 12px; }
+    .app { position: relative; aspect-ratio: 1080 / 1652; background-size: 100% 100%; background-repeat: no-repeat; }
+    .shell-tabs { display: flex; justify-content: space-between; padding: 10px 16px 14px; background: var(--surface-2); border-top: 1px solid var(--border); font-size: 11px; color: var(--muted); }
+    .shell-tabs span { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+    .shell-tabs span.on { color: var(--ink); }
+    /* The price sits exactly where the token figure sat: the chip's own rectangle, in shot coords. */
+    .pill-slot { position: absolute; inset-inline-start: 15.3%; inset-block-start: 96.6%; }
+    .side { width: 330px; display: flex; flex-direction: column; gap: 14px; }
+    .side h1 { font-size: 16px; margin: 0; }
+    .side p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
+    .card { border: 1px solid var(--border); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+    .field { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; }
+    input[type=text] { width: 90px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 8px; background: transparent; color: inherit; font: inherit; }
+    input[type=range] { width: 150px; }
+    .note { font-size: 12px; color: var(--muted); }
+    .toggle { display: flex; gap: 8px; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="phone">
+    <div class="shell-top"><b>בינה ודעת</b><span class="search">חיפוש ⌕</span></div>
+    <div class="app" id="app">
+      <!-- The owner's screen, cropped; the "after" layer paints the chip out and draws the price. -->
+      <span class="pill-slot" id="slot"></span>
+    </div>
+    <div class="shell-tabs">
+      <span class="on">🏠<i>בית</i></span><span>🗂<i>דרייב</i></span><span>✉<i>מייל</i></span>
+      <span>📄<i>מסמכים</i></span><span>📂<i>פתוחים</i></span><span>☰<i>עוד</i></span>
+    </div>
+  </div>
+
+  <aside class="side">
+    <h1>עלות השיחה במקום מונה הטוקנים</h1>
+    <p>המסך שבתמונה הוא המסך שהבעלים שלח. הצ׳יפ של הטוקנים שבתחתית התיבה מוחלף במחיר השיחה, באותה שורה ובאותו מקום — וכל מספר כאן מחושב בקוד של התוסף עצמו (pricing.js + cost.js), לא הוקלד.</p>
+    <label class="toggle"><input type="checkbox" id="original" /> הצגת המסך המקורי (בלי השינוי)</label>
+    <div class="card">
+      <div class="field"><span>מטבע</span><input type="text" id="currency" value="₪" /></div>
+      <div class="field"><span>שער: 1$ =</span><input type="text" id="rate" value="3.7" /></div>
+      <label class="field"><span>חיוב לפי שעות שיא ושפל</span><input type="checkbox" id="peak" checked /></label>
+    </div>
+    <div class="card">
+      <div class="note">פירוט הטוקנים של השיחה (נמדד מהסשן 3e2f4c31 בלשכה):</div>
+      <div class="field"><span>קלט מהמטמון</span><input type="text" id="cached" value="15500000" /></div>
+      <div class="field"><span>קלט (לא במטמון)</span><input type="text" id="uncached" value="114700" /></div>
+      <div class="field"><span>פלט</span><input type="text" id="output" value="110700" /></div>
+      <label class="field"><span>שעה</span><input type="range" id="hour" min="0" max="23" value="12" /><span id="hourLabel">12:00 UTC</span></label>
+    </div>
+    <p class="note" id="before">המסך המקורי הראה: <b>1.9 מיליון</b> טוקנים.</p>
+  </aside>
+
+  <script type="text/plain" id="pricing-src">__PRICING_SRC__</script>
+  <script type="text/plain" id="cost-src">__COST_SRC__</script>
+  <script type="text/plain" id="plugin-css">__PLUGIN_CSS__</script>
+  <script type="text/plain" id="shot-screen">__SHOT_SCREEN__</script>
+  <script type="text/plain" id="shot-original">__SHOT_ORIGINAL__</script>
+
+  <script type="module">
+    // The plugin's own two modules, loaded as Blob modules so the demo runs THE code, not a copy.
+    const blob = (text, map) => URL.createObjectURL(new Blob([map(text)], { type: 'text/javascript' }));
+    const pricingSrc = document.getElementById('pricing-src').textContent;
+    const pricingUrl = blob(pricingSrc, (t) => t);
+    const costSrc = document.getElementById('cost-src').textContent;
+    const costUrl = blob(costSrc, (t) => t.replace('./pricing.js', pricingUrl));
+    const { fold, initial, view } = await import(costUrl);
+
+    // The pill's styles are the plugin's own block, lifted out of lib/client.js by the builder.
+    const style = document.createElement('style');
+    style.textContent = document.getElementById('plugin-css').textContent;
+    document.head.appendChild(style);
+
+    const app = document.getElementById('app');
+    const slot = document.getElementById('slot');
+    const SCREEN = 'url(' + document.getElementById('shot-screen').textContent + ')';
+    const ORIGINAL = 'url(' + document.getElementById('shot-original').textContent + ')';
+    app.style.backgroundImage = SCREEN;
+
+    const fields = ['currency', 'rate', 'peak', 'cached', 'uncached', 'output', 'hour'];
+    const read = () => ({
+      currency: document.getElementById('currency').value.trim() || '₪',
+      rate: Number(document.getElementById('rate').value) || 1,
+      peakPricing: document.getElementById('peak').checked,
+      cached: Number(document.getElementById('cached').value) || 0,
+      uncached: Number(document.getElementById('uncached').value) || 0,
+      output: Number(document.getElementById('output').value) || 0,
+      hour: Number(document.getElementById('hour').value),
+    });
+
+    /** One window entry for the sample: the demo's hour decides peak or off-peak (UTC, weekday). */
+    function stateOf(input) {
+      const stamp = Date.UTC(2026, 9, 12, input.hour, 0, 0);
+      const usage = { inputTokens: input.uncached, outputTokens: input.output, cacheReadTokens: input.cached, cacheWriteTokens: 0 };
+      return fold(initial(), {
+        type: 'assistant/message',
+        time: stamp,
+        data: { turn: 1, step: 1, usage, message: { source: { provider: 'deepseek', model: 'deepseek-flash' } } },
+      });
+    }
+
+    function render() {
+      const input = read();
+      const published = view(stateOf(input), { currency: input.currency, usdRate: input.rate, peakPricing: input.peakPricing });
+      document.getElementById('hourLabel').textContent = String(input.hour).padStart(2, '0') + ':00 UTC';
+      slot.innerHTML = '';
+      const anchor = document.createElement('span');
+      anchor.className = 'bina-cost-anchor';
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'bina-cost-pill';
+      button.setAttribute('aria-label', 'עלות השיחה: ' + published.text);
+      const label = document.createElement('span');
+      label.className = 'bina-cost-label';
+      label.innerHTML = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none"><circle cx="8" cy="8" r="6.25" stroke="currentColor" stroke-width="1.25"></circle><circle cx="8" cy="8" r="2.75" stroke="currentColor" stroke-width="1.25"></circle></svg>' + published.text;
+      button.appendChild(label);
+      button.addEventListener('click', () => {
+        const open = anchor.querySelector('.bina-cost-panel') !== null;
+        if (open) { anchor.querySelector('.bina-cost-panel').remove(); return; }
+        const panel = document.createElement('div');
+        panel.className = 'bina-cost-panel';
+        panel.style.position = 'absolute';
+        panel.style.bottom = '28px';
+        panel.style.insetInlineEnd = '0';
+        panel.style.width = 'min(320px, 78vw)';
+        const rows = published.rows.filter((r) => r.tokens > 0).map((r) => {
+          const names = { cacheHit: 'קלט מהמטמון', cacheMiss: 'קלט (לא במטמון)', cacheWrite: 'כתיבה למטמון', output: 'פלט' };
+          return '<dt>' + names[r.bucket] + '</dt><dd><span class="bina-cost-tokens">' + Math.round(r.tokens).toLocaleString('en-US') + ' טוקנים</span><span class="bina-cost-money">' + r.amount.toFixed(2) + published.currency + '</span></dd>';
+        }).join('');
+        panel.innerHTML =
+          '<div class="bina-cost-panel-head"><span class="bina-cost-panel-title">עלות השיחה</span><span class="bina-cost-panel-total">' + published.text + '</span></div>' +
+          '<div class="bina-cost-rule"></div><dl class="bina-cost-rows">' + rows + '</dl>' +
+          '<div class="bina-cost-rule"></div>' +
+          '<p class="bina-cost-foot"><span>שער המרה: 1$ = ' + published.rate + ' · מחירי DeepSeek</span>' +
+          '<span>' + (published.peakPricing ? 'שעות שיא ' + published.peak.tokens.toLocaleString('en-US') + ' טוקנים · שעות שפל ' + published.offPeak.tokens.toLocaleString('en-US') + ' טוקנים' : 'מחושב לפי מחיר שעות השיא') + '</span>' +
+          '<span>מודלים: ' + published.models.join(', ') + '</span></p>';
+        anchor.appendChild(panel);
+      });
+      anchor.appendChild(button);
+      slot.appendChild(anchor);
+      document.getElementById('before').innerHTML = 'המסך המקורי הראה: <b>1.9 מיליון</b> טוקנים · החישוב כאן: <b>' + published.text + '</b> (' + published.usd.toFixed(4) + '$)';
+    }
+
+    for (const id of fields) document.getElementById(id).addEventListener('input', render);
+    document.getElementById('original').addEventListener('change', (event) => {
+      app.style.backgroundImage = event.target.checked ? ORIGINAL : SCREEN;
+      slot.style.display = event.target.checked ? 'none' : '';
+    });
+    render();
+  </script>
+</body>
+</html>

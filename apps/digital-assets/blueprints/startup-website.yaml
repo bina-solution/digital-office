@@ -1,0 +1,369 @@
+# אתר תדמית לסטארט־אפ / למוצר
+#
+# The pattern for a YOUNG PRODUCT'S OWN SITE: one long landing page that explains the problem, the
+# product, how to start and what it costs, plus the handful of pages a product site cannot do
+# without (features, apps/what's inside, pricing, demo, docs, about, vision, licence, community).
+#
+# Why this is a blueprint and not a folder of HTML: the owner edits TEXT from the assets screen.
+# Every slot here is a place on that site whose value the assets app owns, and the site reads it by
+# `data-da` — the mapping is declared once, and from then on a change is a version + an activate.
+#
+# It is deliberately separate from `business-website`: a product site speaks in the PRODUCT's voice
+# (`identity.product.*`), and the company behind it keeps its own identity for its own site. Where
+# one business runs both, both blueprints are applied — and the two never fight over one slot.
+#
+# Conventions every slot follows:
+#   * `content.website.startup.<page>.<part>` — `<page>` is the page's own name in the site's URL, so a slot
+#     can be found from the address bar; `<part>` is `title` (the <title>/SEO title), `heading` (the
+#     page's first heading), `intro` (the opening paragraph) or a named block of the page.
+#   * `targets: [website]` — the slot is published in the bundle the `sites` app serves, which is
+#     what makes `data-da` see it. A slot with no target stays out of the bundle on purpose.
+id: startup-website
+version: 1
+order: 4
+name:
+  he: אתר תדמית לסטארט־אפ
+  en: Startup marketing site
+summary:
+  he: אתר תדמית של מוצר צעיר — עמוד נחיתה אחד שמסביר את הבעיה, המוצר, ההתחלה והמחיר, ועמודי יכולות,
+    אפליקציות, תמחור, הדגמה, תיעוד, אודות, חזון, רישיון וקהילה. הזהות היא של המוצר, בנפרד מהחברה שמאחוריו.
+  en: A young product's marketing site — one landing page (problem, product, getting started, price)
+    plus features, apps, pricing, demo, docs, about, vision, licence and community. The identity is
+    the PRODUCT's, kept apart from the company behind it.
+# What it LINKS rather than repeats: the product's identity and the business's general data are
+# already defined by the blueprints that own them — `startup-tail` (which itself extends
+# `business-basic`) holds `identity.product.name` and `identity.product.one-liner`, and
+# `business-basic` holds the company's name, logo, tagline and contacts. Extending is what keeps one
+# fact in one place: the assets screen shows those slots once, with the value the business already has.
+extends:
+- startup-tail
+slots:
+- key: identity.product.tagline
+  section: identity
+  group: product
+  kind: text
+  label:
+    he: סלוגן המוצר
+    en: Product tagline
+  constraints:
+    note: the short line under the wordmark, in the site's header and footer — one value for both
+  targets:
+  - channel: website
+- key: identity.product.description
+  section: identity
+  group: product
+  kind: richtext
+  label:
+    he: תיאור המוצר
+    en: Product description
+  targets:
+  - channel: website
+- key: identity.product.logo
+  section: identity
+  group: product
+  kind: image
+  label:
+    he: לוגו המוצר
+    en: Product logo
+  targets:
+  - channel: website
+  - channel: brand
+    brand: product
+
+# ── the landing page ─────────────────────────────────────────────────────────────────────────────
+- key: content.website.startup.home.hero
+  section: content
+  group: home
+  kind: richtext
+  label:
+    he: כותרת הגיבור (שתי שורות)
+    en: Hero headline (two lines)
+  required: true
+  constraints:
+    note: '\n becomes <br> — that is how the two-line hero keeps its break'
+  targets:
+  - channel: website
+- key: content.website.startup.home-subtitle
+  section: content
+  group: home
+  kind: text
+  label:
+    he: תת־כותרת דף הבית
+    en: Home subtitle
+  required: true
+  targets:
+  - channel: website
+- key: content.website.startup.cta
+  section: content
+  group: home
+  kind: text
+  label:
+    he: כפתור הפעולה הראשי
+    en: Primary call to action
+  targets:
+  - channel: website
+- key: content.website.startup.home.problem
+  section: content
+  group: home
+  kind: text
+  label:
+    he: הבעיה
+    en: The problem
+  targets:
+  - channel: website
+- key: content.website.startup.home.apps
+  section: content
+  group: home
+  kind: text
+  label:
+    he: האפליקציות
+    en: What is inside
+  targets:
+  - channel: website
+- key: content.website.startup.home.domains
+  section: content
+  group: home
+  kind: text
+  label:
+    he: התחומים
+    en: The domains covered
+  targets:
+  - channel: website
+- key: content.website.startup.home.install
+  section: content
+  group: home
+  kind: text
+  label:
+    he: התקנה
+    en: Getting it running
+  targets:
+  - channel: website
+- key: content.website.startup.home.where-to-run
+  section: content
+  group: home
+  kind: text
+  label:
+    he: איפה מריצים
+    en: Where it runs
+  targets:
+  - channel: website
+- key: content.website.startup.home.pricing
+  section: content
+  group: home
+  kind: text
+  label:
+    he: תמחור (בדף הבית)
+    en: Pricing (on the landing page)
+  targets:
+  - channel: website
+- key: content.website.startup.home.who-its-for
+  section: content
+  group: home
+  kind: text
+  label:
+    he: למי זה מתאים
+    en: Who it is for
+  targets:
+  - channel: website
+- key: content.website.startup.home.start
+  section: content
+  group: home
+  kind: text
+  label:
+    he: קריאה להתחלה
+    en: Closing call
+  targets:
+  - channel: website
+- key: content.website.startup.footer.tagline
+  section: content
+  group: footer
+  kind: text
+  label:
+    he: שורת התחתית
+    en: Footer line
+  targets:
+  - channel: website
+
+# ── search and sharing ───────────────────────────────────────────────────────────────────────────
+- key: content.website.startup.seo-title
+  section: content
+  group: seo
+  kind: text
+  label:
+    he: כותרת ל-SEO (דף הבית)
+    en: SEO title (home)
+  constraints:
+    max_len: 60
+  targets:
+  - channel: website
+  - channel: google-search
+- key: content.website.startup.seo-meta
+  section: content
+  group: seo
+  kind: text
+  label:
+    he: תיאור המטא (דף הבית)
+    en: Meta description (home)
+  constraints:
+    max_len: 160
+  targets:
+  - channel: website
+  - channel: google-search
+- key: content.website.startup.og-title
+  section: content
+  group: seo
+  kind: text
+  label:
+    he: כותרת לשיתוף (OG)
+    en: Share title (OG)
+  targets:
+  - channel: website
+- key: content.website.startup.og-description
+  section: content
+  group: seo
+  kind: text
+  label:
+    he: תיאור לשיתוף (OG)
+    en: Share description (OG)
+  targets:
+  - channel: website
+
+# ── the pages a product site always has ──────────────────────────────────────────────────────────
+- key: content.website.startup.features.title
+  section: content
+  group: features
+  kind: text
+  label: {he: כותרת עמוד היכולות, en: Features page title}
+  targets: [{channel: website}]
+- key: content.website.startup.features.heading
+  section: content
+  group: features
+  kind: text
+  label: {he: הכותרת הראשית ביכולות, en: Features heading}
+  targets: [{channel: website}]
+- key: content.website.startup.apps.title
+  section: content
+  group: apps
+  kind: text
+  label: {he: כותרת עמוד האפליקציות, en: Apps page title}
+  targets: [{channel: website}]
+- key: content.website.startup.apps.heading
+  section: content
+  group: apps
+  kind: text
+  label: {he: הכותרת הראשית באפליקציות, en: Apps heading}
+  targets: [{channel: website}]
+- key: content.website.startup.apps.intro
+  section: content
+  group: apps
+  kind: richtext
+  label: {he: פסקת הפתיחה באפליקציות, en: Apps intro}
+  targets: [{channel: website}]
+- key: content.website.startup.pricing.title
+  section: content
+  group: pricing
+  kind: text
+  label: {he: כותרת עמוד התמחור, en: Pricing page title}
+  targets: [{channel: website}]
+- key: content.website.startup.pricing.heading
+  section: content
+  group: pricing
+  kind: text
+  label: {he: הכותרת הראשית בתמחור, en: Pricing heading}
+  targets: [{channel: website}]
+- key: content.website.startup.demo.title
+  section: content
+  group: demo
+  kind: text
+  label: {he: כותרת עמוד ההדגמה, en: Demo page title}
+  targets: [{channel: website}]
+- key: content.website.startup.demo.heading
+  section: content
+  group: demo
+  kind: text
+  label: {he: הכותרת הראשית בהדגמה, en: Demo heading}
+  targets: [{channel: website}]
+- key: content.website.startup.docs.title
+  section: content
+  group: docs
+  kind: text
+  label: {he: כותרת עמוד התיעוד, en: Docs page title}
+  targets: [{channel: website}]
+- key: content.website.startup.docs.heading
+  section: content
+  group: docs
+  kind: text
+  label: {he: הכותרת הראשית בתיעוד, en: Docs heading}
+  targets: [{channel: website}]
+- key: content.website.startup.about.title
+  section: content
+  group: about
+  kind: text
+  label: {he: כותרת עמוד האודות, en: About page title}
+  targets: [{channel: website}]
+- key: content.website.startup.about.heading
+  section: content
+  group: about
+  kind: text
+  label: {he: הכותרת הראשית באודות, en: About heading}
+  targets: [{channel: website}]
+- key: content.website.startup.vision.title
+  section: content
+  group: vision
+  kind: text
+  label: {he: כותרת עמוד החזון, en: Vision page title}
+  targets: [{channel: website}]
+- key: content.website.startup.vision.heading
+  section: content
+  group: vision
+  kind: text
+  label: {he: הכותרת הראשית בחזון, en: Vision heading}
+  targets: [{channel: website}]
+- key: content.website.startup.business-model.title
+  section: content
+  group: business-model
+  kind: text
+  label: {he: כותרת עמוד המודל העסקי, en: Business model page title}
+  targets: [{channel: website}]
+- key: content.website.startup.business-model.heading
+  section: content
+  group: business-model
+  kind: text
+  label: {he: הכותרת הראשית במודל העסקי, en: Business model heading}
+  targets: [{channel: website}]
+- key: content.website.startup.community.title
+  section: content
+  group: community
+  kind: text
+  label: {he: כותרת עמוד הקהילה, en: Community page title}
+  targets: [{channel: website}]
+- key: content.website.startup.community.heading
+  section: content
+  group: community
+  kind: text
+  label: {he: הכותרת הראשית בקהילה, en: Community heading}
+  targets: [{channel: website}]
+- key: content.website.startup.license.title
+  section: content
+  group: license
+  kind: text
+  label: {he: כותרת עמוד הרישיון, en: Licence page title}
+  targets: [{channel: website}]
+- key: content.website.startup.license.heading
+  section: content
+  group: license
+  kind: text
+  label: {he: הכותרת הראשית ברישיון, en: Licence heading}
+  targets: [{channel: website}]
+- key: content.website.startup.not-found.title
+  section: content
+  group: not-found
+  kind: text
+  label: {he: כותרת עמוד 404, en: 404 page title}
+  targets: [{channel: website}]
+- key: content.website.startup.not-found.heading
+  section: content
+  group: not-found
+  kind: text
+  label: {he: הכותרת הראשית בעמוד 404, en: 404 heading}
+  targets: [{channel: website}]

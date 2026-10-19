@@ -1,0 +1,82 @@
+# yaml-language-server: $schema=./schema.json
+title: browser42's profile protection was built on an unverified premise, and grew three overlapping backup designs around a one-line cause
+opened: '2026-09-27'
+category: chore
+severity: medium
+status: open
+summary: A previous agent concluded that cloakserve's destructive rmtree 'cannot be patched out' — about a plain-Python file this repo already patches twice — and built a snapshot + guard + runtime-watcher stack, a second generation of copies, and a third never-used encrypted dump path on top of the still-open cause. The premise is now disproved and the cause closed; what remains is the accumulated machinery and the traps it left.
+description: |
+  ## The wrong decision, stated plainly
+  `apps/browser42/start-browser.sh` opened its profile section with:
+
+  > The binary is third-party and digest-pinned, so the deletion cannot be patched out.
+
+  Both halves were false in the way that matters. `cloakserve` is a 28 KB Python script, and
+  `apps/browser42/Dockerfile.browser` **already** patched that exact file twice (its shutdown rmtree,
+  and `--disable-extensions`). The conclusion was never tested; it was written as a justification for
+  building around the problem instead of closing it, and the destructive line stayed open for five
+  days until it cost the owner his Facebook login (see
+  `issues/browser42-startup-rmtree-deletes-the-profile.yaml`).
+
+  This is the expensive kind of wrong decision: not a bug to fix, but a premise that makes the bug
+  permanent. The workaround it licensed then had its own failure mode (it could not tell "logged out"
+  from "wiped"), so the protection failed at exactly the job it was built for.
+
+  ## What accumulated on top of it (measured 2026-09-27)
+
+  | Design | Purpose | State |
+  |---|---|---|
+  | The Dockerfile patch | the actual cause | **landed 2026-09-27** — quarantine instead of delete |
+  | `data/browser42/profile-snapshot/` | survive a wipe | operative, now monotone |
+  | `profile-snapshot.prev` | don't destroy the last good copy while protecting it | added 2026-09-27 |
+  | `bbox b42 state dump/load` (AES-256-CBC + PBKDF2, passphrase in `.env`) | move the whole state between deployments | **never used — `bbox b42 state list` is empty**, and it was not the path anyone reached for in two incidents. It also stops the browser to take a consistent copy |
+
+  Three backup mechanisms for one 70 MB volume, plus seven supervisor loops inside the browser
+  container (Xvnc watchdog, fbsetbg sweeper, fluxbox respawn, window-fit every 2s, CDP self-heal
+  watchdog, 5-minute snapshot loop, 20-second runtime guard) and three sibling containers whose jobs
+  overlap at the edges (`reaper.py` caps tabs, `task-watchdog.py` marks stalled tasks, `autoheal`
+  restarts unhealthy containers, and the in-container CDP watchdog restarts the whole stack).
+
+  ## Two traps the old premise left behind
+
+  1. **Duplicated section numbers.** `start-browser.sh` contains two `# 4f.` sections (the loopback
+     broker and the PROFILE GUARD) and two `# 4g.` (the CDP self-heal watchdog and the RUNTIME GUARD),
+     because later work was appended without renumbering. Every comment that cites "§4e/4f" is now
+     ambiguous, and the file's own narrative — the thing that tells the next agent what has already
+     been tried — is no longer reliably navigable.
+  2. **One service per app for secrets.** `reconcile.py` granted an app's `connections[]` to its FIRST
+     routing service, so browser42's secrets all belonged to `browser42-caddy`. That is correct for
+     the MCP token and wrong for anything a non-routed service reads: adding a browser login needed a
+     schema+compiler change (`connections[].service`, 2026-09-27) that would have been unnecessary if
+     the field had existed. It is additive and proven non-breaking (the compiled
+     `connections.consumers.yaml` renders byte-identical to HEAD except the new entry), but it is a
+     contract widening someone had to make because of a modelling shortcut.
+
+  ## What is actually recommended now (not a rewrite)
+  - **Keep defence in depth for the profile.** The data loss is irreversible and the remaining risks
+     (torn volume, `kill -9` mid-write, a future digest bump that drifts the sed) are real. Four layers
+     for an irreversible loss is not the over-engineering here.
+  - **Consolidate the backups to two, deliberately.** Either wire `bbox b42 state dump` into the
+     guard's promotion path (so the encrypted, host-independent copy is refreshed whenever the profile
+     gains a login) or delete it and say in `browser42-cli.md` that the snapshot directory is the only
+     backup. Three designs where nobody can say which one is authoritative is how the snapshot got
+     overwritten with a logged-out state without anyone noticing.
+  - **Renumber the sections** in `start-browser.sh` and make each one's comment state the failure it
+     answers. The file is the memory of this component.
+  - **Before writing "cannot be done", open the file.** The rule this issue exists to record: a
+     third-party component is only a closed door while nobody has looked at it; a `sed` patch with a
+     build-time guard is a normal tool here, and two of them were already in this very Dockerfile.
+tasks:
+- text: 'Decide the fate of `bbox b42 state dump/load`: wire it into the guard''s promotion path, or remove it and name the snapshot as the only backup.'
+  done: false
+- text: Renumber start-browser.sh's sections (two 4f, two 4g) and make every cross-reference in the comments unambiguous.
+  done: false
+- text: Consider whether the window-fit loop (2s) and the fbsetbg sweeper are still needed now that fluxbox is supervised — each is a live risk of fighting another supervisor.
+  done: false
+- text: Re-run the 2026-09-27 acceptance (wipe the profile on purpose, confirm the restore, confirm the snapshot keeps a `c_user`) after the owner signs in.
+  done: false
+references:
+- issues/browser42-startup-rmtree-deletes-the-profile.yaml — the defect this premise kept open
+- issues/browser42-crash-leak-slowdown.yaml — self-heal never wired, still open
+- issues/resource-management-browser42-and-platform.yaml — the 6-container/3.7 GB footprint on a 4.9 GiB guest
+- platform/manager/reconcile.py — connections[] -> the first routing service (the modelling shortcut)

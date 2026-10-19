@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>טלגרם TV</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2356693f'/%3E%3Crect x='6' y='9' width='20' height='13' rx='2' fill='%23f3f5f7'/%3E%3Cpath d='M11 25h10' stroke='%23f3f5f7' stroke-width='2' stroke-linecap='round'/%3E%3Cpath d='M12 15.5l6-1.5-3 4z' fill='%2356693f'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="static/style.css">
+</head>
+<body>
+<div class="app shell">
+  <!-- THE SIDE MENU — the same component, row and palette as every other app
+       (platform-base/bina-ui/bina-nav.css, gate G27). It replaced a top nav that had to share one
+       row with the search box, the sync button, the settings button and the status chip: at 390px
+       the nav was pushed onto its own scrolling line. -->
+  <aside class="side bnv" aria-label="ניווט">
+    <div class="brand bnv-head">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="14" rx="2"/><path d="M8 22h8"/><path d="m10 9 5 2.5-5 2.5z"/></svg>
+      </span>
+      <b>טלגרם TV</b>
+    </div>
+    <nav class="bnv-scroll">
+      <div class="bnv-list">
+        <button class="bnv-item is-active" data-view="home" type="button">
+          <span class="bnv-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 10 9-7 9 7v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg></span>
+          <span class="bnv-label">בית</span>
+        </button>
+        <button class="bnv-item" data-view="series" type="button">
+          <span class="bnv-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="m17 2-5 5-5-5"/></svg></span>
+          <span class="bnv-label">סדרות</span>
+        </button>
+        <button class="bnv-item" data-view="films" type="button">
+          <span class="bnv-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M7 3v18M17 3v18M2 9h20M2 15h20"/></svg></span>
+          <span class="bnv-label">סרטים</span>
+        </button>
+      </div>
+    </nav>
+    <div class="bnv-foot">
+      <button class="bnv-item" id="btn-settings" type="button">
+        <span class="bnv-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6 1.65 1.65 0 0 0 10 3.09V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9v.09a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
+        <span class="bnv-label">הגדרות</span>
+      </button>
+      <div class="bnv-foot-text"><span class="chip" id="chip"><span class="dot"></span><span id="chip-text">טוען…</span></span></div>
+    </div>
+  </aside>
+  <div class="app-main">
+  <!-- ── the top bar: the only chrome, floating over the hero ─────────────────────────────── -->
+  <header class="topbar" id="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="14" rx="2"/><path d="M8 22h8"/><path d="m10 9 5 2.5-5 2.5z"/></svg>
+      </span>
+      <span class="brand-name">טלגרם TV</span>
+    </div>
+    <div class="tools">
+      <div class="search">
+        <svg class="search-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="q" type="search" placeholder="חיפוש סרט או סדרה…" autocomplete="off">
+      </div>
+      <button id="btn-sync" class="icon-btn" type="button" title="סנכרון">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <div id="syncbar" class="syncbar hidden"><div class="syncbar-fill" id="syncbar-fill"></div></div>
+  <div id="banner" class="banner hidden"></div>
+
+  <!-- ── connection screen ────────────────────────────────────────────────────────────────── -->
+  <section id="connect" class="connect hidden">
+    <div class="connect-card">
+      <h1>מחברים את טלגרם</h1>
+      <p class="lead">הסרטים והסדרות נמצאים בחשבון הטלגרם שלך — הלשכה קוראת אותם משם ולא מעתיקה דבר.</p>
+      <div class="tabs">
+        <button class="tab active" data-mode="qr" type="button">סריקת QR</button>
+        <button class="tab" data-mode="phone" type="button">מספר טלפון</button>
+      </div>
+      <div id="step-qr" class="step">
+        <p class="muted">טלגרם ← הגדרות ← מכשירים ← קישור מכשיר, ואז סורקים את הקוד.</p>
+        <div class="qr-box"><img id="qr-img" alt="קוד QR להתחברות לטלגרם"></div>
+        <p class="muted small" id="qr-hint"></p>
+      </div>
+      <div id="step-phone" class="step hidden">
+        <label class="field"><span>מספר טלפון (עם קידומת מדינה)</span>
+          <input id="phone" class="input num" type="tel" inputmode="tel" placeholder="050-000-0007" dir="ltr"></label>
+        <button id="btn-phone" class="btn primary" type="button">שליחת קוד</button>
+      </div>
+      <div id="step-code" class="step hidden">
+        <label class="field"><span>הקוד שנשלח</span>
+          <input id="code" class="input num" type="text" inputmode="numeric" autocomplete="one-time-code" dir="ltr"></label>
+        <button id="btn-code" class="btn primary" type="button">אישור</button>
+      </div>
+      <div id="step-password" class="step hidden">
+        <label class="field"><span>סיסמת אימות דו-שלבי</span>
+          <input id="password" class="input" type="password" autocomplete="current-password" dir="ltr"></label>
+        <button id="btn-password" class="btn primary" type="button">אישור</button>
+      </div>
+      <details class="adv">
+        <summary>הגדרות מתקדמות (api_id / api_hash)</summary>
+        <div class="adv-grid">
+          <label class="field"><span>api_id</span><input id="api-id" class="input num" dir="ltr"></label>
+          <label class="field"><span>api_hash</span><input id="api-hash" class="input num" dir="ltr"></label>
+        </div>
+      </details>
+      <div id="login-error" class="error hidden"></div>
+      <button id="btn-cancel" class="btn ghost hidden" type="button">ביטול</button>
+    </div>
+  </section>
+
+  <!-- ── HOME ─────────────────────────────────────────────────────────────────────────────── -->
+  <main id="view-home" class="view">
+    <section id="hero" class="hero hidden">
+      <div class="hero-bg" id="hero-bg"></div>
+      <div class="hero-scrim"></div>
+      <div class="hero-body">
+        <div class="hero-kicker" id="hero-kicker"></div>
+        <h1 class="hero-title" id="hero-title"></h1>
+        <div class="hero-meta" id="hero-meta"></div>
+        <p class="hero-desc" id="hero-desc"></p>
+        <div class="hero-actions">
+          <button id="hero-play" class="btn big primary" type="button">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg><span id="hero-play-label">נגן</span>
+          </button>
+          <button id="hero-info" class="btn big" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>עוד מידע
+          </button>
+        </div>
+      </div>
+    </section>
+    <div id="rows" class="rows"></div>
+    <div id="empty" class="empty hidden">
+      <div class="empty-mark"><svg viewBox="0 0 24 24" width="46" height="46" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="m17 2-5 5-5-5"/></svg></div>
+      <h3>הספרייה עוד ריקה</h3>
+      <p class="muted">אחרי הסנכרון הראשון יופיעו כאן שורות — שורה לכל צ׳אט, כרטיס לכל סרט.</p>
+      <button class="btn primary" id="empty-sync" type="button">התחל סנכרון</button>
+    </div>
+  </main>
+
+  <!-- ── SERIES ───────────────────────────────────────────────────────────────────────────── -->
+  <main id="view-series" class="view hidden">
+    <h2 class="section-title">סדרות בספרייה</h2>
+    <div id="series-grid" class="grid"></div>
+  </main>
+
+  <!-- ── FILMS ────────────────────────────────────────────────────────────────────────────── -->
+  <main id="view-films" class="view hidden">
+    <h2 class="section-title">סרטים</h2>
+    <div id="films-grid" class="grid"></div>
+  </main>
+
+  <!-- ── one series: seasons, episodes, play next ─────────────────────────────────────────── -->
+  <section id="series-view" class="detail hidden">
+    <button class="back" id="series-back" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg> חזרה
+    </button>
+    <div class="detail-hero">
+      <div class="detail-bg" id="series-bg"></div>
+      <div class="hero-scrim"></div>
+      <div class="detail-body">
+        <h1 id="series-title"></h1>
+        <div class="hero-meta" id="series-meta"></div>
+        <div class="hero-actions">
+          <button id="series-play" class="btn big primary" type="button">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg><span id="series-play-label">נגן</span>
+          </button>
+        </div>
+      </div>
+    </div>
+    <div class="seasons" id="seasons"></div>
+    <div class="episodes" id="episodes"></div>
+  </section>
+
+  <!-- ── the player ───────────────────────────────────────────────────────────────────────── -->
+  <div id="player" class="player hidden" aria-hidden="true">
+    <video id="video" playsinline preload="metadata"></video>
+    <div class="p-scrim" id="p-scrim"></div>
+
+    <div class="p-top" id="p-top">
+      <button class="icon-btn light" id="p-close" type="button" title="סגירה">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+      </button>
+      <div class="p-titles">
+        <div class="p-title" id="p-title"></div>
+        <div class="p-sub" id="p-sub"></div>
+      </div>
+      <div class="p-badges" id="p-badges"></div>
+    </div>
+
+    <div class="p-center" id="p-center">
+      <button class="skip-btn" id="p-back10" type="button" title="אחורה 10 שניות">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 19 2 12l9-7z"/><path d="M22 19l-9-7 9-7z"/></svg>
+      </button>
+      <button class="play-btn" id="p-play" type="button" title="נגן/השהה">
+        <svg id="p-play-ic" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+      </button>
+      <button class="skip-btn" id="p-fwd10" type="button" title="קדימה 10 שניות">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m13 5 9 7-9 7z"/><path d="M2 5l9 7-9 7z"/></svg>
+      </button>
+    </div>
+
+    <div class="p-spinner hidden" id="p-spinner"><div class="ring"></div><span id="p-spinner-text">מאתחל…</span></div>
+
+    <div class="p-bottom" id="p-bottom">
+      <div class="p-bar" id="p-bar">
+        <div class="p-buffer" id="p-buffer"></div>
+        <div class="p-played" id="p-played"></div>
+        <div class="p-knob" id="p-knob"></div>
+      </div>
+      <div class="p-controls">
+        <div class="p-left">
+          <button class="icon-btn light" id="p-play2" type="button" title="נגן/השהה">
+            <svg viewBox="0 0 24 24" fill="currentColor" id="p-play2-ic"><path d="M8 5v14l11-7z"/></svg>
+          </button>
+          <span class="p-time num" id="p-time">0:00</span>
+        </div>
+        <div class="p-right">
+          <div class="select-group" id="p-quality-group"></div>
+          <button class="icon-btn light" id="p-next" type="button" title="הפרק הבא">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 18V6l8.5 6z"/><path d="M16 6h2v12h-2z"/></svg>
+          </button>
+          <button class="icon-btn light" id="p-pip" type="button" title="תמונה בתוך תמונה">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><rect x="12" y="12" width="8" height="6" rx="1"/></svg>
+          </button>
+          <button class="icon-btn light" id="p-fs" type="button" title="מסך מלא">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M16 3h3a2 2 0 0 1 2 2v3"/><path d="M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="p-next hidden" id="p-next-card">
+      <div class="p-next-label">הפרק הבא</div>
+      <div class="p-next-title" id="p-next-title"></div>
+      <div class="p-next-actions">
+        <button class="btn primary" id="p-next-go" type="button">נגן עכשיו</button>
+        <button class="btn light" id="p-next-cancel" type="button">בטל</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── details of one film ──────────────────────────────────────────────────────────────── -->
+  <div id="modal" class="modal hidden" aria-hidden="true">
+    <div class="modal-card" id="modal-card"></div>
+  </div>
+
+  <!-- ── settings ─────────────────────────────────────────────────────────────────────────── -->
+  <aside id="drawer" class="drawer hidden" aria-hidden="true">
+    <div class="drawer-head">
+      <strong>הגדרות</strong>
+      <button id="drawer-close" class="icon-btn" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+      </button>
+    </div>
+    <div class="drawer-body">
+      <section class="card">
+        <h3>חשבון</h3>
+        <div id="account-box" class="kv"></div>
+        <div class="row-actions">
+          <button id="btn-full-sync" class="btn" type="button">סנכרון מלא</button>
+          <button id="btn-relogin" class="btn ghost" type="button">התחברות מחדש</button>
+        </div>
+      </section>
+      <section class="card">
+        <h3>מטמון מקומי <span class="hint" id="cache-hint"></span></h3>
+        <p class="muted small">סרטים ופרקים שנצפו נשמרים מקומית — קפיצה קדימה/אחורה וצפייה חוזרת הופכות
+          למיידיות, והפרק הבא נטען מראש בזמן שאתה צופה.</p>
+        <div class="meter"><div class="meter-fill" id="cache-fill"></div></div>
+        <div class="kv" id="cache-box"></div>
+      </section>
+      <section class="card">
+        <h3>צ׳אטים בספרייה <span class="hint" id="chat-count"></span></h3>
+        <p class="muted small">כל צ׳אט מסומן הופך לשורה במסך. „שיטה” קובעת איך מחלצים סרט מההודעות,
+          ו„עומק” כמה הודעות לסרוק בכל סנכרון.</p>
+        <div class="row-actions wrap">
+          <input id="chat-filter" class="input" type="search" placeholder="סינון צ׳אטים…">
+          <input id="dialog-filter" class="input" type="search" placeholder="חיפוש בכל הטלגרם (גם בוטים)…">
+          <button id="btn-dialog-search" class="btn" type="button">חפש</button>
+        </div>
+        <div id="dialog-results" class="chat-list hidden"></div>
+        <div id="chat-list" class="chat-list"></div>
+      </section>
+    </div>
+  </aside>
+
+  </div><!-- /.app-main -->
+</div>
+<script src="static/app.js"></script>
+</body>
+</html>

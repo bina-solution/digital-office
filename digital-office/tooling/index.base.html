@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>המרכז — מערכת ניהול העסק</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --green:#0e9f6e; --green-d:#0b7a58; --green-dd:#085d40;
+  --sidebar:#0f2a22; --sidebar-2:#0c211b; --sidebar-line:#1e3d33;
+  --hero1:#0e5e49; --hero2:#0b7b5d;
+  --bg:#f4f6f5; --card:#fff; --line:#e6eae8; --line-2:#eef1f0;
+  --ink:#132019; --ink-2:#334; --muted:#6b7c76; --muted-2:#8a9a94;
+  --amber-bg:#fdf1dc; --amber-ink:#b45309; --amber-line:#f2d9a8;
+  --blue:#2563eb; --red:#dc2626; --purple:#7c53c9; --gold:#c07f16;
+  --radius:12px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{font-family:"Segoe UI",system-ui,-apple-system,"Noto Sans Hebrew","Assistant",Arial,sans-serif;background:#0c211b;color:var(--ink);font-size:14px;-webkit-font-smoothing:antialiased}
+a{text-decoration:none;color:inherit}
+button{font-family:inherit}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:#c8d2ce;border-radius:8px}
+
+/* ===== stage / router ===== */
+#stage{height:100vh;overflow:hidden}
+.screen{display:none;height:100vh}
+.screen.active{display:block}
+
+/* ===== המרכז shell ===== */
+.viewport{display:flex;flex-direction:row;height:100vh;background:var(--bg)}
+.hm-side{width:238px;min-width:238px;background:var(--sidebar);color:#c6d6d0;display:flex;flex-direction:column;order:0}
+.hm-brand{padding:16px 18px 14px;display:flex;align-items:center;gap:11px;justify-content:flex-start}
+.hm-brand .logo{width:36px;height:36px;border-radius:9px;background:var(--green);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:19px;flex:0 0 auto}
+.hm-brand .bt{display:flex;flex-direction:column;line-height:1.15}
+.hm-brand .bt b{color:#fff;font-size:18px;font-weight:800}
+.hm-brand .bt span{color:#7f9a90;font-size:11.5px}
+.hm-nav{flex:1;overflow:auto;padding:4px 10px 10px}
+.hm-sec{color:#5f7a70;font-size:11px;font-weight:700;padding:12px 8px 5px;text-align:right}
+.hm-nav a{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;border-radius:9px;color:#b7c8c1;font-size:14px;font-weight:500;margin:1px 0;cursor:pointer}
+.hm-nav a .ic{width:18px;height:18px;flex:0 0 auto;opacity:.85}
+.hm-nav a:hover{background:#16342a;color:#e6f0ec}
+.hm-nav a.on{background:var(--green);color:#fff}
+.hm-nav a.on .ic{opacity:1}
+.hm-foot{border-top:1px solid var(--sidebar-line);padding:14px 18px;background:var(--sidebar-2)}
+.hm-foot small{color:#6f8a80;font-size:11px}
+.hm-foot b{display:block;color:#eaf3ef;font-size:14px;margin-top:2px}
+
+.hm-main{flex:1;order:1;display:flex;flex-direction:column;min-width:0;overflow:hidden}
+.hm-top{height:60px;min-height:60px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:16px;padding:0 18px}
+.hm-top .grp{display:flex;align-items:center;gap:10px}
+.hm-top .left{margin-inline-start:auto}
+.hm-title{font-size:20px;font-weight:800;color:var(--ink)}
+.hm-burger{width:34px;height:34px;border-radius:8px;border:1px solid var(--line);background:#fff;display:flex;align-items:center;justify-content:center;color:#556;cursor:pointer}
+.hm-search{display:flex;align-items:center;gap:8px;background:#f2f4f3;border:1px solid var(--line);border-radius:9px;padding:7px 12px;color:#8593;min-width:210px}
+.hm-search .kbd{margin-inline-start:auto;background:#fff;border:1px solid var(--line);border-radius:6px;padding:1px 7px;font-size:11px;color:#7a8a84}
+.pill-amber{display:flex;align-items:center;gap:7px;background:var(--amber-bg);border:1px solid var(--amber-line);color:var(--amber-ink);border-radius:999px;padding:6px 13px;font-size:13px;font-weight:700;cursor:pointer}
+.hm-scroll{flex:1;overflow:auto}
+.hm-body{padding:22px 26px 60px}
+
+/* subhead / secondary business tabs */
+.biz-bar{background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 22px}
+.biz-tabs{display:flex;align-items:center;gap:6px}
+.biz-tabs a{display:flex;align-items:center;gap:6px;padding:8px 15px;border-radius:9px;color:#3f524b;font-weight:600;font-size:14px;cursor:pointer}
+.biz-tabs a .dot{color:var(--green);font-size:9px}
+.biz-tabs a:hover{background:#f1f5f3}
+.biz-tabs a.on{background:var(--green-d);color:#fff}
+.biz-tabs a.on .dot{color:#bfe9d8}
+
+/* page heading */
+.page-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding-bottom:12px;border-bottom:1px solid var(--line);margin-bottom:18px}
+.page-head h1{margin:0;font-size:26px;font-weight:800;color:var(--ink)}
+.page-head .sub{color:var(--muted);font-size:13.5px;margin-top:4px}
+.page-meta{color:var(--muted);font-size:13px;text-align:left}
+
+/* hero */
+.hero{background:linear-gradient(275deg,var(--hero2),var(--hero1));color:#fff;border-radius:14px;padding:26px 30px;margin-bottom:20px}
+.hero h2{margin:0 0 6px;font-size:24px;font-weight:800}
+.hero p{margin:0;opacity:.9;font-size:14px}
+
+/* stat cards */
+.stat-row{display:grid;gap:14px;margin-bottom:20px}
+.stat{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 18px;text-align:right;position:relative;overflow:hidden}
+.stat:not(.stat-big){display:flex;flex-direction:column-reverse;align-items:flex-end;justify-content:flex-end;gap:2px}
+.stat .n{font-size:30px;font-weight:800;line-height:1.1;color:var(--ink)}
+.stat .l{color:var(--muted);font-size:13px;margin-top:4px}
+.stat.acc-g::after,.stat.acc-a::after,.stat.acc-b::after{content:"";position:absolute;top:0;right:0;left:0;height:3px}
+.stat.acc-g::after{background:var(--green)}
+.stat.acc-a::after{background:var(--gold)}
+.stat.acc-b::after{background:var(--blue)}
+.stat .n.g{color:var(--green)} .stat .n.a{color:var(--gold)} .stat .n.b{color:var(--blue)} .stat .n.r{color:var(--red)}
+.stat-big{background:linear-gradient(275deg,var(--hero2),var(--hero1));color:#fff;border:none}
+.stat-big .l{color:#cdeee1} .stat-big .n{color:#fff;font-size:34px} .stat-big .foot{color:#bfe6d6;font-size:12px;margin-top:6px}
+
+/* generic card */
+.card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px}
+.card h3{margin:0 0 14px;font-size:16px;font-weight:800;text-align:right}
+.muted{color:var(--muted)}
+.row{display:flex;align-items:center;gap:10px}
+.spread{display:flex;align-items:center;justify-content:space-between;gap:12px}
+
+/* app tiles */
+.tiles{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-bottom:8px}
+.tile{background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px 16px;min-height:104px;display:flex;flex-direction:column;justify-content:flex-end;gap:4px;cursor:pointer;transition:.12s}
+.tile:hover{border-color:#bfe3d3;box-shadow:0 6px 18px rgba(11,90,67,.08);transform:translateY(-1px)}
+.tile .ti{align-self:flex-start;color:#2b3a34}
+.tile b{font-size:16px;font-weight:800}
+.tile span{color:var(--muted);font-size:12.5px}
+.tile.ext b{display:flex;align-items:center;gap:6px}
+.sec-lab{color:var(--muted);font-size:13px;font-weight:700;text-align:right;margin:22px 2px 12px}
+
+/* buttons */
+.btn{display:inline-flex;align-items:center;gap:7px;padding:9px 15px;border-radius:9px;border:1px solid var(--line);background:#fff;color:#233;font-weight:600;font-size:13.5px;cursor:pointer;white-space:nowrap}
+.btn:hover{background:#f6f8f7}
+.btn-primary{background:var(--green-d);color:#fff;border-color:transparent}
+.btn-primary:hover{background:var(--green-dd)}
+.btn-danger{background:var(--red);color:#fff;border-color:transparent}
+.btn-danger:hover{filter:brightness(.94)}
+.btn-ghost{background:transparent;border-color:var(--line)}
+.btn-sm{padding:6px 11px;font-size:12.5px}
+
+/* filter segmented pills */
+.segs{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.seg{padding:7px 14px;border-radius:999px;border:1px solid var(--line);background:#fff;color:#455;font-size:13px;font-weight:600;cursor:pointer}
+.seg.on{background:#12241d;color:#fff;border-color:#12241d}
+.seg .c{opacity:.6;font-weight:700;margin-inline-start:5px}
+
+/* tables */
+.tbl-wrap{background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+table.tbl{width:100%;border-collapse:collapse}
+.tbl th{color:var(--muted);font-weight:700;font-size:13px;padding:12px 14px;text-align:right;border-bottom:1px solid var(--line);background:#fafbfb}
+.tbl td{padding:13px 14px;border-bottom:1px solid var(--line-2);text-align:right;font-size:13.5px}
+.tbl tr:last-child td{border-bottom:none}
+.tbl tr:hover td{background:#fafcfb}
+.tbl .idx{color:#9aa;width:40px}
+.badge{display:inline-block;padding:3px 11px;border-radius:999px;font-size:12px;font-weight:600}
+.badge-gray{background:#eef1f0;color:#5a6b64}
+.badge-green{background:#dff5ec;color:#0b7a58}
+.badge-blue{background:#e5edff;color:#2b57c4}
+.badge-amber{background:#fdf1dc;color:#b45309}
+.badge-red{background:#fde8e8;color:#c23636}
+.badge-draft{background:#eef1f0;color:#5a6b64}.badge-issued{background:#dff5ec;color:#0b7a58}.badge-sent{background:#e5edff;color:#2b57c4}.badge-paid{background:#dff5ec;color:#0b7a58}.badge-cancelled{background:#fde8e8;color:#c23636}
+.searchbox{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--line);border-radius:9px;padding:8px 12px;color:#9aa;min-width:280px}
+.input{border:1px solid var(--line);border-radius:9px;padding:9px 12px;background:#fff;font:inherit;width:100%}
+
+/* bars (charts) */
+.bar-line{display:flex;align-items:center;gap:10px;margin:8px 0}
+.bar-line .lab{width:80px;text-align:right;color:#556;font-size:13px}
+.bar-track{flex:1;height:9px;background:#eef1f0;border-radius:6px;overflow:hidden}
+.bar-fill{height:100%;border-radius:6px;background:var(--green)}
+.bar-num{width:22px;color:#889;font-size:12px}
+
+/* floating navigator */
+#navBtn{position:fixed;left:14px;bottom:14px;z-index:60;background:#0f2a22;color:#fff;border:none;border-radius:999px;padding:11px 16px;font-family:inherit;font-weight:700;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.28);cursor:pointer;display:flex;gap:8px;align-items:center}
+#navBtn:hover{background:#16342a}
+#navОv,#navOv{position:fixed;inset:0;z-index:70;background:rgba(8,20,16,.55);backdrop-filter:blur(2px);display:none;align-items:center;justify-content:center}
+#navOv.show{display:flex}
+.nav-panel{background:#fff;width:min(940px,94vw);max-height:88vh;overflow:auto;border-radius:16px;padding:20px 22px;direction:rtl}
+.nav-panel h2{margin:2px 0 4px;font-size:19px;font-weight:800}
+.nav-panel .np-sub{color:var(--muted);font-size:13px;margin-bottom:14px}
+.np-close{position:sticky;top:0;float:left;border:none;background:#eef1f0;border-radius:8px;width:32px;height:32px;cursor:pointer;font-size:16px}
+.np-group{margin-top:16px}
+.np-group h4{margin:0 0 8px;font-size:13px;color:var(--green-d);font-weight:800;border-bottom:1px solid var(--line);padding-bottom:6px}
+.np-items{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.np-items a{display:block;padding:9px 11px;border:1px solid var(--line);border-radius:9px;font-size:13px;font-weight:600;color:#2b3a34;cursor:pointer}
+.np-items a:hover{background:#f1f7f4;border-color:#bfe3d3}
+.np-items a small{display:block;color:var(--muted);font-weight:500;font-size:11px;margin-top:2px}
+
+/* small helpers */
+.flex{display:flex} .ac{align-items:center} .jc{justify-content:center} .jb{justify-content:space-between}
+.gap8{gap:8px}.gap12{gap:12px}.wrap{flex-wrap:wrap}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.mt8{margin-top:8px}.mt16{margin-top:16px}.mb0{margin-bottom:0}
+.live{display:inline-flex;align-items:center;gap:6px;background:#e9f7f0;color:#0b7a58;border-radius:999px;padding:4px 11px;font-size:12px;font-weight:700}
+.live .dt{width:8px;height:8px;border-radius:50%;background:#12b981;display:inline-block}
+.dv-rail{width:56px;min-width:56px;background:var(--sidebar);order:0;display:flex;flex-direction:column;align-items:center;gap:6px;padding-top:14px;color:#a9bcb4}
+.dv-rail .logo{width:34px;height:34px;border-radius:9px;background:var(--green);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800}
+.dv-rail .ri{width:38px;height:38px;border-radius:9px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#9fb3ab}
+.dv-rail .ri:hover{background:#16342a;color:#fff}
+.dv-rail .ri.on{background:var(--green);color:#fff}
+
+/* ===== interaction layer: modals / drawers / toasts / menus / drag / live ===== */
+.do-scrim{position:absolute;inset:0;background:rgba(8,20,16,.42);backdrop-filter:blur(1.5px);display:flex;align-items:center;justify-content:center;z-index:40;animation:doFade .14s ease}
+@keyframes doFade{from{opacity:0}to{opacity:1}}
+.do-modal{background:#fff;border-radius:14px;box-shadow:0 24px 60px rgba(8,30,22,.28);width:min(520px,92%);max-height:86vh;overflow:auto;direction:rtl;animation:doPop .16s ease}
+@keyframes doPop{from{transform:translateY(8px) scale(.98);opacity:.6}to{transform:none;opacity:1}}
+.do-palette-scrim{align-items:flex-start}
+.do-palette{background:#fff;border-radius:14px;box-shadow:0 24px 70px rgba(8,30,22,.34);width:min(560px,92%);margin-top:11vh;direction:rtl;overflow:hidden;animation:doPop .16s ease}
+.do-palette .dp-in{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line);color:var(--muted)}
+.do-palette .dp-in input{flex:1;border:none;outline:none;font:inherit;font-size:15px;color:#12241d;background:none}
+.do-palette .dp-list{max-height:52vh;overflow:auto;padding:6px}
+.do-palette .dp-row{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;border:none;background:none;padding:9px 12px;border-radius:9px;cursor:pointer;font:inherit;text-align:right}
+.do-palette .dp-row .dp-lab{font-size:14px;font-weight:600;color:#12241d}
+.do-palette .dp-row .dp-grp{font-size:11.5px;color:var(--muted)}
+.do-palette .dp-row.on,.do-palette .dp-row:hover{background:#eef6f2}
+.do-palette .dp-empty{padding:24px;text-align:center;color:var(--muted);font-size:13px}
+/* ===== I7 interaction polish (hover/cursor/transition — all :hover/:active only, so V1 static renders are unaffected) ===== */
+[data-nav],[data-action],[data-open],[data-tab],[data-menu],[data-folder],.seg,.biz-tabs a,.hm-nav a,.dv-rail .ri,.tbl tbody tr[data-action],.tbl tbody tr[data-menu]{cursor:pointer}
+.tbl tbody tr{transition:background .12s ease}
+.tbl tbody tr[data-action]:hover,.tbl tbody tr[data-menu]:hover,.tbl tbody tr[data-ctx]:hover{background:#f3f8f6}
+[data-list] [data-drag]{transition:background .12s ease,box-shadow .12s ease}
+[data-list] [data-drag]:hover{background:#f3f8f6}
+[data-drag].dragging{opacity:.5}
+.do-drag-over{outline:2px dashed var(--green);outline-offset:-3px;background:#eef8f2 !important;border-radius:8px}
+.btn{transition:filter .12s ease,transform .05s ease,box-shadow .12s ease}
+.btn:hover{filter:brightness(.97)}
+.btn:active{transform:translateY(1px)}
+.hm-nav a:hover,.dv-rail .ri:hover{background:rgba(255,255,255,.08)}
+.biz-tabs a:hover,.seg:hover{color:#12241d}
+.hm-search{cursor:pointer;transition:border-color .12s ease}
+.hm-search:hover{border-color:var(--green)}
+.stat[data-bind],.stat .n[data-tick]{transition:color .2s ease}
+a[data-nav]{transition:color .12s ease}
+/* detail drawer grid (clicking a document opens its sub-view) */
+.dd-grid{display:grid;grid-template-columns:auto 1fr;gap:10px 18px;align-items:center}
+.dd-grid .dd-k{color:var(--muted);font-size:13px}
+.dd-grid .dd-v{font-weight:700;font-size:14px;text-align:start}
+/* accordion (data-collapse) */
+.dv-tree .dv-list{overflow:hidden;transition:max-height .18s ease}
+.dv-tree.collapsed .dv-list{display:none}
+.dv-tree [data-collapse] .car,.dv-tree [data-collapse] .tog{transition:transform .15s ease}
+.dv-tree.collapsed [data-collapse] .car,.dv-tree.collapsed [data-collapse] .tog{transform:rotate(-90deg)}
+.do-modal .mh{display:flex;align-items:center;justify-content:space-between;padding:15px 20px;border-bottom:1px solid var(--line)}
+.do-modal .mh b{font-size:17px;font-weight:800}
+.do-modal .mh .x{border:none;background:#eef1f0;border-radius:8px;width:30px;height:30px;cursor:pointer;font-size:15px;color:#556}
+.do-modal .mb{padding:18px 20px}
+.do-modal .mf{display:flex;gap:10px;justify-content:flex-start;padding:14px 20px;border-top:1px solid var(--line)}
+.do-field{margin-bottom:12px}.do-field label{display:block;font-size:12.5px;color:var(--muted);margin-bottom:5px;font-weight:600}
+.do-drawer{position:absolute;top:60px;bottom:0;inset-inline-start:0;width:430px;max-width:88%;background:#fff;box-shadow:0 0 40px rgba(8,30,22,.22);z-index:41;overflow:auto;direction:rtl;animation:doSlide .18s ease}
+.do-drawer .dh{display:flex;align-items:center;justify-content:space-between;padding:15px 20px;border-bottom:1px solid var(--line)}
+@keyframes doSlide{from{transform:translateX(-24px);opacity:.4}to{transform:none;opacity:1}}
+.do-toast{position:absolute;left:50%;transform:translateX(-50%);bottom:26px;z-index:55;background:#12241d;color:#eaf3ef;border-radius:10px;padding:11px 18px;font-size:13.5px;font-weight:600;box-shadow:0 10px 30px rgba(0,0,0,.3);animation:doToast .2s ease}
+@keyframes doToast{from{transform:translate(-50%,10px);opacity:0}to{transform:translate(-50%,0);opacity:1}}
+.do-menu{position:absolute;z-index:45;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 14px 34px rgba(8,30,22,.18);padding:6px;min-width:170px;direction:rtl;animation:doPop .12s ease}
+.do-menu button{display:flex;width:100%;align-items:center;gap:9px;padding:8px 11px;border:none;background:none;border-radius:7px;font:inherit;font-size:13.5px;color:#2b3a34;cursor:pointer;text-align:right}
+.do-menu button:hover{background:#f1f5f3}.do-menu button.danger{color:var(--red)}
+.do-menu .sep{height:1px;background:var(--line);margin:5px 4px}
+.drop-target.do-drag-over{outline:2px dashed var(--green);outline-offset:-4px;background:#eafaf3}
+.dragging{opacity:.45}
+[data-drag]{cursor:grab}[data-drag]:active{cursor:grabbing}
+.tick-up{animation:tickUp .6s ease}
+@keyframes tickUp{0%{color:var(--green);transform:translateY(-2px)}100%{color:inherit;transform:none}}
+.live .dt{animation:livePulse 1.7s ease-in-out infinite}
+@keyframes livePulse{0%,100%{box-shadow:0 0 0 0 rgba(18,185,129,.5)}55%{box-shadow:0 0 0 5px rgba(18,185,129,0)}}
+[data-open],[data-action],[data-tab],[data-menu],[data-close]{cursor:pointer}
+.feed{display:flex;flex-direction:column;gap:2px}
+.feed .fi{display:flex;align-items:center;gap:9px;padding:8px 4px;border-bottom:1px solid var(--line-2);font-size:13px;animation:doSlide .25s ease}
+.feed .fi .dt{width:7px;height:7px;border-radius:50%;background:var(--green);flex:0 0 auto}
+.feed .fi .ago{margin-inline-start:auto;color:var(--muted-2);font-size:11.5px}
+</style>
+</head>
+<body>
+<div id="stage"><!--TEMPLATES--></div>
+
+<button id="navBtn" onclick="openNav()">☰ מפת מסכים</button>
+<div id="navOv" onclick="if(event.target===this)closeNav()">
+  <div class="nav-panel">
+    <button class="np-close" onclick="closeNav()">✕</button>
+    <h2>מפת מסכים — המרכז</h2>
+    <div class="np-sub">שחזור 1:1 מתוך ה‑UI map. לחצו על מסך כדי לפתוח אותו.</div>
+    <div id="navGroups"></div>
+  </div>
+</div>
+
+<script>
+/* ==========================================================================
+   DO — Digital Office central mock-data engine (single source of truth for a
+   simulated running Israeli business). Reactive store + live tick + actions +
+   hydration + interaction layer (modals/drawers/toasts/menus/tabs/drag).
+   Screens bind to it with data-* hooks; static screens keep working untouched.
+   ========================================================================== */
+const DO = (function(){
+  const pad=n=>String(n).padStart(2,'0');
+  // ---- seed state: a running business (בינה פתרונות בע"מ) ----
+  const state = {
+    business:{name:'בינה פתרונות בע״מ', id:'514789234', type:'עוסק מורשה'},
+    clock:{h:14,m:57,s:9},
+    metrics:{msgs:295, docsToday:3, itemsSynced:10, syncOk:27, syncTotal:51, actions:7,
+             customers:5, items:5, documents:5, revenue:52488},
+    live:[{text:'סנכרון gmail הושלם — 12 פריטים',when:'14:55'},{text:'חשבונית INV-2048 הופקה',when:'14:53'},{text:'מסמך חדש התקבל · INDOX',when:'14:52'}], // event feed (newest first)
+    customers:[
+      {id:'C-101',name:'ישראל קרטון בע״מ',taxid:'514112233',city:'תל אביב',email:'person118@example.com',phone:'04-8112255',balance:25488,docs:3},
+      {id:'C-102',name:'מאפיית הבוקר',taxid:'039221144',city:'חיפה',email:'person123@example.com',phone:'04-8620011',balance:8900,docs:2},
+      {id:'C-103',name:'שריזלי הובלות',taxid:'514778812',city:'ראשל״צ',email:'person124@example.com',phone:'03-9512244',balance:0,docs:1},
+      {id:'C-104',name:'טכנולוגיות אור',taxid:'515903221',city:'הרצליה',email:'person125@example.com',phone:'09-7712345',balance:8500,docs:1},
+      {id:'C-105',name:'ספק הענן בע״מ',taxid:'514330099',city:'פתח תקווה',email:'person126@example.com',phone:'03-6440022',balance:-1240,docs:2},
+    ],
+    items:[
+      {id:'IT-1',name:'ייעוץ שעת עבודה',sku:'SRV-01',unit:'שעה',price:420},
+      {id:'IT-2',name:'רישוי חודשי',sku:'LIC-09',unit:'חודש',price:180},
+      {id:'IT-3',name:'BREAK HOUSING ASSY',sku:'HW-204',unit:'יח׳',price:200},
+      {id:'IT-4',name:'התקנה באתר',sku:'SRV-07',unit:'יח׳',price:650},
+      {id:'IT-5',name:'תמיכה שנתית',sku:'SUP-01',unit:'שנה',price:2400},
+    ],
+    documents:[
+      {id:'INV-2048',type:'חשבונית מס',cust:'ישראל קרטון בע״מ',total:25488,status:'הונפק',statusK:'issued',date:'20/07/2026'},
+      {id:'INV-1042',type:'חשבונית מס',cust:'מאפיית הבוקר',total:1240,status:'שולם',statusK:'paid',date:'19/07/2026'},
+      {id:'RCP-771',type:'קבלה',cust:'טכנולוגיות אור',total:8500,status:'שולם',statusK:'paid',date:'18/07/2026'},
+      {id:'INV-2049',type:'חשבונית מס',cust:'שריזלי הובלות',total:3120,status:'טיוטה',statusK:'draft',date:'20/07/2026'},
+      {id:'DLV-330',type:'תעודת משלוח',cust:'ספק הענן בע״מ',total:0,status:'נשלח',statusK:'sent',date:'20/07/2026'},
+    ],
+    mail:[
+      {id:'m1',from:'מערכת INDOX',subj:'מסמך התקבל ועובד',when:'היום 14:52',unread:true,tag:'מערכת'},
+      {id:'m2',from:'לקוח חדש',subj:'בקשה להצעת מחיר',when:'היום 14:41',unread:true,tag:'דורש טיפול'},
+      {id:'m3',from:'ספק הענן בע״מ',subj:'חשבונית #INV-2048 — יולי',when:'היום 14:30',unread:false,tag:''},
+      {id:'m4',from:'ישראל קרטון בע״מ',subj:'אישור הזמנה 10004',when:'היום 13:58',unread:true,tag:'הזמנות'},
+      {id:'m5',from:'מאפיית הבוקר',subj:'קבלה על תשלום — תודה',when:'היום 12:20',unread:false,tag:''},
+      {id:'m6',from:'שריזלי הובלות',subj:'תעודת משלוח DLV-330',when:'היום 11:05',unread:false,tag:'משלוחים'},
+      {id:'m7',from:'רשות המסים',subj:'תזכורת: דיווח מע״מ תקופתי',when:'אתמול 17:44',unread:true,tag:'דורש טיפול'},
+      {id:'m8',from:'טכנולוגיות אור',subj:'הצעת מחיר מעודכנת',when:'אתמול 16:12',unread:false,tag:'הצעות'},
+      {id:'m9',from:'מערכת INDOX',subj:'סנכרון gmail הושלם — 12 פריטים',when:'אתמול 15:30',unread:false,tag:'מערכת'},
+      {id:'m10',from:'פוליראן תעשיות',subj:'חשבונית 05179 לאישור',when:'אתמול 14:02',unread:false,tag:'חשבוניות'},
+      {id:'m11',from:'דלתא לוגיסטיקה',subj:'עדכון סטטוס הזמנה',when:'אתמול 10:48',unread:false,tag:''},
+      {id:'m12',from:'ספק הענן בע״מ',subj:'חידוש מנוי שנתי',when:'21/07 09:15',unread:false,tag:''},
+      {id:'m13',from:'אגן שיווק',subj:'בקשה להתאמת חשבון',when:'21/07 08:33',unread:false,tag:'דורש טיפול'},
+      {id:'m14',from:'בנק לאומי',subj:'דו״ח תנועות חודשי',when:'20/07 19:20',unread:false,tag:''},
+    ],
+    indox:{ companies:10,
+      repos:[{name:'incoming-documents-main',docs:5,backend:'supabase'}],
+      syncs:[{name:'gmail · חשבוניות',state:'synced',items:12},{name:'drive · קבלות',state:'to_sync',items:3}],
+      // incoming documents flow through the real INDOX status enum:
+      // NEEDS_REVIEW(לבדיקה) -> IN_PROGRESS(בעיבוד) -> COMPLETED(הושלם) | EXTRACTION_FAILED(חילוץ נכשל)
+      incoming:[
+        {date:'12/06/2026',name:'סבח סוכנויות בע"מ-6...',company:'סבח סוכנויות בע"מ',cid:'570043745',short:'06146',type:'INVOICE',did:'demo-inv-1001',status:'NEEDS_REVIEW'},
+        {date:'28/05/2026',name:'אגן שיווק-10004',company:'אגן שיווק',cid:'511301129',short:'10004',type:'ORDER',did:'demo-ord-7001',status:'NEEDS_REVIEW'},
+        {date:'14/05/2026',name:'ישראל קרטון-00818',company:'ישראל קרטון',cid:'512093170',short:'00818',type:'INVOICE',did:'demo-inv-1002',status:'IN_PROGRESS'},
+        {date:'22/04/2026',name:'מ.ש. הכהנים בע"מ-1...',company:'מ.ש. הכהנים בע"מ',cid:'511020471',short:'01661',type:'INVOICE',did:'demo-inv-1003',status:'NEEDS_REVIEW'},
+        {date:'03/06/2026',name:'פוליראן תעשיות-05179',company:'פוליראן תעשיות',cid:'513498345',short:'05179',type:'SHIPMENT',did:'demo-shp-5001',status:'NEEDS_REVIEW'},
+      ]},
+    // real notifications__main/state-empty capture shows an empty center — start empty, then the
+    // tick's notify() streams notifications in live (matches both the capture and "running business")
+    notifications:[],
+    jobs:{running:30, ok:290, err:5, p50:'3ms', p99:'133s'},
+    // ---- drive (drive): folders + files; files drag between folders, upload sim, trash ----
+    drive:{ sel:null,
+      folders:[{id:'gdoc',name:'drive-gdoc',sync:'synced',syncL:'סונכרן'},{id:'gdoc2',name:'drive-gdoc 2',sync:'to_sync',syncL:'לסנכרון'},{id:'bs',name:'drive-bs',sync:'in_progress',syncL:'בתהליך'}],
+      files:[
+        {id:'d1',folder:'gdoc',name:'חשבונית_2048.pdf',kind:'pdf',size:'240KB',status:'synced',statusL:'סונכרן',when:'22:41'},
+        {id:'d2',folder:'gdoc',name:'קבלה_771.pdf',kind:'pdf',size:'88KB',status:'synced',statusL:'סונכרן',when:'21:10'},
+        {id:'d3',folder:'gdoc',name:'הצעת_מחיר_קרטון.pdf',kind:'pdf',size:'120KB',status:'to_sync',statusL:'לסנכרון',when:'22:52'},
+        {id:'d4',folder:'gdoc2',name:'מאזן_בוחן_Q2.xlsx',kind:'xls',size:'64KB',status:'in_progress',statusL:'בתהליך',when:'22:55'},
+        {id:'d5',folder:'gdoc2',name:'תזרים_יולי.xlsx',kind:'xls',size:'52KB',status:'synced',statusL:'סונכרן',when:'20:30'},
+        {id:'d6',folder:'bs',name:'BS_2026Q2.pdf',kind:'pdf',size:'310KB',status:'synced',statusL:'סונכרן',when:'20:02'},
+      ], trash:[] },
+    // ---- infra: machine metrics, any-concurrency spans (gantt), kabil lanes, whatsapp bot ----
+    infra:{
+      machine:{cpu:34, mem:58, disk:41, up:'12d 04h', containers:[
+        {name:'traefik',state:'running',cpu:2,mem:48},{name:'n8n',state:'running',cpu:14,mem:410},
+        {name:'n8n-postgres',state:'running',cpu:6,mem:220},{name:'supabase-db',state:'running',cpu:9,mem:512},
+        {name:'redis',state:'running',cpu:1,mem:36},{name:'apitools',state:'running',cpu:4,mem:96}]},
+      conc:{running:3, queued:2, done:118, err:607, spans:[
+        {name:'extract · demo-inv-1001',pct:100,state:'done'},{name:'extract · demo-inv-1002',pct:64,state:'run'},
+        {name:'sync · drive-bs',pct:38,state:'run'},{name:'ocr · קבלה_771',pct:0,state:'queued'}]},
+      kabil:{lanes:[{name:'ingest',n:4},{name:'ocr',n:2},{name:'extract',n:3},{name:'post',n:1}]},
+      bot:{state:'online',stateL:'מחובר',users:38, sessions:5, msgsToday:212},
+    },
+    palette:{open:false, q:''},
+  };
+  // ---- reactive ----
+  const subs={};
+  function on(k,fn){(subs[k]=subs[k]||[]).push(fn);return fn}
+  function emit(k){(subs[k]||[]).forEach(fn=>{try{fn(state)}catch(e){}})}
+  function clockStr(){return pad(state.clock.h)+':'+pad(state.clock.m)}
+  function fmt(n){return (n||0).toLocaleString('he-IL')}
+  // ---- resolve a dotted expression against state, with a few computed keys ----
+  function val(expr){
+    if(expr==='clock')return clockStr();
+    if(expr==='sync')return state.metrics.syncOk+'/'+state.metrics.syncTotal;
+    if(expr==='revenue')return '₪'+fmt(state.metrics.revenue);
+    // INDOX derived counters (from the incoming-documents pipeline)
+    if(expr.slice(0,3)==='ix.'){ const inc=state.indox.incoming, k=expr.slice(3);
+      const c=s=>inc.filter(d=>d.status===s).length;
+      if(k==='total')return inc.length;
+      if(k==='completed')return c('COMPLETED');
+      if(k==='review')return c('NEEDS_REVIEW');
+      if(k==='progress')return c('IN_PROGRESS');
+      if(k==='failed')return c('EXTRACTION_FAILED');
+      if(k==='companies')return state.indox.companies;
+      if(k==='repos')return state.indox.repos.length;
+      if(k==='pct')return inc.length?Math.round(c('COMPLETED')/inc.length*100):0;
+      if(k==='pctL')return (inc.length?Math.round(c('COMPLETED')/inc.length*100):0)+'%';
+      if(k==='pctFill')return (inc.length?Math.round(c('COMPLETED')/inc.length*100):0);
+    }
+    // drive: files in the selected folder, selected folder name, counts
+    if(expr==='drive.current')return state.drive.files.filter(f=>f.folder===state.drive.sel).map(f=>({...f, badgeK:{synced:'green',to_sync:'blue',in_progress:'amber',failed:'red'}[f.status]||'gray'}));
+    if(expr==='drive.selName'){ const f=state.drive.folders.find(x=>x.id===state.drive.sel); return f?f.name:''; }
+    if(expr==='drive.count')return state.drive.files.filter(f=>f.folder===state.drive.sel).length;
+    if(expr==='drive.trashN')return state.drive.trash.length;
+    if(expr==='mail.unread')return state.mail.filter(m=>m.unread).length;
+    // my-docs per-status counts (for the filter chips)
+    if(expr.slice(0,5)==='docs.'){ const d=state.documents, k=expr.slice(5);
+      if(k==='total')return d.length;
+      return d.filter(x=>x.statusK===k).length; }
+    const parts=expr.split('.'); let o=state;
+    for(const p of parts){ if(o==null)return ''; o=o[p]; }
+    return (typeof o==='number')?fmt(o):(o==null?'':o);
+  }
+  // ---- actions (mutations that keep the sim coherent) ----
+  function pushLive(text){ state.live.unshift({text,when:clockStr()}); state.live=state.live.slice(0,8); emit('live'); }
+  function notify(kind,text){ state.notifications.unshift({id:'n'+Date.now(),kind,text,when:clockStr()}); emit('notifs'); pushLive(text); }
+  const actions={
+    addDocument(d){ const id=(d.type==='קבלה'?'RCP-':'INV-')+(700+Math.floor(state.documents.length*7+3));
+      const doc={id,type:d.type||'חשבונית מס',cust:d.cust||'—',total:+d.total||0,status:'טיוטה',statusK:'draft',date:clockStr()+' · היום'};
+      state.documents.unshift(doc); state.metrics.documents++; state.metrics.docsToday++; state.metrics.revenue+=doc.total;
+      emit('documents'); emit('metrics'); toast('המסמך נשמר'); notify('ok','מסמך חדש נוצר · '+id); return doc; },
+    addCustomer(c){ state.customers.unshift({id:'C-'+(200+state.customers.length),name:c.name||'לקוח חדש',taxid:c.taxid||'',city:c.city||'',email:c.email||'',phone:c.phone||'',balance:0,docs:0}); state.metrics.customers++; emit('customers');emit('metrics'); toast('הלקוח נשמר'); },
+    addItem(it){ state.items.unshift({id:'IT-'+(90+state.items.length),name:it.name||'פריט חדש',sku:it.sku||'',unit:it.unit||'יח׳',price:+it.price||0}); state.metrics.items++; emit('items');emit('metrics'); toast('הפריט נשמר'); },
+    markNotifsRead(){ const n=state.notifications.length; toast('סומנו '+n+' כנקראו'); },
+    // drive
+    selectFolder(d){ const id=d.folder||d.id; if(id){ state.drive.sel=id; emit('drive'); } },
+    moveFile(d){ const f=state.drive.files.find(x=>x.id===d.file); if(f && d.to){ f.folder=d.to; emit('drive'); toast('הקובץ הועבר → '+(state.drive.folders.find(x=>x.id===d.to)||{name:d.to}).name); } },
+    uploadFile(){ const n=state.drive.files.length+1; state.drive.files.push({id:'d'+Date.now(),folder:state.drive.sel,name:'מסמך_חדש_'+n+'.pdf',kind:'pdf',size:(40+n*7)+'KB',status:'in_progress',statusL:'בתהליך',when:clockStr()}); emit('drive'); toast('הקובץ הועלה'); notify('ok','קובץ חדש הועלה לדרייב'); },
+    trashFile(d){ const i=state.drive.files.findIndex(x=>x.id===d.file); if(i>=0){ state.drive.trash.push(state.drive.files.splice(i,1)[0]); emit('drive'); toast('הועבר לאשפה'); } },
+    // mail
+    openMail(d){ const m=state.mail.find(x=>x.id===d.mail); if(m){ m.unread=false; emit('mail'); } },
+    readAll(){ state.mail.forEach(m=>m.unread=false); emit('mail'); toast('כל ההודעות סומנו כנקראו'); },
+  };
+  // ---- a plausible fresh incoming document (for the pipeline) ----
+  const IX_POOL=[
+    {name:'טרפולין אריזות-22140',company:'טרפולין אריזות',cid:'514660231',short:'22140',type:'INVOICE',did:'demo-inv-1'},
+    {name:'דלתא לוגיסטיקה-30581',company:'דלתא לוגיסטיקה',cid:'515220984',short:'30581',type:'SHIPMENT',did:'demo-shp-5'},
+    {name:'מקור הזהב-44902',company:'מקור הזהב',cid:'512778100',short:'44902',type:'ORDER',did:'demo-ord-7'},
+    {name:'טל-אור הנדסה-09113',company:'טל-אור הנדסה',cid:'514009887',short:'09113',type:'INVOICE',did:'demo-inv-2'},
+  ];
+  function newIncoming(t){ const b=IX_POOL[t%IX_POOL.length]; const n=state.indox.incoming.length+1001;
+    return {...b, did:b.did+n, date:clockStr()+' · היום', status:'NEEDS_REVIEW'}; }
+  // ---- live tick: advance the simulated business every few seconds ----
+  let ticks=0;
+  function tick(){
+    ticks++;
+    // clock advances ~1 min per tick
+    let m=state.clock.m+1,h=state.clock.h; if(m>59){m=0;h=(h+1)%24;} state.clock.m=m;state.clock.h=h;
+    emit('clock');
+    if(ticks%2===0){ state.metrics.msgs++; emit('metrics'); }
+    // INDOX pipeline: each incoming document advances NEEDS_REVIEW -> IN_PROGRESS -> COMPLETED
+    const inc=state.indox.incoming;
+    if(ticks%2===0){
+      const p=inc.find(d=>d.status==='IN_PROGRESS');
+      if(p){ p.status='COMPLETED'; state.metrics.itemsSynced++; emit('indox');emit('metrics'); pushLive('חולץ מסמך · '+p.company); }
+      const q=inc.find(d=>d.status==='NEEDS_REVIEW');
+      if(q && inc.filter(d=>d.status==='IN_PROGRESS').length<2){ q.status='IN_PROGRESS'; emit('indox'); }
+    }
+    // a fresh document lands in the repo every so often
+    if(ticks%7===4){ inc.push(newIncoming(ticks)); state.indox.repos[0].docs=inc.length; emit('indox'); notify('ok','מסמך חדש התקבל · INDOX'); }
+    // jobs jitter
+    const j=state.jobs; j.running=28+Math.round(4*Math.sin(ticks/3)); emit('jobs');
+    // infra: machine metrics breathe; any-concurrency spans advance
+    const mc=state.infra.machine; mc.cpu=Math.max(8,Math.min(92,mc.cpu+Math.round(6*Math.sin(ticks/2))-2)); mc.mem=Math.max(30,Math.min(88,mc.mem+Math.round(3*Math.cos(ticks/3))));
+    mc.containers.forEach((c,i)=>{ if(c.state==='running') c.cpu=Math.max(0,c.cpu+((ticks+i)%3-1)); });
+    const co=state.infra.conc; co.spans.forEach(s=>{ if(s.state==='run'){ s.pct=Math.min(100,s.pct+12); if(s.pct>=100){ s.state='done'; co.running=Math.max(0,co.running-1); co.done++; } } });
+    if(ticks%3===0){ const q=co.spans.find(s=>s.state==='queued'); if(q){ q.state='run'; co.running++; co.queued=Math.max(0,co.queued-1); } }
+    co.done+=1+(ticks%3===0?1:0); if(ticks%9===0)co.err++;
+    emit('infra');
+    // occasional mail / notification
+    if(ticks%6===3){ const subj=['בקשת הצעת מחיר','חשבונית התקבלה','תזכורת תשלום'][ticks%3];
+      state.mail.unshift({id:'m'+Date.now(),from:'לקוח '+(100+ticks%40),subj,when:'היום '+clockStr(),unread:true,tag:'דורש טיפול'});
+      emit('mail'); notify('ok','דוא״ל חדש · '+subj); }
+  }
+
+  /* ================= interaction layer ================= */
+  function activeScreen(){ return document.querySelector('.screen.active'); }
+  function host(){ // element to anchor overlays in (the app viewport of the active screen)
+    const s=activeScreen(); return (s&&(s.querySelector('.hm-main')||s.querySelector('.viewport')||s))||document.body; }
+  function ensureRelative(el){ if(el&&getComputedStyle(el).position==='static')el.style.position='relative'; }
+  function toast(msg,ms){ const h=host(); ensureRelative(h); const t=document.createElement('div'); t.className='do-toast'; t.textContent=msg; h.appendChild(t);
+    setTimeout(()=>{t.style.transition='opacity .3s';t.style.opacity='0';setTimeout(()=>t.remove(),300)}, ms||2200); }
+  function closeOverlays(){ document.querySelectorAll('.do-scrim,.do-drawer,.do-menu').forEach(e=>e.remove()); }
+  function modal({title,body,footer,onMount}){ const h=host(); ensureRelative(h); closeMenus();
+    const sc=document.createElement('div'); sc.className='do-scrim';
+    sc.innerHTML=`<div class="do-modal"><div class="mh"><b>${title||''}</b><button class="x" data-close>✕</button></div><div class="mb">${body||''}</div>${footer?`<div class="mf">${footer}</div>`:''}</div>`;
+    sc.addEventListener('click',e=>{ if(e.target===sc)sc.remove(); });
+    h.appendChild(sc); if(onMount)onMount(sc); return sc; }
+  function drawer({title,body}){ const h=host(); ensureRelative(h); closeOverlays();
+    const d=document.createElement('div'); d.className='do-drawer';
+    d.innerHTML=`<div class="dh"><b style="font-size:16px;font-weight:800">${title||''}</b><button class="x" data-close style="border:none;background:#eef1f0;border-radius:8px;width:30px;height:30px;cursor:pointer">✕</button></div><div style="padding:16px 20px">${body||''}</div>`;
+    h.appendChild(d); return d; }
+  // context menu tailored to the clicked row/element (real actions, not just toasts)
+  function rowMenu(el){
+    const drag=el.getAttribute&&el.getAttribute('data-drag');
+    if(drag&&drag.indexOf('file:')===0){ const fid=drag.slice(5);
+      return [{k:'pv',label:'תצוגה מקדימה',icon:'👁',on:()=>go('drive-state-preview')},
+              {k:'dl',label:'הורדה',icon:'⬇',on:()=>toast('מוריד…')},
+              {k:'rn',label:'שינוי שם',icon:'✎',on:()=>toast('שינוי שם')},'-',
+              {k:'del',label:'העברה לאשפה',icon:'🗑',danger:true,on:()=>actions.trashFile({file:fid})}]; }
+    if(el.hasAttribute&&el.hasAttribute('data-mail')){ const id=el.getAttribute('data-mail');
+      return [{k:'open',label:'פתיחה',icon:'↗',on:()=>actions.openMail({mail:id})},
+              {k:'rd',label:'סימון כנקרא',icon:'✓',on:()=>actions.openMail({mail:id})},'-',
+              {k:'del',label:'מחיקה',icon:'🗑',danger:true,on:()=>toast('ההודעה נמחקה')}]; }
+    if(el.hasAttribute&&el.hasAttribute('data-doc')){
+      return [{k:'open',label:'פתיחה',icon:'↗',on:()=>openRowDrawer(el)},
+              {k:'dup',label:'שכפול',icon:'⧉',on:()=>toast('שוכפל')},
+              {k:'pdf',label:'הורדת PDF',icon:'⬇',on:()=>toast('מפיק PDF…')},'-',
+              {k:'del',label:'מחיקה',icon:'🗑',danger:true,on:()=>toast('נמחק')}]; }
+    return [{k:'open',label:'פתיחה',icon:'↗',on:()=>openRowDrawer(el)},{k:'edit',label:'עריכה',icon:'✎',on:()=>toast('עריכה')},'-',{k:'del',label:'מחיקה',icon:'🗑',danger:true,on:()=>toast('נמחק')}];
+  }
+  // open a detail drawer built from a row's data-* fields (clicking a document → sub-view)
+  function openRowDrawer(el){
+    const d=el.dataset||{}; const rows=[
+      ['מספר',d.doc||d.id],['סוג',d.type],['לקוח',d.cust],['סכום',d.total?('₪'+d.total):null],
+      ['תאריך',d.date],['סטטוס',d.status]].filter(r=>r[1]);
+    const body=`<div class="dd-grid">${rows.map(r=>`<div class="dd-k">${r[0]}</div><div class="dd-v">${r[1]}</div>`).join('')}</div>
+      <div class="row" style="gap:8px;margin-top:16px"><button class="btn btn-primary" data-close>סגירה</button><button class="btn" data-close>הורדת PDF</button></div>`;
+    drawer({title:(d.type||'מסמך')+' · '+(d.doc||d.id||''),body});
+  }
+  function closeMenus(){ document.querySelectorAll('.do-menu').forEach(e=>e.remove()); }
+  function menu(x,y,items){ closeMenus(); const h=host(); ensureRelative(h); const r=h.getBoundingClientRect();
+    const mn=document.createElement('div'); mn.className='do-menu'; mn.style.left=(x-r.left)+'px'; mn.style.top=(y-r.top)+'px';
+    mn.innerHTML=items.map(it=>it==='-'?'<div class="sep"></div>':`<button class="${it.danger?'danger':''}" data-mi="${it.k||''}">${it.icon||''} ${it.label}</button>`).join('');
+    mn.addEventListener('click',e=>{const b=e.target.closest('button');if(b){const it=items.find(i=>i&&i.k===b.dataset.mi);closeMenus();if(it&&it.on)it.on();}});
+    h.appendChild(mn); return mn; }
+  // ---- command palette (Ctrl-K): fuzzy jump to any screen ----
+  function paletteItems(){ const out=[]; (window.NAV_GROUPS||[]).forEach(g=>g[1].forEach(s=>out.push({id:s[0],label:s[1],grp:g[0],sub:s[2]||''}))); return out; }
+  function openPalette(){ closeOverlays(); const all=paletteItems();
+    const sc=document.createElement('div'); sc.className='do-scrim do-palette-scrim';
+    sc.innerHTML=`<div class="do-palette"><div class="dp-in"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4-4"/></svg><input placeholder="חיפוש מסך, פעולה או אפליקציה…" id="dp-q" autocomplete="off"><span class="kbd">Esc</span></div><div class="dp-list" id="dp-list"></div></div>`;
+    document.body.appendChild(sc);
+    const q=sc.querySelector('#dp-q'), list=sc.querySelector('#dp-list'); let sel=0, cur=all;
+    function render(){ cur=all.filter(it=>{ const t=(it.label+' '+it.grp+' '+it.sub+' '+it.id).toLowerCase(); return t.indexOf(q.value.toLowerCase())>=0; }).slice(0,40);
+      if(sel>=cur.length)sel=Math.max(0,cur.length-1);
+      list.innerHTML=cur.map((it,i)=>`<button class="dp-row${i===sel?' on':''}" data-go="${it.id}"><span class="dp-lab">${it.label}</span><span class="dp-grp">${it.grp}</span></button>`).join('')||'<div class="dp-empty">אין תוצאות</div>'; }
+    function choose(i){ const it=cur[i]; if(it){ sc.remove(); go(it.id); } }
+    q.addEventListener('input',()=>{sel=0;render();});
+    q.addEventListener('keydown',e=>{ if(e.key==='ArrowDown'){e.preventDefault();sel=Math.min(cur.length-1,sel+1);render();} else if(e.key==='ArrowUp'){e.preventDefault();sel=Math.max(0,sel-1);render();} else if(e.key==='Enter'){e.preventDefault();choose(sel);} });
+    list.addEventListener('click',e=>{ const b=e.target.closest('[data-go]'); if(b){ sc.remove(); go(b.getAttribute('data-go')); } });
+    sc.addEventListener('click',e=>{ if(e.target===sc)sc.remove(); });
+    render(); setTimeout(()=>q.focus(),10); return sc; }
+
+  /* ================= built-in modals (data-open="key") ================= */
+  const builtins={
+    'new-doc':()=>modal({title:'מסמך חדש',
+      body:`<div class="do-field"><label>סוג מסמך</label><select class="input" id="nd-type"><option>חשבונית מס</option><option>קבלה</option><option>תעודת משלוח</option><option>הצעת מחיר</option></select></div>
+            <div class="do-field"><label>לקוח</label><select class="input" id="nd-cust">${state.customers.map(c=>`<option>${c.name}</option>`).join('')}</select></div>
+            <div class="do-field"><label>סכום כולל (₪)</label><input class="input" id="nd-total" type="number" placeholder="0" value="0"></div>`,
+      footer:`<button class="btn btn-primary" data-action="submit-new-doc">הפק מסמך</button><button class="btn btn-ghost" data-close>ביטול</button>`}),
+    'new-customer':()=>modal({title:'לקוח חדש',
+      body:`<div class="do-field"><label>שם</label><input class="input" id="nc-name" placeholder="שם הלקוח"></div>
+            <div class="do-field"><label>ח.פ / ע.מ</label><input class="input" id="nc-tax" placeholder="514…"></div>
+            <div class="do-field"><label>עיר</label><input class="input" id="nc-city" placeholder="עיר"></div>`,
+      footer:`<button class="btn btn-primary" data-action="submit-new-customer">שמירה</button><button class="btn btn-ghost" data-close>ביטול</button>`}),
+    'new-item':()=>modal({title:'פריט חדש',
+      body:`<div class="do-field"><label>שם</label><input class="input" id="ni-name" placeholder="שם הפריט"></div>
+            <div class="do-field"><label>מק״ט</label><input class="input" id="ni-sku"></div>
+            <div class="do-field"><label>מחיר (₪)</label><input class="input" id="ni-price" type="number" value="0"></div>`,
+      footer:`<button class="btn btn-primary" data-action="submit-new-item">שמירה</button><button class="btn btn-ghost" data-close>ביטול</button>`}),
+  };
+  // data-action handlers
+  function runAction(name,el){
+    if(name==='submit-new-doc'){ const t=document.getElementById('nd-type').value,c=document.getElementById('nd-cust').value,tot=document.getElementById('nd-total').value; actions.addDocument({type:t,cust:c,total:tot}); closeOverlays(); }
+    else if(name==='submit-new-customer'){ actions.addCustomer({name:document.getElementById('nc-name').value,taxid:document.getElementById('nc-tax').value,city:document.getElementById('nc-city').value}); closeOverlays(); }
+    else if(name==='submit-new-item'){ actions.addItem({name:document.getElementById('ni-name').value,sku:document.getElementById('ni-sku').value,price:document.getElementById('ni-price').value}); closeOverlays(); }
+    else if(name==='mark-read'){ actions.markNotifsRead(); }
+    else if(actions[name]){ actions[name](el?el.dataset:{}); }
+  }
+
+  /* ================= hydration: bind a screen to the store ================= */
+  function renderList(el){
+    const src=el.getAttribute('data-list'); const rowTpl=el.getAttribute('data-row');
+    let arr=[]; try{ arr=val(src)||[]; }catch(e){} if(!Array.isArray(arr)){ arr=state[src]||[]; }
+    if(!Array.isArray(arr))return;
+    if(arr.length===0 && el.hasAttribute('data-empty')){ el.innerHTML=el.getAttribute('data-empty'); return; }
+    el.innerHTML=arr.map((it,i)=> rowTpl.replace(/\{\{(\w+)\}\}/g,(_,k)=> k==='i'?(i+1):(it[k]==null?'':(typeof it[k]==='number'?fmt(it[k]):it[k]))) ).join('');
+  }
+  function hydrate(scr){ if(!scr)return;
+    scr.querySelectorAll('[data-bind]').forEach(el=>{ const nv=val(el.getAttribute('data-bind'));
+      if(el.textContent!==String(nv)){ el.textContent=nv; el.classList.remove('tick-up'); void el.offsetWidth; if(el.hasAttribute('data-tick'))el.classList.add('tick-up'); } });
+    scr.querySelectorAll('[data-list]').forEach(renderList);
+  }
+  function hydrateActive(){ hydrate(activeScreen()); }
+
+  /* ================= global event delegation ================= */
+  function bindGlobal(){
+    document.addEventListener('click',e=>{
+      const open=e.target.closest('[data-open]'); if(open){ e.preventDefault(); const k=open.getAttribute('data-open'); if(builtins[k])builtins[k](); return; }
+      const close=e.target.closest('[data-close]'); if(close){ e.preventDefault(); const ov=close.closest('.do-scrim,.do-drawer'); if(ov)ov.remove(); else closeOverlays(); return; }
+      const act=e.target.closest('[data-action]'); if(act){ e.preventDefault(); runAction(act.getAttribute('data-action'),act); return; }
+      const tab=e.target.closest('[data-tab]'); if(tab){ const box=tab.closest('[data-tabs]')||tab.parentElement; box.querySelectorAll('[data-tab]').forEach(t=>t.classList.remove('on')); tab.classList.add('on');
+        const tgt=tab.getAttribute('data-tab'); const scr=activeScreen(); if(scr){ scr.querySelectorAll('[data-pane]').forEach(p=>p.style.display=p.getAttribute('data-pane')===tgt?'':'none'); } return; }
+      const mnl=e.target.closest('[data-menu]'); if(mnl){ e.preventDefault(); menu(e.clientX,e.clientY,rowMenu(mnl)); return; }
+      const col=e.target.closest('[data-collapse]'); if(col){ e.preventDefault(); const box=col.closest('.dv-tree')||col.parentElement; box.classList.toggle('collapsed'); return; }
+      const drw=e.target.closest('[data-doc]'); if(drw && !e.target.closest('button,a,input,[data-menu]')){ e.preventDefault(); openRowDrawer(drw); return; }
+      // ---- safety net: no interactive element is ever dead ----
+      // (runs only if no specific hook above handled the click; nav is a separate listener)
+      const hit=e.target.closest('button, .btn, .seg, [role=button], a[href="#"], .hm-burger');
+      if(hit && !e.target.closest('.do-menu, .do-palette') && !hit.closest('[data-nav],[data-action],[data-open],[data-close],[data-tab],[data-menu],[data-folder],[data-mail]') && !hit.matches('.hm-search')){
+        // filter chips / segmented controls: move the active state (real toggle feedback)
+        const seg=hit.closest('.seg'); const grp=seg&&seg.closest('.segs,.biz-tabs,.tabbar,.filters');
+        if(seg && grp){ grp.querySelectorAll('.seg').forEach(s=>s.classList.remove('on')); seg.classList.add('on'); e.preventDefault(); }
+        else { const t=(hit.textContent||'').replace(/\s+/g,' ').trim().slice(0,26); toast(t||'בוצע'); e.preventDefault(); }
+        if(!e.target.closest('.do-menu'))closeMenus(); return;
+      }
+      if(!e.target.closest('.do-menu'))closeMenus();
+    });
+    // right-click context menu on [data-ctx]
+    document.addEventListener('contextmenu',e=>{ const t=e.target.closest('[data-ctx],[data-menu]'); if(t){ e.preventDefault(); menu(e.clientX,e.clientY,rowMenu(t)); } });
+    // drag & drop: [data-drag] onto [data-drop]
+    document.addEventListener('dragstart',e=>{ const d=e.target.closest('[data-drag]'); if(d){ d.classList.add('dragging'); e.dataTransfer.setData('text/plain',d.getAttribute('data-drag')); } });
+    document.addEventListener('dragend',e=>{ document.querySelectorAll('.dragging').forEach(x=>x.classList.remove('dragging')); document.querySelectorAll('.do-drag-over').forEach(x=>x.classList.remove('do-drag-over')); });
+    document.addEventListener('dragover',e=>{ const z=e.target.closest('[data-drop]'); if(z){ e.preventDefault(); z.classList.add('do-drag-over'); } });
+    document.addEventListener('dragleave',e=>{ const z=e.target.closest('[data-drop]'); if(z)z.classList.remove('do-drag-over'); });
+    document.addEventListener('drop',e=>{ const z=e.target.closest('[data-drop]'); if(z){ e.preventDefault(); z.classList.remove('do-drag-over'); const what=e.dataTransfer.getData('text/plain'); const to=z.getAttribute('data-drop');
+      if(what&&what.indexOf('file:')===0&&to&&to.indexOf('folder:')===0){ actions.moveFile({file:what.slice(5),to:to.slice(7)}); }
+      else toast('הועבר: '+what+' → '+(to||'תיקייה')); } });
+    document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ closeOverlays(); }
+      if((e.ctrlKey||e.metaKey)&&(e.key==='k'||e.key==='K')){ e.preventDefault(); openPalette(); } });
+    // clicking the header search box opens the palette too
+    document.addEventListener('click',e=>{ if(e.target.closest('.hm-search')){ e.preventDefault(); openPalette(); } });
+  }
+
+  function start(){ bindGlobal();
+    // re-hydrate the active screen whenever the store changes
+    ['clock','metrics','documents','customers','items','mail','indox','jobs','notifs','live','drive','infra'].forEach(k=>on(k,hydrateActive));
+    setInterval(()=>{ tick(); }, 3800);
+    hydrateActive();
+  }
+  return {state,on,emit,val,tick,hydrate,hydrateActive,start,toast,modal,drawer,menu,actions,notify,clockStr};
+})();
+window.DO = DO;
+
+const NAV_GROUPS=[
+ ["המרכז · ליבה",[["dashboard","לוח בקרה","מבט על המערכת"],["apps","אפליקציות","קטלוג אפליקציות"],["notifications","התראות","מרכז התראות"],["connections-auth","חיבורים ומפתחות","סודות ומפתחות"],["connections-infra","חיבורים · תשתית",""],["connections-apppw","חיבורים · סיסמת אפליקציה",""],["homepage","דף הבית",""]]],
+ ["מסמכים שלי",[["mydocs-dash","לוח בקרה","סקירת מסמכים"],["mydocs-docs","מסמכים","רשימת מסמכים"],["mydocs-customers","לקוחות",""],["mydocs-items","פריטים",""],["mydocs-settings","הגדרות עסק",""]]],
+ ["מסמכים נכנסים (INDOX)",[["indox-root","לוח בקרה",""],["indox-repos","מסמכים",""],["indox-extraction","חילוץ מסמכים",""],["indox-repo","ריפו בודד",""],["indox-repo-docs","מסמכי ריפו",""],["indox-repo-doc","מסמך בריפו",""],["indox-repo-tail","ריפו · המשך",""],["indox-sync","סנכרון",""],["indox-settings","הגדרות",""],["indox-tests","בדיקות",""]]],
+ ["מייל",[["mail-inbox","תיבת דואר",""],["mail-label","תווית",""],["mail-message","הודעה",""],["mail-attention","דורש טיפול",""],["mail-search","חיפוש",""]]],
+ ["דרייב",[["drive-root","דרייב",""],["drive-search","חיפוש",""],["drive-trash","אשפה",""]]],
+ ["מסך התקנה / קונסולה",[["console-install","מסך התקנה",""],["console-palette","פלטת פקודות",""],["console-rail","סרגל מכווץ",""],["console-wizard","אשף ספק",""]]],
+ ["בוט ווצאפ (wadmin)",[["wadmin-login","התחברות",""],["wadmin-dashboard","לוח בקרה",""],["wadmin-connect","חיבור",""],["wadmin-actions","פעולות",""],["wadmin-users","משתמשים",""],["wadmin-settings","הגדרות",""]]],
+ ["תשתית · כלים חיצוניים",[["machine","מכונה",""],["kabil","כל‑מקביל",""],["browser42","Browser42",""],["feature-validation","אימות מערכת",""],["authentik-login","Authentik · כניסה",""],["authentik-admin","Authentik · ניהול",""],["portainer-dashboard","Portainer · לוח",""],["portainer-containers","Portainer · קונטיינרים",""],["n8n-workflows","n8n · Workflows",""],["n8n-executions","n8n · Executions",""],["n8n-credentials","n8n · Credentials",""],["supabase","Supabase Studio",""],["redis","RedisInsight",""],["glitchtip","GlitchTip",""]]],
+];
+window.NAV_GROUPS = NAV_GROUPS;
+function buildNav(){
+  const g=document.getElementById('navGroups');
+  g.innerHTML=NAV_GROUPS.map(([t,items])=>`<div class="np-group"><h4>${t}</h4><div class="np-items">${items.map(([id,n,s])=>`<a onclick="go('${id}')">${n}${s?`<small>${s}</small>`:''}</a>`).join('')}</div></div>`).join('');
+}
+function openNav(){document.getElementById('navOv').classList.add('show')}
+function closeNav(){document.getElementById('navOv').classList.remove('show')}
+function go(id){
+  const scr=document.querySelector('.screen[data-screen="'+id+'"]');
+  if(!scr){alert('מסך '+id+' עדיין לא נטען');return}
+  document.querySelectorAll('.screen.active').forEach(s=>s.classList.remove('active'));
+  scr.classList.add('active');
+  document.getElementById('stage').scrollTop=0;
+  scr.scrollTop=0; const sc=scr.querySelector('.hm-scroll'); if(sc)sc.scrollTop=0;
+  document.querySelectorAll('.do-scrim,.do-drawer,.do-menu,.do-toast').forEach(e=>e.remove()); // clear overlays on nav
+  try{ DO.hydrate(scr); }catch(e){}
+  closeNav();
+  window.scrollTo(0,0);
+}
+document.addEventListener('click',e=>{const a=e.target.closest('[data-nav]');if(a){e.preventDefault();go(a.getAttribute('data-nav'))}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeNav()});
+window.addEventListener('DOMContentLoaded',()=>{
+  buildNav();
+  const first=document.querySelector('.screen');
+  if(first)first.classList.add('active');
+  try{ DO.start(); }catch(e){ console.warn('DO.start',e); }
+});
+</script>
+</body>
+</html>

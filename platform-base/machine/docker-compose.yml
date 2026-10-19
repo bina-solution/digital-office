@@ -1,0 +1,62 @@
+services:
+  machine:
+    container_name: machine-${DEPLOYMENT_NAME:-bina-deployment}
+    # The image CI publishes for this commit (DGO-41). `pull_policy: missing` means it is
+    # fetched only when it is not here already, so a checkout that has built it is untouched;
+    # the `build:` below stays as the fallback. Needs the GHCR package readable — a package made
+    # from a private repo is private, so `docker login ghcr.io` on a machine that must pull.
+    image: ghcr.io/solomonboltin/digital-office/machine:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    build:
+      context: .
+      dockerfile: Dockerfile
+    hostname: machine
+    networks:
+    - traefik-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.75'
+          # RAISED 384M -> 640M, 2026-08-06. This is the opposite direction from the rest of this
+          # pass, and deliberately so: measured high-water was 384MiB — exactly 100% of the limit.
+          # A container sitting at its ceiling is one allocation away from a real OOM kill, and an
+          # OOM kill here would look identical to the daemon-restart orphaning we are trying to
+          # eliminate. Cutting the stack's ceilings without fixing this would have installed the
+          # very defect this work exists to remove.
+          memory: 640M
+        reservations:
+          cpus: '0.05'
+          memory: 64M
+    environment:
+    - SENTRY_DSN=${MACHINE_SENTRY_DSN:-}
+    - DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-bina-deployment}
+    - HOST_ROOT=/host/root
+    - DEPLOYMENT_PATH=/host/root/root/deployment-hacohen
+    - MACHINE_CLEANUP_ALLOWED_ACTIONS=${MACHINE_CLEANUP_ALLOWED_ACTIONS:-}
+    - MACHINE_DU_TIMEOUT_S=${MACHINE_DU_TIMEOUT_S:-20}
+    - MACHINE_STAT_WORKERS=${MACHINE_STAT_WORKERS:-8}
+    volumes:
+    # Project socket on the host side — see the note in platform-base/traefik/docker-compose.yml.
+    - ${BBOX_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
+    - /:/host/root:ro
+    # Power policy + status shared with the host's power agent (packaging/macos/power-agent.py):
+    # a checkout directory, because the checkout is the one path the host and this container both see.
+    - ../../data/power:/data/power
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - python -c "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://localhost:8080/healthz',timeout=3).status==200
+        else 1)"
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-5s}
+      retries: 5
+      start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '3'
+networks:
+  traefik-network:
+    external: true

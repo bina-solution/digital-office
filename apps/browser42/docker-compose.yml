@@ -1,0 +1,340 @@
+# NOTE: this app carried `profiles: [browser42]` on every service, gating it behind
+# COMPOSE_PROFILES. That was a SECOND source of truth for whether the app runs: with
+# browser42 enabled: true in platform.state.yaml and COMPOSE_PROFILES empty, compose
+# silently omitted every container and the app 404'd with nothing to point at. The
+# disposition in platform.state.yaml is the only thing that decides this. Gate G22.
+# Config below was layered by production/compose.override.yml before the platform-OS
+# refactor; merged here so this app owns its complete definition.
+services:
+  browser42-browser:
+    container_name: browser42-browser-${DEPLOYMENT_NAME:-bina-deployment}
+    build:
+      context: .
+      dockerfile: Dockerfile.browser
+    restart: unless-stopped
+    # docker-init as PID 1: start-browser.sh runs a dozen background loops whose short-lived
+    # children (probes, xdotool, python) are reparented to PID 1 when their subshell has moved on,
+    # and bash-as-PID-1 does not reap what it did not spawn. The script's own contract is kept —
+    # it is still the process the watchdogs kill the cloakserve child under, and its exit still
+    # ends the container (docker-init exits with it).
+    init: true
+    environment:
+      VNC_PASSWORD: ${BROWSER42_VNC_PASSWORD:-}
+      SCREEN_WIDTH: ${BROWSER42_SCREEN_WIDTH:-1920}
+      SCREEN_HEIGHT: ${BROWSER42_SCREEN_HEIGHT:-1080}
+      PRESENTATION_MODE: ${BROWSER42_PRESENTATION_MODE:-compact}
+      # --mute-audio (2026-08-04): ad-heavy pages autoplay muted video/audio renderers that
+      # burn compositor cycles in the shared headed Chrome; muting cuts saturation risk.
+      # --restore-last-session (2026-09-30): a wake from idle sleep (start-browser.sh §4k) is a fresh
+      # Chromium on the same profile; this is what brings the tabs back so it continues where it was.
+      CLOAK_EXTRA_ARGS: ${BROWSER42_CLOAK_EXTRA_ARGS:---load-extension=/extension --renderer-process-limit=12 --mute-audio --restore-last-session}
+      CLOAKBROWSER_BINARY_PATH: ${BROWSER42_CHROME:-/usr/bin/chromium}
+      LOCAL_PROXY_TARGET: traefik-${DEPLOYMENT_NAME:-bina-deployment}
+      BROWSER42_BROKER_HOST: 0.0.0.0
+      # Idle sleep (start-browser.sh §4k, reaper.py): seconds without use before Chrome exits
+      # gracefully and stays down until the next use. 0 = never. `bbox b42 sleep after N` overrides
+      # at runtime (data/browser42/settings.json).
+      BROWSER42_IDLE_SLEEP_S: ${BROWSER42_IDLE_SLEEP_S:-120}
+    volumes:
+    - cloakprofile:/profile
+    - ../../data/browser42:/data
+    - ./group-manager.py:/group-manager.py:ro
+    # The Chrome <-> credential-plane bridge (`bbox b42 logins`). Mounted here and ONLY here,
+    # because /profile is mounted here and nowhere else — the task runner, which holds the broker
+    # identity for `task login`, has no access to the profile, and this one has no access to that
+    # connection. Read-only: the file is app source, the profile is the state.
+    - ./logins.py:/logins.py:ro
+    shm_size: 4gb
+    expose:
+    - '9222'
+    - '6080'
+    healthcheck:
+      # Asleep is healthy (start-browser.sh §4k): /data/.sleeping means Chrome exited on purpose, and
+      # probing /json/version would relaunch it — cloakserve's handler calls get_or_launch, which is
+      # how a probe became the crash-restart loop of 2026-09-30 (RestartCount 37 on a browser nobody
+      # used). Awake, the probe is what it was: CDP must answer.
+      test:
+      - CMD-SHELL
+      - test -f /data/.sleeping && exit 0; python3 -c "import urllib.request as u; u.urlopen('http://localhost:9222/json/version/',timeout=5)" || exit 1
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-8s}
+      retries: 3
+      start_period: 45s
+    networks:
+    - browser42-internal
+    - traefik-network
+    deploy:
+      resources:
+        limits:
+          # 6 -> env-driven, 2026-09-17. A hard-coded 6 is a HOST-dependent value in the one place
+          # docker refuses rather than warns:
+          #     Error response from daemon: range of CPUs is from 0.01 to 4.00,
+          #     as there are only 4 CPUs available
+          # and because the whole app is brought up as ONE compose invocation, that single refusal
+          # takes every container in this file down with it — the build succeeded, then nothing
+          # started. `bbox_clamp_cpus_to_host` (scripts/lib.sh) exists for exactly this class and
+          # only rewrites `*_CPUS=` keys in .env, so an env-driven key is what makes browser42
+          # portable like apitools (`cpus: ${APITOOLS_CPUS:-0}`).
+          cpus: ${BROWSER42_CPUS:-6}
+          # 4G -> 1536M, 2026-08-06. Measured high-water 788MiB with a live Chromium tree (7+
+          # renderer processes); 1536M is ~1.95x that. Cut harder than most because browser42 is
+          # QA tooling that must NOT be running during a pipeline proof anyway (quiet mode stops
+          # it, and machine-health-guard --admit proof refuses while it is up), so its ceiling
+          # competes with the document path for budget it should never be spending.
+          # 1536M -> 1792M, 2026-09-23. The 2026-09-22 load run (three heavy pages in parallel,
+          # ai/context/browser42-resource-and-load-report-2026-09-22.md) measured a 1456MiB peak —
+          # 95% of the old ceiling, i.e. one more tab away from the kernel killing a renderer
+          # mid-task. 1792M keeps ~23% headroom over that measured peak. This is a CEILING, not a
+          # reservation: idle usage is ~0.7-1.0GiB, and the host only pays if the browser really
+          # grows.
+          memory: 1792M
+        reservations:
+          cpus: '1'
+          memory: 512M
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+  browser42-mcp:
+    container_name: browser42-mcp-${DEPLOYMENT_NAME:-bina-deployment}
+    image: node:22-slim
+    restart: unless-stopped
+    depends_on:
+    - browser42-browser
+    environment:
+      PLAYWRIGHT_MCP_CDP_ENDPOINT: http://browser42-browser:9222
+      # A bounded, GENEROUS heap: an accessibility snapshot of a big page (Facebook) is megabytes,
+      # and with Node's default heap for a 512M cgroup the process died "JavaScript heap out of
+      # memory" twice in 15 minutes of real use (2026-09-29) — every in-flight call dropped, callers
+      # saw 502. Callers now address controls by role selector instead of snapshotting per step.
+      NODE_OPTIONS: --max-old-space-size=512
+      PLAYWRIGHT_MCP_SAVE_SESSION: ${BROWSER42_DEBUG:+true}
+      PLAYWRIGHT_MCP_SAVE_TRACE: ${BROWSER42_DEBUG:+true}
+      PLAYWRIGHT_MCP_CONSOLE_LEVEL: ${BROWSER42_DEBUG:+debug}
+      DEBUG: ${BROWSER42_DEBUG:+pw:mcp*}
+    working_dir: /data
+    volumes:
+    - ../../data/browser42:/data
+    command:
+    - npx
+    - -y
+    # PINNED. `@latest` changed the tool schema under every caller on 2026-09-29 (`ref` → `target`,
+    # a required `scale` on screenshots); 0.0.83 is the version the callers were fixed and
+    # verified against (apps/domains, apps/social-list read the dialect from the schemas anyway).
+    - '@playwright/mcp@0.0.83'
+    - --port
+    - '8931'
+    - --host
+    - 0.0.0.0
+    - --output-dir
+    - /data/output
+    - --caps
+    - pdf
+    expose:
+    - '8931'
+    networks:
+    - browser42-internal
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 768M
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+  browser42-reaper:
+    container_name: browser42-reaper-${DEPLOYMENT_NAME:-bina-deployment}
+    build:
+      context: .
+      dockerfile: Dockerfile.browser
+    restart: unless-stopped
+    depends_on:
+    - browser42-browser
+    entrypoint:
+    - python3
+    - /reaper.py
+    environment:
+      CDP: http://browser42-browser:9222
+      MAX_TABS: ${BROWSER42_MAX_TABS:-6}
+      INTERVAL: ${BROWSER42_REAP_INTERVAL:-30}
+      TASKS_DIR: /data/tasks
+      # Idle sleep: the reaper is the idle DECIDER (tabs, tasks, activity markers); see reaper.py.
+      BROWSER42_IDLE_SLEEP_S: ${BROWSER42_IDLE_SLEEP_S:-120}
+      # Lane reconciliation: close any-concurrency tab lanes whose task is terminal
+      # (or zombie-allocated) with no live tagged tab. Needs traefik-network reach.
+      ANY_CONCURRENCY_SPANS_URL: http://any-concurrency:8080/ingest/span
+      BROWSER42_SPANS_ENABLED: ${BROWSER42_SPANS_ENABLED:-1}
+    volumes:
+    - ./reaper.py:/reaper.py:ro
+    - ../../data/browser42:/data
+    networks:
+    - browser42-internal
+    - traefik-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+  browser42-task-watchdog:
+    container_name: browser42-task-watchdog-${DEPLOYMENT_NAME:-bina-deployment}
+    build:
+      context: .
+      dockerfile: Dockerfile.browser
+    restart: unless-stopped
+    entrypoint:
+    - python3
+    - /task-watchdog.py
+    environment:
+      BROWSER42_TASK_STALL_SECONDS: ${BROWSER42_TASK_STALL_SECONDS:-300}
+      BROWSER42_TASK_TOTAL_SECONDS: ${BROWSER42_TASK_TOTAL_SECONDS:-1800}
+      BROWSER42_TASK_WATCHDOG_INTERVAL: ${BROWSER42_TASK_WATCHDOG_INTERVAL:-5}
+      BROKER: ws://browser42-browser:8765
+      ANY_CONCURRENCY_SPANS_URL: http://any-concurrency:8080/ingest/span
+      BROWSER42_SPANS_ENABLED: ${BROWSER42_SPANS_ENABLED:-1}
+    volumes:
+    - ../../data/browser42:/data
+    - ./task-watchdog.py:/task-watchdog.py:ro
+    networks:
+    - browser42-internal
+    - traefik-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.1'
+          memory: 128M
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+  browser42-task-runner:
+    container_name: browser42-task-runner-${DEPLOYMENT_NAME:-bina-deployment}
+    build:
+      context: .
+      dockerfile: Dockerfile.browser
+    restart: unless-stopped
+    # PID 1 was the runner itself, which never wait()s for children it did not spawn: every task
+    # whose shell exited first left a <defunct> behind (9 counted 2026-09-29), forever, until a
+    # restart. docker-init as PID 1 reaps orphans; the runner is unchanged.
+    init: true
+    depends_on:
+    - browser42-browser
+    entrypoint:
+    - python3
+    - /task-runner.py
+    environment:
+      CDP: http://browser42-browser:9222
+      BROKER: ws://browser42-browser:8765
+      BROWSER42_TASK_REQUEST_SECONDS: ${BROWSER42_TASK_REQUEST_SECONDS:-300}
+      # ONE CDP work command at a time: the lanes are parallel (tabs/lanes stay open
+      # concurrently) but the single shared Chrome saturates when two heavy ad-heavy
+      # evaluates run at once (0805g death spiral). Serialize work; queue the rest.
+      BROWSER42_TASK_MAX_CONCURRENT: ${BROWSER42_TASK_MAX_CONCURRENT:-1}
+      # Long bounded wait so a queued parallel command interleaves instead of hitting
+      # runner_busy; reads (status/heartbeat) never take a slot. Must cover a sibling
+      # that runs the full 300s request budget.
+      BROWSER42_TASK_QUEUE_SECONDS: ${BROWSER42_TASK_QUEUE_SECONDS:-300}
+      ANY_CONCURRENCY_SPANS_URL: http://any-concurrency:8080/ingest/span
+      BROWSER42_SPANS_ENABLED: ${BROWSER42_SPANS_ENABLED:-1}
+      # The credential plane, for `task login`. The runner leases ONE named connection at the moment
+      # of typing (`POST /api/broker/lease`, identified by its own container id) and holds it only as
+      # a local variable — there is no boot-time secret here to leak or to forget. CONN_SERVICE must
+      # equal this compose service name: that is what the broker checks the identity against, and what
+      # browser42's app.json names on the connection (connections[].service).
+      CONNECTIONS_URL: http://connections:8990
+      CONN_SERVICE: browser42-task-runner
+    volumes:
+    - ../../data/browser42:/data
+    - ./group-manager.py:/group-manager.py:ro
+    - ./task-runner.py:/task-runner.py:ro
+    - ./task-client.py:/task-client.py:ro
+    networks:
+    - browser42-internal
+    - traefik-network
+    deploy:
+      resources:
+        limits:
+          # Goal CLIs each carry a Playwright client; two concurrent ones thrashed at
+          # 256M and stalled mid-protocol. Real headroom keeps the protocol fast.
+          cpus: '1'
+          memory: 512M
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+  browser42-caddy:
+    container_name: browser42-caddy-${DEPLOYMENT_NAME:-bina-deployment}
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+    - browser42-mcp
+    - browser42-browser
+    ports:
+    - 127.0.0.1:8931:80
+    environment:
+      SITE_ADDRESS: :80
+      MCP_TOKEN: ${BROWSER42_MCP_TOKEN:?set BROWSER42_MCP_TOKEN in .env (openssl rand
+        -hex 32)}
+    volumes:
+    - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+    - browser42_caddy_data:/data
+    - browser42_caddy_config:/config
+    networks:
+    - browser42-internal
+    - traefik-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    labels:
+    - traefik.enable=true
+    - traefik.docker.network=traefik-network
+    - traefik.http.routers.browser42-local.rule=Host(`browser42.localhost`)
+    - traefik.http.routers.browser42-local.entrypoints=web
+    - traefik.http.routers.browser42-local.service=browser42
+    - traefik.http.routers.browser42-local.middlewares=authentik@file
+    - traefik.http.routers.browser42-http.rule=Host(`${BROWSER42_BASE_URL}`)
+    - traefik.http.routers.browser42-http.entrypoints=web
+    - traefik.http.routers.browser42-http.service=browser42
+    # Gated like its two neighbours. It carried no middleware: on a `.localhost` office this rule
+    # is the SAME as browser42-local's, so whether the automation browser asked for a sign-in
+    # depended on which of two identical rules traefik picked — and on a domain office plain http
+    # asked for none at all (G21 invariant 4, which found it).
+    - traefik.http.routers.browser42-http.middlewares=authentik@file
+    - traefik.http.routers.browser42-https.rule=Host(`${BROWSER42_BASE_URL}`)
+    - traefik.http.routers.browser42-https.entrypoints=websecure
+    - traefik.http.routers.browser42-https.tls=true
+    - traefik.http.routers.browser42-https.tls.certresolver=myresolver
+    - traefik.http.routers.browser42-https.service=browser42
+    - traefik.http.routers.browser42-https.middlewares=authentik@file
+    - traefik.http.routers.browser42-mcp-https.rule=Host(`${BROWSER42_BASE_URL}`)
+      && PathPrefix(`/mcp`)
+    - traefik.http.routers.browser42-mcp-https.entrypoints=websecure
+    - traefik.http.routers.browser42-mcp-https.tls=true
+    - traefik.http.routers.browser42-mcp-https.tls.certresolver=myresolver
+    - traefik.http.routers.browser42-mcp-https.service=browser42
+    - traefik.http.services.browser42.loadbalancer.server.port=80
+networks:
+  browser42-internal:
+    driver: bridge
+  traefik-network:
+    external: true
+volumes:
+  cloakprofile: null
+  browser42_caddy_data: null
+  browser42_caddy_config: null

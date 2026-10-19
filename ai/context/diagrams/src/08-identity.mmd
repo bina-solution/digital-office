@@ -1,0 +1,11 @@
+flowchart LR
+    B["Browser"] -->|"session cookie"| A1["Fleet authentik at the edge - auth.staging"]
+    A1 -->|"forwardAuth"| LC["Local console"]
+    LC -->|"authentik-fleet@file - outpost over the overlay"| A1
+    LC -->|"gateway call, no user identity in headers"| G["network gateway"]
+    G -->|"mints peer JWT - user, tenant, node, scope, aud, short TTL"| N["Remote node"]
+    N -->|"verifies against the peer public key; rejects X-Authentik-* from anywhere but the overlay"| N
+    B -->|"direct visit to a node host"| N2["Node edge"]
+    N2 -->|"forwardAuth to the fleet authentik over the tunnel"| A1
+    N2 -.->|"edge unreachable - node-local fallback"| A2["Node-local authentik"]
+    S["Site traffic - Class B"] -->|"NO identity headers at all"| W["Website container"]

@@ -1,0 +1,199 @@
+# UI-coverage manifest — the hand-declared PART of the inventory.
+#
+# Everything that CAN be derived from source is derived (see inventory.py extractors);
+# this file holds only what genuinely cannot be:
+#   - where each app lives (env var -> host)
+#   - single-view apps (nothing to extract: the app IS one screen)
+#   - third-party UIs (we don't own their source, so we pin the screens we care about)
+#   - explicitly-declared STATES that no router knows about (wizard steps, empty/error)
+#
+# Rule: if you find yourself adding a first-party *route* here by hand, stop — write an
+# extractor instead. Hand-listed routes are exactly what makes a coverage number a lie.
+
+# ── how to reach each app ────────────────────────────────────────────────────
+# env  = variable in .env holding the host (ci-env.sh writes *.localhost values)
+# local= fallback host when the env var is absent
+# auth = authentik | own | none   (drives which login helper the capture driver uses)
+# tier = first_party | third_party   (code-coverage gate applies to first_party only)
+hosts:
+  console:            {env: CONSOLE_BASE_URL,          local: console.localhost,           auth: authentik, tier: first_party}
+  my-docs:            {env: MY_DOCS_BASE_URL,          local: my-docs.localhost,           auth: authentik, tier: first_party}
+  incoming-documents: {env: INCOMING_DOCS_BASE_URL,    local: incoming-documents.localhost, auth: authentik, tier: first_party}
+  connections:        {env: CONNECTIONS_BASE_URL,      local: connections.localhost,       auth: authentik, tier: first_party}
+  mailview:           {env: MAILVIEW_BASE_URL,         local: mail.localhost,              auth: authentik, tier: first_party}
+  drive:         {env: DRIVE_BASE_URL,            local: drive.localhost,             auth: authentik, tier: first_party}
+  notifications:      {env: NOTIFICATIONS_BASE_URL,    local: alerts-svc.localhost,        auth: authentik, tier: first_party}
+  machine:            {env: MACHINE_BASE_URL,          local: machine.localhost,           auth: authentik, tier: first_party}
+  chat:               {env: CHAT_APP_BASE_URL,         local: chat.localhost,              auth: own,       tier: first_party}
+  any-concurrency:    {env: ANY_CONCURRENCY_BASE_URL,  local: any-concurrency.localhost,   auth: authentik, tier: first_party}
+  browser42:          {env: BROWSER42_BASE_URL,        local: browser42.localhost,         auth: authentik, tier: first_party}
+  n8n:                {env: N8N_BASE_URL,              local: n8n.localhost,               auth: own,       tier: third_party}
+  portainer:          {env: PORTAINER_BASE_URL,        local: portainer.localhost,         auth: own,       tier: third_party}
+  glitchtip:          {env: GLITCHTIP_BASE_URL,        local: glitchtip.localhost,         auth: own,       tier: third_party}
+  authentik:          {env: AUTH_BASE_URL,             local: auth.localhost,              auth: none,      tier: third_party}
+  supabase-studio:    {env: SUPABASE_STUDIO_BASE_URL,  local: supabase-studio.localhost,   auth: authentik, tier: third_party}
+  redisinsight:       {env: REDISINSIGHT_BASE_URL,     local: redisinsight.localhost,      auth: authentik, tier: third_party}
+  # The sample third-party app, installed from the signed catalog. It is first_party by tier
+  # because we own its one screen and can extract it; the point of shipping it is that an app
+  # author has a working reference, and a reference that breaks the ui-map is not one.
+  hello-bina:         {env: HELLO_BINA_BASE_URL,       local: hello-bina.localhost,        auth: authentik, tier: first_party}
+  # ── [2026-09-27] every app that had views but no host entry ──────────────────
+  # inventory.py requires a host row for EVERY app it emits a view for — embedded or not —
+  # because the row is where tier and auth come from. These seven had none, which is one of
+  # the reasons they never reached the map: each opened a fresh error line instead of a view.
+  # For an embedded app the host is a fallback only (rewrite_for_console re-points the view at
+  # the console shell and the standalone host is never visited while it is embedded).
+  bina:               {env: BINA_DS_BASE_URL,          local: bina.localhost,              auth: authentik, tier: first_party}
+  telegram-tv:        {env: TELEGRAM_TV_BASE_URL,      local: telegram-tv.localhost,       auth: authentik, tier: first_party}
+  git:                {env: GIT_BASE_URL,              local: git.localhost,               auth: authentik, tier: first_party}
+  sites:              {env: SITES_BASE_URL,            local: sites.localhost,             auth: authentik, tier: first_party}
+  domains:            {env: DOMAINS_BASE_URL,          local: domains.localhost,           auth: authentik, tier: first_party}
+  computers:          {env: COMPUTERS_BASE_URL,        local: computers.localhost,         auth: authentik, tier: first_party}
+  data-management:    {env: DATA_MANAGEMENT_BASE_URL,  local: data-management.localhost,   auth: authentik, tier: first_party}
+  app-management:     {env: APP_MANAGEMENT_BASE_URL,   local: apps.localhost,              auth: authentik, tier: first_party}
+  digital-assets:     {env: DIGITAL_ASSETS_BASE_URL,   local: digital-assets.localhost,    auth: authentik, tier: first_party}
+  social-list:        {env: SOCIAL_LIST_BASE_URL,      local: social-list.localhost,       auth: authentik, tier: first_party}
+  dgo-extend:            {env: DGO_EXTEND_BASE_URL,          local: dgo-extend.localhost,           auth: authentik, tier: first_party}
+  # [2026-10-07] archify: in the rail since it was added, and in no map — it had no row here.
+  archify:            {env: ARCHIFY_BASE_URL,          local: archify.localhost,           auth: authentik, tier: first_party}
+  # [2026-09-30] Plane (project-pln). Its screens are upstream's SPA, so in the scorecard's sense
+  # this is third-party software — but the tier here decides something specific: only
+  # `first_party` views are rewritten into the console frame (rewrite_for_console), and Plane is
+  # EMBEDDED (`module.embed: true`, /a/plane/). Declaring it third_party would send the capture to
+  # its standalone host and photograph a screen no user of this office ever sees. The screens we
+  # ship and measure are our shell framing our tile, so the row is first_party, and `auth` is the
+  # SSO the app.json declares (`auth: sso`).
+  project-pln:        {env: PROJECT_PLN_BASE_URL,      local: plane.localhost,             auth: authentik, tier: first_party}
+
+# ── apps that live INSIDE the console shell ─────────────────────────────────
+# The console is the product. A user never visits my-docs.localhost — they open the console and
+# see "מסמכים שלי" framed by the shell. So every app whose manifest declares a framed tile
+# (routing[].module: embed + alias) is captured at console/#/m/<module> with the shell visible,
+# and its sub-views are reached by driving the iframe. Its standalone host is NOT captured: that
+# would both double-count and show a screen the product does not have.
+#
+# THE TABLE THAT WAS HERE IS DERIVED NOW (inventory.py: console_embed). It listed, by hand, the
+# module and the alias of every such tile — the manifests' own facts — and five times an app
+# reached the rail without a row here (browser42, data-management, Plane, three at once on
+# 2026-09-29, archify), while each app that was switched off had its row deleted (hello-bina,
+# my-docs), which made this tracked file the description of one office. What an app still needs
+# here is its `hosts` row above; an app this office does not run is left out of its map, and said.
+
+# NOTE: feature-validation was removed here — it is parked in attic/, so it has no app.json,
+# no container and no console tile. Leaving it declared made the UI inventory report drift.
+
+# ── apps whose entire UI is one screen (nothing to extract) ──────────────────
+# Each still gets an anti-drift check in inventory.py: the served index.html must NOT
+# contain a router/tab construct. If someone adds tabs, the check fails and forces an
+# extractor — so "single view" can never silently hide new screens.
+single_view:
+  machine:            {path: "/", title: "מכונה — מדדי מארח ו-Docker"}
+  notifications:      {path: "/", title: "התראות — מרכז התראות"}
+  any-concurrency:    {path: "/", title: "כל מקביל — ציר-זמן מקביליות"}
+  browser42:          {path: "/view/", title: "Browser42 — תצוגת דפדפן חי"}
+  hello-bina:         {path: "/", title: "שלום בינה — אפליקציית דוגמה"}
+  # [2026-09-27] classified by running the router-smell probe over each app's own source:
+  # these three serve ONE screen (cards/sections, no router, no tabs). They get a probe
+  # below, so the moment one grows navigation the inventory fails instead of hiding it.
+  computers:          {path: "/", title: "מחשבים — צי המכונות"}
+  # [2026-09-29] renamed: the console tile now reads „ניהול גרסאות" — the capture locates this
+  # panel by the tile TEXT in the rail, so a stale title here is a capture that hangs until the
+  # shard timeout, reported as "0 captured" rather than as the rename it actually is.
+  git:                {path: "/", title: "ניהול גרסאות — חשבונות, מראות וספריית הקוד"}
+  # [2026-09-29] data-management was enabled, embedded and in the rail with **zero** views in the
+  # denominator — the only embedded module in that state, found by diffing console_embed against
+  # the inventory. It is one scrolling page (four <h2> sections, no router), so it is declared
+  # here and gets a probe like the rest: the day it grows a router the inventory fails.
+  data-management:    {path: "/", title: "ניהול נתונים — מלאי, גיבוי ושחזור"}
+  # dgo-extend has no router at all (checked with the smell probe before declaring it).
+  dgo-extend:            {path: "/", title: "לשכות נוספות — הצהרות והרצות"}
+  # bina (the DeepSeek-Harness agent) is genuinely one screen — a conversation with panels
+  # that are runtime state, not routes. Its index.html is generated by the harness at image
+  # build, outside this repo, so it has no probe file; it is listed here deliberately and
+  # its container being up is asserted by the capture itself (a down container fails).
+  bina:               {path: "/", title: "בינה ודעת — הסוכן"}
+  # Plane's UI is upstream's own SPA (served by its containers, not by a file in this repo), so
+  # like bina it has no probe file — the router-smell check cannot read a bundle we do not own.
+  # One screen: the app's whole surface is embedded at /a/plane/. The title's first half must be
+  # the console TILE's text, because the capture locates the panel by that text in the rail.
+  project-pln:        {path: "/", title: "ניהול פרויקטים — לוחות ומשימות"}
+
+# ── third-party: pinned screens we deliberately chose to document ────────────
+# NOT claimed as "100% of that product" — reported as its own tier in the scorecard.
+third_party_screens:
+  n8n:
+    - {id: workflows,   path: "/home/workflows",    title: "n8n — Workflows"}
+    - {id: executions,  path: "/home/executions",   title: "n8n — Executions"}
+    - {id: credentials, path: "/home/credentials",  title: "n8n — Credentials"}
+  portainer:
+    - {id: dashboard,   path: "/#!/home",           title: "Portainer — Dashboard"}
+    - {id: containers,  path: "/#!/1/docker/containers", title: "Portainer — Containers"}
+  glitchtip:
+    - {id: issues,      path: "/",                  title: "GlitchTip — Issues"}
+  authentik:
+    - {id: login,       path: "/if/flow/default-authentication-flow/", title: "Authentik — Login"}
+    - {id: admin,       path: "/if/admin/",         title: "Authentik — Admin"}
+  supabase-studio:
+    - {id: tables,      path: "/",                  title: "Supabase Studio — Tables"}
+  redisinsight:
+    - {id: databases,   path: "/",                  title: "RedisInsight — Databases"}
+
+# ── declared STATES (no router knows these) ──────────────────────────────────
+# A state = the same route rendered differently. These are the ones we assert exist;
+# the JS/CSS coverage report is what PROVES whether we actually hit them, and any
+# uncovered render-branch surfaces here as a missing state to add.
+# steps = DOM recipe executed after navigating to `of` before the shot.
+states:
+  console:
+  # Selectors verified against console/static/index.html + app.js. An earlier version
+  # invented [data-connect-wizard]/[data-rail-toggle]; those never matched, so the shot
+  # silently captured the base view instead of the state — exactly the failure the
+  # coverage report then exposed as an uncovered render branch.
+    # [2026-09-29] the phone launcher. `#/` on a phone renders the home screen (route()); on a
+    # desktop the same address redirects to the first tile, which is what a desktop user sees —
+    # so this one view is honest at both profiles, and only the mobile run is interesting.
+    - {id: home,           of: "#/",        title: "מסך בית — משגר האפליקציות"}
+    # the phone's open apps: open one, go home, raise the switcher. Phone-only surface — the CSS
+    # hides the bar above 640px, so on a desktop run the last step is a no-op on a hidden button
+    # and the shot is the home/landing screen, which is honest for that profile.
+    - {id: switcher,       of: "#/m/drive", title: "מסך בית — אפליקציות פתוחות",
+       steps: [{js: "location.hash='#/'"}, {js: "var b=document.getElementById('bnOpen'); if(b&&b.offsetParent) b.click();"}]}
+    - {id: palette,        of: "#/",        title: "המרכז — חיפוש מהיר", steps: [{click: "#paletteBtn"}]}
+    - {id: rail-collapsed, of: "#/",        title: "המרכז — תפריט מכווץ", steps: [{click: "#railToggle"}]}
+    # the connect wizard opens from the account bar, which the shell renders only for
+    # modules that own accounts (service: drive|mail in modules.yaml) — hence #/m/drive
+    - {id: wizard-provider, of: "#/m/drive", title: "אשף חיבור — בחירת ספק", steps: [{click: "#acctChip button"}]}
+  # NOTE: these belong to drive, not console. A line-range edit once dropped this
+  # key, which silently re-attributed both states to the console and navigated to
+  # console/trash — not a console route, so the tiles showed the SPA fallback while
+  # claiming to be the drive. Keep the app key adjacent to its states.
+  drive:
+    - {id: trash,   of: "/trash",  title: "דרייב — סל מיחזור"}
+    - {id: search,  of: "/search?q=doc", title: "דרייב — חיפוש"}
+  mailview:
+    - {id: attention, of: "/attention", title: "מייל — דורש טיפול"}
+    - {id: search,    of: "/?q=חשבונית", title: "מייל — חיפוש"}
+
+# ── code-coverage scope: what counts as "view code" ─────────────────────────
+# Denominator for the "% of view code visible in the mockup" metric.
+code_coverage:
+  include:
+    - platform-base/console/static/app.js
+    - platform-base/console/static/style.css
+    - apps/my-docs/static/app.js
+    - apps/my-docs/static/style.css
+    - apps/mail/mailview/static/app.js
+    - apps/drive/static/app.js
+    - platform-base/notifications/static/index.html
+    - platform-base/machine/static/index.html
+    - apps/any-concurrency/static/index.html
+    - platform-base/connections/ui.html
+    - apps/indox/app/webapp/src/**/*.tsx
+  exclude:
+    # vendored / third-party bundles: not our design, would dilute the metric
+    - "**/vendor/**"
+    - "**/*.min.js"
+    - "**/node_modules/**"
+  # A view file below this % fails the gate. 100 = every line of view code must have
+  # run while a screenshot was being taken.
+  threshold: 100

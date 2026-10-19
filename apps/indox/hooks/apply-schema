@@ -1,0 +1,208 @@
+#!/usr/bin/env bash
+# apply-schema — apply INDOX's schema INTO ONE INSTANCE SCHEMA.
+#
+#   apps/indox/hooks/apply-schema <instance-id>       # e.g. hacohen
+#   apps/indox/hooks/apply-schema --all               # every enabled instance
+#   apps/indox/hooks/apply-schema <id> --dry-run      # print the plan, touch nothing
+#
+# WHY THIS EXISTS AT ALL. Two things were true at once and nobody could apply the schema:
+#
+#   1. `blueprint/fixtures/schema.sql` wrote `public.` on every statement, and since the
+#      2026-08 tenancy migration `public.incoming_documents` is a VIEW over
+#      `indox_<id>.incoming_documents`. `alter table <view> add column` fails outright
+#      ("This operation is not supported for views"), so a fresh install, `bbox indox test`
+#      seeding and any second instance were all dead.
+#   2. The old applier was an n8n Postgres node, which hands the file to pg-promise; that
+#      reads `$` as its own variable syntax and chokes on the dollar-quoted plpgsql bodies.
+#      Recorded in issues/fixture-seeding-cannot-apply-the-schema-through-n8n.yaml.
+#
+# It applies DDL ONLY. No settings, no tag_rules, no companies — seeding is indoxSettings01 /
+# indoxV2TestFixtures01. A tenant provisioned here comes up with empty tables and no config.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+STATE="${ROOT}/platform.state.yaml"
+SCHEMA_SQL="${ROOT}/apps/indox/blueprint/fixtures/schema.sql"
+# Container name + strip_public_views live in ONE place shared with schema-drift — the first
+# draft hand-parsed .env here (default `supabase-db-local`, diverging from everything lib.sh
+# based) and pasted strip_public_views twice. See _schema-lib.sh for both stories.
+. "${ROOT}/apps/indox/hooks/_schema-lib.sh"
+PG="${INDOX_PG}"
+
+die() { echo "apply-schema: $*" >&2; exit 1; }
+
+[ -f "${SCHEMA_SQL}" ] || die "schema not found: ${SCHEMA_SQL}"
+
+# ── instance -> schema: THE DATABASE IS THE REGISTRY ─────────────────────────────────────────
+# `public.indox_instances` is where instances are managed — not platform.state.yaml.
+#
+# WHY (owner decision, 2026-08-28): creating a tenant is a RUNTIME operation, and a file in the
+# repo cannot serve one. The n8n workflows cannot read a file in another container — which is
+# precisely why that table was created — so a yaml-only registry makes every tenant be born by a
+# repo edit plus a reconcile, and leaves the workflows hardcoding a literal in the meantime.
+#
+# The evidence is a divergence on a SAFETY flag: `levi` is enabled:true in the yaml and
+# enabled:false in the table, disabled there pending the `public.<table>` fallback fix. That flag
+# lives in only one of the two places, and database-wins yields the safe answer — `--all` skips
+# levi. (An earlier draft of this comment claimed the yaml lacked levi entirely and would have
+# refused to provision it. That was wrong: the yaml held both, and indox_levi was provisioned
+# through it. The direction stands; that example did not happen.)
+#
+# platform.state.yaml survives as a FALLBACK, not a peer — consulted only when the database
+# cannot be reached, so a cold box still resolves. When both answer and they DISAGREE, the
+# database wins and the difference is printed rather than quietly preferred: two registries
+# disagreeing is the bug, not a tie to break in silence.
+db_instances() {
+  docker exec "${PG}" psql -U postgres -d postgres -tA -F'|' -c \
+    "select id, schema_name, case when enabled then 'true' else 'false' end, coalesce(purpose,'') \
+       from public.indox_instances order by id" 2>/dev/null | sed '/^$/d'
+}
+
+yaml_instances() {
+  [ -f "${STATE}" ] || return 0
+  awk '
+    /^  indox:/            { in_indox = 1; next }
+    in_indox && /^  [a-z]/ { in_indox = 0 }
+    in_indox && /id:/ {
+      id = ""; schema = ""; enabled = "false"; purpose = ""
+      if (match($0, /id: *[A-Za-z0-9_-]+/))       { id      = substr($0, RSTART+4, RLENGTH-4) }
+      if (match($0, /schema: *[A-Za-z0-9_]+/))    { schema  = substr($0, RSTART+8, RLENGTH-8) }
+      if ($0 ~ /enabled: *true/)                  { enabled = "true" }
+      if (match($0, /purpose: *[A-Za-z0-9_-]+/))  { purpose = substr($0, RSTART+9, RLENGTH-9) }
+      gsub(/ /, "", id); gsub(/ /, "", schema); gsub(/ /, "", purpose)
+      if (id != "" && schema != "") { print id "|" schema "|" enabled "|" purpose }
+    }
+  ' "${STATE}" 2>/dev/null
+}
+
+instances() {
+  local rows
+  rows="$(db_instances || true)"
+  if [ -n "${rows}" ]; then
+    printf '%s\n' "${rows}"
+    return 0
+  fi
+  echo "apply-schema: NOTE public.indox_instances unreachable — falling back to ${STATE}" >&2
+  yaml_instances
+}
+
+schema_for() {
+  local want="$1" found yaml_found have
+  found="$(instances | awk -F'|' -v w="${want}" '$1 == w { print $2; exit }')"
+  if [ -z "${found}" ]; then
+    have="$(instances | cut -d'|' -f1 | tr '\n' ' ')"
+    die "instance '${want}' is not in public.indox_instances (have: ${have})"
+  fi
+  yaml_found="$(yaml_instances | awk -F'|' -v w="${want}" '$1 == w { print $2; exit }')"
+  if [ -n "${yaml_found}" ] && [ "${yaml_found}" != "${found}" ]; then
+    echo "apply-schema: WARNING '${want}' is '${found}' in the registry but '${yaml_found}' in ${STATE}; using the registry" >&2
+  fi
+  echo "${found}"
+}
+
+# ── NEVER TOUCH A `public.` VIEW WHILE APPLYING TO A TENANT ───────────────────────────────────
+# strip_public_views comes from _schema-lib.sh — one owner, shared with schema-drift, so the
+# cutover's edit to the stripped-statement list cannot land in one hook and miss the other.
+
+apply_one() {
+  local id="$1" dry="$2" schema
+  schema="$(schema_for "${id}")"
+  echo "apply-schema: instance '${id}' -> schema '${schema}' (db ${PG})"
+  if [ "${dry}" = "1" ]; then
+    echo "apply-schema: --dry-run, nothing sent"
+    return 0
+  fi
+  docker ps --format '{{.Names}}' | grep -Fxq "${PG}" || die "postgres container '${PG}' is not running"
+
+  # The preamble is the ONLY dynamic part, and it is what makes the file schema-relative:
+  # create the tenant schema, then point search_path at it. `public` stays on the path so the
+  # pure functions and the platform's touch_updated_at() still resolve.
+  {
+    printf 'create schema if not exists "%s";\n' "${schema}"
+    printf 'set search_path = "%s", public;\n' "${schema}"
+    cat "${SCHEMA_SQL}" | strip_public_views
+  } | docker exec -i "${PG}" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -q
+
+  # Proof rather than assumption: the tables must exist IN THE INSTANCE SCHEMA.
+  # 13, not 14 — `ai_extraction_cache` is shared across tenants and stays in `public`.
+  local n
+  n="$(docker exec "${PG}" psql -U postgres -d postgres -tAc \
+        "select count(*) from information_schema.tables where table_schema='${schema}' and table_type='BASE TABLE'" \
+        | tr -d ' \r')"
+  echo "apply-schema: ${schema} now holds ${n} tables"
+  [ "${n}" -ge 13 ] || die "expected at least 13 tables in ${schema}, found ${n}"
+}
+
+# ── THE REGISTRY HAS A DDL OWNER: THIS HOOK ─────────────────────────────────────────────────
+# Until 2026-08-31 public.indox_instances was created BY HAND ("the table was made by hand" —
+# instances-consolidation-plan.md), so a fresh machine booted a console that listed no
+# instances and a scheduler that scheduled nothing. Created here, idempotently, because this is
+# the one place that already owns instance provisioning; seeded from platform.state.yaml ONLY
+# when the table is newly empty — after that the DATABASE IS THE REGISTRY, exactly as above.
+#
+# THE SCHEMA LAW: schema_name = 'indox_' || id, as a table constraint. ~65 workflow sites
+# derive the schema by that exact concatenation; the registry's schema_name column made id and
+# schema separable, which would have let the BFF (which reads the column) and the workflows
+# (which concatenate) address two different schemas for the same tenant. The law closes that:
+# the derivation is correct BY CONSTRUCTION, and a registry row that tries to break it is
+# refused by postgres, not discovered in production. Existing installs (whose table predates
+# the constraint) get the same law asserted on every run below.
+ensure_registry() {
+  docker ps --format '{{.Names}}' | grep -Fxq "${PG}" || return 0  # cold box: yaml fallback serves
+  docker exec -i "${PG}" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -q <<'SQL' \
+    || die "could not ensure public.indox_instances"
+create table if not exists public.indox_instances (
+  id          text primary key,
+  schema_name text not null unique,
+  label       text,
+  enabled     boolean not null default false,
+  purpose     text,
+  created_at  timestamptz not null default now(),
+  constraint indox_instances_id_shape   check (id ~ '^[a-z][a-z0-9_]*$'),
+  constraint indox_instances_schema_law check (schema_name = 'indox_' || id)
+);
+SQL
+  local bad n
+  bad="$(docker exec "${PG}" psql -U postgres -d postgres -tAc \
+        "select count(*) from public.indox_instances where schema_name <> 'indox_' || id or id !~ '^[a-z][a-z0-9_]*$'" \
+        2>/dev/null | tr -d ' \r')"
+  [ "${bad:-0}" = "0" ] || die "registry breaks the schema law (schema_name must be 'indox_'||id) on ${bad} row(s) — fix the rows before provisioning"
+  n="$(docker exec "${PG}" psql -U postgres -d postgres -tAc \
+        "select count(*) from public.indox_instances" 2>/dev/null | tr -d ' \r')"
+  if [ "${n:-0}" = "0" ]; then
+    echo "apply-schema: registry is empty — seeding from ${STATE}"
+    while IFS='|' read -r sid sschema sen spurpose; do
+      [ -n "${sid}" ] || continue
+      docker exec "${PG}" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -q -c \
+        "insert into public.indox_instances(id, schema_name, enabled, purpose) values ('${sid}','${sschema}',${sen},$([ -n "${spurpose}" ] && printf "'%s'" "${spurpose}" || printf 'null')) on conflict (id) do nothing" \
+        || die "seeding instance '${sid}' failed"
+    done < <(yaml_instances)
+  fi
+}
+
+DRY=0
+ALL=0
+TARGETS=()
+for a in "$@"; do
+  case "$a" in
+    --dry-run) DRY=1 ;;
+    --all)     ALL=1 ;;
+    -*)        die "unknown flag: $a" ;;
+    *)         TARGETS+=("$a") ;;
+  esac
+done
+
+# The registry is ensured BEFORE --all enumerates it (a fresh machine's --all would otherwise
+# see nothing) and never on --dry-run, which must touch nothing.
+[ "${DRY}" = "1" ] || ensure_registry
+if [ "${ALL}" = "1" ]; then
+  # Four fields (id|schema|enabled|purpose) — the trailing _purpose keeps `read` from folding
+  # the fourth field into `en` (bash stuffs the remainder into the LAST variable).
+  while IFS='|' read -r id _ en _purpose; do
+    [ "${en}" = "true" ] && TARGETS+=("${id}")
+  done < <(instances)
+fi
+
+[ "${#TARGETS[@]}" -gt 0 ] || die "usage: apply-schema <instance-id> | --all [--dry-run]"
+for id in "${TARGETS[@]}"; do apply_one "${id}" "${DRY}"; done
+echo "apply-schema: done"

@@ -1,0 +1,168 @@
+name: local-hebrew-doc-ex
+
+# THE EXTRACTION LOCK: 527/527 Hebrew-doc values + a speed budget, forever.
+#
+# Depends on apitools ONLY. scripts/extraction-corpus-check.py replicates the
+# n8n pipeline exactly — the workflows' Load V3 Config / Fan Fields / Collect
+# logic driven by the SAME declarative q_v3_% fixture n8n-push seeds — and
+# imports the BFF module itself for the dataset, ground truth and scoring
+# comparators (zero drift with the product by construction). No n8n, no db, no
+# BFF container, no traefik: one apitools container + one python script.
+#
+# Fails on ANY of: docs != 138, scored values != 527, a single wrong value, a
+# single doc-level error (a dead value-call is an error, never a quiet miss),
+# or wall time over the budget.
+#
+# Baselines (2026-07-17, apitools 0.6.3): laptop 6-core = 527/527 in ~9.5 min.
+# The 2-vCPU runner gets 1 OCR slot from autoscale — budget via repo var
+# EXTRACTION_GATE_BUDGET_S; tighten after a few green runs.
+
+on:
+  push:
+    branches: [main, shlomo-laptop, release-v2-lockin, platform-os-refactor]
+    paths:
+      # the extraction chain — anything else shouldn't burn a full corpus run
+      - 'apps/apitools/**'
+      - 'apps/indox/blueprint/fixtures/settings.json'
+      - 'apps/indox/**'
+      - 'scripts/extraction-corpus-check.py'
+      - '.github/workflows/local-hebrew-doc-ex.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: local-hebrew-doc-ex-${{ github.ref }}
+  # a newer push supersedes the old gate run — this is a pure pass/fail check
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write   # images job pushes content-addressed builds to GHCR
+
+env:
+  REG: ghcr.io/solomonboltin/deployment-hacohen
+
+jobs:
+  # ── content-addressed apitools prebake (same scheme as indox-e2e) ──
+  images:
+    runs-on: [self-hosted, portable]
+    timeout-minutes: 45
+    outputs:
+      apitools_tag: ${{ steps.tags.outputs.apitools }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute content-addressed tag
+        id: tags
+        run: |
+          set -euo pipefail
+          AP="$(bash scripts/ci/apitools-tag.sh)"
+          echo "apitools=${AP}" >> "$GITHUB_OUTPUT"
+          echo "apitools tag: ${AP}"
+
+      - name: Login GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check if image already exists
+        id: need
+        run: |
+          set -euo pipefail
+          need_ap=1
+          docker manifest inspect "$REG/apitools:${{ steps.tags.outputs.apitools }}" >/dev/null 2>&1 && need_ap=0
+          echo "apitools=$need_ap" >> "$GITHUB_OUTPUT"
+          echo "build needed — apitools: $need_ap"
+
+      - uses: docker/setup-buildx-action@v3
+        if: steps.need.outputs.apitools == '1'
+
+      - name: Build + push apitools
+        if: steps.need.outputs.apitools == '1'
+        uses: docker/build-push-action@v6
+        with:
+          context: apps/apitools
+          push: true
+          tags: ${{ env.REG }}/apitools:${{ steps.tags.outputs.apitools }}
+          cache-from: type=gha,scope=apitools
+          cache-to: type=gha,scope=apitools,mode=max
+
+  # ── the gate: ONE apitools container + the standalone harness ──
+  gate:
+    needs: images
+    runs-on: [self-hosted, portable]
+    timeout-minutes: 100
+    env:
+      EXPECTED_DOCS: "138"
+      EXPECTED_VALUES: "527"
+      EXTRACTION_GATE_BUDGET_S: ${{ vars.EXTRACTION_GATE_BUDGET_S || 4800 }}
+      # self-hosted DinD topology: -p ports live in the dind container's namespace,
+      # not the runner's localhost (same rule as indox-e2e's INDOX_TEST_BASE)
+      APITOOLS_HOST: ${{ vars.INDOX_E2E_RUNNER != '' && 'dind' || '127.0.0.1' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Reset docker state (persistent-runner fresh-machine semantics)
+        run: |
+          docker rm -f apitools-gate 2>/dev/null || true
+
+      - name: Login GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Start apitools (cold — fresh container, no cache volume)
+        run: |
+          set -euo pipefail
+          docker pull -q "$REG/apitools:${{ needs.images.outputs.apitools_tag }}"
+          # No ocr_cache DB configured -> every OCR is computed fresh (cold by
+          # construction). autoscale sizes slots to the runner; the soft-timeout
+          # and worker-timeout mirror production compose values.
+          docker run -d --name apitools-gate -p 8080:8080 \
+            -e OCR_ENGINE=local \
+            -e APITOOLS_QUERY_SOFT_TIMEOUT=180 \
+            -e GUNICORN_TIMEOUT=900 \
+            -e APITOOLS_SLOT_WAIT_TIMEOUT=600 \
+            "$REG/apitools:${{ needs.images.outputs.apitools_tag }}"
+          up=0
+          for i in $(seq 1 60); do
+            curl -sf "http://$APITOOLS_HOST:8080/health" >/dev/null 2>&1 && { up=1; break; }
+            curl -sf "http://$APITOOLS_HOST:8080/" >/dev/null 2>&1 && { up=1; break; }
+            sleep 2
+          done
+          # silence is not success: a gate that can't reach its engine must FAIL
+          # here, loudly — not 138 docs later with 'Connection refused'
+          [ "$up" = 1 ] || { echo "::error::apitools not reachable at $APITOOLS_HOST:8080"; docker logs --tail 80 apitools-gate; exit 1; }
+          docker logs apitools-gate 2>&1 | grep -m1 "autoscale:" || true
+          docker exec apitools-gate python3 -c "from src.version import APITOOLS_VERSION; print('apitools', APITOOLS_VERSION)"
+
+      - name: "GATE: extraction corpus — 527/527 cold + speed budget"
+        timeout-minutes: 90
+        run: |
+          set -euo pipefail
+          bash scripts/ci/pip-ensure.sh flask httpx
+          APITOOLS_BASE="http://$APITOOLS_HOST:8080" \
+            python3 scripts/extraction-corpus-check.py | tee gate-output.log
+          tail -1 gate-output.log >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Upload gate log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-hebrew-doc-ex-log
+          path: gate-output.log
+          if-no-files-found: ignore
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          docker logs --tail 150 apitools-gate || true
+
+      - name: Teardown
+        if: always()
+        run: |
+          docker rm -f apitools-gate 2>/dev/null || true

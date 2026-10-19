@@ -1,0 +1,425 @@
+# yaml-language-server: $schema=./schema.json
+title: Design — OCR/vision-based COMPANY_ID recognition for signal-less WhatsApp-photo documents
+opened: "2026-08-07"
+category: feature
+severity: medium
+status: in-progress
+summary: >-
+  Design for closing the COMPANY_ID/TYPE gap on documents (mostly WhatsApp
+  photos synced from one shared Google Drive folder) that carry zero
+  sender-email or filename signal. Scoping only — nothing here is implemented.
+  Headline finding: the OCR infrastructure to do this ALREADY EXISTS and
+  ALREADY RUNS on every affected document (apitools `find option` via
+  indoxV2FigureCompanyId01's "Find Option" node) — it just isn't finding
+  matches. A materially better matcher (`match_mode: "id"` /
+  `"name_substring"`, calibrated against a 97-row ground truth per its own
+  code comment) is already built into apitools/ocr_json_query.py but is
+  **never invoked by any n8n workflow** and has **no feature-validation
+  coverage**. Wiring that in is the first, cheapest, highest-leverage step —
+  before reaching for new OCR/vision capability.
+description: |
+  ## Population (re-derived 2026-08-07, same filter discipline as the earlier measurement)
+
+  Filter: `BASE_EXTRACTION_COMPLETED='true'`, test-fixture rows excluded per
+  `scripts/test-fixture-prefixes.yaml` (ID-prefix list + `COMPANY_ID='C_GDTEST'` +
+  SYNC_NAME-marked prefixes). Applying only the YAML's registered marker columns left
+  obvious test noise in the result (filenames like `mailorg_150170.pdf`,
+  `sv3f_rg_gmail-bs_1.pdf` — the mail/gmail proc-lane fixtures the YAML itself documents
+  as landing under a PRODUCTION `SYNC_NAME`, so their marker is baked into `NAME`
+  instead, which is not a registered marker column). Excluding those too:
+
+  | | COMPANY_ID missing | TYPE missing |
+  |---|---|---|
+  | Total (all source types) | 198 | 51 |
+  | `GOOGLE_DRIVE_FOLDER` (`drive-gdoc` + `drive-gdoc-scanned`) — the WhatsApp-photo class | 89 | — |
+  | `GMAIL` (`gmail-doc`) | 76 | — |
+  | Empty `SOURCE_TYPE`/`NAME`/`LINK`/`SOURCE_LINK` shell rows (`doc_msir*`, no recoverable content at all) | 32 | — |
+  | `MAIL_ATTACHMENT` (non-fixture) | 1 | — |
+
+  This is a larger and broader population than the 97/75 figures in the originating
+  task (population grows continuously as new documents arrive, and this design's cut
+  additionally separates out three population classes the original number likely didn't
+  distinguish). **This design targets the `GOOGLE_DRIVE_FOLDER` class (89 rows,
+  ~92% of it images: `unknown-*.jpg` placeholder names 48, WhatsApp `IMG-*-WA*.jpg`
+  exports 27, filenames with literal Hebrew text 14)** — the class the originating task
+  described. The other two classes are different problems and are called out separately
+  at the end so they aren't silently folded in.
+
+  Test-fixture-prefixes.yaml gap found in passing (not this design's job to fix, flagging
+  for the owner of G58): `mailorg_`/`mailorgsl_`/`sv3f_` fixture markers land in `NAME`
+  for the mail-proc lanes, same syndrome the file's own `sv3s_` section describes and
+  already fixed for — but `mailorg_`/`sv3f_` never got the equivalent NAME-marker
+  registration. Real consequence measured here: without the extra NAME filter above, the
+  COMPANY_ID-missing count would have been overcounted by 123 fixture rows.
+
+  ## What already runs today (indoxV2FigureCompanyId01.json — "Figure Document COMPANY_ID")
+
+  This is the "existing sender/email lookup mechanism" from the originating task's
+  context, and it does more than sender/email:
+
+  1. `Try By SOURCE_ID` — sender-email-domain match against `company_id_by_mails`
+     (built from the `companies` table's "מייל 1"/"מייל 2" columns).
+  2. `Try By SOURCE_ID` (same node) — filename-substring match against
+     `company_name_by_identifier` (company display names).
+  3. If both miss (`If Found By Source` = false, which "If Good INPUT" makes true for
+     essentially every row with a LINK or API_TOOLS_ID): `Find Option` — an OCR pass.
+     POSTs to `apitools:8080/documentJsonQuery` with
+     `{"action": "find option", "action_value": all_companies_identifiers,
+     "is_rtl": true, "fulltext_fallback": true}`. `all_companies_identifiers` is built
+     from the `public.companies` table (1183 rows / ~1223 identifiers: "מזהה 1",
+     "מזהה 2", "שם ספק מפריוריטי" minus a blacklist) by indoxSettings01's `Call INDOX
+     Companies` node.
+
+  **This node already OCRs and searches every affected image** — company recognition
+  via OCR is not a gap in *capability*, it is a gap in *hit rate*. Uploading (which
+  triggers the actual OCR) happens once per HASH via `indoxV2UploadApiTools01`
+  (apitools `docExists` dedup), so the OCR itself is not redundant per-attempt.
+
+  ## Sample findings (10 real `GOOGLE_DRIVE_FOLDER` rows, re-run live against apitools)
+
+  Original per-document OCR cache had already been evicted (`.storage/ocr_cache` held
+  only 6 entries deployment-wide at inspection time), so each sample was re-OCR'd via
+  `POST /documentJsonQuery {"file_id": <HASH>, "ocr_json_query": {"action": "raw_text"}}`
+  (local engine — `OCR_ENGINE=local` is forced in this environment's `.env` despite a
+  `GOOGLE_VISION_API_KEY` being configured; see "Levers" below), then the *actual*
+  production query was replayed — `find option` with the *real* 1223-identifier list
+  built live from `public.companies` — against all 10.
+
+  **All 10 returned `ActionOutputNone` — no match, despite `fulltext_fallback: true`
+  being on.** OCR text quality on the 10 varied enormously, sample IDs
+  (`doc_...`, apitools `file_id` = the row's `HASH`):
+
+  - `doc_mshfn36cneo4m8` (`91a07ec0cd2493f242e63b3ede529e7a`) — genuinely illegible:
+    fragments like "TAMBOQUR", a phone number, no coherent company text. A human
+    could not read a company name off this OCR output either.
+  - `doc_mshvagh3lym4pc` (`a2867ba2ee7289b8cdd1c4879f735a72`) — **fully legible**:
+    letterhead "מ.מיכאל ... א.ת הר טוב ... בית שמש", phone/fax, "מס. תיק ניכויים:
+    943288662", addressed "לכבוד: מ.ש. הכהנים חומרי בניין" (the client itself, as
+    recipient). No identifier field on the page matched any of the 1223 registered
+    identifiers exactly (943288662 is a tax-withholding-file number, not a "מזהה"
+    column value; the company's actual registered ID, if any, is a different field
+    the fuzzy matcher didn't land on).
+  - `doc_mshraampuipgxo` (`76c20f6d6b5622200c1c45e33a1b3d3b`) — legible: "עוסק מורשה
+    7640380", "א.ת קרית גת", "הפצה בע\"מ", email domain `iskoor.co.il`. **Confirmed
+    by direct query against `public.companies`: no row matches "קור"/Iskoor.** This
+    supplier is not in the registry at all — no identifier-list match could ever
+    succeed here regardless of OCR quality.
+  - `doc_mshwncpln0sdq2` (`c3ce4c096c88ef7fe973e685c9dc4c88`) — partially legible,
+    repeated "CIMENT" (cement-industry stamp/logo, OCR'd as Latin), phone number,
+    no clean company-name string.
+  - `doc_mshwnjh8kw1jfl` (`96b6dd85ffff1e20db7d226bfa9cb384`) — legible enough to
+    show the brand **"KNAUF"** (a real, well-known building-materials manufacturer)
+    plus "הכה 23 חומרי בניין" (the client, again as recipient/warehouse marker).
+    **Confirmed: no "Knauf"/"קנאוף" row in `public.companies` either.**
+  - Remaining 5 (`a5ac1e1521654cacbc7efefccbb83c4c`, `3b34f3a3d7f6667a925b659e62a46c1a`,
+    `93a25105c39fb1eb3ff0df6c43b88432`, `4baf6847560dacb58d0fb7293003d021`,
+    `e27c266e0b6351b141553c89fa5e52bc`) — mostly low-quality delivery-note photos,
+    fragments of "תעודת משלוח" (delivery note), order numbers, "מ.ש.הכהנים" (client,
+    as recipient) repeated; no clean issuer identifier recovered.
+
+  **Conclusion from the sample: the 89-row population is not one problem.** Roughly
+  half looks like genuinely low-quality phone photos where no OCR engine will recover
+  a clean company string (a photo-quality floor, not a matching-algorithm problem).
+  The other half has perfectly legible issuer information that the *current* matching
+  pass simply fails to resolve, for two distinct reasons: (a) the supplier is not in
+  `public.companies` at all (confirmed for 2 of 10: Knauf, an Iskoor-family
+  distributor), and (b) the document carries multiple numeric IDs (own tax-file
+  number, order number, client's own registration number) and the current matcher
+  has no way to tell them apart from the one "מזהה" value it's looking for.
+
+  ## The lever that already exists and is not wired in
+
+  `apps/apitools/src/ocr_core/ocr_json_query.py`'s `find option` handler supports
+  `match_mode: "id"` and `match_mode: "name_substring"` — a *materially different*
+  algorithm from the default fuzzy-annotation match the "Find Option" node currently
+  uses:
+
+  - Scans only the **issuer region** (top of page, cut at `region.exclude_below`) —
+    exactly the fix for the "which of the 3 numbers on this page is the right one"
+    problem seen in the sample.
+  - `exclude_near` vetoes a hit sitting next to a recipient marker (the code's own
+    example is `'הכהנים'` — this client's own name, which appeared as page noise in
+    6 of the 10 samples above).
+  - ktiv-insensitive name matching (`הכול`/`הכל`, punctuation-insensitive acronyms).
+  - Position-ordered (not length-ordered) ID picking — the code comment records this
+    was fixed after finding "11/144 cached documents" carry two registry IDs, the
+    second usually being the recipient's own.
+  - The code's own inline comment: **"Measured over 97 ground-truth rows,
+    position-ordering moved id-mode from 78.4%/86.4% to 81.4%/89.8% recall/precision"**
+    — a 97-row ground truth, i.e. this was almost certainly built and calibrated
+    against the *exact population this design is scoping*, in an earlier pass that
+    never got wired into production.
+
+  Verified directly: `grep -rn match_mode apps/indox/blueprint/n8n/*.json` — **zero
+  hits.** No n8n node anywhere passes `match_mode`. The "Find Option" node in
+  `indoxV2FigureCompanyId01.json` calls `find option` with no `match_mode`, so it
+  always takes the older, more expensive, less targeted fuzzy-annotation path (which
+  the same file's comments say is disabled for `id`/`name_substring` specifically
+  *because* it's expensive and its output is discarded when those modes are active —
+  i.e. the codebase already knows the old path is the worse one).
+
+  Also verified: `grep -rln match_mode apps/apitools/ --include=*.py` finds it defined
+  in exactly one file, and `apps/apitools/feature-validation/find-option-matching/`
+  has no test referencing it. **This capability is unwired and untested — a real gap,
+  but a much smaller one than "no OCR-based recognition exists."**
+
+  ## Other existing levers, checked and characterized
+
+  - **AI/vision extraction leg exists and is currently OFF.**
+    `indoxV2ExtractInvoiceGemini01` (model `models/gemini-3.1-pro-preview` per
+    `public.settings.extraction_model`) is a second, vision-native path that could in
+    principle recognize a supplier from a logo/letterhead the way a human would, not
+    just via exact-string OCR matching. It is gated by
+    `public.settings.extraction_ai_enabled`, which is **`false`** in this deployment,
+    set deliberately by an operator on 2026-08-05 (every sample document's
+    `SELECTION_DEBUG_BASE` shows `"AI_STATUS":"skipped: extraction_ai_enabled=false"`).
+    Re-enabling it is an operator cost/reliability decision outside this design's
+    scope, but it's the natural Phase-3 lever if the OCR-text-matching phases below
+    leave a large illegible-photo residual, and it reuses infrastructure that already
+    exists rather than requiring anything new to be built.
+  - **Google Vision vs local OCR engine.** `OCR_ENGINE=local` is forced in this
+    deployment's `.env` even though `GOOGLE_VISION_API_KEY` is configured — i.e. the
+    stronger cloud engine is available but not the one running against these images.
+    `apps/apitools/ai/context/local-ocr-research.md` (an existing research doc, not
+    part of this task) already flags local-engine Hebrew accuracy as the open risk
+    of that earlier swap: "probably not 100% [of Google Vision], ... 90-95% for
+    structured documents" — WhatsApp phone photos of delivery notes are a harder
+    case than the structured financial documents that estimate was made for. A direct
+    local-vs-Google comparison on this population's worst photos was **attempted but
+    inconclusive**: the `?ocr_engine=google` query-param override returned a cached
+    local-engine result unchanged (same `ocr_at` timestamp), meaning `documentJsonQuery`
+    does not force a fresh OCR run on an engine-param override the way `documentOcr`'s
+    cache-bypass logic does. A real engine comparison needs a cache-bypassed test —
+    step zero of Phase 2 below, not yet done here.
+  - **Cheap non-OCR signal (folder path / sender context) — checked and ruled out.**
+    All 3 spot-checked sample rows share the exact same `SOURCE_LINK` Drive folder
+    (`.../folders/1DYzDE5T3c2PGFOfNwnmCP3jjSqr2DiBx`) — this is one shared inbox
+    folder fed by many different suppliers' drivers/photos, not a per-supplier
+    folder. `SOURCE_ID` for this source type is the Drive file's own opaque ID, not
+    a sender identity. Filenames are either WhatsApp's own generic export name
+    (`IMG-YYYYMMDD-WAnnnn.jpg`) or a synced-placeholder (`unknown-NNNNN.jpg`). There
+    is no cheap metadata shortcut here; this confirms the originating task's premise
+    — text-content recognition (OCR) really is the only avenue, folder/sender
+    metadata cannot substitute for it.
+
+  ## Recommended phased design
+
+  **Phase 0 — small, do first, ~1-2 days.** Wire `match_mode: "id"` (numeric
+  identifiers) then `match_mode: "name_substring"` (with `option_map` back to company
+  id) as two ordered attempts inside the "Find Option" node's `ocr_json_query` body in
+  `apps/indox/blueprint/n8n/indoxV2FigureCompanyId01.json`, with
+  `exclude_near: [<client's own name variants>]` (the recipient-noise pattern seen in
+  6/10 samples). Add first-class coverage in
+  `apps/apitools/feature-validation/find-option-matching/` (currently has none for
+  `match_mode`) before flipping it on for real documents, since the only existing
+  "97 ground-truth rows, 81.4%/89.8%" evidence for this path is an inline code
+  comment, not a reproducible test. 100% reuse of existing, already-written,
+  already-network-connected code — genuinely new work is the n8n wiring, the
+  `exclude_near` client-name list, and the test fixtures. No new OCR/vision
+  capability required.
+
+  **Phase 1 — data/process, not code, ~ongoing.** For the confirmed-unregistered
+  cases (Knauf, the Iskoor-family distributor — 2 of 10 sampled, likely a
+  meaningfully larger share of the 89) no amount of matching-algorithm improvement
+  helps: the target isn't in `public.companies`. Recommend a low-effort "unresolved
+  supplier surfaced with its OCR'd letterhead text" review queue for an operator to
+  either register the company (one-time) or mark permanently-unresolvable, rather
+  than silently parking these in `MISSING_COMPANY_ID` forever. This is registry
+  completeness work, not an extraction defect.
+
+  **Phase 2 — medium, only after measuring Phase 0's residual.** Cache-bypassed
+  local-vs-Google-Vision comparison specifically on the photos that are still
+  illegible after Phase 0 (the "genuinely garbage" half of the sample, e.g.
+  `doc_mshfn36cneo4m8`). If Google Vision recovers meaningfully more legible text on
+  blurry phone photos, consider a quality-triggered fallback (try local first, retry
+  with `?ocr_engine=google` when the local pass looks like garbage — the same
+  admission-controlled endpoint already supports per-request engine override) rather
+  than switching the whole deployment's default engine. Infra reuse: the endpoint
+  and override already exist; new work is the quality-triggered fallback rule and
+  the cost/latency tradeoff of a second OCR pass on the same document.
+
+  **Phase 3 — large, last resort.** For whatever remains illegible to any OCR engine
+  (true photo-quality floor — blur, glare, cropping), a vision-LLM pass (re-enabling
+  `extraction_ai_enabled` for this leg, or a scoped company-recognition-only prompt
+  against `indoxV2ExtractInvoiceGemini01`'s model) is the only remaining lever, and
+  it's an operator cost decision, not a build decision — the capability already
+  exists and is one settings flag away, so "large" here is mostly about validating
+  cost/accuracy tradeoffs and scoping the prompt, not writing new integration code.
+
+  ## Not this design's scope (found in passing, flagged separately)
+
+  - **76 `GMAIL`/`gmail-doc` missing-COMPANY_ID rows.** These carry a real sender
+    email as `SOURCE_ID`; `Try By SOURCE_ID`'s sender-domain lookup should apply.
+    Not sampled here — worth checking separately whether these are simply senders
+    missing from `company_id_by_mails`, which is a registry-completeness problem
+    like Phase 1 above, or something else.
+  - **32 empty-shell rows** (`doc_msir*`, no `NAME`/`LINK`/`SOURCE_LINK`, most with
+    no `API_TOOLS_ID` either). These have no recoverable content of any kind — not an
+    OCR/vision problem, likely a separate ingestion defect worth its own issue.
+  - **TYPE gap (51 rows).** Smaller, mostly overlapping with the COMPANY_ID-missing
+    set. `SELECTION_DEBUG_BASE` on several sampled COMPANY_ID-missing rows shows
+    `TYPE` already resolved (`LOCAL_ONLY`) even where `COMPANY_ID` failed, meaning
+    TYPE classification (keyword/header matching, a separate query set in
+    `JQExV3Base000001`) is already succeeding more often than company recognition on
+    the same documents. Recommend re-measuring the TYPE gap after Phase 0 lands
+    (fixing COMPANY_ID may incidentally shrink it, since it's largely the same
+    documents) rather than designing a parallel TYPE-specific OCR pass now.
+
+  ## Phase 0 — implemented and measured (2026-08-07)
+
+  Wired `match_mode: "id"` into the "Find Option" node's `ocr_json_query` body in
+  `apps/indox/blueprint/n8n/indoxV2FigureCompanyId01.json`. Scope came out NARROWER
+  than this design originally sketched — findings below explain why, and why that's
+  the correct scope rather than an incomplete one.
+
+  **What changed.** `action_value` is now the registry's numeric ids only (`מזהה 1`/
+  `מזהה 2` values matching `^[0-9]{9}$`, mirroring `_registry_ids`'s own filter in
+  `JQExV3Base000001.json`'s "Load V3 Config" node — 1166 of the 1183 companies),
+  filtered inline from `all_companies_identifiers` via
+  `.filter(v => /^[0-9]{9}$/.test(String(v)))`. Added `match_mode: "id"` and
+  `exclude_near: ["הכהנים", "מ.ש הכהנים"]` — reused VERBATIM from
+  `public.settings.q_v3_company`'s own `exclude_near` list (discovered live in the DB
+  while wiring this: `q_v3_company` is a fully-built, already-calibrated match_mode
+  query used by local extraction's COMPANY_ID field, `@registry_ids`-bound at runtime
+  by `JQExV3Base000001.json`'s "Fan Fields" node — this task reuses its exclude_near
+  list rather than inventing one, for exactly the same recipient-noise reason its own
+  code comment gives). The OLD default fuzzy-annotation query (full
+  `all_companies_identifiers`, `fulltext_fallback: true`) is kept as a `fallbacks[0]`
+  entry, so nothing that worked before regresses.
+
+  **Scope correction: id-only, NOT name_substring.** The original Phase 0 bullet
+  below also called for wiring `match_mode: "name_substring"` as a second ordered
+  attempt. Not done, for a concrete reason found while wiring: `q_v3_company`'s own
+  `name_substring` fallback is a hand-curated whitelist of only 57 of 1183 companies
+  (4.8%) — `JQExV3Base000001.json`'s "Fan Fields" node comment calls this out
+  explicitly: *"the frozen list held 57 of 1183 companies (4.8%)... that lane could
+  only ever resolve 25 of them"* (referring to the OLD path's own truncation, see
+  below). Building a FULL-registry name→id map (all 1183 companies' display names,
+  not just 57) is genuinely new engineering — a new field in
+  `indoxSettings01.json`'s identifier-building code, uncalibrated, no ground-truth
+  evidence anywhere in this codebase for name_substring's accuracy. `match_mode:"id"`
+  by contrast has a real, cited calibration number tied specifically to it (the
+  "81.4%/89.8% recall/precision over 97 ground-truth rows" comment in
+  `ocr_json_query.py` is inside the id-mode position-ordering block, not shared with
+  name_substring). Per this task's own instructions: stop at the well-evidenced
+  piece rather than force the uncalibrated one in under the same "Phase 0" umbrella.
+  name_substring (full-registry, not the 57-frozen whitelist) is left as future work.
+
+  **A structural bug this incidentally bypasses.** Found while wiring, not previously
+  documented in this file: `ocr_query.py`'s `find_matching_texts` (the OLD default
+  path this node used exclusively before today) caps its option list at
+  `APITOOLS_FIND_OPTION_MAX_TEXTS` (default 25) — a fix landed 2026-08-06, one day
+  before this task, after profiling showed the Find Option node's real production
+  request carries ~2383 identifiers, causing 96-140s per call and intermittent 504s.
+  The practical effect for THIS node: the OLD path only ever compared a document
+  against the FIRST 25 of ~1223 identifiers (in whatever order the companies table
+  happens to return them) — a >98% truncation of the registry, silently, on every
+  single call, for every document, before today. `match_mode:"id"` bypasses
+  `find_matching_texts` entirely (confirmed in code: `_mm_pre in ("name_substring",
+  "id")` skips straight past it), so it also structurally fixes this, incidentally.
+
+  **Test coverage added** (`apps/apitools/feature-validation/find-option-matching/`
+  had zero match_mode coverage before this task, confirmed by the earlier scoping
+  pass):
+  - `apps/apitools/tests/test_ocr_json_query_match_mode.py` — 5 new unit tests
+    against `OcrJsonQuery` directly with synthetic OCR data (no server/network/image
+    corpus needed, same convention as `tests/test_ocr_query_limits.py`): basic id
+    match, position-ordering (first-in-reading-order wins over the
+    lexicographically-larger option — the exact regression the code comment
+    documents), exclude_near veto (WITH a same-setup control proving the veto is
+    what's doing the work, not just an unrelated non-match), and two
+    `name_substring` tests (ktiv-insensitive matching + `option_map`, exclude_near).
+    All 5 pass (`python -m unittest tests/test_ocr_json_query_match_mode.py`, ran
+    inside the `apitools` container: `Ran 5 tests in 0.003s — OK`).
+  - `apps/apitools/feature-validation/find-option-matching/fixtures/fixtures.json` —
+    2 new integration cases (`match-mode-id-with-known-id`,
+    `match-mode-id-no-match-expected`) exercising match_mode through the real HTTP
+    `/documentJsonQuery` endpoint against the existing `ciment.pdf` fixture (real id
+    `514745819`, confirmed present via `raw_text`: `"עוסק מורשה: 514745819"` /
+    `"מספר תיק במעמ: 514745819"`). Both pass; full suite run
+    (`python validate-feature.py`, live against the `apitools` container):
+    `Cases: 3/3 passed (2 skipped — need ['reference_corpus'])` — the 2 skips are
+    the PRE-EXISTING `reference_corpus`-gated cases, unrelated to this change.
+
+  **Live before/after measurement — the full population, not a sample.** Queried
+  `public.incoming_documents` live for every `SOURCE_TYPE='GOOGLE_DRIVE_FOLDER'` row
+  with `BASE_EXTRACTION_COMPLETED='true'`, empty `COMPANY_ID`, an `API_TOOLS_ID`
+  already assigned (already OCR'd — 79 of the 89-row population; the other 10 have
+  never been uploaded to apitools at all, a different, ingestion-side gap), and
+  fixture-prefix NAME exclusion per this file's own filter above. Ran BOTH the OLD
+  query (exact production shape, pre-this-change) and the NEW query (as wired) against
+  all 79 live, via `/documentJsonQuery` directly against the `apitools` container:
+
+  | | count |
+  |---|---|
+  | BEFORE (old default path) resolved | 3 / 79 |
+  | AFTER (match_mode:"id" + fallback) resolved | 3 / 79 |
+  | Newly resolved (fail→pass) | 0 |
+  | Regressed (pass→fail) | 0 |
+  | Same doc, cleaner match set | 2 |
+
+  **Zero net new documents resolved on the live population.** This is a smaller
+  result than this design's headline framing implied, and it should be read
+  honestly rather than talked up. The 3 resolved are identical before and after —
+  no regressions, and 2 of the 3 got measurably CLEANER: doc
+  `7090653c60e945833a461902e7f1ea6c` went from 3 co-matches (`מדויק` — a stray OCR
+  word — the correct id `510616956`, AND the full company name string all returned
+  together) to exactly the one correct id. That precision improvement is real but
+  doesn't move `MISSING_COMPANY_ID` counts.
+
+  Why zero new recoveries, reconciled with the "materially better matcher"
+  framing above: this measurement is consistent with, not contradictory to, the
+  10-doc sample findings earlier in this file. That sample's own conclusion was that
+  the 89-row population splits roughly into (a) genuinely illegible phone photos —
+  no matching-algorithm change recovers text that was never legible — and (b)
+  legible text naming a supplier not present in `public.companies` at all (Knauf,
+  an Iskoor-family distributor, confirmed absent from the registry directly). Both
+  categories are OUTSIDE what `match_mode:"id"` can fix by construction: it can only
+  correctly PICK among candidates that are BOTH legibly OCR'd AND already in the
+  1166-id registry — it cannot invent a missing id or register an absent supplier.
+  The specific failure mode `match_mode:"id"` targets (a correct, registered id
+  present in OCR text but position/truncation caused the OLD path to miss or
+  mis-pick it) measured as ~0-occurrent in this particular 79-row population, at
+  least among cases the OLD path was already resolving cleanly and among the ones
+  it flat failed on. This is real, verified NEW evidence — not a repeat of the
+  10-doc sample's conclusion — that should shift priority toward Phase 1 (registry
+  completeness — unregistered suppliers) and Phase 2 (OCR engine/quality on
+  illegible photos) over further tuning of the matching algorithm itself; further
+  match-mode tuning (e.g. full-registry name_substring) is unlikely to move this
+  population's numbers much until Phase 1/2 land first.
+
+  **Shipped.** Kept: zero regressions (proven, not assumed), unit + integration
+  tested, a genuine structural bug (25-item truncation) incidentally fixed, real
+  precision improvement on already-working cases. Pushed via `tmp/push-batch1.sh`
+  (gate passed: no running Test/E2E executions; halt-tests verified post-push).
+tasks:
+  - text: "Phase 0: wire match_mode:\"id\" (NOT name_substring, scope-corrected — see 'Phase 0 — implemented and measured' section) into indoxV2FigureCompanyId01's Find Option node, with exclude_near set to the client's own name variants (reused verbatim from public.settings.q_v3_company's own calibrated exclude_near list: הכהנים / מ.ש הכהנים). Old default-path query kept as a fallback so nothing regresses."
+    done: true
+  - text: "Phase 0: add match_mode test coverage — apps/apitools/tests/test_ocr_json_query_match_mode.py (5 unit tests, synthetic OCR data) + 2 new integration cases in apps/apitools/feature-validation/find-option-matching/fixtures/fixtures.json (real ciment.pdf fixture). Both suites pass live."
+    done: true
+  - text: "Phase 0: re-measure the COMPANY_ID gap on GOOGLE_DRIVE_FOLDER rows after wiring — done against the FULL live 79-row population (not a sample): 3/79 before, 3/79 after, 0 regressions, 0 net new recoveries, 2 cases with a cleaner (single-id) match. See 'Phase 0 — implemented and measured' section for the full reconciliation with the earlier 10-doc sample."
+    done: true
+  - text: "Phase 0 follow-up (deferred, not done): a FULL-registry name_substring option_map (all 1183 companies' display names -> primary id, not q_v3_company's 57-company frozen whitelist) would need new engineering in indoxSettings01.json's identifier-building code and has no calibration evidence anywhere in this codebase yet. Live measurement above suggests further matching-algorithm tuning is unlikely to move this population's numbers much before Phase 1/2 land — reprioritize after those."
+    done: false
+  - text: "Phase 1: build an operator review queue for OCR-legible-but-unregistered suppliers (surfaces OCR'd letterhead text; confirmed cases in sample: Knauf, an Iskoor-family distributor)"
+    done: false
+  - text: "Phase 2: cache-bypassed local-vs-Google-Vision comparison on the still-illegible residual after Phase 0, before considering any engine-default change"
+    done: false
+  - text: "Separately investigate the 76-row GMAIL/gmail-doc missing-COMPANY_ID population (real sender signal exists; likely a company_id_by_mails registry gap, not an OCR problem)"
+    done: false
+  - text: "Separately investigate the 32-row empty-shell population (no NAME/LINK/SOURCE_LINK/API_TOOLS_ID) as an ingestion defect, not an OCR/vision problem"
+    done: false
+  - text: "Flag to the owner of scripts/test-fixture-prefixes.yaml: mailorg_/mailorgsl_/sv3f_ fixture markers land in NAME for the mail-proc lanes (same syndrome the file's own sv3s_ section already fixed for) and are not yet a registered marker column"
+    done: false
+references:
+  - apps/indox/blueprint/n8n/indoxV2FigureCompanyId01.json
+  - apps/indox/blueprint/n8n/indoxSettings01.json
+  - apps/apitools/src/ocr_core/ocr_json_query.py
+  - apps/apitools/feature-validation/find-option-matching
+  - apps/apitools/ai/context/local-ocr-research.md
+  - apps/indox/blueprint/n8n/indoxV2ExtractInvoiceGemini01.json
+  - apps/indox/blueprint/n8n/BaseDocEx01.json
+  - apps/indox/blueprint/n8n/JQExV3Base000001.json
+  - scripts/test-fixture-prefixes.yaml
+  - public.companies (1183 rows at time of writing)
+  - public.settings (extraction_ai_enabled=false, OCR_ENGINE=local in apitools .env)

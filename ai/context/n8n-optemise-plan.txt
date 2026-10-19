@@ -1,0 +1,109 @@
+n8n optimise plan (findings + mitigations)
+Date: 2025-09-19
+Scope: n8n + Postgres + Redis on Docker Compose (Traefik v3). Services: n8n-bina-deployment, n8n-postgres-bina-deployment, redis. DB: Postgres 17, db "n8n", user "hacohen". Queue env present; EXECUTIONS save-on-progress enabled; concurrency limit commented out.
+
+1) Symptoms observed
+- During run of HTTP → Run with ~6000 items in a burst:
+  - n8n: many "timeout exceeded when trying to connect" (pg-pool) and failures to save execution progress/metadata.
+  - Postgres: frequent collation version mismatch warnings; one very long checkpoint: write ≈188s, total ≈188s.
+  - DB connections: not saturated (max_conn=100, total≈8), but app timed out acquiring a connection; suggests I/O stalls rather than connection exhaustion.
+
+2) Likely root causes
+- Sudden high write pressure from saving execution progress for thousands of items → heavy WAL and data writes → long checkpoint → global I/O latency spike.
+- Lack of backpressure/concurrency control in n8n (single process fan-out) → bursty DB access and pg-pool acquisition timeouts.
+- Collation version mismatch spam adds noise and may incur extra checks at query time.
+
+3) Current instrumentation
+- DB slow query logging enabled to 200ms via role-in-database for hacohen@n8n (effective for new sessions).
+- Lock wait logging on; deadlock_timeout=1s. logging_collector currently off (logs go to container stderr).
+
+4) Immediate mitigations (low risk)
+A. Throttle workflow fan-out
+- Add Split In Batches before the heavy section. Start with: batchSize=100, waitBetweenBatches=200–300ms.
+- Alternatively set N8N_CONCURRENCY_PRODUCTION_LIMIT=10–20 (kept conservative) to cap per-instance parallelism.
+
+B. Reduce write volume to DB
+- Set N8N_EXECUTIONS_DATA_SAVE_ON_PROGRESS=false.
+- Set N8N_EXECUTIONS_DATA_SAVE_ON_SUCCESS=false and N8N_EXECUTIONS_DATA_SAVE_ON_ERROR=true (keep failure visibility).
+- Optional: lower DB pool if needed to reduce concurrent writers (DB_POSTGRESDB_POOL_SIZE=10–15), though batching is preferred.
+
+C. Stabilise retries at edges
+- Ensure HTTP Request nodes use retry with exponential backoff, small concurrency, and sensible timeouts to avoid thundering herds on transient stalls.
+
+D. Refresh sessions to capture slow statements
+- Briefly restart n8n so new DB sessions inherit 200ms log_min_duration_statement.
+
+5) Structural improvements (moderate)
+A. Queue mode execution
+- Enable EXECUTIONS_MODE=queue and add 1–2 n8n worker services using existing Redis.
+- Set N8N_CONCURRENCY_PRODUCTION_LIMIT per worker (e.g., 5–10) to keep total concurrency bounded and smoother.
+- Benefit: workflow UI remains responsive; workers can be scaled without overwhelming DB.
+
+B. Isolate heavy workloads
+- Move large fan-out into a dedicated workflow triggered via webhook or queue; keep triggering workflow lightweight.
+
+6) Postgres tuning (apply during a maintenance window)
+A. Checkpoint and WAL
+- Increase max_wal_size (e.g., 4–8GB) to reduce checkpoint frequency under bursts.
+- Set checkpoint_completion_target=0.9 to smooth write pressure.
+- Consider checkpoint_timeout=10–15min if acceptable.
+- Keep fsync=on; optional per-database synchronous_commit=off if you can tolerate losing a few seconds of the latest writes on crash.
+
+B. Collation mismatch clean-up
+- Execute: ALTER DATABASE n8n REFRESH COLLATION VERSION; if refused or risky, plan a dump/restore on a host with stable glibc/ICU version to stop warnings.
+
+C. Indexing (post evidence)
+- After slow logs collected, add targeted indexes for n8n tables commonly queried:
+  - executions_entity(workflowId)
+  - executions_entity(waitTill)
+  - executions_entity(startedAt), executions_entity(stoppedAt)
+- Only create indexes backed by slow-log evidence to avoid bloat.
+
+D. Autovacuum/maintenance
+- Ensure autovacuum runs timely; consider lowering autovacuum_vacuum_cost_delay and/or raising autovacuum_max_workers if write-heavy.
+
+7) Rollout plan (phased)
+Phase 0 – Observe
+- Restart n8n to pick up 200ms slow logging. Re-run 6000-item scenario. Capture Postgres logs for "duration:" and any "lock wait" lines.
+
+Phase 1 – Quick relief
+- Enable Split In Batches (100 items, 200–300ms pause) OR set N8N_CONCURRENCY_PRODUCTION_LIMIT=10–20.
+- Disable save-on-progress and save-on-success as above.
+- Re-test; target: no pg-pool timeouts, stable throughput.
+
+Phase 2 – Structure for scale
+- Switch to queue mode, add 1–2 workers, set conservative concurrency. Re-test with 6000 items.
+
+Phase 3 – DB tuning
+- Apply ALTER SYSTEM for max_wal_size and checkpoint_completion_target; pg_reload_conf; monitor "checkpoint complete" durations.
+- If durations still spike, increase IOPS (storage class/volume), and consider synchronous_commit=off for the n8n database only.
+
+Phase 4 – Collation resolution
+- Run REFRESH COLLATION VERSION; if not feasible, schedule dump/restore to remove mismatch warnings.
+
+8) Success criteria
+- During 6000-item run:
+  - 0 occurrences of "timeout exceeded when trying to connect" in n8n logs.
+  - Postgres: no checkpoint taking >10s; median statement duration <100–200ms; minimal lock waits.
+  - n8n executions complete without progress-save failures (or progress saving deliberately disabled).
+
+9) Rollback
+- Revert N8N_* env changes and queue mode to prior values; scale workers down.
+- Revert ALTER SYSTEM changes; pg_reload_conf. Keep a snapshot of pre-change postgresql.conf settings.
+
+10) Concrete config hints (compose/env)
+- n8n env examples:
+  - N8N_CONCURRENCY_PRODUCTION_LIMIT=15
+  - N8N_EXECUTIONS_DATA_SAVE_ON_PROGRESS=false
+  - N8N_EXECUTIONS_DATA_SAVE_ON_SUCCESS=false
+  - N8N_EXECUTIONS_DATA_SAVE_ON_ERROR=true
+  - EXECUTIONS_MODE=queue (when enabling workers)
+  - QUEUE_BULL_REDIS_HOST=redis (already present)
+- Postgres (via ALTER SYSTEM, then reload):
+  - max_wal_size = '8GB'
+  - checkpoint_completion_target = 0.9
+  - checkpoint_timeout = '15min'
+
+Notes
+- Most benefit will come from smoothing load (batching/queue) and reducing write amplification (disable progress saves) before deep DB tuning.
+- Once slow logs at 200ms are collected, revisit indexes and any specific query patterns from n8n that need attention.

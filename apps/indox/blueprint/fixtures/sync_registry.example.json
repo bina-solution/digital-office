@@ -1,0 +1,111 @@
+[
+  {
+    "__doc__": [
+      "TENANT-NEUTRAL EXAMPLE. Placeholder ids only — never real ones.",
+      "",
+      "This file documents the SHAPE of settings.sync_registry. It is never applied.",
+      "The real registry for a deployment lives at data/registry/sync_registry.json,",
+      "which is gitignored for the same reason .env is: it holds one client's",
+      "connection ids and live Drive folder ids.",
+      "",
+      "Gate G40 (scripts/refactor/fixture-live-key-lint.py) bars `sync_registry` from",
+      "any blueprint fixture, after a 2026-08-05 incident where a fixture's registry row",
+      "was upserted over a real client's live registry twice, deleting two configured",
+      "drive pipes and blanking `connection` on two more. A tracked file holding real",
+      "folder ids would also point the NEXT deployment bootstrapped from this repo at",
+      "THIS client's Drive on its very first seed — a cross-tenant leak, not just an",
+      "overwrite. Hence: shape here, values out of tree.",
+      "",
+      "  regenerate the real file   apps/indox/hooks/sync-registry-converge.py --emit",
+      "  preview a convergence      ... --dry-run",
+      "  prove the contract offline ... --selftest",
+      "",
+      "RUNTIME KEYS ARE NEVER STORED HERE. last_run / last_run_execution / last_run_url",
+      "are written by the engine; convergence preserves whatever the live row holds and",
+      "never seeds or clears them. See RUNTIME_KEYS in the hook — the one definition.",
+      "",
+      "`feedback` — DERIVED, not hand-written. It says whether the state machine reports a",
+      "document's VERDICT back to the source: moving the Drive file into the pair's `synced`",
+      "or `failed` folder, or adding the pipe's `labels.synced` / `labels.failed` tag to the",
+      "mail. Convergence materialises an explicit block for every pipe from the vocabulary",
+      "the entry already declares (see feedback_for() in sync-registry-converge.py, proved by",
+      "--selftest section 7), so turning feedback on for a pipe means GIVING IT SOMEWHERE TO",
+      "FILE, not setting a flag in a second place. A pipe whose `synced` and `failed` are the",
+      "same folder cannot express a verdict and is derived to mode 'off' with the reason in",
+      "`_derived`. Write the block by hand only to OVERRIDE the derivation; an explicit block",
+      "always wins. Consumers treat an ABSENT block as off, so a pipe authored through the",
+      "Console does nothing until convergence gives it one.",
+      "",
+      "THE 2026-09-02 CONTRACT (owner rule): a pipe REQUIRES only its source — the drive pair's",
+      "`to_sync` folder, or the gmail `labels.to_sync` tag. `synced` / `failed` folders and tags",
+      "are OPTIONAL user-visible marks the state machine's feedback writes; sync state itself",
+      "lives in sync_ledger (the sync item) and never depends on where a file or mail sits.",
+      "`dest_folder` (gmail: where attachments are saved) defaults to the drive's root when",
+      "absent. processor_wf / v3_mode / claim_label / search_take are RETIRED: every pipe is",
+      "thin v3, and the engine does not claim by label."
+    ]
+  },
+  {
+    "name": "example-drive-pipe",
+    "source": "drive",
+    "engine": "v3",
+    "connection": "drive_google_service_account-CHANGEME",
+    "projection": "on",
+    "enabled": true,
+    "type_hint": null,
+    "fallback_type": null,
+    "batch": {
+      "take": 50,
+      "chunk": 25,
+      "timeout_min": 14,
+      "schedule_min": 15
+    },
+    "pairs": [
+      {
+        "__doc__": "Both vocabularies are written by _normalise_entry: the editor/sim uses from/to/failed_to, the engine uses to_sync/synced/failed. Every pipe needs its OWN synced and failed folders — sharing them across pipes was a live three-way collision. Replace every PLACEHOLDER_* with a real Drive folder id.",
+        "from": "PLACEHOLDER_TO_SYNC_FOLDER_ID",
+        "to_sync": "PLACEHOLDER_TO_SYNC_FOLDER_ID",
+        "to": "PLACEHOLDER_SYNCED_FOLDER_ID",
+        "synced": "PLACEHOLDER_SYNCED_FOLDER_ID",
+        "failed_to": "PLACEHOLDER_FAILED_FOLDER_ID",
+        "failed": "PLACEHOLDER_FAILED_FOLDER_ID"
+      }
+    ],
+    "feedback": {
+      "mode": "drive_move",
+      "on_success": true,
+      "on_failure": true
+    }
+  },
+  {
+    "name": "example-gmail-pipe",
+    "source": "gmail",
+    "engine": "v3",
+    "connection": "mail_imap_app_password-CHANGEME",
+    "enabled": true,
+    "type_hint": null,
+    "fallback_type": null,
+    "search_extra": "has:attachment newer_than:6m",
+    "dest_folder": "PLACEHOLDER_DRIVE_DEST_FOLDER_ID",
+    "drive_connection_id": "drive_local-CHANGEME",
+    "drive_profile_id": "admin",
+    "batch": {
+      "take": 25,
+      "chunk": 5,
+      "_chunk": "ONE IMAP connection per mailbox is the rule, so chunk bounds how many deliveries queue on it per pass (each attachment fetch is tens of seconds; the mail workflow waits up to 300 s) — measured 2026-09-02: 25 parallel fetches aborted the queued ones",
+      "timeout_min": 14,
+      "schedule_min": 15
+    },
+    "labels": {
+      "to_sync": "DOC_TO_SYNC",
+      "in_progress": "IN_PROGRESS",
+      "synced": "SYNCED_DOC",
+      "failed": "FAILED_DOC"
+    },
+    "feedback": {
+      "mode": "mail_tag",
+      "on_success": true,
+      "on_failure": true
+    }
+  }
+]

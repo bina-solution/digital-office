@@ -1,0 +1,1725 @@
+{
+  "updatedAt": "2026-04-27T15:39:17.748Z",
+  "createdAt": "2026-03-30T13:55:11.552Z",
+  "id": "indoxV2ExtractInvoiceGemini01",
+  "name": "invoice Extractor - Gemini 3.1 pro",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "invoice_extractor",
+        "authentication": "basicAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "ed361653-6367-4574-80ea-776522d99c97",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -208,
+        848
+      ],
+      "webhookId": "a33c7ec8-c766-4d68-b05b-008d6e1027eb",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "azPhHBvOWaf9IsEA",
+          "name": "Incoming Documents"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "word-doc-condition",
+                    "leftValue": "={{ $(\"Before Start\").item.binary.data.mimeType }}",
+                    "rightValue": "text/plain",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Text"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "2cd928a5-7364-4d43-8ff5-89ea6407ad38",
+                    "leftValue": "={{ $(\"Before Start\").item.binary.data.mimeType }}",
+                    "rightValue": "text/csv",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "CSV"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "excel-condition",
+                    "leftValue": "={{ $(\"Before Start\").item.binary.data.mimeType }}",
+                    "rightValue": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "GSheet"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "e8209c9b-c736-44bf-a25f-5b1cd62f0d58",
+                    "leftValue": "={{ $(\"Before Start\").item.binary.data.mimeType }}",
+                    "rightValue": "application/vnd.ms-excel",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Excel"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $(\"Before Start\").item.binary.data.mimeType }}",
+                    "rightValue": "image/jpeg",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "jpeg-condition"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "JPEG"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $(\"Before Start\").item.binary.data.mimeType }}",
+                    "rightValue": "image/png",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "png-condition"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "PNG"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "pdf-condition",
+                    "leftValue": "={{ $(\"Before Start\").item.binary.data.mimeType }}",
+                    "rightValue": "application/pdf",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "PDF"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        2784,
+        752
+      ],
+      "id": "91a438bb-7330-4c59-a9d8-7d6c15018e49",
+      "name": "File Type Router"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        5744,
+        1024
+      ],
+      "id": "5fc8262d-6860-4f81-91a0-5df1d7d7641e",
+      "name": "API Response"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        3360,
+        512
+      ],
+      "id": "31d60122-277c-4723-b7c4-7f4809740f1c",
+      "name": "Textual Input"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        3040,
+        512
+      ],
+      "id": "e2c22349-8efb-43da-91ee-4a30c0569dc4",
+      "name": "Extract from File"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Loop over input items and add a new field called 'myNewField' to the JSON of each one\nconst allData = {};\nlet i = 0;\nfor (const item of $input.all()) {\n  i += 1;\n  allData[\"line_\" + i] = item.json;\n  // Object.assign(allData, item.json);\n}\n\nreturn [{\n  json: allData\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3200,
+        592
+      ],
+      "id": "1c98500a-8baf-49cb-9d4f-ed4218b82b77",
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "content": "# Cache Check",
+        "height": 384,
+        "width": 1008,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1568,
+        368
+      ],
+      "id": "1a2ce0ee-fb72-43f9-a7ae-38bda3dafec3",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        3040,
+        336
+      ],
+      "id": "7fade8d7-2e21-4fc9-b62d-f121439a1de4",
+      "name": "Extract from File1"
+    },
+    {
+      "parameters": {
+        "operation": "xlsx",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        3040,
+        672
+      ],
+      "id": "40696eb0-375b-4dba-b7f6-bc76bdf3c6bb",
+      "name": "Extract from File2"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Handle unsupported file formats\nconst mimeType = items[0].binary?.data?.mimeType || \"unknown\";\nconst fileName = items[0].binary?.data?.fileName || \"unknown\";\n\nreturn [{\n  json: {\n    success: false,\n    error: \"Unsupported file format\",\n    details: `File type '${mimeType}' is not supported. Supported formats: PDF, Word (.docx), Excel (.xlsx), JPEG, PNG`,\n    fileName: fileName,\n    mimeType: mimeType,\n    processedAt: new Date().toISOString()\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        4720,
+        960
+      ],
+      "id": "0ca303a8-86ad-4933-acf6-708e2550774f",
+      "name": "Response Format: Unsupported File Error"
+    },
+    {
+      "parameters": {
+        "binaryData": true,
+        "dataPropertyName": "cached_input_key"
+      },
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 1,
+      "position": [
+        1616,
+        528
+      ],
+      "id": "267e539f-3bae-4b5f-ae0b-e00f00594cd1",
+      "name": "Crypto"
+    },
+    {
+      "parameters": {
+        "key": "={{ $json.cached_input_key }}"
+      },
+      "type": "n8n-nodes-kv-storage.kvStorage",
+      "typeVersion": 1,
+      "position": [
+        1792,
+        512
+      ],
+      "id": "71da29ea-ba0f-4873-af17-595c82c07c77",
+      "name": "KVStorage"
+    },
+    {
+      "parameters": {
+        "operation": "setValue",
+        "key": "={{ $('Start').first().json.cached_input_key }}",
+        "val": "={{ $json.toJsonString() }}",
+        "expire": false
+      },
+      "type": "n8n-nodes-kv-storage.kvStorage",
+      "typeVersion": 1,
+      "position": [
+        5968,
+        768
+      ],
+      "id": "67c9687b-94f1-46bc-b9ff-7b85a04944a1",
+      "name": "KVStorage1"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        5504,
+        784
+      ],
+      "id": "3889af3c-c5ce-4553-a17a-81e0d7d74d4d",
+      "name": "End"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1072,
+        832
+      ],
+      "id": "cae0c891-3085-427e-885f-32479b7afee0",
+      "name": "Before Start"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2544,
+        848
+      ],
+      "id": "b3c01bf2-13e4-49d7-b1c3-5b911a48b3c0",
+      "name": "Start"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        2384,
+        432
+      ],
+      "id": "c0bd3725-4c0f-4153-853a-2e467d628dfb",
+      "name": "API Response1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "30391b3a-9b77-4a8a-9004-56c86cb2328a",
+              "leftValue": "={{ $input.item.json?.val[0] }}",
+              "rightValue": "",
+              "operator": {
+                "type": "object",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1952,
+        528
+      ],
+      "id": "c65d9441-a27b-4ca3-9c13-c81e8c14728a",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "return {\n  \"json\": {\n    \"cached_input_key\": $('Crypto').item.json.cached_input_key\n  },\n  \"binary\": $(\"Before Start\").item.binary\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2384,
+        624
+      ],
+      "id": "2e0428d6-2cbc-4e47-8cc9-2645492ce3a3",
+      "name": "Code2"
+    },
+    {
+      "parameters": {
+        "content": "# Prepare Response",
+        "height": 656,
+        "width": 544,
+        "color": 2
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        4480,
+        512
+      ],
+      "id": "9616211b-1a41-4e5a-925e-365b793d86c4",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "content": "# Cache Set",
+        "height": 224,
+        "width": 464,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        5296,
+        704
+      ],
+      "id": "07bcc383-70b8-4db3-b185-db30acb7558f",
+      "name": "Sticky Note6"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "eea89e5c-53d2-47c6-b259-0ce0eee65e2d",
+              "leftValue": "={{ $json.use_cache}}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1456,
+        832
+      ],
+      "id": "027eb084-cce6-405e-a191-f7fae7790f8c",
+      "name": "If1",
+      "notesInFlow": false
+    },
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "LINK"
+            },
+            {
+              "name": "use_cache",
+              "type": "boolean"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -208,
+        1056
+      ],
+      "id": "a337c705-08fd-4011-b28c-36978f535ee0",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $binary }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "object",
+                      "operation": "notEmpty",
+                      "singleValue": true
+                    },
+                    "id": "e8da54be-a09f-43e1-9bc5-0d9bbf76e518"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "binary"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "ab565658-14a3-4a04-90fe-9ee67f27888c",
+                    "leftValue": "={{ !!$json.LINK }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "link"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        256,
+        1040
+      ],
+      "id": "d21cec96-1397-4a3e-80f4-5bc48ec50667",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.LINK }}",
+          "mode": "url"
+        },
+        "options": {
+          "binaryPropertyName": "data",
+          "googleFileConversion": {
+            "conversion": {
+              "docsToFormat": "text/plain",
+              "slidesToFormat": "application/pdf"
+            }
+          }
+        }
+      },
+      "id": "fec1b314-59fa-4773-a25d-b456c5fde724",
+      "name": "Download LINK",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        592,
+        1056
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "KirWFwoFdEFmnN0R",
+          "name": "Google Drive person17@example.com"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "8551a8b2-ce2b-4f77-912a-8cdbece9d709",
+              "leftValue": "={{ $binary }}",
+              "rightValue": "",
+              "operator": {
+                "type": "object",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        784,
+        1056
+      ],
+      "id": "c951712a-4a74-47d0-9fc7-63b20da2820d",
+      "name": "If Binary"
+    },
+    {
+      "parameters": {
+        "jsCode": "for (const item of $input.all()) {\n  item.json.success = false;\n  item.json.error = \"failed_to_get_gd_link\";\n}\n\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1056,
+        1072
+      ],
+      "id": "f3a3e61f-c363-4080-b6ff-de6caf96ef4e",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "jsCode": "for (const item of $input.all()) {\n  item.json = item.json.val[0] || {};\n}\n\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2160,
+        432
+      ],
+      "id": "e134ac75-25a4-43f5-a92f-dcea1ec268dd",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "37f1c08b-d334-4c58-a5e8-1b3cdd4b207e",
+              "name": "LINK",
+              "value": "={{ $json.GDRIVE_LINK }}",
+              "type": "string"
+            },
+            {
+              "id": "41af91b8-f273-48eb-8a50-afa497b5a1ac",
+              "name": "use_cache",
+              "value": false,
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -208,
+        1312
+      ],
+      "id": "d328ec89-6618-4287-911f-15140740aab1",
+      "name": "MAP LINK"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "223f1807-7549-49b0-881d-7d5e6facff81",
+              "leftValue": "={{ $json.success }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        5744,
+        784
+      ],
+      "id": "4cd47531-d4b8-47a6-80f8-27ead961f7fd",
+      "name": "If Success"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "04ce5540-a4e3-42c4-bc5c-0c34cbcd02cf",
+              "name": "prompt",
+              "value": "You are an expert accounting assistant. The provided file is a business document, typically an invoice (\"חשבונית מס\"), receipt, or related document.\n\nExtract the strictly required fields below from the document based on these guidelines:\n\n1. **AI_COMPANY_ID**: The company identification number or VAT number (e.g., ח.פ, עוסק מורשה, מספר תאגיד) of the issuing company. **CRITICAL: Do NOT extract or use our company's VAT number (515561520 / הכהנים חומרי בניין בע\"מ). This is the recipient's ID and must be completely ignored.** If not found, use \"\".\n2. **AI_DOC_AMOUNT**: The total amount of the document including VAT (סה\"כ כולל מע\"מ / סכום כולל / סה\"כ לתשלום / לתשלום). Return amounts as strings. CRITICAL: Do NOT confuse the total amount with the order number (\"הזמנה\"). If not found, use \"\".\n3. **AI_DOC_DATE**: The date of the document in DD/MM/YYYY format. If multiple potential Dates exist, pick according to this strict order: 1. \"תאריך הפקה\", 2. \"תאריך חשבונית\", 3. \"תאריך מסמך\", 4. \"תאריך\". Do NOT use the payment date (\"תאריך תשלום\") or the pay-by date (\"לתשלום עד\"). If not found, use \"\".\n4. **AI_DOC_ID**: The full document number. If multiple potential IDs exist, pick according to this strict order: 1. \"חשבונית מס\", 2. \"מס' חשבונית\", 3. \"מסמך\", 4. \"מספר מסמך\", 5. \"מסמך חיוב\". If not found, use \"\".\n5. **AI_ORDER_IDS**: Purchase Order ID: For documents of type INVOICE, extract the purchase order number as it appears in the customer's records (e.g., \"מספר הזמנת לקוח\", \"מס' הזמנת מקור\", \"הזמנת רכש\", etc.) rather than the issuer's internal order reference. If multiple order numbers are listed, extract only the first one. If not found, use \"\".\n6. **AI_SHIPMENT_IDS: The linked shipment document numbers (מספר תעודת משלוח / ת. משלוח). Extract all unique shipment numbers and return them as an array of strings. Do not repeat the same number. If not found, return an empty array[].\n7. **AI_TYPE**: Identify the type of the document and classify it into exactly one of the following labels:\n   - If the document is an invoice or bill, return INVOICE.\n   - If it is a shipping document or delivery note, return SHIPMENT.\n   - If it is a financial balance sheet (including screenshots of balance sheets), return BALANCE_SHEET.\n   - If it is a purchase order, return ORDER.\n   - If the document is irrelevant, return IRRELEVANT.\n\nStrictly return ONLY the JSON object with the following structure. Do not use null values; use an empty string \"\" for missing string values. Do not include any explanations, apologies, or conversational text outside of the JSON structure. Ensure that any double quotes that are part of the string data itself are properly escaped with a backslash.\n\n{\n  \"AI_COMPANY_ID\": \"string\" | \"\",\n  \"AI_DOC_AMOUNT\": \"string\" | \"\",\n  \"AI_DOC_DATE\": \"DD/MM/YYYY\" | \"\",\n  \"AI_DOC_ID\": \"string\" | \"\",\n  \"AI_ORDER_IDS\": \"string\" | \"\",\n  \"AI_SHIPMENT_IDS\": [\"string\"] |[],\n  \"AI_TYPE\": \"INVOICE\" | \"SHIPMENT\" | \"BALANCE_SHEET\" | \"ORDER\" | \"IRRELEVANT\"\n}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1280,
+        576
+      ],
+      "id": "b45fd12f-6aca-4534-a44b-4a4dccb01366",
+      "name": "CONFIG"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.1-pro-preview",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        3728,
+        240
+      ],
+      "id": "834413da-e727-429f-bb1b-28efa5215055",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "6mfcsdRaqQ4IdQ8Y",
+          "name": "ai-studio-bs-extraction"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "document",
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-3.1-pro-preview",
+          "mode": "list",
+          "cachedResultName": "models/gemini-3.1-pro-preview"
+        },
+        "text": "={{ $(\"CONFIG\").last().json.prompt }}",
+        "inputType": "binary",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1,
+      "position": [
+        3296,
+        816
+      ],
+      "id": "e05337c0-5b61-45d7-8f5c-296864ceed2f",
+      "name": "Document Processor",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "6mfcsdRaqQ4IdQ8Y",
+          "name": "ai-studio-bs-extraction"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-3-flash-preview",
+          "mode": "list",
+          "cachedResultName": "models/gemini-3-flash-preview"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "={{ $(\"CONFIG\").last().json.prompt }}",
+              "role": "model"
+            },
+            {
+              "content": "=textxtual fileinput: {{ JSON.stringify( $json )}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1,
+      "position": [
+        3504,
+        528
+      ],
+      "id": "d2baeff7-4841-4e1b-a136-f6f52051fe14",
+      "name": "Text Processor",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "6mfcsdRaqQ4IdQ8Y",
+          "name": "ai-studio-bs-extraction"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "for (const item of $input.all()) {\n  item.json.json_schema = {\n    \"$schema\": \"https://json-schema.org/draft/2020-12/schema\",\n    \"title\": \"JSON_INVOICE_EXTRACTION\",\n    \"type\": \"object\",\n    \"description\": \"Extraction of required fields from a business document.\",\n    \"additionalProperties\": false,\n    \"properties\": {\n      \"AI_COMPANY_ID\": {\n        \"type\": \"string\",\n        \"description\": \"The company identification number or VAT number. Ignore 515561520 / הכהנים חומרי בניין בע\\\"מ.\"\n      },\n      \"AI_DOC_AMOUNT\": {\n        \"type\": \"string\",\n        \"description\": \"The total amount of the document including VAT (סה\\\"כ כולל מע\\\"מ / סכום כולל / סה\\\"כ לתשלום / לתשלום). Do NOT confuse with order number.\"\n      },\n      \"AI_DOC_DATE\": {\n        \"type\": \"string\",\n        \"description\": \"The date of the document in DD/MM/YYYY format. Preference: 1. תאריך הפקה, 2. תאריך חשבונית, 3. תאריך מסמך, 4. תאריך. Do NOT use payment date.\"\n      },\n      \"AI_DOC_ID\": {\n        \"type\": \"string\",\n        \"description\": \"The full document number. Preference: 1. חשבונית מס, 2. מס' חשבונית, 3. מסמך, 4. מספר מסמך, 5. מסמך חיוב.\"\n      },\n      \"AI_ORDER_IDS\": {\n        \"type\": \"string\",\n        \"description\": \"Purchase Order ID (מספר הזמנת לקוח, הזמנת רכש, etc.). If multiple, extract only the first.\"\n      },\n      \"AI_SHIPMENT_IDS\": {\n        \"type\": \"array\",\n        \"items\": {\n          \"type\": \"string\"\n        },\n        \"uniqueItems\": true,\n        \"description\": \"Array of unique linked shipment document numbers (מספר תעודת משלוח / ת. משלוח). If not found, use an empty array.\"\n      },\n      \"AI_TYPE\": {\n        \"type\": \"string\",\n        \"enum\":[\"INVOICE\", \"SHIPMENT\", \"BALANCE_SHEET\", \"ORDER\", \"IRRELEVANT\"],\n        \"description\": \"Document classification based on guidelines.\"\n      }\n    },\n    \"required\":[\n      \"AI_COMPANY_ID\",\n      \"AI_DOC_AMOUNT\",\n      \"AI_DOC_DATE\",\n      \"AI_DOC_ID\",\n      \"AI_ORDER_IDS\",\n      \"AI_SHIPMENT_IDS\",\n      \"AI_TYPE\"\n    ]\n  };\n}\n\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1312,
+        416
+      ],
+      "id": "6523cf82-575e-4711-91c6-581b24c73d40",
+      "name": "Config1",
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "df08253d-0222-4aa7-8fea-581221d8be2c",
+              "name": "data",
+              "value": "={{ $json.data }}",
+              "type": "object"
+            },
+            {
+              "id": "7f276377-3f35-441a-ba8d-7a63c21b182b",
+              "name": "success",
+              "value": "={{ $json.success }}",
+              "type": "boolean"
+            },
+            {
+              "id": "2d9b8e06-4afe-481a-8369-0115210121fe",
+              "name": "processedAt",
+              "value": "={{ $json.processedAt }}",
+              "type": "string"
+            },
+            {
+              "id": "3a4c0b6a-5c97-4e2e-9eeb-0a0187f1ff13",
+              "name": "evalMetadata",
+              "value": "={{ $('Start').last().json.full_response ? $json.evalMetadata : {} }}",
+              "type": "object"
+            },
+            {
+              "id": "522bc164-f726-4087-9013-f6933b67f350",
+              "name": "fullResponse",
+              "value": "={{ $('Start').last().json.full_response ? $json : {} }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {
+          "ignoreConversionErrors": false
+        }
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        4720,
+        592
+      ],
+      "id": "0fe60c09-aa10-4841-b6a3-5b6c222d7eaa",
+      "name": "Map Response"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "extract-content",
+              "name": "content",
+              "value": "={{ $json.content.parts[0].text }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3792,
+        576
+      ],
+      "id": "d701e3eb-5e7c-40cc-81c3-103e4bdd2cdd",
+      "name": "Extract Response"
+    },
+    {
+      "parameters": {
+        "functionCode": "const raw = items[0].json.content;\nconst jsonText = raw.replace(/^```json\\n/, '').replace(/\\n```$/, '');\n\ntry {\n  const parsed = JSON.parse(jsonText);\n  return [{ json: parsed }];\n} catch (error) {\n  // Return error response for invalid JSON\n  return [{\n    json: {\n      error: \"Failed to parse AI response as JSON\",\n      rawResponse: raw,\n      parseError: error.message\n    }\n  }];\n}"
+      },
+      "id": "d72a8499-1f81-450d-9e17-1dd5d7c1973e",
+      "name": "Parse JSON Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        3952,
+        592
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const item = items[0].json;\n\n// במקרה של שגיאת פענוח\nif (item.error) {\n  return[{\n    json: {\n      success: false,\n      error: item.error,\n      details: item.parseError || \"Unknown parsing error\"\n    }\n  }];\n}\n\n// קריאת המערך של תעודות המשלוח, ובמידה וריק יוגדר כמערך ריק\nlet shipmentIdsRaw = Array.isArray(item.AI_SHIPMENT_IDS) ? item.AI_SHIPMENT_IDS :[];\n// מחיקת כפילויות ליתר ביטחון למקרה שהמודל טעה\nlet uniqueShipmentIds =[...new Set(shipmentIdsRaw)];\n\n// סידור הנתונים שחזרו למבנה התקין בהתאם להגדרות החדשות\nconst response = {\n  success: true,\n  data: {\n    AI_COMPANY_ID: item.AI_COMPANY_ID || \"\",\n    AI_DOC_ID: item.AI_DOC_ID || \"\",\n    AI_DOC_DATE: item.AI_DOC_DATE || \"\",\n    AI_DOC_AMOUNT: item.AI_DOC_AMOUNT || \"\",\n    AI_SHIPMENT_IDS: uniqueShipmentIds, // כאן הוכנס המערך המסונן\n    AI_ORDER_IDS: item.AI_ORDER_IDS || \"\",\n    AI_TYPE: item.AI_TYPE || \"\"\n  },\n  processedAt: new Date().toISOString()\n};\n\nreturn[{ json: response }];"
+      },
+      "id": "eb0f76d2-b1c8-4372-afcb-130741dc3e77",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        4112,
+        592
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Handle unsupported file formats\nconst mimeType = items[0].binary?.data?.mimeType || \"unknown\";\nconst fileName = items[0].binary?.data?.fileName || \"unknown\";\n\nreturn [{\n  json: {\n    success: false,\n    error: \"LLM Faild\",\n    details: `Faild getting output from llm.`,\n    fileName: fileName,\n    mimeType: mimeType,\n    processedAt: new Date().toISOString()\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        4720,
+        784
+      ],
+      "id": "e9f55d73-0449-4f4b-afdf-b2d1e06260b5",
+      "name": "Response Format: No LLM Output"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "37f1c08b-d334-4c58-a5e8-1b3cdd4b207e",
+              "name": "LINK",
+              "value": "={{ $json.body.LINK }}",
+              "type": "string"
+            },
+            {
+              "id": "41af91b8-f273-48eb-8a50-afa497b5a1ac",
+              "name": "use_cache",
+              "value": "={{ $json.body.use_cache || true }}",
+              "type": "boolean"
+            },
+            {
+              "id": "bc93fbae-3f3e-4522-bfb4-1e2af2b75f64",
+              "name": "full_response",
+              "value": "={{ $json.body.full_response || false }}",
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        16,
+        912
+      ],
+      "id": "f04f9eb0-b235-4360-bcc1-bed2446e0ac0",
+      "name": "MAP LINK1"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -560,
+        1536
+      ],
+      "id": "2e58f32c-1a56-4a71-a67e-0289f95eddeb",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "operation": "setValue",
+        "key": "={{ \"c565df33c7194f72ce2395956c771695\" }}"
+      },
+      "type": "n8n-nodes-kv-storage.kvStorage",
+      "typeVersion": 1,
+      "position": [
+        -288,
+        1536
+      ],
+      "id": "9624fc38-9ae2-436e-9b16-e4b23d10cea4",
+      "name": "Delete Cache"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://us-documentai.googleapis.com/v1/projects/928205450024/locations/us/processors/55409bca20033969/processorVersions/fb6558662229489c:process",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleApi",
+        "sendBody": true,
+        "contentType": "=json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "rawDocument.mimeType",
+              "value": "={{ $binary.data.mimeType }}"
+            },
+            {
+              "name": "=rawDocument.content",
+              "value": "={{ $json.fileBase64 }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        3344,
+        1040
+      ],
+      "id": "7723729d-6060-4115-8014-bc2ff8bbb180",
+      "name": "HTTP Request",
+      "credentials": {
+        "googleApi": {
+          "id": "wxbv5yj5lnKDuvmN",
+          "name": "Document AI Connection"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// שולפים את כל הפריטים שהגיעו מ-Google Document AI\nconst items = $input.all();\n\nreturn items.map(item => {\n  const entities = item.json.document.entities || [];\n\n  const extractedData = {\n    COMPANY_ID: \"\",\n    COMPANY_DOC_ID: \"\",\n    SHIPMENT_DOC_ID: \"\",\n    DOC_TOTAL_AMOUNT: \"\",\n    DOC_DATE: \"\",\n    PURCHASE_ID: \"\"\n  };\n\n  for (const entity of entities) {\n    const type = entity.type;\n    const value = entity.mentionText || \"\";\n\n    if (extractedData[type] !== undefined) {\n      extractedData[type] = value;\n    }\n  }\n\n  return {\n    json: {\n      success: true,\n      data: extractedData,\n      processedAt: new Date().toISOString()\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3536,
+        1040
+      ],
+      "id": "8cf86dcd-1a6e-49f1-a5bd-0b3ce6a61b19",
+      "name": "Code in JavaScript2"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nfor (let i = 0; i < items.length; i++) {\n  // בודקים שיש בכלל קובץ בינארי\n  if (items[i].binary && items[i].binary.data) {\n    // שולפים את הקובץ מהזיכרון/דיסק של n8n\n    const buffer = await this.helpers.getBinaryDataBuffer(i, 'data');\n    // ממירים אותו ל-Base64 ושומרים בתוך שדה חדש ב-JSON\n    items[i].json.fileBase64 = buffer.toString('base64');\n  }\n}\n\nreturn items;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3152,
+        1040
+      ],
+      "id": "81b1b59b-3940-45a9-b1df-922190266faf",
+      "name": "Code in JavaScript3"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2992,
+        896
+      ],
+      "id": "b369d56f-76c8-45eb-b28e-44215da06b52",
+      "name": "Start1"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        5744,
+        1232
+      ],
+      "id": "d1deaaa7-c200-40ef-9c91-3bedb1394a1c",
+      "name": "End2"
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "MAP LINK1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "File Type Router": {
+      "main": [
+        [
+          {
+            "node": "Extract from File1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract from File2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract from File2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Start1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Start1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Start1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Response Format: Unsupported File Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Textual Input": {
+      "main": [
+        [
+          {
+            "node": "Text Processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "Textual Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File1": {
+      "main": [
+        [
+          {
+            "node": "Textual Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File2": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Response Format: Unsupported File Error": {
+      "main": [
+        [
+          {
+            "node": "End",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crypto": {
+      "main": [
+        [
+          {
+            "node": "KVStorage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "End": {
+      "main": [
+        [
+          {
+            "node": "API Response",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "If Success",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "End2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Before Start": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "CONFIG",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Config1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "KVStorage": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "File Type Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code2": {
+      "main": [
+        [
+          {
+            "node": "Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "Crypto",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Before Start",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Download LINK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download LINK": {
+      "main": [
+        [
+          {
+            "node": "If Binary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Binary": {
+      "main": [
+        [
+          {
+            "node": "Before Start",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "API Response1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MAP LINK": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Success": {
+      "main": [
+        [
+          {
+            "node": "KVStorage1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        []
+      ]
+    },
+    "Map Response": {
+      "main": [
+        [
+          {
+            "node": "End",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Response": {
+      "main": [
+        [
+          {
+            "node": "Parse JSON Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse JSON Response": {
+      "main": [
+        [
+          {
+            "node": "Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Response Format: No LLM Output": {
+      "main": [
+        [
+          {
+            "node": "End",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MAP LINK1": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Delete Cache",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Document Processor": {
+      "main": [
+        [
+          {
+            "node": "Extract Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Response": {
+      "main": [
+        [
+          {
+            "node": "Map Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Text Processor": {
+      "main": [
+        [
+          {
+            "node": "Extract Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript2": {
+      "main": [
+        []
+      ]
+    },
+    "Code in JavaScript3": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start1": {
+      "main": [
+        [
+          {
+            "node": "Document Processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": {
+    "Webhook Trigger": [
+      {
+        "json": {
+          "headers": {
+            "host": "n8n:5678",
+            "user-agent": "feature-validation-balance-sheet/1.0",
+            "accept-encoding": "gzip, deflate",
+            "accept": "*/*",
+            "connection": "keep-alive",
+            "content-type": "application/json",
+            "content-length": "112",
+            "authorization": "Basic YWRtaW46d2Rua2pkNzI4NzYyODczYmhqZDM4NjIxM2hqZzM3ZGtzeGk3MnNo"
+          },
+          "params": {},
+          "query": {},
+          "body": {
+            "LINK": "https://drive.google.com/file/d/1MaLIw1Yly2KSeoFBU-kul8JvqVbVU2vBRAn5FVbDDLQ/edit",
+            "use_cache": false
+          },
+          "webhookUrl": "https://n8n.hacohen.bina-solutions.co.il/webhook/bs_ex_2",
+          "executionMode": "production"
+        }
+      }
+    ],
+    "When Executed by Another Workflow": [
+      {
+        "json": {
+          "LINK": "https://drive.google.com/file/d/1SCkHFYEgQRRX9_Eq_kI_X0zoAmitW34m",
+          "use_cache": false
+        }
+      }
+    ]
+  },
+  "versionId": "17b2373a-71d5-4151-9e54-edc94fab2be2",
+  "activeVersionId": "96f791ee-bce7-49ea-a4ba-9058a4a6f0bc",
+  "versionCounter": 89,
+  "triggerCount": 1,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-03-30T13:55:11.552Z",
+      "createdAt": "2026-03-30T13:55:11.552Z",
+      "role": "workflow:owner",
+      "workflowId": "indoxV2ExtractInvoiceGemini01",
+      "projectId": "EChUnhWXmjrEc3fG",
+      "project": {
+        "updatedAt": "2024-09-26T18:07:08.765Z",
+        "createdAt": "2024-09-26T17:59:24.039Z",
+        "id": "EChUnhWXmjrEc3fG",
+        "name": "Shlomo Bolo <person8@example.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null
+      }
+    }
+  ]
+}

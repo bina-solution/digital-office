@@ -1,0 +1,108 @@
+# The test network, driven through the office browser — the reference script. Every step kind the
+# real platforms need appears here once: a composer that opens a dialog, an editor with no accessible
+# name (js_fill), a hidden file input (upload), an in-page confirmation, and in-page extraction.
+# Step vocabulary (adapters/browser.py): goto · click · fill · press · wait_for · js_fill · js_click ·
+# upload · extract. `{name}`-style holes are filled from the op's parameters.
+platform: fixture
+version: 1
+status: verified          # passed POST /api/selftest {"kind":"browser"} through the real office
+                          # browser (browser42, @playwright/mcp `target` dialect) on 2026-09-29: 5/5 in 53 s
+origin: "{browser_self}/fixture"
+ops:
+  profile.get:
+    status: verified
+    steps:
+      - {id: feed, action: goto, value: "{origin}/"}
+      - id: read-profile
+        action: extract
+        out: profile
+        function: |
+          async () => {
+            for (let i = 0; i < 40 && !document.querySelector('#p-name').textContent; i++)
+              await new Promise(r => setTimeout(r, 100));
+            const q = (s) => document.querySelector(s);
+            const abs = (el) => (el && !el.hidden && el.getAttribute('src'))
+              ? new URL(el.getAttribute('src'), location.href).href : null;
+            return JSON.stringify({ok: true, value: {
+              name: q('#p-name').textContent.trim(),
+              handle: q('#p-handle').textContent.replace(/^@/, '').trim(),
+              bio: q('#p-bio').textContent.trim(),
+              avatar_url: abs(q('#avatar')), banner_url: abs(q('#banner'))}});
+          }
+
+  profile.update.name:
+    status: verified
+    steps:
+      - {id: settings, action: goto, value: "{origin}/settings"}
+      - {id: type-name, action: fill, locator: {role: textbox, name: ["שם", "Name"]}, value: "{name}"}
+      - {id: save, action: click, locator: {role: button, name: ["שמירה", "Save"]}}
+      - {id: saved, action: wait_for, text: "נשמר", seconds: 8}
+
+  profile.update.bio:
+    status: verified
+    steps:
+      - {id: settings, action: goto, value: "{origin}/settings"}
+      - {id: type-bio, action: fill, locator: {role: textbox, name: ["ביו", "Bio"]}, value: "{bio}"}
+      - {id: save, action: click, locator: {role: button, name: ["שמירה", "Save"]}}
+      - {id: saved, action: wait_for, text: "נשמר", seconds: 8}
+
+  profile.update.avatar:
+    status: verified
+    steps:
+      - {id: settings, action: goto, value: "{origin}/settings"}
+      - {id: give-file, action: upload, css: "#avatar-file", file: avatar, spec: avatar}
+      - {id: updated, action: wait_for, text: "התמונה עודכנה", seconds: 10}
+
+  profile.update.banner:
+    status: verified
+    steps:
+      - {id: settings, action: goto, value: "{origin}/settings"}
+      - {id: give-file, action: upload, css: "#banner-file", file: banner, spec: banner}
+      - {id: updated, action: wait_for, text: "התמונה עודכנה", seconds: 10}
+
+  post.list:
+    status: verified
+    steps:
+      - {id: feed, action: goto, value: "{origin}/"}
+      - id: read-feed
+        action: extract
+        out: posts
+        function: |
+          async () => {
+            for (let i = 0; i < 40 && !document.querySelector('#feed').children.length; i++)
+              await new Promise(r => setTimeout(r, 100));
+            const out = [...document.querySelectorAll('article.post')].slice(0, 20).map((a) => ({
+              id: a.id.replace('post-', ''),
+              text: (a.querySelector('p') ? a.querySelector('p').textContent : ''),
+              url: location.origin + location.pathname + '#' + a.id}));
+            return JSON.stringify({ok: true, value: out});
+          }
+
+  post.create.text:
+    status: verified
+    steps:
+      - {id: feed, action: goto, value: "{origin}/"}
+      - {id: open-composer, action: click, locator: {role: button, name: ["מה חדש", "What's on your mind"]}}
+      # the editor is a contenteditable named only by aria-placeholder — reached in the page
+      - {id: type, action: js_fill, css: "#composer [role=textbox][contenteditable=true]", value: "{text}"}
+      - {id: publish, action: click, locator: {role: button, name: ["פרסום", "Post"], pick: last}}
+      - {id: in-feed, action: wait_for, text: "{text_head}", seconds: 10}
+
+  post.create.image:
+    status: verified
+    steps:
+      - {id: feed, action: goto, value: "{origin}/"}
+      - {id: open-composer, action: click, locator: {role: button, name: ["מה חדש", "What's on your mind"]}}
+      - {id: type, action: js_fill, css: "#composer [role=textbox][contenteditable=true]", value: "{text}"}
+      - {id: give-file, action: upload, css: "#file", file: image, size: {w: 1200, h: 1200}}
+      - {id: thumb, action: wait_for, seconds: 1}
+      - {id: publish, action: click, locator: {role: button, name: ["פרסום", "Post"], pick: last}}
+      - {id: in-feed, action: wait_for, text: "{text_head}", seconds: 10}
+
+  post.delete:
+    status: verified
+    steps:
+      - {id: feed, action: goto, value: "{origin}/"}
+      - {id: delete, action: click, locator: {role: button, name: ["מחיקת פוסט {post_id}"], exact: true}}
+      - {id: confirm, action: click, locator: {role: button, name: ["כן, למחוק את פוסט {post_id}"], exact: true}}
+      - {id: settle, action: wait_for, seconds: 1}

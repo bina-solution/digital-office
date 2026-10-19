@@ -1,0 +1,704 @@
+{
+  "updatedAt": "2025-11-26T07:29:23.656Z",
+  "createdAt": "2025-09-25T21:19:55.920Z",
+  "id": "indoxV2QueryShipmentId01",
+  "name": "Query SHIPMENT_ID",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://apitools.hacohen.bina-solutions.co.il/documentJsonQuery",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "draw",
+              "value": "false"
+            },
+            {
+              "name": "format",
+              "value": "img"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "=json",
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "jsonBody": "={\n  \"file_id\": \"{{ $('Upload OR Get API_TOOLS_ID').item.json.file_id }}\",\n  \"ocr_json_query\": {{ $('Shipping Id AFTER Query').first().json.shipping_id_query.toJsonString() }},\n   \"match_index\":  {{ $('Shipping Id AFTER Query').first().json.match_index || 0 }},\n   \"draw\": true,\n   \"format\": \"img\"\n}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "455bbc44-5949-44c5-9bbf-eff7f7da4351",
+      "name": "Extract SHIPMENT ID AFTER",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -544,
+        16
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2600,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://apitools.hacohen.bina-solutions.co.il/documentJsonQuery",
+        "sendBody": true,
+        "specifyBody": "=json",
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "jsonBody": "={\n  \"file_id\": \"{{ $('Upload OR Get API_TOOLS_ID').item.json.file_id }}\",\n  \"ocr_json_query\": {{ $('Shipping Id BELOW Query').first().json.shipping_id_query.toJsonString() }}\n}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "197421c7-c395-4ecc-9009-65367e87f65d",
+      "name": "Extract SHIPMENT_ID BELOW",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -112,
+        16
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 2100,
+      "maxTries": 5,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"shipping_id_query\": {\n    \"action\": \"find below\",\n    \"action_value\": [\n        \"תעודת משלוח מספר\",\n        \"משלוח מספר\",\n        \"תעודת משלוח מס':\",\n        \"תעודת משלוח מס'\",\n        \"משלוח מספר    \",\n         \"משלוח מס' :    \",\n       \"תעודת משלוח מס'\",\n        \"תעודת משלוח\",\n        \"תעודת משלוח מס\",\n        \"תעודת משלוח\",\n        \"מספר משלוח\",\n        \"משלוח מס'\",\n      \"ת.משלוח\",\n      \"ת משלוח\",\n      \"משלוח\",\n      \"תעודה\",\n      \"ת.מ\"\n\n    ],\n    \"value_validations\": [\n        {\n            \"validation_type\": \"has_number\"\n        },\n        {\n            \"validation_type\": \"length_greater_than\",\n            \"validation_value\": 3\n        },\n        { \"validation_type\": \"length_less_than\", \"validation_value\": 20 }\n    ],\n    \"is_rtl\": true\n  }\n}\n\n",
+        "options": {}
+      },
+      "id": "d7e1d0ec-ec97-4e46-bd74-e50f2c72933a",
+      "name": "Shipping Id BELOW Query",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -896,
+        -224
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "72d31359-d3a5-4246-af26-22a901684d38",
+              "leftValue": "={{ $json.error }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -1968,
+        496
+      ],
+      "id": "70cdf2db-3148-4c4d-bbd0-58f36ee9a641",
+      "name": "If OCR Error"
+    },
+    {
+      "parameters": {
+        "errorMessage": "=Failed to perform ocr {{ $json.error }}"
+      },
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        -1744,
+        480
+      ],
+      "id": "571b3f94-790c-42bd-b049-11287206d8f6",
+      "name": "Stop and Error"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "\n\n\nlet query = {\n  \"shipping_id_query\": {\n    \"action\": \"find after\",\n    \"action_value\": [\n        \"מספר תעודה בפנקס:\",\n        \"תעודת החזרה מלקוח מספר\",\n        \"משלוח אריזות מספר\",\n        \"תעודת משלוח מספר\",\n        \"משלוח מספר\",\n        \"תעודת משלוח מס':\",\n        \"תעודת משלוח מס'\",\n      \"מס' תמ\\\"ש\",\n        \"משלוח מספר\",\n         \"משלוח מס' :\",\n       \"תעודת משלוח מס'\",\n      \"תעודות משלוח\",\n        \"תעודת משלוח\",\n        \"תעודת משלוח מס\",\n      \"ת.משלוח מס.\",\n      \"ת.משלוח מס\",\n        \"תעודת משלוח\",\n        \"מספר משלוח\",\n        \"משלוח מס'\",\n      \"תע' משלוח\",\n      \"ת.משלוח\",\n      \"ת משלוח\",\n      \"מס משלוח\",\n      \"מס תעודה\",\n      \"מספר תעודה\",\n      \"סהכ תעודה\",\n      \"תעודה מס\",\n      \"תעודה:\",\n    ],\n    \"value_validations\": [\n        {\"validation_type\": \"has_number\"},\n        {\n            \"validation_type\": \"length_greater_than\",\n            \"validation_value\": 1\n        },\n        { \"validation_type\": \"length_less_than\", \"validation_value\": 20 },\n\n    ],\n    \"is_rtl\": true\n  },\n  \"match_index\": -1\n}\n\n\nif ([null,undefined,\"\", \"unkown\"].includes($json.COMPANY_DOC_ID)==false){\n  let not_doc_id_validation = { \n    \"validation_type\": \"not_ends_with\",\n    \"validation_value\": String($json.COMPANY_DOC_ID).slice?.(-5)\n  }\n  query.shipping_id_query.value_validations.push(not_doc_id_validation)\n}\nreturn query;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1120,
+        -224
+      ],
+      "id": "536a8711-35c7-41e5-900a-9f1f4619d14f",
+      "name": "Shipping Id AFTER Query"
+    },
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "API_TOOLS_ID"
+            },
+            {
+              "name": "LINK"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -1664,
+        32
+      ],
+      "id": "8553cf8b-83aa-4e94-8a29-c3276262088f",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $('Google Sheets Trigger').item.json.LINK }}",
+          "mode": "url"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -1968,
+        672
+      ],
+      "id": "3f5ec24a-6870-4dc7-8df8-532272d6adfe",
+      "name": "Download file2",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "KirWFwoFdEFmnN0R",
+          "name": "Google Drive person17@example.com"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://apitools.hacohen.bina-solutions.co.il/documentOcr",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "dont_return_ocr",
+              "value": "={{true}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "47a59226-eeed-402e-b1fd-605bd14a0433",
+      "name": "Document OCR1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1744,
+        672
+      ],
+      "executeOnce": false
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -1376,
+        32
+      ],
+      "id": "7a27a289-394f-4e2e-881c-f5b3bd021ef0",
+      "name": "Start"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "765d597c-0388-415d-9131-9e87b840f7d4",
+              "name": "ok",
+              "value": "={{ !!$json.result }}",
+              "type": "boolean"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        576,
+        160
+      ],
+      "id": "ac086765-6b0f-490e-b11e-9d14ab057896",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "indoxV2UploadApiTools01",
+          "mode": "list",
+          "cachedResultName": "Upload Doc To API TOOLS"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "HASH": "={{ $json.API_TOOLS_ID }}",
+            "LINK": "={{ $json.LINK || null }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "LINK",
+              "displayName": "LINK",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "HASH",
+              "displayName": "HASH",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "each",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        -1120,
+        32
+      ],
+      "id": "222c699f-cf8b-49a0-b779-9d1dd1a7aa95",
+      "name": "Upload OR Get API_TOOLS_ID"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "40af2929-a4ed-4fc0-9ec8-eb392307d940",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -912,
+        32
+      ],
+      "id": "65f3a012-1431-4bdc-9f79-06b108a275e6",
+      "name": "IS OK"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e69518aa-a04e-4af6-99a7-f0488ebb8317",
+              "name": "result",
+              "value": "={{ $json.result?.result || null}}",
+              "type": "string"
+            },
+            {
+              "id": "35c8afed-91ae-4cac-bfd4-93fca0489c9a",
+              "name": "file_id",
+              "value": "={{ $json.file_id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        96,
+        -64
+      ],
+      "id": "9423d113-79fa-41fd-bf06-2954c5e05106",
+      "name": "Result"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "9a2c300b-ed4f-4d25-af27-90742262814b",
+              "leftValue": "={{ $json?.result?.result }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -320,
+        -48
+      ],
+      "id": "69d29d5f-14ee-4875-899d-53203d0038ae",
+      "name": "If has results"
+    },
+    {
+      "parameters": {
+        "content": "## I'm a note \nFails list \nhttps://drive.google.com/file/d/1mImvW8W9ouc4L1WAly4gjtpBgZN-gaZi/edit below\nhttps://drive.google.com/file/d/1kHzfaokXgcWEY-Jh9tVxpPckl1F-5vHe/edit below\nhttps://drive.google.com/file/d/1AfPV9WiCY7xx_X1S5XlmSyzqhzotqZFE/view after \nhttps://drive.google.com/file/d/1hw5bJlSPf2Kvt8xA1Qobfz8X9OsrlF6d/view?usp=drivesdk after ",
+        "height": 224,
+        "width": 720
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -2064,
+        -256
+      ],
+      "id": "da7c1690-59ae-4fe1-844c-02e40332aa68",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        112,
+        160
+      ],
+      "id": "eb56c0b1-f595-443f-9ed5-aab81d9cd01d",
+      "name": "Map Query Error"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -688,
+        160
+      ],
+      "id": "7699ed37-db44-4370-83ff-99580e7dfe31",
+      "name": "Failed API_TOOLS_ID"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -304,
+        160
+      ],
+      "id": "e79aa1a9-34a8-4690-98f4-1e48499e8564",
+      "name": "Map Query Error1"
+    }
+  ],
+  "connections": {
+    "Extract SHIPMENT ID AFTER": {
+      "main": [
+        [
+          {
+            "node": "If has results",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Map Query Error1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shipping Id BELOW Query": {
+      "main": [
+        []
+      ]
+    },
+    "If OCR Error": {
+      "main": [
+        [
+          {
+            "node": "Stop and Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shipping Id AFTER Query": {
+      "main": [
+        [
+          {
+            "node": "Shipping Id BELOW Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download file2": {
+      "main": [
+        [
+          {
+            "node": "Document OCR1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Shipping Id AFTER Query",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Upload OR Get API_TOOLS_ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract SHIPMENT_ID BELOW": {
+      "main": [
+        [
+          {
+            "node": "Result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Map Query Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload OR Get API_TOOLS_ID": {
+      "main": [
+        [
+          {
+            "node": "IS OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IS OK": {
+      "main": [
+        [
+          {
+            "node": "Extract SHIPMENT ID AFTER",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Failed API_TOOLS_ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Result": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If has results": {
+      "main": [
+        [
+          {
+            "node": "Result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract SHIPMENT_ID BELOW",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map Query Error": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Failed API_TOOLS_ID": {
+      "main": [
+        [
+          {
+            "node": "Map Query Error1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map Query Error1": {
+      "main": [
+        [
+          {
+            "node": "Map Query Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false,
+    "timeSavedPerExecution": 1
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": {
+    "When Executed by Another Workflow": [
+      {
+        "json": {
+          "LINK": "https://drive.google.com/file/d/1SC_J3k4LwcTPoougG0QLyLKIgi7URUMt/edit"
+        }
+      }
+    ]
+  },
+  "versionId": "c313e570-c8c1-4b4d-8939-f97b4ff5c9f0",
+  "activeVersionId": "c313e570-c8c1-4b4d-8939-f97b4ff5c9f0",
+  "versionCounter": 122,
+  "triggerCount": 0,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2025-09-25T21:19:55.920Z",
+      "createdAt": "2025-09-25T21:19:55.920Z",
+      "role": "workflow:owner",
+      "workflowId": "indoxV2QueryShipmentId01",
+      "projectId": "EChUnhWXmjrEc3fG",
+      "project": {
+        "updatedAt": "2024-09-26T18:07:08.765Z",
+        "createdAt": "2024-09-26T17:59:24.039Z",
+        "id": "EChUnhWXmjrEc3fG",
+        "name": "Shlomo Bolo <person8@example.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null
+      }
+    }
+  ]
+}

@@ -1,0 +1,109 @@
+# yaml-language-server: $schema=./schema.json
+title: "`./scripts/dc` run from the container's own path (/workspace/office) targets a DIFFERENT compose project (`office`) than the running stack (`digital-office`), so every `up` dies on 'container name is already in use'"
+opened: 2026-09-30
+category: bug
+severity: high
+status: resolved
+summary: "scripts/lib.sh derives COMPOSE_PROJECT_NAME from `basename $REPO_ROOT`, falling back to `digital-office` only when that basename sanitises to empty. The same checkout is reachable at two paths — the macOS path whose Hebrew basename sanitises to nothing (→ digital-office, the project the whole running stack belongs to) and the container's /workspace/office (→ office) — so the SAME command with the SAME compiled files creates a phantom empty project and collides with every running container's name."
+description: |
+  ## Symptom
+
+  Told to run git/compose work from the container's path, an agent did:
+
+  ```bash
+  cd /workspace/office
+  ./scripts/dc build git && ./scripts/dc up -d git
+  ```
+
+  The build succeeded and the start failed:
+
+  ```
+  Container git-local  Creating
+  Container git-local  Error response from daemon: Conflict. The container name "/git-local" is
+  already in use by container "96371e2f…"
+  ```
+
+  Nothing is wrong with the app, the image or the compose files. Compose simply does not recognise the
+  running container as its own.
+
+  ## Measured
+
+  ```bash
+  docker inspect git-local --format '{{index .Config.Labels "com.docker.compose.project"}}'
+  # digital-office          ← the container the office actually runs
+
+  cd "/Users/shlomobolotin/הלשכה הדיגיטלית שלי " && ./scripts/dc config --format json | jq -r .name
+  # digital-office
+  cd /workspace/office              && ./scripts/dc config --format json | jq -r .name
+  # office                  ← a phantom project: `dc ps` shows nothing, `up` collides on every name
+
+  cd /workspace/office && COMPOSE_PROJECT_NAME=digital-office ./scripts/dc config --format json | jq -r .name
+  # digital-office          ← the pin works
+  ```
+
+  Every container in the stack carries `com.docker.compose.project=digital-office`
+  (`console-local`, `traefik-local`, `forge-local`, `dgo-extend-local`, …), and the images are
+  `digital-office-*`.
+
+  ## Root cause
+
+  `scripts/lib.sh` (~line 268) deliberately pins a name only when compose's own derivation would be
+  EMPTY — the comment above it explains why (the Hebrew checkout name would otherwise break the
+  waits). It chooses the fallback by sanitising `basename "${REPO_ROOT}"`:
+
+  ```bash
+  _bbox_pn="$(basename "${REPO_ROOT}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9_-]//g; s/^[^a-z0-9]*//')"
+  [ -n "${_bbox_pn}" ] || export COMPOSE_PROJECT_NAME="digital-office"
+  ```
+
+  `REPO_ROOT` is resolved from the script's own path, so it is whatever path the caller used. The
+  Hebrew macOS path sanitises to nothing → `digital-office` (correct, and it is where the stack was
+  built). `/workspace/office` sanitises to `office` → a project of its own. Both paths point at the
+  SAME files, so nothing warns; only the container-name collision surfaces it, and only on `up` —
+  `build`, `config`, `logs` and `ps` look perfectly healthy while addressing the wrong project
+  (`dc ps` from /workspace/office lists an empty stack, which reads as "the office is down").
+
+  ## Why it matters beyond one session
+
+  DGO-62 told every agent to push git through the app's proxy with `cd /workspace/office && git push …`
+  — the natural next step from there is `./scripts/dc …`, and that step silently switches projects. A
+  `dc down` from the container path would not stop the office (it sees nothing) while a `dc up -d`
+  would fight the running stack for every container name. The two paths are documented as equivalent
+  ("the checkout is mounted at its original path"), so the difference is invisible by construction.
+
+  ## Suggested fix (not applied here — a platform file, several sessions in it)
+
+  Derive the name from something path-independent, in this order:
+
+  1. honour `COMPOSE_PROJECT_NAME` from `.env` if present (compose reads `.env` itself; the shell
+     check in lib.sh does not, which is why pinning it in the environment works but in `.env` alone
+     would only be seen by compose);
+  2. otherwise resolve `REPO_ROOT` to its PHYSICAL path (`pwd -P`) and, when that path is one of the
+     known aliases of the same checkout (`/workspace/office`, the macOS Hebrew path), keep
+     `digital-office` rather than deriving a second name;
+  3. and, until then, say the derived project name in one line on every `dc` invocation — a wrong
+     project must not be quieter than a right one.
+
+  The interim workaround that is safe today: run `./scripts/dc` (and `./bbox`) from the checkout's
+  macOS path, never from `/workspace/office`. `git` commands are unaffected — the two paths share one
+  `.git`.
+
+  ## Related
+
+  * DGO-62 — pushing from inside bina-ds through `http://git:8978/git/gh/<account>/…`, which is where
+    the `cd /workspace/office` habit comes from.
+
+  ## Where this stands, 2026-10-07 (branch dgo-pair)
+
+  The three steps suggested above:
+
+  1. **A name pinned in `.env` is honoured by the shell.** `scripts/lib.sh` reads
+     `COMPOSE_PROJECT_NAME` from `.env` before it derives anything, so the shell and compose cannot
+     disagree about a pinned name.
+  2. **The physical path decides** (`pwd -P`, landed 2026-09-30): the checkout reached through
+     `/workspace/office` derives the same name as the host's path.
+  3. **A wrong project is not quieter than a right one.** Not a line on every `dc` call — `bbox
+     status` says which compose project it is talking about, lists what another project holds under
+     this stack's names, and `bbox run` refuses to start over such a container, naming it. A checkout
+     that derives a phantom project now hears about it before anything is created: every name it
+     needs is held by the real one.

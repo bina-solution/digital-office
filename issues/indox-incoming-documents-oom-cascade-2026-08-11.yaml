@@ -1,0 +1,56 @@
+# yaml-language-server: $schema=./schema.json
+title: The incoming-documents API container hit its 768MiB cgroup limit and was OOM-killed, cascading into an n8n main restart, a worker recreation, and 90 abandoned executions.
+opened: '2026-08-11'
+severity: high
+status: open
+summary: The incoming-documents API container hit its 768MiB cgroup limit and was OOM-killed, cascading into an n8n main restart, a worker recreation, and 90 abandoned executions.
+description: |
+  id: indox-incoming-documents-oom-cascade-2026-08-11
+  As first recorded — opened: 2026-08-11T09:20Z · severity: high-recurring · status: OCCURRED-AND-SELF-RECOVERED
+
+  ## What happened
+
+  ```yaml
+  timeline:
+    08:53Z: gunicorn (the incoming-documents API) OOM-killed. CONSTRAINT_MEMCG -- a container hitting its OWN limit, not host exhaustion. anon-rss 347476kB.
+    09:04-09:11Z: 90 executions abandoned mid-flight across indoxV2Driver01, indoxV2ActionRouter01, indoxV2ActionsGDoc01, indoxV2ActionsShip01, indoxDocBatchUpsert01, InvoiceDocEx01, JQExV3Invoice001, indoxSettings01, indoxV2Decide01.
+    09:06:20Z: n8n main (n8n-shlomo-laptop) restarted -- RestartCount reached 4.
+    09:16:17Z: n8n-worker-1 started fresh.
+  recovery: Self-recovered within ~15 minutes. All containers healthy, throughput returned to 424/hr (a session high), orphans falling 90 -> 28 as the reaper and natural completion cleared them.
+  ```
+
+  ## The warning that was correct and the judgement that was not
+
+  ```yaml
+  what_I_saw: incoming-documents at 94.3% then 94.8% of its 768MiB limit, oscillating down to 91.19%.
+  what_I_concluded: That the oscillation was GC reclaiming successfully -- 'stable and self-limiting, a sawtooth not a slope' -- and that restarting a core API service to fix a non-breaching sawtooth was not worth the disruption. I explicitly stood the concern down.
+  why_that_was_wrong: The oscillation WAS real, but it was oscillating against a ceiling with no headroom left. A sawtooth at 91-95% of a hard limit is not evidence of safety -- it is evidence that every GC cycle is only just winning, and one allocation spike ends it. The correct reading of "no headroom" is risk, not stability.
+  what_it_cost: 'A restart at that moment would have cost a few retried API requests (callers retry; unlike n8n workers, nothing is permanently destroyed). Instead: an n8n main restart, a worker recreation, and 90 abandoned executions.'
+  ```
+
+  ## Why this matters beyond one incident
+
+  This is the THIRD distinct OOM cascade in one night, each from a different container hitting a different limit:
+    06:15  pdftoppm at 3.3GB RSS (apitools rasterization, host-wide OOM)
+    07:38  an n8n worker at its 2GiB cgroup limit -> stalled jobs -> maxStalledCount:0 -> the
+           "Missing key" wedge
+    08:53  incoming-documents (gunicorn) at its 768MiB cgroup limit -> n8n main restart -> 90 orphans
+  The common factor is that container limits sum to ~31GB on a 9.95GB host -- deliberate oversubscription that works until any single service needs its full allocation at the wrong moment. Throughput tripling this session (122 -> 424/hr) means more documents concurrently in flight, which means every service runs closer to its ceiling. The gains and the OOMs have the same cause.
+
+  ## Recommended
+
+  Do NOT simply raise limits -- perf-profiles.yml pins them for documented reasons and the host has no spare RAM to give. Instead: (a) monitor cgroup occupancy and treat sustained >90% as actionable rather than as a sawtooth to admire, (b) restart the ONE hot container early, which is cheap for API services whose callers retry, and (c) reduce per-document memory demand -- the same execution-cost problem tracked in the consolidated issue.
+
+  ## Detection gap closed 2026-08-11t09:25z
+
+  ```yaml
+  what_was_built: scratchpad/memwatch.sh -- a cgroup occupancy watcher. Every 60s it reads per-container MemPerc (occupancy against each container's OWN limit, which is what predicts a cgroup OOM) and logs anything >=85% as a warning and >=92% as an alert, plus host-level available memory below 700MB. Writes to scratchpad/memwatch.log. Start it with scratchpad/start_memwatch.sh.
+  thresholds_are_measured_not_conventional: '85 / 92 come from tonight: incoming-documents sat at 91-95% for a long stretch before firing, so 92% is the band where a single allocation spike ends it.'
+  IT_ONLY_OBSERVES_and_that_is_deliberate: It never restarts, kills, or reconfigures anything. An automated restart carries real risk here -- restarting an n8n worker permanently destroys every execution it holds (maxStalledCount:0, no retries) -- and the judgement of trading a disruption for headroom belongs to a human. What was missing tonight was the SIGNAL, not the action.
+  PROVEN_WORKING_the_hard_way: The first launcher used `pgrep -fc memwatch` as its already-running guard, and since the launcher itself was named launch_memwatch.sh it MATCHED ITS OWN NAME, concluded the watcher was running, and never started it -- while reporting "already running" with its own pids. The watcher was blind for the entire period I believed it was covering. Caught only by testing the logic against live values rather than trusting the launcher's output. start_memwatch.sh now guards on the full script path and PROVES the process by its command line before claiming success. A monitor that reports all-clear while blind is worse than no monitor -- which is the same failure class as the incidents it was built to catch.
+  first_catch: Within minutes of actually starting, it tracked incoming-documents from 90.64% -> 92.22% -> 92.97% -> 98.94% -> 99.76% (766.1MiB of 768MiB, under 2MiB of headroom) and then back down to 96.59% as GC reclaimed. Several minutes of lead time where the three earlier cascades had none.
+  ```
+
+  ## Detection gap
+
+  Nothing watches cgroup occupancy. The n8n worker liveness probe caught its own wedge but nothing caught incoming-documents approaching its limit, and I only saw it because I was manually chasing a throughput dip. A simple watcher on per-container MemPerc would have flagged all three of tonight's cascades before they fired.

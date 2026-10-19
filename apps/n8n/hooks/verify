@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+set -euo pipefail
+export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
+# n8n-verify — is the deployment ready to RUN? (= onboarding --auth-state)
+#   1. .env key audit       — warn on placeholder/empty keys (feature impact)
+#   2. settings webhook probe — Settings workflow + httpBasic cred + data-sheet access (end-to-end)
+#   3. OAuth credentials    — each Google cred has a usable token? else print a re-auth link
+# Read-only. Usage: scripts/n8n-verify
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # read_env, DN, N8N_CONTAINER, colors, ok/warn/bad, running
+N8N="${N8N_CONTAINER}"
+OE="$(read_env N8N_OWNER_EMAIL)"; OP="$(read_env N8N_OWNER_PASSWORD)"
+running "${N8N}" || { echo "${cr}n8n not running${c0} — 'bbox run'"; exit 1; }
+
+echo "n8n verify — ${DN}"
+echo "[1) required keys (.env)]"
+audit() { # name "feature"
+  local v; v="$(read_env "$1")"
+  if [ -z "$v" ]; then warn "$1 EMPTY — $2";
+  elif printf '%s' "$v" | grep -qiE 'your-|change-me|example|placeholder|here$'; then warn "$1 PLACEHOLDER — $2";
+  else ok "$1 set"; fi
+}
+audit GEMINI_API_KEY        "AI extraction (balance-sheet / invoice) will fail"
+audit GOOGLE_VISION_API_KEY "apitools OCR (/documentOcr) will fail"
+audit N8N_GOOGLE_OAUTH_CLIENT_ID "Google OAuth (Sheets/Drive) cannot connect"
+audit N8N_GMAIL_OAUTH_CLIENT_ID  "Gmail OAuth cannot connect"
+
+echo "[2) settings webhook + 3) OAuth credentials]"
+NOCLR="$([ -t 1 ] && echo '' || echo 1)"
+docker exec -e OE="${OE}" -e OP="${OP}" -e SU="$(read_env SETTINGS_AUTH_USER)" -e SP="$(read_env SETTINGS_AUTH_PASS)" -e OAB="$(read_env N8N_OAUTH_BASE)" -e NOCLR="${NOCLR}" "${N8N}" node -e '
+const OE=process.env.OE,OP=process.env.OP;let C="";
+const reauthBase=(process.env.OAB&&process.env.OAB.length)?process.env.OAB:"http://127.0.0.1:5678";
+async function rq(p,m,b,h){const r=await fetch("http://localhost:5678"+p,{method:m||"GET",headers:{"Content-Type":"application/json",...(C?{Cookie:C}:{}),...(h||{})},body:b?JSON.stringify(b):undefined});const sc=r.headers.get("set-cookie");if(sc)C=sc.split(";")[0];const t=await r.text();let j=null;try{j=JSON.parse(t);}catch(e){}return{status:r.status,text:t,data:j&&j.data!==undefined?j.data:j};}
+const NC=process.env.NOCLR?1:0, C0=NC?"":"\x1b[0m",G=NC?"":"\x1b[32m",Y=NC?"":"\x1b[33m",R=NC?"":"\x1b[31m";
+const ok=s=>console.log("  "+G+"✓"+C0+" "+s),wa=s=>console.log("  "+Y+"!"+C0+" "+s),ba=s=>console.log("  "+R+"✗"+C0+" "+s);
+(async()=>{ try{
+  // n8n may be restarting (push restarts it) — wait for the REST API, never crash.
+  // retry only while the connection is refused (n8n restarting); stop once an HTTP response comes.
+  for(let i=0;i<30;i++){ try{ await rq("/rest/login","POST",{emailOrLdapLoginId:OE,password:OP}); break; }catch(e){ await new Promise(r=>setTimeout(r,2000)); } }
+  if(!C){ wa("could not authenticate to n8n (still starting / login rate-limited / N8N_OWNER_* wrong) — re-run: bbox n8n verify"); return; }
+  if(process.env.SU){
+    try{ const a=Buffer.from(process.env.SU+":"+process.env.SP).toString("base64");
+      // cap the probe: a broken Settings workflow (e.g. inaccessible data sheet) retries ~45s before 500 —
+      // a readiness check must fail FAST and loud, not hang. 8s is plenty for a healthy sheet read.
+      const r=await fetch("http://localhost:5678/webhook/setting?key=gmail_docs_dest_folder_id",{headers:{Authorization:"Basic "+a},signal:AbortSignal.timeout(8000)});
+      let v="";try{v=(JSON.parse(await r.text()).val)||"";}catch(e){}
+      r.status===200&&v? ok("settings webhook OK → gmail_docs_dest_folder_id="+v) : (r.status===200? wa("settings webhook 200 but no value (sheet rows?)") : ba("settings webhook HTTP "+r.status+" (Settings workflow / data-sheet access?)"));
+    }catch(e){ e.name==="TimeoutError"||/abort/i.test(e.message)? ba("settings webhook TIMED OUT >8s (Settings workflow stuck — data-sheet inaccessible?)") : wa("settings webhook probe failed: "+e.message); }
+  } else wa("SETTINGS_AUTH_USER not set — skipping settings webhook probe");
+  let list=[]; try{ const cr=await rq("/rest/credentials"); list=Array.isArray(cr.data)?cr.data:[]; }catch(e){ wa("credential list error: "+e.message); return; }
+  const oauth=list.filter(c=>/OAuth2/.test(c.type)||c.type==="gmailOAuth2");
+  if(!oauth.length){wa("no Google OAuth credentials found");return;}
+  for(const c of oauth){
+    try{ const r=await rq("/rest/credentials/"+c.id+"?includeData=true"); const data=(r.data&&r.data.data)||{};
+      if(r.status!==200){ ba(c.name+" — cannot decrypt (key drift) → re-auth"); }
+      else if(data.oauthTokenData){ ok(c.name+" — token present"); }
+      else { ba(c.name+" — NOT connected → re-auth at "+reauthBase+" (Credentials → "+c.name+" → Connect)"); }
+    }catch(e){ wa(c.name+" — check failed: "+e.message); }
+  }
+} catch(e){ wa("verify error: "+e.message); } })();' 2>&1 | grep -viE 'could not be decrypted|error tracking|Puppeteer|deprecat' || true

@@ -1,0 +1,11 @@
+{
+ "appearance.title": "מראה",
+ "appearance.light": "בהיר",
+ "appearance.dark": "כהה",
+ "appearance.system": "לפי המערכת",
+ "fontSize.title": "גודל גופן",
+ "fontSize.description": "משפיע על תוכן השיחה בלבד",
+ "fontSize.unit": "px",
+ "fontSize.increase": "הגדלת הגופן",
+ "fontSize.decrease": "הקטנת הגופן"
+}

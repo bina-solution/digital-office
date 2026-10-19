@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+#: the office's own forge — the admin user and the access token this deployment acts with
+#
+# prepare — git's bring-up bootstrap. Invoked generically by `bbox run` via run_app_hooks; the CLI
+# does not know this app exists.
+#
+# What it produces, and why it must happen BEFORE anything needs it: the local forge is the code
+# library AND the display provider for every repository, and the office can only reach it through a
+# credential that does not exist until somebody mints it. A fresh deployment therefore has to mint
+# one by itself — the alternative is a wizard that asks the owner to paste a token for a service the
+# office just created, which is exactly the ceremony apps/git/bootstrap.py exists to delete.
+#
+# TWO CONTAINERS, ONE CREDENTIAL, and the split is not arbitrary:
+#   * the forge image is the only place the admin CLI exists, and Forgejo REFUSES to run as root, so
+#     every command runs as the `git` user (`-u git`);
+#   * the git container is the only process that can reach the credential plane's instance API.
+# The password and the token are read from the CLI's OUTPUT and piped over stdin — never passed as
+# an argument, because a secret in argv is a secret in `ps`.
+#
+# IDEMPOTENT AND CHEAP WHEN ALREADY DONE: bootstrap.py --check verifies the stored token against the
+# forge, and this hook returns immediately when it answers "yes". A lost token is recovered by
+# running this same hook again.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # say, colors, running, cn, dcx, DN
+
+FORGE_SVC=forge
+GIT_SVC=git
+FORGE_USER="${GIT_FORGE_USER:-office}"
+FORGE_EMAIL="${GIT_FORGE_EMAIL:-office@${DEPLOYMENT_DOMAIN:-localhost}}"
+TOKEN_NAME="${GIT_FORGE_TOKEN_NAME:-office-agent}"
+
+forgejo() {   # run the forge's admin CLI the only way it works: as the git user, non-interactively
+  dcx exec -T -u git "${FORGE_SVC}" forgejo "$@" 2>&1
+}
+
+# ── 1. the forge must be up before it can be provisioned ─────────────────────────────────────────
+if ! running "$(cn "${FORGE_SVC}")"; then
+  say "[git] starting the local forge…"
+  dcx up -d "${FORGE_SVC}" >/dev/null 2>&1 \
+    || say "${cy}[git] the forge did not start — the code library will be unreachable${c0}"
+fi
+for _ in $(seq 1 30); do
+  if dcx exec -T "${FORGE_SVC}" curl -fsS http://localhost:3000/api/healthz >/dev/null 2>&1; then
+    break
+  fi
+  sleep 4
+done
+if ! dcx exec -T "${FORGE_SVC}" curl -fsS http://localhost:3000/api/healthz >/dev/null 2>&1; then
+  say "${cr}[git] the forge is not answering /api/healthz — skipping its bootstrap${c0}"
+  say "${cr}[git]   inspect: ./scripts/dc logs --tail 50 ${FORGE_SVC}${c0}"
+  exit 0
+fi
+
+# ── 2. is there already a WORKING credential? then there is nothing to do ────────────────────────
+if ! running "$(cn "${GIT_SVC}")"; then
+  say "[git] starting the version-control service…"
+  dcx up -d "${GIT_SVC}" >/dev/null 2>&1 || true
+  sleep 5
+fi
+CHECK="$(dcx exec -T "${GIT_SVC}" python3 /app/bootstrap.py --check 2>/dev/null | tail -1)"
+case "${CHECK}" in
+  *'"has_account": true'*)
+    say "[git] the office's forge account is in place — nothing to mint."
+    exit 0 ;;
+  *'"has_account": false'*)
+    : ;;                                     # expected on a fresh deployment, and on a lost token
+  *)
+    say "${cy}[git] could not read the forge account state from the vault — continuing to mint${c0}" ;;
+esac
+
+# ── 3. the admin user (created once, never re-created) ───────────────────────────────────────────
+PASSWORD=""
+if forgejo admin user list | awk 'NR>1 {print $2}' | grep -qx "${FORGE_USER}"; then
+  say "[git] forge user '${FORGE_USER}' already exists."
+  # The forge's OWN login is the only door until SSO covers that host, and a password this hook
+  # generated during a run whose vault write failed is a password nobody has. So: the user exists but
+  # the vault holds no password → mint one now and store it with the token. `change-password` has no
+  # stdin form, which is why this one value travels in argv — on this engine, argv belongs to whoever
+  # can already run docker as root, and it is written to the vault immediately afterwards.
+  case "${CHECK}" in
+    *'"has_password": true'*) : ;;
+    *)
+      PASSWORD="$(python3 -c 'import secrets;print(secrets.token_urlsafe(12))')"
+      if forgejo admin user change-password --username "${FORGE_USER}" --password "${PASSWORD}" \
+           --must-change-password=false >/dev/null; then
+        say "[git] minted a forge password — it is stored in the vault with the token."
+      else
+        PASSWORD=""
+        say "${cy}[git] could not set a forge password — the token still works, the web login may not${c0}"
+      fi ;;
+  esac
+else
+  say "[git] creating the office's forge user '${FORGE_USER}'…"
+  OUT="$(forgejo admin user create --username "${FORGE_USER}" --email "${FORGE_EMAIL}" \
+             --admin --random-password --must-change-password=false)"
+  # `generated random password is 'xyz'` — parsed from the output, never passed in.
+  PASSWORD="$(printf '%s\n' "${OUT}" | sed -nE "s/^generated random password is '([^']+)'.*/\1/p" | head -1)"
+  if ! printf '%s\n' "${OUT}" | grep -q "successfully created"; then
+    say "${cr}[git] creating the forge user failed:${c0}"
+    printf '%s\n' "${OUT}" | tail -3 | sed 's/^/  /'
+    exit 0
+  fi
+fi
+
+# ── 4. a fresh token, with a name that cannot collide with an earlier one ────────────────────────
+# forgejo refuses a duplicate token NAME, and the CLI has no way to delete one — so the name carries
+# the moment it was minted. Recovery runs are rare, and a stale token is removable in the forge UI
+# (Settings → Applications), which is the only place that knows about them.
+STAMP="$(date +%Y%m%d%H%M%S)"
+TOKEN="$(forgejo admin user generate-access-token --username "${FORGE_USER}" \
+             --token-name "${TOKEN_NAME}-${STAMP}" --scopes all --raw | tail -1)"
+TOKEN="$(printf '%s' "${TOKEN}" | tr -d '\r\n')"
+if [ -z "${TOKEN}" ] || [ "${#TOKEN}" -lt 20 ]; then
+  say "${cr}[git] the forge did not return an access token — the code library stays unconnected${c0}"
+  exit 0
+fi
+
+# ── 5. verify, then store (the app's own rule: a connection is verified, never merely added) ─────
+PAYLOAD="$(FORGE_USER="${FORGE_USER}" PASSWORD="${PASSWORD}" TOKEN="${TOKEN}" TOKEN_NAME="${TOKEN_NAME}" \
+  python3 -c 'import json,os; print(json.dumps({"username":os.environ["FORGE_USER"],"password":os.environ["PASSWORD"],"token":os.environ["TOKEN"],"token_name":os.environ["TOKEN_NAME"],"base_url":os.environ.get("FORGE_URL") or "http://forge:3000"}))')"
+RESULT="$(printf '%s' "${PAYLOAD}" | dcx exec -T "${GIT_SVC}" python3 /app/bootstrap.py --register 2>&1 | tail -1)"
+unset PAYLOAD TOKEN PASSWORD
+
+case "${RESULT}" in
+  *'"ok": true'*)
+    say "[git] the office's forge account is connected and verified."
+    # The password IS a secret the owner may need (the forge's own login, until SSO covers it) — the
+    # line says where to read it rather than printing it into a log.
+    printf '%s\n' "${RESULT}" | python3 -c 'import json,sys; d=json.loads(sys.stdin.read() or "{}"); print("  instance: %s (%s)" % (d.get("instance"), d.get("action")))' 2>/dev/null || true
+    say "  the forge credential is in the vault (account screen); nothing to type."
+    ;;
+  *)
+    say "${cr}[git] connecting the office's forge account FAILED${c0}"
+    printf '%s\n' "${RESULT}" | tail -3 | sed 's/^/  /'
+    ;;
+esac

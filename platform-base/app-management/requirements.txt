@@ -1,0 +1,4 @@
+Flask>=3.0
+gunicorn>=21
+PyYAML>=6.0
+docker>=7.0

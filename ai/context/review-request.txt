@@ -1,0 +1,2 @@
+deep review desing / stability / imlementation minimality / robustness / system desinge / efficency / ui ux 
+use playwright mcp to fully review the webapp ui ux / imagine relevant humen user stories (basic and complex), review existing system agins state of the art systems.

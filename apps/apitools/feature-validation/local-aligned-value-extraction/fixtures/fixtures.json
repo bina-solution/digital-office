@@ -1,0 +1,288 @@
+[
+  {
+    "name": "real-doc-1-doc-number",
+    "notes": "Delivery note number: find after מס': → 643672 (Local Tesseract OCR)",
+    "source_file": "fixtures/real-doc-1.png",
+    "ocr_json_query": {
+      "action": "find after",
+      "action_value": "מס':",
+      "is_rtl": true,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80
+      },
+      "value_validations": [
+        {
+          "validation_type": "length_greater_than",
+          "validation_value": 2
+        },
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": "643672",
+      "text_match_equals": "מס':"
+    }
+  },
+  {
+    "name": "real-doc-1-entered-by",
+    "notes": "Entered by field: find after הוקלד: → שמרון (Local Tesseract OCR)",
+    "source_file": "fixtures/real-doc-1.png",
+    "ocr_json_query": {
+      "action": "find after",
+      "action_value": "הוקלד:",
+      "is_rtl": true,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80
+      },
+      "value_validations": []
+    },
+    "expected": {
+      "result_value_equals": "שמרון",
+      "text_match_equals": "הוקלד:"
+    }
+  },
+  {
+    "name": "real-doc-1-customer-name",
+    "notes": "Customer name field: find after הכהנים → חומרי (Local Tesseract OCR)",
+    "source_file": "fixtures/real-doc-1.png",
+    "ocr_json_query": {
+      "action": "find after",
+      "action_value": "הכהנים",
+      "is_rtl": true,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80
+      },
+      "value_validations": []
+    },
+    "expected": {
+      "result_value_contains": "חומרי",
+      "text_match_equals": "הכהנים"
+    }
+  },
+  {
+    "name": "real-doc-1-delivery-type",
+    "notes": "Delivery type: find after תעודת → משלוח. (Local Tesseract OCR includes trailing dot)",
+    "source_file": "fixtures/real-doc-1.png",
+    "ocr_json_query": {
+      "action": "find after",
+      "action_value": "תעודת",
+      "is_rtl": true,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80
+      },
+      "value_validations": []
+    },
+    "expected": {
+      "result_value_contains": "משלוח",
+      "text_match_equals": "תעודת"
+    }
+  },
+  {
+    "name": "real-doc-1-below-origin-label",
+    "notes": "Below מקור label → finds מס': (Local Tesseract OCR keeps colon attached)",
+    "source_file": "fixtures/real-doc-1.png",
+    "ocr_json_query": {
+      "action": "find below",
+      "action_value": "מקור",
+      "is_rtl": true,
+      "tolerances": {
+        "max_vertical_gap": 200,
+        "max_horizontal_offset": 150
+      },
+      "value_validations": []
+    },
+    "expected": {
+      "result_value_equals": "מס':",
+      "text_match_equals": "מקור"
+    }
+  },
+  {
+    "name": "real-doc-2-business-id",
+    "notes": "Business registration: find after מורשה: → 513020941 (Local Tesseract OCR)",
+    "source_file": "fixtures/real-doc-2.png",
+    "ocr_json_query": {
+      "action": "find after",
+      "action_value": "מורשה:",
+      "is_rtl": true,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80
+      },
+      "value_validations": [
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": "513020941",
+      "text_match_equals": "מורשה:"
+    }
+  },
+  {
+    "name": "real-doc-2-phone",
+    "notes": "Phone number: find after טלפון: → 050-000-0001 (Local Tesseract OCR)",
+    "source_file": "fixtures/real-doc-2.png",
+    "ocr_json_query": {
+      "action": "find after",
+      "action_value": "טלפון:",
+      "is_rtl": true,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80
+      },
+      "value_validations": [
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": "050-000-0001",
+      "text_match_equals": "טלפון:"
+    }
+  },
+  {
+    "name": "real-doc-2-receipt-number",
+    "notes": "Receipt barcode: find after קבלה: → RC24004357 (Local Tesseract OCR may add artifacts)",
+    "source_file": "fixtures/real-doc-2.png",
+    "ocr_json_query": {
+      "action": "find after",
+      "action_value": "קבלה:",
+      "is_rtl": true,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 100
+      },
+      "value_validations": []
+    },
+    "expected": {
+      "result_value_contains": "RC24004357",
+      "text_match_equals": "קבלה:"
+    }
+  },
+  {
+    "name": "real-doc-2-customer-id",
+    "notes": "Customer ID: find after לקוח: → 211464 (Local Tesseract OCR)",
+    "source_file": "fixtures/real-doc-2.png",
+    "ocr_json_query": {
+      "action": "find after",
+      "action_value": "לקוח:",
+      "is_rtl": true,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80
+      },
+      "value_validations": [
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": "211464",
+      "text_match_equals": "לקוח:"
+    }
+  },
+  {
+    "name": "real-doc-2-agent",
+    "notes": "Agent name: find after סוכן: → חי (Local Tesseract OCR truncates to partial name)",
+    "source_file": "fixtures/real-doc-2.png",
+    "ocr_json_query": {
+      "action": "find after",
+      "action_value": "סוכן:",
+      "is_rtl": true,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80
+      },
+      "value_validations": []
+    },
+    "expected": {
+      "result_value_equals": "חי",
+      "text_match_equals": "סוכן:"
+    }
+  },
+  {
+    "name": "real-doc-2-payment-date",
+    "notes": "Weighted payment date: find after משוקלל: → 27/08/24 (Local Tesseract OCR)",
+    "source_file": "fixtures/real-doc-2.png",
+    "ocr_json_query": {
+      "action": "find after",
+      "action_value": "משוקלל:",
+      "is_rtl": true,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80
+      },
+      "value_validations": []
+    },
+    "expected": {
+      "result_value_equals": "27/08/24",
+      "text_match_equals": "משוקלל:"
+    }
+  },
+  {
+    "name": "real-doc-2-print-time",
+    "notes": "Print time: find after הדפסה: → 08:20 (Local Tesseract OCR correctly sees time)",
+    "source_file": "fixtures/real-doc-2.png",
+    "ocr_json_query": {
+      "action": "find after",
+      "action_value": "הדפסה:",
+      "is_rtl": true,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80
+      },
+      "value_validations": []
+    },
+    "expected": {
+      "result_value_equals": "08:20",
+      "text_match_equals": "הדפסה:"
+    }
+  },
+  {
+    "name": "real-doc-2-invoice-date",
+    "notes": "Invoice date: find below מתאריך. → 18/04/24 (Local Tesseract OCR)",
+    "source_file": "fixtures/real-doc-2.png",
+    "ocr_json_query": {
+      "action": "find below",
+      "action_value": "מתאריך.",
+      "is_rtl": true,
+      "tolerances": {
+        "max_vertical_gap": 200,
+        "max_horizontal_offset": 150
+      },
+      "value_validations": []
+    },
+    "expected": {
+      "result_value_equals": "18/04/24",
+      "text_match_equals": "מתאריך."
+    }
+  },
+  {
+    "name": "real-doc-2-paid-method",
+    "notes": "Payment method: find after שולם → במזומן (Local Tesseract OCR)",
+    "source_file": "fixtures/real-doc-2.png",
+    "ocr_json_query": {
+      "action": "find after",
+      "action_value": "שולם",
+      "is_rtl": true,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80
+      },
+      "value_validations": []
+    },
+    "expected": {
+      "result_value_equals": "במזומן",
+      "text_match_equals": "שולם"
+    }
+  }
+]

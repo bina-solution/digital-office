@@ -1,0 +1,138 @@
+# X through the office browser (browser42), in the account the owner signed in to ONCE in its live
+# view. Controls are X's own `data-testid` attributes — the hooks X's web app is built on, stable for
+# years (SideNav_AccountSwitcher_Button, tweetTextarea_0, tweetButton, Profile_Save_Button…). The
+# composer is addressed INSIDE its dialog: the home timeline behind it has a second tweetTextarea_0.
+# X's automation rules forbid scripting the site: the office acts at a person's pace, only on actions
+# the owner started, and every WRITE here is `draft` until one run watched in the live view passes.
+# Written 2026-09-29 from X's known structure; the office browser was not yet signed in to X, so
+# nothing here has been observed on the owner's account yet.
+platform: x
+version: 1
+status: draft
+origin: "https://x.com"
+session:
+  signed_in: "[data-testid=SideNav_AccountSwitcher_Button], [data-testid=AppTabBar_Profile_Link]"
+  signed_out: "input[autocomplete=username], input[name=text], [data-testid=loginButton], a[href='/i/flow/login']"
+  wait: 12
+ops:
+  profile.get:
+    status: draft
+    why: "קריאה בלבד — נכתב מהמבנה הידוע של X, ייבדק עם ההתחברות הראשונה"
+    steps:
+      - {id: home, action: goto, value: "https://x.com/home"}
+      - id: me
+        action: extract
+        out: me
+        function: |
+          async () => {
+            for (let i = 0; i < 100 && !document.querySelector('[data-testid=AppTabBar_Profile_Link]'); i++)
+              await new Promise(r => setTimeout(r, 100));
+            const a = document.querySelector('[data-testid=AppTabBar_Profile_Link]');
+            const handle = a ? (a.getAttribute('href') || '').replace(/^\//, '') : '';
+            return JSON.stringify(handle ? {ok: true, value: {handle}} : {ok: false, error: 'no_profile_link'});
+          }
+      - {id: profile, action: goto, value: "https://x.com/{me_handle}"}
+      - id: read-profile
+        action: extract
+        out: profile
+        function: |
+          async () => {
+            for (let i = 0; i < 100 && !document.querySelector('[data-testid=UserName]'); i++)
+              await new Promise(r => setTimeout(r, 100));
+            const q = (s) => document.querySelector(s);
+            const un = q('[data-testid=UserName]');
+            const first = un ? un.querySelector('span') : null;
+            const url = q('[data-testid=UserUrl]');
+            const img = (s) => { const e = q(s); return e ? e.src : null; };
+            return JSON.stringify({ok: true, value: {
+              name: first ? first.innerText.trim() : null,
+              handle: location.pathname.split('/')[1] || null,
+              bio: (q('[data-testid=UserDescription]') || {}).innerText || null,
+              links: url ? [url.innerText.trim()] : [],
+              avatar_url: img('a[href$="/photo"] img'),
+              banner_url: img('a[href$="/header_photo"] img')}});
+          }
+
+  post.create.text:
+    status: draft
+    steps:
+      - {id: compose, action: goto, value: "https://x.com/compose/post"}
+      - {id: type, action: fill, locator: {css: "[role=dialog] [data-testid=tweetTextarea_0]"}, value: "{text}"}
+      - {id: publish, action: click, locator: {css: "[role=dialog] [data-testid=tweetButton]"}}
+      - &x_sent
+        id: sent
+        action: extract
+        out: sent
+        function: |
+          async () => {
+            for (let i = 0; i < 200; i++) {
+              const t = document.querySelector('[data-testid=toast]');
+              if (t && /sent|נשלח/i.test(t.innerText)) return JSON.stringify({ok: true, value: {toast: t.innerText.slice(0, 80)}});
+              if (!document.querySelector('[role=dialog] [data-testid=tweetTextarea_0]')) return JSON.stringify({ok: true, value: {closed: 'yes'}});
+              await new Promise(r => setTimeout(r, 100));
+            }
+            return JSON.stringify({ok: false, error: 'not_sent'});
+          }
+
+  post.create.image:
+    status: draft
+    steps:
+      - {id: compose, action: goto, value: "https://x.com/compose/post"}
+      - {id: type, action: fill, locator: {css: "[role=dialog] [data-testid=tweetTextarea_0]"}, value: "{text}"}
+      - id: attach
+        action: choose_file
+        click: {role: button, name: ["Add photos or video", "הוספת תמונות או וידאו", "Media", "מדיה"]}
+        file: image
+      - {id: preview, action: wait_for, seconds: 4}
+      - {id: publish, action: click, locator: {css: "[role=dialog] [data-testid=tweetButton]"}}
+      - *x_sent
+
+  profile.update.name:
+    status: draft
+    steps:
+      - {id: edit, action: goto, value: "https://x.com/settings/profile"}
+      - {id: type, action: fill, locator: {css: "input[name=displayName]"}, value: "{name}"}
+      - {id: save, action: click, locator: {css: "[data-testid=Profile_Save_Button]"}}
+      - {id: saved, action: wait_for, seconds: 4}
+
+  profile.update.bio:
+    status: draft
+    steps:
+      - {id: edit, action: goto, value: "https://x.com/settings/profile"}
+      - {id: type, action: fill, locator: {css: "textarea[name=description]"}, value: "{bio}"}
+      - {id: save, action: click, locator: {css: "[data-testid=Profile_Save_Button]"}}
+      - {id: saved, action: wait_for, seconds: 4}
+
+  profile.update.links:
+    status: draft
+    steps:
+      - {id: edit, action: goto, value: "https://x.com/settings/profile"}
+      - {id: type, action: fill, locator: {css: "input[name=url]"}, value: "{link}"}
+      - {id: save, action: click, locator: {css: "[data-testid=Profile_Save_Button]"}}
+      - {id: saved, action: wait_for, seconds: 4}
+
+  profile.update.avatar:
+    status: draft
+    steps:
+      - {id: edit, action: goto, value: "https://x.com/settings/profile"}
+      - id: upload
+        action: choose_file
+        click: {role: button, name: ["Add avatar photo", "הוספת תמונת פרופיל"]}
+        file: avatar
+        spec: avatar
+      - {id: apply, action: click, locator: {css: "[data-testid=applyButton]"}}
+      - {id: save, action: click, locator: {css: "[data-testid=Profile_Save_Button]"}}
+      - {id: settle, action: wait_for, seconds: 6}
+
+  profile.update.banner:
+    status: draft
+    steps:
+      - {id: edit, action: goto, value: "https://x.com/settings/profile"}
+      - id: upload
+        action: choose_file
+        click: {role: button, name: ["Add banner photo", "הוספת תמונת נושא"]}
+        file: banner
+        spec: banner
+      - {id: apply, action: click, locator: {css: "[data-testid=applyButton]"}}
+      - {id: save, action: click, locator: {css: "[data-testid=Profile_Save_Button]"}}
+      - {id: settle, action: wait_for, seconds: 6}

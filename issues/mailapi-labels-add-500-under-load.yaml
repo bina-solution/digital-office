@@ -1,0 +1,59 @@
+# yaml-language-server: $schema=./schema.json
+title: mailapi POST /labels/add returns 500 under load — the live lane fails to label real client mail
+opened: '2026-08-06'
+severity: high
+status: open
+summary: mailapi POST /labels/add returns 500 under load — the live lane fails to label real client mail
+description: |
+  component: apps/mail (mailapi service)
+
+  ## Context
+
+  During INDOX battery 6 (17:2x UTC) the LIVE mail lane produced 60 failed executions in a single
+  ~6-minute window — 30 `gmail api` + 30 `gmail api - imap smtp` — every one of them the same call:
+
+      POST http://mailapi:8970/labels/add  ->  500 Internal Server Error
+      body: {"id": "person52@example.com", "labelIds": ["אינדוקס - חשבונית נשמרה"]}
+
+  n8n surfaces it as: "The service was not able to process your request", with the Flask default
+  HTML error page as the description:
+
+      <!doctype html><html lang=en><title>500 Internal Server Error</title>
+      <h1>Internal Server Error</h1><p>The server encountered an internal error and was unable to
+      complete your request. Either the server is overloaded or there is an error in the
+      application.</p>
+
+  CONCURRENT LOAD AT THE TIME (mailapi access log, same seconds): a sustained stream of
+  `POST /search` returning 200 with 316 KB - 342 KB bodies, several per second, alongside
+  `GET /organizer/settings` at 22 KB per call. `/healthz` and `/readyz` stayed 200 throughout, so
+  the container was up and the failure is per-request, not a crash.
+
+  WHY THIS IS NOT THE TEST SUITES: the address is real client mail (`person52@example.com`), the
+  label is a production label (`אינדוקס - חשבונית נשמרה` = "INDOX - invoice saved"), and no INDOX
+  E2E suite touches either. This is the live pipeline labelling real mail and failing.
+
+  WHY IT MATTERS: `labels/add` is how the pipeline records that a document was saved. A 500 here
+  means the mail keeps its to-sync label and no synced label, so the next sweep re-processes it —
+  the same mail is handled repeatedly and the "saved" billboard never appears in the mailbox.
+
+  ## Evidence
+
+  n8n execution 192733 (gmail api, status=error) — full request/response captured in
+  execution_data; siblings 192708..193200 in the same window.
+  Query to re-list them:
+    SELECT e.id FROM execution_entity e JOIN workflow_entity w ON w.id=e."workflowId"
+    WHERE w.name IN ('gmail api','gmail api - imap smtp') AND e.status='error'
+      AND e."startedAt" > '2026-08-06 17:20:00+00';
+
+  ## Next
+
+  Needs the mailapi traceback, which the Flask default page hides — the 500 body carries no
+  detail, so the container log at DEBUG (or an error handler that logs the exception) is the
+  first step. Two hypotheses worth separating, both consistent with "under load":
+    1. a per-request failure amplified by concurrency (IMAP connection pool exhaustion, or a
+       label-store write contending with the large /search reads), vs
+    2. a genuine application error on this specific label/address that would fail at any load.
+  Distinguish by retrying the exact call in isolation, quiet: if it succeeds, it is (1).
+
+  NOT investigated further here by design — flagged and handed off during the INDOX E2E work
+  rather than chased, per coordinator routing.

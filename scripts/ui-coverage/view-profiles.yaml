@@ -1,0 +1,66 @@
+# View profiles — THE single source of truth for every viewport the UI is captured at.
+#
+# Both ui-map paths read this file, so a profile is defined once and can never drift:
+#   • digital-office/sim/ui-map.py    — the offline map, captured from platform-sim.html
+#   • scripts/ui-coverage/capture.py  — the docker-stack CI map (bbox ui-map)
+#
+# Adding a profile here is all it takes for BOTH to start producing it — the sim generator
+# iterates `--all`, and the CI workflow builds its matrix from `ci_matrix` below.
+#
+# Fields:
+#   label        human name shown on the montage header bar
+#   width/height CSS pixels of the viewport
+#   dsf          deviceScaleFactor (2–3 on phones/tablets → retina-sharp screenshots)
+#   is_mobile    Playwright is_mobile: enables the mobile viewport meta + overlay scrollbars
+#   has_touch    exposes touch events, so hover-only affordances correctly do NOT appear
+#   cols         montage columns (wide desktop cells tile 2-up; narrow phone cells tile 4-up)
+#   note         why this profile exists — keep it honest, it drives what we design for
+#
+# The three below are deliberately the *breakpoint-defining* sizes, not a device catalogue:
+# 390 sits under the 820px mobile breakpoint, 834 sits between 820 and 1024 (the icon-rail
+# band), and 1440 is above 1024 (full sidebar). Together they exercise every responsive rule.
+
+profiles:
+  mobile:
+    label: "Mobile · 390×844"
+    width: 390
+    height: 844
+    dsf: 3
+    is_mobile: true
+    has_touch: true
+    cols: 4
+    note: >-
+      iPhone 14/15 class. Below the 820px breakpoint: bottom tab bar, off-canvas drawers,
+      single-column list→detail. The profile most of the mobile-first work targets.
+
+  tablet:
+    label: "Tablet · 834×1112"
+    width: 834
+    height: 1112
+    dsf: 2
+    is_mobile: true
+    has_touch: true
+    cols: 3
+    note: >-
+      iPad Air portrait. The in-between band (820–1024) where the console shows its icon rail
+      but apps are already past their mobile rules — historically the least-tested width.
+
+  desktop:
+    label: "Desktop · 1440×900"
+    width: 1440
+    height: 900
+    dsf: 1
+    is_mobile: false
+    has_touch: false
+    cols: 2
+    note: >-
+      Above 1024: full sidebar, multi-pane layouts, hover affordances live. The reference
+      profile every desktop layout is held pixel-stable against.
+
+# Profiles the CI generates. Keep desktop first — it is the one gated on, the others are
+# additive evidence. Trimming this list is how you make CI cheaper without deleting a profile.
+ci_matrix: [desktop, tablet, mobile]
+
+# Profile used when a caller names none (bbox ui-map with no --profile, capture.py with no
+# UI_MAP_PROFILE). Kept as desktop so existing behaviour and baselines are unchanged.
+default: desktop

@@ -1,0 +1,308 @@
+# incoming-documents — "מסמכים נכנסים" (INDOX) production UI service.
+#
+# Ships the EXISTING Python Flask BFF (development/incoming-documents) which
+# already builds the Vite React SPA and serves it at the app root, plus the
+# `/incomingDocuments/*` REST contract the SPA calls. The BFF reads the SAME
+# live Supabase `incoming_documents` table the n8n INDOX pipeline writes.
+#
+# Embedded same-origin in the console at /a/incoming/ (see apps/console
+# app.py APP_BASES["incoming"] -> http://incoming-documents:8080). Also reachable
+# standalone (SSO-gated) at incoming-documents.localhost / ${INCOMING_DOCS_BASE_URL}.
+#
+# Build reuses the dev Dockerfile as-is (multi-stage: node build -> python
+# serve) — no duplication. There is no message broker in this platform: the app's
+# broker abstraction resolves to its Null producer/consumer/admin when no broker
+# is configured (the SSE tail endpoint still responds, it just streams no live
+# events; the n8n pipeline writes straight to Supabase). The background sync
+# poller is disabled — n8n owns the pipeline.
+services:
+  incoming-documents:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: incoming-documents-local:latest
+    container_name: incoming-documents-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: incoming-documents
+    restart: unless-stopped
+    environment:
+      - FLASK_DEBUG=False
+      - LOG_LEVEL=INFO
+      - PORT=8080
+      # --- glibc allocator containment. THE reason this container used to fill its cap.
+      #
+      # MEASURED 2026-08-11 22:14->22:28 on the live stack: RSS climbed 137MiB -> 704MiB
+      # (+567MB) while serving 236 requests, 86% of them POST /documents/thumbnail. That
+      # endpoint retains NOTHING process-global (the raster is a request-scoped `r.content`
+      # in `_thumbnail_from_apitools`), and the persisted extraction state that backs the
+      # in-memory run/result dicts was 142 KB and untouched since 2026-08-06. So the growth
+      # was never live Python objects — it was freed buffers the allocator refused to return.
+      #
+      # /proc/<worker>/maps at 623MiB RSS showed 19 glibc 64MB arena heaps holding 402.5MiB
+      # of committed rw-p, i.e. 65% of the process sitting in per-thread malloc arenas.
+      # Two glibc behaviours produce that, and both are misconfigured-by-default here:
+      #
+      #   1. ARENA COUNT is sized off the HOST's core count, not the cgroup's. `nproc` inside
+      #      this container reports 6, so glibc permits 8 x 6 = 48 arenas (~3 GB of heap
+      #      spread) for a service whose `cpu.max` is `100000 100000` = exactly 1.0 CPU.
+      #      Arenas exist to cut lock contention between threads running CONCURRENTLY; at a
+      #      1.0-CPU quota only one thread runs at a time, so every arena past the second buys
+      #      nothing and costs a private, never-shared free list. Hence ARENA_MAX=2.
+      #
+      #   2. The DYNAMIC MMAP THRESHOLD ratchets. A 722KB-1.3MB page raster (measured mean
+      #      722 KB, max 1.3 MB) starts out above the 128 KB mmap threshold, so it is mmap'd
+      #      and handed straight back to the OS on free. But glibc RAISES the threshold to the
+      #      size of each mmap'd block it frees (up to 32 MB), so after the first few rasters
+      #      every subsequent one is served from an arena instead — where freeing it returns
+      #      it to a free list, not to the kernel. Pinning MMAP_THRESHOLD_ disables that
+      #      ratchet: document-sized buffers keep going to mmap and keep being reclaimed.
+      #
+      # TRIM_THRESHOLD_ is pinned for the same reason (it is half of the same dynamic pair):
+      # it keeps the main arena's top trimmed rather than letting the trim point drift up.
+      # Cost is an mmap/munmap pair per large buffer, which at this service's ~15-30 req/min
+      # is nothing; the alternative was a 20-minute external `docker restart` crutch that
+      # measurably tripled the pipeline's error rate (0.14% -> 0.54%) by killing in-flight work.
+      #
+      # Why not the alternatives: gunicorn worker recycling (max_requests) is unsafe here
+      # because this service runs ONE worker by design (see app/gunicorn.conf.py — it holds
+      # authoritative in-memory run state), so a recycle is a hard serving gap, not a graceful
+      # handover. Raising the cap only gives the arenas more room to sprawl into, on a host
+      # with ~600MB free. Cutting `threads` would throttle the document path itself.
+      - MALLOC_ARENA_MAX=2
+      - MALLOC_MMAP_THRESHOLD_=131072
+      - MALLOC_TRIM_THRESHOLD_=131072
+      # --- Supabase: read the live INDOX table directly with the service key
+      #     (no n8n-credential coupling — N8N_DB_DSN intentionally NOT set, so the
+      #     factory takes the direct SUPABASE_BASE_URL/SUPABASE_SERVICE_KEY path).
+      # INTERNAL supabase REST gateway — the external https://${SUPABASE_BASE_URL} (supabase.localhost)
+      # is not resolvable from inside a container; kong routes /rest/v1 -> postgrest on the docker network.
+      - SUPABASE_BASE_URL=${INCOMING_DOCS_SUPABASE_URL:-http://kong:8000}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      - SUPABASE_STUDIO_URL=https://${SUPABASE_STUDIO_BASE_URL:-supabase-studio.${DEPLOYMENT_DOMAIN:-localhost}}
+      # --- Registry: the seeded `incoming-documents-main` repo (backend supabase,
+      #     table public.incoming_documents) so GET /repos returns the live repo.
+      - INCOMING_DOCS_REPO_REGISTRY=/app/.storage/incoming_documents/repos.json
+      - INCOMING_DOCS_API_PREFIX=${INCOMING_DOCS_API_PREFIX:-/incomingDocuments}
+      - INCOMING_DOCS_WEBAPP_DIST=/app/incoming_documents_dist
+      # --- No background poller (n8n owns the pipeline).
+      - INCOMING_DOCS_DISABLE_POLLER=1
+      # --- Live action-log (יומן פעולות): the Action Router brackets every dispatch with a
+      #     redis key (incoming_docs_actions:<ID>:<ACTION>:<exec>, TTL 10m); the BFF reads
+      #     them for /dashboard/actions. Same redis + password the whole stack shares.
+      - REDIS_HOST=${INCOMING_DOCS_REDIS_HOST:-redis}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      # --- One-click emergency stop (console settings): stops running n8n executions
+      #     through the internal REST as the owner (same creds bbox's verify hook uses).
+      - N8N_REST_BASE=${N8N_REST_BASE:-http://n8n:5678}
+      - N8N_OWNER_EMAIL=${N8N_OWNER_EMAIL:-}
+      - N8N_OWNER_PASSWORD=${N8N_OWNER_PASSWORD:-}
+      # --- INDOX sync control plane: the BFF proxies the n8n manage webhook
+      #     (SCAN / RELEASE) for the live sync board. Same traefik-network, service DNS.
+      - INDOX_MANAGE_WEBHOOK_URL=${INDOX_MANAGE_WEBHOOK_URL:-http://n8n-webhook:5678/webhook/indox-manage}
+      # --- How many messages a mail pipe lists PER STATE for the board and the inventory.
+      # The default 300 is not just a display cap: the board's move-gate resolves an item's
+      # CURRENT state from this listing, so anything past the cap is refused with "current state
+      # None" and an operator simply cannot act on it. Measured 2026-08-25 on a 1,041-message
+      # mailbox: of 1,190 documents needing a re-sync, the gate could see 307. Raised to cover
+      # the whole mailbox. Cost is a larger stats payload; the UI reads are unaffected because
+      # they go through the `payload_light` generated column, which strips `items`.
+      - INDOX_SYNC_MAIL_LIMIT=${INDOX_SYNC_MAIL_LIMIT:-1500}
+      # --- Test suites (בדיקות): the BFF drives the INDOX n8n E2E test workflows
+      #     (sync-v3 + indox-v2 state machine) via their lane webhooks. No n8n
+      #     credentials needed — webhooks are unauthenticated. Same traefik-network DNS.
+      - N8N_WEBHOOK_BASE=${N8N_WEBHOOK_BASE:-http://n8n-webhook:5678/webhook}
+      # --- Settings-cache invalidation (H5): `PUT /config/settings/<key>` calls the
+      #     `indoxSettings01` cache-clear webhook right after a write, so a settings edit is
+      #     visible immediately rather than up to the KV cache's 20-minute TTL later. That webhook
+      #     carries the SAME "Settings Auth [env-managed]" basic-auth credential every other
+      #     `indoxSettings01` webhook already uses — reusing it, not minting a new secret.
+      - SETTINGS_AUTH_USER=${SETTINGS_AUTH_USER:-settings}
+      - SETTINGS_AUTH_PASS=${SETTINGS_AUTH_PASS:-}
+      # --- The BROWSER-reachable n8n, which is a different address from the one
+      #     above. `http://n8n:5678` is in-cluster DNS: correct for this service
+      #     to call, and a link that silently never resolves if handed to the
+      #     operator's browser. The engine view needs the public one so that
+      #     "why did this run claim nothing" is one click rather than a hunt
+      #     through a hundred executions. Unset is fine — the UI then shows the
+      #     execution id as text, because an id you can paste beats a dead link.
+      - N8N_PUBLIC_URL=${N8N_PROTOCOL:-https}://${N8N_BASE_URL:-n8n.${DEPLOYMENT_DOMAIN:-localhost}}
+      # --- חילוץ מסמכים: dataset-based extraction runner. The BFF drives the
+      #     JsonQueryExV3 n8n workflows (one apitools call per value) over the
+      #     grounded demo dataset mounted below, and proxies apitools for the
+      #     document/draw images. Same traefik-network service DNS.
+      - EXTRACTION_DATASET_DIR=/app/.dataset
+      - APITOOLS_BASE=${APITOOLS_BASE:-http://apitools:8080}
+      # --- AI-side shadow extraction (ai/context/EXTRACTION-REFACTOR-PLAN.md §3
+      #     Phase 3): the extraction harness's AI-side run mode calls the live
+      #     Gemini extractor webhooks (invoice_extractor / bs_ex_2_dev) directly,
+      #     scored by the SAME comparators as the local run. Those webhooks carry
+      #     the same "Incoming Documents [env-managed]" basic-auth credential every
+      #     other invoice/BS extractor webhook already uses — reusing it, not
+      #     minting a new secret.
+      - BS_WEBHOOK_USER=${BS_WEBHOOK_USER:-}
+      - BS_WEBHOOK_PASS=${BS_WEBHOOK_PASS:-}
+      # --- PIPELINE COMMAND (GET /pipeline/status, POST /pipeline/drain):
+      #     read-only postgres for the two databases the pipeline bar reports on.
+      #     psycopg is already a dependency (the n8n credential store), and both
+      #     connections are opened with `default_transaction_read_only=on`.
+      #
+      #     TWO DATABASES. INDOX's documents/settings/action log are in the
+      #     supabase postgres; n8n's `execution_entity` — which is what makes the
+      #     single-drainer rule enforceable — is in n8n's OWN postgres.
+      #
+      #     Passed as PARTS, not as a DSN string: a password containing `@`, `:`
+      #     or `/` silently corrupts a URL-form DSN and surfaces as an auth
+      #     failure that reads like a wrong credential. `_pipeline_conninfo`
+      #     assembles them with libpq's own quoting (a full `*_DSN` still wins if
+      #     a deployment sets one).
+      #
+      #     PORT IS 5432, NOT ${SUPABASE_DB_PORT}: that variable (5433) is the
+      #     HOST-published port. On the docker network the container listens on
+      #     5432, which is what every other service here connects to.
+      #
+      #     NOT NAMED `N8N_DB_DSN`. That name is read by repo_factory and setting
+      #     it would reroute every repo build through an n8n credential lookup
+      #     (see the SUPABASE_BASE_URL comment above). `.env`'s existing
+      #     N8N_DB_DSN is also stale — measured 2026-08-23, its password no longer
+      #     matches the one the live n8n container authenticates with — so these
+      #     derive from POSTGRES_* instead, the values the database is created
+      #     from. Unset password => the endpoint degrades and says which half is
+      #     missing, rather than failing.
+      - PIPELINE_INDOX_PGHOST=${INCOMING_DOCS_PG_HOST:-supabase-db}
+      - PIPELINE_INDOX_PGPORT=5432
+      - PIPELINE_INDOX_PGDATABASE=${SUPABASE_DB_NAME:-postgres}
+      - PIPELINE_INDOX_PGUSER=${SUPABASE_DB_USER:-postgres}
+      - PIPELINE_INDOX_PGPASSWORD=${SUPABASE_DB_PASSWORD:-}
+      - PIPELINE_N8N_PGHOST=${INCOMING_DOCS_N8N_PG_HOST:-n8n-postgres}
+      - PIPELINE_N8N_PGPORT=5432
+      - PIPELINE_N8N_PGDATABASE=${POSTGRES_DB:-n8n}
+      - PIPELINE_N8N_PGUSER=${POSTGRES_USER:-hacohen}
+      - PIPELINE_N8N_PGPASSWORD=${POSTGRES_PASSWORD:-}
+      # --- Observability (optional).
+      - SENTRY_DSN=${INCOMING_DOCS_SENTRY_DSN:-}
+      - SENTRY_ENVIRONMENT=${SENTRY_ENVIRONMENT:-production}
+    volumes:
+      - ./storage:/app/.storage
+      # grounded extraction dataset (read-only): types + files + dataset.csv truth
+      - ./blueprint/demo-docs:/app/.dataset:ro
+      # The engine manifest — the sync screen's picture of the pipeline, GENERATED from the
+      # workflows next to it (gen-engine-manifest.py). Mounted rather than baked into the image so
+      # that a workflow change and the diagram describing it ship together; baking it would let the
+      # two versions drift apart for exactly as long as nobody rebuilt, which is the failure the
+      # generator exists to prevent.
+      - ./blueprint/engine-manifest.json:/app/blueprint/engine-manifest.json:ro
+      # THE DISPLAY CATALOG — every Hebrew word the grid puts on a column header, plus the
+      # logical types Postgres cannot know (15 of 16 booleans here are physically TEXT).
+      # BIND-MOUNTED rather than baked so the promise in its own header holds: add a label and
+      # it is live on the next page load, no rebuild. The BFF reloads it on mtime.
+      - ./blueprint/schema/display.json:/app/blueprint/schema/display.json:ro
+      # LAYER 2 — which columns a screen opens with, in what order and how wide. Same
+      # bind-mount reasoning as the catalog: a new view is a JSON edit, not a rebuild.
+      - ./blueprint/schema/views.json:/app/blueprint/schema/views.json:ro
+    networks:
+      - traefik-network
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik-network
+      - traefik.http.services.incoming-documents.loadbalancer.server.port=8080
+      # local (SSO-gated). Host matches the Authentik app blueprint, which is
+      # registered under INCOMING_DOCS_BASE_URL (default incoming-documents.localhost).
+      - traefik.http.routers.incoming-documents-local.rule=Host(`incoming-documents.localhost`)
+      - traefik.http.routers.incoming-documents-local.entrypoints=web
+      - traefik.http.routers.incoming-documents-local.service=incoming-documents
+      - traefik.http.routers.incoming-documents-local.middlewares=authentik@file
+      # https (deployment domain)
+      - traefik.http.routers.incoming-documents-https.rule=Host(`${INCOMING_DOCS_BASE_URL:-incoming-documents.${DEPLOYMENT_DOMAIN:-localhost}}`)
+      - traefik.http.routers.incoming-documents-https.entrypoints=websecure
+      - traefik.http.routers.incoming-documents-https.tls=true
+      - traefik.http.routers.incoming-documents-https.tls.certresolver=myresolver
+      - traefik.http.routers.incoming-documents-https.service=incoming-documents
+      - traefik.http.routers.incoming-documents-https.middlewares=authentik@file
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 60s
+    stop_grace_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          # HELD AT 512M — a planned cut to 384M was WITHDRAWN, 2026-08-06.
+          # Idle sample said 177MiB; under proof-#5 load this peaked at 231MiB, which is 60% of
+          # 384M and climbing while the sampler runs. This container is ON the document path, so
+          # the remaining headroom is not spare capacity to reclaim — it is the margin that keeps
+          # the pipeline from stalling on a large batch.
+          #
+          # 512M -> 768M, 2026-08-11. The 2026-08-06 reasoning was right and 512M was simply not
+          # enough of it: this container was OOM-KILLED twice during tonight's OCR backfill and
+          # was observed at 502.1 of 512 MiB = 98.07%, i.e. one allocation from dying, while
+          # serving the `Render Thumbnail` call that the upload workflow makes for every single
+          # document. Killing it stalls the very pipeline the limit was sized to protect, and it
+          # took `drive` with it. Watched live as apitools throughput recovered tonight, this
+          # climbed 61.7% -> 80.4% within four minutes — the load here scales WITH upload
+          # throughput, so the margin has to scale with it too.
+          # The 256M comes from headroom that now genuinely exists: fixing the unclamped drawing
+          # raster in apps/apitools/src/pdf_core/pdf_to_jpg.py took apitools from 4.17 GiB to
+          # ~0.6 GiB and returned the host from 118 MB free / swap 100% full to ~2.7 GB free.
+          # This spends a tenth of that on the most fragile container on the document path.
+          memory: ${INCOMING_DOCS_MEM:-768M}
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+  # The static file server for INDOX's own demo corpus and fixtures.
+  #
+  # This was declared in apps/n8n/docker-compose.yml — layer 2 running a container on a
+  # layer-3 app's behalf, which is the single item G9's layering lint still reported. Its name said
+  # so out loud: `<app>-anything` in a base compose is the strongest inversion there is. It lives
+  # with the app now, and both mounts point at paths inside apps/indox.
+  #
+  # caddy:2-alpine, not python:3.12-slim — a read-only static file server. hello-bina already pulls
+  # caddy:2-alpine, so this keeps a whole interpreter (~130 MB) out of the stack.
+  indox-demo-docs:
+    container_name: indox-demo-docs-${DEPLOYMENT_NAME:-bina-deployment}
+    # Capped 2026-08-06 — had no deploy.resources block, so docker reported the host total as its
+    # limit. A read-only static file server; measured high-water 55MiB. 256M is ~4.6x that.
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+        reservations:
+          cpus: '0.05'
+          memory: 32M
+    image: caddy:2-alpine
+    hostname: indox-demo-docs
+    working_dir: /srv
+    command:
+    - caddy
+    - file-server
+    - --root
+    - /srv
+    - --listen
+    - :8088
+    - --browse
+    volumes:
+    - ./blueprint/demo-docs:/srv:ro
+    - ./blueprint/fixtures:/srv/fixtures:ro
+    # [synthetic corpus 2026-08-31] The docGen-generated corpus (90 docs, authored truth in
+    # truth.json — including receipt, which the re-stamped real corpus never had). The suites'
+    # batch/bare lanes fetch from /srv/synth/<type>/files/…; the re-stamped real corpus above
+    # stays served for the extraction-gate work that still reads it.
+    - ./blueprint/synth-demo-docs:/srv/synth:ro
+    networks:
+    - traefik-network
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '3'
+networks:
+  traefik-network:
+    external: true

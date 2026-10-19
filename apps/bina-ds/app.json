@@ -1,0 +1,147 @@
+{
+  "id": "bina-ds",
+  "title": {
+    "he": "בינה",
+    "en": "Bina"
+  },
+  "layer": 3,
+  "kind": "service",
+  "version": "0.1.0",
+  "summary": {
+    "he": "הסוכן של הלשכה — DeepSeek Harness בעברית, עוקב אחרי כל האפליקציות ופועל בהן",
+    "en": "The office agent — a Hebrew-native DeepSeek Harness that follows and acts across every app"
+  },
+  "capabilities": [
+    {
+      "name": "office-agent",
+      "type": "protocol",
+      "interface": "agent.v1",
+      "endpoint": "http://bina-ds:3081",
+      "required_ops": [
+        "health",
+        "listSessions",
+        "createSession",
+        "getSession",
+        "sendMessage",
+        "listMessages"
+      ]
+    }
+  ],
+  "use": [
+    {
+      "capability": "identity",
+      "strength": "requires",
+      "after": true
+    },
+    {
+      "capability": "secrets",
+      "strength": "requires",
+      "after": true
+    },
+    {
+      "capability": "notify",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
+    },
+    {
+      "capability": "computers",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
+    }
+  ],
+  "connections": [
+    {
+      "id": "deepseek-key",
+      "required": false
+    },
+    {
+      "id": "openai-key",
+      "required": false
+    },
+    {
+      "id": "anthropic-key",
+      "required": false
+    }
+  ],
+  "contributes": {
+    "env": {
+      "any-concurrency": {
+        "SPAN_SOURCE_BINA": "http://bina-ds:3081/timeline/spans",
+        "SPAN_BUFFER_BINA": "20000"
+      }
+    }
+  },
+  "compose": "docker-compose.yml",
+  "routing": [
+    {
+      "host": "bina",
+      "port": 3080,
+      "auth": "sso",
+      "emit_labels": true,
+      "module": {
+        "group": "ראשי",
+        "icon": "bot",
+        "embed": true,
+        "alias": "bina",
+        "id": "bina",
+        "name": "בינה ודעת",
+        "desc": "הסוכן של הלשכה",
+        "order": 1,
+        "url": "http://bina-ds:3080",
+        "url_env": "BINA_DS_URL",
+        "passthrough": [
+          {
+            "path": "/",
+            "match": "prefix",
+            "transport": "http",
+            "strip_mount_prefix": true
+          },
+          {
+            "path": "/api",
+            "match": "prefix",
+            "transport": "websocket",
+            "mount": "root"
+          },
+          {
+            "path": "/plugins",
+            "match": "prefix",
+            "transport": "http",
+            "mount": "root"
+          },
+          {
+            "path": "/assets",
+            "match": "prefix",
+            "transport": "http",
+            "mount": "root"
+          }
+        ]
+      },
+      "sso": {
+        "slug": "bina",
+        "display_name": "Bina",
+        "default_host": "bina.localhost",
+        "base_url_env": "BINA_DS_BASE_URL",
+        "local_twin": true
+      }
+    }
+  ],
+  "health": {
+    "structural": "auto",
+    "probe": {
+      "http": "http://bina-ds:3080/favicon.svg",
+      "interval": "30s"
+    }
+  },
+  "data": {
+    "volumes": [
+      "bina_ds_home"
+    ],
+    "on_uninstall": "keep"
+  },
+  "resources": {
+    "cpus": "1",
+    "memory": "1g"
+  }
+}

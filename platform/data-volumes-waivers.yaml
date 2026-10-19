@@ -1,0 +1,66 @@
+# data-volumes-waivers — mounts that gate G26 flags but which are NOT app state.
+#
+# G26 (scripts/refactor/data-volumes-lint.py) asserts that `data.volumes` in every app.json lists
+# exactly the state that app's docker-compose.yml creates. Its rule is "if git tracks it, it is not
+# state" — which correctly clears every config mount without a hand-maintained list of directory
+# names. What lands here is the residue that rule cannot decide: paths outside the repo, and files
+# that are neither code nor restorable data.
+#
+# A waiver is a DECISION, not a mute. Each entry carries the reason, so "we thought about this" and
+# "we forgot" never look the same again. If you cannot write a reason, declare it instead.
+#
+# Format:  <app id>: [ <volume name or bind source>, ... ]
+
+app-management:
+  # Mounts the repository root so it can render and converge the deployment — that IS its job.
+  # The repo is in git; a backup of it would be a backup of the source tree.
+  - "../../"
+
+data-management:
+  # Same mount, same reason, and here the irony is load-bearing: this app is the backup service, so
+  # it mounts the repo to READ what to back up — app.json manifests, scripts/deployment-archive.py,
+  # and the compose config it derives the bind list from. Its own output goes to DATA_ARCHIVE_ROOT
+  # (/archives), deliberately outside the repo; the archiver refuses to write anywhere git does not
+  # ignore. Backing this mount up would archive the source tree a clone already provides.
+  - "../../"
+
+bina-ds:
+  # The office agent's workspace: the repository, bind-mounted at its HOST path (BBOX_REPO_HOST, the
+  # same absolute path the engine sees, so `./bbox` and compose bind mounts resolve from inside the
+  # container). Tracked source, same reason as app-management above; the gate cannot clear it
+  # statically because the source is an interpolated absolute path.
+  - "${BBOX_REPO_HOST:-../../}"
+
+openhands:
+  # Three absolute host paths pinned to the production checkout location. They are the repo (and
+  # subtrees of it) bind-mounted into the agent's sandbox, so they are tracked source, not state —
+  # but the gate cannot prove that statically because the path is absolute and does not resolve on
+  # any other machine. That non-portability is a real wart (this app cannot run on a host where the
+  # repo lives anywhere else); it is tracked separately, not hidden by this waiver.
+  - "/root/deployment-hacohen"
+  - "/root/deployment-hacohen/ai/obsidian"
+  # Scratch: files the agent downloaded while working. Untracked and regenerable — losing it costs
+  # nothing a re-run does not replace. (The path used to say `development/openhands/downloads`,
+  # naming a directory the platform refactor deleted; docker would have silently created an empty
+  # one. G26 found that, and it now points at apps/openhands/downloads.)
+  - "/root/deployment-hacohen/apps/openhands/downloads"
+
+portainer:
+  # A single generated file holding portainer's bootstrap admin password. Gitignored, so the gate is
+  # right that it is not source — but it is a credential, not a data volume, and it does not belong
+  # in a data backup. Credentials belong to the connections vault / .env, which is backed up by a
+  # different mechanism and on a different schedule.
+  - "./portainer_password.txt"
+
+# dgo-extend — the office's identity volume (`dgo_identity`, DGO-22). Deliberately EMPTY, and this
+# entry is the record of that decision: the identity is NOT waived, because a waiver in this file
+# means "flagged by G26 and not app state", and `dgo_identity` is the opposite of that. It holds the
+# office's Ed25519 and WireGuard keys; it is declared in `apps/dgo-extend/app.json` → `data.volumes`,
+# so G26 passes on the declaration rather than on an exception here; and it is carried by
+# `bbox export` — a rebuilt office that lost it would be a NEW office to every peer, and every link
+# would have to be re-paired. Putting the name in the list below would tell the next reader that the
+# identity is not backed up, which is the one thing this file must never say about it.
+# (The gate is G26, `scripts/refactor/data-volumes-lint.py`; the round trip — export, restore, same
+# fingerprint — is the DGO-22 check in `apps/dgo-extend/tests/phase1.py`.)
+dgo-extend: []
+

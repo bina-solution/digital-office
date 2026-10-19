@@ -1,0 +1,46 @@
+# yaml-language-server: $schema=./schema.json
+title: "A stale .generated/cpu-budget.yml (G65) named a service an app had just removed, and every `dc` command for every session failed with 'invalid compose project'"
+opened: 2026-09-30
+category: bug
+severity: high
+status: resolved
+summary: "The CPU-budget overlay is rendered at bring-up from the apps' compose files and merged LAST. When the Plane session removed its plane-mq service (16:33, the in-memory broker), the overlay still carried `plane-mq: {deploy: …}`; a service with a deploy block and no image makes the whole project invalid, so build/up/config failed for everyone until somebody re-rendered (16:49). Fixed in reconcile.compose_files(): the overlay is filtered to services the compiled set still declares and compose gets the filtered file."
+description: |
+  ## Measured
+
+  * 16:33:25 apps/project-pln/docker-compose.yml lost its `plane-mq` block (a deliberate edit).
+  * `./scripts/dc build browser42-browser browser42-reaper` → rc 1: `service "plane-mq" has neither an
+    image nor a build context specified: invalid compose project`. `dc config` failed the same way.
+    The only file naming plane-mq was `.generated/cpu-budget.yml` (rendered 13:xx by
+    scripts/perf-profile-apply, merged last by reconcile.compose_files()).
+  * 16:49:44 the overlay was re-rendered by another bring-up step and the project was valid again —
+    by accident, not by design.
+
+  ## Why it is structural
+
+  A generated file that is a FUNCTION of the apps' compose files (the set of services) was cached
+  from an earlier state, and the merge step trusted it. Any later change to the service set — an
+  app removed, a service renamed, an in-memory broker replacing a container — leaves a block that
+  compose cannot accept, and because the file is merged last it poisons every command of every
+  session, not the one app. The join between "what the profile budgeted" and "what exists now"
+  belongs where the -f list is assembled.
+
+  ## Fix (this commit)
+
+  reconcile.compose_files() hands compose `.generated/cpu-budget.effective.yml`: the overlay
+  restricted to services declared by the compiled set (the compiled `include:` files plus the
+  routing/connections overlays), with a header naming what was dropped. The rendered overlay stays
+  as perf-profile-apply wrote it, so gate G65's header check is unchanged. Tested on the engine
+  with a bogus service appended to the overlay: dropped, `dc config` rc 0.
+tasks:
+  - text: "reconcile.compose_files(): filter the CPU overlay to existing services (cpu-budget.effective.yml)"
+    done: true
+  - text: "perf-profile-apply / reconcile render: re-render the CPU overlay whenever the service set changes, so the effective file is normally identical to the rendered one"
+    done: false
+  - text: "Standing rule for agents (in the briefs): a compose edit is a whole-file write followed by `./scripts/dc config -q`"
+    done: false
+references:
+  - platform/manager/reconcile.py
+  - scripts/perf-profile-apply
+  - scripts/refactor/cpu-budget-lint.py
+  - apps/project-pln/docker-compose.yml

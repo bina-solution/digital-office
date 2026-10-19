@@ -1,0 +1,17 @@
+{
+  "format": "bina.catalog.keyring/v1",
+  "keys": {
+    "ba5b155a1da15f91": {
+      "alg": "ed25519",
+      "public_key": "7e89faac3cd941270899ba22a4baeb7d4743b3f1e2711c19b81719a5beb12ed7",
+      "label": "shlomo-laptop dev catalog",
+      "added": "2026-07-27T19:09:54Z"
+    },
+    "025cd32d5b648a91": {
+      "alg": "ed25519",
+      "public_key": "da7ccaf6206eebc201eee3e2a83a01fab13696ddca1bf1014adb07359b51e3e3",
+      "label": "hello-bina vendor",
+      "added": "2026-07-27T19:38:45Z"
+    }
+  }
+}

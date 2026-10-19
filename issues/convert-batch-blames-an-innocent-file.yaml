@@ -1,0 +1,135 @@
+# yaml-language-server: $schema=./schema.json
+title: one uncompilable blueprint blocks EVERY n8n push, and the error names an innocent file
+opened: '2026-08-22'
+severity: high
+status: in-progress
+summary: one uncompilable blueprint blocks EVERY n8n push, and the error names an innocent file
+description: |
+  area: n8n blueprints / deploy path / tooling
+
+  ## Context
+
+  platform-base/n8n/tooling/wrap.mjs compileDir() strips every .workflow.ts in the directory,
+  hands the whole set to convertBatch() in ONE call, then walks the metas map looking for output:
+
+      const tmp = convertBatch(fs.readdirSync(strip).map(...), "json");
+      for (const [jsonName, m] of metas) {
+        const p = path.join(tmp, jsonName);
+        if (!fs.existsSync(p)) throw new Error(`${m.src}: convert-batch produced no json`);
+
+  The thrown error names `m.src` - the first file whose json is MISSING in map order. That is not
+  the file that broke the batch. Whatever actually failed conversion may be anywhere in the set,
+  and the file named may be entirely valid.
+
+  Two consequences, both measured on shlomo-laptop 2026-08-22:
+
+  1. THE BLAME IS WRONG. Every push failed with
+
+         Error: apps/indox/blueprint/n8n/indoxV2ActionsGDoc01.workflow.ts:
+                convert-batch produced no json
+
+     but that same file compiles clean on its own - wrap.mjs takes a single file, not just a
+     directory (`const files = isDir ? listTs(src) : [src]`):
+
+         node platform-base/n8n/tooling/wrap.mjs compile \
+              apps/indox/blueprint/n8n/indoxV2ActionsGDoc01.workflow.ts /tmp/cmpout
+         -> compile: 1 workflow(s) -> /tmp/cmpout
+
+     So the deploy path spent its error message pointing at a file that was fine.
+
+  2. THE BLAST IS THE WHOLE DIRECTORY. compileDir runs for a single-workflow push too, so
+
+         bbox n8n push indox driveApi01
+
+     failed identically. ONE uncompilable file anywhere in apps/indox/blueprint/n8n/ takes out
+     every push of every other workflow in that app - including pushes that have nothing to do
+     with it.
+
+  In the observed case the directory held uncommitted work in progress (the __priority_local
+  ternary across indoxV2ActionsGDoc01 / indoxV2ActionsShip01 / indoxV2Driver01, plus new
+  drainPoolTarget01, drainPoolTest01, priorityLocalApi01). NOT established: which of those
+  actually fails conversion. Per-file compiles were attempted but the shell loop variable was
+  mangled by the WSL arg passing and every run received an empty filename, so those results were
+  void - the bisect still needs doing.
+
+  ## Impact
+
+  This turns "somebody has an in-progress blueprint open" into "nobody can deploy anything for
+  this app", and sends whoever hits it to debug a file that has nothing wrong with it. It cost a
+  live debugging session here: `bs` had just been walked forward through two real defects
+  (Seed Test Fixtures applying the DDL, then a retired COMPANY_DOC_ID column) and the next push
+  could not be made at all.
+
+  It also compounds ai/context notes already warning that blueprint validation "blames the wrong
+  node" - same class of fault, one layer up: wrong node inside a file, wrong file inside a batch.
+
+  ## Fix
+
+  Two independent changes, both small:
+
+  1. Name the real culprit. Either convert per file (slower, exact), or have convertBatch report
+     which input it failed on and surface that instead of the first missing output. At minimum
+     the error should say "N of M files produced no json" and list them, rather than pointing at
+     one arbitrary name as though it were the cause.
+
+  2. Do not let one file veto unrelated pushes. For `push <app> <wfId ...>` the compile set
+     should be the REQUESTED workflows plus their dependencies, not the whole directory. A
+     broken file should block deploying THAT file.
+
+  A regression test is cheap: put a deliberately uncompilable .workflow.ts in a fixture dir,
+  assert the error names it, and assert that compiling a different file in the same dir still
+  succeeds.
+
+  ## Fix 1 and the test, done (2026-10-07, hp-laptop, branch dgo-pair)
+
+  WHAT THE CONVERTER REALLY DOES, measured on a directory of real blueprints with one twin broken
+  three different ways, sorted first, in the middle and last: it converts what it can, EXITS 0, and
+  says for every input it could not convert why - on stderr:
+
+      ❌ zzzBroken01.workflow.ts: No class with @workflow decorator found in file
+
+  wrap.mjs piped that and threw it away, then named the first input without an output. So the
+  reason was never missing; it was discarded one layer up.
+
+  NOW (`platform-base/n8n/tooling/wrap.mjs`, compile and render alike): both of the converter's
+  streams are read, and ONE error names every input left without an output, each with the
+  converter's own sentence -
+
+      2 of 3 blueprint(s) did not convert:
+        .../aaaBroken01.workflow.ts: No class with @workflow decorator found in file
+        .../zzzBroken01.workflow.ts: No class with @workflow decorator found in file
+
+  - and nothing is written for a directory that did not wholly convert (it used to leave the
+  outputs that happened to sort before the first missing one). An input the converter said nothing
+  about is listed too, as exactly that.
+
+  `platform-base/n8n/test_compile_blame.mjs` is the regression test this asked for: 11 checks -
+  the count, each broken twin named WITH its reason, the good blueprint not blamed, nothing
+  written, the good one still compiling by itself, a broken one alone saying the same reason. It
+  fails on the compiler as it was ("it says how many of how many"). G72 runs it with the planes'
+  tests.
+
+  NOTHING ELSE MOVED: all 80 real blueprints (chat 1, drive 1, google-workspace-agent 4, indox 69,
+  mail 5) compile to byte-identical json under the old compiler and the new, and the round trip
+  (`wrap.mjs verify`) is lossless on the two fleets it was run on, 4/4 and 5/5.
+
+  WHAT WAS NOT REPRODUCED: an innocent file being the one named. In every breakage tried here the
+  input without an output was the broken one. Whatever made `indoxV2ActionsGDoc01` lose its output
+  on 2026-08-22 was in working files that are long gone; the next time it happens the error
+  carries the converter's reason for every file involved, which is what was missing that day.
+
+  ## Fix 2, not done
+
+  `push <app> <wfId ...>` still compiles the whole directory, so one broken blueprint still blocks
+  pushing the others - with the right name and reason now, which makes it a minute's work instead
+  of a session's. Narrowing the compile set is not a change to the compiler: the push's sha cache
+  is written from EVERY compiled workflow, and a row that disappears from it is a conflict base
+  that disappears (platform-base/n8n/hooks/push-app, `_cache_write`). That belongs with the
+  two-writer logic and its own tests.
+tasks:
+- text: "The error names EVERY blueprint that did not convert, each with the converter's reason; nothing is written for a directory that did not wholly convert"
+  done: true
+- text: "Regression test: platform-base/n8n/test_compile_blame.mjs (11 checks; fails on the compiler as it was)"
+  done: true
+- text: "push <app> <wfId ...> compiles only what it pushes (and its dependencies), so a broken blueprint blocks only itself - needs the push cache's rows kept for what was not compiled"
+  done: false

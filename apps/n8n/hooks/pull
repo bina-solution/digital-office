@@ -1,0 +1,274 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# Prevent Git-Bash/MSYS from rewriting container paths. No-op on real Linux.
+export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
+
+# n8n-pull — export the n8n state to a declarative, fully human-readable, git-tracked BLUEPRINT
+# (n8n >= 2.17.0).
+#
+# Produces apps/n8n/blueprint.yml (the entry point) + these parts it points to:
+#   workflows/<id>.json    HUMAN-READABLE (export:workflow): nodes, connections, settings, tags, `active`
+#   credentials/<id>.json  HUMAN-READABLE entity (export:credentials): id/name/type; secret AES-encrypted
+#
+# n8n-push restores from these files. There is NO encrypted full-state backstop: the OWNER account is
+# sourced from .env (N8N_OWNER_*) on push, NOT carried here. (n8n ties workflow/credential ownership to
+# the owner's user/project IDs; import:workflow / import:credentials re-own everything to the current
+# owner, so a human-readable restore stays coherent — an entities snapshot minus the owner would not.)
+#
+# The active flag in each workflow file is re-applied on push via `publish:workflow`. Credential SECRETS
+# decrypt only with the matching N8N_ENCRYPTION_KEY (keep it in .env, OUT of git); otherwise re-auth in UI.
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # read_env, DN, N8N_CONTAINER, PG_CONTAINER (overridable via env)
+N8N_DIR="${REPO_ROOT}/apps/n8n"
+# Pull renders live → code and refreshes the sha cache; same root-ownership trap as push.
+ensure_generated_writable || true
+ensure_generated_writable "${N8N_DIR}/.push-cache" || true
+WF_DIR="${N8N_DIR}/blueprint/n8n"; CRED_DIR="${N8N_DIR}/credentials"
+STATE_DIR="${N8N_DIR}/.credentials-state"   # git-ignored full-cred cache (survives reset; same key → OAuth restores)
+BLUEPRINT="${N8N_DIR}/blueprint.yml"
+C_WF="/home/node/workflows"; C_CRED="/tmp/n8n-pull-cred"
+
+# `bbox n8n <app> pull` (--app <id>): export from the live instance but keep ONLY that app's
+# blueprint changes. The export itself is always instance-wide (n8n has no per-app export), so the
+# scoping is applied after the workflows are routed back to their owners.
+APP_SCOPE=""
+_pullrest=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --app)   APP_SCOPE="${2:-}"; shift 2 || shift ;;
+    --app=*) APP_SCOPE="${1#--app=}"; shift ;;
+    *)       _pullrest="${_pullrest} $1"; shift ;;
+  esac
+done
+set -- ${_pullrest}
+SUDO=""; if [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1; then SUDO="sudo"; fi
+log() { echo "[n8n-pull] $*"; }
+
+log "Container: ${N8N_CONTAINER}"
+docker ps --format '{{.Names}}' | grep -Fxq "${N8N_CONTAINER}" || { echo "Error: '${N8N_CONTAINER}' not running." >&2; exit 1; }
+# SAFETY: a pull WIPES the blueprint workflows before re-exporting. If the instance is empty/broken
+# (0 workflows), pulling would DESTROY the committed blueprint. Refuse unless forced.
+LIVE_WF="$(pgq 'select count(*) from workflow_entity;')"; LIVE_WF="${LIVE_WF:-0}"
+if [ "${LIVE_WF}" -eq 0 ] 2>/dev/null && [ "${1:-}" != "--force" ]; then
+  echo "[n8n-pull] ⚠ REFUSING to pull: instance has 0 workflows (broken/empty?). Pulling would WIPE the blueprint." >&2
+  echo "[n8n-pull]   Restore the instance first ('bbox n8n push all'), or './bbox n8n pull all --force' to override." >&2
+  exit 1
+fi
+mkdir -p "${WF_DIR}" "${CRED_DIR}"
+${SUDO} chown -R 1000:1000 "${WF_DIR}" 2>/dev/null || true
+
+# 1) Workflows (human-readable; clean stale first so deletions propagate)
+log "Exporting workflows (human-readable)..."
+docker exec "${N8N_CONTAINER}" sh -c "rm -f ${C_WF}/*.json; n8n export:workflow --backup --output ${C_WF}" \
+  2>&1 | grep -viE '"event"|error tracking|deprecat' | grep -iE 'exported|error' | tail -1 || true
+# Normalize: drop volatile runtime fields so the blueprint round-trips deterministically (n8n re-assigns
+# these on import/publish; keeping them churns all workflow files on every pull).
+docker exec "${N8N_CONTAINER}" node -e '
+  const fs=require("fs"),d="'"${C_WF}"'",VOL=["updatedAt","createdAt","versionId","activeVersionId","versionCounter","triggerCount"];
+  for(const f of fs.readdirSync(d)){ if(!f.endsWith(".json"))continue; const p=d+"/"+f;
+    try{const w=JSON.parse(fs.readFileSync(p,"utf8")); for(const k of VOL) delete w[k];
+      fs.writeFileSync(p,JSON.stringify(w,null,2)+"\n"); }catch(e){} }' 2>/dev/null || true
+# ── RETIRED workflows never come back ────────────────────────────────────────────────────────
+# The export above is the whole instance, and an instance keeps every workflow it ever imported.
+# One that left the blueprints would land right here again, untagged, in the central blueprint —
+# see retired-workflows.txt for the twelve that did.
+_back=0
+for _rid in $(awk '!/^[[:space:]]*#/ && NF {print $1}' "${N8N_DIR}/retired-workflows.txt" 2>/dev/null); do
+  [ -f "${WF_DIR}/${_rid}.json" ] || continue
+  rm -f "${WF_DIR}/${_rid}.json"; _back=$((_back + 1))
+done
+[ "${_back}" -eq 0 ] || log "  ${_back} retired workflow(s) still exist on this instance and were NOT brought back (retired-workflows.txt). 'bbox n8n base unpush --retired' removes them from it."
+# ── Route each exported workflow back to the app that OWNS it — BY app:* TAG ─────────────────
+# Ownership signal (owner decision 2026-08-16): every workflow carries an n8n tag of the form
+# `app:<id>` (truncated to tag_entity's varchar(24): `('app:'+id)[:24]` — that cap is why
+# google-workspace-agent's tag reads `app:google-workspace-age`). Tag routing means a workflow
+# CREATED IN THE UI routes home on the next pull the moment it is tagged — directory membership
+# (the old signal, kept below as fallback) could only route files that already existed in git.
+# `app:n8n` = the central platform blueprint (apps/n8n/blueprint/n8n).
+_tagmap="$( cd "${REPO_ROOT}" && python3 platform/manager/reconcile.py blueprints | tr -d '\r' )"
+_routed=0; _untagged=""
+while IFS= read -r _line; do
+  _f="${_line%%	*}"; _tag="${_line#*	}"
+  [ -n "${_f}" ] && [ -f "${WF_DIR}/${_f}" ] || continue
+  _dest=""
+  if [ "${_tag}" = "app:n8n" ]; then
+    _dest=""   # central blueprint IS WF_DIR — already home
+  elif [ -n "${_tag}" ] && [ "${_tag}" != "-" ]; then
+    while IFS="$(printf '\t')" read -r _aid _rel; do
+      [ -n "${_aid}" ] || continue
+      _want="app:${_aid}"; _want="$(printf '%.24s' "${_want}")"
+      [ "${_want}" = "${_tag}" ] && { _dest="${REPO_ROOT}/${_rel}"; break; }
+    done <<EOF2
+${_tagmap}
+EOF2
+    [ -z "${_dest}" ] && log "  WARNING: '${_f}' tagged '${_tag}' but no enabled app matches — left in central blueprint."
+  else
+    _untagged="${_untagged} ${_f}"
+  fi
+  if [ -n "${_dest}" ]; then
+    mkdir -p "${_dest}"
+    mv -f "${WF_DIR}/${_f}" "${_dest}/${_f}"
+    _routed=$((_routed + 1))
+  fi
+done <<EOF3
+$(docker exec "${N8N_CONTAINER}" node -e '
+  const fs=require("fs"),d="'"${C_WF}"'";
+  for(const f of fs.readdirSync(d)){ if(!f.endsWith(".json")) continue;
+    try{ const w=JSON.parse(fs.readFileSync(d+"/"+f,"utf8"));
+      const t=(w.tags||[]).map(x=>typeof x==="string"?x:(x&&x.name)||"").find(n=>n.startsWith("app:"));
+      console.log(f+"\t"+(t||"-")); }catch(e){ console.log(f+"\t-"); } }' 2>/dev/null)
+EOF3
+# Fallback for UNTAGGED workflows: legacy directory membership, loudly — tag them so this stops.
+_fell=0
+for _bp in "${REPO_ROOT}"/apps/*/blueprint/n8n; do
+  [ -d "${_bp}" ] || continue
+  for _b in ${_untagged}; do
+    _owned=""
+    [ -f "${_bp}/${_b}" ] && _owned=1
+    [ -f "${_bp}/${_b%.json}.workflow.ts" ] && _owned=1
+    if [ -n "${_owned}" ] && [ -f "${WF_DIR}/${_b}" ]; then
+      mv -f "${WF_DIR}/${_b}" "${_bp}/${_b}"; _fell=$((_fell + 1))
+      log "  WARNING: '${_b}' has NO app:* tag — routed by legacy dir membership. Tag it in n8n (or re-run the app-tag seeding) so pull routing stays declarative."
+    fi
+  done
+done
+log "Routed ${_routed} workflow(s) by app:* tag${_fell:+ + ${_fell} by legacy dir fallback}."
+# Scoped pull: keep only the requested app's blueprint changes, restore every other owner's dir.
+if [ -n "${APP_SCOPE}" ]; then
+  # tr -d CR: python on Windows prints CRLF; a trailing CR breaks every path comparison/glob.
+  _keep="$( cd "${REPO_ROOT}" && python3 platform/manager/reconcile.py blueprints --for "${APP_SCOPE}" \
+            | tr -d '\r' | cut -f2 )" || { echo "Error: unknown app '${APP_SCOPE}'." >&2; exit 1; }
+  while IFS="$(printf '\t')" read -r _aid _rel; do
+    [ -n "${_rel}" ] || continue
+    [ "${_rel}" = "${_keep}" ] && continue
+    ( cd "${REPO_ROOT}" && git checkout -- "${_rel}" 2>/dev/null ) || true
+  done <<EOF
+$( cd "${REPO_ROOT}" && python3 platform/manager/reconcile.py blueprints | tr -d '' )
+EOF
+  log "Scoped pull: kept only '${APP_SCOPE}' blueprint changes; other blueprints restored."
+fi
+WF_COUNT=$(find "${WF_DIR}" -maxdepth 1 -name '*.json' | wc -l | tr -d ' ')
+
+# 2) Credentials — MANIFEST ONLY (id/name/type; data:"" ). NEVER commit secrets: env-managed creds are
+# reseeded from .env (credential_overrides) and OAuth creds are bootstrapped per-env. data:"" (not null)
+# keeps import:credentials happy AND makes the round-trip deterministic (encrypted blobs re-randomize).
+log "Exporting credentials (git=manifest only; full encrypted blobs → git-ignored cache)..."
+# (a) export FULL encrypted entities
+docker exec "${N8N_CONTAINER}" sh -c "rm -rf ${C_CRED} && mkdir -p ${C_CRED} && n8n export:credentials --backup --output ${C_CRED} 2>/dev/null || true"
+# (b) full blobs → reset-proof git-ignored cache (OAuth survives reset when key unchanged)
+rm -rf "${STATE_DIR:?}" 2>/dev/null || true; mkdir -p "${STATE_DIR}"
+if docker exec "${N8N_CONTAINER}" sh -c "ls ${C_CRED}/*.json >/dev/null 2>&1"; then
+  docker exec "${N8N_CONTAINER}" tar -C "${C_CRED}" -cf - . | tar -C "${STATE_DIR}" -xf -
+fi
+# (c) reduce to MANIFEST (id/name/type, data:"") for the git-tracked credentials/ — never commit secrets
+docker exec "${N8N_CONTAINER}" sh -c "node -e '
+  const fs=require(\"fs\"),d=\"${C_CRED}\";
+  for(const f of fs.readdirSync(d)){ if(!f.endsWith(\".json\"))continue; const p=d+\"/\"+f;
+    try{const a=JSON.parse(fs.readFileSync(p,\"utf8\")),c=Array.isArray(a)?a[0]:a;
+      fs.writeFileSync(p,JSON.stringify({id:c.id,name:c.name,type:c.type,data:\"\"},null,2)+\"\n\"); }catch(e){} }' 2>/dev/null || true"
+rm -f "${CRED_DIR:?}/"*.json 2>/dev/null || true
+if docker exec "${N8N_CONTAINER}" sh -c "ls ${C_CRED}/*.json >/dev/null 2>&1"; then
+  docker exec "${N8N_CONTAINER}" tar -C "${C_CRED}" -cf - . | tar -C "${CRED_DIR}" -xf -
+fi
+CRED_COUNT=$(find "${CRED_DIR}" -maxdepth 1 -name '*.json' | wc -l | tr -d ' ')
+
+# Active workflow names (the `active` flag is also in each workflow file)
+ACTIVE_NAMES="$(docker exec "${N8N_CONTAINER}" sh -c "node -e '
+const fs=require(\"fs\"),d=\"${C_WF}\";const a=[];
+for(const f of fs.readdirSync(d)){if(!f.endsWith(\".json\"))continue;try{const w=JSON.parse(fs.readFileSync(d+\"/\"+f));if(w.active)a.push(w.name);}catch(e){}}
+console.log(a.join(\"\n\"));'" 2>/dev/null || true)"
+ACTIVE_COUNT=$(printf '%s' "${ACTIVE_NAMES}" | grep -c . || true); ACTIVE_COUNT="${ACTIVE_COUNT:-0}"
+
+# Community node packages (manifest only — reinstalled on push from these pins via n8n's
+# N8N_REINSTALL_MISSING_PACKAGES). Read from the installed_packages registry table.
+CN_LINES="$(docker exec "${PG_CONTAINER}" sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select \"packageName\"||'\''@'\''||\"installedVersion\" from installed_packages order by \"packageName\";"' 2>/dev/null | grep -viE 'error tracking' | sed '/^$/d' || true)"
+CN_COUNT=$(printf '%s' "${CN_LINES}" | grep -c . || true); CN_COUNT="${CN_COUNT:-0}"
+
+# Key fingerprint
+KEY="$(docker exec "${N8N_CONTAINER}" printenv N8N_ENCRYPTION_KEY 2>/dev/null | tr -d '\r' || true)"
+KEYFP="$(printf '%s' "${KEY}" | { command -v sha256sum >/dev/null 2>&1 && sha256sum || shasum -a 256; } | cut -c1-16)"
+NVER="$(read_env N8N_VERSION)"
+
+# Preserve the hand-authored `credential_overrides` block across regeneration (it is an INPUT — the .env→cred
+# mapping reseeded on push — not derived from the instance). Re-appended verbatim after the manifest below.
+OVR_PRESERVE="$(sed -n '/^credential_overrides:/,$p' "${BLUEPRINT}" 2>/dev/null || true)"
+
+# 3) Write blueprint.yml (the entry point / manifest pointing to every part)
+{
+  echo "# n8n declarative blueprint — './bbox n8n push all' restores the instance from the files below."
+  echo "# Fully human-readable. The OWNER account is NOT stored here — it is created from .env (N8N_OWNER_*)."
+  echo "schema: n8n-blueprint/v2"
+  echo "n8n_version: \"${NVER:-unknown}\""
+  echo "encryption_key_fingerprint: \"${KEYFP}\""
+  echo "owner:"
+  echo "  source: env            # N8N_OWNER_EMAIL/PASSWORD/FIRSTNAME/LASTNAME — bootstrapped by n8n-push"
+  echo "parts:"
+  echo "  workflows:"
+  echo "    path: ./workflows"
+  echo "    format: workflow.ts     # code files (wrap.mjs render); compiled back to import JSON on push"
+  echo "    count: ${WF_COUNT}"
+  echo "  credentials:"
+  echo "    path: ./credentials"
+  echo "    format: json            # export:credentials — id/name/type readable; secret AES-encrypted"
+  echo "    count: ${CRED_COUNT}"
+  echo "community_nodes:            # npm packages reinstalled on push (N8N_REINSTALL_MISSING_PACKAGES)"
+  if [ "${CN_COUNT}" -gt 0 ]; then
+    printf '%s\n' "${CN_LINES}" | while IFS= read -r p; do [ -n "$p" ] && echo "  - \"${p}\""; done
+  else
+    echo "  []"
+  fi
+  # NOT an input. push re-activates from each workflow file's own `active` flag (see the ACTIVE_IDS
+  # pass in hooks/push), never from this list — so a name here that resolves to nothing does nothing,
+  # and editing this list by hand changes no behaviour and is erased by the next pull. It used to say
+  # "re-activated on push", which read as authoritative and sent at least one reader off to reconcile
+  # 22 stale entries that could not have mattered.
+  echo "active_workflows:           # SNAPSHOT of what was active when pulled — read by nothing"
+  if [ "${ACTIVE_COUNT}" -gt 0 ]; then
+    printf '%s\n' "${ACTIVE_NAMES}" | while IFS= read -r n; do [ -n "$n" ] && echo "  - \"${n}\""; done
+  else
+    echo "  []"
+  fi
+} > "${BLUEPRINT}"
+
+# Re-append the preserved credential_overrides block (env-driven local creds; reseeded by n8n-push).
+if [ -n "${OVR_PRESERVE}" ]; then
+  printf '%s\n' "${OVR_PRESERVE}" >> "${BLUEPRINT}"
+else
+  printf 'credential_overrides:       # local/owned creds re-seeded from .env on push (survive key drift). Add `<id>: {"name","type","data":{field:"${ENV}"}}` lines.\n  {}\n' >> "${BLUEPRINT}"
+fi
+
+# ── 4) RENDER TO CODE — blueprints contain .workflow.ts, never JSON (owner mandate 2026-08-16;
+#      plan: ai/context/n8n-as-code-migration.md). wrap.mjs is the one toolchain entry point: it
+#      re-injects the fields the transformer drops (notes/tags/connections/…, all /*__n8n__*/
+#      marker lines) so compile round-trips deep-equal — proven 81/81 on this estate before the
+#      flip. The exported JSON is an intermediate here and is DELETED once its .ts exists.
+WRAP="${N8N_DIR}/tooling/wrap.mjs"
+render_dir() {  # $1 = blueprint dir: render every *.json to *.workflow.ts in place, then rm json
+  ls "$1"/*.json >/dev/null 2>&1 || return 0
+  if "$(bbox_node)" "${WRAP}" render "$1" "$1" >/dev/null; then
+    # remove old .ts for workflows that no longer exist live, then the json intermediates
+    for _ts in "$1"/*.workflow.ts; do
+      [ -e "${_ts}" ] || continue
+      _idj="$(basename "${_ts}" .workflow.ts).json"
+      [ -f "$1/${_idj}" ] || rm -f "${_ts}"
+    done
+    rm -f "$1"/*.json
+    log "  rendered $(ls "$1"/*.workflow.ts 2>/dev/null | wc -l | tr -d ' ') workflow(s) as code: $1"
+  else
+    echo "[n8n-pull] FATAL: render failed for $1 — JSONs left in place, fix wrap.mjs before committing." >&2
+    exit 1
+  fi
+}
+render_dir "${WF_DIR}"
+while IFS="$(printf '\t')" read -r _aid _rel; do
+  [ -n "${_rel}" ] && [ -d "${REPO_ROOT}/${_rel}" ] && render_dir "${REPO_ROOT}/${_rel}"
+done <<EOF4
+${_tagmap}
+EOF4
+rm -f "${WF_DIR}/.n8n_push_hashes"   # legacy scripts/n8n-push cache — retired with it
+
+log "Blueprint written: ${BLUEPRINT}"
+log "  workflows=${WF_COUNT}  credentials=${CRED_COUNT}  active=${ACTIVE_COUNT}  community_nodes=${CN_COUNT}  owner=.env(N8N_OWNER_*)"
+log "Review 'git status' and commit. Restore with './bbox n8n push all'; iterate with './bbox n8n push <app>'."

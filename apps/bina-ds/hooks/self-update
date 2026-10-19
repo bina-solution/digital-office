@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# self-update — this app's own door for "recreate ME, from outside myself".
+#
+# Contract (scripts/lib.sh, `compose_self_helper`): an app whose container runs compose inside
+# itself may ship `<root>/<id>/hooks/self-update`. When a compose command would recreate that very
+# container, the guard hands the recreate here instead of running it in-process — because the old
+# container goes first, and the client issuing the command dies with it, leaving the replacement in
+# `Created` (measured 2026-09-29: eight hours of the harness down).
+#
+# The guard knows the contract and nothing else: no app is named in layer 0, and how a particular
+# app comes back is the app's own business — here, `../self-update.sh` runs a one-shot helper
+# outside the container, waits for health, and rolls the previous image back if the new one is not
+# healthy. Args are passed through unchanged (`launch up`, `launch restart`, …).
+set -uo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec bash "${HERE}/../self-update.sh" "$@"

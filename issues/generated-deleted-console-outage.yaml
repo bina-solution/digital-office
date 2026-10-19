@@ -1,0 +1,46 @@
+# yaml-language-server: $schema=./schema.json
+title: 'Deleting .generated/ took the live console down to the install screen: console+connections bind-mount .generated/registry and kept serving the deleted inode until restarted'
+opened: '2026-08-17'
+severity: high
+status: resolved
+summary: 'An agent session running bbox as root left `.generated/` root-owned (15:32 local). A later per-app push (`bbox n8n push indox indoxApi01`, run as the normal user) crashed with EACCES writing `.generated/n8n/indox/*.json`. To clear the ownership debris the agent deleted the ENTIRE `.generated/` directory instead of chowning the offending subtree. `.generated` is not scratch: it is the reconciler''s rendered config, and `console-shlomo-laptop` + `connections-shlomo-laptop` bind-mount `.generated/registry` -> /app/generated. Deleting a bind-mounted directory leaves running containers holding the dead inode: /api/modules kept answering HTTP 200 with an empty module list, and the console, seeing zero modules, fell back to the install screen ("מסך התקנה"). Owner-visible outage ~1h (≈16:50-18:05 local).'
+description: |
+  id: generated-deleted-console-outage · area: platform .generated lifecycle / console / connections / bbox push tooling
+
+  ## Timeline local
+
+  - 15:32 — root-run bbox invocation creates root-owned .generated/n8n/indox + .push-cache
+  - 16:4x — push EACCES; agent rm -rf .generated (and .push-cache) as root
+  - 16:50-18:05 — console shows install screen; owner reports; agent initially chases wrong leads (settings seed, app catalog, posnet deployment cross-routing — all red herrings)
+  - 17:52 — python3 platform/manager/reconcile.py render rebuilds .generated (20 apps)
+  - 18:03 — docker restart console-shlomo-laptop connections-shlomo-laptop re-binds mounts
+  - 18:05 — verified restored in the owner's Chrome: full sidebar, drive module loads
+
+  ## Proof
+
+  - docker inspect: console-shlomo-laptop and connections-shlomo-laptop both mount <repo>/.generated/registry -> /app/generated (bind)
+  - after render but BEFORE restart: GET /api/modules = 200 yet the SPA routed #/m/apps -> #/m/install (empty module list); zero JS console errors — the failure was silent
+  - after restart: sidebar fully populated, #/m/drive renders, Google Drive connection live
+  - the 'QA company / 123456789' identity shown on the install screen is this deployment's seeded business identity — public.settings had ZERO rows written that day (measured); it looked like data damage but was only the install screen surfacing the seed
+
+  ## Root causes
+
+  - .generated is live-mounted config with no guard against deletion while containers hold the mount — rm -rf detaches every consumer silently
+  - running bbox as root poisons repo ownership on drvfs (metadata enabled), which later breaks user-mode pushes — the original sin that motivated the deletion
+  - console treats an empty module registry as 'fresh install' with no distinction from 'registry read failure', so a data-plane fault cosplays as first-run onboarding
+
+  ## Recovery runbook
+
+  - python3 platform/manager/reconcile.py render   # rebuilds .generated in seconds
+  - docker restart console-<dep> connections-<dep> # re-bind the registry mounts
+  - ownership debris: chown the exact path as root; NEVER delete above .generated/n8n/
+
+  ## Prevention candidates
+
+  - bbox: refuse to run as root (or auto-chown back) — root-runs on drvfs are the seed of this whole class
+  - push-app EACCES handler: print 'chown, do not delete — .generated is live-mounted' in the error path
+  - console: distinguish empty registry from unreadable registry; show a loud degraded banner instead of silently entering install mode
+  - reconcile render could bounce (or SIGHUP) registry consumers after a rebuild so a future deletion self-heals
+references:
+- apps/indox/NEXT.md 2026-08-17 17:50 + 18:05 entries (incident log)
+- 'agent memory: feedback_generated_is_compiled_config'

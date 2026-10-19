@@ -1,0 +1,69 @@
+# social-list — every social network the business is on, behind ONE abstract API (social.v1).
+#
+# NO SECRET IS MOUNTED HERE. Every account is an INSTANCE in the credential plane (protocols
+# social_<network>_{browser|api-kind}), read at call time from `connections`. An API account's
+# token never touches this container's environment or volume; a browser account's secret is a
+# POINTER to the office browser session. The volume holds what is OURS: which account is primary per
+# network, the log of every action taken on the owner's behalf, and the office's own test network
+# (fixture.json).
+services:
+  social-list:
+    # The image CI publishes for this commit (DGO-41). `pull_policy: missing` means it is
+    # fetched only when it is not here already, so a checkout that has built it is untouched;
+    # the `build:` below stays as the fallback. Needs the GHCR package readable — a package made
+    # from a private repo is private, so `docker login ghcr.io` on a machine that must pull.
+    image: ghcr.io/solomonboltin/digital-office/social-list:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: social-list-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: social-list
+    restart: unless-stopped
+    environment:
+      - SENTRY_DSN=${SOCIAL_LIST_SENTRY_DSN:-}
+      - DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-bina-deployment}
+      - CONNECTIONS_URL=${CONNECTIONS_URL:-http://connections:8990}
+      - APP_STATE_DIR=/data
+      - SOCIAL_LIST_URL=http://social-list:8986
+      # an expiring public copy of an image, for the one API that downloads media itself
+      # (Instagram). Empty = that op refuses and says so; nothing else depends on it.
+      - SOCIAL_LIST_PUBLIC_URL=${SOCIAL_LIST_PUBLIC_URL:-}
+      # the office BROWSER (browser_session.v1). Without both, the browser kind reports itself
+      # unavailable and every other kind works exactly as before.
+      - BROWSER_SESSION_ENDPOINT=${BROWSER_SESSION_ENDPOINT:-http://browser42-caddy:80/mcp}
+      - BROWSER42_MCP_TOKEN=${BROWSER42_MCP_TOKEN:-}
+      - SOCIAL_BROWSER_LIVE_VIEW=/a/browser42/
+    volumes:
+      - social_list_state:/data
+    networks:
+      - traefik-network
+    healthcheck:
+      # python, never curl: python:3.12-slim has no curl (gate G18).
+      test: ["CMD", "python", "-c", "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://localhost:8986/healthz',timeout=8).status==200 else 1)"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          # HTTP to a few APIs, a browser driven over the network (the browser's own container does
+          # the work), and one Pillow resize per write.
+          cpus: '0.3'
+          memory: 192M
+        reservations:
+          cpus: '0.02'
+          memory: 48M
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+
+volumes:
+  social_list_state:
+
+networks:
+  traefik-network:
+    external: true

@@ -1,0 +1,115 @@
+# yaml-language-server: $schema=./schema.json
+title: The .workflow.ts migration moved 96 blueprints and left EIGHT readers pointing at the JSON era
+opened: '2026-08-21'
+severity: high
+status: in-progress
+summary: |-
+  Commit 52b32aa4 — "blueprints are code: 96 workflows as *.workflow.ts, JSON era removed" —
+  moved every blueprint and parked the old JSON in legacy/blueprints-json-20260816/. Today:
+
+      git ls-files apps/indox/blueprint/n8n/ | grep -c '\.json$'          -> 0
+      git ls-files apps/indox/blueprint/n8n/ | grep -c '\.workflow\.ts$'  -> 70
+
+  Eight consumers were never repointed. They were found one failure at a time over a single
+  session on 2026-08-21, which is the reason this is filed as ONE issue: individually each
+  looks like a small stale path, and together they are a migration that was not finished.
+  Anyone landing a change of this shape should sweep the readers, not wait for the failures.
+
+  The consumers do not fail the same way, and that is what made them hard to see:
+    - some CRASH (FileNotFoundError)
+    - some report "not found" AS A FINDING, so they look merely red rather than dead
+    - one aborted a deploy path with a message that named the wrong cause
+    - one refused a safety flip that was actually safe
+description: |
+  area: n8n blueprints / CI gates / deploy path
+  As first recorded — status: partially-fixed
+
+  ## Inventory
+
+  ```yaml
+  - id: G39 trigger-schema-drift-lint
+    symptom: 'reports "blueprint file not found: apps/indox/blueprint/n8n/indoxDocBatchUpsert01.json"'
+    effect: inspects nothing; a column missing from a trigger schema would go unseen
+    status: OPEN
+  - id: G41 switch-fallback-lint
+    symptom: 'indoxV2ActionsShip01.json -> unreachable/dropped value(s): [''blueprint file not found'']'
+    effect: |
+      inspects nothing. The defect it guards is severe — a document falling through a switch with no fallbackOutput keeps its STATUS forever and is silently re-picked every sweep.
+    status: OPEN
+  - id: G48 noop-success-lint
+    symptom: syncV3Main0001.json "blueprint file not found — REPLY_NODES entry is stale"
+    effect: |
+      inspects nothing. Directly relevant: authentik's outpost-ready probe is a live instance of exactly this defect class (see authentik-bootstrap-races-migrations-on-cold-start.yaml) and G48 could not have caught it.
+    status: OPEN
+  - id: G50 dropped-signal-lint
+    symptom: 1 ALLOWED entry matches nothing — names scripts/refactor/n8n-layout-lint.py
+    effect: |
+      the named file is one gates.sh's OWN comments record as deleted on 2026-08-06. A stale exemption, which the gate's own output calls "how G34's predecessor grew to 293 files".
+    status: OPEN
+  - id: G53 swallowed-subcall-lint
+    symptom: 5 ALLOWED entries match nothing — all syncV3*.json
+    effect: same stale-exemption shape as G50
+    status: OPEN
+  - id: bbox n8n push all
+    symptom: 'Error: no workflows/ in blueprint.'
+    effect: |
+      THE FULL RECONCILER — the only path that publishes and restarts — aborted on every invocation. Its precondition demanded *.json in platform-base/n8n/workflows; the loop that compiles .workflow.ts INTO json sits ~20 lines below it and never ran. The error message named the wrong cause, so it read as a missing blueprint rather than a stale guard.
+    status: FIXED 2026-08-21 — the guard accepts either form
+  - id: G64 test-registry-scope-lint
+    symptom: 11 findings, all 'registered owner ... .json does not exist'; battery REFUSED TO RUN
+    effect: |
+      a HARD pre-flight, so this blocked the ENTIRE INDOX E2E battery. The gate exists to stop a fixture run reaching the client's real mailbox — it was failing because it could not find any of the files it polices, which is the least useful possible reason for a safety gate to be red. Note the repoint was not purely mechanical: indoxApiSupabase01 had also MOVED, and is RETIRED (see below), so three of its allow-list entries belonged on indoxApi01 and a fourth ('PG Upsert') named a node that exists in no live workflow and was removed.
+    status: FIXED 2026-08-21 (paths); the gate still json.loads a .workflow.ts — see remaining
+  - id: apps/indox/hooks/sync-engine
+    symptom: silent FileNotFoundError inside a heredoc; AWARE empty; REFUSED
+    effect: |
+      `bbox indox sync engine <src> v3` was unreachable. It fails closed, so nothing corrupted — but the precondition it guards was SATISFIED (v1's Build Units carries `if (s.engine==='v3') continue;`), so the guard was the only thing preventing a safe flip.
+    status: FIXED 2026-08-21 — reads the .workflow.ts, still node-scoped, negative-tested
+  - id: processLock01 duplicate
+    symptom: 'Error: workflow filename collision ''processLock01.json'' — ''n8n'' and an earlier blueprint both own it'
+    effect: |
+      the migration left TWO live copies. Not equivalent: the apps/indox one was a strict superset carrying the doc-scoped unlock ('Scan Doc-Scoped Locks', 2026-08-16). Whichever copy the push happened to pick decided whether that lock fix was deployed — silently.
+    status: FIXED 2026-08-21 — superset kept at the tag-declared owner's path
+  - id: gate registry drift
+    symptom: 'gates.sh --verify-ci: RUN BY CI BUT MISSING FROM THE GATES LIST: incoming-documents-writer-lint'
+    effect: |
+      runs in CI and in NO local path (gates.sh, fresh-machine-check, baseline), so anyone running the gates before pushing does not run it. The same position G58 was in when the reverse check was added on 2026-08-07 — after the incident that deleted 2,432 client documents.
+    status: OPEN
+  ```
+
+  ## Remaining
+
+  1. The five OPEN gates need to READ .workflow.ts, not just be repointed. G64 shows why:
+     after fixing its paths it still fails, because line 273 does
+
+         blueprints[rel] = json.loads(p.read_text(encoding="utf-8"))
+
+     on a TypeScript file. Every one of these gates wants the compiled workflow dict.
+     There is exactly one compiler — `node platform-base/n8n/tooling/wrap.mjs compile <dir> <out>`,
+     the same one `bbox n8n push` uses — so the fix is ONE shared reader in scripts/refactor/
+     (load .json directly, compile .workflow.ts once per directory and cache), adopted by all
+     six. Six private parsers is how this drifts again.
+
+  2. Adopt incoming-documents-writer-lint into the canonical GATES list (verify it passes first —
+     gates.sh's own convention is that adopting a red gate turns every lane red rather than
+     fixing anything), and treat --verify-ci as blocking rather than informational.
+
+  3. gates.sh should fail loudly when a gate reports ZERO inspected units. Every one of the five
+     would have been caught the day the blueprints moved. "A gate that runs nowhere is
+     documentation" (GATES.md) — these run everywhere and inspect nothing, which is worse,
+     because they consume the attention a real failure needs.
+
+  ## Related retirement debt
+
+  Found while repointing G64: two workflows are RETIRED and inactive but still shipped and still
+  referenced by live blueprints —
+
+      indoxApiSupabase01  'indox api (RETIRED 2026-08-12 - id renamed to indoxApi01)'  active: false
+      indoxApiRouter01    'indox api router (RETIRED 2026-08-12 - folded into indoxApiSupabase01)' active: false
+
+  indoxApiRouter01 is still named by SyncApi0000000001, indoxHealth00001, indoxV2ActionsBS01,
+  indoxV2BSTest01, indoxV2DocBaseTest01 and more; indoxApiSupabase01 by indoxDocGet01 and
+  indoxV2ActionsGDoc01. They are not islands, so they cannot simply be deleted (see the project
+  note on dead-node removal safety) — but a retired, inactive workflow that live blueprints still
+  call is its own hazard, and it is what made the allow-list repoint above land on the wrong file
+  at the first attempt.

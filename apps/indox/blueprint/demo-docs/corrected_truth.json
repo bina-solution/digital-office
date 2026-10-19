@@ -1,0 +1,2205 @@
+[
+ {
+  "file": "shryzly-3.pdf",
+  "type": "invoice",
+  "field": "COMPANY_ID",
+  "old": "510711716",
+  "new": "510711716",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "shryzly-3.pdf",
+  "type": "invoice",
+  "field": "DOC_ID",
+  "old": "",
+  "new": "19186115",
+  "verdict": "WRONG",
+  "note": "truth empty; doc: chesbonit mas 19186115"
+ },
+ {
+  "file": "shryzly-3.pdf",
+  "type": "invoice",
+  "field": "DOC_DATE",
+  "old": "",
+  "new": "29/10/2025",
+  "verdict": "WRONG",
+  "note": "truth empty; doc: 29/10/25"
+ },
+ {
+  "file": "shryzly-3.pdf",
+  "type": "invoice",
+  "field": "PURCHASE_ID",
+  "old": "220329591",
+  "new": "",
+  "verdict": "NOT_ON_DOC",
+  "note": "mispar hazmanat lakoach: printed EMPTY on doc; 220329591 is the te'uda (shipment) number (viewed crop 2026-07-15)"
+ },
+ {
+  "file": "zlmn-shr-1.pdf",
+  "type": "invoice",
+  "field": "COMPANY_ID",
+  "old": "516009677",
+  "new": "516009677",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "zlmn-shr-1.pdf",
+  "type": "invoice",
+  "field": "DOC_ID",
+  "old": "201286",
+  "new": "201286",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "zlmn-shr-1.pdf",
+  "type": "invoice",
+  "field": "DOC_DATE",
+  "old": "30/05/2025",
+  "new": "30/05/2025",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "zlmn-shr-1.pdf",
+  "type": "invoice",
+  "field": "DOC_TOTAL_AMOUNT",
+  "old": "3,920.00",
+  "new": "4,626.00",
+  "verdict": "WRONG",
+  "note": "truth 3,920.00 is the pre-VAT subtotal; sach letashlum = 4,626.00 (VAT 705.66)"
+ },
+ {
+  "file": "zlmn-shr-1.pdf",
+  "type": "invoice",
+  "field": "PURCHASE_ID",
+  "old": "",
+  "new": "",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "zlmn-shr-2.pdf",
+  "type": "invoice",
+  "field": "COMPANY_ID",
+  "old": "516009677",
+  "new": "516009677",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "zlmn-shr-2.pdf",
+  "type": "invoice",
+  "field": "DOC_ID",
+  "old": "201786",
+  "new": "201786",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "zlmn-shr-2.pdf",
+  "type": "invoice",
+  "field": "DOC_DATE",
+  "old": "30/10/2025",
+  "new": "30/10/2025",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "zlmn-shr-2.pdf",
+  "type": "invoice",
+  "field": "DOC_TOTAL_AMOUNT",
+  "old": "5,187.00",
+  "new": "6,121.00",
+  "verdict": "WRONG",
+  "note": "truth 5,187.00 is pre-VAT subtotal; sach letashlum = 6,121.00"
+ },
+ {
+  "file": "zlmn-shr-2.pdf",
+  "type": "invoice",
+  "field": "PURCHASE_ID",
+  "old": "",
+  "new": "25011330",
+  "verdict": "WRONG",
+  "note": "truth empty; doc footer: rechesh 25011330"
+ },
+ {
+  "file": "avrbvnd-1.jpg",
+  "type": "invoice",
+  "field": "COMPANY_ID",
+  "old": "511581084",
+  "new": "511581084",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "avrbvnd-1.jpg",
+  "type": "invoice",
+  "field": "DOC_ID",
+  "old": "",
+  "new": "1852592883",
+  "verdict": "WRONG",
+  "note": "truth empty; doc: chesbonit ZIKUY (credit note) 1852592883"
+ },
+ {
+  "file": "avrbvnd-1.jpg",
+  "type": "invoice",
+  "field": "DOC_DATE",
+  "old": "",
+  "new": "09/11/2025",
+  "verdict": "WRONG",
+  "note": "truth empty; doc: 09.11.2025"
+ },
+ {
+  "file": "avrbvnd-1.jpg",
+  "type": "invoice",
+  "field": "DOC_TOTAL_AMOUNT",
+  "old": "",
+  "new": "1,240.42",
+  "verdict": "WRONG",
+  "note": "truth empty; sach mechir chesbonit zikuy = 1,240.42 (credit note - arguably negative)"
+ },
+ {
+  "file": "avrbvnd-1.jpg",
+  "type": "invoice",
+  "field": "PURCHASE_ID",
+  "old": "",
+  "new": "",
+  "verdict": "NOT_ON_DOC",
+  "note": "no PO; references original invoice 1852519436"
+ },
+ {
+  "file": "mylstvn-1.jpg",
+  "type": "invoice",
+  "field": "COMPANY_ID",
+  "old": "512643859",
+  "new": "512643859",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "mylstvn-1.jpg",
+  "type": "invoice",
+  "field": "DOC_ID",
+  "old": "",
+  "new": "SI266M001099",
+  "verdict": "WRONG",
+  "note": "truth empty; doc: SI266M001099"
+ },
+ {
+  "file": "mylstvn-1.jpg",
+  "type": "invoice",
+  "field": "DOC_DATE",
+  "old": "",
+  "new": "29/03/2026",
+  "verdict": "WRONG",
+  "note": "truth empty; doc: 29/03/26"
+ },
+ {
+  "file": "mylstvn-1.jpg",
+  "type": "invoice",
+  "field": "DOC_TOTAL_AMOUNT",
+  "old": "",
+  "new": "1,589.00",
+  "verdict": "WRONG",
+  "note": "truth empty; sach = 1,589.00 incl VAT"
+ },
+ {
+  "file": "mylstvn-1.jpg",
+  "type": "invoice",
+  "field": "PURCHASE_ID",
+  "old": "",
+  "new": "PO26002620",
+  "verdict": "WRONG",
+  "note": "truth empty; hazmantchem PO26002620 (OCR-confirmed 26002620); teuda SH26M002307"
+ },
+ {
+  "file": "msgryyt-shtyl-4.pdf",
+  "type": "invoice",
+  "field": "COMPANY_ID",
+  "old": "511061780",
+  "new": "511061780",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "msgryyt-shtyl-4.pdf",
+  "type": "invoice",
+  "field": "DOC_ID",
+  "old": "261182",
+  "new": "261182",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "msgryyt-shtyl-4.pdf",
+  "type": "invoice",
+  "field": "DOC_DATE",
+  "old": "30/06/2025",
+  "new": "30/06/2025",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "msgryyt-shtyl-4.pdf",
+  "type": "invoice",
+  "field": "DOC_TOTAL_AMOUNT",
+  "old": "19,260.00",
+  "new": "22,727.00",
+  "verdict": "WRONG",
+  "note": "truth 19,260.00 is pre-VAT subtotal; sach letashlum = 22,727.00"
+ },
+ {
+  "file": "msgryyt-shtyl-4.pdf",
+  "type": "invoice",
+  "field": "PURCHASE_ID",
+  "old": "",
+  "new": "",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "nyrlt-tsb-ym-4.pdf",
+  "type": "invoice",
+  "field": "COMPANY_ID",
+  "old": "520037532",
+  "new": "520037532",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "nyrlt-tsb-ym-4.pdf",
+  "type": "invoice",
+  "field": "DOC_ID",
+  "old": "621104",
+  "new": "621104",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "nyrlt-tsb-ym-4.pdf",
+  "type": "invoice",
+  "field": "DOC_DATE",
+  "old": "26/05/2025",
+  "new": "27/05/2025",
+  "verdict": "WRONG",
+  "note": "truth 26/05/2025 is the shipping date (t. mishloach); invoice issue date (taarich hafaka) = 27/05/2025"
+ },
+ {
+  "file": "nyrlt-tsb-ym-4.pdf",
+  "type": "invoice",
+  "field": "DOC_TOTAL_AMOUNT",
+  "old": "",
+  "new": "8,220.00",
+  "verdict": "WRONG",
+  "note": "truth empty; sach lechovatchem = 8,220.00 (pre-VAT 6,966.09)"
+ },
+ {
+  "file": "nyrlt-tsb-ym-4.pdf",
+  "type": "invoice",
+  "field": "PURCHASE_ID",
+  "old": "",
+  "new": "",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "vvyz-alktryk-4.pdf",
+  "type": "invoice",
+  "field": "COMPANY_ID",
+  "old": "515463354",
+  "new": "515463354",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "vvyz-alktryk-4.pdf",
+  "type": "invoice",
+  "field": "DOC_ID",
+  "old": "09166",
+  "new": "09166",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "vvyz-alktryk-4.pdf",
+  "type": "invoice",
+  "field": "DOC_DATE",
+  "old": "29/07/2025",
+  "new": "29/07/2025",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "vvyz-alktryk-4.pdf",
+  "type": "invoice",
+  "field": "DOC_TOTAL_AMOUNT",
+  "old": "1,298.00",
+  "new": "1,298.00",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "vvyz-alktryk-4.pdf",
+  "type": "invoice",
+  "field": "PURCHASE_ID",
+  "old": "",
+  "new": "",
+  "verdict": "CORRECT",
+  "note": "no customer PO; doc shows makor S41603 / mizahe hazmana 4637"
+ },
+ {
+  "file": "mvral-2.pdf",
+  "type": "invoice",
+  "field": "COMPANY_ID",
+  "old": "516711157",
+  "new": "516711157",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "mvral-2.pdf",
+  "type": "invoice",
+  "field": "DOC_ID",
+  "old": "SI256000620",
+  "new": "SI256000620",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "mvral-2.pdf",
+  "type": "invoice",
+  "field": "DOC_DATE",
+  "old": "31/07/2025",
+  "new": "31/07/2025",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "mvral-2.pdf",
+  "type": "invoice",
+  "field": "DOC_TOTAL_AMOUNT",
+  "old": "",
+  "new": "8,213.00",
+  "verdict": "WRONG",
+  "note": "truth empty; sach mechir kolel maam = 8,213.00"
+ },
+ {
+  "file": "mvral-2.pdf",
+  "type": "invoice",
+  "field": "PURCHASE_ID",
+  "old": "",
+  "new": "",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "mvral-4.pdf",
+  "type": "invoice",
+  "field": "COMPANY_ID",
+  "old": "516711157",
+  "new": "516711157",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "mvral-4.pdf",
+  "type": "invoice",
+  "field": "DOC_ID",
+  "old": "SI256001361",
+  "new": "SI256001361",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "mvral-4.pdf",
+  "type": "invoice",
+  "field": "DOC_DATE",
+  "old": "31/12/2025",
+  "new": "31/12/2025",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "mvral-4.pdf",
+  "type": "invoice",
+  "field": "DOC_TOTAL_AMOUNT",
+  "old": "",
+  "new": "5,324.00",
+  "verdict": "WRONG",
+  "note": "truth empty; sach mechir kolel maam = 5,324.00"
+ },
+ {
+  "file": "mvral-4.pdf",
+  "type": "invoice",
+  "field": "PURCHASE_ID",
+  "old": "",
+  "new": "",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "dvr-rpal-2.pdf",
+  "type": "invoice",
+  "field": "COMPANY_ID",
+  "old": "514772342",
+  "new": "514772342",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "dvr-rpal-2.pdf",
+  "type": "invoice",
+  "field": "DOC_ID",
+  "old": "256006612",
+  "new": "256006612",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "dvr-rpal-2.pdf",
+  "type": "invoice",
+  "field": "DOC_DATE",
+  "old": "13/08/2025",
+  "new": "13/08/2025",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "dvr-rpal-2.pdf",
+  "type": "invoice",
+  "field": "DOC_TOTAL_AMOUNT",
+  "old": "616.00",
+  "new": "616.00",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "dvr-rpal-2.pdf",
+  "type": "invoice",
+  "field": "PURCHASE_ID",
+  "old": "S025006345",
+  "new": "SO25006345",
+  "verdict": "WRONG",
+  "note": "truth wrote digit zero (S0...); doc/OCR: letter O - SO25006345; hazmantchem PO25008234 also on doc"
+ },
+ {
+  "file": "ysh-krtvn-2.pdf",
+  "type": "invoice",
+  "field": "COMPANY_ID",
+  "old": "512093170",
+  "new": "512093170",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "ysh-krtvn-2.pdf",
+  "type": "invoice",
+  "field": "DOC_ID",
+  "old": "SI256007720",
+  "new": "SI256007720",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "ysh-krtvn-2.pdf",
+  "type": "invoice",
+  "field": "DOC_DATE",
+  "old": "15/05/2025",
+  "new": "15/05/2025",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "ysh-krtvn-2.pdf",
+  "type": "invoice",
+  "field": "DOC_TOTAL_AMOUNT",
+  "old": "10,709.00",
+  "new": "10,709.00",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "ysh-krtvn-2.pdf",
+  "type": "invoice",
+  "field": "PURCHASE_ID",
+  "old": "25005104",
+  "new": "25005104",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "vvyz-alktryk-2.pdf",
+  "type": "invoice",
+  "field": "COMPANY_ID",
+  "old": "515463354",
+  "new": "515463354",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "vvyz-alktryk-2.pdf",
+  "type": "invoice",
+  "field": "DOC_ID",
+  "old": "10910",
+  "new": "10910",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "vvyz-alktryk-2.pdf",
+  "type": "invoice",
+  "field": "DOC_DATE",
+  "old": "01/09/2025",
+  "new": "01/09/2025",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "vvyz-alktryk-2.pdf",
+  "type": "invoice",
+  "field": "DOC_TOTAL_AMOUNT",
+  "old": "2,091.00",
+  "new": "2,091.00",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "vvyz-alktryk-2.pdf",
+  "type": "invoice",
+  "field": "PURCHASE_ID",
+  "old": "",
+  "new": "",
+  "verdict": "CORRECT",
+  "note": "no customer PO; doc shows makor S48562"
+ },
+ {
+  "file": "ysh-krtvn-3.pdf",
+  "type": "invoice",
+  "field": "COMPANY_ID",
+  "old": "512093170",
+  "new": "512093170",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "ysh-krtvn-3.pdf",
+  "type": "invoice",
+  "field": "DOC_ID",
+  "old": "SI256008572",
+  "new": "SI256008572",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "ysh-krtvn-3.pdf",
+  "type": "invoice",
+  "field": "DOC_DATE",
+  "old": "28/05/2025",
+  "new": "28/05/2025",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "ysh-krtvn-3.pdf",
+  "type": "invoice",
+  "field": "DOC_TOTAL_AMOUNT",
+  "old": "6,615.00",
+  "new": "6,615.00",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "ysh-krtvn-3.pdf",
+  "type": "invoice",
+  "field": "PURCHASE_ID",
+  "old": "25005703",
+  "new": "25005703",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "mvral-3.pdf",
+  "type": "invoice",
+  "field": "COMPANY_ID",
+  "old": "516711157",
+  "new": "516711157",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "mvral-3.pdf",
+  "type": "invoice",
+  "field": "DOC_ID",
+  "old": "SI256000207",
+  "new": "SI256000207",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "mvral-3.pdf",
+  "type": "invoice",
+  "field": "DOC_DATE",
+  "old": "31/03/2025",
+  "new": "31/03/2025",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "mvral-3.pdf",
+  "type": "invoice",
+  "field": "DOC_TOTAL_AMOUNT",
+  "old": "",
+  "new": "9,867.00",
+  "verdict": "WRONG",
+  "note": "truth empty; sach mechir kolel maam = 9,867.00"
+ },
+ {
+  "file": "mvral-3.pdf",
+  "type": "invoice",
+  "field": "PURCHASE_ID",
+  "old": "",
+  "new": "",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "dvr-rpal-3.pdf",
+  "type": "invoice",
+  "field": "COMPANY_ID",
+  "old": "514772342",
+  "new": "514772342",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "dvr-rpal-3.pdf",
+  "type": "invoice",
+  "field": "DOC_ID",
+  "old": "256005047",
+  "new": "256005047",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "dvr-rpal-3.pdf",
+  "type": "invoice",
+  "field": "DOC_DATE",
+  "old": "30/06/2025",
+  "new": "30/06/2025",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "dvr-rpal-3.pdf",
+  "type": "invoice",
+  "field": "DOC_TOTAL_AMOUNT",
+  "old": "2,725.00",
+  "new": "2,725.00",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "dvr-rpal-3.pdf",
+  "type": "invoice",
+  "field": "PURCHASE_ID",
+  "old": "SO26001685",
+  "new": "SO25004685",
+  "verdict": "WRONG",
+  "note": "truth SO26001685 not on doc; doc/OCR: hazmana SO25004685 (also hazmantchem PO25006152)"
+ },
+ {
+  "file": "khrml-plvr-3.pdf",
+  "type": "invoice",
+  "field": "COMPANY_ID",
+  "old": "514488782",
+  "new": "514488782",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "khrml-plvr-3.pdf",
+  "type": "invoice",
+  "field": "DOC_ID",
+  "old": "SI256001000207",
+  "new": "SI256001000207",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "khrml-plvr-3.pdf",
+  "type": "invoice",
+  "field": "DOC_DATE",
+  "old": "31/03/2025",
+  "new": "31/03/2025",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "khrml-plvr-3.pdf",
+  "type": "invoice",
+  "field": "DOC_TOTAL_AMOUNT",
+  "old": "3,664.00",
+  "new": "3,664.00",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "khrml-plvr-3.pdf",
+  "type": "invoice",
+  "field": "PURCHASE_ID",
+  "old": "S025001000878",
+  "new": "SO25001000878",
+  "verdict": "WRONG",
+  "note": "truth wrote digit zero (S0...); doc/OCR: letter O - SO25001000878; hazmantchem PO25003192 also on doc"
+ },
+ {
+  "file": "mvral-5.pdf",
+  "type": "invoice",
+  "field": "COMPANY_ID",
+  "old": "516711157",
+  "new": "516711157",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "mvral-5.pdf",
+  "type": "invoice",
+  "field": "DOC_ID",
+  "old": "SI266000206",
+  "new": "SI266000206",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "mvral-5.pdf",
+  "type": "invoice",
+  "field": "DOC_DATE",
+  "old": "28/02/2026",
+  "new": "28/02/2026",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "mvral-5.pdf",
+  "type": "invoice",
+  "field": "DOC_TOTAL_AMOUNT",
+  "old": "",
+  "new": "15,047.00",
+  "verdict": "WRONG",
+  "note": "truth empty; sach mechir kolel maam = 15,047.00"
+ },
+ {
+  "file": "mvral-5.pdf",
+  "type": "invoice",
+  "field": "PURCHASE_ID",
+  "old": "",
+  "new": "",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "mvral-1.pdf",
+  "type": "invoice",
+  "field": "COMPANY_ID",
+  "old": "516711157",
+  "new": "516711157",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "mvral-1.pdf",
+  "type": "invoice",
+  "field": "DOC_ID",
+  "old": "SI256000352",
+  "new": "SI256000352",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "mvral-1.pdf",
+  "type": "invoice",
+  "field": "DOC_DATE",
+  "old": "30/04/2025",
+  "new": "30/04/2025",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "mvral-1.pdf",
+  "type": "invoice",
+  "field": "DOC_TOTAL_AMOUNT",
+  "old": "",
+  "new": "11,908.00",
+  "verdict": "WRONG",
+  "note": "truth empty; sach mechir kolel maam = 11,908.00"
+ },
+ {
+  "file": "mvral-1.pdf",
+  "type": "invoice",
+  "field": "PURCHASE_ID",
+  "old": "",
+  "new": "",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "hvpyt-kybvts-khnrt-5.pdf",
+  "type": "invoice",
+  "field": "COMPANY_ID",
+  "old": "514454446",
+  "new": "514454446",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "hvpyt-kybvts-khnrt-5.pdf",
+  "type": "invoice",
+  "field": "DOC_ID",
+  "old": "SI256011625",
+  "new": "SI256011625",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "hvpyt-kybvts-khnrt-5.pdf",
+  "type": "invoice",
+  "field": "DOC_DATE",
+  "old": "23/12/2025",
+  "new": "23/12/2025",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "hvpyt-kybvts-khnrt-5.pdf",
+  "type": "invoice",
+  "field": "DOC_TOTAL_AMOUNT",
+  "old": "9,534.00",
+  "new": "9,534.00",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "hvpyt-kybvts-khnrt-5.pdf",
+  "type": "invoice",
+  "field": "PURCHASE_ID",
+  "old": "S025011016",
+  "new": "SO25011016",
+  "verdict": "WRONG",
+  "note": "truth wrote digit zero (S0...); doc/OCR: letter O - SO25011016; hazmantchem PO25013414 also on doc"
+ },
+ {
+  "file": "hvlyvt-zrymh-4.pdf",
+  "type": "invoice",
+  "field": "COMPANY_ID",
+  "old": "570038158",
+  "new": "570038158",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "hvlyvt-zrymh-4.pdf",
+  "type": "invoice",
+  "field": "DOC_ID",
+  "old": "SI256008298",
+  "new": "SI256008298",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "hvlyvt-zrymh-4.pdf",
+  "type": "invoice",
+  "field": "DOC_DATE",
+  "old": "22/04/2025",
+  "new": "22/04/2025",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "hvlyvt-zrymh-4.pdf",
+  "type": "invoice",
+  "field": "DOC_TOTAL_AMOUNT",
+  "old": "197.00",
+  "new": "197.00",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "hvlyvt-zrymh-4.pdf",
+  "type": "invoice",
+  "field": "PURCHASE_ID",
+  "old": "HU25005292",
+  "new": "HU25005292",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "pvlybyd-3.pdf",
+  "type": "invoice",
+  "field": "COMPANY_ID",
+  "old": "570047217",
+  "new": "570047217",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "pvlybyd-3.pdf",
+  "type": "invoice",
+  "field": "DOC_ID",
+  "old": "SIP25005782",
+  "new": "SIP25005782",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "pvlybyd-3.pdf",
+  "type": "invoice",
+  "field": "DOC_DATE",
+  "old": "27/05/2025",
+  "new": "27/05/2025",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "pvlybyd-3.pdf",
+  "type": "invoice",
+  "field": "DOC_TOTAL_AMOUNT",
+  "old": "31.25",
+  "new": "12,353.00",
+  "verdict": "WRONG",
+  "note": "truth 31.25 is the QUANTITY (31.250 cubic-m); sach mechir = ILS 12,353.00"
+ },
+ {
+  "file": "pvlybyd-3.pdf",
+  "type": "invoice",
+  "field": "PURCHASE_ID",
+  "old": "PO25005556",
+  "new": "PO25005556",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "pvlybyd-4.pdf",
+  "type": "invoice",
+  "field": "COMPANY_ID",
+  "old": "570047217",
+  "new": "570047217",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "pvlybyd-4.pdf",
+  "type": "invoice",
+  "field": "DOC_ID",
+  "old": "SIP25003961",
+  "new": "SIP25003961",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "pvlybyd-4.pdf",
+  "type": "invoice",
+  "field": "DOC_DATE",
+  "old": "17/04/2025",
+  "new": "17/04/2025",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "pvlybyd-4.pdf",
+  "type": "invoice",
+  "field": "DOC_TOTAL_AMOUNT",
+  "old": "12.50",
+  "new": "2,921.00",
+  "verdict": "WRONG",
+  "note": "truth 12.50 is the QUANTITY (12.500 cubic-m); sach mechir = ILS 2,921.00"
+ },
+ {
+  "file": "pvlybyd-4.pdf",
+  "type": "invoice",
+  "field": "PURCHASE_ID",
+  "old": "PO25004073",
+  "new": "PO25004073",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "pvlybyd-2.pdf",
+  "type": "invoice",
+  "field": "COMPANY_ID",
+  "old": "570047217",
+  "new": "570047217",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "pvlybyd-2.pdf",
+  "type": "invoice",
+  "field": "DOC_ID",
+  "old": "SIP25003674",
+  "new": "SIP25003674",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "pvlybyd-2.pdf",
+  "type": "invoice",
+  "field": "DOC_DATE",
+  "old": "08/04/2025",
+  "new": "08/04/2025",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "pvlybyd-2.pdf",
+  "type": "invoice",
+  "field": "DOC_TOTAL_AMOUNT",
+  "old": "13.84",
+  "new": "3,234.00",
+  "verdict": "WRONG",
+  "note": "truth 13.84 is the QUANTITY (13.840 cubic-m); sach mechir = ILS 3,234.00"
+ },
+ {
+  "file": "pvlybyd-2.pdf",
+  "type": "invoice",
+  "field": "PURCHASE_ID",
+  "old": "",
+  "new": "PO25003985",
+  "verdict": "WRONG",
+  "note": "truth empty; hazmantchem PO25003985 (both lines, OCR-confirmed)"
+ },
+ {
+  "file": "pvlybyd-5.pdf",
+  "type": "invoice",
+  "field": "COMPANY_ID",
+  "old": "570047217",
+  "new": "570047217",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "pvlybyd-5.pdf",
+  "type": "invoice",
+  "field": "DOC_ID",
+  "old": "SIP25005602",
+  "new": "SIP25005602",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "pvlybyd-5.pdf",
+  "type": "invoice",
+  "field": "DOC_DATE",
+  "old": "22/05/2025",
+  "new": "22/05/2025",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "pvlybyd-5.pdf",
+  "type": "invoice",
+  "field": "DOC_TOTAL_AMOUNT",
+  "old": "10.38",
+  "new": "2,425.00",
+  "verdict": "WRONG",
+  "note": "truth 10.38 is the QUANTITY (10.380 cubic-m); sach mechir = ILS 2,425.00"
+ },
+ {
+  "file": "pvlybyd-5.pdf",
+  "type": "invoice",
+  "field": "PURCHASE_ID",
+  "old": "PO25005450",
+  "new": "PO25005450",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "arkhh-3.pdf",
+  "type": "invoice",
+  "field": "COMPANY_ID",
+  "old": "511022493",
+  "new": "511022493",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "arkhh-3.pdf",
+  "type": "invoice",
+  "field": "DOC_ID",
+  "old": "20342503040",
+  "new": "20342503040",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "arkhh-3.pdf",
+  "type": "invoice",
+  "field": "DOC_DATE",
+  "old": "13/01/2025",
+  "new": "29/05/2025",
+  "verdict": "WRONG",
+  "note": "truth 13/01/2025 nowhere on doc; taarich chesbonit = 29/05/25 (OCR-confirmed)"
+ },
+ {
+  "file": "arkhh-3.pdf",
+  "type": "invoice",
+  "field": "DOC_TOTAL_AMOUNT",
+  "old": "",
+  "new": "849.00",
+  "verdict": "WRONG",
+  "note": "truth empty; sach mechir = 849.00 (pre-VAT 719.49)"
+ },
+ {
+  "file": "arkhh-3.pdf",
+  "type": "invoice",
+  "field": "PURCHASE_ID",
+  "old": "20102500087",
+  "new": "PO25005306",
+  "verdict": "WRONG",
+  "note": "truth 20102500087 nowhere on doc; hazmantchem = PO25005306 (OCR-confirmed)"
+ },
+ {
+  "file": "vvyz-alktryk-3.pdf",
+  "type": "invoice",
+  "field": "COMPANY_ID",
+  "old": "515463354",
+  "new": "515463354",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "vvyz-alktryk-3.pdf",
+  "type": "invoice",
+  "field": "DOC_ID",
+  "old": "12143",
+  "new": "12143",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "vvyz-alktryk-3.pdf",
+  "type": "invoice",
+  "field": "DOC_DATE",
+  "old": "21/09/2025",
+  "new": "21/09/2025",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "vvyz-alktryk-3.pdf",
+  "type": "invoice",
+  "field": "DOC_TOTAL_AMOUNT",
+  "old": "5,890.00",
+  "new": "5,890.00",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "vvyz-alktryk-3.pdf",
+  "type": "invoice",
+  "field": "PURCHASE_ID",
+  "old": "",
+  "new": "",
+  "verdict": "CORRECT",
+  "note": "no customer PO; doc shows makor S49617 / mizahe hazmana 10193"
+ },
+ {
+  "file": "khrml-plvr-2.pdf",
+  "type": "invoice",
+  "field": "COMPANY_ID",
+  "old": "514488782",
+  "new": "514488782",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "khrml-plvr-2.pdf",
+  "type": "invoice",
+  "field": "DOC_ID",
+  "old": "SI266001000100",
+  "new": "SI266001000100",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "khrml-plvr-2.pdf",
+  "type": "invoice",
+  "field": "DOC_DATE",
+  "old": "28/02/2026",
+  "new": "28/02/2026",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "khrml-plvr-2.pdf",
+  "type": "invoice",
+  "field": "DOC_TOTAL_AMOUNT",
+  "old": "20,503.00",
+  "new": "20,503.00",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "khrml-plvr-2.pdf",
+  "type": "invoice",
+  "field": "PURCHASE_ID",
+  "old": "SO26001000638",
+  "new": "SO26001000638",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "yhzkal-ahrvn-1.jpg",
+  "type": "invoice",
+  "field": "COMPANY_ID",
+  "old": "511027419",
+  "new": "511027419",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "yhzkal-ahrvn-1.jpg",
+  "type": "invoice",
+  "field": "DOC_ID",
+  "old": "697512",
+  "new": "697512",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "yhzkal-ahrvn-1.jpg",
+  "type": "invoice",
+  "field": "DOC_DATE",
+  "old": "15/05/2025",
+  "new": "15/05/2025",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "yhzkal-ahrvn-1.jpg",
+  "type": "invoice",
+  "field": "DOC_TOTAL_AMOUNT",
+  "old": "7,200.00",
+  "new": "8,496.00",
+  "verdict": "WRONG",
+  "note": "truth 7,200.00 is the pre-VAT subtotal; sach letashlum = 8,496.00 (OCR-confirmed 8,496)"
+ },
+ {
+  "file": "yhzkal-ahrvn-1.jpg",
+  "type": "invoice",
+  "field": "PURCHASE_ID",
+  "old": "",
+  "new": "5230",
+  "verdict": "WRONG",
+  "note": "truth empty; doc line: rechesh 5230"
+ },
+ {
+  "file": "msgryyt-shtyl-2.pdf",
+  "type": "invoice",
+  "field": "COMPANY_ID",
+  "old": "511061780",
+  "new": "511061780",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "msgryyt-shtyl-2.pdf",
+  "type": "invoice",
+  "field": "DOC_ID",
+  "old": "269669",
+  "new": "269669",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "msgryyt-shtyl-2.pdf",
+  "type": "invoice",
+  "field": "DOC_DATE",
+  "old": "18/02/2026",
+  "new": "18/02/2026",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "msgryyt-shtyl-2.pdf",
+  "type": "invoice",
+  "field": "DOC_TOTAL_AMOUNT",
+  "old": "20,224.80",
+  "new": "23,865.00",
+  "verdict": "WRONG",
+  "note": "truth 20,224.80 is pre-VAT subtotal; sach letashlum = 23,865.00"
+ },
+ {
+  "file": "msgryyt-shtyl-2.pdf",
+  "type": "invoice",
+  "field": "PURCHASE_ID",
+  "old": "",
+  "new": "",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "zlmn-shr-3.pdf",
+  "type": "invoice",
+  "field": "COMPANY_ID",
+  "old": "516009677",
+  "new": "516009677",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "zlmn-shr-3.pdf",
+  "type": "invoice",
+  "field": "DOC_ID",
+  "old": "201868",
+  "new": "201868",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "zlmn-shr-3.pdf",
+  "type": "invoice",
+  "field": "DOC_DATE",
+  "old": "31/12/2025",
+  "new": "31/12/2025",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "zlmn-shr-3.pdf",
+  "type": "invoice",
+  "field": "DOC_TOTAL_AMOUNT",
+  "old": "95,675.03",
+  "new": "112,897.00",
+  "verdict": "WRONG",
+  "note": "truth 95,675.03 is pre-VAT subtotal; sach letashlum = 112,897.00 (3-page invoice, total on p3)"
+ },
+ {
+  "file": "zlmn-shr-3.pdf",
+  "type": "invoice",
+  "field": "PURCHASE_ID",
+  "old": "",
+  "new": "",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "hvpyt-kybvts-khnrt-1.pdf",
+  "type": "shipment",
+  "field": "COMPANY_ID",
+  "old": "514454446",
+  "new": "514454446",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "hvpyt-kybvts-khnrt-1.pdf",
+  "type": "shipment",
+  "field": "DOC_ID",
+  "old": "SH26001884",
+  "new": "SH26001884",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "hvpyt-kybvts-khnrt-1.pdf",
+  "type": "shipment",
+  "field": "DOC_DATE",
+  "old": "24/02/2026",
+  "new": "24/02/2026",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "hvpyt-kybvts-khnrt-1.pdf",
+  "type": "shipment",
+  "field": "DOC_TOTAL_AMOUNT",
+  "old": "",
+  "new": "",
+  "verdict": "NOT_ON_DOC",
+  "note": "shipment cert - no total printed"
+ },
+ {
+  "file": "hvpyt-kybvts-khnrt-1.pdf",
+  "type": "shipment",
+  "field": "PURCHASE_ID",
+  "old": "",
+  "new": "PO26002198",
+  "verdict": "WRONG",
+  "note": "truth empty; hazmantchem PO26002198 (hazmana SO26001577); visual read, OCR table lost"
+ },
+ {
+  "file": "dyavr-4.pdf",
+  "type": "shipment",
+  "field": "COMPANY_ID",
+  "old": "513105494",
+  "new": "513105494",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "dyavr-4.pdf",
+  "type": "shipment",
+  "field": "DOC_ID",
+  "old": "SH26000378",
+  "new": "SH26000378",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "dyavr-4.pdf",
+  "type": "shipment",
+  "field": "DOC_DATE",
+  "old": "18/01/2026",
+  "new": "18/01/2026",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "dyavr-4.pdf",
+  "type": "shipment",
+  "field": "DOC_TOTAL_AMOUNT",
+  "old": "",
+  "new": "",
+  "verdict": "NOT_ON_DOC",
+  "note": "shipment cert - no total printed"
+ },
+ {
+  "file": "dyavr-4.pdf",
+  "type": "shipment",
+  "field": "PURCHASE_ID",
+  "old": "PO26000613",
+  "new": "PO26000613",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "dyavr-5.pdf",
+  "type": "shipment",
+  "field": "COMPANY_ID",
+  "old": "513105494",
+  "new": "513105494",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "dyavr-5.pdf",
+  "type": "shipment",
+  "field": "DOC_ID",
+  "old": "SH25002649",
+  "new": "SH25002649",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "dyavr-5.pdf",
+  "type": "shipment",
+  "field": "DOC_DATE",
+  "old": "05/05/2025",
+  "new": "05/05/2025",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "dyavr-5.pdf",
+  "type": "shipment",
+  "field": "DOC_TOTAL_AMOUNT",
+  "old": "",
+  "new": "",
+  "verdict": "NOT_ON_DOC",
+  "note": "shipment cert - no total printed"
+ },
+ {
+  "file": "dyavr-5.pdf",
+  "type": "shipment",
+  "field": "PURCHASE_ID",
+  "old": "PO250004688",
+  "new": "PO250004688",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "hvpyt-kybvts-khnrt-2.pdf",
+  "type": "shipment",
+  "field": "COMPANY_ID",
+  "old": "514454446",
+  "new": "514454446",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "hvpyt-kybvts-khnrt-2.pdf",
+  "type": "shipment",
+  "field": "DOC_ID",
+  "old": "SH25012503",
+  "new": "SH25012503",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "hvpyt-kybvts-khnrt-2.pdf",
+  "type": "shipment",
+  "field": "DOC_DATE",
+  "old": "23/12/2025",
+  "new": "23/12/2025",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "hvpyt-kybvts-khnrt-2.pdf",
+  "type": "shipment",
+  "field": "DOC_TOTAL_AMOUNT",
+  "old": "",
+  "new": "",
+  "verdict": "NOT_ON_DOC",
+  "note": "shipment cert - no total printed"
+ },
+ {
+  "file": "hvpyt-kybvts-khnrt-2.pdf",
+  "type": "shipment",
+  "field": "PURCHASE_ID",
+  "old": "",
+  "new": "PO25013414",
+  "verdict": "WRONG",
+  "note": "truth empty; hazmantchem PO25013414 both lines (hazmana SO25011016); matches invoice SI256011625 chain"
+ },
+ {
+  "file": "hvpyt-kybvts-khnrt-3.pdf",
+  "type": "shipment",
+  "field": "COMPANY_ID",
+  "old": "514454446",
+  "new": "514454446",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "hvpyt-kybvts-khnrt-3.pdf",
+  "type": "shipment",
+  "field": "DOC_ID",
+  "old": "SH26002782",
+  "new": "SH26002782",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "hvpyt-kybvts-khnrt-3.pdf",
+  "type": "shipment",
+  "field": "DOC_DATE",
+  "old": "24/03/2026",
+  "new": "24/03/2026",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "hvpyt-kybvts-khnrt-3.pdf",
+  "type": "shipment",
+  "field": "DOC_TOTAL_AMOUNT",
+  "old": "",
+  "new": "",
+  "verdict": "NOT_ON_DOC",
+  "note": "shipment cert - no total printed"
+ },
+ {
+  "file": "hvpyt-kybvts-khnrt-3.pdf",
+  "type": "shipment",
+  "field": "PURCHASE_ID",
+  "old": "",
+  "new": "PO26003461",
+  "verdict": "WRONG",
+  "note": "truth empty; hazmantchem PO26003461 (hazmana SO26002367); visual read, OCR table lost"
+ },
+ {
+  "file": "pvlyrn-5.pdf",
+  "type": "shipment",
+  "field": "COMPANY_ID",
+  "old": "513498345",
+  "new": "513498345",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "pvlyrn-5.pdf",
+  "type": "shipment",
+  "field": "DOC_ID",
+  "old": "S0125005179",
+  "new": "S0125005179",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "pvlyrn-5.pdf",
+  "type": "shipment",
+  "field": "DOC_DATE",
+  "old": "03/06/2025",
+  "new": "03/06/2025",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "pvlyrn-5.pdf",
+  "type": "shipment",
+  "field": "DOC_TOTAL_AMOUNT",
+  "old": "",
+  "new": "",
+  "verdict": "NOT_ON_DOC",
+  "note": "shipment cert - no total printed"
+ },
+ {
+  "file": "pvlyrn-5.pdf",
+  "type": "shipment",
+  "field": "PURCHASE_ID",
+  "old": "",
+  "new": "PO25005653",
+  "verdict": "WRONG",
+  "note": "truth empty; TWO order refs on doc: hazmana mas PO25005653 and PO25005840"
+ },
+ {
+  "file": "mylstvn-3.pdf",
+  "type": "shipment",
+  "field": "COMPANY_ID",
+  "old": "512643859",
+  "new": "512643859",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "mylstvn-3.pdf",
+  "type": "shipment",
+  "field": "DOC_ID",
+  "old": "SH26M001115",
+  "new": "SH26M001115",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "mylstvn-3.pdf",
+  "type": "shipment",
+  "field": "DOC_DATE",
+  "old": "09/02/2026",
+  "new": "09/02/2026",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "mylstvn-3.pdf",
+  "type": "shipment",
+  "field": "DOC_TOTAL_AMOUNT",
+  "old": "",
+  "new": "",
+  "verdict": "NOT_ON_DOC",
+  "note": "shipment cert - no total printed"
+ },
+ {
+  "file": "mylstvn-3.pdf",
+  "type": "shipment",
+  "field": "PURCHASE_ID",
+  "old": "SO26M001140",
+  "new": "PO26001466",
+  "verdict": "WRONG",
+  "note": "dataset used the SUPPLIER order (הזמנה SO26M001140); PURCHASE_ID is the customer PO under הזמנתכם = PO26001466 (viewed doc 2026-07-16)"
+ },
+ {
+  "file": "d-a-plst-5.pdf",
+  "type": "shipment",
+  "field": "COMPANY_ID",
+  "old": "511200180",
+  "new": "511200180",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "d-a-plst-5.pdf",
+  "type": "shipment",
+  "field": "DOC_ID",
+  "old": "ML2505785",
+  "new": "ML2505785",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "d-a-plst-5.pdf",
+  "type": "shipment",
+  "field": "DOC_DATE",
+  "old": "21/05/2025",
+  "new": "21/05/2025",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "d-a-plst-5.pdf",
+  "type": "shipment",
+  "field": "DOC_TOTAL_AMOUNT",
+  "old": "",
+  "new": "",
+  "verdict": "NOT_ON_DOC",
+  "note": "shipment cert - no total printed"
+ },
+ {
+  "file": "d-a-plst-5.pdf",
+  "type": "shipment",
+  "field": "PURCHASE_ID",
+  "old": "",
+  "new": "PO25005321",
+  "verdict": "WRONG",
+  "note": "truth empty; hazmantchem PO25005321 all lines (hazmana K250008739); visual read, OCR nearly empty on this stamped scan"
+ },
+ {
+  "file": "sbh-5.pdf",
+  "type": "shipment",
+  "field": "COMPANY_ID",
+  "old": "511020471",
+  "new": "511020471",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "sbh-5.pdf",
+  "type": "shipment",
+  "field": "DOC_ID",
+  "old": "SH2611624",
+  "new": "SH2611624",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "sbh-5.pdf",
+  "type": "shipment",
+  "field": "DOC_DATE",
+  "old": "09/04/2026",
+  "new": "09/04/2026",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "sbh-5.pdf",
+  "type": "shipment",
+  "field": "DOC_TOTAL_AMOUNT",
+  "old": "",
+  "new": "",
+  "verdict": "NOT_ON_DOC",
+  "note": "shipment cert - no total printed"
+ },
+ {
+  "file": "sbh-5.pdf",
+  "type": "shipment",
+  "field": "PURCHASE_ID",
+  "old": "26003171",
+  "new": "26003171",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "kmhy-khly-5.pdf",
+  "type": "shipment",
+  "field": "COMPANY_ID",
+  "old": "512069865",
+  "new": "512069865",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "kmhy-khly-5.pdf",
+  "type": "shipment",
+  "field": "DOC_ID",
+  "old": "SH25005689-",
+  "new": "SH25005689",
+  "verdict": "WRONG",
+  "note": "truth has stray trailing hyphen; doc/OCR: SH25005689"
+ },
+ {
+  "file": "kmhy-khly-5.pdf",
+  "type": "shipment",
+  "field": "DOC_DATE",
+  "old": "",
+  "new": "23/04/2025",
+  "verdict": "WRONG",
+  "note": "truth empty; taarich hateuda 23/04/25 (OCR-confirmed 23/04/2025)"
+ },
+ {
+  "file": "kmhy-khly-5.pdf",
+  "type": "shipment",
+  "field": "DOC_TOTAL_AMOUNT",
+  "old": "",
+  "new": "",
+  "verdict": "NOT_ON_DOC",
+  "note": "shipment cert - no total printed"
+ },
+ {
+  "file": "kmhy-khly-5.pdf",
+  "type": "shipment",
+  "field": "PURCHASE_ID",
+  "old": "",
+  "new": "PO25004203",
+  "verdict": "WRONG",
+  "note": "truth empty; mispar hazmanat lakoach PO25004203 (OCR-confirmed 25004203)"
+ },
+ {
+  "file": "mbnh-drvm-5.pdf",
+  "type": "shipment",
+  "field": "COMPANY_ID",
+  "old": "570042077",
+  "new": "570042077",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "mbnh-drvm-5.pdf",
+  "type": "shipment",
+  "field": "DOC_ID",
+  "old": "SHM2501205",
+  "new": "SHM2501205",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "mbnh-drvm-5.pdf",
+  "type": "shipment",
+  "field": "DOC_DATE",
+  "old": "27/04/2025",
+  "new": "27/04/2025",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "mbnh-drvm-5.pdf",
+  "type": "shipment",
+  "field": "DOC_TOTAL_AMOUNT",
+  "old": "",
+  "new": "",
+  "verdict": "NOT_ON_DOC",
+  "note": "shipment cert - no total printed"
+ },
+ {
+  "file": "mbnh-drvm-5.pdf",
+  "type": "shipment",
+  "field": "PURCHASE_ID",
+  "old": "",
+  "new": "PO25004346",
+  "verdict": "WRONG",
+  "note": "truth empty; hazmantchem PO25004346 (hazmana SOM2500697)"
+ },
+ {
+  "file": "by-gy-4.pdf",
+  "type": "shipment",
+  "field": "COMPANY_ID",
+  "old": "514291418",
+  "new": "514291418",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "by-gy-4.pdf",
+  "type": "shipment",
+  "field": "DOC_ID",
+  "old": "02TSH25017987",
+  "new": "02TSH25017987",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "by-gy-4.pdf",
+  "type": "shipment",
+  "field": "DOC_DATE",
+  "old": "18/11/2025",
+  "new": "18/11/2025",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "by-gy-4.pdf",
+  "type": "shipment",
+  "field": "DOC_TOTAL_AMOUNT",
+  "old": "",
+  "new": "",
+  "verdict": "NOT_ON_DOC",
+  "note": "shipment cert - no money total (mishkal bruto 11,072.01 is weight)"
+ },
+ {
+  "file": "by-gy-4.pdf",
+  "type": "shipment",
+  "field": "PURCHASE_ID",
+  "old": "",
+  "new": "PO25012019",
+  "verdict": "WRONG",
+  "note": "truth empty; hazmantchem PO25012019 both lines (OCR-confirmed 25012019; hazmana SO25015464)"
+ },
+ {
+  "file": "mbnh-drvm-1.pdf",
+  "type": "shipment",
+  "field": "COMPANY_ID",
+  "old": "570042077",
+  "new": "570042077",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "mbnh-drvm-1.pdf",
+  "type": "shipment",
+  "field": "DOC_ID",
+  "old": "SHM2501512",
+  "new": "SHM2501512",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "mbnh-drvm-1.pdf",
+  "type": "shipment",
+  "field": "DOC_DATE",
+  "old": "09/06/2025",
+  "new": "09/06/2025",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "mbnh-drvm-1.pdf",
+  "type": "shipment",
+  "field": "DOC_TOTAL_AMOUNT",
+  "old": "",
+  "new": "",
+  "verdict": "NOT_ON_DOC",
+  "note": "shipment cert - no total printed"
+ },
+ {
+  "file": "mbnh-drvm-1.pdf",
+  "type": "shipment",
+  "field": "PURCHASE_ID",
+  "old": "",
+  "new": "",
+  "verdict": "NOT_ON_DOC",
+  "note": "no customer PO column; internal hazmana SOM2500918 + pak/mana P2505xxxx refs only"
+ },
+ {
+  "file": "pl-ym-5.pdf",
+  "type": "shipment",
+  "field": "COMPANY_ID",
+  "old": "513327064",
+  "new": "513327064",
+  "verdict": "NOT_ON_DOC",
+  "note": "supplier ch.p. not printed on doc; supplier name T.P.Y Pal-Yam matches truth id - kept"
+ },
+ {
+  "file": "pl-ym-5.pdf",
+  "type": "shipment",
+  "field": "DOC_ID",
+  "old": "252067160",
+  "new": "252067160",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "pl-ym-5.pdf",
+  "type": "shipment",
+  "field": "DOC_DATE",
+  "old": "01/09/2025",
+  "new": "01/09/2025",
+  "verdict": "CORRECT",
+  "note": ""
+ },
+ {
+  "file": "pl-ym-5.pdf",
+  "type": "shipment",
+  "field": "DOC_TOTAL_AMOUNT",
+  "old": "",
+  "new": "",
+  "verdict": "NOT_ON_DOC",
+  "note": "shipment cert - no total printed"
+ },
+ {
+  "file": "pl-ym-5.pdf",
+  "type": "shipment",
+  "field": "PURCHASE_ID",
+  "old": "PO25009040",
+  "new": "PO25009040",
+  "verdict": "CORRECT",
+  "note": "matches line 1 hazmantchem; lines 2-4 show PO25009479 (second PO on same cert)"
+ },
+ {
+  "file": "files/m-trvt-b-1.jpg",
+  "type": "",
+  "field": "COMPANY_ID",
+  "old": "",
+  "new": "",
+  "verdict": "NOT_ON_DOC",
+  "note": "no letterhead; cropped photo | human-on-page answer: none"
+ },
+ {
+  "file": "files/m-trvt-b-1.jpg",
+  "type": "",
+  "field": "DOC_TOTAL_AMOUNT",
+  "old": "",
+  "new": "",
+  "verdict": "NOT_ON_DOC",
+  "note": "amounts scribbled over in red | human-on-page answer: none"
+ },
+ {
+  "file": "files/ats-hvmry-aytvm-1.jpg",
+  "type": "",
+  "field": "COMPANY_ID",
+  "old": "",
+  "new": "",
+  "verdict": "NOT_ON_DOC",
+  "note": "supplier ledger screenshot, recipient only | human-on-page answer: none"
+ },
+ {
+  "file": "files/ats-hvmry-aytvm-2.png",
+  "type": "",
+  "field": "COMPANY_ID",
+  "old": "",
+  "new": "",
+  "verdict": "NOT_ON_DOC",
+  "note": "same | human-on-page answer: none"
+ },
+ {
+  "file": "files/ats-hvmry-aytvm-3.png",
+  "type": "",
+  "field": "COMPANY_ID",
+  "old": "",
+  "new": "",
+  "verdict": "NOT_ON_DOC",
+  "note": "same | human-on-page answer: none"
+ },
+ {
+  "file": "files/nvymn-3.png",
+  "type": "",
+  "field": "COMPANY_ID",
+  "old": "",
+  "new": "",
+  "verdict": "NOT_ON_DOC",
+  "note": "excel screenshot, no identity | human-on-page answer: none"
+ },
+ {
+  "file": "files/nvymn-3.png",
+  "type": "",
+  "field": "DOC_TOTAL_AMOUNT",
+  "old": "",
+  "new": "",
+  "verdict": "NOT_ON_DOC",
+  "note": "no printed total (truth was computed sum) | human-on-page answer: none"
+ },
+ {
+  "file": "files/nvymn-3.png",
+  "type": "",
+  "field": "DOC_DATE",
+  "old": "",
+  "new": "30/11/2025",
+  "verdict": "WRONG",
+  "note": "page prints 30/11/2025 on every row | human-on-page answer"
+ },
+ {
+  "file": "files/tyh-harts-3.pdf",
+  "type": "",
+  "field": "DOC_DATE",
+  "old": "",
+  "new": "10/11/25",
+  "verdict": "WRONG",
+  "note": "header print date on page | human-on-page answer"
+ },
+ {
+  "file": "files/tyh-harts-4.pdf",
+  "type": "",
+  "field": "DOC_DATE",
+  "old": "",
+  "new": "13/01/26",
+  "verdict": "WRONG",
+  "note": "header print date on page | human-on-page answer"
+ },
+ {
+  "file": "files/aysh-hkhvl-yrvk-1.pdf",
+  "type": "",
+  "field": "DOC_TOTAL_AMOUNT",
+  "old": "",
+  "new": "19730.80",
+  "verdict": "WRONG",
+  "note": "printed summary 19,730.80; truth 21,288.4 not on page | human-on-page answer"
+ },
+ {
+  "file": "files/pl-ym-5.pdf",
+  "type": "invoice",
+  "field": "COMPANY_ID",
+  "old": "",
+  "new": "513327064",
+  "verdict": "WRONG",
+  "note": "letterhead prints עוסק מורשה: 513327064 (verified crop)"
+ },
+ {
+  "file": "files/pl-ym-5.pdf",
+  "type": "invoice",
+  "field": "DOC_TOTAL_AMOUNT",
+  "old": "",
+  "new": "-1251.00",
+  "verdict": "WRONG",
+  "note": "credit invoice; printed total 1,251.00- (verified in text)"
+ },
+ {
+  "file": "files/ats-hvmry-aytvm-1.jpg",
+  "type": "",
+  "field": "DOC_DATE",
+  "old": "",
+  "new": "16/02/26",
+  "verdict": "WRONG",
+  "note": "weighted-payment (משוקלל) date, consistent with ats-2 human-anchor rule"
+ },
+ {
+  "file": "mylstvn-1.jpg",
+  "type": "invoice",
+  "field": "SHIPMENT_ID",
+  "old": "SI266M001099",
+  "new": "SH26M002307",
+  "verdict": "WRONG",
+  "note": "truth auto-filled with the invoice's own number; te'uda column prints SH26M002307 (viewed crop)"
+ },
+ {
+  "file": "shryzly-3.pdf",
+  "type": "invoice",
+  "field": "SHIPMENT_ID",
+  "old": "19186115",
+  "new": "220329591",
+  "verdict": "WRONG",
+  "note": "truth auto-filled with invoice number; doc prints sah-kol le-te'uda mispar 220329591 (viewed crop)"
+ },
+ {
+  "file": "avrbvnd-1.jpg",
+  "type": "invoice",
+  "field": "SHIPMENT_ID",
+  "old": "1852592883",
+  "new": "",
+  "verdict": "NOT_ON_DOC",
+  "note": "credit note (heshbonit zikui 1852592883); no delivery-note ref on doc (viewed crop)"
+ },
+ {
+  "file": "khpr-mnhm-5.pdf",
+  "type": "invoice",
+  "field": "PURCHASE_ID",
+  "old": "PO26009686",
+  "new": "PO25009686",
+  "verdict": "WRONG",
+  "note": "truth 26-typo; doc prints hazmantchem PO25009686 twice - table row + summary (viewed crop)"
+ },
+ {
+  "file": "tyh-harts-3.pdf",
+  "type": "balance_sheet",
+  "field": "DOC_DATE",
+  "old": "10/11/25",
+  "new": "22/12/25",
+  "verdict": "WRONG",
+  "note": "operator ruling 2026-07-15: doc date = printed ta'arich tashlum meshuklal 22/12/25; 10/11/25 is just the last transaction row"
+ },
+ {
+  "file": "ikon-sh25005075.jpg",
+  "field": "PURCHASE_ID",
+  "type": "shipment",
+  "verdict": "NOT_ON_DOC",
+  "note": "PO is a blue-pen 6-over-5 handwritten correction; not machine-readable, excluded from scoring"
+ },
+ {
+  "file": "m-trvt-b-1.jpg",
+  "type": "balance_sheet",
+  "field": "TYPE",
+  "verdict": "WRONG",
+  "old": "balance_sheet",
+  "new": "unknown",
+  "note": "weird BS scrap, <15 words no anchor; correct type is unknown"
+ }
+]

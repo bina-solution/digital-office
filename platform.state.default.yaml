@@ -1,0 +1,94 @@
+# platform.state.default.yaml — WHAT A FRESH INSTALL STARTS FROM. Not the office's own state.
+#
+# Two files, two owners:
+#   * platform.state.yaml          the OFFICE's desired state. Written at runtime (the console,
+#                                  `bbox apps enable|disable`); one per deployment; an office's own
+#                                  file, like `.env` beside `.env.ex`. It is what the platform runs.
+#   * platform.state.default.yaml  THIS file. The product default, tracked in git, never written by
+#                                  anything. `reconcile.ensure_state()` copies it into place when a
+#                                  checkout has no platform.state.yaml — that is all it is for.
+#
+# WHY THEY HAD TO SPLIT (measured 2026-10-06): while the file was one, git carried ONE office's
+# runtime. A fresh clone started from the Mac office's app set and its `remote:` block for vps1; a
+# pull silently replaced an office whose copy was unchanged and was refused for an office whose copy
+# had changed; and the HP office kept working only through a per-clone `skip-worktree` flag nobody
+# declared. A default is a product decision; a runtime is a deployment's.
+#
+# THE LIST BELOW is the owner's decision of 2026-09-17 — "the platform, the four business apps, the
+# office agent, and nothing else" — written out: **19 of the 41 catalog apps on** (the seven layer-1
+# apps, the seven layer-2 apps, apitools, indox, drive, mail, bina-ds) and the rest off. The ten apps
+# that joined after that decision (computers, git, sites, domains, telegram-tv, project-pln,
+# dgo-extend, social-list, digital-assets, archify) are therefore off.
+#
+# EVERY LINE IS A DISPOSITION AND NOTHING ELSE: `{ enabled: true|false }`. No `state:`, no `by:`, no
+# `remote:` — those describe a deployment's history, and a fresh install has none. Gate G23
+# (gallery-default-lint) judges THIS file for exactly that reason.
+#
+# The shape of an app's own state entry, its instances and its `remote:` block all still live in
+# platform.state.yaml once an office has one; `schema_version` is checked by the compiler either way.
+schema_version: 1
+
+apps:
+  # ── layer 1 — headless base (system: cannot be disabled) ───────────────────────
+  app-management:   { enabled: true }   # the control plane — install/enable/disable/uninstall apps
+  traefik:          { enabled: true }   # the edge — provides routing/TLS/forward-auth
+  postgres:         { enabled: true }   # provides sql — the db, and only the db
+  redis:            { enabled: true }   # provides kv
+  authentik:        { enabled: true }   # provides identity + forward-auth
+  connections:      { enabled: true }   # secret-base
+  autoheal:         { enabled: true }   # restarts containers docker marked unhealthy (opt-in label)
+
+  # ── layer 2 — base apps ────────────────────────────────────────────────────────
+  console:          { enabled: true }
+  n8n:              { enabled: false }   # provides workflow + automation-stdlib
+  notifications:    { enabled: true }
+  any-concurrency:  { enabled: false }
+  machine:          { enabled: true }
+  data-management:  { enabled: true }   # data inventory, full backup and restore
+  bina-ui:          { enabled: true }   # build-time library, no container
+
+  # ── layer 3 — the four business apps and the office agent ──────────────────────
+  apitools:         { enabled: true }   # provides ocr + ledger
+  indox:            { enabled: true }   # incoming documents
+  drive:            { enabled: true }
+  mail:             { enabled: true }
+  # 2026-09-17 (owner): "בינה" — the office agent, the platform's primary app going forward. A
+  # customized DeepSeek Harness embedded in the console; see apps/bina-ds/README.md.
+  bina-ds:          { enabled: true }
+
+  # ── gallery — installable apps that ship DISABLED (the app-store surface).
+  #    Declared and present in the catalog; `bbox apps enable ollama` turns one on.
+  ollama:           { enabled: false }
+  openhands:        { enabled: false }
+  # Container management UI. Layer 3 because it is an OPTIONAL operator tool, not platform chassis.
+  portainer:        { enabled: false }
+  # QA/automation browser — an optional operator tool; nothing declares a dependency on it.
+  browser42:        { enabled: false }
+  # Cache/queue inspector. Extracted out of the layer-1 `redis` app: nothing depends on it.
+  redisinsight:     { enabled: false }
+  # Supabase on top of the platform db: kong + postgrest + storage + Studio. The db itself is
+  # layer-1 chassis (`postgres`); THIS is the optional observability/API surface over it.
+  supabase:         { enabled: false }
+  # Automation-only app (kind: blueprint, owns no container): the Google Drive/Sheets/Gmail MCP
+  # servers an n8n AI agent calls, plus an integration health probe.
+  google-workspace-agent: { enabled: false }
+  # The third-party sample app. A fresh install should not start a demo nobody asked for.
+  hello-bina:       { enabled: false }
+  # My documents (invoices): the ledger lives in apitools; this is its UI over it.
+  my-docs:          { enabled: false }
+  # The office's own development surface — added after the 2026-09-17 decision, so off.
+  computers:        { enabled: false }
+  git:              { enabled: false }
+  sites:            { enabled: false }
+  domains:          { enabled: false }
+  telegram-tv:      { enabled: false }
+  project-pln:      { enabled: false }
+  dgo-extend:       { enabled: false }
+  social-list:      { enabled: false }
+  digital-assets:   { enabled: false }
+  archify:          { enabled: false }
+  # The watchful agent (awareness + repair) and the chat surface — operator tools, off by default.
+  raphael:          { enabled: false }
+  chat:             { enabled: false }
+  # Error tracking. Off by default: a fresh install has no Sentry/GlitchTip project to report to.
+  glitchtip:        { enabled: false }

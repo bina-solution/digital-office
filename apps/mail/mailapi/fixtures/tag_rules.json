@@ -1,0 +1,232 @@
+[
+ {
+  "id": 1,
+  "TYPE": "ON_CREATE_EVENT",
+  "LABEL": "שליחה-נכשלה",
+  "RULE": "contains(email.text, \"דומיין שתכתובת לא נמצאת או איזה יכלה לקבל אימייל\")",
+  "KEY": "SEND_FAILED",
+  "EVENT": "ON_CREATE",
+  "label_id": "Label_1",
+  "row_number": 2
+ },
+ {
+  "id": 2,
+  "TYPE": "ON_CREATE_EVENT",
+  "LABEL": "קשור-לדומיין",
+  "RULE": "contains(email.text, \"domain\") && !includes(email.labels, \"שליחה-נשלחה\")",
+  "KEY": "DOMAIN_RELATED",
+  "EVENT": "ON_CREATE",
+  "label_id": "Label_2",
+  "row_number": 3
+ },
+ {
+  "id": 3,
+  "TYPE": "ON_CREATE_EVENT",
+  "LABEL": "קשור-לתשתית-אוטומציה",
+  "RULE": "contains(email.text, \"hostinger\")",
+  "KEY": "AUTOMATION_INFRA",
+  "EVENT": "ON_CREATE",
+  "label_id": "Label_3",
+  "row_number": 4
+ },
+ {
+  "id": 4,
+  "TYPE": "ON_CREATE_EVENT",
+  "LABEL": "קשור-לחשבונית",
+  "RULE": "containsAny(email.text, [\"invoice\", \"document\"])",
+  "KEY": "INVOICE_RELATED",
+  "EVENT": "ON_CREATE",
+  "label_id": "Label_4",
+  "row_number": 5
+ },
+ {
+  "id": 5,
+  "TYPE": "ON_CREATE_EVENT",
+  "LABEL": "מייל-מספק ",
+  "RULE": "inList(email.from, [\"39611150\",\"a-albo.com\",\"rockstone.co.il\",\"averbuch.co.il\",\"agan-engineering.co.il\",\"@adir-a.com\",\"ohevzion.co.il\",\"person76@example.com\",\"steelron.co.il\",\"knauf.com\",\"ahab.co.il\",\"ytong.co.il\",\"nglltd.com\",\"person69@example.com\",\"el-gal.co.il\",\"engelelectric.co.il\",\"dvakim.com\",\"person23@example.com\",\"electro-slill.co.il\",\"person71@example.com\",\"aresco.co.il\",\"afarsemonbs.com\",\"erco.co.il\",\"erkotools.co.il\",\"person77@example.com\",\"b-gtech.com \",\"b-techtools.co\",\"@bloom-berg.co.il\",\"person78@example.com\",\"barsys.co.il\",\"tsd-store.com\",\"gbtools.co.il\",\"gulevy.com\",\"redback.co.il \",\"golan-plastic.com\",\"@gilar.co.il\",\"gelem2000.co.il\",\"cgwheels.com\",\"person79@example.com\",\"dor-raphael.co.il\",\"person80@example.com\",\"di-or.co.il \",\"tayar-doors.co.il\",\"harel-s.co.il\",\"hashahal.com\",\"yow.co.il \",\"WORKER.CO.IL\",\"person25@example.com\",\"person31@example.com\",\"person24@example.com\",\"person22@example.com\",\"@huliot.com\",\"hbv.co.il\",\"hofit.com\",\"hamat.co.il\",\"person81@example.com \",\"chashmalc.com\",\"topbath.co.il\",\"tornado-ltd.com\",\"tth.co.il\",\"person82@example.com\",\"techno-eitan.co.il\",\"tambour.co.il\",\"tassa.co.il\",\"ysteel.co.il \",\"yac.co.il\",\"jacobi.co.il\",\"person30@example.com\",\"yskarton.co.il\",\"netvision.net.il\",\"COHENPUR@GMAIL.COM\",\"person28@example.com \",\"kmmw.co.il\",\"chromagen.com\",\"carmelgroup.co.il\",\"keter.com\",\"levbaron.co.il\",\"@lehavot.com\",\"leviron.co.il\",\"lkltd.com\",\"@mivnedarom.co.il\",\"morelltd.co.il\",\"mmts.co.il\",\"home.design\",\"@milstone.co.il\",\"mikopro.com\",\"mb-ltd.co.il\",\"metzerplas.com\",\"aresco.co.il\",\"nobrand.co.il\",\"neumansteel.co.il\",\"@nitzavim.com\",\"noap.co.il\",\"sabeco.co.il\",\"saynet.co.il\",\"@sebach.co.il\",\"sagolltd.com\",\"sulamot-hagit.co.il\",\"stanco.co.il\",\"scantruck2025.co.il\",\"person83@example.com\",\"person84@example.com\",\"AESEK.CO.IL\",\"polybid.co.il\",\"person29@example.com\",\"pazlub.co.il\",\"azmarketing.co.il\",\"t-p-y.co.il \",\"peledtech.com \",\" iskoor.co.il\",\"panel-or.com\",\"Peamit.co.il\",\"alltoolsdepot.com \",\"ferromat.co.il\",\"parket4u.co.il\",\"person85@example.com \",\"equipment.co.il\",\"zinometal.com\",\"tzinorvberez.co.il\",\"koltimber.com\",\"kisner.co.il\",\"person86@example.com\",\"jkf.co.il\",\"cemex.com\",\"rozenfeld.co.il\",\"@rotoniv.com\",\"saltech.co.il\",\"nyga.co.il\",\"shidav.co.il \",\"person87@example.com\",\"person88@example.com\",\"pirzulst.co.il\",\"sakbeton.co.il\",\"sherizly.com\",\"termokir.Co.il\",\"fetaya.com\",\"B-Gtech.com\",\"person26@example.com\",\"leviron.co.il\",\"milstone\",\"person89@example.com\"])",
+  "KEY": "SUPPLIER_MAIL",
+  "EVENT": "ON_CREATE",
+  "label_id": "Label_5",
+  "row_number": 6
+ },
+ {
+  "id": 6,
+  "TYPE": "ON_CREATE_EVENT",
+  "LABEL": "התכתבות-שהתחלנו",
+  "RULE": "!includes(email.labels, \"בקשת-ממספכם\") && thread.from === \"person9@example.com\"",
+  "KEY": "CORRESPONDENCE_STARTED",
+  "EVENT": "ON_CREATE",
+  "label_id": "Label_6",
+  "row_number": 7
+ },
+ {
+  "id": 7,
+  "TYPE": "ON_CREATE_EVENT",
+  "LABEL": "מייל-פרסומת",
+  "RULE": "contains(email.text, \"פרסומת\") || (noHebrew(email.text) && !includesAny(email.labels, [\"קשור-לחשבונית\", \"קשור-לתשתיות-אוטומציה\", \"קשור-לדומיין\", \"התכתבות-שהתחלנו\",\"מייל-מספק\"]))",
+  "KEY": "PROMOTIONAL",
+  "EVENT": "ON_CREATE",
+  "label_id": "Label_7",
+  "row_number": 8
+ },
+ {
+  "id": 8,
+  "TYPE": "ON_CREATE_EVENT",
+  "LABEL": "בקשת-דוח-גיול",
+  "RULE": "thread.from === \"person9@example.com\" && contains(email.text, \"תזכורת לבקשתכם\") && contains(email.text, \"דוח גיול\")",
+  "KEY": "BS_REPORT_REQUEST",
+  "EVENT": "ON_CREATE",
+  "label_id": "Label_8",
+  "row_number": 9
+ },
+ {
+  "id": 9,
+  "TYPE": "ON_CREATE_EVENT",
+  "LABEL": "התכתבות-ספקים",
+  "RULE": "includes(email.labels, \"התכתבות-שהתחלתי\") || ( !includes(email.labels, \"מייל-פרסומת\") && !attachments.some(a => !a.inline))",
+  "KEY": "SUPPLIER_CORRESPONDENCE",
+  "EVENT": "ON_CREATE",
+  "label_id": "Label_9",
+  "row_number": 10
+ },
+ {
+  "id": 10,
+  "TYPE": "ON_CREATE_EVENT",
+  "LABEL": "לטיפול-אוטומציה-שמירת-דוחות-גיול",
+  "RULE": "attachments.length > 0 && !includes(email.labels, \"מייל-פרסומת\") && containsAny(thread.messages[0].text, [\"דוח גיול\", \"כרטסת\"])",
+  "KEY": "BS_TO_SYNC",
+  "EVENT": "ON_CREATE",
+  "label_id": "Label_10",
+  "row_number": 11
+ },
+ {
+  "id": 11,
+  "TYPE": "ON_CREATE_EVENT",
+  "LABEL": "לטיפול-אוטומציה-שמירת-מסמכים",
+  "RULE": "attachments.length > 0 && !includesAny(email.labels, [\"לטיפול-אוטומציה-שמירת-דוחות-גיול\",\"מייל-פרסומת\", \"בקשת-דוח-גיול\"]) ",
+  "KEY": "DOC_TO_SYNC",
+  "EVENT": "ON_CREATE",
+  "label_id": "Label_11",
+  "row_number": 12
+ },
+ {
+  "id": 12,
+  "TYPE": "ON_CREATE_EVENT",
+  "LABEL": "-INBOX",
+  "RULE": "(includes(email.labels, \"מייל-פרסומת\") && !includes(email.labels, \"התכתבות שהתחלתי\")) ",
+  "KEY": "ARCHIVE_PROMO",
+  "EVENT": "ON_CREATE",
+  "label_id": null,
+  "row_number": 13
+ },
+ {
+  "id": 13,
+  "TYPE": "ON_CREATE_EVENT",
+  "LABEL": "לטיפול-אוטומציה-קישור-למסמך",
+  "RULE": "inList(email.from, [\"notify@morning.co\", \"person90@example.com\", \"person91@example.com\", \"person92@example.com\", \"person93@example.com\", \"person94@example.com\", \"person95@example.com\", \"person96@example.com\", \"person97@example.com\", \"person98@example.com\", \"person99@example.com\", \"person100@example.com\", \"hcheshbonot@rozenman.co\", \"person101@example.com\", \"person102@example.com\", \"person103@example.com\", \"person104@example.com\", \"person105@example.com\"]) && attachments.length === 0",
+  "KEY": "DOC_LINK_TO_SYNC",
+  "EVENT": "ON_CREATE",
+  "label_id": "Label_12",
+  "row_number": 14
+ },
+ {
+  "id": 14,
+  "TYPE": "IN_PROGRESS",
+  "LABEL": "באמצע-טיפול-אוטומציה",
+  "RULE": "contains(email.text, \"__NEVER_MATCH_SYNC_STATE__\")",
+  "KEY": "IN_PROGRESS",
+  "EVENT": "SYSTEM",
+  "label_id": "Label_13",
+  "row_number": 100
+ },
+ {
+  "id": 15,
+  "TYPE": "SAVED_INVOICE",
+  "LABEL": "חשבונית-מס-נשמרה-אוטומציה",
+  "RULE": "contains(email.text, \"__NEVER_MATCH_SYNC_STATE__\")",
+  "KEY": "SAVED_INVOICE",
+  "EVENT": "SYSTEM",
+  "label_id": "Label_16",
+  "row_number": 100
+ },
+ {
+  "id": 16,
+  "TYPE": "SYNCED_DOC",
+  "LABEL": "אוטומציה-שמירת-מסמכים-טופל",
+  "RULE": "contains(email.text, \"__NEVER_MATCH_SYNC_STATE__\")",
+  "KEY": "SYNCED_DOC",
+  "EVENT": "SYSTEM",
+  "label_id": "Label_19",
+  "row_number": 100
+ },
+ {
+  "id": 17,
+  "TYPE": "SYNCED_BS",
+  "LABEL": "דוח-גיול-נשמר-אוטומציה",
+  "RULE": "contains(email.text, \"__NEVER_MATCH_SYNC_STATE__\")",
+  "KEY": "SYNCED_BS",
+  "EVENT": "SYSTEM",
+  "label_id": "Label_20",
+  "row_number": 100
+ },
+ {
+  "id": 18,
+  "TYPE": "FAILED_BS",
+  "LABEL": "אוטומציה-דוחות-גיול-נכשלה",
+  "RULE": "contains(email.text, \"__NEVER_MATCH_SYNC_STATE__\")",
+  "KEY": "FAILED_BS",
+  "EVENT": "SYSTEM",
+  "label_id": "Label_21",
+  "row_number": 100
+ },
+ {
+  "id": 19,
+  "TYPE": "PROCESSED",
+  "LABEL": "תוויות-טופל",
+  "RULE": "contains(email.text, \"__NEVER_MATCH_SYNC_STATE__\")",
+  "KEY": "PROCESSED",
+  "EVENT": "SYSTEM",
+  "label_id": null,
+  "row_number": 200
+ },
+ {
+  "id": 20,
+  "TYPE": "SAVED_SHIPMENT",
+  "LABEL": "תעודת-משלוח-נשמרה-אוטומציה",
+  "RULE": "contains(email.text, \"__NEVER_MATCH_SYNC_STATE__\")",
+  "KEY": "SAVED_SHIPMENT",
+  "EVENT": "SYSTEM",
+  "label_id": "Label_17",
+  "row_number": 300
+ },
+ {
+  "id": 21,
+  "TYPE": "FOUND_UNKNOWN",
+  "LABEL": "נמצא-מסמך-לא-ידוע-אוטומציה",
+  "RULE": "contains(email.text, \"__NEVER_MATCH_SYNC_STATE__\")",
+  "KEY": "FOUND_UNKNOWN",
+  "EVENT": "SYSTEM",
+  "label_id": "Label_18",
+  "row_number": 300
+ },
+ {
+  "id": 22,
+  "TYPE": "ACTION_DONE",
+  "LABEL": "אינדוקס - פעולה בוצעה",
+  "RULE": "contains(email.text, \"__NEVER_MATCH_SYNC_STATE__\")",
+  "KEY": "ACTION_DONE",
+  "EVENT": "SYSTEM",
+  "label_id": "Label_22",
+  "row_number": 300
+ },
+ {
+  "id": 23,
+  "TYPE": "ACTION_FAILED",
+  "LABEL": "אינדוקס - פעולה נכשלה",
+  "RULE": "contains(email.text, \"__NEVER_MATCH_SYNC_STATE__\")",
+  "KEY": "ACTION_FAILED",
+  "EVENT": "SYSTEM",
+  "label_id": "Label_23",
+  "row_number": 300
+ }
+]

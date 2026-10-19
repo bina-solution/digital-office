@@ -1,0 +1,11 @@
+{
+ "command": "פקודות",
+ "skill": "מיומנויות",
+ "subagent": "סוכני משנה",
+ "loading": "טוען…",
+ "drill.aria": "עיון בתיקייה",
+ "drill.hint": "עיון בתיקייה",
+ "drill.key": "Tab",
+ "crumbs.aria": "ניווט בתיקיות",
+ "suggestions.aria": "הצעות"
+}

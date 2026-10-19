@@ -1,0 +1,441 @@
+# yaml-language-server: $schema=./schema.json
+title: >-
+  n8n v1 execution order sorts fan-out by canvas position, so a relayout silently kills
+  splitInBatches batching — the loop re-enters itself before doing its work
+opened: 2026-08-07
+category: bug
+severity: high
+status: in-progress  # 2026-08-07: fleet audit complete, fix staged, awaiting push + live proof
+summary: >-
+  With `executionOrder: v1`, when one output fans out to several destinations n8n executes them
+  in ascending (y, x) — topmost-first, then leftmost. When a splitInBatches `loop` output fans
+  out to BOTH the work lane and a loop-back/self edge, whichever node sits higher on the canvas
+  runs first. If that is the loop-back, the loop drains every batch onto the stack before any
+  work runs: batching is configured but semantically dead. It reports success, no node fails,
+  and the only symptom is a wildly inflated duration (mailLabelEngine01: 12m 28s for 10 items).
+  UPDATE (fleet audit complete): exactly ONE live defect fleet-wide — mailLabelEngine01. It
+  shipped broken from n8n's own import, NOT from any auto-relayout this repo ran; the layout
+  tool already has a tested, working guard rail. syncV3Deliver0001 was a LINT FALSE POSITIVE
+  (resolved). indoxV2Driver01's instance is in dead code (zero live impact, fixed anyway). Fix
+  is staged in the repo; not yet live — see "the draft/active trap" below.
+
+description: |
+  ## 1. The rule, quoted from the installed engine
+
+  n8n **2.17.0**, `n8n-core/dist/execution-engine/workflow-execute.js`:
+
+  ```js
+  // :1151-1163  — when one output fans out to more than one destination
+  if (workflow.settings.executionOrder === 'v1') {
+      nodesToAdd.sort((a, b) => {
+          if (a.position[1] < b.position[1]) { return  1; }   // smaller y -> later in array
+          if (a.position[1] > b.position[1]) { return -1; }   // larger  y -> earlier in array
+          if (a.position[0] > b.position[0]) { return -1; }   // larger  x -> earlier in array
+          return 0;
+      });
+      for (const nodeData of nodesToAdd) { this.addNodeToBeExecuted(...); }
+  }
+
+  // :230
+  const enqueueFn = workflow.settings.executionOrder === 'v1' ? 'unshift' : 'push';
+  ```
+
+  `position` is `[x, y]`, so `position[1]` is **y** and `position[0]` is **x**.
+
+  Working it through: the sort yields the array in *descending* y. Each element is then
+  **`unshift`**-ed onto the front of `nodeExecutionStack`, which reverses it. The stack is
+  consumed front-first. Net effect:
+
+  > **The destination with the SMALLEST y — highest on the canvas — executes FIRST.**
+  > **On a y tie, the SMALLEST x — leftmost — executes first.**
+
+  There is no further tie-break; two nodes at an identical `[x, y]` have undefined order.
+
+  **Canvas position is not cosmetic. It is control flow.**
+
+  **CORRECTION (verified independently against the same container by a second pass):** the x
+  comparator (`a.x > b.x ? -1 : 0`) is **not antisymmetric** — it is not a valid strict weak
+  ordering. For a 2-element y-tie it still resolves leftmost-first either way, so the rule above
+  holds for the common case. But **for 3+ nodes sharing one y, the relative order among them is
+  genuinely V8-sort-implementation-dependent** — not a documented, reproducible leftmost-first
+  order. "Equal y is not safe" (section 4) is stronger than originally stated: with 3+ way ties,
+  it is not just "the wrong node might win", it is "which node wins is not something you can
+  predict by reading the code."
+
+  Also confirmed: `splitInBatches`'s `out[0]` (done) and `out[1]` (loop) never carry data on the
+  same iteration — a loop node's own done-vs-loop pair can never race each other. **The only
+  danger is two or more targets on the SAME output index** (as in both confirmed instances
+  below, both on `out[1]`).
+
+  ### FAQ: "isn't node position just UI layout metadata?"
+
+  Asked in good faith by someone about to build on this finding, and worth answering plainly
+  rather than assuming everyone reading this already believes section 1: **almost always yes,
+  except at exactly one place.** The `connections` graph — which output feeds which input — is
+  what the engine actually executes from, and it alone determines *reachability*: which nodes
+  are even eligible to run. Position plays no role there; that part of the skeptic's model is
+  correct.
+
+  But reachability isn't the whole story. When **one output fans out to two or more
+  destinations at once** — the shape at issue in this entire file — all of those destinations
+  become ready *simultaneously*, and something has to order them. In `executionOrder: v1` mode,
+  that tie-break is done by sorting the ready candidates by canvas `position` — the exact
+  comparator quoted in section 1, read directly from the installed engine, not inferred or
+  paraphrased. Position is inert everywhere else in the graph. It only becomes causal at a
+  fan-out tie. Both models are true; they describe different parts of the same mechanism.
+
+  ## 2. Why this specifically destroys batching
+
+  A `splitInBatches` loop is wired: `out[0]` = "done" -> finish, `out[1]` = "loop" -> work lane,
+  and the work lane's tail returns to the loop node.
+
+  The danger is when **one output fans out to two destinations** — typically the work lane *and*
+  a loop-back edge (often a literal self-edge back onto the loop node).
+
+  - Work node **higher** (smaller y) than the loop-back target -> work runs, completes, returns,
+    next batch. **Batching works.**
+  - Work node **lower** (larger y) -> the loop node re-enters itself first, drains *every* batch
+    onto the stack, and only then does the work run — all at once. **Batching is dead.**
+
+  Observed in `mailLabelEngine01` exec 376923 ("Succeeded in 12m 28.501s", 10 items):
+
+  ```
+  Batching 1
+  Batching 1
+  Batching 1        <- ten consecutive loop iterations, no work between them
+  Batching 1
+  ...
+  End
+  Start Gmail Item  <- then all the work, in one lump
+  ```
+
+  Consequences: `batchSize` pacing is lost so external services get hit in one unbroken burst
+  (this deployment already runs a saturated apitools at 30-55% HTTP 429); all batches materialise
+  on the execution stack simultaneously; and **it reports success** — no error, no warning, no
+  failed node.
+
+  **CORRECTION, MEASURED 2026-08-07 — "runtime explodes" was WRONG, and the 12 minutes was never
+  this bug.** Both runs below process the same 10 messages in exactly 99 node runs across 26
+  nodes; the drain REORDERS the work, it does not add any. n8n executes the stack sequentially,
+  so "all at once" never meant "concurrently" — there is no lost parallelism to recover.
+
+  ```
+  exec 381900  BROKEN  [-80,272]   800.4s   Batching 1 x11 -> End -> Start Gmail Item x10
+  exec 388031  FIXED   [-96,432]   708.7s   Batching 1 -> Start Gmail Item -> ... x10 -> End
+  ```
+
+  708.7s sits inside the broken baseline's own spread (748.5 / 764.8 / 800.4 / 811.2 / 829.7),
+  so **none of the difference is safely attributable to the fix.** Per-node totals show where the
+  12 minutes actually goes, and it is three sub-workflow calls, not the loop:
+
+  ```
+  Get Gmail Thread      310.3s / 10 runs   (~31s per call)   44%
+  Get a message         226.0s /  1 run    (10 messages)     32%
+  Add label to message  119.9s / 10 runs   (~12s per call)   17%
+                                                             --- 93% of wall time
+  ```
+
+  So the loop-order defect is REAL and worth fixing on its own terms — pacing, peak memory (the
+  OOM crash at exec 387474 happened on the broken layout), and the plain fact that a configured
+  batch size was doing nothing. But **anyone chasing the 12-minute duration must go at
+  `Get Gmail Thread` at ~31s per call, not at this.** Do not let this issue close the duration
+  question; it does not answer it.
+
+  ## 3. Confirmed instances
+
+  ### `apps/mail/blueprint/n8n/mailLabelEngine01.json` — `Batching 1` — BROKEN
+
+  ```
+  LOOP NODE: 'Batching 1'             pos=(x=-80,  y=272)
+     out[0] done -> 'End'             pos=(x=144,  y=176)
+     out[1] loop -> 'Batching 1'      pos=(x=-80,  y=272)   <- SELF-EDGE
+     out[1] loop -> 'Start Gmail Item' pos=(x=144, y=368)   <- the actual work
+  ```
+
+  `out[1]` fans out to two nodes. Sorted descending by y: `[Start Gmail Item (368),
+  Batching 1 (272)]`; unshifted in that order the stack becomes `[Batching 1, Start Gmail Item]`.
+  **The self-edge (y=272) executes before the work (y=368).** This is the 12-minute execution.
+
+  Fix: `Start Gmail Item` must sit strictly above the loop node (`y < 272`), with real clearance.
+
+  ### `apps/indox/blueprint/n8n/indoxV2Driver01.json` — `Loop Over Items39` — BROKEN via the y-tie, but NOT LIVE
+
+  ```
+  LOOP NODE: 'Loop Over Items39'                 pos=(x=-4512, y=14840)
+     out[1] loop -> 'Loop Over Items39'          pos=(x=-4512, y=14840)   <- SELF-EDGE
+     out[1] loop -> 'Selection & Scoring Logic2' pos=(x=-4288, y=14840)   <- the work
+  ```
+
+  **Identical y.** The tie falls to x, smallest-first: the self-edge at `x=-4512` beats the work
+  at `x=-4288`.
+
+  Internalise this one: **equal y is not safe.** A layout tool that aligns nodes onto a clean
+  horizontal row produces exactly this, and the order is then decided by a tie-break nobody was
+  thinking about.
+
+  **UPDATE — reachability traced from all 8 triggers: this node has ZERO incoming edges.** It
+  sits in a 52-node unreachable region of the file alongside `Replace Me` template scaffolding —
+  dead code, latent landmine, **zero runtime impact today**. Fixed anyway (see §7) so it cannot
+  bite the moment someone wires it live without re-reading this file.
+
+  ### Correct only by accident — same wiring, different geometry
+
+  ```
+  'Loop Over Items25'    work 'Batch x Start' (y=15064) vs loop-back 'Replace Me'  (y=15256)  OK
+  'Lines Batching Loop'  work 'Start'         (y=7832)  vs loop-back 'Loop keeper' (y=8552)   OK
+  'Loop Over Items37'    work 'HTTP Request'  (y=6472)  vs loop-back 'Loop End1'   (y=6664)   OK
+  ```
+
+  Nothing in the JSON distinguishes these from the broken ones except the y coordinates.
+
+  ## 4. The rule to follow
+
+  > **For any output that fans out to both a work lane and a loop-back (or self) edge, every
+  > work-lane entry node must have a strictly smaller `y` than the loop-back target. Never equal.**
+
+  - Put the work lane **above** the loop node, with real vertical clearance (>= 48px).
+  - **Never leave two competing destinations at the same y.** Ties resolve by x in a direction
+    most people guess wrong.
+  - Treat `position` as **semantic**. Do not tidy a canvas, align rows, or run an auto-layout over
+    a workflow containing `splitInBatches` without re-checking every loop fan-out afterwards.
+  - Prefer removing the ambiguity: if an output needs one destination, wire one destination. A
+    self-edge competing with the work lane is the shape that fails.
+
+  ## 5. Why it happened — UPDATE: it was NOT our auto-relayout
+
+  Original theory was that an in-repo auto-relayout caused this. **Disproven.**
+  `mailLabelEngine01`'s `Batching 1` was at `[-80, 272]` in the very first commit that
+  introduced the file (`70d5ad9f`, 2026-07-30) — the file has only ever had 2 commits total.
+  **It came in broken from n8n's own import.** No relayout tool touched it.
+
+  **`scripts/refactor/n8n-layout.py` was tested against this, not just read**: running it with
+  `--force` against copies of 6 loop-bearing workflows **refused all 6, wrote nothing** — the
+  guard rail from an earlier 3->55-violation incident is load-bearing and fires correctly. A
+  positive control (the same layout with the guard bypassed) produced real violations on
+  workflows that are fine today (`indoxV2ActionsGDoc01` 0->19, `indoxV2ActionsGlobal01` 0->3,
+  `IndoxResetGml001` 0->1) — proving the guard is the reason those stayed fine, not luck.
+
+  **So the layout tool is not the culprit and does not need a behavioural fix here.** The
+  original section 5 guidance (treat position as semantic, never touch a `splitInBatches`
+  workflow without re-checking loop fan-outs afterward) still stands as a rule for *humans and
+  future tools* — it was simply not what broke these two.
+
+  ### On the existing lint
+
+  `scripts/refactor/n8n-loop-order-lint.py` has been reporting exactly **3** failures —
+  `indoxV2Driver01`, `syncV3Deliver0001`, `mailLabelEngine01` — accepted as a known-red baseline.
+  **That baseline was real defects being ignored** for the one that matters
+  (`mailLabelEngine01`, live) — but see below, it was also over-counting.
+  A gate whose findings are permanently treated as background noise is indistinguishable from
+  no gate. (Same family as `scripts/refactor/GATES.md` -> "Checks whose evidence is an absence".)
+
+  **RESOLVED — `syncV3Deliver0001` is a lint FALSE POSITIVE, not a defect.** `Loop Attach`'s
+  outputs are not a same-output fan-out at all: it has `onError: continueErrorOutput`, so
+  `out[0]` (success) goes to `'Loop Attach'` (the correct loop-body return) and `out[1]` (error)
+  goes to `'Attempt Req'`, a failure sink — two DIFFERENT output indices, not two targets on one
+  output. **The lint compares targets across different output indices and mislabels the error
+  sink as a competing work lane.** Nothing to fix in the workflow; the lint needs the fix (see
+  the fleet-audit coverage-gap task below — same class, needs its own pass to correct this
+  false-positive rule too).
+
+  ### Fleet audit (complete)
+
+  **122 `splitInBatches` nodes across 27 files.** 86 nodes in 22 files fall inside the lint's
+  globs; **36 nodes in 5 files under `apps/indox/app/incoming_documents/context-collection/
+  n8n-workflows/` are NOT covered by the lint's globs at all** — a real coverage gap. All 5 of
+  those files are currently clean (no live defect), so the gap is real but currently benign —
+  it should still be closed so it does not become a blind spot later.
+
+  **100 same-output-index fan-outs on a `splitInBatches` cycle were examined fleet-wide.**
+  Exactly 2 defects found, both already identified above (`mailLabelEngine01`, and the dead
+  `indoxV2Driver01` instance). **So there is exactly ONE live loop-order defect fleet-wide:
+  `mailLabelEngine01`.**
+
+  ## 5b. The draft/active trap — a second, independent finding
+
+  While staging the fix, the n8n **draft** for `mailLabelEngine01` was found to already have
+  `Batching 1` at `[-96, 432]` — someone (very likely the user, mid-diagnosis) had already
+  dragged the node to a plausible-looking fix position in the editor. **But
+  `activeVersionId` still pointed at the version with `[-80, 272]`** — the draft was never
+  published. Every live run kept executing the broken layout despite the canvas looking fixed
+  in the UI. This is the exact "draft vs active version" trap documented elsewhere tonight
+  (n8n 2.17 splits a workflow into `workflow_entity.nodes` [draft] and
+  `activeVersionId -> workflow_history.nodes` [what actually executes] — a `PATCH` or an
+  in-editor drag updates the draft only; nothing runs the new layout until it is published).
+
+  The staged fix deliberately **adopts the user's exact draft coordinate** (`[-96, 432]`) rather
+  than picking an independent one, so the push both fixes the live version and makes it match
+  what the user already believed was fixed — repo == draft == (after push) active.
+
+  ## 6. How to check a workflow yourself
+
+  ```python
+  import json, pathlib
+  d = json.loads(pathlib.Path('<blueprint>.json').read_text(encoding='utf-8'))
+  pos = {n['name']: n.get('position') for n in d['nodes']}
+  conns = d.get('connections', {})
+
+  for n in d['nodes']:
+      if not n.get('type','').endswith('splitInBatches'):
+          continue
+      name = n['name']
+      print(f"\nLOOP {name!r} pos={pos[name]}")
+      for idx, branch in enumerate(conns.get(name, {}).get('main', [])):
+          for c in (branch or []):
+              print(f"   out[{idx}] -> {c['node']!r} pos={pos.get(c['node'])}")
+  ```
+
+  For any output listing **two or more** destinations, sort by `(y, x)` ascending — the first is
+  what n8n runs first. If that is the loop-back or the loop node itself rather than the work lane,
+  the loop is broken.
+
+  **Verify behaviour, not just geometry.** A correct run interleaves in the execution log
+  (`Batching 1 -> Start Gmail Item -> Batching 1 -> ...`); a broken run shows the loop node
+  repeated consecutively, then the work in one block.
+
+  ## 6b. Fleet-wide zero-defect result — measured, not assumed
+
+  With the false-positive fix and the hop-distance strengthening both in, the detector was run
+  against the full audited fleet: **107 files, 122 `splitInBatches` nodes, 100 same-output-index
+  fan-outs on a loop cycle. Result: ZERO remaining defects** beyond the 2 already fixed above.
+
+  **Proven a real zero, not an absence of looking**, by a fleet-wide mutation test: for every
+  currently-clean fan-out, hoist the soonest-returning lane above its competitors and re-run the
+  gate. **100 mutations attempted, 100 caught, 0 missed.**
+
+  Of the 100 fan-outs, 95 were already policed by the pre-strengthening lint (return is direct,
+  hop distance 0). **5 were completely unpoliced** (return via an intermediate hop, h>=1):
+  `indoxV2Driver01` `'Loop Over Items25'` / `'Loop Over Items37'` / `'Lines Batching Loop'`,
+  `indoxGmailDocDownloader01` `'Code'`, and `incoming-documents-0.1.6` `'Loop Over Items25'`.
+  All 5 are correct **today**, with margins of +192px to +720px — comfortably safe, but they
+  were previously invisible to the gate.
+
+  ### The knife-edges — ranked by margin, the ones that matter for anyone editing near a loop
+
+  Every fan-out ranked by margin (y of the soonest-returning lane minus y of its highest
+  competitor). 16 sit under one node height (96px):
+
+  ```
+  +16px   indoxV2ActionsBS01    'Loop Over Items' out1  vs 'Extract via Webhook'   <- TIGHTEST IN FLEET
+  +64px   SyncProcGDoc0001      'Pre Log - File Too Big' / '- Process Document Failed' / '- Rename End'
+  +64px   indoxV2ActionsGDoc01 + indoxV2ActionsShip01  'Loop Over Items29', 'Loop Over Items4'
+  +64px   mailLabelEngine01     'Batching 1' (the fix landed here — see 5b, the user's own coordinate)
+  ```
+
+  **`indoxV2ActionsBS01` at +16px is the sharpest live risk in the fleet.** A 16-pixel drag
+  silently breaks batching there — same failure shape as `mailLabelEngine01`: reports success,
+  no error, no warning, only a runtime multiple as the symptom. That file had active concurrent
+  work the night this was found; flagged directly to the owning lane.
+
+  On `mailLabelEngine01`'s own +64px: this is the user's own draft coordinate (see 5b), adopted
+  deliberately so the push matches what they already dragged. It is strictly positive and
+  correct, but inside one node height. Left as-is rather than widened — G45 now holds the
+  invariant (proven above), so the margin does not need to also be defensive on its own.
+
+  ## 6c. False-alarm incident, resolved — logged so it is not re-investigated
+
+  After the fix published, version history on `mailLabelEngine01` kept moving (multiple
+  `workflow_history` entries between 09:35 and 10:05) and two executions right around 09:45
+  errored with `"The resource you are requesting could not be found"` at node `'Get a message'`.
+  This looked, briefly, like an unidentified editor touching the live client-mail workflow, or
+  a new bug the fix had exposed.
+
+  **Resolved definitively via `workflow_history.authors`** — the one field that settles
+  attribution without inference. Every version tonight is `author=import` (a `bbox n8n push`
+  landing the repo file) **except one**: `ad06a811` at 09:45:26, `author=Admin User` — **the
+  human, saving directly in the n8n editor**, and they landed on the exact same coordinate
+  `[-96,432]` this issue's fix independently derived. That is who created the draft this file
+  originally flagged as "someone had already dragged it" (section 5b) — now confirmed, not
+  inferred. `2efb8b00` (10:05:31) and `20c827fb` (10:07:39) are the push-queue lane's own
+  `import`s of this fix; the loop-order fix's first *stored* version is `2efb8b00`, not the
+  earlier `5e8fa3c2` (which still carries the broken `[-80,272]` — correcting an earlier
+  mis-citation in this thread).
+
+  **The `'Get a message'` errors are a separate, pre-existing, unrelated bug — not exposed by
+  this fix.** Proven three ways: it fails identically at `07:30:56` (exec `367954`), **2.5
+  hours before any work tonight**; it fails on **both** the old `[-80,272]` layout and the new
+  `[-96,432]` layout, so geometry is not the variable; and in every failure `'Batching 1'` runs
+  **zero times** — the chain dies at `Schedule Trigger -> Load Settings (sched) -> Get many
+  messages -> 'Get a message' -> Start -> Batching 1`, strictly upstream of the loop node, which
+  never executes. A downstream ordering fix cannot cause an upstream failure. Filed separately —
+  see `issues/` (or the task tracker) for the standalone investigation. One corroborating
+  signal worth keeping: the OOM crash (`387474`) occurred on the **old** broken layout,
+  consistent with all-batches-materialising-at-once memory pressure — the loop fix should
+  reduce that specific risk even though it does not touch the `Get a message` bug.
+
+  **Not an incident, not an unknown editor, not a second bug from this fix.** Logged here so
+  this exact confusion — draft churn + a coincidentally-timed pre-existing error read as an
+  incident — doesn't cost anyone else the same investigation.
+
+  ## 7. Edits staged (repo only — NOT yet live, awaiting push slot)
+
+  Both proved individually: structural fingerprint unchanged, exactly 1 node moved, no new
+  node-box overlaps introduced, exactly 1 fan-out order changed.
+
+  - `mailLabelEngine01`: `'Batching 1'` `[-80, 272]` -> `[-96, 432]` (adopts the user's own
+    already-dragged, never-published draft coordinate — see 5b)
+  - `indoxV2Driver01`: `'Selection & Scoring Logic2'` `[-4288, 14840]` -> `[-4288, 14744]`
+    (the dead-code instance; fixed pre-emptively even though zero runtime impact today)
+
+  **Baseline captured before the fix** (`execution_entity`, `mailLabelEngine01`, last 12 runs):
+  successes 748.5s / 800.4s / 764.8s / 829.7s / 811.2s (376923 = 748.5s confirms the reported
+  "12m 28.5s"); also errors at 574s/176s/39.5s/33.6s and crashes at 944.9s/363.3s/0.1s in the
+  same window. The next scheduled run (15-min trigger) after the push activates gives the
+  "after" — expected: interleaved log, runtime collapsing from ~750-830s toward whatever a
+  single correctly-paced pass over ~10 items actually costs.
+
+tasks:
+  - text: Fix mailLabelEngine01 `Batching 1` — move `Start Gmail Item` strictly above y=272
+    done: true
+  - text: Fix indoxV2Driver01 `Loop Over Items39` — break the y=14840 tie so the work wins
+    done: true
+  - text: Full fleet audit — every splitInBatches across all blueprints, with a positive-controlled detector
+    done: true
+  - text: Audit n8n-loop-order-lint.py against the quoted rule; confirm it catches the y-tie case
+    done: true
+  - text: Resolve why the lint flags syncV3Deliver0001, whose loop has no same-output fan-out
+    done: true
+  - text: Fix the auto-layout tool to preserve loop-lane ordering, or refuse workflows with splitInBatches
+    done: true
+  - text: >-
+      Push the staged fix live (scratchpad/push-batch1.sh, coordinated slot) — LANDED, active
+      version confirms 'Batching 1' at the user's own dragged coordinate [-96,432]
+    done: true
+  - text: >-
+      Fleet-wide zero-defect confirmation with a mutation-test proof (100 injected, 100 caught,
+      0 missed) — see 6b
+    done: true
+  - text: >-
+      Capture the first genuine post-fix scheduled run (~10:15 UTC) as behavioural proof —
+      interleaved log + runtime vs the 748.5-829.7s baseline
+    done: true
+  - text: >-
+      Relay the indoxV2ActionsBS01 +16px knife-edge (tightest margin in the fleet) to its
+      owning lane before any further edit near that loop — done, flagged directly
+    done: true
+  - text: >-
+      Close the lint's glob coverage gap (36 nodes / 5 files under
+      apps/indox/app/incoming_documents/context-collection/n8n-workflows/ are unscanned)
+    done: true
+  - text: Fix the lint's false-positive rule (compares targets across different output indices)
+    done: true
+  - text: >-
+      Extend the lint to catch re-entry through an INTERMEDIATE hop, not just a target that IS
+      the loop driver — the old self-test asserted this was a false positive, but tracing the
+      engine shows it drains the loop identically. Live shape: indoxGmailDocDownloader01 'Code'.
+    done: true
+  - text: >-
+      n8n-layout.py: --check ran BEFORE the guard-rail checks, so a dry run reported STALE for
+      files --force would REFUSE; and an unguarded Path.relative_to crashed the tool on any
+      out-of-repo path. Both fixed.
+    done: true
+
+references:
+  - apps/mail/blueprint/n8n/mailLabelEngine01.json
+  - apps/indox/blueprint/n8n/indoxV2Driver01.json
+  - apps/indox/blueprint/n8n/syncV3Deliver0001.json
+  - scripts/refactor/n8n-loop-order-lint.py
+  - scripts/refactor/GATES.md
+  - ai/context/n8n-cli.md
+  - issues/mailapi-labels-add-500-under-load.yaml
+  - issues/mail-label-registry-split.yaml

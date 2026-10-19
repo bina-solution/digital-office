@@ -1,0 +1,6 @@
+{
+  "_comment": "G66 unread-error-lint, check B: broad `except` over an HTTP call that discards the error body. This number may only go DOWN, and only by fixing one. Raising it re-buys the defect that cost this session the most time. Checks A and C have no ceiling -- neither has a defensible instance, so both fail at 1.",
+  "_recorded": "2026-10-06",
+  "_history": "103 on 2026-08-23, counted by text (`.get(` / `.post(` in a file that imports an HTTP library) -- which is what a dict read looks like. On 2026-10-06 the count had drifted to 146, of which 108 were dict reads; the check now decides on the syntax tree (a call that raises on a bad status), which left 31 real ones, and 10 of those were fixed the same day.",
+  "http_body_discarded": 21
+}

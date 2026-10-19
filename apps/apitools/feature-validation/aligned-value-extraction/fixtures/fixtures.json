@@ -1,0 +1,1416 @@
+[
+  {
+    "name": "after-en",
+    "source_file": "fixtures/after.png",
+    "ocr_json_query": {
+      "action": "find after",
+      "action_value": "Shipment ID",
+      "is_rtl": false,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80,
+        "max_rotation_delta": 5
+      },
+      "value_validations": [
+        {
+          "validation_type": "length_greater_than",
+          "validation_value": 2
+        },
+        {
+          "validation_type": "length_less_than",
+          "validation_value": 20
+        },
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": "SO57928272628",
+      "aligned_value_equals": "SO57928272628",
+      "text_match_equals": "Shipment ID"
+    }
+  },
+  {
+    "name": "after-45deg",
+    "source_file": "fixtures/after-45deg.png",
+    "ocr_json_query": {
+      "action": "find after",
+      "action_value": "Shipment ID",
+      "is_rtl": false,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80,
+        "max_rotation_delta": 5
+      },
+      "value_validations": [
+        {
+          "validation_type": "length_greater_than",
+          "validation_value": 2
+        },
+        {
+          "validation_type": "length_less_than",
+          "validation_value": 20
+        },
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": {
+        "value": "SO57928272628",
+        "max_distance": 1
+      },
+      "aligned_value_equals": {
+        "value": "SO57928272628",
+        "max_distance": 1
+      },
+      "text_match_equals": "Shipment ID"
+    }
+  },
+  {
+    "name": "after-90deg",
+    "source_file": "fixtures/after-90deg.png",
+    "ocr_json_query": {
+      "action": "find after",
+      "action_value": "Shipment ID",
+      "is_rtl": false,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80,
+        "max_rotation_delta": 5
+      },
+      "value_validations": [
+        {
+          "validation_type": "length_greater_than",
+          "validation_value": 2
+        },
+        {
+          "validation_type": "length_less_than",
+          "validation_value": 20
+        },
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": {
+        "value": "SO57928272628",
+        "max_distance": 1
+      },
+      "aligned_value_equals": {
+        "value": "SO57928272628",
+        "max_distance": 1
+      },
+      "text_match_equals": "Shipment ID"
+    }
+  },
+  {
+    "name": "after-135deg",
+    "source_file": "fixtures/after-135deg.png",
+    "ocr_json_query": {
+      "action": "find after",
+      "action_value": "Shipment ID",
+      "is_rtl": false,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80,
+        "max_rotation_delta": 5
+      },
+      "value_validations": [
+        {
+          "validation_type": "length_greater_than",
+          "validation_value": 2
+        },
+        {
+          "validation_type": "length_less_than",
+          "validation_value": 20
+        },
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": {
+        "value": "SO57928272628",
+        "max_distance": 1
+      },
+      "aligned_value_equals": {
+        "value": "SO57928272628",
+        "max_distance": 1
+      },
+      "text_match_equals": "Shipment ID"
+    }
+  },
+  {
+    "name": "after-180deg",
+    "source_file": "fixtures/after-180deg.png",
+    "ocr_json_query": {
+      "action": "find after",
+      "action_value": "Shipment ID",
+      "is_rtl": false,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80,
+        "max_rotation_delta": 5
+      },
+      "value_validations": [
+        {
+          "validation_type": "length_greater_than",
+          "validation_value": 2
+        },
+        {
+          "validation_type": "length_less_than",
+          "validation_value": 20
+        },
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": {
+        "value": "SO57928272628",
+        "max_distance": 1
+      },
+      "aligned_value_equals": {
+        "value": "SO57928272628",
+        "max_distance": 1
+      },
+      "text_match_equals": "Shipment ID"
+    }
+  },
+  {
+    "name": "after-225deg",
+    "source_file": "fixtures/after-225deg.png",
+    "ocr_json_query": {
+      "action": "find after",
+      "action_value": "Shipment ID",
+      "is_rtl": false,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80,
+        "max_rotation_delta": 5
+      },
+      "value_validations": [
+        {
+          "validation_type": "length_greater_than",
+          "validation_value": 2
+        },
+        {
+          "validation_type": "length_less_than",
+          "validation_value": 20
+        },
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": {
+        "value": "SO57928272628",
+        "max_distance": 1
+      },
+      "aligned_value_equals": {
+        "value": "SO57928272628",
+        "max_distance": 1
+      },
+      "text_match_equals": "Shipment ID"
+    }
+  },
+  {
+    "name": "after-270deg",
+    "source_file": "fixtures/after-270deg.png",
+    "ocr_json_query": {
+      "action": "find after",
+      "action_value": "Shipment ID",
+      "is_rtl": false,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80,
+        "max_rotation_delta": 5
+      },
+      "value_validations": [
+        {
+          "validation_type": "length_greater_than",
+          "validation_value": 2
+        },
+        {
+          "validation_type": "length_less_than",
+          "validation_value": 20
+        },
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": {
+        "value": "SO57928272628",
+        "max_distance": 1
+      },
+      "aligned_value_equals": {
+        "value": "SO57928272628",
+        "max_distance": 1
+      },
+      "text_match_equals": "Shipment ID"
+    }
+  },
+  {
+    "name": "after-315deg",
+    "source_file": "fixtures/after-315deg.png",
+    "ocr_json_query": {
+      "action": "find after",
+      "action_value": "Shipment ID",
+      "is_rtl": false,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80,
+        "max_rotation_delta": 5
+      },
+      "value_validations": [
+        {
+          "validation_type": "length_greater_than",
+          "validation_value": 2
+        },
+        {
+          "validation_type": "length_less_than",
+          "validation_value": 20
+        },
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": {
+        "value": "SO57928272628",
+        "max_distance": 1
+      },
+      "aligned_value_equals": {
+        "value": "SO57928272628",
+        "max_distance": 1
+      },
+      "text_match_equals": "Shipment ID"
+    }
+  },
+  {
+    "name": "after-heb",
+    "source_file": "fixtures/after-heb.png",
+    "ocr_json_query": {
+      "action": "find after",
+      "action_value": "מספר תעודת משלוח",
+      "is_rtl": true,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80,
+        "max_rotation_delta": 5
+      },
+      "value_validations": [
+        {
+          "validation_type": "length_greater_than",
+          "validation_value": 2
+        },
+        {
+          "validation_type": "length_less_than",
+          "validation_value": 20
+        },
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": "SO57928272628",
+      "aligned_value_equals": "SO57928272628",
+      "text_match_equals": "מספר תעודת משלוח"
+    }
+  },
+  {
+    "name": "after-heb-mutliple-matches",
+    "source_file": "fixtures/after-heb-mutliple-matches.png",
+    "ocr_json_query": {
+      "action": "find after",
+      "action_value": "1מפתח",
+      "is_rtl": true,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80,
+        "max_rotation_delta": 5
+      },
+      "value_validations": [
+        {
+          "validation_type": "length_greater_than",
+          "validation_value": 2
+        },
+        {
+          "validation_type": "length_less_than",
+          "validation_value": 20
+        },
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": {
+        "value": "SO111111",
+        "max_distance": 1
+      },
+      "aligned_value_equals": {
+        "value": "SO111111",
+        "max_distance": 1
+      },
+      "text_match_equals": "1 מפתח"
+    }
+  },
+  {
+    "name": "below-en",
+    "source_file": "fixtures/below.png",
+    "ocr_json_query": {
+      "action": "find below",
+      "action_value": "Shipment ID",
+      "is_rtl": false,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80,
+        "max_rotation_delta": 5
+      },
+      "value_validations": [
+        {
+          "validation_type": "length_greater_than",
+          "validation_value": 2
+        },
+        {
+          "validation_type": "length_less_than",
+          "validation_value": 20
+        },
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": "SO57928272628",
+      "aligned_value_equals": "SO57928272628",
+      "text_match_equals": "Shipment ID"
+    }
+  },
+  {
+    "name": "below-45deg",
+    "source_file": "fixtures/below-45deg.png",
+    "ocr_json_query": {
+      "action": "find below",
+      "action_value": "Shipment ID",
+      "is_rtl": false,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80,
+        "max_rotation_delta": 5
+      },
+      "value_validations": [
+        {
+          "validation_type": "length_greater_than",
+          "validation_value": 2
+        },
+        {
+          "validation_type": "length_less_than",
+          "validation_value": 20
+        },
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": {
+        "value": "SO57928272628",
+        "max_distance": 1
+      },
+      "aligned_value_equals": {
+        "value": "SO57928272628",
+        "max_distance": 1
+      },
+      "text_match_equals": "Shipment ID"
+    }
+  },
+  {
+    "name": "below-90deg",
+    "source_file": "fixtures/below-90deg.png",
+    "ocr_json_query": {
+      "action": "find below",
+      "action_value": "Shipment ID",
+      "is_rtl": false,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80,
+        "max_rotation_delta": 5
+      },
+      "value_validations": [
+        {
+          "validation_type": "length_greater_than",
+          "validation_value": 2
+        },
+        {
+          "validation_type": "length_less_than",
+          "validation_value": 20
+        },
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": {
+        "value": "SO57928272628",
+        "max_distance": 1
+      },
+      "aligned_value_equals": {
+        "value": "SO57928272628",
+        "max_distance": 1
+      },
+      "text_match_equals": "Shipment ID"
+    }
+  },
+  {
+    "name": "below-135deg",
+    "source_file": "fixtures/below-135deg.png",
+    "ocr_json_query": {
+      "action": "find below",
+      "action_value": "Shipment ID",
+      "is_rtl": false,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80,
+        "max_rotation_delta": 5
+      },
+      "value_validations": [
+        {
+          "validation_type": "length_greater_than",
+          "validation_value": 2
+        },
+        {
+          "validation_type": "length_less_than",
+          "validation_value": 20
+        },
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": {
+        "value": "SO57928272628",
+        "max_distance": 1
+      },
+      "aligned_value_equals": {
+        "value": "SO57928272628",
+        "max_distance": 1
+      },
+      "text_match_equals": "Shipment ID"
+    }
+  },
+  {
+    "name": "below-180deg",
+    "source_file": "fixtures/below-180deg.png",
+    "ocr_json_query": {
+      "action": "find below",
+      "action_value": "Shipment ID",
+      "is_rtl": false,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80,
+        "max_rotation_delta": 5
+      },
+      "value_validations": [
+        {
+          "validation_type": "length_greater_than",
+          "validation_value": 2
+        },
+        {
+          "validation_type": "length_less_than",
+          "validation_value": 20
+        },
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": {
+        "value": "SO57928272628",
+        "max_distance": 1
+      },
+      "aligned_value_equals": {
+        "value": "SO57928272628",
+        "max_distance": 1
+      },
+      "text_match_equals": "Shipment ID"
+    }
+  },
+  {
+    "name": "below-225deg",
+    "source_file": "fixtures/below-225deg.png",
+    "ocr_json_query": {
+      "action": "find below",
+      "action_value": "Shipment ID",
+      "is_rtl": false,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80,
+        "max_rotation_delta": 5
+      },
+      "value_validations": [
+        {
+          "validation_type": "length_greater_than",
+          "validation_value": 2
+        },
+        {
+          "validation_type": "length_less_than",
+          "validation_value": 20
+        },
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": {
+        "value": "SO57928272628",
+        "max_distance": 1
+      },
+      "aligned_value_equals": {
+        "value": "SO57928272628",
+        "max_distance": 1
+      },
+      "text_match_equals": "Shipment ID"
+    }
+  },
+  {
+    "name": "below-270deg",
+    "source_file": "fixtures/below-270deg.png",
+    "ocr_json_query": {
+      "action": "find below",
+      "action_value": "Shipment ID",
+      "is_rtl": false,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80,
+        "max_rotation_delta": 5
+      },
+      "value_validations": [
+        {
+          "validation_type": "length_greater_than",
+          "validation_value": 2
+        },
+        {
+          "validation_type": "length_less_than",
+          "validation_value": 20
+        },
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": {
+        "value": "SO57928272628",
+        "max_distance": 1
+      },
+      "aligned_value_equals": {
+        "value": "SO57928272628",
+        "max_distance": 1
+      },
+      "text_match_equals": "Shipment ID"
+    }
+  },
+  {
+    "name": "below-315deg",
+    "source_file": "fixtures/below-315deg.png",
+    "ocr_json_query": {
+      "action": "find below",
+      "action_value": "Shipment ID",
+      "is_rtl": false,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80,
+        "max_rotation_delta": 5
+      },
+      "value_validations": [
+        {
+          "validation_type": "length_greater_than",
+          "validation_value": 2
+        },
+        {
+          "validation_type": "length_less_than",
+          "validation_value": 20
+        },
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": {
+        "value": "SO57928272628",
+        "max_distance": 1
+      },
+      "aligned_value_equals": {
+        "value": "SO57928272628",
+        "max_distance": 1
+      },
+      "text_match_equals": "Shipment ID"
+    }
+  },
+  {
+    "name": "below-heb-table-column",
+    "source_file": "fixtures/below-heb-table-column.png",
+    "ocr_json_query": {
+      "action": "find below",
+      "action_value": "תעודה",
+      "is_rtl": true,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80,
+        "max_rotation_delta": 5
+      },
+      "value_validations": [
+        {
+          "validation_type": "length_greater_than",
+          "validation_value": 2
+        },
+        {
+          "validation_type": "length_less_than",
+          "validation_value": 20
+        },
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": "M5125026813",
+      "aligned_value_equals": "M5125026813",
+      "text_match_equals": "תעודה"
+    }
+  },
+  {
+    "name": "below-ignore-sides.png",
+    "source_file": "fixtures/below-ignore-sides.png",
+    "ocr_json_query": {
+      "action": "find below",
+      "action_value": "Shipment ID",
+      "is_rtl": true,
+      "value_validations": [
+        {
+          "validation_type": "length_greater_than",
+          "validation_value": 2
+        },
+        {
+          "validation_type": "length_less_than",
+          "validation_value": 20
+        },
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": "SO1111",
+      "aligned_value_equals": "SO1111",
+      "text_match_equals": "Shipment ID"
+    }
+  },
+  {
+    "name": "below-table-column-miss-aligned",
+    "source_file": "fixtures/below-table-column-miss-aligned.png",
+    "ocr_json_query": {
+      "action": "find below",
+      "action_value": "Shipment ID",
+      "is_rtl": true,
+      "value_validations": [
+        {
+          "validation_type": "length_greater_than",
+          "validation_value": 2
+        },
+        {
+          "validation_type": "length_less_than",
+          "validation_value": 20
+        },
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": "SO111111",
+      "aligned_value_equals": "SO111111",
+      "text_match_equals": "Shipment ID"
+    }
+  },
+  {
+    "name": "below-table-column-miss-aligned-order",
+    "source_file": "fixtures/below-table-column-miss-aligned-order.png",
+    "ocr_json_query": {
+      "action": "find below",
+      "action_value": "Shipment ID",
+      "is_rtl": true,
+      "value_validations": [
+        {
+          "validation_type": "length_greater_than",
+          "validation_value": 2
+        },
+        {
+          "validation_type": "length_less_than",
+          "validation_value": 20
+        },
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": "SO444444444",
+      "aligned_value_equals": "SO444444444",
+      "text_match_equals": "Shipment ID"
+    }
+  },
+  {
+    "name": "after-far",
+    "source_file": "fixtures/after-far.png",
+    "ocr_json_query": {
+      "action": "find after",
+      "action_value": "Shipment ID",
+      "is_rtl": false,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80,
+        "max_rotation_delta": 5
+      },
+      "value_validations": [
+        {
+          "validation_type": "length_greater_than",
+          "validation_value": 2
+        },
+        {
+          "validation_type": "length_less_than",
+          "validation_value": 20
+        },
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": {
+        "value": "SO11111",
+        "max_distance": 1
+      },
+      "aligned_value_equals": {
+        "value": "SO11111",
+        "max_distance": 1
+      },
+      "text_match_equals": "Shipment ID"
+    }
+  },
+  {
+    "name": "below-table-column-miss-aligned-45deg",
+    "source_file": "fixtures/below-table-column-miss-aligned-45deg.png",
+    "ocr_json_query": {
+      "action": "find below",
+      "action_value": "Shipment ID",
+      "is_rtl": true,
+      "value_validations": [
+        {
+          "validation_type": "length_greater_than",
+          "validation_value": 2
+        },
+        {
+          "validation_type": "length_less_than",
+          "validation_value": 20
+        },
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": {
+        "value": "SO111111",
+        "max_distance": 1
+      },
+      "aligned_value_equals": {
+        "value": "SO111111",
+        "max_distance": 1
+      },
+      "text_match_equals": "Shipment ID"
+    }
+  },
+  {
+    "name": "below-table-column-miss-aligned-90deg",
+    "source_file": "fixtures/below-table-column-miss-aligned-90deg.png",
+    "ocr_json_query": {
+      "action": "find below",
+      "action_value": "Shipment ID",
+      "is_rtl": true,
+      "value_validations": [
+        {
+          "validation_type": "length_greater_than",
+          "validation_value": 2
+        },
+        {
+          "validation_type": "length_less_than",
+          "validation_value": 20
+        },
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": {
+        "value": "SO111111",
+        "max_distance": 1
+      },
+      "aligned_value_equals": {
+        "value": "SO111111",
+        "max_distance": 1
+      },
+      "text_match_equals": "Shipment ID"
+    }
+  },
+  {
+    "name": "below-table-column-miss-aligned-135deg",
+    "source_file": "fixtures/below-table-column-miss-aligned-135deg.png",
+    "ocr_json_query": {
+      "action": "find below",
+      "action_value": "Shipment ID",
+      "is_rtl": true,
+      "value_validations": [
+        {
+          "validation_type": "length_greater_than",
+          "validation_value": 2
+        },
+        {
+          "validation_type": "length_less_than",
+          "validation_value": 20
+        },
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": {
+        "value": "SO111111",
+        "max_distance": 1
+      },
+      "aligned_value_equals": {
+        "value": "SO111111",
+        "max_distance": 1
+      },
+      "text_match_equals": "Shipment ID"
+    }
+  },
+  {
+    "name": "below-table-column-miss-aligned-180deg",
+    "source_file": "fixtures/below-table-column-miss-aligned-180deg.png",
+    "ocr_json_query": {
+      "action": "find below",
+      "action_value": "Shipment ID",
+      "is_rtl": true,
+      "value_validations": [
+        {
+          "validation_type": "length_greater_than",
+          "validation_value": 2
+        },
+        {
+          "validation_type": "length_less_than",
+          "validation_value": 20
+        },
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": "SO111111",
+      "aligned_value_equals": "SO111111",
+      "text_match_equals": "Shipment ID"
+    }
+  },
+  {
+    "name": "below-table-column-miss-aligned-225deg",
+    "source_file": "fixtures/below-table-column-miss-aligned-225deg.png",
+    "ocr_json_query": {
+      "action": "find below",
+      "action_value": "Shipment ID",
+      "is_rtl": true,
+      "value_validations": [
+        {
+          "validation_type": "length_greater_than",
+          "validation_value": 2
+        },
+        {
+          "validation_type": "length_less_than",
+          "validation_value": 20
+        },
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": {
+        "value": "SO111111",
+        "max_distance": 1
+      },
+      "aligned_value_equals": {
+        "value": "SO111111",
+        "max_distance": 1
+      },
+      "text_match_equals": "Shipment ID"
+    }
+  },
+  {
+    "name": "below-table-column-miss-aligned-270deg",
+    "source_file": "fixtures/below-table-column-miss-aligned-270deg.png",
+    "ocr_json_query": {
+      "action": "find below",
+      "action_value": "Shipment ID",
+      "is_rtl": true,
+      "value_validations": [
+        {
+          "validation_type": "length_greater_than",
+          "validation_value": 2
+        },
+        {
+          "validation_type": "length_less_than",
+          "validation_value": 20
+        },
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": {
+        "value": "SO111111",
+        "max_distance": 1
+      },
+      "aligned_value_equals": {
+        "value": "SO111111",
+        "max_distance": 1
+      },
+      "text_match_equals": "Shipment ID"
+    }
+  },
+  {
+    "name": "below-table-column-miss-aligned-315deg",
+    "source_file": "fixtures/below-table-column-miss-aligned-315deg.png",
+    "ocr_json_query": {
+      "action": "find below",
+      "action_value": "Shipment ID",
+      "is_rtl": true,
+      "value_validations": [
+        {
+          "validation_type": "length_greater_than",
+          "validation_value": 2
+        },
+        {
+          "validation_type": "length_less_than",
+          "validation_value": 20
+        },
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": {
+        "value": "SO111111",
+        "max_distance": 1
+      },
+      "aligned_value_equals": {
+        "value": "SO111111",
+        "max_distance": 1
+      },
+      "text_match_equals": "Shipment ID"
+    }
+  },
+  {
+    "name": "below-heb",
+    "source_file": "fixtures/below-heb.png",
+    "ocr_json_query": {
+      "action": "find below",
+      "action_value": "מספר תעודת משלוח",
+      "is_rtl": true,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80,
+        "max_rotation_delta": 5
+      },
+      "value_validations": [
+        {
+          "validation_type": "length_greater_than",
+          "validation_value": 2
+        },
+        {
+          "validation_type": "length_less_than",
+          "validation_value": 20
+        },
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": "SO57928272628",
+      "aligned_value_equals": "SO57928272628",
+      "text_match_equals": "מספר תעודת משלוח"
+    }
+  },
+  {
+    "name": "after-heb-dbg2",
+    "source_file": "fixtures/after-heb-dbg2.pdf",
+    "ocr_json_query": {
+      "action": "find after",
+      "action_value": "מספר תעודה",
+      "is_rtl": true,
+      "value_validations": [
+        {
+          "validation_type": "length_greater_than",
+          "validation_value": 2
+        },
+        {
+          "validation_type": "length_less_than",
+          "validation_value": 20
+        },
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_contains": "256004047",
+      "aligned_value_contains": "256004047",
+      "text_match_equals": "מספר תעודה"
+    }
+  },
+  {
+    "name": "real-doc-1-doc-number",
+    "notes": "Delivery note number: find after מס': → 643672 (Google Vision OCR)",
+    "source_file": "fixtures/real-doc-1.png",
+    "ocr_json_query": {
+      "action": "find after",
+      "action_value": "מס':",
+      "is_rtl": true,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80
+      },
+      "value_validations": [
+        {
+          "validation_type": "length_greater_than",
+          "validation_value": 2
+        },
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": "643672",
+      "text_match_equals": {
+        "value": "מס':",
+        "max_distance": 3
+      }
+    }
+  },
+  {
+    "name": "real-doc-1-entered-by",
+    "notes": "Entered by field: find after הוקלד: → שמרון (Google Vision OCR tokenizes colon separately)",
+    "source_file": "fixtures/real-doc-1.png",
+    "ocr_json_query": {
+      "action": "find after",
+      "action_value": "הוקלד:",
+      "is_rtl": true,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80
+      },
+      "value_validations": []
+    },
+    "expected": {
+      "result_value_equals": "שמרון",
+      "text_match_equals": {
+        "value": "הוקלד:",
+        "max_distance": 2
+      }
+    }
+  },
+  {
+    "name": "real-doc-1-customer-name",
+    "notes": "Customer name field: find after הכהנים → חומרי",
+    "source_file": "fixtures/real-doc-1.png",
+    "ocr_json_query": {
+      "action": "find after",
+      "action_value": "הכהנים",
+      "is_rtl": true,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80
+      },
+      "value_validations": []
+    },
+    "expected": {
+      "result_value_contains": "חומרי",
+      "text_match_equals": "הכהנים"
+    }
+  },
+  {
+    "name": "real-doc-1-delivery-type",
+    "notes": "Delivery type: find after תעודת → משלוח",
+    "source_file": "fixtures/real-doc-1.png",
+    "ocr_json_query": {
+      "action": "find after",
+      "action_value": "תעודת",
+      "is_rtl": true,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80
+      },
+      "value_validations": []
+    },
+    "expected": {
+      "result_value_contains": "משלוח",
+      "text_match_equals": "תעודת"
+    }
+  },
+  {
+    "name": "real-doc-1-below-origin-label",
+    "notes": "Below מקור label → finds מס (Google tokenizes מס': as separate tokens)",
+    "source_file": "fixtures/real-doc-1.png",
+    "ocr_json_query": {
+      "action": "find below",
+      "action_value": "מקור",
+      "is_rtl": true,
+      "tolerances": {
+        "max_vertical_gap": 200,
+        "max_horizontal_offset": 150
+      },
+      "value_validations": []
+    },
+    "expected": {
+      "result_value_contains": "מס",
+      "text_match_equals": "מקור"
+    }
+  },
+  {
+    "name": "real-doc-2-business-id",
+    "notes": "Business registration: find after מורשה: → 513020941 (Google Vision OCR)",
+    "source_file": "fixtures/real-doc-2.png",
+    "ocr_json_query": {
+      "action": "find after",
+      "action_value": "עוסק מורשה:",
+      "is_rtl": true,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80
+      },
+      "value_validations": [
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": "513020941",
+      "text_match_contains": "מורשה"
+    }
+  },
+  {
+    "name": "real-doc-2-phone",
+    "notes": "Phone number: find after טלפון: → 050-000-0001 (Google Vision OCR)",
+    "source_file": "fixtures/real-doc-2.png",
+    "ocr_json_query": {
+      "action": "find after",
+      "action_value": "טלפון:",
+      "is_rtl": true,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80
+      },
+      "value_validations": [
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": "050-000-0001",
+      "text_match_equals": {
+        "value": "טלפון:",
+        "max_distance": 2
+      }
+    }
+  },
+  {
+    "name": "real-doc-2-receipt-number",
+    "notes": "Receipt barcode: find after קבלה: → RC24004357 (Google Vision OCR)",
+    "source_file": "fixtures/real-doc-2.png",
+    "ocr_json_query": {
+      "action": "find after",
+      "action_value": "קבלה:",
+      "is_rtl": true,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 100
+      },
+      "value_validations": []
+    },
+    "expected": {
+      "result_value_contains": "RC24004357",
+      "text_match_equals": {
+        "value": "קבלה:",
+        "max_distance": 2
+      }
+    }
+  },
+  {
+    "name": "real-doc-2-customer-id",
+    "notes": "Customer ID: find after לקוח: → 211464 (Google Vision OCR)",
+    "source_file": "fixtures/real-doc-2.png",
+    "ocr_json_query": {
+      "action": "find after",
+      "action_value": "לקוח:",
+      "is_rtl": true,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80
+      },
+      "value_validations": [
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": "211464",
+      "text_match_equals": {
+        "value": "לקוח:",
+        "max_distance": 2
+      }
+    }
+  },
+  {
+    "name": "real-doc-2-agent",
+    "notes": "Agent name: find after סוכן: → חיים (Google Vision OCR sees full name)",
+    "source_file": "fixtures/real-doc-2.png",
+    "ocr_json_query": {
+      "action": "find after",
+      "action_value": "סוכן:",
+      "is_rtl": true,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80
+      },
+      "value_validations": []
+    },
+    "expected": {
+      "result_value_contains": "חי",
+      "text_match_equals": {
+        "value": "סוכן:",
+        "max_distance": 2
+      }
+    }
+  },
+  {
+    "name": "real-doc-2-payment-date",
+    "notes": "Weighted payment date: find after משוקלל: → 27/08/24 (Google Vision OCR)",
+    "source_file": "fixtures/real-doc-2.png",
+    "ocr_json_query": {
+      "action": "find after",
+      "action_value": "משוקלל:",
+      "is_rtl": true,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80
+      },
+      "value_validations": []
+    },
+    "expected": {
+      "result_value_equals": "27/08/24",
+      "text_match_equals": {
+        "value": "משוקלל:",
+        "max_distance": 2
+      }
+    }
+  },
+  {
+    "name": "real-doc-2-print-time",
+    "notes": "Print time/date: find after הדפסה: → 29/08/24 (Google Vision OCR gives date instead of time)",
+    "source_file": "fixtures/real-doc-2.png",
+    "ocr_json_query": {
+      "action": "find after",
+      "action_value": "הדפסה:",
+      "is_rtl": true,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80
+      },
+      "value_validations": []
+    },
+    "expected": {
+      "result_value_equals": "29/08/24",
+      "text_match_equals": {
+        "value": "הדפסה:",
+        "max_distance": 2
+      }
+    }
+  },
+  {
+    "name": "real-doc-2-invoice-date",
+    "notes": "Invoice date: find below מתאריך. → 18/04/24 (Google Vision OCR)",
+    "source_file": "fixtures/real-doc-2.png",
+    "ocr_json_query": {
+      "action": "find below",
+      "action_value": "מתאריך.",
+      "is_rtl": true,
+      "tolerances": {
+        "max_vertical_gap": 200,
+        "max_horizontal_offset": 150
+      },
+      "value_validations": []
+    },
+    "expected": {
+      "result_value_equals": "18/04/24",
+      "text_match_equals": {
+        "value": "מתאריך.",
+        "max_distance": 1
+      }
+    }
+  },
+  {
+    "name": "real-doc-2-paid-method",
+    "notes": "Payment method: find after שולם → במזומן",
+    "source_file": "fixtures/real-doc-2.png",
+    "ocr_json_query": {
+      "action": "find after",
+      "action_value": "שולם",
+      "is_rtl": true,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80
+      },
+      "value_validations": []
+    },
+    "expected": {
+      "result_value_equals": "במזומן",
+      "text_match_equals": "שולם"
+    }
+  }
+]

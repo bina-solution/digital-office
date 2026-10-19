@@ -1,0 +1,1195 @@
+/* @palette:start */
+/* From here to `@palette:end`: every colour and the type stack, light and dark. A page the console
+   writes itself (app.py: _card) inlines this region — so that page is the shell's, not a copy. */
+:root{
+  /* The shell's own: the type stack and the ramps. The COLOURS are not here — they are the office's
+     palette, in the generated block below (bina-ui/theme-tokens.css), and nothing in this file
+     writes one. */
+  --font:"Segoe UI",system-ui,-apple-system,"Noto Sans Hebrew","Assistant",Arial,sans-serif;
+
+  /* Ramps: so a component can stop inventing its own 13px and its own shadow. A shadow's shade is
+     the palette's — two steps are its own shadows, the two between are its scrim, thinned — so the
+     ramp turns with the theme without a second copy of it. */
+  --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:24px; --space-6:32px; --space-8:48px;
+  --radius-sm:8px; --radius-md:12px; --radius-lg:16px; --radius-pill:999px;
+  --elev-1:0 1px 2px color-mix(in srgb,var(--scrim) 12%,transparent);
+  --elev-2:var(--shadow);
+  --elev-3:0 6px 20px color-mix(in srgb,var(--scrim) 20%,transparent),0 16px 40px color-mix(in srgb,var(--scrim) 12%,transparent);
+  --elev-4:var(--shadow-lg);
+  --dur-fast:.12s; --dur-base:.2s; --dur-slow:.32s; --ease-standard:cubic-bezier(.2,.8,.2,1);
+}
+
+/* ── B6 · theming ────────────────────────────────────────────────────────────────
+   The block below is GENERATED from platform-base/bina-ui/theme-tokens.css and kept identical by
+   scripts/refactor/theme-token-lint.py. Do not hand-edit it here — edit the source and re-run the
+   lint with --fix, or the shell and the app inside its iframe drift apart, which is the one place
+   the drift is unmissable: they are one screen.
+
+   The console had NO dark support at all until now, while bina-ui has carried a prefers-color-scheme
+   block for a long time — so on a dark-mode machine the apps went dark and the shell around them
+   stayed white. That was never a decision; it was two files nobody read together. */
+/* @bina-theme-tokens:start */
+/* OLIVE GROVE — the one palette of the office (the owner, 2026-10-07 · DGO-450). Four hues, sampled
+   from his mock-up, and the ground they stand on. A screen never writes a colour: it names one of
+   these. Each hue is the colour itself (a FILL — a button, a bar, a dot), «-d» for text and thin
+   lines on the ground (4.5:1 or more), «-soft» and «-line» for a tint and its hairline, and «-ink»
+   for what is written ON the fill. The role names every screen already uses point at them:
+   (no backtick in this block: one of its copies lives inside a script's template string)
+     olive  the brand and the main action · what is well, what is done
+     sky    what is in motion, what only informs · a link
+     lime   look here — a warning, something waiting
+     plum   a person must act — a failure, a removal, the one final action
+   Contrast, measured (WCAG): ink on the ground 13.7 · muted 4.65 · light text on olive 5.51 and on
+   plum 9.54 · ink on lime 6.88 · its ink on sky 6.32 · sky-d 4.61 · lime-d 4.70 · violet 5.32 ·
+   on the desk: its ink 6.32 (dark: 13.96), and 11.2 where the sky pales (dark: 5.12). */
+:root,:root[data-theme="light"]{
+  color-scheme:light;
+  accent-color:var(--accent);   /* the browser's OWN controls - a checkbox, a radio, a range, a progress bar - on both grounds: said once, here (it was said for eight single controls, and every other one was the browser's blue) */
+  --bg:#f3f5f7; --surface:#fff; --surface-2:#f9fafb; --ink:#1f2a17; --muted:#6a7068; --line:#dcdfde;
+  --olive:#56693f; --olive-d:#475734; --olive-soft:#e7eae4; --olive-line:#bfc6b6; --olive-ink:#f3f5f7;
+  --sky:#7baae3; --sky-d:#2a6fc4; --sky-soft:#edf3fb; --sky-line:#cddff4; --sky-ink:#13263f;
+  --lime:#a9b84c; --lime-d:#69732e; --lime-soft:#f3f5e6; --lime-line:#dee4bb; --lime-ink:#1f2a17;
+  --plum:#5b3349; --plum-d:#4a303b; --plum-soft:#e8e2e6; --plum-line:#c1b1ba; --plum-ink:#f3f5f7;
+  --accent:var(--olive); --accent-d:var(--olive-d); --accent-soft:var(--olive-soft); --accent-ink:var(--olive-ink);
+  --blue:var(--sky-d); --amber:var(--lime-d); --red:var(--plum);
+  --violet:#7c5c6d;   /* plum, lifted a fifth toward white: someone has to look — nothing has failed */
+  --ok:var(--olive); --warn:var(--lime-d); --danger:var(--plum); --info:var(--sky-d);
+  --ok-soft:var(--olive-soft); --warn-soft:var(--lime-soft); --danger-soft:var(--plum-soft); --info-soft:var(--sky-soft);
+  --red-soft:var(--plum-soft); --amber-soft:var(--lime-soft); --blue-soft:var(--sky-soft); --violet-soft:var(--plum-soft);
+  --side:var(--olive); --side-ink:#f3f5f7; --side-mut:#dce1da; --side-line:#788765;
+  --desk:var(--sky); --desk-ink:var(--sky-ink);   /* desktop mode's ground is the sky (the owner, DGO-452), and what is written straight on it */
+  --scrim:rgba(31,42,23,.5);                      /* what dims a screen behind a pop-up */
+  --shadow:0 1px 3px rgba(31,42,23,.08),0 6px 24px rgba(31,42,23,.06);
+  --shadow-lg:0 20px 60px rgba(31,42,23,.28);
+  /* ONE COLOUR AND ONE ANIMAL PER OFFICE (the owner, 2026-10-09 · flt-002). When offices are linked,
+     a person reads WHICH office a thing belongs to without opening it, so each office gets a hue of
+     its own. The hue is an IDENTITY and never a health state: an office that stopped answering keeps
+     its colour, and the quiet mark is the one that says "not answering". Each is an ALIAS of the
+     palette's own hue — no fourth value is invented, and because the ground re-points the hue, the
+     office mark follows the ground by itself. Each office's animal (elephant, deer, eagle) is a
+     glyph of bina-icons.js. */
+  --office-hp:var(--muted);   /* hp · elephant — grey: the heavy laptop at home, in the palette's own grey */
+  --office-mac:var(--lime);   /* macbook · deer — yellow: the palette has one yellow and it is lime. A FILL, so what is written ON it is --lime-ink, never this */
+  --office-vps:var(--sky-d);  /* vps · eagle — deep sky blue, «the eagle in the clouds». THE OWNER'S OWN CHOICE (2026-10-09, in writing: vps = נשר + כחול-שמיים) — this line is the colour he picked, not a default kept for him */
+}
+
+/* ── A LINKED OFFICE'S MARK, BY NAME (flt-004) ───────────────────────────────────────────────
+   The link carries a NAME — mark: {color, animal} in the catalog, from the office's own identity
+   — and never a value: the office that DRAWS a linked tile owns the pixels, so it paints the name
+   with its own palette. These seven rules are that translation, one per family above; a screen sets
+   data-office-hue="lime" and paints var(--office-hue).
+   A name this file does not know paints nothing, which is why the vocabulary in
+   apps/dgo-extend/identity.py may only name families that exist here — and why --red and --ok
+   are not among them: they mean «danger» and «it is well» on every screen in the office. */
+[data-office-hue="grey"]   { --office-hue:var(--muted); }
+[data-office-hue="lime"]   { --office-hue:var(--lime); }
+[data-office-hue="sky"]    { --office-hue:var(--sky-d); }
+[data-office-hue="olive"]  { --office-hue:var(--olive-d); }
+[data-office-hue="plum"]   { --office-hue:var(--plum); }
+[data-office-hue="blue"]   { --office-hue:var(--blue); }
+[data-office-hue="violet"] { --office-hue:var(--violet); }
+/* the dark ground is the same four hues on the palette's own ink, and the SAME legend. Olive on that
+   ink is 2.5:1, so its text step there is olive LIFTED — its own hue and saturation, lighter (7.14
+   on a card, 4.82 on its own tint) — and the brand, the main action and «it is well» take that step.
+   Lime stays «look here» and the sky «in motion», as on the light ground: were lime the accent here
+   (it was, for a day), a warning, a selection and «it is well» were one colour. Each «-d» on its
+   own «-soft» there, measured: olive 4.82 · sky 4.62 · lime 4.63 · plum 4.71. */
+@media (prefers-color-scheme:dark){
+  :root{ color-scheme:dark;
+         --bg:#141b0f; --surface:#1f2a17; --surface-2:#192213; --ink:#f3f5f7; --muted:#a2a8a2; --line:#414a3b;
+         --olive-d:#a5ba8c; --olive-soft:#384629; --olive-line:#56693f;
+         --sky-d:#7baae3; --sky-soft:#2e3f38; --sky-line:#4d6a8c;
+         --lime-d:#a9b84c; --lime-soft:#3b4622; --lime-line:#69732e;
+         --plum-d:#ad99a4; --plum-soft:#402f33; --plum-line:#7c5c6d;
+         --accent:var(--olive-d); --accent-ink:var(--surface);
+         --red:#ad99a4; --violet:#bdadb6; --danger:#ad99a4; --ok:var(--olive-d); --side:var(--surface);
+         --desk:var(--sky-ink); --desk-ink:var(--ink); --scrim:rgba(0,0,0,.6);
+         --shadow:0 1px 3px rgba(0,0,0,.4),0 6px 24px rgba(0,0,0,.3);
+         --shadow-lg:0 20px 60px rgba(0,0,0,.55); }
+}
+:root[data-theme="midnight"]{
+  color-scheme:dark;
+  --bg:#141b0f; --surface:#1f2a17; --surface-2:#192213; --ink:#f3f5f7; --muted:#a2a8a2; --line:#414a3b;
+  --olive-d:#a5ba8c; --olive-soft:#384629; --olive-line:#56693f;
+  --sky-d:#7baae3; --sky-soft:#2e3f38; --sky-line:#4d6a8c;
+  --lime-d:#a9b84c; --lime-soft:#3b4622; --lime-line:#69732e;
+  --plum-d:#ad99a4; --plum-soft:#402f33; --plum-line:#7c5c6d;
+  --accent:var(--olive-d); --accent-ink:var(--surface);
+  --red:#ad99a4; --violet:#bdadb6; --danger:#ad99a4; --ok:var(--olive-d); --side:var(--surface);
+  --desk:var(--sky-ink); --desk-ink:var(--ink); --scrim:rgba(0,0,0,.6);
+  --shadow:0 1px 3px rgba(0,0,0,.4),0 6px 24px rgba(0,0,0,.3);
+  --shadow-lg:0 20px 60px rgba(0,0,0,.55);
+}
+/* THE KEYBOARD'S RING - what the browser draws around the stop the keyboard is on, in the palette, wherever
+   a part draws none of its own. It has no specificity at all (:where), so any rule of a part wins. Two
+   screens said this for themselves; on the others nearly every stop wore the browser's ring (DGO-455).
+   A field keeps the offset it has - fourteen rules draw a field's own outline and say no offset. An area
+   (a scroll box, a table) takes the ring inside, where nothing clips it; a control takes it outside,
+   where a filled button does not hide it. */
+:where(:focus-visible){outline:2px solid var(--accent)}
+:where(:focus-visible:not(a,button,summary,[role=button],input,select,textarea)){outline-offset:-2px}
+:where(a,button,summary,[role=button]):focus-visible{outline-offset:2px}
+/* HEBREW AT A HEAVY WEIGHT - on Windows, where the first family of --font is installed. "Segoe UI" has its
+   Hebrew in Light, Regular, Semibold and Bold. Asked for 800 or 900 the browser takes the family's Black
+   face, which has none, and so has every family after it - so the Hebrew of every title at 800 was drawn in
+   the system's last-resort serif, thin, beside Latin in Black: «חשבונות ומראות» at 20px is 150px wide at 700
+   and 120px at 800 (Chrome 154; the screens ask for 800 in 167 places, the question's title among them).
+   These faces give the family's HEBREW RANGE the faces that have it. A family a sheet names is no longer the
+   system's for those characters, so every weight and both styles are named, each as the system resolves it:
+   measured, only upright 800 and 900 change. Any other character is not theirs and goes on to the next
+   family the screen names - system-ui in --font, on Windows the same faces, Black included - which is why
+   G27 asks that system-ui follows wherever a screen names this family itself. Where the family is not
+   installed nothing here resolves and nothing changes. */
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Light");font-weight:100 300;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI");font-weight:400;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Semibold");font-weight:500 600;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Bold");font-weight:700 900;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Light Italic");font-weight:100 300;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Italic");font-weight:400;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Semibold Italic");font-weight:500 600;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Bold Italic");font-weight:700 900;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+/* @bina-theme-tokens:end */
+/* @palette:end */
+
+/* @bina-nav:start */
+/* ── §1 the vocabulary ────────────────────────────────────────────────────── */
+.bnv{
+  --bnv-bg:var(--surface-2);
+  --bnv-ink:var(--ink);
+  --bnv-ink-2:var(--muted);
+  --bnv-hover:color-mix(in srgb, var(--bnv-ink) 6%, transparent);
+  --bnv-active:color-mix(in srgb, var(--bnv-ink) 10%, transparent);
+  --bnv-brand:var(--accent);
+  --bnv-brand-ink:var(--accent-d);
+  --bnv-brand-soft:var(--accent-soft);
+  --bnv-line:var(--line);
+
+  /* geometry — the rail (§3) and the sizes (§4) change THESE, never a rule */
+  --bnv-pad:8px 10px;
+  --bnv-gap:2px;
+  --bnv-row-w:100%;
+  --bnv-row-h:36px;
+  --bnv-row-pad:7px 8px;
+  --bnv-row-gap:8px;
+  --bnv-row-justify:flex-start;
+  --bnv-head-h:52px;
+  --bnv-head-pad:4px 6px 10px;
+  --bnv-head-justify:flex-start;
+  --bnv-primary-w:100%;
+  --bnv-primary-h:44px;
+  --bnv-primary-pad:10px 12px;
+  --bnv-primary-justify:flex-start;
+  --bnv-foot-align:stretch;
+  /* what a rail takes away — `none` per part, because only the owner of a rule may say what
+     that rule's display IS. A `display:none!important`-style override cannot be undone by a
+     narrower container, and a phone must be able to bring these back.
+     A rail takes away WORDS, never a way in: the names, the group heads, the search's field, and
+     «הצג עוד» (which is words) — so the rows «הצג עוד» folds are all there in a rail (`--bnv-rest`),
+     the search stays as its magnifier, and the collapse control stays, turned round, under the
+     avatar. It used to take those three away too: a rail had no search, was missing the folded
+     rows, and — once a person had chosen it — nothing left to press that would bring the menu back. */
+  --bnv-text:block;
+  --bnv-ghead:flex;
+  --bnv-field:block;     /* the search's field */
+  --bnv-more:block;
+  --bnv-rest:none;       /* the rows folded behind «הצג עוד», while they are folded */
+  --bnv-head-dir:row;    /* the brand row: avatar · name · collapse — a rail stacks what is left of it */
+  --bnv-turn:none;       /* the collapse control's arrow */
+  --bnv-side:252px;      /* read by .appgrid — the only width the host asks for */
+  --bnv-off:-100%;       /* where a closed drawer parks; flipped for RTL below */
+
+  background:var(--bnv-bg);
+  color:var(--bnv-ink);
+  display:flex;
+  flex-direction:column;
+  gap:var(--bnv-gap);
+  box-sizing:border-box;
+  height:100%;
+  min-height:0;
+  padding:var(--bnv-pad);
+  font-size:14px;
+  overflow:hidden;
+}
+
+/* ── §2 the parts ─────────────────────────────────────────────────────────── */
+.bnv-scroll{
+  flex:1;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+  gap:var(--bnv-gap);
+  overflow-y:auto;
+  overflow-x:hidden;
+  overscroll-behavior:contain;
+  scrollbar-width:thin;
+}
+.bnv-list{display:flex;flex-direction:column;gap:var(--bnv-gap);min-width:0}
+
+/* brand row: square avatar · name (+ one line of context) · the collapse control */
+.bnv-head{
+  display:flex;
+  flex-direction:var(--bnv-head-dir);
+  align-items:center;
+  justify-content:var(--bnv-head-justify);
+  gap:10px;
+  min-height:var(--bnv-head-h);
+  padding:var(--bnv-head-pad);
+  flex:none;
+  overflow:hidden;
+}
+.bnv-avatar{
+  width:28px;height:28px;border-radius:8px;flex:none;
+  display:grid;place-items:center;overflow:hidden;
+  background:var(--bnv-brand-soft);color:var(--bnv-brand-ink);
+  font-weight:800;font-size:14px;line-height:1;
+}
+.bnv-avatar img{width:100%;height:100%;object-fit:cover;display:block}
+.bnv-head-text{flex:1;min-width:0;display:var(--bnv-text)}
+/* (a brand line reads its own way — `dir=auto`, so what is cut is its end — and still sits on the menu's side) */
+.bnv-head b,.bnv-head small{text-align:-webkit-match-parent;text-align:match-parent}
+.bnv-head b{display:block;font-size:16px;line-height:22px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bnv-head small{display:block;color:var(--bnv-ink-2);font-size:11px;line-height:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bnv-collapse{
+  flex:none;width:28px;height:28px;padding:0;border:0;border-radius:8px;
+  background:transparent;color:var(--bnv-ink-2);
+  display:grid;place-items:center;cursor:pointer;
+}
+.bnv-collapse:hover{background:var(--bnv-hover);color:var(--bnv-ink)}
+.bnv-collapse:focus-visible{outline:2px solid var(--bnv-ink);outline-offset:-2px}
+.bnv-collapse svg{width:16px;height:16px;transform:var(--bnv-turn)}
+
+/* the ONE flat primary action — the same object in every app, at finger size */
+.bnv-primary{
+  box-sizing:border-box;flex:none;width:var(--bnv-primary-w);min-height:var(--bnv-primary-h);
+  display:flex;align-items:center;justify-content:var(--bnv-primary-justify);gap:8px;
+  padding:var(--bnv-primary-pad);border:0;border-radius:10px;
+  background:var(--bnv-brand-soft);color:var(--bnv-brand-ink);
+  font:inherit;font-size:14px;line-height:22px;font-weight:600;
+  text-align:start;text-decoration:none;cursor:pointer;
+}
+.bnv-primary:hover{background:color-mix(in srgb, var(--bnv-brand) 16%, transparent)}
+.bnv-primary:active{background:color-mix(in srgb, var(--bnv-brand) 24%, transparent)}
+.bnv-primary:focus-visible{outline:2px solid var(--bnv-brand);outline-offset:2px}
+.bnv-primary .bnv-label{flex:1}
+.bnv-primary[aria-disabled="true"],.bnv-primary:disabled{opacity:.5;cursor:default}
+
+/* a group: a named block of rows, with its own header */
+.bnv-group{display:flex;flex-direction:column;gap:var(--bnv-gap);min-width:0}
+.bnv-ghead{display:var(--bnv-ghead);align-items:center;gap:2px;min-height:28px;padding:6px 6px 0;flex:none}
+.bnv-gtitle{
+  flex:1;min-width:0;display:var(--bnv-text);
+  color:var(--bnv-ink-2);font-size:11px;line-height:16px;font-weight:600;letter-spacing:.04em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+/* a group action is a small icon button, and there are never more than two */
+.bnv-act{
+  flex:none;width:26px;height:26px;padding:0;border:0;border-radius:7px;
+  background:transparent;color:var(--bnv-ink-2);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;
+}
+.bnv-act:hover{background:var(--bnv-hover);color:var(--bnv-ink)}
+.bnv-act:focus-visible{outline:2px solid var(--bnv-ink);outline-offset:-2px}
+.bnv-act svg{width:15px;height:15px}
+
+/* search lives IN the menu — which is what frees the top of the page for content.
+   Its magnifier is a button (it puts the keyboard in the field), and in a rail it is the whole box:
+   the field is gone (`--bnv-field`), and a press opens the menu over the page, on the field. */
+.bnv-search{
+  display:flex;align-items:center;justify-content:var(--bnv-row-justify);flex:none;
+  margin:0 2px;min-height:34px;
+  border:1px solid var(--bnv-line);border-radius:8px;background:var(--bnv-bg);cursor:pointer;
+}
+.bnv-search button{
+  flex:none;align-self:stretch;width:30px;padding:0;border:0;border-radius:7px;
+  background:transparent;color:var(--bnv-ink-2);
+  display:inline-flex;align-items:center;justify-content:center;cursor:pointer;
+}
+.bnv-search button:hover{color:var(--bnv-ink)}
+.bnv-search button:focus-visible{outline:2px solid var(--bnv-ink);outline-offset:-2px}
+.bnv-search svg{width:15px;height:15px;flex:none}
+.bnv-search input{
+  display:var(--bnv-field);
+  flex:1;min-width:0;padding:7px 0;padding-inline-end:9px;border:0;background:transparent;color:inherit;
+  font:inherit;font-size:13px;line-height:20px;cursor:text;
+}
+.bnv-search input:focus{outline:none}
+.bnv-search:focus-within{border-color:color-mix(in srgb, var(--bnv-brand) 45%, transparent)}
+.bnv-search[hidden]{display:none}
+
+/* the row */
+.bnv-item{
+  box-sizing:border-box;
+  width:var(--bnv-row-w);
+  min-width:0;
+  min-height:var(--bnv-row-h);
+  display:flex;
+  align-items:center;
+  justify-content:var(--bnv-row-justify);
+  gap:var(--bnv-row-gap);
+  padding:var(--bnv-row-pad);
+  border:0;
+  border-radius:8px;
+  background:transparent;
+  color:var(--bnv-ink-2);
+  font:inherit;
+  font-size:14px;
+  line-height:22px;
+  font-weight:500;
+  text-align:start;
+  text-decoration:none;
+  cursor:pointer;
+}
+.bnv-item:hover{background:var(--bnv-hover);color:var(--bnv-ink)}
+.bnv-item:active{background:var(--bnv-active)}
+.bnv-item.is-active,.bnv-item[aria-current="page"]{
+  background:var(--bnv-active);
+  color:var(--bnv-ink);
+  font-weight:500;
+}
+.bnv-item:focus-visible{outline:2px solid var(--bnv-ink);outline-offset:-2px}
+.bnv-item[aria-disabled="true"],.bnv-item:disabled{opacity:.5;cursor:default}
+
+/* a REMOTE app — one that runs on a LINKED office, not on this machine
+   (ai/context/dgo-remote-apps.md §4). The row is a row like any other: same height, same hover,
+   same active tint. What says "not this machine" is one corner bracket in the logo's apps-line
+   colour, mirrored at the row's inline-start corner in BOTH directions (logical properties only —
+   this component has no physical direction anywhere, and the mark is not going to be the first).
+   The colour is the palette's «look here» in its line step (the lime the mark's apps carry). */
+.bnv-item.is-remote{position:relative}
+.bnv-item.is-remote::after{
+  content:"";position:absolute;inset-block-start:3px;inset-inline-start:3px;
+  width:7px;height:7px;pointer-events:none;
+  border-block-start:2px solid var(--lime-d);
+  border-inline-start:2px solid var(--lime-d);
+  border-start-start-radius:3px;
+}
+/* the office did not answer: the mark goes quiet, the row keeps its place — a tile that vanishes
+   is a tile nobody can ask about. The state is FORM here, not words: the office's tag (capped at
+   5em below — "MacBook לא זמינה" was drawn as "…acBook") turns the failure colour and the row dims;
+   the sentence is the row's tooltip. */
+.bnv-item.is-remote.is-offline::after{border-color:var(--bnv-ink-2)}
+/* …and the mark takes the OFFICE's own colour where the row knows which office it is: the shell adds
+   `office-<id>` (console/static/app.js, remoteCls) and the hue is the palette's family
+   `--office-hp/-mac/-vps` — declared in theme-tokens.css and nowhere else (G27/G82). An office with no
+   token keeps the lime this mark ships with, so a fourth office needs one token and no CSS. */
+.bnv-item.office-hp.is-remote::after{border-color:var(--office-hp)}
+.bnv-item.office-mac.is-remote::after{border-color:var(--office-mac)}
+.bnv-item.office-vps.is-remote::after{border-color:var(--office-vps)}
+.bnv-item.is-offline :is(.bnv-ic,.bnv-label){opacity:.72}
+.bnv-item.is-offline .bnv-meta{color:var(--danger)}
+/* `hidden` is how the search filters rows, and it has to beat `display:flex` above */
+.bnv-item[hidden],.bnv-empty[hidden],.bnv-group[hidden]{display:none}
+.bnv-ic{width:18px;height:18px;flex:none;display:inline-flex;align-items:center;justify-content:center}
+.bnv-ic svg,.bnv-ic .ic-svg{width:18px;height:18px;display:block}
+/* the label is what gives way — never the row, never the container.
+   A label that is a NAME someone gave (a folder, a mailbox) carries `dir="auto"`: it is cut at ITS
+   end, not the row's — «Plane — HP ומק» lost its first letters in a narrow rail («…ne — HP ומק») —
+   and `match-parent` keeps it on the row's reading edge whichever way it reads. */
+.bnv-label{flex:1;min-width:0;display:var(--bnv-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  text-align:-webkit-match-parent;text-align:match-parent}
+/* the SECOND column: a count, a size, a time. Tabular, so a list of them aligns. */
+.bnv-meta{
+  flex:none;display:var(--bnv-text);color:var(--bnv-ink-2);
+  font-size:12px;line-height:18px;font-variant-numeric:tabular-nums;
+}
+/* A REMOTE row's meta is a NAME, not a count — and a name may be long ("שרת פיתוח בינה סלושנס").
+   With `flex:none` (above) it held its full width, so the LABEL took the loss: measured on the live
+   rail (218px), `מסמכים שלי` — 73px of text — was drawn in 44px, while the office name kept 124px.
+   That inverts what a row is for: the app is the subject, the office is commentary.
+
+   `flex:0 1 auto` alone does NOT fix it, and that is worth writing down: the row is not overflowing
+   (18 + 8 + 44 + 8 + 124 + 16 = 218), so there is no shrink pressure to resolve — the label simply
+   sits at min-content while the meta takes what it asks for. Nothing is "squeezed out" to shrink.
+
+   So the meta gets a CAP of `min(40%, 5em)` — and the measurement is why it is a formula and not a
+   percentage. At the console's live rail (218px), a 40% cap left the office 81px and still ellipsized
+   the app name by 16px (`חיבורים ומפתחות`, 103px). Swept on the live row: 40% → name 87 (clipped),
+   30% → 107 (fits) + office 61, 26% → 115 + 53, 22% → 124 + 44. `5em` is 60px of office at this
+   font — the shortest tag that still names an office — and it leaves the label 107px, its full
+   width. The percentage half keeps a WIDE rail from giving the office an unbounded share; `flex:0 8`
+   then resolves what is left in the label's favour. `.is-remote` and not every meta on purpose: a
+   count has no office to name, and its fixed slot is what makes a column of them line up. */
+.bnv-item.is-remote .bnv-meta{
+  flex:0 8 auto;min-width:0;max-inline-size:min(40%,5em);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+/* trailing slot: a badge, a dot, a chevron. `nowrap` so it can never wrap into a second line. */
+.bnv-tail{flex:none;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;color:var(--bnv-ink-2);font-size:12px}
+.bnv-item:hover .bnv-tail,.bnv-item.is-active .bnv-tail{color:inherit}
+.bnv-badge{
+  flex:none;min-width:18px;height:18px;padding:0 5px;border-radius:999px;
+  background:var(--bnv-brand-soft);color:var(--bnv-brand-ink);
+  font-size:11px;line-height:18px;font-weight:700;text-align:center;
+}
+.bnv-item:hover .bnv-badge,.bnv-item.is-active .bnv-badge{background:color-mix(in srgb, var(--bnv-brand) 22%, transparent)}
+
+/* Priority+: the rows that did not fit, and the one row that reveals them. (A rail has no such
+   row to press — it is words — so there the folded rows are simply there: `--bnv-rest`.) */
+.bnv-rest{display:var(--bnv-rest);flex-direction:column;gap:var(--bnv-gap);min-width:0}
+.bnv-rest.is-open{display:flex}
+.bnv-more{
+  display:var(--bnv-more);flex:none;width:100%;min-height:28px;padding:4px 8px;border:0;border-radius:8px;
+  background:transparent;color:var(--bnv-ink-2);font:inherit;font-size:12px;font-weight:600;
+  text-align:start;cursor:pointer;
+}
+.bnv-more:hover{background:var(--bnv-hover);color:var(--bnv-ink)}
+.bnv-empty{padding:6px 8px;color:var(--bnv-ink-2);font-size:12px;line-height:18px}
+
+.bnv-foot{
+  flex:none;margin-top:auto;padding-top:10px;border-top:1px solid var(--bnv-line);
+  min-width:0;display:flex;flex-direction:column;gap:var(--bnv-gap);align-items:var(--bnv-foot-align);
+}
+.bnv-foot-text{
+  display:var(--bnv-text);padding:0 8px;max-width:100%;color:var(--bnv-ink-2);
+  font-size:11px;line-height:16px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.bnv-sep{height:1px;background:var(--bnv-line);margin:6px 8px;flex:none}
+
+/* ── §3 the rail: one state, two triggers, a list of values ────────────────── */
+/* `.bnv.is-rail` — a rail somebody chose: the menu's own collapse control (remembered per app),
+   or a host that collapses the menu by itself.
+   `.rail-host .bnv` — a host whose grid column decides and cannot put a class on the aside.
+   Both write the SAME values as the medium size class in §4, so the rail exists once.
+   The values are a rail's while it is SHUT. Opened — by its collapse control, or by its search —
+   it is the whole menu again, the values above, standing over the page (the rule under these).
+   `:where()` keeps that condition out of the selector's weight: the drawer of a phone-sized frame
+   must still out-rank a rail saved on a desktop. */
+:is(.bnv.is-rail,.rail-host .bnv):where(:not(.is-open)){
+  --bnv-pad:12px 10px;
+  --bnv-gap:6px;
+  --bnv-row-w:36px;
+  --bnv-row-h:36px;
+  --bnv-row-pad:0;
+  --bnv-row-gap:0;
+  --bnv-row-justify:center;
+  --bnv-head-h:36px;
+  --bnv-head-pad:0 0 10px;
+  --bnv-head-justify:center;
+  --bnv-primary-w:36px;
+  --bnv-primary-h:36px;
+  --bnv-primary-pad:0;
+  --bnv-primary-justify:center;
+  --bnv-foot-align:center;
+  --bnv-text:none;
+  --bnv-ghead:none;
+  --bnv-field:none;
+  --bnv-more:none;
+  --bnv-rest:flex;
+  --bnv-head-dir:column;
+  --bnv-turn:rotate(180deg);
+}
+/* An OPENED rail: the whole menu, standing over the page until a row is picked or it is shut — the
+   way to a rail's search, and to the names of its rows. (The rail by width says the same in §4.) */
+:is(.bnv.is-rail,.rail-host .bnv).is-open{position:fixed;inset-block:0;inset-inline-start:0;z-index:60;width:min(84vw,320px);box-shadow:var(--shadow-lg)}
+
+/* ── §4 the sizes ─────────────────────────────────────────────────────────── */
+/* The app declares ONE container (`.bnv-host`, on the element that wraps the shell) and one grid
+   (`.appgrid`, whose side column is `--bnv-side`). From there: ≥840px the full menu, 600–839px the
+   rail, <600px a drawer over one pane. Nothing here names a breakpoint of the WINDOW: the menu
+   answers the space it is actually given, so the same app is right in a 940px pane, in a 2000px
+   desktop, and on a 390px phone — which is exactly what a viewport query cannot do. */
+.bnv-host{container-type:inline-size;container-name:bnav}
+.appgrid{
+  display:grid;
+  grid-template-columns:var(--bnv-side,252px) minmax(0,1fr);
+  min-width:0;
+}
+/* …and its `min-height:0` (an app may scroll inside a fixed shell) carries NO weight, so that a
+   page which scrolls can say `min-height:100dvh` of its grid wherever it likes. At one class this
+   line beat a page that said so ABOVE the block: the menu's panel ended where the content did, half
+   way down the screen. Three pages moved their two lines below the block for it; the fourth — the
+   apps screen, whose list is short for as long as it loads — never did. */
+:where(.appgrid){min-height:0}
+/* THE MENU STAYS. Where the PAGE scrolls, the menu's cell is as tall as the page and the menu left
+   with it: by the end of a long list the notifications' filters and the apps' sections were a
+   screen and a half up, over a column left empty (2026-10-09, the live office: 2360px of page). It
+   is a frame tall at the most, and holds on to the frame's top. `:where()` keeps this at one class:
+   the drawer and the opened rail — `position:fixed`, at two classes and more — still say where
+   THEY stand. */
+:where(.appgrid) > .bnv{position:sticky;inset-block-start:0;max-height:100dvh}
+/* Which column the CONTENT is in — owned here, not by each app.
+   The menu is `position:fixed` below 600px, and a fixed child is not a grid item: the browser
+   places the remaining in-flow child (the content) into COLUMN 1, which is the side column. So the
+   content inherited the menu's width — 252px on a desktop, 56/64px in the rail, and 0px once the
+   phone collapses the side column. Measured 2026-10-01 at 390x844: `.pg` was 24px wide, mailview's
+   phone score was clipping 0.0/15, and every adopter's phone layout was a sliver.
+   It survived a green map because the DESKTOP profile has a fine pointer and a static aside: there
+   the menu IS a grid item, the content auto-places into column 2, and nothing looks wrong. */
+.appgrid > :not(.bnv):not(.bnv-scrim):not(.bnv-burger):not(.bnv-drawer){
+  grid-column:2;
+  min-width:0;
+}
+/* the burger: shown only where the menu is a drawer, and it is row-sized there */
+.bnv-burger{
+  display:none;flex:none;width:44px;height:44px;padding:0;border:0;border-radius:10px;
+  background:transparent;color:inherit;align-items:center;justify-content:center;cursor:pointer;
+}
+.bnv-burger:hover{background:color-mix(in srgb, currentColor 8%, transparent)}
+.bnv-burger:focus-visible{outline:2px solid currentColor;outline-offset:-2px}
+.bnv-burger svg{width:20px;height:20px}
+.bnv-scrim{
+  position:fixed;inset:0;z-index:55;border:0;padding:0;
+  background:var(--scrim);   /* the palette's own: mixed from the menu's ink it was a WHITE veil wherever that ink is light */
+  opacity:0;visibility:hidden;transition:opacity .18s ease;
+}
+.bnv-scrim.is-open{opacity:1;visibility:visible}
+
+/* medium — the rail, chosen by container width instead of by a class */
+@container bnav (max-width:839px){
+  .appgrid{--bnv-side:56px}
+  .bnv:where(:not(.is-open)){
+    --bnv-pad:12px 10px;
+    --bnv-gap:6px;
+    --bnv-row-w:36px;
+    --bnv-row-h:36px;
+    --bnv-row-pad:0;
+    --bnv-row-gap:0;
+    --bnv-row-justify:center;
+    --bnv-head-h:36px;
+    --bnv-head-pad:0 0 10px;
+    --bnv-head-justify:center;
+    --bnv-primary-w:36px;
+    --bnv-primary-h:36px;
+    --bnv-primary-pad:0;
+    --bnv-primary-justify:center;
+    --bnv-foot-align:center;
+    --bnv-text:none;
+    --bnv-ghead:none;
+    --bnv-field:none;
+    --bnv-more:none;
+    --bnv-rest:flex;
+    --bnv-head-dir:column;
+    --bnv-turn:rotate(180deg);
+  }
+  .bnv.is-open{position:fixed;inset-block:0;inset-inline-start:0;z-index:60;width:min(84vw,320px);box-shadow:var(--shadow-lg)}
+}
+/* …and a rail somebody CHOSE takes a rail's column — where the frame is wide enough to have given the
+   menu its whole one (below that the two size classes already say). Nothing said it: the icons of a
+   chosen rail stood in a column 252px wide. */
+@container bnav (min-width:840px){
+  .appgrid:has(> .bnv.is-rail){--bnv-side:56px}
+}
+/* compact — one pane, and the menu becomes a drawer over it.
+   `:is(.bnv,.bnv.is-rail,.rail-host .bnv)` is deliberate: a rail saved on a desktop must NOT
+   survive into a phone, so this block has to out-rank the class trigger and the host class. */
+@container bnav (max-width:599px){
+  .appgrid{--bnv-side:0px}
+  .bnv-burger{display:inline-flex}
+  :is(.bnv,.bnv.is-rail,.rail-host .bnv){
+    position:fixed;inset-block:0;inset-inline-start:0;z-index:60;
+    width:min(84vw,320px);box-sizing:border-box;
+    transform:translateX(var(--bnv-off,-100%));
+    transition:transform .18s ease;
+    --bnv-pad:8px 10px;
+    --bnv-gap:2px;
+    --bnv-row-w:100%;
+    --bnv-row-h:44px;
+    --bnv-row-pad:10px 8px;
+    --bnv-row-gap:8px;
+    --bnv-row-justify:flex-start;
+    --bnv-head-h:52px;
+    --bnv-head-pad:4px 6px 10px;
+    --bnv-head-justify:flex-start;
+    --bnv-primary-w:100%;
+    --bnv-primary-h:44px;
+    --bnv-primary-pad:10px 12px;
+    --bnv-primary-justify:flex-start;
+    --bnv-foot-align:stretch;
+    --bnv-text:block;
+    --bnv-ghead:flex;
+    --bnv-field:block;
+    --bnv-more:block;
+    --bnv-rest:none;
+    --bnv-head-dir:row;
+    --bnv-turn:none;
+  }
+  /* The shadow is the OPEN drawer's. On the parked one it still painted: a 40px grey band down the
+     screen edge, over the page, in every app that carries this menu (seen in five, 2026-10-06). */
+  :is(.bnv,.bnv.is-rail,.rail-host .bnv).is-open{
+    transform:none;
+    box-shadow:var(--shadow-lg);
+  }
+}
+/* in RTL the drawer parks on the other side — the only direction-dependent line in this file */
+:is([dir="rtl"],:dir(rtl)) .bnv{--bnv-off:100%}
+
+/* touch: the same rows, sized for a finger. bina keeps 36px on every pointer; a phone needs 44. */
+@media (pointer:coarse){
+  .bnv-item{min-height:44px;padding:10px 8px}
+  .bnv-primary{min-height:44px}
+  .bnv-search{min-height:44px}
+  .bnv-act{width:36px;height:36px}
+  :is(.bnv.is-rail,.rail-host .bnv):where(:not(.is-open)) .bnv-item{width:44px;height:44px;min-height:44px}
+  /* THE RAIL IS A RAIL ONLY IN THE RAIL RANGE. This rule used to read `(max-width:839px)`, which
+     also covers the compact range — and because it comes AFTER the compact block (§4), the same
+     specificity meant it won there: on any touch device narrower than 600px `--bnv-side` was 64px
+     instead of 0, so the drawer opened over a content column 64px wide.
+     Measured 2026-10-01 on the office's own capture at 390x844 (`is_mobile`/`has_touch`, i.e. the
+     profile the phone map uses): `.pg` came out 64px wide and mailview scored clipping 0.0/15 —
+     "text cut with no way to reach it" was not the app's layout, it was this line. The desktop
+     capture never saw it (fine pointer), which is why it survived a green map on both profiles. */
+  @container bnav (min-width:600px) and (max-width:839px){
+    .appgrid{--bnv-side:64px}
+  }
+  @container bnav (min-width:840px){
+    .appgrid:has(> .bnv.is-rail){--bnv-side:64px}
+  }
+}
+/* a SHORT panel — the menu of a window dragged small. Its head, its button and its foot are most
+   of 224px, and the rows were left a sliver to scroll in (measured 2026-10-07 in the drive's
+   menu: 20px for 416px of rows). There the PANEL scrolls, rows and all. */
+@media (max-height:399px){
+  .bnv{overflow-y:auto;overscroll-behavior:contain}
+  .bnv-scroll{flex:none;overflow:visible}
+  /* …and the page's own menu buttons are a cursor's size there, not a finger's: 44px of a head is a
+     fifth of such a window (a touch screen keeps the finger's size — it is not this window). */
+  @media (pointer:fine){.bnv-burger{width:32px;height:32px;border-radius:8px}}
+}
+@media (prefers-reduced-motion:reduce){
+  .bnv,.bnv *,.bnv-scrim{transition:none!important;animation:none!important}
+}
+/* @bina-nav:end */
+
+/* Reduced motion: keep functional feedback, drop anything long or looping. */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;
+    transition-duration:.05ms!important;scroll-behavior:auto!important}
+}
+/* B6 a11y — skip to content. Parked off-screen rather than display:none, because a hidden element
+   is not focusable and a skip link that cannot receive focus is decoration. */
+.skiplink{
+  position:fixed; top:-64px; inset-inline-start:12px; z-index:3000;
+  background:var(--accent); color:var(--accent-ink); padding:10px 18px; border-radius:var(--radius-sm);
+  font-weight:700; text-decoration:none; box-shadow:var(--elev-3);
+  transition:top var(--dur-fast) var(--ease-standard);
+}
+.skiplink:focus{top:12px; outline:2px solid var(--accent-ink); outline-offset:2px}
+#content:focus{outline:none}   /* focus moves here for screen readers; the ring would be noise */
+
+/* screen-reader-only text */
+.visually-hidden{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
+  clip:rect(0 0 0 0);white-space:nowrap;border:0}
+
+/* (A10 — the keyboard's focus ring — is the palette block's now, for every screen: it was said here
+   for the shell alone, and it also squared a focused part's corners to 4px.) */
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font-size:14px}
+.num{font-variant-numeric:tabular-nums;direction:ltr;unicode-bidi:isolate}
+/* C16 — the SHELL owns the viewport; every region takes the height it is given.
+   100dvh, not 100vh: on mobile the browser chrome counts toward vh, so the shell ends up
+   taller than the visible area and scrolls behind the URL bar. */
+#app{display:grid;grid-template-columns:238px 1fr;height:100dvh;overflow:hidden}
+
+/* sidebar — the shared side menu (platform-base/bina-ui/bina-nav.css, gate G27).
+   The shell only RE-POINTS the component's tokens at its own palette; every dimension, the
+   active state and the rail geometry live in the component, so this file can never drift
+   away from the other apps' menus again. */
+/* The shell used to re-point the component at its own dark-green palette (--side). That made
+   the console's menu a different product from the apps' menus — visible the moment two of them
+   sit side by side. The menu now uses the component's own tokens in every app, light and dark
+   alike; --side survives only as the mobile TAB BAR's fill, which is a different component. */
+.side{--bnv-bg:var(--surface-2);--bnv-ink:var(--ink);--bnv-ink-2:var(--muted);--bnv-line:var(--line)}
+.brand{display:flex;align-items:center;gap:10px}
+/* the i0 mark (digital-office/brand/io, version 7): tile r22 %, one cap radius (0.27 × stroke) on
+   every stroke end. ONE colourway, in the office's palette — the olive tile, its ink for the
+   drawing, lime on the head and the apps — because the two places that carry it (this menu, the
+   desktop's bar) are the same surface now, and an olive tile stands on it light or dark. */
+.brand .logo{width:32px;height:32px;flex:none;display:block}
+.logo svg,.dk-logo svg{display:block;width:100%;height:100%}
+.logo .t,.dk-logo .t{fill:var(--olive)} .logo .m,.dk-logo .m{fill:var(--olive-ink)} .logo .a,.dk-logo .a{fill:var(--lime)}
+.brand b{font-size:18px;letter-spacing:.01em}
+.brand small{display:block;color:var(--bnv-ink-2);font-size:11px;font-weight:600;line-height:1.35}
+/* ── modern stroke icons (SVG, monochrome, inherit currentColor) — replaces emoji ── */
+.ic-svg{display:block;flex:none}
+.bnv-ic .ic-svg{width:18px;height:18px}
+.pal-ic{display:inline-flex;align-items:center;justify-content:center}
+.pal-ic .ic-svg{width:19px;height:19px}
+.bn-ic{display:inline-flex;align-items:center;justify-content:center}
+.bn-ic .ic-svg{width:20px;height:20px}
+.card .ic{display:inline-flex;color:var(--accent-d)}
+.card .ic .ic-svg{width:25px;height:25px}
+.search-btn .ic-svg{width:15px;height:15px}
+.pill .ic-svg{width:12px;height:12px;vertical-align:-2px;margin-inline-end:2px}
+/* A2 — the icons that were characters. They inherit the button's colour and size like every other
+   one, instead of arriving at whatever weight the reader's font stack picked. */
+#railToggle .ic-svg{width:18px;height:18px}
+.modal-h .ghost .ic-svg,.cw-h .ghost .ic-svg{width:16px;height:16px}
+.modal-h .ghost,.cw-h .ghost{display:grid;place-items:center;background:transparent;border:1px solid var(--line);border-radius:8px;width:30px;height:30px;cursor:pointer;color:var(--muted);padding:0}
+.modal-h .ghost:hover,.cw-h .ghost:hover{border-color:var(--accent);color:var(--accent-d)}
+/* apps catalog: external-tool indicator on a launch card */
+.card .ext{display:inline-flex;align-items:center;color:var(--muted);margin-inline-start:5px;vertical-align:middle}
+.card .ext .ic-svg{width:13px;height:13px}
+.card.tool .ic{color:var(--muted)}
+.bnv-foot .user{font-size:12.5px;color:var(--bnv-ink-2)}
+.bnv-foot .user b{color:var(--bnv-ink)}
+
+/* main */
+.main{display:flex;flex-direction:column;min-width:0;overflow:hidden}
+/* ONE height. The bar took the height of its tallest child, so it was 62px on most screens and
+   taller on the two whose app puts a two-line chip in it (the Drive's account, the computer
+   picker) — the whole page jumped by a few pixels on the way in and out of them. */
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;height:62px;box-sizing:border-box;padding:0 22px;border-bottom:1px solid var(--line);background:var(--surface)}
+/* the rail's list is longer than most screens: its last rows fade, so a cut row reads as "more" —
+   and the row a person is ON is brought to rest above the fade, not inside it (`scroll-padding`:
+   the current app's row sat half faded at the list's edge, reading as the one that is NOT chosen) */
+#nav.bnv-scroll{-webkit-mask-image:linear-gradient(var(--ink) calc(100% - 26px),transparent);mask-image:linear-gradient(var(--ink) calc(100% - 26px),transparent);padding-bottom:22px;scroll-padding-block-end:30px}
+.topbar h1{font-size:18px;margin:0}
+/* a linked office's tile: the office, beside the title — ink on the page, so it is not a state colour */
+.topbar h1{display:flex;align-items:center;gap:9px;min-width:0}
+.vt-office{font-size:12px;font-weight:700;line-height:20px;padding:1px 10px;border-radius:999px;
+  background:var(--ink);color:var(--surface);white-space:nowrap}
+.vt-office.is-off{background:var(--surface-2);color:var(--muted);box-shadow:inset 0 0 0 1px var(--line)}
+/* ── A LINKED OFFICE'S MARK (flt-004) ────────────────────────────────────────────────────────────
+   The link carries NAMES — `remote.mark: {color, animal}` — and these are the two halves drawn from
+   them. `--office-hue` is set by the palette's own rules (`[data-office-hue="lime"]{--office-hue:
+   var(--lime)}`, stamped into this file by G27), so nothing here names a colour.
+   OFFLINE IS NOT AN OFFICE COLOUR: an office that stopped answering keeps its hue — the mark is an
+   identity, never a health state — and the quiet mark stays the failure colour the shell already
+   uses, which is why the hue rules are scoped away from `.is-offline` / `.is-off`.
+   The chip takes the hue as a DOT and not as its text: it is an ink-on-surface pill, and a hue as
+   text on it is a contrast lottery; a dot carries the colour and leaves the label legible. */
+.bnv-item:not(.is-offline) .bnv-meta[data-office-hue]{color:var(--office-hue)}
+.vt-office[data-office-hue]::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;
+  background:var(--office-hue);margin-inline-end:6px;vertical-align:1px}
+.vt-office[data-office-hue].is-off::before{background:var(--muted)}
+.vt-animal{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;
+  margin-inline-end:5px;vertical-align:-2px}
+.vt-animal svg{width:15px;height:15px;display:block}
+/* the same animal, inline in a LABEL rather than in the title bar (the launcher tile's office line,
+   which a phone also shows): a glyph of the one icon set, sized to the text it sits beside. */
+.office-animal{display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;
+  margin-inline-end:4px;vertical-align:-2px}
+.office-animal svg{width:13px;height:13px;display:block}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700}
+.pill.ok{background:var(--accent-soft);color:var(--accent-d)}
+.pill.warn{background:var(--warn-soft);color:var(--warn)}
+/* waits for a PERSON (the product's legend: violet) — amber is something running */
+.pill.need{background:color-mix(in srgb, var(--violet) 12%, var(--surface));color:var(--violet)}
+.content{flex:1;overflow:auto;padding:22px}
+
+/* the launcher block (.hero/.kpi/.kcard/.grid/.card/.sectlbl) went with the "לוח בקרה" screen */
+
+/* embedded module */
+.embed{position:absolute;inset:0}
+.embed iframe{width:100%;height:100%;border:0}
+.embedwrap{position:relative;flex:1;min-height:0}
+
+/* ── C3/C15 · the account switcher: one chip, in the top bar ──────────────────────
+   What this replaces: a full-width band (#acctBar) pinned above every embedded app. Its entire job
+   was to hold one control, and it charged ~56px of vertical height in every app, forever, to do it.
+   The top bar already had the room. Everything the band spelled out inline — connect, last-checked,
+   refresh, the service's reason — now lives in the menu, where it can be a sentence instead of an
+   abbreviation squeezed into a row. */
+.tb-acct{display:flex;align-items:center;flex:none}
+/* The chip is the tallest thing in the top bar. It used to decide where the band ends — pinned
+   here at 42px, so the band was 70px while a chip was shown and 62px on every other screen, and
+   the content began in two places. The band has ONE height now (.topbar), which the chip fits
+   inside; its own box stays pinned so one line or two, avatar or not, never moves anything. */
+.tb-acct{display:flex;align-items:center;min-height:42px}
+.acct-switch{position:relative;min-width:0}
+.acct-btn{display:flex;align-items:center;gap:7px;background:var(--bg);border:1px solid var(--line);border-radius:var(--radius-pill);padding:5px 10px;cursor:pointer;font-family:inherit;font-size:13px;color:var(--ink);max-width:240px}
+.acct-btn:hover{border-color:var(--accent)}
+.acct-btn[disabled]{cursor:default;opacity:.75}
+.acct-btn.bad{border-color:var(--danger);color:var(--danger)}
+.acct-btn .dot{width:8px;height:8px}
+.acct-tx{min-width:0;display:flex;flex-direction:column;line-height:1.25;text-align:start}
+.acct-lbl{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12.5px}
+.acct-lbl.muted{font-weight:600;color:var(--muted)}
+.acct-hint{color:var(--muted);font-size:10.5px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.acct-chev{display:inline-flex;color:var(--muted);flex:none}
+.acct-chev .ic-svg{width:14px;height:14px}
+/* opens from the END of the bar (screen-left in RTL), where the chip sits */
+.acct-menu{position:absolute;inset-inline-end:0;inset-inline-start:auto;top:calc(100% + 8px);min-width:290px;max-width:min(340px,calc(100vw - 28px));background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-md);box-shadow:var(--elev-3);padding:6px;z-index:40}
+.acct-sep{height:1px;background:var(--line);margin:6px 4px}
+.acct-act{display:flex;align-items:center;gap:9px;width:100%;padding:9px 10px;border:none;border-radius:var(--radius-sm);background:transparent;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;color:var(--ink);text-align:start}
+.acct-act:hover{background:var(--surface-2)}
+.acct-act.add{color:var(--accent-d)}
+.acct-act.add:hover{background:var(--accent-soft)}
+.acct-plus{flex:none;width:24px;height:24px;border-radius:50%;border:1.5px dashed var(--accent);display:inline-grid;place-items:center;color:var(--accent-d)}
+.acct-plus .ic-svg{width:12px;height:12px}
+.acct-badge{margin-inline-start:auto;min-width:18px;height:18px;border-radius:9px;display:inline-grid;place-items:center;font-size:11px;font-weight:800;color:var(--surface)}
+.acct-badge.needs_action{background:var(--warn)}.acct-badge.degraded{background:var(--danger)}
+.acct-badge .ic-svg{width:11px;height:11px;stroke-width:3}   /* the «!» is drawn (mIcon("bang")), in the badge's own ink */
+.acct-foot{display:flex;align-items:center;gap:8px;padding:8px 10px 4px;border-top:1px solid var(--line);margin-top:4px}
+.acct-recheck{margin-inline-start:auto;background:transparent;border:1px solid var(--line);border-radius:7px;padding:3px 10px;font-family:inherit;font-size:11.5px;cursor:pointer;color:var(--accent-d)}
+.acct-recheck:hover{border-color:var(--accent)}
+
+/* ── B6 · the theme switcher's own rules are gone with the control ──
+   The palette button and its menu were removed from the top bar on the owner's request
+   (2026-09-25; see index.html + app.js). The theme PALETTES stay — they are the generated token
+   block at the top of this file, and app.js still applies a saved `do-theme` on boot. */
+
+/* ── C4 · connection-health panel ── */
+.hlist{display:flex;flex-direction:column;gap:10px;max-height:52vh;overflow:auto;margin-bottom:12px}
+.hc{border:1px solid var(--line);border-radius:var(--radius-md);padding:12px 14px}
+.hc.on{border-color:var(--accent);background:var(--surface-2)}
+.hc-h{display:flex;align-items:center;gap:10px}
+.hc-tx{flex:1;min-width:0}
+.hc-tx b{display:block;font-size:14px}
+.hc-tx small{display:block;color:var(--muted);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hc-proto{color:var(--muted);font-size:11.5px;margin-top:6px}
+.hc-reason{font-size:12.5px;line-height:1.5;margin-top:8px}
+.hc-reason.bad{color:var(--warn);font-weight:600}
+.hc-meta{display:flex;align-items:center;gap:5px;margin-top:9px;color:var(--muted);font-size:11px}
+.hc-meta .ic-svg{width:12px;height:12px;flex:none}
+.acct-item{display:flex;align-items:center;gap:4px;border-radius:8px}
+.acct-item:hover{background:var(--accent-soft)}
+.acct-pick{width:100%;flex:1;min-width:0;display:flex;align-items:center;gap:8px;background:transparent;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-size:13px;color:inherit;padding:8px 10px;text-align:start}
+.acct-pick:hover{background:var(--accent-soft)}
+/* the three facts, stacked — see the note at the call site */
+.acct-tx2{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.acct-l1{display:flex;align-items:center;gap:8px;min-width:0}
+.acct-l1 b{font-size:13px;font-weight:700;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.acct-proto{color:var(--muted);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.acct-rm{width:28px;height:28px;flex:none;color:var(--muted);border-color:transparent}
+.acct-rm:hover{color:var(--danger);border-color:var(--danger);background:var(--danger-soft)}
+.acct-rm .ic-svg{width:14px;height:14px}
+.acct-empty{padding:10px 12px;color:var(--muted);font-size:12.5px}
+/* The service's own reason. In the band this had to be one ellipsized line or it widened the row;
+   in the menu it has a column to itself, so it WRAPS and is read in full — which is the point of a
+   diagnostic, and was the band's real cost: the sentence that explains the failure was the first
+   thing truncated. */
+.acct-warn{color:var(--warn);font-size:12px;font-weight:600;line-height:1.5;padding:8px 10px 4px}
+.acct-when{display:inline-flex;align-items:center;gap:4px;color:var(--muted);font-size:11.5px;white-space:nowrap}
+.acct-when .ic-svg{width:12px;height:12px}
+
+/* ── live state chip (§4b): one vocabulary wherever a connection's state is shown ── */
+.chip{display:inline-flex;align-items:center;gap:5px;flex:none;padding:3px 9px;border-radius:999px;font-size:11.5px;font-weight:700;white-space:nowrap}
+.chip.healthy{background:var(--accent-soft);color:var(--accent-d)}
+.chip.checking{background:var(--info-soft);color:var(--info)}
+.chip.needs_action{background:var(--warn-soft);color:var(--warn)}
+.chip.degraded{background:var(--danger-soft);color:var(--danger)}
+/* not a state of health: the thing is not there to have one (the same grey a `.dot.unset` is) */
+.chip.unset{background:var(--surface-2);color:var(--muted);box-shadow:inset 0 0 0 1px var(--line)}
+.dot.checking{background:var(--blue);animation:dotpulse 1.1s ease-in-out infinite}
+@keyframes dotpulse{50%{opacity:.2}}
+@media (prefers-reduced-motion:reduce){.dot.checking{animation:none}}
+
+/* ── guided connect wizard (§4b): provider → method → provide → verify → done ── */
+.modal.wide{width:min(600px,94vw);max-height:88vh;overflow:auto}
+.cw-steps{display:flex;flex-wrap:wrap;gap:5px;margin:2px 0 14px}
+.cw-step{padding:3px 9px;border-radius:999px;background:var(--bg);border:1px solid var(--line);color:var(--muted);font-size:11px;white-space:nowrap}
+.cw-step.cur{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-d);font-weight:700}
+.cw-step.done{color:var(--accent-d);border-color:var(--accent-soft)}
+.cw-body .sub{color:var(--muted);font-size:12.5px;margin-bottom:12px}
+.cw-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}
+.cw-card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;box-shadow:var(--shadow);cursor:pointer;text-align:start;font-family:inherit;color:inherit;transition:transform .08s,box-shadow .12s,border-color .12s}
+.cw-card:hover{transform:translateY(-2px);border-color:var(--accent);box-shadow:var(--elev-2)}
+.cw-ic{color:var(--accent-d)}
+.cw-ic .ic-svg{width:24px;height:24px}
+.cw-t{font-weight:700;font-size:14.5px;margin-top:8px}
+.cw-d{color:var(--muted);font-size:12px;margin-top:4px;line-height:1.45}
+.cw-ways{display:inline-block;margin-top:8px;color:var(--blue);font-size:11px;font-weight:700}
+.cw-card .pill{margin-top:8px}
+.cw-m{display:block;width:100%;text-align:start;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:8px;cursor:pointer;font-family:inherit;color:inherit}
+.cw-m:hover{border-color:var(--accent);background:var(--accent-soft)}
+.cw-m-h{display:flex;align-items:center;gap:8px;font-size:14px}
+.cw-m-ic{display:inline-flex;color:var(--accent-d)}
+.cw-m-ic .ic-svg{width:17px;height:17px}
+.cw-m-d{color:var(--muted);font-size:12px;line-height:1.5;margin-top:5px}
+.cw-m-d b{color:var(--ink);font-weight:700}
+.cw-m-need{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+.cw-m-need span{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:2px 7px;font-size:11px;color:var(--muted)}
+.cw-msg{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:11px 13px;font-size:12.5px;line-height:1.6;margin-bottom:10px}
+.cw-msg .ic-svg{width:14px;height:14px;display:inline-block;vertical-align:-3px;margin-inline-end:4px}
+.cw-msg.soft{background:transparent;color:var(--muted)}
+.cw-msg.ok{background:var(--ok-soft);border-color:var(--accent);color:var(--accent-d)}
+.cw-msg.err{background:var(--danger-soft);border-color:var(--danger);color:var(--danger)}
+.cw-msg.wait{background:var(--info-soft);border-color:var(--info);color:var(--info)}
+.cw-msg a{color:var(--accent-d)}
+.cw-ol,.cw-ul{margin:6px 0 0;padding-inline-start:18px}
+.cw-ol li,.cw-ul li{margin-bottom:3px}
+.cw-form{display:grid;gap:12px;margin-bottom:12px}
+.cw-field{display:flex;flex-direction:column;gap:4px}
+.cw-f-l{font-size:12.5px;font-weight:700}
+.cw-f-h{font-size:11.5px;color:var(--muted);line-height:1.45}
+.cw-field input{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:9px 11px;font-family:inherit;font-size:13px;color:var(--ink);margin-top:2px}
+.cw-field input:focus{outline:2px solid var(--accent);border-color:transparent}
+.cw-field input:disabled{background:var(--bg);color:var(--muted)}
+.cw-check{display:flex;align-items:flex-start;gap:9px;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:11px 13px;cursor:pointer;margin-bottom:10px}
+.cw-check input{margin-top:3px;flex:none}
+.cw-check b{font-size:13px}
+.cw-check small{display:block;color:var(--muted);font-size:11.5px;line-height:1.5;margin-top:2px}
+.cw-foot{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
+.cw-foot .grow{margin-inline-start:auto}
+.cw-note{color:var(--muted);font-size:11.5px}
+.cw-foot .btn .ic-svg{width:13px;height:13px;vertical-align:-2px;margin-inline-end:3px}
+.cw-danger:hover{border-color:var(--danger);color:var(--danger);background:var(--danger-soft)}
+.cw-file-load{align-self:flex-start;margin-top:6px}
+.cw-file-input{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+
+/* the launch-card block (.launch/.launch-card/.launch-ic/.launch-note/.btn.lg) went with
+   launchCard() — every compiled module embeds, so the external-tab card was unreachable */
+
+/* the wizard's card — the first-run page (install.html) and the shell's own "no screens" card share it */
+.wizard{max-width:760px;margin-inline:auto}
+.wcard{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px 20px;box-shadow:var(--shadow);margin-bottom:16px}
+.wcard h3{margin:0 0 4px;font-size:16px}
+.wcard .sub{color:var(--muted);font-size:12.5px;margin-bottom:12px}
+.dot{width:9px;height:9px;border-radius:50%;flex:none}
+.dot.healthy{background:var(--ok)}.dot.needs_action{background:var(--warn)}.dot.missing,.dot.degraded{background:var(--danger)}.dot.unset{background:var(--muted)}
+.btn{background:var(--accent);color:var(--accent-ink);font-weight:700;border:none;border-radius:8px;padding:8px 14px;cursor:pointer;font-family:inherit;font-size:13px;text-decoration:none}
+.btn:hover{background:var(--accent-d)}
+.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--ink)}
+.btn.sm{padding:5px 10px;font-size:12px}
+.modal-ov{position:fixed;inset:0;background:var(--scrim);display:flex;align-items:center;justify-content:center;z-index:50}
+.modal{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px;width:min(360px,92vw);box-shadow:var(--elev-4)}
+.modal-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.modal-h h3{margin:0;font-size:16px}
+/* the page's own sign-in ran out (app.js signedOut): over everything, the desktop's layers included */
+.modal-ov.signed-out{z-index:10000}
+.signed-out .modal{display:grid;gap:12px}
+.signed-out .modal-h{margin:0}
+.hidden{display:none!important}
+.spin{color:var(--muted);padding:30px;text-align:center}
+
+/* ── nav upgrades: topbar controls, collapsible rail, ⌘K palette, responsive ── */
+.tb-left{display:flex;align-items:center;gap:10px;min-width:0}
+.tb-right{display:flex;align-items:center;gap:14px}
+.icon-btn{background:transparent;border:1px solid var(--line);border-radius:9px;width:34px;height:34px;cursor:pointer;font-size:15px;color:var(--ink);display:grid;place-items:center;flex:none}
+.icon-btn:hover{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-d)}
+.search-btn{display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:7px 12px;cursor:pointer;color:var(--muted);font-family:inherit;font-size:13px}
+.search-btn:hover{border-color:var(--accent);color:var(--accent-d)}
+.search-btn .kbd{font-size:11px;background:var(--surface);border:1px solid var(--line);border-radius:5px;padding:1px 6px}
+
+/* collapsed icon rail (manual toggle) */
+/* the rail is `.rail-host` on the shell; the component owns what a rail looks like */
+#app.rail-collapsed{grid-template-columns:56px 1fr}
+
+/* ⌘K command palette */
+.pal-ov{position:fixed;inset:0;background:var(--scrim);display:flex;justify-content:center;align-items:flex-start;padding-top:12vh;z-index:120}
+.pal{background:var(--surface);border:1px solid var(--line);border-radius:14px;width:min(560px,92vw);box-shadow:var(--elev-4);overflow:hidden}
+.pal-input{width:100%;border:none;border-bottom:1px solid var(--line);padding:16px 18px;font-family:inherit;font-size:15px;color:var(--ink);outline:none;background:transparent}
+.pal-input:focus{border-bottom-color:var(--accent)}   /* a ring would be cut by the box on three sides: the field's own line says it has the keyboard */
+.pal-list{max-height:52vh;overflow:auto;padding:6px}
+.pal-item{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:9px;cursor:pointer}
+.pal-item.sel{background:var(--accent-soft)}
+.pal-ic{font-size:18px;width:24px;text-align:center}
+.pal-t{font-weight:700;font-size:14px}
+.pal-d{color:var(--muted);font-size:12px;margin-inline-start:auto;text-align:end;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:45%}
+.pal-empty{padding:20px;text-align:center;color:var(--muted)}
+
+/* ── a REMOTE app: ONE mark, every surface of the shell ─────────────────────────────────────────
+   An app that runs on a LINKED office (ai/context/dgo-remote-apps.md §4) is not copied, installed or
+   disabled here — it runs where it runs, and it appears in the rail, the launcher, the phone
+   launcher, the phone's recent-apps cards and the desktop dock exactly like a local one. The whole
+   of what says "not this machine" is a corner bracket in the logo's apps-line colour, and the
+   office's own name in the tooltip / beside the name.
+
+   The rail's copy of this rule lives in the side-menu COMPONENT (`bina-nav.css`, `.bnv-item.is-remote`)
+   because a rail the component draws is a rail the component marks; these are the shell's own
+   surfaces, in one rule rather than five. `is-offline` is what the office last MEASURED about the
+   link (the registry's `remote.ok`, see remoteInfo in app.js) — and it never blanks the tile: it
+   says which office is not answering, in Hebrew. */
+:is(.htile,.pal-item,.bottomnav .bn-item,.sw-card).is-remote{position:relative}
+:is(.htile,.pal-item,.bottomnav .bn-item,.sw-card).is-remote::after{
+  content:"";position:absolute;inset-block-start:4px;inset-inline-start:4px;
+  width:7px;height:7px;pointer-events:none;
+  border-block-start:2px solid var(--lime-d);
+  border-inline-start:2px solid var(--lime-d);
+  border-start-start-radius:3px;
+}
+.bottomnav .bn-item.is-remote::after{border-color:var(--lime)}   /* the tab bar is a fill: on it, the hue itself */
+:is(.htile,.pal-item,.bottomnav .bn-item,.sw-card).is-remote.is-offline::after{border-color:var(--muted)}
+/* THE OFFICE'S OWN COLOUR, BY NAME (flt-004). The bracket above says "not this machine"; this says
+   WHICH other machine — the hue the office publishes as a NAME (`remote.mark.color`), painted by the
+   palette's own `[data-office-hue="…"]` rules so nothing here names a colour. One rule for every
+   shell surface that carries the attribute (the launcher tile, the palette row, the phone tab bar,
+   the switcher card). OFFLINE IS NOT AN OFFICE COLOUR and keeps the muted bracket it already had:
+   the mark is an identity, never a health state — an office that stopped answering still has one. */
+:is(.htile,.pal-item,.bottomnav .bn-item,.sw-card)[data-office-hue]::after{border-color:var(--office-hue)}
+/* the office's name under a phone tile — the second half of "two tiles for one alias", and the
+   line that carries "… לא זמינה כרגע" when that office is not answering */
+.htile-office{font-size:10.5px;line-height:13px;font-weight:600;color:var(--muted);
+              max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.htile-office.off{color:var(--danger);white-space:normal;text-align:center}
+.htile.is-offline :is(.htile-ic,.htile-nm){opacity:.72}
+
+/* bottom tab bar — mobile only */
+.bottomnav{display:none}
+
+
+/* tablet: auto-collapse the rail to an icon strip for more content width */
+@media (max-width:1024px) and (min-width:641px){
+  #app{grid-template-columns:56px 1fr}
+  #railToggle{display:none}
+}
+
+/* ── open apps (phone) ───────────────────────────────────────────────────────────
+   Cards, not windows: a phone switches between apps by looking at them. The list is MRU and
+   each card carries the app's own icon and name — the same two things its tile has, so the
+   gesture "I was just in the thing with the envelope" works. */
+.bn-badge{position:absolute;transform:translate(10px,-8px);min-width:15px;height:15px;padding:0 4px;
+          border-radius:999px;background:var(--lime);color:var(--lime-ink);font-size:10px;font-weight:700;
+          line-height:15px;text-align:center;display:none}   /* lime: the bar it sits on is the accent itself */
+.bn-badge.on{display:block}
+.bottomnav .bn-item{position:relative}
+.switcher{position:fixed;inset:0;z-index:140;background:var(--scrim);
+          display:flex;flex-direction:column;justify-content:flex-end;backdrop-filter:blur(2px)}
+/* the switcher rises from the tab bar, so what is written on its scrim is the bar's ink */
+.sw-head{display:flex;align-items:center;justify-content:space-between;gap:12px;
+         padding:16px 18px 8px;color:var(--side-ink);font-size:15px}
+.sw-close{background:var(--surface);border:0;color:var(--ink);width:32px;height:32px;border-radius:50%;
+          cursor:pointer;display:grid;place-items:center}
+.sw-close .ic-svg{width:16px;height:16px}
+.sw-list{display:flex;gap:12px;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;
+         max-height:52vh;padding:8px 16px max(20px, env(safe-area-inset-bottom, 0px))}
+.sw-card{position:relative;flex:none;width:min(62vw,230px);scroll-snap-align:center;
+         background:var(--surface);border:1px solid var(--line);border-radius:18px;
+         box-shadow:var(--elev-4);overflow:hidden}
+.sw-open{display:flex;flex-direction:column;align-items:center;gap:8px;width:100%;
+         padding:22px 14px 18px;background:none;border:0;cursor:pointer;color:var(--ink)}
+.sw-ic{width:30px;height:30px;display:grid;place-items:center;color:var(--accent-d)}
+.sw-ic .ic-svg{width:30px;height:30px}
+.sw-nm{font-size:13px;font-weight:700;text-align:center;max-width:100%;overflow:hidden;
+       text-overflow:ellipsis;white-space:nowrap}
+.sw-x{position:absolute;top:6px;inset-inline-start:6px;width:26px;height:26px;border-radius:50%;
+      border:0;background:var(--surface-2);color:var(--muted);cursor:pointer;display:grid;place-items:center}
+.sw-x .ic-svg{width:13px;height:13px}
+
+/* ── the phone launcher ──────────────────────────────────────────────────────────
+   The rail is hidden below 640px, and a bottom bar of four items cannot reach sixteen apps.
+   This is the screen that can: every installed module, grouped the way the rail groups them,
+   built from the compiled registry so a new app appears without an edit here.
+   It renders ONLY in phone mode (route() decides); on a desktop the rail is still the launcher. */
+/* @card:start */
+/* the card for a tile that is not shown here (sign-in needed · opened at an address with no names
+   under it · the linked office did not answer · the app answered with no screen): one object, in
+   the middle of where the app would be. ONE card: the shell draws it in its own content
+   (app.js: externalNotice), and the console answers with it INSIDE the frame when an app or a
+   linked office has no page to give (app.py: _card, which inlines this block and the palette —
+   it had rules of its own, and the two stood side by side in one menu as two designs). */
+.xn{display:grid;place-items:center;min-height:100%;padding:24px 0}
+.xn,.xn-card,.xn-ic{box-sizing:border-box}      /* the shell's reset, said here: the frame's page has none */
+.xn-card{width:min(460px,100%);background:var(--surface);border:1px solid var(--line);border-radius:16px;
+  box-shadow:var(--shadow);padding:26px 26px 24px;text-align:center}
+.xn-ic{display:inline-grid;place-items:center;width:44px;height:44px;border-radius:12px;background:var(--surface-2);
+  border:1px solid var(--line);color:var(--muted)}
+.xn-ic .ic-svg{width:22px;height:22px}
+.xn-card h2{margin:12px 0 2px;font-size:16px;font-weight:800}
+.xn-sub{color:var(--muted);font-size:12.5px;font-weight:600}
+.xn-card p{margin:12px 0 0;font-size:13px;line-height:1.65;color:var(--ink)}
+.xn-card .btn{margin-top:16px}
+.xn-acts{display:flex;flex-wrap:wrap;gap:8px}
+/* what was actually answered, as it was, one click away */
+.xn-card details{margin-top:12px;color:var(--muted);font-size:12.5px}
+.xn-card summary{cursor:pointer}
+.xn-card pre{margin:6px 0 0;white-space:pre-wrap;word-break:break-word;direction:ltr;text-align:start;
+  font:12px ui-monospace,Menlo,Consolas,monospace;color:var(--ink)}
+/* …as a page of its own, in the frame: the shell's ground and type around it */
+html[data-card],html[data-card] body{height:100%}
+html[data-card] body{margin:0;padding:0 16px;box-sizing:border-box;background:var(--bg);color:var(--ink);
+  font-family:var(--font);font-size:14px}
+/* @card:end */
+.home{display:flex;flex-direction:column;gap:14px;padding:4px 0 8px}
+.home-head{display:flex;flex-direction:column;gap:2px;padding:6px 2px 2px}
+.home-clock{font-size:34px;line-height:40px;font-weight:300;letter-spacing:-.02em;color:var(--ink)}
+.home-brand b{display:block;font-size:15px;font-weight:700;color:var(--ink)}
+.home-brand small{color:var(--muted);font-size:12px}
+.home-group{color:var(--muted);font-size:11px;font-weight:700;letter-spacing:.06em;
+            margin:6px 2px -6px;text-transform:uppercase}
+.home-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:10px}
+.htile{display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:7px;
+       padding:14px 6px 12px;border-radius:16px;text-decoration:none;color:var(--ink);
+       background:var(--surface);border:1px solid var(--line);min-width:0;
+       transition:background .12s,border-color .12s}
+.htile:active{background:var(--surface-2)}
+.htile-ic{width:26px;height:26px;display:grid;place-items:center;color:var(--accent-d);flex:none}
+.htile-ic .ic-svg{width:26px;height:26px}
+.htile-nm{font-size:11.5px;line-height:15px;font-weight:600;text-align:center;min-width:0;
+          max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media (pointer:coarse){ .htile{min-height:92px} }
+
+/* phone: hide the rail, show a bottom tab bar */
+@media (max-width:640px){
+  #app{grid-template-columns:1fr}
+  .side,#railToggle{display:none}
+  .content{padding:16px 14px 76px}
+  .embed{inset:0 0 60px 0}
+  /* …and the reservation goes with the bar it reserves for. Full screen hides the tab bar
+     (desktop.css: html.bare .bottomnav), so without this line that mode reclaims only the top bar's
+     58px and leaves a 60px hole under the app. Measured in the simulation before it was written —
+     digital-office/sim/console-fullscreen-mock.src.html, which is what a mock is for. */
+  html.bare .embed{inset:0}
+  .cw-grid{grid-template-columns:1fr}
+  /* phone reclaims the band, chip included */
+  .topbar{height:58px;padding:0 14px}
+  .tb-acct{min-height:0}
+  .topbar h1{font-size:16px}
+  .search-btn>span:first-child,.search-btn .kbd{display:none}
+  .search-btn{padding:7px 10px}
+  .bottomnav{display:flex;position:fixed;bottom:0;inset-inline:0;height:60px;background:var(--side);border-top:1px solid var(--side-line);z-index:60;justify-content:space-around;align-items:stretch}
+  .bn-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:var(--side-mut);text-decoration:none;font-size:11.5px;cursor:pointer}
+  .bn-item.active{color:var(--side-ink)}
+  .bn-ic{font-size:19px;line-height:1}
+  /* The office's animal on a tab (flt-004): beside the label, at the label's own size — a phone shows
+     no tooltip, so the half of the mark that is a colour needs the half that can be named. */
+  .bn-item .office-animal{width:11px;height:11px;vertical-align:-1px}
+  .bn-item .office-animal svg{width:11px;height:11px}
+}
+
+/* ── full screen (app.js: applyFocus) ─────────────────────────────────────────────
+   What the mode hides is desktop.css's own `html.bare` rule — the same one a console view inside a
+   desktop window already uses — so nothing is restated here. What THIS file owns is the way back and
+   the button that turns it on, because both are chrome the shell draws:
+
+   · the chip is fixed to the TOP of the viewport, at the inline end (screen-left in RTL, where the
+     app puts nothing), out of every element `bare` hides: it cannot disappear with the chrome.
+   · 44px tall on a touch screen: it is the one control a person in this mode has to hit.
+   · the button carries two icons and the stylesheet shows one — no JS swaps an icon, and no icon is
+     a character that renders at whatever weight the reader's font stack happens to pick. */
+#focusBtn .ic-svg{width:17px;height:17px}
+#focusBtn .ic-out{display:none}
+html.focus #focusBtn .ic-in{display:none}
+html.focus #focusBtn .ic-out{display:block}
+.focus-exit{
+  display:none;position:fixed;inset-block-start:calc(10px + env(safe-area-inset-top,0px));
+  inset-inline-end:10px;z-index:65;align-items:center;justify-content:center;
+  min-height:44px;width:44px;padding:0;cursor:pointer;overflow:hidden;
+  font-family:inherit;font-size:13px;font-weight:700;
+  background:var(--surface);color:var(--ink);border:1px solid var(--line);
+  border-radius:var(--radius-pill);box-shadow:var(--elev-2);
+}
+.focus-exit::before{content:"▾";font-size:14px;line-height:1}
+.focus-exit .txt{display:none;white-space:nowrap}
+html.focus .focus-exit{display:inline-flex}
+/* folded by default (a 44px circle with its chevron) — the full sentence is shown while the mode is
+   being entered (`html.focus-armed`, five seconds, app.js), and for as long as a pointer or the
+   keyboard is on it. An app's own top corner is where its search or menu lives; a way back that
+   covers one is a second problem, not a solution. */
+html.focus-armed .focus-exit,.focus-exit:hover,.focus-exit:focus-visible{
+  width:auto;padding:0 15px;gap:6px;justify-content:flex-start}
+html.focus-armed .focus-exit .txt,.focus-exit:hover .txt,.focus-exit:focus-visible .txt{display:block}
+.focus-exit:hover{border-color:var(--accent);color:var(--accent-d)}
+
+/* ── B4 · the chip narrows before the row does ────────────────────────────────────
+   The top bar carries the app title too, and a chip that keeps its full identity at every width
+   pushes that title off the row. So the chip sheds detail in order of how much it answers: the
+   second line (an address, or a protocol name) goes first — truncated to four characters it answers
+   nothing anyway, and it is kept in the tooltip — then the name, leaving the dot, which is the part
+   you actually glance up for.
+   Every collapse is scoped to the CHIP. The MENU never loses its labels: a list of identical dots is
+   not a compact switcher, it is a guessing game, and the name is the whole point there. */
+@media (max-width:1100px){ .tb-acct .acct-btn .acct-hint{display:none} }
+@media (max-width:760px){
+  .tb-acct .acct-btn .acct-tx{display:none}
+  .tb-acct .acct-btn{max-width:none;padding:6px}
+  .acct-menu{min-width:min(300px,calc(100vw - 24px))}
+}
+
+/* B7 — on a touch screen every control in the switcher and the health panel clears 44px. Keyed on
+   the POINTER, not the width: a small window on a laptop is still a mouse, and inflating its
+   controls only wastes the room it hasn't got. */
+@media (pointer:coarse){
+  .acct-btn,.acct-pick,.acct-act,.acct-recheck,.acct-rm{min-height:44px}
+  .acct-rm{width:44px}
+  .modal .btn,.modal .btn.ghost{min-height:44px}
+}
+
+/* C1 — build version, pinned under the side nav. Deliberately quiet: it must be readable when you
+   go looking for it and invisible when you are not. */
+.side .build{
+  margin-top:auto; padding:10px 6px 2px; font-size:11px; letter-spacing:.02em;
+  color:var(--side-mut); opacity:.75; direction:ltr; text-align:left;
+  font-variant-numeric:tabular-nums;
+}

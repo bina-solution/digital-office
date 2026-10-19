@@ -1,0 +1,23 @@
+{
+ "command.label": "מודל",
+ "command.description": "בחירת המודל לשיחה הזו",
+ "option.loadError": "טעינת הקטלוג נכשלה: {message}",
+ "option.deepseekV4Flash.description": "מהיר, יעיל וחסכוני; מתאים למשימות ממוקדות, שגרתיות או מקבילות.",
+ "option.deepseekV4Pro.description": "קידוד סוכני, ידע והסקה מורכבת חזקים יותר; מתאים למשימות מורכבות או קריטיות לאיכות, בעלות גבוהה יותר.",
+ "trigger.fallback": "בחירת מודל",
+ "trigger.loading": "טוען מודלים…",
+ "trigger.selectAria": "בחירת מודל",
+ "trigger.aria": "בחירת מודל, נוכחי {model}",
+ "trigger.ariaEffort": "בחירת מודל, נוכחי {model}, רמת חשיבה {effort}",
+ "menu.aria": "מודל ורמת חשיבה",
+ "menu.model": "מודל",
+ "menu.effort": "רמת חשיבה",
+ "effort.providerDefault": "ברירת מחדל",
+ "status.loading": "מרענן את רשימת המודלים…",
+ "error.action": "פעולת המודל נכשלה: {message}",
+ "action.reload": "טעינה מחדש",
+ "warning.groupLoad": "טעינת {name} נכשלה: {message}",
+ "empty.models": "אין מודלים זמינים.",
+ "blocked.composer": "המודל הזה לא זמין — יש לבחור מודל כדי להמשיך",
+ "empty.efforts": "למודל הזה אין רמות חשיבה."
+}

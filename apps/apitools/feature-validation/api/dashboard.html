@@ -1,0 +1,1195 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>אימות מערכת</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2356693f'/%3E%3Cpath d='M13 17l3 3 6-7' stroke='%23f3f5f7' stroke-width='2.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+/* ── this screen's own: radii and type. The colours are the office's palette — the generated block
+   below (kept identical to platform-base/bina-ui/theme-tokens.css by gate G27) ── */
+:root{--radius:16px;--radius-sm:9px;--radius-pill:999px;
+--font:"Segoe UI",system-ui,-apple-system,"Noto Sans Hebrew","Assistant",Arial,sans-serif;
+--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+/* @bina-theme-tokens:start */
+/* OLIVE GROVE — the one palette of the office (the owner, 2026-10-07 · DGO-450). Four hues, sampled
+   from his mock-up, and the ground they stand on. A screen never writes a colour: it names one of
+   these. Each hue is the colour itself (a FILL — a button, a bar, a dot), «-d» for text and thin
+   lines on the ground (4.5:1 or more), «-soft» and «-line» for a tint and its hairline, and «-ink»
+   for what is written ON the fill. The role names every screen already uses point at them:
+   (no backtick in this block: one of its copies lives inside a script's template string)
+     olive  the brand and the main action · what is well, what is done
+     sky    what is in motion, what only informs · a link
+     lime   look here — a warning, something waiting
+     plum   a person must act — a failure, a removal, the one final action
+   Contrast, measured (WCAG): ink on the ground 13.7 · muted 4.65 · light text on olive 5.51 and on
+   plum 9.54 · ink on lime 6.88 · its ink on sky 6.32 · sky-d 4.61 · lime-d 4.70 · violet 5.32 ·
+   on the desk: its ink 6.32 (dark: 13.96), and 11.2 where the sky pales (dark: 5.12). */
+:root,:root[data-theme="light"]{
+  color-scheme:light;
+  accent-color:var(--accent);   /* the browser's OWN controls - a checkbox, a radio, a range, a progress bar - on both grounds: said once, here (it was said for eight single controls, and every other one was the browser's blue) */
+  --bg:#f3f5f7; --surface:#fff; --surface-2:#f9fafb; --ink:#1f2a17; --muted:#6a7068; --line:#dcdfde;
+  --olive:#56693f; --olive-d:#475734; --olive-soft:#e7eae4; --olive-line:#bfc6b6; --olive-ink:#f3f5f7;
+  --sky:#7baae3; --sky-d:#2a6fc4; --sky-soft:#edf3fb; --sky-line:#cddff4; --sky-ink:#13263f;
+  --lime:#a9b84c; --lime-d:#69732e; --lime-soft:#f3f5e6; --lime-line:#dee4bb; --lime-ink:#1f2a17;
+  --plum:#5b3349; --plum-d:#4a303b; --plum-soft:#e8e2e6; --plum-line:#c1b1ba; --plum-ink:#f3f5f7;
+  --accent:var(--olive); --accent-d:var(--olive-d); --accent-soft:var(--olive-soft); --accent-ink:var(--olive-ink);
+  --blue:var(--sky-d); --amber:var(--lime-d); --red:var(--plum);
+  --violet:#7c5c6d;   /* plum, lifted a fifth toward white: someone has to look — nothing has failed */
+  --ok:var(--olive); --warn:var(--lime-d); --danger:var(--plum); --info:var(--sky-d);
+  --ok-soft:var(--olive-soft); --warn-soft:var(--lime-soft); --danger-soft:var(--plum-soft); --info-soft:var(--sky-soft);
+  --red-soft:var(--plum-soft); --amber-soft:var(--lime-soft); --blue-soft:var(--sky-soft); --violet-soft:var(--plum-soft);
+  --side:var(--olive); --side-ink:#f3f5f7; --side-mut:#dce1da; --side-line:#788765;
+  --desk:var(--sky); --desk-ink:var(--sky-ink);   /* desktop mode's ground is the sky (the owner, DGO-452), and what is written straight on it */
+  --scrim:rgba(31,42,23,.5);                      /* what dims a screen behind a pop-up */
+  --shadow:0 1px 3px rgba(31,42,23,.08),0 6px 24px rgba(31,42,23,.06);
+  --shadow-lg:0 20px 60px rgba(31,42,23,.28);
+  /* ONE COLOUR AND ONE ANIMAL PER OFFICE (the owner, 2026-10-09 · flt-002). When offices are linked,
+     a person reads WHICH office a thing belongs to without opening it, so each office gets a hue of
+     its own. The hue is an IDENTITY and never a health state: an office that stopped answering keeps
+     its colour, and the quiet mark is the one that says "not answering". Each is an ALIAS of the
+     palette's own hue — no fourth value is invented, and because the ground re-points the hue, the
+     office mark follows the ground by itself. Each office's animal (elephant, deer, eagle) is a
+     glyph of bina-icons.js. */
+  --office-hp:var(--muted);   /* hp · elephant — grey: the heavy laptop at home, in the palette's own grey */
+  --office-mac:var(--lime);   /* macbook · deer — yellow: the palette has one yellow and it is lime. A FILL, so what is written ON it is --lime-ink, never this */
+  --office-vps:var(--sky-d);  /* vps · eagle — deep sky blue, «the eagle in the clouds». THE OWNER'S OWN CHOICE (2026-10-09, in writing: vps = נשר + כחול-שמיים) — this line is the colour he picked, not a default kept for him */
+}
+
+/* ── A LINKED OFFICE'S MARK, BY NAME (flt-004) ───────────────────────────────────────────────
+   The link carries a NAME — mark: {color, animal} in the catalog, from the office's own identity
+   — and never a value: the office that DRAWS a linked tile owns the pixels, so it paints the name
+   with its own palette. These seven rules are that translation, one per family above; a screen sets
+   data-office-hue="lime" and paints var(--office-hue).
+   A name this file does not know paints nothing, which is why the vocabulary in
+   apps/dgo-extend/identity.py may only name families that exist here — and why --red and --ok
+   are not among them: they mean «danger» and «it is well» on every screen in the office. */
+[data-office-hue="grey"]   { --office-hue:var(--muted); }
+[data-office-hue="lime"]   { --office-hue:var(--lime); }
+[data-office-hue="sky"]    { --office-hue:var(--sky-d); }
+[data-office-hue="olive"]  { --office-hue:var(--olive-d); }
+[data-office-hue="plum"]   { --office-hue:var(--plum); }
+[data-office-hue="blue"]   { --office-hue:var(--blue); }
+[data-office-hue="violet"] { --office-hue:var(--violet); }
+/* the dark ground is the same four hues on the palette's own ink, and the SAME legend. Olive on that
+   ink is 2.5:1, so its text step there is olive LIFTED — its own hue and saturation, lighter (7.14
+   on a card, 4.82 on its own tint) — and the brand, the main action and «it is well» take that step.
+   Lime stays «look here» and the sky «in motion», as on the light ground: were lime the accent here
+   (it was, for a day), a warning, a selection and «it is well» were one colour. Each «-d» on its
+   own «-soft» there, measured: olive 4.82 · sky 4.62 · lime 4.63 · plum 4.71. */
+@media (prefers-color-scheme:dark){
+  :root{ color-scheme:dark;
+         --bg:#141b0f; --surface:#1f2a17; --surface-2:#192213; --ink:#f3f5f7; --muted:#a2a8a2; --line:#414a3b;
+         --olive-d:#a5ba8c; --olive-soft:#384629; --olive-line:#56693f;
+         --sky-d:#7baae3; --sky-soft:#2e3f38; --sky-line:#4d6a8c;
+         --lime-d:#a9b84c; --lime-soft:#3b4622; --lime-line:#69732e;
+         --plum-d:#ad99a4; --plum-soft:#402f33; --plum-line:#7c5c6d;
+         --accent:var(--olive-d); --accent-ink:var(--surface);
+         --red:#ad99a4; --violet:#bdadb6; --danger:#ad99a4; --ok:var(--olive-d); --side:var(--surface);
+         --desk:var(--sky-ink); --desk-ink:var(--ink); --scrim:rgba(0,0,0,.6);
+         --shadow:0 1px 3px rgba(0,0,0,.4),0 6px 24px rgba(0,0,0,.3);
+         --shadow-lg:0 20px 60px rgba(0,0,0,.55); }
+}
+:root[data-theme="midnight"]{
+  color-scheme:dark;
+  --bg:#141b0f; --surface:#1f2a17; --surface-2:#192213; --ink:#f3f5f7; --muted:#a2a8a2; --line:#414a3b;
+  --olive-d:#a5ba8c; --olive-soft:#384629; --olive-line:#56693f;
+  --sky-d:#7baae3; --sky-soft:#2e3f38; --sky-line:#4d6a8c;
+  --lime-d:#a9b84c; --lime-soft:#3b4622; --lime-line:#69732e;
+  --plum-d:#ad99a4; --plum-soft:#402f33; --plum-line:#7c5c6d;
+  --accent:var(--olive-d); --accent-ink:var(--surface);
+  --red:#ad99a4; --violet:#bdadb6; --danger:#ad99a4; --ok:var(--olive-d); --side:var(--surface);
+  --desk:var(--sky-ink); --desk-ink:var(--ink); --scrim:rgba(0,0,0,.6);
+  --shadow:0 1px 3px rgba(0,0,0,.4),0 6px 24px rgba(0,0,0,.3);
+  --shadow-lg:0 20px 60px rgba(0,0,0,.55);
+}
+/* THE KEYBOARD'S RING - what the browser draws around the stop the keyboard is on, in the palette, wherever
+   a part draws none of its own. It has no specificity at all (:where), so any rule of a part wins. Two
+   screens said this for themselves; on the others nearly every stop wore the browser's ring (DGO-455).
+   A field keeps the offset it has - fourteen rules draw a field's own outline and say no offset. An area
+   (a scroll box, a table) takes the ring inside, where nothing clips it; a control takes it outside,
+   where a filled button does not hide it. */
+:where(:focus-visible){outline:2px solid var(--accent)}
+:where(:focus-visible:not(a,button,summary,[role=button],input,select,textarea)){outline-offset:-2px}
+:where(a,button,summary,[role=button]):focus-visible{outline-offset:2px}
+/* HEBREW AT A HEAVY WEIGHT - on Windows, where the first family of --font is installed. "Segoe UI" has its
+   Hebrew in Light, Regular, Semibold and Bold. Asked for 800 or 900 the browser takes the family's Black
+   face, which has none, and so has every family after it - so the Hebrew of every title at 800 was drawn in
+   the system's last-resort serif, thin, beside Latin in Black: «חשבונות ומראות» at 20px is 150px wide at 700
+   and 120px at 800 (Chrome 154; the screens ask for 800 in 167 places, the question's title among them).
+   These faces give the family's HEBREW RANGE the faces that have it. A family a sheet names is no longer the
+   system's for those characters, so every weight and both styles are named, each as the system resolves it:
+   measured, only upright 800 and 900 change. Any other character is not theirs and goes on to the next
+   family the screen names - system-ui in --font, on Windows the same faces, Black included - which is why
+   G27 asks that system-ui follows wherever a screen names this family itself. Where the family is not
+   installed nothing here resolves and nothing changes. */
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Light");font-weight:100 300;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI");font-weight:400;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Semibold");font-weight:500 600;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Bold");font-weight:700 900;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Light Italic");font-weight:100 300;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Italic");font-weight:400;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Semibold Italic");font-weight:500 600;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Bold Italic");font-weight:700 900;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+/* @bina-theme-tokens:end */
+*{box-sizing:border-box}html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--font);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.mono{font-family:var(--mono)}
+a{color:var(--accent-d);text-decoration:none}a:hover{text-decoration:underline}
+
+/* page shell */
+.wrap{max-width:1080px;margin:0 auto;padding:22px 20px 40px}
+
+/* header */
+.app-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:14px;flex-wrap:wrap}
+.app-header h1{font-size:22px;font-weight:800;margin:0;letter-spacing:-.01em}
+.app-header .sub{color:var(--muted);font-size:13px;margin-top:3px}
+.app-header .actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+
+/* cards */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px;box-shadow:var(--shadow);margin-bottom:16px}
+.card>h3{margin:0 0 12px;font-size:15px;font-weight:700}
+
+/* stat chips */
+.stats{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-pill);padding:5px 13px;font-size:12px;color:var(--muted);display:inline-flex;gap:7px;align-items:center;box-shadow:var(--shadow)}
+.stat b{font-size:15px;color:var(--ink)}
+
+/* pills / status */
+.pill{padding:2px 10px;border-radius:var(--radius-pill);font-size:11px;font-weight:700;white-space:nowrap;display:inline-block}
+.pill.ok,.pill.passed,.pill.healthy{background:var(--accent-soft);color:var(--accent-d)}
+.pill.warn,.pill.error{background:var(--warn-soft);color:var(--amber)}
+.pill.bad,.pill.failed,.pill.missing{background:var(--danger-soft);color:var(--red)}
+.pill.unset,.pill.unknown,.pill.muted{background:var(--bg);color:var(--muted)}
+.dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex:none}
+
+/* callout (overall banner / notices) */
+.callout{border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:14px 18px;font-size:14px;color:var(--ink);margin:0 0 18px;box-shadow:var(--shadow);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;font-weight:700}
+.callout .counts{font-size:12px;font-weight:600;color:var(--muted)}
+.callout.all_passed{background:var(--accent-soft);border-color:var(--olive-line);color:var(--accent-d)}
+.callout.partial{background:var(--warn-soft);border-color:var(--lime-line);color:var(--amber)}
+.callout.failing{background:var(--danger-soft);border-color:var(--plum-line);color:var(--red)}
+
+/* buttons */
+.btn,button{background:var(--accent);color:var(--accent-ink);font-weight:700;border:none;border-radius:var(--radius-sm);padding:8px 15px;min-height:30px;cursor:pointer;font-family:inherit;font-size:13px;transition:background .12s,color .12s;line-height:1}
+.btn:hover,button:hover{background:var(--accent-d);color:var(--accent-ink)}
+.btn.ghost,button.ghost{background:transparent;border:1px solid var(--line);color:var(--ink)}
+.btn.ghost:hover,button.ghost:hover{background:var(--surface-2);border-color:var(--muted);color:var(--ink)}
+button:disabled{opacity:.5;cursor:not-allowed}
+.btn-sm{padding:4px 11px;font-size:12px;min-height:30px}
+.link{color:var(--accent-d);font-size:12px;font-weight:600;cursor:pointer}
+.link:hover{text-decoration:underline}
+
+/* fields */
+.field{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
+.field label{font-size:12px;color:var(--muted);font-weight:600}
+input,select,textarea{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 11px;font-family:inherit;font-size:13px;color:var(--ink);width:100%}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);border-color:transparent}
+code{color:var(--ink);background:var(--surface-2);border:1px solid var(--line);padding:1px 6px;border-radius:5px;font-size:12px;font-family:var(--mono)}
+.muted{color:var(--muted)}.small{font-size:12px}
+
+/* ── App-specific: feature suites ── */
+.actions-row{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin-bottom:16px}
+.feature{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);margin-bottom:14px;overflow:hidden;box-shadow:var(--shadow)}
+.feature-header{padding:14px 18px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;gap:12px}
+.feature-header:hover{background:var(--surface-2)}
+.feature-title{font-weight:700;font-size:15px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+/* a suite describes itself in the language it was written in — English, mostly: laid out in THAT direction (its
+   full stop stood at its beginning), and kept on this side with the rest */
+.feature-desc{font-size:12px;color:var(--muted);margin-top:3px;unicode-bidi:plaintext;text-align:right}
+.feature-stats{display:flex;gap:14px;align-items:center;font-size:12px;white-space:nowrap;color:var(--muted)}
+.feature-stats .ts{color:var(--muted)}
+.badge{display:inline-block;padding:2px 10px;border-radius:var(--radius-pill);font-size:11px;font-weight:700;white-space:nowrap}
+.badge.passed{background:var(--accent-soft);color:var(--accent-d)}
+.badge.failed{background:var(--danger-soft);color:var(--red)}
+.badge.error{background:var(--warn-soft);color:var(--amber)}
+.badge.unknown{background:var(--bg);color:var(--muted)}
+.badge.integration-type{background:var(--info-soft);color:var(--blue);font-size:10px;margin-inline-start:.35rem}
+.cases{border-top:1px solid var(--line);display:none}
+.cases.open{display:block}
+.case-row{display:flex;align-items:center;padding:.5rem 1.1rem;border-bottom:1px solid var(--line);font-size:13px;cursor:pointer;gap:.5rem}
+.case-row:hover{background:var(--surface-2)}
+.case-name{flex:1;font-weight:600}
+.case-context{color:var(--muted);font-size:12px;margin-inline-start:1rem;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.case-assertions{color:var(--muted);margin-inline-start:1rem}
+.case-row.passed .case-icon::before{content:'\2713';color:var(--accent-d);margin-inline-end:.5rem;font-weight:700}
+.case-row.failed .case-icon::before{content:'\2717';color:var(--red);margin-inline-end:.5rem;font-weight:700}
+.case-row.error .case-icon::before{content:'!';color:var(--amber);margin-inline-end:.5rem;font-weight:700}
+.fail-detail{font-size:12px;color:var(--red);background:var(--danger-soft);border:1px solid var(--plum-line);padding:.3rem .75rem;margin:0 1rem .25rem 2rem;border-radius:6px;font-family:var(--mono)}
+.case-detail{display:none;border-bottom:1px solid var(--line);padding:.9rem 1.1rem;background:var(--surface-2)}
+.case-detail.open{display:block}
+.detail-images{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:.75rem}
+.detail-col{min-width:0}
+.detail-label{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--accent-d);margin-bottom:.35rem;font-weight:700}
+.detail-filename{font-size:11px;color:var(--muted);margin-top:.25rem;word-break:break-all}
+.thumb-wrap{background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:.5rem;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:border-color .15s}
+.thumb-wrap:hover{border-color:var(--accent)}
+.thumb{max-width:100%;max-height:320px;border-radius:6px;cursor:pointer;object-fit:contain;background:var(--surface)}
+.detail-json{font-size:12px;font-family:var(--mono);background:var(--surface);color:var(--ink);padding:.65rem;border:1px solid var(--line);border-radius:8px;overflow-x:auto;max-height:220px;white-space:pre-wrap;word-break:break-all;line-height:1.5}
+.result-grid{font-size:13px;display:grid;grid-template-columns:auto 1fr;gap:.15rem .75rem}
+.result-item{display:contents}
+.result-key{color:var(--muted);font-weight:600;white-space:nowrap}
+.result-val{word-break:break-word;unicode-bidi:plaintext;text-align:right}   /* (a value reads in its own direction, beside its key: «40218-A» stood as «A-40218») */
+.result-val.obj{font-family:var(--mono);font-size:12px;background:var(--surface);border:1px solid var(--line);padding:2px 6px;border-radius:5px;display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.result-error{color:var(--red)}
+.detail-results-query{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+.int-detail{padding:.25rem 0}
+.int-detail-row{display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:.5rem}
+.int-detail-item{font-size:13px}
+.int-detail-item .label{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:.15rem}
+.int-status-badge{display:inline-block;padding:2px 8px;border-radius:6px;font-size:12px;font-weight:700;font-family:var(--mono)}
+.int-status-badge.s2xx{background:var(--accent-soft);color:var(--accent-d)}
+.int-status-badge.s4xx{background:var(--warn-soft);color:var(--amber)}
+.int-status-badge.s5xx{background:var(--danger-soft);color:var(--red)}
+.int-links{display:flex;gap:.75rem;margin-top:.35rem;flex-wrap:wrap;align-items:center}
+.int-links a{font-size:12px}
+.int-links code{min-width:0;overflow-wrap:anywhere}   /* (a request's address with no place to break stays inside its card) */
+/* (a token and a block of code read left to right wherever they stand: an opened case laid its JSON out right to
+   left - the braces mirrored, each comma before its line. A body is shown as code whatever it holds.) */
+code,.int-body-preview,.detail-json{direction:ltr;unicode-bidi:isolate}
+.int-body-preview{font-size:12px;font-family:var(--mono);background:var(--surface);padding:.5rem;border-radius:6px;max-height:200px;overflow:auto;white-space:pre-wrap;word-break:break-all;margin-top:.35rem;border:1px solid var(--line)}
+.duration{font-size:12px;color:var(--muted);font-family:var(--mono)}
+#log{margin-top:1rem;padding:.75rem;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-sm);font-family:var(--mono);font-size:12px;white-space:pre-wrap;max-height:250px;overflow-y:auto;display:none;color:var(--ink)}
+.spinner{display:inline-block;width:12px;height:12px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle}
+@keyframes spin{to{transform:rotate(360deg)}}
+.chevron{transition:transform .2s;font-size:11px;color:var(--muted);margin-inline-start:.5rem}
+.chevron.open{transform:rotate(-90deg)}
+.feature-links{font-size:12px;display:flex;gap:.9rem;padding:.25rem 1.1rem .75rem}
+/* (what a finger hits is 30px high: the three links were 18 - each is 30 whatever the font draws, and its own margin
+   takes the difference back so that the line stays where it was) */
+@media (pointer:coarse){.feature-links a,.int-links a{display:inline-flex;align-items:center;min-height:30px;margin-block:-6px}}
+
+/* Preview modal */
+.preview-overlay{display:none;position:fixed;inset:0;background:var(--scrim);z-index:1000;align-items:center;justify-content:center;cursor:pointer}
+.preview-overlay.open{display:flex}
+.preview-overlay img{max-width:95vw;max-height:95vh;object-fit:contain;border-radius:6px}
+
+/* Playground */
+.playground{display:none;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:1.5rem;margin-top:1.5rem;box-shadow:var(--shadow)}
+.playground.open{display:block}
+.playground h2{font-size:17px;margin:0 0 1rem;font-weight:800}
+.playground h3{font-size:14px;margin:0 0 .5rem;color:var(--muted)}
+.pg-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem}
+.pg-section{min-width:0}
+.pg-field{margin-bottom:.5rem}
+.pg-field label{display:block;font-size:12px;color:var(--muted);margin-bottom:.2rem}
+.pg-field input,.pg-field textarea,.pg-field select{width:100%;padding:.45rem .6rem;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font-family:var(--mono);font-size:12px}
+.pg-field textarea{resize:vertical;min-height:120px}
+/* a query, a file's hash and what the service answers are code: left to right in this right-to-left
+   page — the query read «,"find after" :"action"» (the field's Hebrew hint stays as the page reads) */
+.pg-field textarea,#pg-file-id:not(:placeholder-shown),.pg-result,.pg-response{direction:ltr}
+.pg-result{margin-top:.5rem;font-size:12px;font-family:var(--mono);background:var(--surface-2);border:1px solid var(--line);padding:.5rem;border-radius:8px;max-height:200px;overflow:auto;white-space:pre-wrap;word-break:break-all}
+.pg-result:empty{display:none}
+.pg-drawing-img{max-width:100%;max-height:300px;border-radius:6px;border:1px solid var(--line);cursor:pointer;object-fit:contain;background:var(--surface);margin-top:.5rem}
+.pg-response{font-size:12px;font-family:var(--mono);background:var(--surface-2);border:1px solid var(--line);padding:.5rem;border-radius:8px;max-height:300px;overflow:auto;white-space:pre-wrap;word-break:break-all}
+.pg-response:empty{display:none}
+.pg-dropzone{border:2px dashed var(--line);border-radius:var(--radius-sm);padding:1.5rem 1rem;text-align:center;cursor:pointer;transition:border-color .2s,background .2s;position:relative;min-height:100px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.5rem}
+.pg-dropzone:hover{border-color:var(--accent);background:var(--accent-soft)}
+.pg-dropzone.drag-over{border-color:var(--accent);background:var(--accent-soft);border-style:solid}
+.pg-dropzone.has-file{border-color:var(--accent);border-style:solid;padding:.75rem}
+.pg-dropzone .dz-icon{font-size:1.8rem;opacity:.5}
+.pg-dropzone .dz-text{font-size:13px;color:var(--muted)}
+.pg-dropzone .dz-hint{font-size:11px;color:var(--muted);opacity:.7}
+.pg-dropzone input[type=file]{display:none}
+.pg-preview-wrap{display:flex;align-items:center;gap:.75rem;width:100%}
+.pg-preview-img{max-height:80px;max-width:120px;border-radius:6px;object-fit:contain;background:var(--surface);border:1px solid var(--line);flex-shrink:0}
+.pg-preview-info{text-align:start;flex:1;min-width:0}
+.pg-preview-name{font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pg-preview-size{font-size:11px;color:var(--muted)}
+.pg-preview-clear{padding:2px 8px;font-size:11px;border-radius:6px;border:1px solid var(--line);background:transparent;color:var(--muted);cursor:pointer;flex-shrink:0;font-weight:600}
+.pg-preview-clear:hover{border-color:var(--red);color:var(--red);background:transparent}
+.pg-step{display:flex;align-items:center;gap:.5rem;margin-bottom:.35rem}
+.pg-step-num{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--line);color:var(--ink);font-size:12px;font-weight:700;flex-shrink:0}
+.pg-step-num.done{background:var(--accent);color:var(--accent-ink)}
+.pg-step h3{margin:0;color:var(--ink)}
+
+@media (max-width:800px){
+  .detail-images{grid-template-columns:1fr}
+  .detail-results-query{grid-template-columns:1fr}
+  .pg-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="app-header">
+  <div>
+    <h1>אימות מערכת</h1>
+    <div class="sub">ניטור מקבצי בדיקות אימות &mdash; מתרענן אוטומטית כל 60 שניות</div>
+  </div>
+  <div class="actions">
+    <button onclick="runAll()" id="btn-run">הרץ הכל</button>
+    <button class="ghost" onclick="togglePlayground()">מגרש בדיקות</button>
+  </div>
+</div>
+
+<div id="overall" class="callout">טוען&hellip;</div>
+
+<div id="features"></div>
+<div id="log"></div>
+
+<!-- Playground -->
+<div class="playground" id="playground">
+  <h2>מגרש בדיקות &mdash; שאילתת מסמך מותאמת</h2>
+  <div class="pg-grid">
+    <div class="pg-section">
+      <div class="pg-step"><span class="pg-step-num" id="pg-step1">1</span><h3>העלאת מסמך</h3></div>
+      <div class="pg-dropzone" id="pg-dropzone">
+        <span class="dz-icon">&#128206;</span>
+        <span class="dz-text">גררו לכאן תמונה או PDF, לחצו לבחירה, או הדביקו מהלוח</span>
+        <span class="dz-hint">Ctrl+V להדבקה &middot; עד 50 MB</span>
+        <input type="file" id="pg-file" accept="image/*,.pdf">
+      </div>
+      <div id="pg-file-preview" style="display:none"></div>
+      <button onclick="pgUpload()" id="pg-upload-btn" style="margin-top:.5rem">העלאה ו-OCR</button>
+      <div id="pg-upload-result" class="pg-result"></div>
+
+      <div class="pg-step" style="margin-top:1rem"><span class="pg-step-num" id="pg-step2">2</span><h3>הרצת שאילתה</h3></div>
+      <div class="pg-field">
+        <label>מזהה קובץ (מההעלאה)</label>
+        <input id="pg-file-id" placeholder="ימולא אוטומטית לאחר ההעלאה">
+      </div>
+      <div class="pg-field">
+        <label>תבנית יכולת</label>
+        <select id="pg-preset" onchange="pgApplyPreset()">
+          <option value="">מותאם אישית</option>
+          <option value="find-after">find after (aligned-value-extraction)</option>
+          <option value="find-below">find below (column-extraction)</option>
+          <option value="find-option">find option (find-option-matching)</option>
+        </select>
+      </div>
+      <div class="pg-field">
+        <label>שאילתת JSON</label>
+        <textarea id="pg-query-json">{
+  "action": "find after",
+  "action_value": "",
+  "is_rtl": false,
+  "tolerances": {
+    "max_vertical_gap": 120,
+    "max_horizontal_offset": 80
+  },
+  "value_validations": []
+}</textarea>
+      </div>
+      <div style="display:flex;gap:.5rem;align-items:center">
+        <button onclick="pgQuery()" id="pg-query-btn">הרץ שאילתה</button>
+        <label style="font-size:13px;display:flex;align-items:center;gap:.25rem;color:var(--muted)">
+          <input type="checkbox" id="pg-draw" checked style="width:auto"> צייר סימונים
+        </label>
+      </div>
+    </div>
+    <div class="pg-section">
+      <h3>תוצאות</h3>
+      <div id="pg-drawing"></div>
+      <pre id="pg-response" class="pg-response"></pre>
+    </div>
+  </div>
+</div>
+
+<!-- Preview modal -->
+<div class="preview-overlay" id="preview-overlay" onclick="closePreview()">
+  <img id="preview-img" src="">
+  <iframe id="preview-iframe" src="" style="display:none;width:90vw;height:90vh;border:none;border-radius:6px;background:var(--surface)"></iframe>
+</div>
+
+</div><!-- /wrap -->
+
+<script>
+/* @bina-ask:start */
+var binaAsk, binaTell;
+(function () {
+  var doc = document;
+  var CSS = ".bask{position:fixed;inset:0;z-index:2147483000;display:grid;grid-template:minmax(0,1fr)/minmax(0,1fr);place-items:center;padding:16px;background:var(--scrim)}"
+    + ".bask-card{display:flex;flex-direction:column;width:min(440px,100%);max-height:100%;overflow:auto;box-sizing:border-box;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:16px;padding:20px;box-shadow:var(--shadow-lg);font:14px/1.5 var(--font,system-ui,sans-serif);text-align:start;outline:0}"
+    + ".bask-card h2{margin:0 0 8px;font-size:16px;font-weight:800;line-height:1.35}"
+    + ".bask-read{overflow:auto}.bask-read:not(:empty){min-height:19px}"   // never squeezed to nothing: a line of it stays, and past that the card itself scrolls
+    + ".bask-card p{margin:0 0 6px;font-size:13px;color:var(--muted)}"
+    + ".bask-read p:last-child{margin:0}"
+    + ".bask-facts{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:10px 0 0;padding:10px 12px;background:var(--surface-2);border:1px solid var(--line);border-radius:9px}"
+    + ".bask-facts dt{color:var(--muted);font-size:11px;font-weight:600;line-height:1.7}"
+    + ".bask-facts dd{margin:0;font-size:12.5px;font-weight:600;overflow-wrap:anywhere;unicode-bidi:plaintext;text-align:right}"
+    + ".bask-field{display:grid;gap:5px;margin-top:10px;font-size:12px;font-weight:600;color:var(--muted)}"
+    + ".bask-field input{font:inherit;font-size:13px;font-weight:400;height:36px;padding:0 10px;border:1px solid var(--line);border-radius:9px;background:var(--surface);color:var(--ink)}"
+    + ".bask-said{margin-top:10px;padding:8px 12px;border-radius:9px;border-inline-start:4px solid var(--red);background:color-mix(in srgb,var(--red) 14%,var(--surface));font-size:12.5px;overflow-wrap:anywhere}"
+    + ".bask-said:empty{display:none}"
+    + ".bask-acts{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}"
+    + ".bask-btn{height:34px;padding:0 16px;border-radius:9px;border:1px solid var(--line);background:transparent;color:var(--ink);font:inherit;font-size:13px;font-weight:700;cursor:pointer}"
+    + ".bask-btn.primary{background:var(--accent);border-color:transparent;color:var(--accent-ink)}"
+    + ".bask-btn.danger{background:var(--red);border-color:transparent;color:var(--surface)}"
+    + ".bask-btn:disabled{opacity:.5;cursor:default}"
+    + ".bask-field input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}"
+    + "@media (pointer:coarse){.bask-btn{height:44px}.bask-field input{height:44px}}"
+    + "@media (max-height:399px){.bask{padding:8px}.bask-card{padding:12px}.bask-acts{margin-top:10px}}"   // the side menu's own short frame
+    + "#bina-tell{position:fixed;inset-block-end:16px;inset-inline-start:16px;z-index:2147483001;display:grid;gap:8px;max-width:min(420px,calc(100vw - 32px))}"
+    + ".btell{--c:var(--ok);padding:10px 14px;border-radius:12px;background:color-mix(in srgb,var(--c) 14%,var(--surface));color:var(--ink);border:1px solid color-mix(in srgb,var(--c) 38%,var(--surface));border-inline-start:4px solid var(--c);font:13px/1.45 var(--font,system-ui,sans-serif);box-shadow:var(--shadow-lg);cursor:pointer;text-align:start}"
+    + ".btell.warn{--c:var(--lime)}.btell.bad{--c:var(--red)}"   // --ok and --red, not the bare hues: they are the steps that are lifted on the dark ground
+    + ".btell small{display:block;margin-top:2px;font-size:11.5px;color:var(--muted);overflow-wrap:anywhere;unicode-bidi:plaintext}"
+    + ".btell button{margin-inline-start:12px;padding:0;border:0;background:none;font:inherit;font-weight:800;color:var(--blue);text-decoration:underline;cursor:pointer}";
+
+  function el(tag, cls, text) {
+    var n = doc.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+  function style() {
+    if (doc.getElementById("bina-ask-css")) return;
+    var s = el("style", "", CSS);
+    s.id = "bina-ask-css";
+    doc.head.appendChild(s);
+  }
+
+  binaAsk = function (q) {
+    style();
+    return new Promise(function (resolve) {
+      var back = doc.activeElement, field = null, must = q.input && q.input.must;
+      var scrim = el("div", "bask"), card = el("div", "bask-card"), read = el("div", "bask-read"), said = el("div", "bask-said");
+      card.setAttribute("role", "alertdialog");
+      card.setAttribute("aria-modal", "true");
+      card.setAttribute("dir", "rtl");
+      card.setAttribute("tabindex", "-1");
+      said.setAttribute("role", "alert");
+      card.appendChild(el("h2", "", q.title));
+      card.appendChild(read);
+      String(q.body || "").split(/\n+/).forEach(function (line) { if (line.trim()) read.appendChild(el("p", "", line)); });
+      if (q.facts && q.facts.length) {
+        var dl = el("dl", "bask-facts");
+        q.facts.forEach(function (f) { dl.appendChild(el("dt", "", f[0])); dl.appendChild(el("dd", "", f[1])); });
+        read.appendChild(dl);
+      }
+      if (q.input) {
+        var lab = el("label", "bask-field", q.input.label || "");
+        field = el("input");
+        field.value = q.input.value || "";
+        if (q.input.dir) field.setAttribute("dir", q.input.dir);
+        lab.appendChild(field);
+        card.appendChild(lab);
+      }
+      var acts = el("div", "bask-acts"), no = el("button", "bask-btn", q.cancel || "ביטול"),
+          yes = el("button", "bask-btn " + (q.danger ? "danger" : "primary"), q.ok || "אישור");
+      no.setAttribute("type", "button");
+      yes.setAttribute("type", "button");
+      acts.appendChild(no);
+      acts.appendChild(yes);
+      card.appendChild(said);
+      card.appendChild(acts);
+      scrim.appendChild(card);
+      doc.body.appendChild(scrim);
+
+      function fit() { if (must) yes.disabled = field.value.trim() !== must; }
+      function home() { (field || (q.danger ? no : yes)).focus(); }
+      function done(v) {
+        doc.removeEventListener("keydown", key, true);
+        scrim.remove();
+        if (back && back.focus) back.focus();
+        resolve(v);
+      }
+      function cancel() { if (!no.disabled) done(field ? null : false); }
+      function agree() {
+        if (yes.disabled) return;
+        var v = field ? field.value : true;
+        if (!q.run) return done(v);
+        yes.disabled = no.disabled = true;                // in flight: busy, and there is nothing left to cancel
+        yes.textContent = "מבצע…";
+        said.textContent = "";
+        card.focus();
+        Promise.resolve(v).then(q.run).then(function () { done(v); }, function (e) {
+          yes.textContent = q.ok || "אישור";
+          yes.disabled = no.disabled = false;
+          fit();
+          said.textContent = (e && e.message) || "הפעולה נכשלה";
+          home();
+        });
+      }
+      function key(e) {
+        if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); cancel(); }
+        else if (e.key === "Enter" && field && doc.activeElement === field) { e.preventDefault(); agree(); }
+        else if (e.key === "Tab") {                       // the page behind is not reachable while asked
+          var ring = [field, no, yes].filter(function (n) { return n && !n.disabled; });
+          var i = ring.indexOf(doc.activeElement);
+          e.preventDefault();
+          if (ring.length) ring[(i + (e.shiftKey ? ring.length - 1 : 1)) % ring.length].focus();
+        }
+        else if (/^(Arrow|Page)(Up|Down)$/.test(e.key) && doc.activeElement !== field && read.scrollHeight > read.clientHeight) {
+          e.preventDefault();                               // the focus lives on the buttons, outside what scrolls
+          read.scrollTop += (/Up$/.test(e.key) ? -1 : 1) * (/^Page/.test(e.key) ? read.clientHeight : 40);
+        }
+      }
+      yes.addEventListener("click", agree);
+      no.addEventListener("click", cancel);
+      scrim.addEventListener("mousedown", function (e) { if (e.target === scrim) cancel(); });
+      if (field) field.addEventListener("input", fit);
+      doc.addEventListener("keydown", key, true);
+      fit();
+      home();
+    });
+  };
+
+  // The third word is how long the notice stays (ms) — or what more it carries: { ms, more, act, stay }.
+  //   more  the service's own sentence, on a line of its own under the notice's words
+  //   act   [label, fn] — one way on from the notice (an undo, a refresh): pressing it runs fn and takes the notice down
+  //   stay  no clock: the notice is there until it is pressed
+  binaTell = function (text, kind, opt) {
+    style();
+    var o = opt && typeof opt === "object" ? opt : { ms: opt };
+    var box = doc.getElementById("bina-tell");
+    if (!box) { box = el("div"); box.id = "bina-tell"; doc.body.appendChild(box); }
+    var n = el("div", "btell " + (kind || "ok"), text);
+    n.setAttribute("role", kind === "bad" ? "alert" : "status");
+    n.setAttribute("dir", "rtl");
+    if (o.more) n.appendChild(el("small", "", o.more));
+    if (o.act) {
+      var go = el("button", "", o.act[0]);
+      go.setAttribute("type", "button");
+      go.addEventListener("click", function (e) { e.stopPropagation(); n.remove(); o.act[1](); });
+      n.appendChild(go);
+    }
+    n.addEventListener("click", function () { n.remove(); });
+    box.appendChild(n);
+    if (!o.stay) setTimeout(function () { n.remove(); }, o.ms || (kind === "bad" ? 9000 : 5200));
+    return n;
+  };
+})();
+/* @bina-ask:end */
+/* @bina-said:start */
+var binaSaid = (status) => (!status ? "אין תשובה מהשירות"
+  : status < 300 ? "התשובה אינה מה שהמסך ציפה לו — רענן את הדף"
+  : status === 401 ? "הכניסה פגה — רענן את הדף" : status === 403 ? "אין הרשאה לפעולה הזאת"
+  : status === 404 ? "השירות לא מכיר את הבקשה הזאת"
+  : status > 501 && status < 505 ? "השירות אינו זמין כרגע" : status >= 500 ? "השירות נתקל בשגיאה"
+  : "הבקשה נדחתה");
+// a request that could not even be sent answers like one that was refused, with status 0
+var binaNoAnswer = () => ({ ok: false, status: 0, json: async () => ({}), text: async () => "" });
+/* @bina-said:end */
+const API = '';
+let featuresData = [];
+
+/* ---- Hebrew status labels ---- */
+function statusHe(s) {
+  return { passed: 'עובר', failed: 'נכשל', error: 'שגיאה', unknown: 'אין נתונים' }[s] || s;
+}
+
+/* ---- State preservation helpers ---- */
+function getOpenSets() {
+  var feats = new Set();
+  document.querySelectorAll('.cases.open').forEach(function(el) {
+    var m = el.id.match(/cases-(\d+)/);
+    if (m) feats.add(Number(m[1]));
+  });
+  var details = new Set();
+  document.querySelectorAll('.case-detail.open').forEach(function(el) {
+    details.add(el.id);
+  });
+  return { feats: feats, details: details };
+}
+
+function restoreOpenSets(sets) {
+  sets.feats.forEach(function(i) {
+    var el = document.getElementById('cases-' + i);
+    var ch = document.getElementById('chev-' + i);
+    if (el) el.classList.add('open');
+    if (ch) ch.classList.add('open');
+  });
+  sets.details.forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.classList.add('open');
+  });
+}
+
+/* ---- Data loading ---- */
+async function loadStatus() {
+  // The READ alone is judged here. What was not read is named, and that the screen asks again by itself:
+  // «טעינה נכשלה» said neither. A refusal that carried JSON was drawn as an office with no suites at all; and
+  // the read and the drawing shared one try, so a fault in drawing would have been said as a failed load.
+  var res = await fetch(API + 'api/features').catch(binaNoAnswer);
+  var data = res.status ? await res.json().catch(function () { return null; }) : null;
+  if (!res.ok || !data) {
+    var el = document.getElementById('overall');
+    el.textContent = (featuresData.length ? 'המקבצים לא עודכנו — ' : 'המקבצים לא נטענו — ') + binaSaid(res.status) + '. המסך שואל שוב מעצמו כל 60 שניות.';
+    el.className = 'callout failing';
+    return;                                            // …and a list that WAS read stays
+  }
+  featuresData = data.features || [];
+  var open = getOpenSets();
+  renderFeatures(featuresData);
+  restoreOpenSets(open);
+  updateOverall(featuresData);
+}
+
+function updateOverall(features) {
+  var el = document.getElementById('overall');
+  var total = features.length;
+  var passed = features.filter(function(f) { return f.latest_benchmark && f.latest_benchmark.all_passed; }).length;
+  var totalCases = features.reduce(function(s, f) { return s + (f.latest_benchmark ? f.latest_benchmark.case_count || 0 : 0); }, 0);
+  var passedCases = features.reduce(function(s, f) { return s + (f.latest_benchmark ? f.latest_benchmark.cases_passed || 0 : 0); }, 0);
+
+  var status, label;
+  if (passed === total && total > 0) { status = 'all_passed'; label = 'כל היכולות תקינות'; }
+  else if (passed > 0) { status = 'partial'; label = 'חלק מהיכולות נכשלות'; }
+  else { status = 'failing'; label = total > 0 ? 'יכולות נכשלות' : 'אין נתונים'; }
+
+  el.className = 'callout ' + status;
+  el.innerHTML = '<span>' + esc(label) + '</span><span class="counts">' + passed + '/' + total + ' יכולות · ' + passedCases + '/' + totalCases + ' מקרים</span>';
+}
+
+/* ---- Rendering ---- */
+function caseContext(c) {
+  /* OCR features */
+  var q = c.ocr_json_query;
+  var a = c.analysis || {};
+  if (q) {
+    var parts = [];
+    if (q.action) parts.push(q.action);
+    if (typeof q.action_value === 'string' && q.action_value) parts.push(q.action_value);
+    else if (Array.isArray(q.action_value)) parts.push(q.action_value.length + ' אפשרויות');
+    if (a.result_value != null) parts.push('→ ' + String(a.result_value));
+    else if (a.match_count != null) parts.push('→ ' + a.match_count + ' התאמות');
+    return parts.join(' · ');
+  }
+  /* Integration features */
+  var parts = [];
+  if (c.description) parts.push(c.description);
+  else if (c.integration) parts.push(c.integration);
+  if (c.response_status != null) parts.push(String(c.response_status));
+  if (c.duration_s != null) parts.push(c.duration_s + 's');
+  return parts.join(' · ');
+}
+
+function renderCaseDetail(f, c, fi, ci) {
+  var id = 'detail-' + fi + '-' + ci;
+  var html = '<div class="case-detail" id="' + id + '">';
+
+  var isIntegration = !!(c.integration || c.test_type);
+
+  if (isIntegration) {
+    html += renderIntegrationDetail(f, c);
+  } else {
+    html += renderOcrDetail(f, c);
+  }
+
+  /* Failed assertions (common) */
+  if (c.failed_assertions && c.failed_assertions.length) {
+    html += '<div style="margin-top:.5rem">';
+    html += c.failed_assertions.map(function(fa) {
+      return '<div class="fail-detail">' + esc(fa.name) + ': ציפייה ' + esc(fa.operator) + ' ' + esc(JSON.stringify(fa.expected)) + ' התקבל ' + esc(JSON.stringify(fa.actual)) + '</div>';
+    }).join('');
+    html += '</div>';
+  }
+
+  html += '</div>';
+  return html;
+}
+
+function statusBadgeClass(code) {
+  if (code >= 200 && code < 300) return 's2xx';
+  if (code >= 400 && code < 500) return 's4xx';
+  return 's5xx';
+}
+
+function getFileExt(path) {
+  if (!path) return '';
+  var m = path.match(/\.([a-zA-Z0-9]+)$/);
+  return m ? m[1].toLowerCase() : '';
+}
+
+function isImageExt(ext) {
+  return ['png','jpg','jpeg','gif','bmp','webp','tiff'].indexOf(ext) >= 0;
+}
+
+function renderDocumentPreview(f, c) {
+  if (!c.source_file) return '';
+  var src = 'api/features/' + encodeURIComponent(f.name) + '/files/' + c.source_file;
+  var ext = getFileExt(c.source_file);
+  var html = '<div style="margin-bottom:.75rem">';
+  html += '<div class="detail-label">מסמך מקור</div>';
+  if (isImageExt(ext)) {
+    html += '<div class="thumb-wrap" onclick="showPreview(\'' + esc(src) + '\')"><img src="' + esc(src) + '" class="thumb" loading="lazy" onerror="this.parentElement.style.display=\'none\'"></div>';
+  } else if (ext === 'pdf') {
+    html += '<div class="thumb-wrap" style="height:320px" onclick="showPreview(\'' + esc(src) + '\')"><iframe src="' + esc(src) + '" style="width:100%;height:100%;border:none" loading="lazy"></iframe></div>';
+  } else {
+    html += '<div style="font-size:13px"><a href="' + esc(src) + '" target="_blank" rel="noopener">הורדת ' + esc(c.source_file.split('/').pop()) + '</a></div>';
+  }
+  html += '<div class="detail-filename">' + esc(c.source_file) + '</div>';
+  html += '</div>';
+  return html;
+}
+
+function renderIntegrationDetail(f, c) {
+  var html = '<div class="int-detail">';
+
+  /* Source document preview */
+  html += renderDocumentPreview(f, c);
+
+  /* Row 1: Type badge, status, duration, description */
+  html += '<div class="int-detail-row">';
+  if (c.test_type) {
+    html += '<div class="int-detail-item"><span class="label">סוג</span>';
+    html += '<span class="badge integration-type">' + esc(c.test_type) + '</span></div>';
+  }
+  if (c.response_status != null) {
+    html += '<div class="int-detail-item"><span class="label">סטטוס HTTP</span>';
+    html += '<span class="int-status-badge ' + statusBadgeClass(c.response_status) + '">' + c.response_status + '</span></div>';
+  }
+  if (c.duration_s != null) {
+    html += '<div class="int-detail-item"><span class="label">משך</span>';
+    html += '<span class="duration">' + c.duration_s + 's</span></div>';
+  }
+  if (c.execution_status) {
+    html += '<div class="int-detail-item"><span class="label">ביצוע</span>';
+    var exClass = c.execution_status === 'success' ? 's2xx' : 's5xx';
+    html += '<span class="int-status-badge ' + exClass + '">' + esc(c.execution_status) + '</span></div>';
+  }
+  if (c.is_connected != null) {
+    html += '<div class="int-detail-item"><span class="label">מחובר</span>';
+    html += '<span style="color:' + (c.is_connected ? 'var(--accent-d)' : 'var(--red)') + ';font-weight:700">' + (c.is_connected ? 'כן' : 'לא') + '</span></div>';
+  }
+  if (c.row_count != null) {
+    html += '<div class="int-detail-item"><span class="label">שורות</span>';
+    html += '<span>' + c.row_count + '</span></div>';
+  }
+  html += '</div>';
+
+  /* Row 2: Links (N8N execution, workflow, request URL) */
+  var hasLinks = c.execution_url || c.workflow_url || c.request_url;
+  if (hasLinks) {
+    html += '<div class="int-links">';
+    if (c.execution_url) {
+      html += '<a href="' + esc(c.execution_url) + '" target="_blank" rel="noopener" title="פתיחת הביצוע ב-n8n, בלשונית חדשה">ביצוע N8N' + (c.execution_id ? ' #' + esc(String(c.execution_id)) : '') + '</a>';
+    }
+    if (c.workflow_url) {
+      html += '<a href="' + esc(c.workflow_url) + '" target="_blank" rel="noopener" title="פתיחת התהליך ב-n8n, בלשונית חדשה">תהליך' + (c.workflow_id ? ' ' + esc(c.workflow_id) : '') + '</a>';
+    }
+    if (c.request_url) {
+      // (a request is a TOKEN, drawn as the page draws one: it stood as grey running text - an address printed like a sentence)
+      html += '<code>' + esc((c.request_method || 'GET') + ' ' + c.request_url) + '</code>';
+    }
+    html += '</div>';
+  }
+
+  /* Request body (if any) */
+  if (c.request_body) {
+    html += '<div style="margin-top:.35rem"><span class="label" style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">גוף בקשה</span>';
+    html += '<div class="int-body-preview">' + esc(typeof c.request_body === 'string' ? c.request_body : JSON.stringify(c.request_body, null, 2)) + '</div></div>';
+  }
+
+  /* Response body */
+  if (c.response_body) {
+    var bodyStr = c.response_body;
+    try { bodyStr = JSON.stringify(JSON.parse(bodyStr), null, 2); } catch(e) {}
+    html += '<div style="margin-top:.35rem"><span class="label" style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">גוף תגובה</span>';
+    html += '<div class="int-body-preview">' + esc(bodyStr) + '</div></div>';
+  }
+
+  /* Response error */
+  if (c.response_error) {
+    html += '<div style="margin-top:.35rem"><span class="label" style="font-size:11px;color:var(--red);text-transform:uppercase;letter-spacing:.04em">שגיאה</span>';
+    html += '<div class="fail-detail" style="margin:0">' + esc(c.response_error) + '</div></div>';
+  }
+
+  /* Postgres rows preview */
+  if (c.rows_preview && c.rows_preview.length) {
+    html += '<div style="margin-top:.35rem"><span class="label" style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">תצוגת שורות</span>';
+    html += '<div class="int-body-preview">' + esc(JSON.stringify(c.rows_preview, null, 2)) + '</div></div>';
+  }
+
+  html += '</div>';
+  return html;
+}
+
+function fmtVal(v) {
+  if (v == null) return '';
+  if (typeof v === 'object') return '<span class="result-val obj">' + esc(JSON.stringify(v)) + '</span>';
+  return '<span class="result-val">' + esc(String(v)) + '</span>';
+}
+
+function renderOcrDetail(f, c) {
+  var html = '';
+
+  /* Images row: source + drawing side-by-side */
+  var hasImages = c.source_file || c.file_id;
+  if (hasImages) {
+    html += '<div class="detail-images">';
+    if (c.source_file) {
+      var src = 'api/features/' + encodeURIComponent(f.name) + '/files/' + c.source_file;
+      var ext = getFileExt(c.source_file);
+      html += '<div class="detail-col"><div class="detail-label">מסמך מקור</div>';
+      if (isImageExt(ext)) {
+        html += '<div class="thumb-wrap" onclick="showPreview(\'' + esc(src) + '\')">';
+        html += '<img src="' + esc(src) + '" class="thumb" loading="lazy" onerror="this.parentElement.style.display=\'none\'">';
+        html += '</div>';
+      } else if (ext === 'pdf') {
+        html += '<div class="thumb-wrap" style="height:320px" onclick="showPreview(\'' + esc(src) + '\')">';
+        html += '<iframe src="' + esc(src) + '" style="width:100%;height:100%;border:none" loading="lazy"></iframe>';
+        html += '</div>';
+      }
+      html += '<div class="detail-filename">' + esc(c.source_file) + '</div></div>';
+    }
+    if (c.file_id) {
+      var drawSrc = 'api/features/' + encodeURIComponent(f.name) + '/cases/' + encodeURIComponent(c.name) + '/drawing';
+      html += '<div class="detail-col"><div class="detail-label">ציור מסומן</div>';
+      html += '<div class="thumb-wrap" onclick="showPreview(\'' + esc(drawSrc) + '\')">';
+      html += '<img src="' + esc(drawSrc) + '" class="thumb" loading="lazy" onerror="this.parentElement.style.display=\'none\'">';
+      html += '</div></div>';
+    }
+    html += '</div>';
+  }
+
+  /* Results + Query side-by-side */
+  var a = c.analysis || {};
+  var hasResults = a.result_value != null || a.aligned_value != null || a.text_match != null || a.match_count != null;
+  var hasQuery = !!c.ocr_json_query;
+  if (hasResults || hasQuery) {
+    html += '<div class="detail-results-query">';
+    if (hasResults) {
+      html += '<div class="detail-col"><div class="detail-label">תוצאות</div><div class="result-grid">';
+      if (a.result_value != null) html += '<div class="result-item"><span class="result-key">result_value</span>' + fmtVal(a.result_value) + '</div>';
+      if (a.aligned_value != null) html += '<div class="result-item"><span class="result-key">aligned_value</span>' + fmtVal(a.aligned_value) + '</div>';
+      if (a.text_match != null) html += '<div class="result-item"><span class="result-key">text_match</span>' + fmtVal(a.text_match) + '</div>';
+      if (a.match_count != null) html += '<div class="result-item"><span class="result-key">match_count</span>' + fmtVal(a.match_count) + '</div>';
+      if (a.matched_option_names) html += '<div class="result-item"><span class="result-key">matched</span>' + fmtVal(a.matched_option_names) + '</div>';
+      if (a.error) html += '<div class="result-item result-error"><span class="result-key">error</span>' + fmtVal(a.error) + '</div>';
+      html += '</div></div>';
+    }
+    if (hasQuery) {
+      html += '<div class="detail-col"><div class="detail-label">שאילתה</div>';
+      html += '<pre class="detail-json">' + esc(JSON.stringify(c.ocr_json_query, null, 2)) + '</pre></div>';
+    }
+    html += '</div>';
+  }
+
+  return html;
+}
+
+function renderFeatures(features) {
+  var container = document.getElementById('features');
+  container.innerHTML = features.map(function(f, i) {
+    var b = f.latest_benchmark;
+    var status = b ? (b.all_passed ? 'passed' : 'failed') : 'unknown';
+    var label = b ? statusHe(b.all_passed ? 'passed' : 'failed') : statusHe('unknown');
+    var cases = b ? (b.cases_passed + '/' + b.case_count) : '-';
+    var ts = b && b.timestamp ? timeAgo(b.timestamp) : 'מעולם';
+
+    var casesHtml = '';
+    if (b && b.cases) {
+      casesHtml = b.cases.map(function(c, j) {
+        var cs = c.status || 'unknown';
+        var ctx = caseContext(c);
+        var detailId = 'detail-' + i + '-' + j;
+        var row = '<div class="case-row ' + cs + '" onclick="toggleDetail(\'' + detailId + '\')">';
+        row += '<span class="case-icon"></span>';
+        row += '<span class="case-name">' + esc(c.name);
+        if (c.integration) row += ' <span class="badge integration-type">' + esc(c.integration) + '</span>';
+        row += '</span>';
+        if (ctx) row += '<span class="case-context" title="' + esc(ctx) + '">' + esc(ctx) + '</span>';
+        if (c.duration_s != null) row += '<span class="duration" style="margin-inline-start:.5rem">' + c.duration_s + 's</span>';
+        row += '<span class="case-assertions">' + c.assertions_passed + '/' + c.assertions_total + '</span>';
+        row += '<span class="badge ' + cs + '">' + esc(statusHe(cs)) + '</span>';
+        row += '</div>';
+        row += renderCaseDetail(f, c, i, j);
+        return row;
+      }).join('');
+    }
+
+    return '<div class="feature" id="feat-' + i + '">' +
+      '<div class="feature-header" onclick="toggleCases(' + i + ')">' +
+        '<div>' +
+          '<div class="feature-title">' + esc(f.name) + ' <span class="badge ' + status + '">' + esc(label) + '</span> <span class="chevron" id="chev-' + i + '">&#9664;</span></div>' +
+          '<div class="feature-desc">' + esc(f.description || '') + '</div>' +
+        '</div>' +
+        '<div class="feature-stats">' +
+          '<span>' + cases + ' מקרים</span>' +
+          '<span class="ts">' + ts + '</span>' +
+          '<button class="btn-sm" onclick="event.stopPropagation();runFeature(\'' + esc(f.name) + '\')">הרץ</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="feature-links">' +
+        '<a href="api/features/' + encodeURIComponent(f.name) + '/benchmarks/latest" target="_blank">תוצאה אחרונה</a>' +
+        '<a href="api/features/' + encodeURIComponent(f.name) + '" target="_blank">פרטי יכולת</a>' +
+        '<a href="api/features/' + encodeURIComponent(f.name) + '/history" target="_blank">היסטוריה</a>' +
+      '</div>' +
+      '<div class="cases" id="cases-' + i + '">' + casesHtml + '</div>' +
+    '</div>';
+  }).join('');
+}
+
+/* ---- Toggle helpers ---- */
+function toggleCases(i) {
+  var el = document.getElementById('cases-' + i);
+  var ch = document.getElementById('chev-' + i);
+  el.classList.toggle('open');
+  ch.classList.toggle('open');
+}
+
+function toggleDetail(id) {
+  var el = document.getElementById(id);
+  if (el) el.classList.toggle('open');
+}
+
+/* ---- Image preview ---- */
+function showPreview(src) {
+  var overlay = document.getElementById('preview-overlay');
+  var img = document.getElementById('preview-img');
+  var iframe = document.getElementById('preview-iframe');
+  var ext = getFileExt(src);
+  if (ext === 'pdf') {
+    img.style.display = 'none'; img.src = '';
+    iframe.style.display = 'block'; iframe.src = src;
+  } else {
+    iframe.style.display = 'none'; iframe.src = '';
+    img.style.display = 'block'; img.src = src;
+  }
+  overlay.classList.add('open');
+}
+function closePreview() {
+  document.getElementById('preview-overlay').classList.remove('open');
+  document.getElementById('preview-img').src = ''; document.getElementById('preview-img').style.display = 'block';
+  document.getElementById('preview-iframe').src = ''; document.getElementById('preview-iframe').style.display = 'none';
+}
+
+/* ---- Utilities ---- */
+function esc(s) { if (s == null) return ''; var d = document.createElement('div'); d.textContent = String(s); return d.innerHTML; }
+
+function timeAgo(iso) {
+  var diff = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (diff < 60) return 'הרגע';
+  if (diff < 3600) return 'לפני ' + Math.floor(diff/60) + ' דק׳';
+  if (diff < 86400) return 'לפני ' + Math.floor(diff/3600) + ' שע׳';
+  var d = Math.floor(diff/86400);               /* (one is said as one: «לפני 1 ימים» is «לפני יום») */
+  return d === 1 ? 'לפני יום' : 'לפני ' + d + ' ימים';
+}
+
+/* ---- Validation runners ---- */
+async function runAll() {
+  var btn = document.getElementById('btn-run');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> מריץ…';
+  var log = document.getElementById('log'); log.style.display = 'block'; log.textContent = 'מריץ את כל הבדיקות...\n';
+  try {
+    var res = await fetch(API + 'api/run', { method: 'POST' });
+    var data = await res.json();
+    log.textContent += JSON.stringify(data.summary || data, null, 2);
+    await loadStatus();
+  } catch (e) { log.textContent += 'שגיאה: ' + e.message; }
+  btn.disabled = false; btn.textContent = 'הרץ הכל';
+}
+
+async function runFeature(name) {
+  var log = document.getElementById('log'); log.style.display = 'block';
+  log.textContent = 'מריץ ' + name + '...\n';
+  try {
+    var res = await fetch(API + 'api/run/' + encodeURIComponent(name), { method: 'POST' });
+    var data = await res.json();
+    log.textContent += (data.stdout || '') + (data.stderr || '');
+    if (data.benchmark) log.textContent += '\nתוצאה: ' + (data.benchmark.all_passed ? 'עבר' : 'נכשל') + ' (' + (data.benchmark.cases_passed||0) + '/' + (data.benchmark.case_count||0) + ' מקרים)';
+    await loadStatus();
+  } catch (e) { log.textContent += 'שגיאה: ' + e.message; }
+}
+
+/* ---- Playground ---- */
+function togglePlayground() {
+  document.getElementById('playground').classList.toggle('open');
+}
+
+var PRESETS = {
+  'find-after': {
+    action: 'find after',
+    action_value: '',
+    is_rtl: false,
+    tolerances: { max_vertical_gap: 120, max_horizontal_offset: 80 },
+    value_validations: [
+      { validation_type: 'length_greater_than', validation_value: 2 },
+      { validation_type: 'length_less_than', validation_value: 20 },
+      { validation_type: 'has_number' }
+    ]
+  },
+  'find-below': {
+    action: 'find below',
+    action_value: '',
+    is_rtl: false,
+    tolerances: { max_vertical_gap: 120, max_horizontal_offset: 80 },
+    value_validations: [
+      { validation_type: 'length_greater_than', validation_value: 1 },
+      { validation_type: 'has_number' }
+    ]
+  },
+  'find-option': {
+    action: 'find option',
+    action_value: [],
+    is_rtl: false,
+    value_validations: []
+  }
+};
+
+function pgApplyPreset() {
+  var val = document.getElementById('pg-preset').value;
+  if (PRESETS[val]) {
+    document.getElementById('pg-query-json').value = JSON.stringify(PRESETS[val], null, 2);
+  }
+}
+
+/* ---- Drop zone / file handling ---- */
+var pgSelectedFile = null;
+
+function pgInitDropzone() {
+  var dz = document.getElementById('pg-dropzone');
+  var fileInput = document.getElementById('pg-file');
+
+  dz.addEventListener('click', function(e) {
+    if (e.target.closest('.pg-preview-clear')) return;
+    fileInput.click();
+  });
+
+  fileInput.addEventListener('change', function() {
+    if (fileInput.files.length) pgSetFile(fileInput.files[0]);
+  });
+
+  dz.addEventListener('dragover', function(e) { e.preventDefault(); dz.classList.add('drag-over'); });
+  dz.addEventListener('dragleave', function(e) { e.preventDefault(); dz.classList.remove('drag-over'); });
+  dz.addEventListener('drop', function(e) {
+    e.preventDefault(); dz.classList.remove('drag-over');
+    if (e.dataTransfer.files.length) pgSetFile(e.dataTransfer.files[0]);
+  });
+
+  document.addEventListener('paste', function(e) {
+    if (!document.getElementById('playground').classList.contains('open')) return;
+    var items = e.clipboardData && e.clipboardData.items;
+    if (!items) return;
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf('image') !== -1) {
+        e.preventDefault();
+        var blob = items[i].getAsFile();
+        if (blob) {
+          var ext = blob.type.split('/')[1] || 'png';
+          var named = new File([blob], 'pasted-image.' + ext, { type: blob.type });
+          pgSetFile(named);
+        }
+        return;
+      }
+    }
+  });
+}
+
+function fmtSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024*1024) return (bytes/1024).toFixed(1) + ' KB';
+  return (bytes/(1024*1024)).toFixed(1) + ' MB';
+}
+
+function pgSetFile(file) {
+  pgSelectedFile = file;
+  var dz = document.getElementById('pg-dropzone');
+  var previewDiv = document.getElementById('pg-file-preview');
+  dz.classList.add('has-file');
+
+  // Hide dropzone default content
+  dz.querySelectorAll('.dz-icon,.dz-text,.dz-hint').forEach(function(el) { el.style.display = 'none'; });
+
+  var isImg = file.type.startsWith('image/');
+  var html = '<div class="pg-preview-wrap">';
+  if (isImg) {
+    var url = URL.createObjectURL(file);
+    html += '<img src="' + url + '" class="pg-preview-img">';
+  } else {
+    html += '<span style="font-size:1.5rem;flex-shrink:0">&#128196;</span>';
+  }
+  html += '<div class="pg-preview-info">';
+  html += '<div class="pg-preview-name">' + esc(file.name) + '</div>';
+  html += '<div class="pg-preview-size">' + fmtSize(file.size) + '</div>';
+  html += '</div>';
+  html += '<button class="pg-preview-clear" onclick="event.stopPropagation();pgClearFile()">&#10005;</button>';
+  html += '</div>';
+
+  // Put preview inside drop zone
+  var existing = dz.querySelector('.pg-preview-wrap');
+  if (existing) existing.remove();
+  dz.insertAdjacentHTML('beforeend', html);
+
+  document.getElementById('pg-upload-result').textContent = '';
+}
+
+function pgClearFile() {
+  pgSelectedFile = null;
+  var dz = document.getElementById('pg-dropzone');
+  dz.classList.remove('has-file');
+  dz.querySelectorAll('.dz-icon,.dz-text,.dz-hint').forEach(function(el) { el.style.display = ''; });
+  var pw = dz.querySelector('.pg-preview-wrap');
+  if (pw) pw.remove();
+  document.getElementById('pg-file').value = '';
+  document.getElementById('pg-upload-result').textContent = '';
+}
+
+async function pgUpload() {
+  if (!pgSelectedFile) { binaTell('בחרו, גררו או הדביקו קובץ תחילה', 'warn'); return; }
+  var btn = document.getElementById('pg-upload-btn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> מעלה…';
+  var fd = new FormData();
+  fd.append('file', pgSelectedFile);
+  var out = document.getElementById('pg-upload-result');
+  try {
+    var res = await fetch(API + 'api/playground/upload', { method: 'POST', body: fd });
+    var data = await res.json();
+    out.textContent = JSON.stringify(data, null, 2);
+    if (data.file_hash) {
+      document.getElementById('pg-file-id').value = data.file_hash;
+      document.getElementById('pg-step1').classList.add('done');
+    }
+  } catch (e) {
+    out.textContent = 'שגיאה: ' + e.message;
+  }
+  btn.disabled = false; btn.textContent = 'העלאה ו-OCR';
+}
+
+async function pgQuery() {
+  var fileId = document.getElementById('pg-file-id').value.trim();
+  var queryText = document.getElementById('pg-query-json').value.trim();
+  if (!fileId) { binaTell('הזינו מזהה קובץ (העלו מסמך תחילה)', 'warn'); return; }
+  var query;
+  // the parser's own sentence (English) rides under the notice's words, as a line of its own
+  try { query = JSON.parse(queryText); } catch(e) { binaTell('ה-JSON של השאילתה אינו תקין', 'warn', { more: e.message }); return; }
+  var draw = document.getElementById('pg-draw').checked ? '1' : '0';
+  var btn = document.getElementById('pg-query-btn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> מריץ…';
+  var respEl = document.getElementById('pg-response');
+  var drawDiv = document.getElementById('pg-drawing');
+  try {
+    var res = await fetch(API + 'api/playground/query', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ file_id: fileId, ocr_json_query: query, draw: draw })
+    });
+    var data = await res.json();
+    respEl.textContent = JSON.stringify(data, null, 2);
+    document.getElementById('pg-step2').classList.add('done');
+    if (draw === '1' && fileId) {
+      try {
+        var drawRes = await fetch(API + 'api/playground/drawing', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ file_id: fileId, ocr_json_query: query })
+        });
+        if (drawRes.ok) {
+          var blob = await drawRes.blob();
+          var url = URL.createObjectURL(blob);
+          drawDiv.innerHTML = '<img src="' + url + '" class="pg-drawing-img" onclick="showPreview(this.src)">';
+        } else {
+          drawDiv.innerHTML = '<span style="color:var(--muted);font-size:13px">אין ציור זמין</span>';
+        }
+      } catch(de) {
+        drawDiv.innerHTML = '<span style="color:var(--muted);font-size:13px">שגיאת ציור: ' + esc(de.message) + '</span>';
+      }
+    } else {
+      drawDiv.innerHTML = '';
+    }
+  } catch (e) {
+    respEl.textContent = 'שגיאה: ' + e.message;
+  }
+  btn.disabled = false; btn.textContent = 'הרץ שאילתה';
+}
+
+/* ---- Init ---- */
+pgInitDropzone();
+loadStatus();
+setInterval(loadStatus, 60000);
+</script>
+</body>
+</html>

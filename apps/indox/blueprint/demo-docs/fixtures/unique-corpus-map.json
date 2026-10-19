@@ -1,0 +1,192 @@
+[
+ {
+  "suite": "dbf",
+  "rel": "invoice/files/agn-3.pdf",
+  "vrel": "invoice/files/agn-3.dbf.pdf",
+  "old_id": "SI256001661",
+  "new_id": "SI256008338",
+  "orig_md5": "c002271f87774fab6fd8a39cde1ddb1a",
+  "new_md5": "162b24411573d9de80610f607719fdf6"
+ },
+ {
+  "suite": "plb",
+  "rel": "invoice/files/agn-3.pdf",
+  "vrel": "invoice/files/agn-3.plb.pdf",
+  "old_id": "SI256001661",
+  "new_id": "SI256003883",
+  "orig_md5": "c002271f87774fab6fd8a39cde1ddb1a",
+  "new_md5": "eeee9a3e6f137a0f3df25eabb26bf43b"
+ },
+ {
+  "suite": "plp",
+  "rel": "invoice/files/agn-3.pdf",
+  "vrel": "invoice/files/agn-3.plp.pdf",
+  "old_id": "SI256001661",
+  "new_id": "SI256005005",
+  "orig_md5": "c002271f87774fab6fd8a39cde1ddb1a",
+  "new_md5": "3a6dc7b0867f6a0c7a293739c223029b"
+ },
+ {
+  "suite": "plp",
+  "rel": "invoice/files/arkhh-3.pdf",
+  "vrel": "invoice/files/arkhh-3.plp.pdf",
+  "old_id": "20342503040",
+  "new_id": "20342507484",
+  "orig_md5": "89eeb4ebe8a619495113003a08f7d5bd",
+  "new_md5": "4f2dd58cabf4904353ad2421d249861e"
+ },
+ {
+  "suite": "plp",
+  "rel": "invoice/files/khpr-mnhm-5.pdf",
+  "vrel": "invoice/files/khpr-mnhm-5.plp.pdf",
+  "old_id": "SI256006146",
+  "new_id": "SI256000580",
+  "orig_md5": "0aee9ce9d8573d5c8654ffae2e8a255f",
+  "new_md5": "79ad3744942f505e6f6f5d46b0416b5c"
+ },
+ {
+  "suite": "plp",
+  "rel": "invoice/files/nbl-3.pdf",
+  "vrel": "invoice/files/nbl-3.plp.pdf",
+  "old_id": "SI256000443",
+  "new_id": "SI256004887",
+  "orig_md5": "ad49de65cef6356a80a8db0f7c215bd9",
+  "new_md5": "3c85f298a238a2b626cc206fbd95aebd"
+ },
+ {
+  "suite": "plp",
+  "rel": "invoice/files/ysh-krtvn-4.pdf",
+  "vrel": "invoice/files/ysh-krtvn-4.plp.pdf",
+  "old_id": "SI266000818",
+  "new_id": "SI266004252",
+  "orig_md5": "b6562a2de2b759061ca882211c3935ec",
+  "new_md5": "2cfbe77299eb0305f103325bbbef18a7"
+ },
+ {
+  "suite": "dbf",
+  "rel": "order/files/PO25010001.png",
+  "vrel": "order/files/PO25010001.dbf.png",
+  "old_id": "PO25010001",
+  "new_id": "PO25017778",
+  "orig_md5": "b9464eb97cd8c1e4d4a159dbf052fa8b",
+  "new_md5": "fd669c174db74081c4a1d7b8676f9998"
+ },
+ {
+  "suite": "plb",
+  "rel": "order/files/PO25010001.png",
+  "vrel": "order/files/PO25010001.plb.png",
+  "old_id": "PO25010001",
+  "new_id": "PO25012223",
+  "orig_md5": "b9464eb97cd8c1e4d4a159dbf052fa8b",
+  "new_md5": "3d173d5ba3c064fb5b7844402504d6c8"
+ },
+ {
+  "suite": "plp",
+  "rel": "order/files/PO25010001.png",
+  "vrel": "order/files/PO25010001.plp.png",
+  "old_id": "PO25010001",
+  "new_id": "PO25014445",
+  "orig_md5": "b9464eb97cd8c1e4d4a159dbf052fa8b",
+  "new_md5": "e02925c1c5c74986b7edde7525f8a3c4"
+ },
+ {
+  "suite": "plp",
+  "rel": "order/files/PO25010002.png",
+  "vrel": "order/files/PO25010002.plp.png",
+  "old_id": "PO25010002",
+  "new_id": "PO25014446",
+  "orig_md5": "dfc0b5dc09b2d447072c9d1e46e304c0",
+  "new_md5": "4faafdec9259c825e7b3aecea121c10e"
+ },
+ {
+  "suite": "plp",
+  "rel": "order/files/PO25010003.png",
+  "vrel": "order/files/PO25010003.plp.png",
+  "old_id": "PO25010003",
+  "new_id": "PO25014447",
+  "orig_md5": "6914b4fb4859b12d733a1ea677f69e8a",
+  "new_md5": "b4d64ec7dfc76bf7be9486234c28607e"
+ },
+ {
+  "suite": "plp",
+  "rel": "order/files/PO25010004.png",
+  "vrel": "order/files/PO25010004.plp.png",
+  "old_id": "PO25010004",
+  "new_id": "PO25014448",
+  "orig_md5": "630424cdcecaf4575d831840fcd65144",
+  "new_md5": "be20df77ce3fc2ccf56b9152366ea82a"
+ },
+ {
+  "suite": "plp",
+  "rel": "order/files/PO25010005.png",
+  "vrel": "order/files/PO25010005.plp.png",
+  "old_id": "PO25010005",
+  "new_id": "PO25014449",
+  "orig_md5": "038832298c1fe369a5e169e6a8ef7e72",
+  "new_md5": "9707f2ee773cea753609f2f284626776"
+ },
+ {
+  "suite": "dbf",
+  "rel": "shipment/files/by-gy-4.pdf",
+  "vrel": "shipment/files/by-gy-4.dbf.pdf",
+  "old_id": "02TSH25017987",
+  "new_id": "02TSH25014654",
+  "orig_md5": "e9a1a37d9f1cdf482f8972d693ee322b",
+  "new_md5": "99521178999ed6a94109f52e15a8ff6b"
+ },
+ {
+  "suite": "plb",
+  "rel": "shipment/files/by-gy-4.pdf",
+  "vrel": "shipment/files/by-gy-4.plb.pdf",
+  "old_id": "02TSH25017987",
+  "new_id": "02TSH25019109",
+  "orig_md5": "e9a1a37d9f1cdf482f8972d693ee322b",
+  "new_md5": "4dd62294cf36f1cd7acbc7f9461b86c9"
+ },
+ {
+  "suite": "plp",
+  "rel": "shipment/files/by-gy-4.pdf",
+  "vrel": "shipment/files/by-gy-4.plp.pdf",
+  "old_id": "02TSH25017987",
+  "new_id": "02TSH25011321",
+  "orig_md5": "e9a1a37d9f1cdf482f8972d693ee322b",
+  "new_md5": "8778fefcd50bfb7b70676535eec22071"
+ },
+ {
+  "suite": "plp",
+  "rel": "shipment/files/dyavr-4.pdf",
+  "vrel": "shipment/files/dyavr-4.plp.pdf",
+  "old_id": "SH26000378",
+  "new_id": "SH26004712",
+  "orig_md5": "d8f747e336963861d4dbb832067ed7b2",
+  "new_md5": "4a3539d561b33aac8ae27a718c71efc6"
+ },
+ {
+  "suite": "plp",
+  "rel": "shipment/files/mbnh-drvm-1.pdf",
+  "vrel": "shipment/files/mbnh-drvm-1.plp.pdf",
+  "old_id": "SHM2501512",
+  "new_id": "SHM2501512",
+  "orig_md5": "7abd920f1ec199714638708e2d5619b6",
+  "new_md5": "7cd35533a3d0e4b6d09de8cc156916bd",
+  "_unrealised": "Intended SHM2505956; the stamp never reached the pixels and re-stamping destroys this page (3339 chars of OCR text -> 66). Five hypotheses disproven in issues/unique-corpus-id-never-stamped.md. Recorded as what the document ACTUALLY prints so the map stops asserting an intent nothing realised -- the CONSEQUENCE is that this variant shares COMPANY_ID+DOC_ID with its .pdf twin, which deadlocks plx_shp3 in a FULL BATTERY (measured: held IN_PROGRESS while gdx_shp3 completed, watch loop ran to the 1080s budget). Solo runs are unaffected."
+ },
+ {
+  "suite": "plp",
+  "rel": "shipment/files/pvlyrn-5.pdf",
+  "vrel": "shipment/files/pvlyrn-5.plp.pdf",
+  "old_id": "S0125005179",
+  "new_id": "S0125009513",
+  "orig_md5": "f179978fac0b23ee13198712f6d41c6e",
+  "new_md5": "bc50db46343cbb2bd5d64fe3e0bfa663"
+ },
+ {
+  "suite": "plp",
+  "rel": "shipment/files/sbh-5.pdf",
+  "vrel": "shipment/files/sbh-5.plp.pdf",
+  "old_id": "SH2611624",
+  "new_id": "SH2615068",
+  "orig_md5": "bea501c3aa57efab7ac989dd2f8d72d0",
+  "new_md5": "0f2368b1ea86cc3c0bc1629d42626b34"
+ }
+]

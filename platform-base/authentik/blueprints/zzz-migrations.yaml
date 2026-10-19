@@ -1,0 +1,46 @@
+# Removals for objects an EARLIER version of this platform created and no longer creates.
+#
+# Renaming an app in its app.json changes what the generator EMITS; it does nothing to what authentik
+# already stored. Without this file a deployment that predates a rename keeps the old application and
+# its proxy provider forever: they still appear in the user's authentik launcher, still hold a slug
+# that the new one might later want, and — because the old provider is no longer in the embedded
+# outpost's provider list — they resolve to nothing when clicked. A dead tile that 404s is worse than
+# no tile, and nothing in the logs says why it is there.
+#
+# `state: absent` is matched on `identifiers`, so each entry must name the object exactly as the old
+# generator named it. Deleting an entry from this file does NOT undo the removal — it just stops the
+# platform from re-asserting it, which is why entries stay here after they have done their work.
+#
+# Applied after zz-generated-apps.yaml (filename order), so a slug being freed here is available to
+# anything the generator asserts in the same pass.
+version: 1
+metadata:
+  name: Deployment - Migrations
+  labels:
+    blueprints.goauthentik.io/instantiate: "true"
+entries:
+  # 2026-07: the `wadmin` app became `chat` (app.json routing[].sso.slug). The application is removed
+  # before its provider, because authentik refuses to delete a provider an application still points at.
+  - id: rm-app-wadmin
+    model: authentik_core.application
+    state: absent
+    identifiers:
+      slug: wadmin
+
+  - id: rm-app-wadmin-local
+    model: authentik_core.application
+    state: absent
+    identifiers:
+      slug: wadmin-local
+
+  - id: rm-provider-wadmin
+    model: authentik_providers_proxy.proxyprovider
+    state: absent
+    identifiers:
+      name: Wadmin Provider
+
+  - id: rm-provider-wadmin-local
+    model: authentik_providers_proxy.proxyprovider
+    state: absent
+    identifiers:
+      name: Wadmin Local Provider

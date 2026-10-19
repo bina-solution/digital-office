@@ -1,0 +1,1224 @@
+# Config below was layered by production/compose.override.yml before the platform-OS
+# refactor; merged here so this app owns its complete definition.
+services:
+  n8n-postgres:
+    container_name: n8n-postgres-${DEPLOYMENT_NAME:-bina-deployment}
+    image: postgres:17
+    hostname: n8n-postgres
+    command:
+    - postgres
+    - -c
+    - listen_addresses=*
+    - -c
+    - shared_buffers=1GB
+    - -c
+    - work_mem=32MB
+    - -c
+    - maintenance_work_mem=512MB
+    - -c
+    # [ceiling 2026-08-10] Was 3GB inside a 2G container that already gives shared_buffers 1GB.
+    # effective_cache_size is a PLANNER HINT for how much cache the OS plus postgres can be
+    # expected to hold; overstating it by 2x makes the planner favour index paths that assume
+    # data is cached when it is not. 1500MB reflects what this container can actually hold.
+    - effective_cache_size=1500MB
+    - -c
+    # [ceiling 2026-08-10] Every commit was waiting on a WAL fsync. This database holds n8n's
+    # workflow definitions and its execution log -- NOT document data, which lives in
+    # supabase-db and is untouched by this setting. The exposure is the last fraction of a
+    # second of commits on an unclean crash (a clean restart still flushes), against a
+    # container that was pegged at 102% of one core. For an execution log that is the right
+    # trade; if a crash ever loses a workflow import, re-import it -- the blueprint is in git.
+    - synchronous_commit=off
+    - -c
+    - wal_level=replica
+    - -c
+    - wal_compression=on
+    - -c
+    - max_wal_size=2GB
+    - -c
+    - min_wal_size=512MB
+    - -c
+    - checkpoint_timeout=10min
+    - -c
+    - checkpoint_completion_target=0.9
+    - -c
+    - random_page_cost=1.1
+    - -c
+    - effective_io_concurrency=200
+    - -c
+    - max_connections=100
+    - -c
+    - shared_preload_libraries=pg_stat_statements
+    - -c
+    - pg_stat_statements.max=10000
+    - -c
+    - pg_stat_statements.track=all
+    - -c
+    - jit=off
+    - -c
+    - autovacuum=on
+    - -c
+    - autovacuum_naptime=10s
+    - -c
+    - autovacuum_vacuum_scale_factor=0.1
+    - -c
+    - autovacuum_analyze_scale_factor=0.05
+    - -c
+    # [ceiling 2026-08-10] REVERTED to 2/1/2 the same day. I raised these to 8/2/4 alongside the
+    # CPU lift, and it destabilised the database: cgroup memory.events showed the 2G ceiling hit
+    # 44,149 times, a backend died under the pressure, and postgres did an internal crash restart
+    # with 109 seconds of WAL redo -- roughly two minutes of downtime. Nothing was OOM-killed, so
+    # it does not show up as a crash; it shows up as "database system is not yet accepting
+    # connections". The comment on the memory limit below already warned that this container's
+    # PEAK is a recovery rather than a workload, and more parallel workers make recovery heavier.
+    # The obvious fix -- more memory -- is not available: the host has 9.7 GiB total with 160 MiB
+    # free and 4.9 of 6 GiB of swap already consumed, and configured container limits already sum
+    # to 31.2 GiB. So parallelism goes back to what the memory envelope supports. The CPU lift
+    # below is kept: cores were the ceiling, and cores are the resource this host actually has
+    # spare.
+    - max_worker_processes=2
+    - -c
+    - max_parallel_workers_per_gather=1
+    - -c
+    - max_parallel_workers=2
+    deploy:
+      resources:
+        limits:
+          # [ceiling 2026-08-10] WAS '1', AND IT WAS THE WHOLE PIPELINE'S CEILING.
+          # Measured: cgroup cpu.max = 100000/100000 (exactly one core) with the container
+          # sitting at 102.23% CPU -- i.e. pinned, permanently. At the same instant apitools
+          # was at 0.03% of its four cores and n8n main at 11%. Every workflow step in this
+          # estate reads and writes n8n-postgres, so a saturated single core throttles the
+          # entire state machine no matter how much work the other tiers can take. This is
+          # why raising pickup width or worker concurrency never moved throughput: the
+          # constraint was never dispatch or OCR, it was one pinned core.
+          # 3 of 6 host cores (owner's call), leaving 3 for the workers and apitools --
+          # the stateless tiers, and the ones that can migrate off this laptop later.
+          #
+          # ENV-DRIVEN, and that is the fix rather than the styling: as a literal this was the one
+          # CPU limit no profile could size and no clamp could lower, so `bbox run` ABORTED the whole
+          # bring-up on any machine with fewer than 3 cores —
+          #   `range of CPUs is from 0.01 to 2.00, as there are only 2 CPUs available`
+          # which is exactly what happens when an office is installed on a 2-core server (measured
+          # 2026-09-30, vps1). `bbox_clamp_cpus_to_host` in scripts/lib.sh lowers every `*CPUS=` key
+          # to the host's core count, and this is the same rule the other limits already follow.
+          cpus: ${N8N_DB_CPUS:-3}
+          # 3G -> 2G, 2026-08-06. Measured high-water 1452MiB, and that sample INCLUDES a 65s WAL
+          # crash-recovery replay (390MB redo) — i.e. it is the worst case, not the steady state.
+          # 2G keeps ~1.4x over that worst case. Do not cut further without re-measuring during a
+          # recovery: this is the one container whose peak is a recovery, not a workload.
+          memory: 2G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    ulimits:
+      nofile:
+        soft: ${PG_NOFILE_SOFT:-102400}
+        hard: ${PG_NOFILE_HARD:-262144}
+    networks:
+    - traefik-network
+    # LOOPBACK ONLY. `10001:5432` published the raw database on every interface — on a server, its
+    # public address — behind nothing but the password, beside an edge that gives the other
+    # databases TLS and an allow-list (issues/n8n-postgres-publicly-exposed.yaml). Nothing in this
+    # repo dials the port; a person on the machine still can, and from elsewhere the door is the
+    # edge's TCP router.
+    ports:
+    - 127.0.0.1:10001:5432
+    restart: unless-stopped
+    volumes:
+    - postgres_storage:/var/lib/postgresql/data
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    labels:
+    - traefik.enable=true
+    - traefik.tcp.middlewares.db-ipallowlist.ipallowlist.sourcerange=${DBS_ALLOWED_IPS}
+    - traefik.tcp.routers.n8n-postgres.rule=HostSNI(`${N8N_DB_HOST}`)
+    - traefik.tcp.routers.n8n-postgres.entrypoints=postgres
+    - traefik.tcp.routers.n8n-postgres.service=n8n-postgres
+    - traefik.tcp.routers.n8n-postgres.middlewares=db-ipallowlist
+    - traefik.tcp.routers.n8n-postgres.tls=true
+    - traefik.tcp.routers.n8n-postgres.tls.certresolver=myresolver
+    - traefik.tcp.services.n8n-postgres.loadbalancer.server.port=5432
+    environment:
+    - TZ=${TZ:-UTC}
+    - POSTGRES_USER=${POSTGRES_USER:-root}
+    - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?set in .env}
+    - POSTGRES_DB=${POSTGRES_DB:-n8n}
+    - POSTGRES_USER=${POSTGRES_USER}
+    - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    - POSTGRES_DB=${POSTGRES_DB}
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - pg_isready -h localhost -U ${POSTGRES_USER:-root} -d ${POSTGRES_DB:-n8n}
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-5s}
+      retries: 10
+  n8n:
+    container_name: n8n-${DEPLOYMENT_NAME:-bina-deployment}
+    # ONE image for the main process and both workers. They are the SAME build - same context,
+    # same Dockerfile, same args - and without an explicit tag compose gives each service its
+    # own image (deployment-hacohen-n8n, -n8n-worker-1, -n8n-worker-2): three separate 1.79 GB
+    # entries for identical content. Naming it here lets the workers reference it instead of
+    # redeclaring the build.
+    #
+    # Measured, so the claim stays honest: the three images shared every layer (54 refs, 15
+    # unique), so builds 2 and 3 were already cache hits and `docker save` already deduplicated
+    # them in the payload. This buys CLARITY - one image, one entry in every inventory - not
+    # wall-clock build time. Build cost in this repo is elsewhere: the 371 MB community-node npm
+    # fetch below, and apitools' 655 MB pip layer.
+    image: binaos/n8n:${N8N_VERSION:?set N8N_VERSION in .env (see .env.ex)}
+    build:
+      context: ./
+      dockerfile: Dockerfile
+      args:
+        N8N_VERSION: ${N8N_VERSION:?set N8N_VERSION in .env (see .env.ex)}
+    # [main saturation 2026-08-24] CPU cap REMOVED (was 1.5). A limit is a ceiling, not a
+    # reservation: it throttled main exactly during parallel-GC bursts at the heap ceiling,
+    # producing multi-second event-loop stalls (measured /healthz: 0.7s-9.2s on the same day).
+    # Uncapped, main bursts when cores are free; under contention CFS still arbitrates — and
+    # cpu_shares below makes main WIN that arbitration, because the UI/webhook front must stay
+    # responsive ahead of batch workers.
+    cpu_shares: 2048
+    deploy:
+      resources:
+        limits:
+          # HELD AT 2G — a planned cut to 1.5G was WITHDRAWN, 2026-08-06.
+          # This service declares NODE_OPTIONS=--max-old-space-size=1536. Cutting the cgroup to
+          # 1.5G would have made the container ceiling EQUAL to the permitted Node heap, leaving
+          # zero room for V8 overhead, native buffers and non-heap RSS. Per the heap x 1.3 rule
+          # documented on the runner services below, 1536 x 1.3 = 2000M — so 2G is the floor.
+          # [main OOM 2026-08-18] heap 1536 -> 2048 (see NODE_OPTIONS note) => 2048 x 1.3 = 2.5G.
+          # [main saturation 2026-08-24] heap 2048 -> 3072 => 3072 x 1.3 = 3994M — 4G is now
+          # exactly the floor; any further heap raise must raise this cgroup first.
+          memory: 4G
+        reservations:
+          cpus: '0.25'
+          memory: 512M
+    networks:
+    - traefik-network
+    env_file:
+    - path: .env
+      required: false
+    environment:
+    - TZ=${TZ:-UTC}
+    - GENERIC_TIMEZONE=${GENERIC_TIMEZONE:-UTC}
+    - N8N_LISTEN_ADDRESS=0.0.0.0
+    - N8N_WORKER_SERVER_ADDRESS=0.0.0.0
+    - N8N_WEBHOOK_USER=${N8N_WEBHOOK_USER:-cicd}
+    - N8N_WEBHOOK_PASS=${N8N_WEBHOOK_PASS:-}
+    - N8N_BASE_URL=${N8N_PROTOCOL:-https}://${N8N_BASE_URL:-n8n.${DEPLOYMENT_DOMAIN:-localhost}}
+    - N8N_HOST=${N8N_BASE_URL:-n8n.${DEPLOYMENT_DOMAIN:-localhost}}
+    - N8N_PROTOCOL=${N8N_PROTOCOL:-https}
+    - N8N_EDITOR_BASE_URL=${N8N_OAUTH_BASE:-${N8N_PROTOCOL:-https}://${N8N_BASE_URL:-n8n.${DEPLOYMENT_DOMAIN:-localhost}}}
+    - WEBHOOK_URL=${N8N_OAUTH_BASE:-${N8N_PROTOCOL:-https}://${N8N_BASE_URL:-n8n.${DEPLOYMENT_DOMAIN:-localhost}}}
+    - DB_TYPE=postgresdb
+    - DB_POSTGRESDB_HOST=n8n-postgres
+    - DB_POSTGRESDB_USER=${POSTGRES_USER:-root}
+    - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD:?set in .env}
+    - DB_POSTGRESDB_DATABASE=${POSTGRES_DB:-n8n}
+    - DB_POSTGRESDB_POOL_SIZE=${DB_POSTGRESDB_POOL_SIZE:-25}
+    - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY:?set in .env}
+    - N8N_USER_MANAGEMENT_JWT_SECRET=${N8N_USER_MANAGEMENT_JWT_SECRET:?set in .env}
+    - N8N_SECURE_COOKIE=${N8N_SECURE_COOKIE:-false}
+    # [main OOM 2026-08-18] 1536->2048 heap. Opening a LARGE execution in the UI makes main
+    # load + flatted-parse a 100-170MB blob single-threaded — measured: 13 restarts overnight,
+    # three kernel cgroup kills at ~2GB in 5 minutes while the owner browsed big executions
+    # (the "server goes down for a bit" symptom). cgroup 2G -> 2.5G below, heap x1.3 rule.
+    - N8N_MEMORY_LIMIT=4G
+    # [main saturation 2026-08-24] 2048 -> 3072: main sat AT the 2048 ceiling (RSS 2.19G) while
+    # serving all webhooks + UI; GC thrash at the ceiling was the measured multi-second stall.
+    - NODE_OPTIONS=--max-old-space-size=3072
+    - N8N_DEFAULT_BINARY_DATA_MODE=filesystem
+    # EXECUTION PRUNING — NOTE THE MISSING `N8N_` PREFIX. These four were spelled
+    # `N8N_EXECUTIONS_DATA_*` here since the file was written, and n8n has been IGNORING ALL FOUR:
+    # @n8n/config's executions.config.js (n8n 2.17.0, read out of the running image 2026-08-09)
+    # declares them as `EXECUTIONS_DATA_PRUNE`, `EXECUTIONS_DATA_MAX_AGE`,
+    # `EXECUTIONS_DATA_PRUNE_MAX_COUNT`, `EXECUTIONS_DATA_SAVE_ON_PROGRESS` — unprefixed. So pruning
+    # was never enabled: measured the same day, `execution_data` was 1 560 MB of a 1 634 MB database
+    # with 27 332 executions and ZERO soft-deleted rows, i.e. nothing had ever been pruned.
+    #
+    # THE TRAP THAT MADE THIS EASY TO GET WRONG, spelled out so it is not re-introduced: n8n mixes
+    # the two conventions in ONE config file. `N8N_EXECUTIONS_QUEUE_RECOVERY_BATCH` and
+    # `N8N_EXECUTIONS_QUEUE_RECOVERY_INTERVAL` (set just below) genuinely ARE `N8N_`-prefixed;
+    # the data-retention ones are not. Prefixing by analogy is silently accepted — an unknown env
+    # var is not an error — and the only symptom is a table that never stops growing.
+    - EXECUTIONS_DATA_PRUNE=true
+    - EXECUTIONS_DATA_MAX_AGE=168
+    # 2000 -> 20000. 2000 was never applied (see above), so this is not a loosening of a working
+    # limit — it is choosing the first value that will ACTUALLY take effect. At the measured
+    # ~5 900 executions/hour this fleet produces under backfill, 2000 is ~20 minutes of history:
+    # it would hard-delete executions while they are still being read back through
+    # `/rest/executions/<id>`, which is the fleet's primary debugging surface. 20000 is ~3.4 h at
+    # that peak rate and still bounds the table, which is the point.
+    - EXECUTIONS_DATA_PRUNE_MAX_COUNT=20000
+    - EXECUTIONS_DATA_SAVE_ON_PROGRESS=false
+    - N8N_EXECUTIONS_TIMEOUT_MAX=${N8N_EXECUTIONS_TIMEOUT_MAX:-36000}
+    # Queue recovery (leader/main only — scaling.service.js calls scheduleQueueRecovery(0) at boot).
+    # BATCH: getInProgressExecutionIds() takes only the newest `batchSize` in-progress rows, so with
+    #   the default 100 every restart with >100 in-flight executions ORPHANS the surplus as `running`
+    #   forever (measured 2026-08-06: 104 permanent zombies from the 18:36 restart). Raise it so the
+    #   boot sweep reaps the whole in-flight set and leaves nothing behind.
+    # INTERVAL: the PERIODIC sweep is destructive — getInProgressExecutionIds() has no `mode` filter
+    #   and `integrated` sub-workflow executions never have a Bull job, so it marks LIVE sub-workflows
+    #   `crashed` (measured: 4 rows aged 0.2-3s killed at 20:07:00). Boot recovery is correct and is
+    #   NOT affected by this value. Must stay under Node's setTimeout 32-bit ceiling
+    #   (2^31-1 ms = 35791 min) or the timer fires immediately in a hot loop.
+    - N8N_EXECUTIONS_QUEUE_RECOVERY_BATCH=${N8N_EXECUTIONS_QUEUE_RECOVERY_BATCH:-5000}
+    - N8N_EXECUTIONS_QUEUE_RECOVERY_INTERVAL=${N8N_EXECUTIONS_QUEUE_RECOVERY_INTERVAL:-20000}
+    - N8N_WEBHOOK_TTL=${N8N_WEBHOOK_TTL:-36000}
+    # [2026-08-18] internal-mode experiment REVERTED same hour (owner order: no settings
+    # fiddling — external mode worked for weeks). The ack-drop stalls traced instead to NEW
+    # per-dispatch runner traffic added that night (router side-stamp code nodes shipping the
+    # full group payload on every action) — fixed at the workflow layer, not here.
+    - N8N_RUNNERS_ENABLED=true
+    - N8N_RUNNERS_MODE=external
+    - N8N_RUNNERS_AUTH_TOKEN=${N8N_RUNNERS_AUTH_TOKEN}
+    - N8N_RUNNERS_HEARTBEAT_INTERVAL=${N8N_RUNNERS_HEARTBEAT_INTERVAL:-90}
+    - N8N_RUNNERS_BROKER_LISTEN_ADDRESS=0.0.0.0
+    - N8N_RUNNERS_TASK_TIMEOUT=${N8N_RUNNERS_TASK_TIMEOUT:-300}
+    - N8N_RUNNERS_TASK_REQUEST_TIMEOUT=${N8N_RUNNERS_TASK_REQUEST_TIMEOUT:-300}
+    - EXECUTIONS_MODE=queue
+    - QUEUE_BULL_REDIS_HOST=redis
+    # 300000 -> 1800000 (2026-08-11). THIS IS WHAT KILLED THE HOURLY FULL-TABLE SWEEP.
+    #
+    # indoxV2Driver01's Schedule Trigger is the ONLY entry point that reads the whole
+    # incoming_documents table; the webhook/integrated runs carry 1-97 lines each and never sweep.
+    # Measured over 24h: EVERY scheduled run failed -- 3 of 3, avg 601s, max 830s -- with
+    #   "This execution failed to be processed too many times and will no longer retry."
+    # That is Bull's stalled-job detector, not a workflow error. The sweep serialises ~17,800 rows
+    # through one job and blocks the worker's event loop past the 300s lock, so the lock expires,
+    # QUEUE_WORKER_STALLED_INTERVAL (60s) catches it, and the job is failed.
+    #
+    # Consequence, measured 2026-08-11: 6,681 documents (37.5% of the fleet) had NEVER been
+    # actioned -- no ACTION_LOG at all -- concentrated in a middle ID band. PG Get All is
+    # ORDER BY "ID", so the sweep re-processed the head every hour (95% of base extractions were
+    # rework) and never reached the tail, while the changelog entry point covered only the newest
+    # rows. One expired lock produced both symptoms.
+    #
+    # 1800000 = 30 min, ~2.2x the worst observed sweep. Sized against the sweep, not guessed: the
+    # lock only has to outlast the longest event-loop block, and a blocked loop cannot renew at
+    # QUEUE_WORKER_LOCK_RENEW_TIME either, so raising the DURATION is the only lever that works.
+    # Cost of a genuinely dead worker is a 30 min wait before its jobs are reclaimed, which
+    # N8N_EXECUTIONS_QUEUE_RECOVERY_INTERVAL (20s, set above) already covers for orphans.
+    - QUEUE_WORKER_LOCK_DURATION=${QUEUE_WORKER_LOCK_DURATION:-1800000}
+    - QUEUE_WORKER_STALLED_INTERVAL=${QUEUE_WORKER_STALLED_INTERVAL:-60000}
+    # QUEUE_WORKER_MAX_STALLED_COUNT REMOVED (was :-5) -- it never did anything, and believing it
+    # did is what made the failures look inexplicable. n8n 2.x does not read this name: the four
+    # env vars @n8n/config/dist/configs/scaling-mode.config.js defines are LOCK_DURATION,
+    # LOCK_RENEW_TIME, STALLED_INTERVAL and TIMEOUT, and n8n ships
+    # dist/modules/breaking-changes/rules/v2/queue-worker-max-stalled-count.rule.js precisely
+    # because the setting was dropped in v2. Worse than inert: dist/scaling/scaling.service.js:89
+    # is `settings: { ...this.globalConfig.queue.bull.settings, maxStalledCount: 0 }` -- it spreads
+    # config in and then HARDCODES 0, so a stalled job gets zero retries, not the Bull default of 1.
+    # There is no supported way to buy retries here; the lock simply must not expire.
+    # This is exactly the failure mode the EXECUTIONS_DATA_PRUNE comment above warns about:
+    # an unknown env var is silently accepted and the only symptom is the thing never working.
+    - QUEUE_BULL_REDIS_PORT=6379
+    - QUEUE_BULL_REDIS_PASSWORD=${REDIS_PASSWORD}
+    - OFFLOAD_MANUAL_EXECUTIONS_TO_WORKERS=${OFFLOAD_MANUAL_EXECUTIONS_TO_WORKERS:-false}
+    - N8N_TRUST_PROXY=true
+    - N8N_PROXY_HOPS=${N8N_PROXY_HOPS:-1}
+    - NODE_FUNCTION_ALLOW_EXTERNAL=*
+    - N8N_LOG_LEVEL=${N8N_LOG_LEVEL:-info}
+    - N8N_DIAGNOSTICS_ENABLED=false
+    - N8N_PERSONALIZATION_ENABLED=false
+    - N8N_PUSH_BACKEND=${N8N_PUSH_BACKEND:-sse}
+    - N8N_SENTRY_DSN=${N8N_SENTRY_DSN:-}
+    - CREDENTIALS_OVERWRITE_DATA={"googleSheetsOAuth2Api":{"clientId":"${N8N_GOOGLE_OAUTH_CLIENT_ID}","clientSecret":"${N8N_GOOGLE_OAUTH_CLIENT_SECRET}"},"googleDriveOAuth2Api":{"clientId":"${N8N_GOOGLE_OAUTH_CLIENT_ID}","clientSecret":"${N8N_GOOGLE_OAUTH_CLIENT_SECRET}"},"googleSheetsTriggerOAuth2Api":{"clientId":"${N8N_GOOGLE_OAUTH_CLIENT_ID}","clientSecret":"${N8N_GOOGLE_OAUTH_CLIENT_SECRET}"},"gmailOAuth2":{"clientId":"${N8N_GMAIL_OAUTH_CLIENT_ID}","clientSecret":"${N8N_GMAIL_OAUTH_CLIENT_SECRET}"}}
+    - N8N_CUSTOM_EXTENSIONS=/home/node/custom-extensions
+    hostname: n8n
+    restart: unless-stopped
+    volumes:
+    - n8n_storage:/home/node/.n8n
+    - ./blueprint/n8n:/home/node/workflows
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 10m
+        max-file: '3'
+    ports:
+    - 127.0.0.1:5678:5678
+    labels:
+    - traefik.enable=true
+    - traefik.http.routers.n8n-local.rule=Host(`n8n.localhost`)
+    - traefik.http.routers.n8n-local.entrypoints=web
+    - traefik.http.routers.n8n-local.service=n8n
+    - traefik.http.routers.n8n-http.rule=Host(`${N8N_BASE_URL}`)
+    - traefik.http.routers.n8n-http.entrypoints=web
+    - traefik.http.routers.n8n-http.service=n8n
+    - traefik.http.routers.n8n-https.rule=Host(`${N8N_BASE_URL}`)
+    - traefik.http.routers.n8n-https.entrypoints=websecure
+    - traefik.http.routers.n8n-https.tls=true
+    - traefik.http.routers.n8n-https.service=n8n
+    - traefik.http.routers.n8n-https.tls.certresolver=myresolver
+    - traefik.http.services.n8n.loadbalancer.server.port=5678
+    # The console's desktop mode opens n8n as a window (console/static/desktop.js openExternal).
+    # n8n answers `X-Frame-Options: SAMEORIGIN`, which forbids exactly that; this drops it and lets
+    # ONLY the console frame the editor (CSP frame-ancestors), so no other site can.
+    - traefik.http.middlewares.n8n-embed.headers.customresponseheaders.X-Frame-Options=
+    - traefik.http.middlewares.n8n-embed.headers.contentsecuritypolicy=frame-ancestors 'self' http://${CONSOLE_BASE_URL} https://${CONSOLE_BASE_URL}
+    - traefik.http.routers.n8n-local.middlewares=n8n-embed@docker
+    - traefik.http.routers.n8n-http.middlewares=n8n-embed@docker
+    - traefik.http.routers.n8n-https.middlewares=n8n-embed@docker
+    - traefik.http.routers.n8n-push-https.rule=Host(`${N8N_BASE_URL}`) && PathPrefix(`/rest/push`)
+    - traefik.http.routers.n8n-push-https.entrypoints=websecure
+    - traefik.http.routers.n8n-push-https.tls=true
+    - traefik.http.routers.n8n-push-https.service=n8n
+    - traefik.http.routers.n8n-push-https.tls.certresolver=myresolver
+    - traefik.http.routers.n8n-push-https.priority=200
+    - traefik.http.routers.n8n-push-https.middlewares=n8n-push-origin@docker
+    - traefik.http.middlewares.n8n-push-origin.headers.customrequestheaders.Origin=${N8N_PROTOCOL:-https}://${N8N_BASE_URL}
+    - traefik.http.routers.n8n-push-http.rule=Host(`${N8N_BASE_URL}`) && PathPrefix(`/rest/push`)
+    - traefik.http.routers.n8n-push-http.entrypoints=web
+    - traefik.http.routers.n8n-push-http.service=n8n
+    - traefik.http.routers.n8n-push-http.priority=200
+    - traefik.http.routers.n8n-push-http.middlewares=n8n-push-origin@docker
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - wget -q -O /dev/null http://127.0.0.1:5678/healthz || exit 1
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 5
+      # FIRST BOOT AFTER `bbox reset` runs ~100 schema migrations before /healthz answers. With a
+      # 60s start_period n8n was marked unhealthy mid-migration, and every dependent declaring
+      # `condition: service_healthy` (task-runners, worker-1/2 + their runners) aborted with
+      # "dependency failed to start: container n8n-... is unhealthy". Failures during start_period
+      # do not count toward retries, so this only affects how long a COLD start may take.
+      start_period: 300s
+  # [2026-08-24, owner order] DEDICATED WEBHOOK PROCESSOR — n8n's official queue-mode scaling
+  # architecture (main = UI/REST/schedules, THIS = /webhook receipt + reply-relay, workers =
+  # execution). Measured need on 2026-08-24: ~80% of main's front-door traffic was internal bus
+  # hops (SHIM x3331/4h); main's event loop stalled 0.7-9.2s serving the UI. Internal workflow
+  # HTTP nodes target http://n8n-webhook:5678 directly; external /webhook/* routes here via
+  # traefik (priority 150). /webhook-test/* deliberately STAYS on main — editor test webhooks
+  # live in the editor session's process.
+  n8n-webhook:
+    container_name: n8n-webhook-${DEPLOYMENT_NAME:-bina-deployment}
+    image: binaos/n8n:${N8N_VERSION:?set N8N_VERSION in .env (see .env.ex)}
+    hostname: n8n-webhook
+    # worker pattern: bypass the seed-community-nodes entrypoint (it execs `n8n "$@"`, which
+    # would read `sh` as an n8n subcommand), and add pull_policy: never for the same cold-engine
+    # reason documented on n8n-worker-1.
+    pull_policy: never
+    entrypoint:
+    - tini
+    - --
+    command:
+    - sh
+    - -c
+    - n8n webhook
+    restart: unless-stopped
+    # Reply-relay lives here now — prioritized under contention like main, but below it.
+    cpu_shares: 1536
+    deploy:
+      resources:
+        limits:
+          # heap 1024 x 1.3 = 1331M -> 1.5G floor per the heap x 1.3 rule documented on main.
+          memory: 1536M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    networks:
+    - traefik-network
+    env_file:
+    - path: .env
+      required: false
+    environment:
+    - TZ=${TZ:-UTC}
+    - GENERIC_TIMEZONE=${GENERIC_TIMEZONE:-UTC}
+    - N8N_LISTEN_ADDRESS=0.0.0.0
+    - N8N_BASE_URL=${N8N_PROTOCOL:-https}://${N8N_BASE_URL:-n8n.${DEPLOYMENT_DOMAIN:-localhost}}
+    - N8N_HOST=${N8N_BASE_URL:-n8n.${DEPLOYMENT_DOMAIN:-localhost}}
+    - N8N_PROTOCOL=${N8N_PROTOCOL:-https}
+    - N8N_EDITOR_BASE_URL=${N8N_OAUTH_BASE:-${N8N_PROTOCOL:-https}://${N8N_BASE_URL:-n8n.${DEPLOYMENT_DOMAIN:-localhost}}}
+    - WEBHOOK_URL=${N8N_OAUTH_BASE:-${N8N_PROTOCOL:-https}://${N8N_BASE_URL:-n8n.${DEPLOYMENT_DOMAIN:-localhost}}}
+    - DB_TYPE=postgresdb
+    - DB_POSTGRESDB_HOST=n8n-postgres
+    - DB_POSTGRESDB_USER=${POSTGRES_USER:-root}
+    - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD:?set in .env}
+    - DB_POSTGRESDB_DATABASE=${POSTGRES_DB:-n8n}
+    - DB_POSTGRESDB_POOL_SIZE=${DB_POSTGRESDB_POOL_SIZE:-25}
+    - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY:?set in .env}
+    - N8N_USER_MANAGEMENT_JWT_SECRET=${N8N_USER_MANAGEMENT_JWT_SECRET:?set in .env}
+    - N8N_SECURE_COOKIE=${N8N_SECURE_COOKIE:-false}
+    - N8N_MEMORY_LIMIT=1536M
+    - NODE_OPTIONS=--max-old-space-size=1024
+    - N8N_DEFAULT_BINARY_DATA_MODE=filesystem
+    - EXECUTIONS_MODE=queue
+    - QUEUE_BULL_REDIS_HOST=redis
+    - QUEUE_BULL_REDIS_PORT=6379
+    - QUEUE_BULL_REDIS_PASSWORD=${REDIS_PASSWORD}
+    - QUEUE_HEALTH_CHECK_ACTIVE=true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    labels:
+    - traefik.enable=true
+    - traefik.http.services.n8n-hooks.loadbalancer.server.port=5678
+    - traefik.http.routers.n8n-hooks-local.rule=Host(`n8n.localhost`) && (PathPrefix(`/webhook/`) || PathPrefix(`/webhook-waiting/`) || PathPrefix(`/form/`))
+    - traefik.http.routers.n8n-hooks-local.entrypoints=web
+    - traefik.http.routers.n8n-hooks-local.service=n8n-hooks
+    - traefik.http.routers.n8n-hooks-local.priority=150
+    - traefik.http.routers.n8n-hooks-http.rule=Host(`${N8N_BASE_URL}`) && (PathPrefix(`/webhook/`) || PathPrefix(`/webhook-waiting/`) || PathPrefix(`/form/`))
+    - traefik.http.routers.n8n-hooks-http.entrypoints=web
+    - traefik.http.routers.n8n-hooks-http.service=n8n-hooks
+    - traefik.http.routers.n8n-hooks-http.priority=150
+    - traefik.http.routers.n8n-hooks-https.rule=Host(`${N8N_BASE_URL}`) && (PathPrefix(`/webhook/`) || PathPrefix(`/webhook-waiting/`) || PathPrefix(`/form/`))
+    - traefik.http.routers.n8n-hooks-https.entrypoints=websecure
+    - traefik.http.routers.n8n-hooks-https.tls=true
+    - traefik.http.routers.n8n-hooks-https.tls.certresolver=myresolver
+    - traefik.http.routers.n8n-hooks-https.service=n8n-hooks
+    - traefik.http.routers.n8n-hooks-https.priority=150
+    depends_on:
+      redis:
+        condition: service_healthy
+      n8n:
+        # main owns schema migrations — a cold boot must let it finish before webhook starts
+        condition: service_healthy
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - wget -q -O /dev/null http://127.0.0.1:5678/healthz || exit 1
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 5
+      start_period: 120s
+  n8n-task-runners:
+    container_name: n8n-task-runners-${DEPLOYMENT_NAME:-bina-deployment}
+    image: n8nio/runners:${N8N_VERSION:?set N8N_VERSION in .env (see .env.ex)}
+    hostname: n8n-task-runners
+    networks:
+    - traefik-network
+    environment:
+    - TZ=${TZ:-UTC}
+    - GENERIC_TIMEZONE=${GENERIC_TIMEZONE:-UTC}
+    - N8N_RUNNERS_AUTH_TOKEN=${N8N_RUNNERS_AUTH_TOKEN}
+    - N8N_RUNNERS_HEARTBEAT_INTERVAL=${N8N_RUNNERS_HEARTBEAT_INTERVAL:-90}
+    - N8N_RUNNERS_TASK_BROKER_URI=http://n8n:5679
+    # Upstream default. task-runner-launcher's own struct tag, read out of the binary in the
+    # running image: `AutoShutdownTimeout env:"N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT, default=15"`.
+    # The 300 that used to sit here arrived unexplained in ff942977 and was never n8n's default.
+    # Idle shutdown is NOT the wedge fix -- a relaunched runner that comes back deaf is caught by
+    # a progress-based probe (see worker-liveness.sh), not by never relaunching.
+    - N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT=${N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT:-15}
+    - RUNNER_LIVENESS_LOG_GLOB=/n8n-data/n8nEventLog.log /n8n-data/n8nEventLog-[0-9]*.log
+    # ── SLOT INVARIANT: runner slots MUST be >= the worker's execution slots ──────────────
+    # N8N_RUNNERS_MAX_CONCURRENCY (here) vs N8N_WORKER_CONCURRENCY (on the worker this sidecar
+    # serves). Every execution lane can be inside a Code node at any moment, and a Code node
+    # needs a runner task slot. With fewer runner slots than worker slots the excess lanes do
+    # NOT queue politely - they starve, and they starve SILENTLY:
+    #   * the runner advertises free capacity as offers valid ~5.1s
+    #     (OFFER_VALID_TIME_MS=5000 + OFFER_VALID_EXTRA_MS=100, task-runner.js sendOffers)
+    #   * an offer accepted after it expired is refused with "Offer expired - not accepted
+    #     within validity window", which the broker logs at INFO and then simply waits
+    #   * an ack slower than the hardcoded 2000ms logs a WARN and also just waits
+    #   * nothing throws until N8N_RUNNERS_TASK_REQUEST_TIMEOUT
+    # Measured 2026-08-18: worker slots 20 vs runner slots 12 wedged 16 driver lanes for 15+
+    # minutes with 0 rows written, 0.3% CPU and not one error line. Keep these equal.
+    - N8N_RUNNERS_MAX_CONCURRENCY=${N8N_RUNNERS_MAX_CONCURRENCY:-15}
+    # [mega-decide 2026-08-18] The RUNNER-side task timeout defaults to 60s when unset HERE —
+    # the worker-side N8N_RUNNERS_TASK_TIMEOUT does not reach the sidecar. A 100k-row decide
+    # task legitimately runs minutes; measured: "Task ... timed out" at exactly 60s.
+    - N8N_RUNNERS_TASK_TIMEOUT=${N8N_RUNNERS_TASK_TIMEOUT:-900}
+    - N8N_RUNNERS_LAUNCHER_LOG_LEVEL=${N8N_LOG_LEVEL:-info}
+    - NODE_OPTIONS=--max-old-space-size=${N8N_RUNNERS_HEAP_MB:-1536}
+    volumes:
+    # READ-ONLY. The probe only reads n8n's event log; this container must never write to the
+    # volume n8n owns. It is the one place a deaf runner is visible from inside this container --
+    # the launcher's /healthz cannot see it, which is the whole 2026-08-18 incident.
+    - n8n_storage:/n8n-data:ro
+    - ./runner-liveness.sh:/runner-liveness.sh:ro
+    labels:
+      # OPT IN to platform-base/autoheal, on the same terms as the workers above: a sustained
+      # `unhealthy` from the progress probe below is what restarts this sidecar, and autoheal's
+      # streak + cooldown + per-window cap bound the damage if the probe is ever wrong. A runner
+      # sidecar is stateless -- it holds no queue position and no data -- so a restart costs at
+      # most the tasks in flight, which a wedged runner was not completing anyway.
+      binaos.autoheal: "true"
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          # HELD AT 1.5G — a planned cut to 768M was WITHDRAWN, 2026-08-06.
+          #
+          # These services declare NODE_OPTIONS=--max-old-space-size=1024 (above in this same
+          # service). A 768M cgroup ceiling sits BELOW the 1024M heap the runtime is told it may
+          # allocate, so the container would be OOM-killed the moment V8 actually used the heap it
+          # was granted — and only under load, which is when it matters. Observed peaks (10 /
+          # 135 / 293 MiB) say nothing about this: they are what the heap happened to reach, not
+          # what it is permitted to reach.
+          #
+          # RULE FOR THIS FILE: cgroup memory limit >= NODE heap x 1.3. The extra 30% is V8
+          # overhead, native buffers and RSS outside old-space — a Node process is never just its
+          # heap. 1024 x 1.3 = 1331M, so 1.5G is the floor here, not a generous allowance.
+          memory: 4G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '3'
+    depends_on:
+      n8n:
+        condition: service_healthy
+        restart: true
+    healthcheck:
+      test:
+      - CMD-SHELL
+      # PROGRESS, not liveness. The probe this replaced was `wget --spider .../healthz` on the Go
+      # launcher, whose health server has ONE route returning a static {"status":"ok"} -- it
+      # answers 200 whenever the LAUNCHER is alive. On 2026-08-18 worker-2's launcher was alive
+      # and healthy for 35 minutes while the Node runner behind it answered nothing: 4,125
+      # unacknowledged task offers, near-zero completions, container green the whole time.
+      # runner-liveness.sh counts n8n's own task.requested/response.received pairs instead.
+      - sh /runner-liveness.sh
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 30s
+  n8n-worker-1:
+    container_name: n8n-worker-1-${DEPLOYMENT_NAME:-bina-deployment}
+    # The image the `n8n` service builds. Deliberately no build: block - redeclaring the same
+    # build is what produced three images of identical content.
+    image: binaos/n8n:${N8N_VERSION:?set N8N_VERSION in .env (see .env.ex)}
+    # binaos/n8n exists only because the `n8n` service builds it - it is in no registry. A service
+    # with an image: and no build: is one compose will try to PULL, so on a cold engine both workers
+    # failed with `pull access denied for binaos/n8n` at ERROR level while every other service only
+    # warned. Nothing was actually broken (depends_on already orders them after n8n, and compose
+    # builds before it starts anything, so the tag is present by then) - but a red error on every
+    # from-zero build teaches people to ignore red errors. Say the dependency out loud instead.
+    pull_policy: never
+    hostname: n8n-worker-1
+    entrypoint:
+    - tini
+    - --
+    command:
+    - sh
+    - -c
+    # ── SLOT INVARIANT (see the runner sidecar): N8N_WORKER_CONCURRENCY must be <=
+    # N8N_RUNNERS_MAX_CONCURRENCY of the runner serving THIS worker, or lanes starve silently.
+    - n8n worker --concurrency=${N8N_WORKER_CONCURRENCY:-8}
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          # HELD AT 2G — a planned cut to 1G was WITHDRAWN, 2026-08-06.
+          #
+          # The cut was sized from a 10-minute sample on an idle-ish, restarting host: worker-1
+          # 443MiB, worker-2 439MiB. Re-measured under real pipeline load during proof #5, with
+          # the same cgroup counter: worker-1 484MiB but **worker-2 1135MiB** — 2.6x the earlier
+          # reading and ABOVE the 1G ceiling that was about to be applied. The cut would have
+          # OOM-killed the busiest worker in the stack, and an OOM-killed worker is
+          # indistinguishable from the restart-orphaning this whole effort exists to remove.
+          #
+          # The asymmetry (484 vs 1135) is the point: whichever worker draws the heavy document
+          # is the one that spikes, so BOTH must be sized for the maximum, not the average.
+          # This is the "sized from a floor, not a maximum" trap, caught by measuring instead of
+          # assuming. Do not cut this without a sample taken under load.
+          # [decide 30k 2026-08-18 #2] 2.5G -> 3.25G with heap 2048 -> 2600 (see NODE_OPTIONS note).
+          memory: 4G
+        reservations:
+          cpus: '0.5'
+          # 1G reservation under a (previously) 2G limit was half the ceiling soft-reserved per
+          # worker. Dropped to 256M so the reservation is a floor, not a second ceiling.
+          memory: 256M
+    networks:
+    - traefik-network
+    env_file:
+    - path: .env
+      required: false
+    environment:
+    - TZ=${TZ:-UTC}
+    - GENERIC_TIMEZONE=${GENERIC_TIMEZONE:-UTC}
+    - N8N_LISTEN_ADDRESS=0.0.0.0
+    - N8N_WORKER_SERVER_ADDRESS=0.0.0.0
+    - N8N_WEBHOOK_USER=${N8N_WEBHOOK_USER:-cicd}
+    - N8N_WEBHOOK_PASS=${N8N_WEBHOOK_PASS:-}
+    - DB_TYPE=postgresdb
+    - DB_POSTGRESDB_HOST=n8n-postgres
+    - DB_POSTGRESDB_USER=${POSTGRES_USER:-root}
+    - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD:?set in .env}
+    - DB_POSTGRESDB_DATABASE=${POSTGRES_DB:-n8n}
+    - DB_POSTGRESDB_POOL_SIZE=${DB_POSTGRESDB_POOL_SIZE:-25}
+    - EXECUTIONS_MODE=queue
+    - QUEUE_BULL_REDIS_HOST=redis
+    # 300000 -> 1800000 (2026-08-11). THIS IS WHAT KILLED THE HOURLY FULL-TABLE SWEEP.
+    #
+    # indoxV2Driver01's Schedule Trigger is the ONLY entry point that reads the whole
+    # incoming_documents table; the webhook/integrated runs carry 1-97 lines each and never sweep.
+    # Measured over 24h: EVERY scheduled run failed -- 3 of 3, avg 601s, max 830s -- with
+    #   "This execution failed to be processed too many times and will no longer retry."
+    # That is Bull's stalled-job detector, not a workflow error. The sweep serialises ~17,800 rows
+    # through one job and blocks the worker's event loop past the 300s lock, so the lock expires,
+    # QUEUE_WORKER_STALLED_INTERVAL (60s) catches it, and the job is failed.
+    #
+    # Consequence, measured 2026-08-11: 6,681 documents (37.5% of the fleet) had NEVER been
+    # actioned -- no ACTION_LOG at all -- concentrated in a middle ID band. PG Get All is
+    # ORDER BY "ID", so the sweep re-processed the head every hour (95% of base extractions were
+    # rework) and never reached the tail, while the changelog entry point covered only the newest
+    # rows. One expired lock produced both symptoms.
+    #
+    # 1800000 = 30 min, ~2.2x the worst observed sweep. Sized against the sweep, not guessed: the
+    # lock only has to outlast the longest event-loop block, and a blocked loop cannot renew at
+    # QUEUE_WORKER_LOCK_RENEW_TIME either, so raising the DURATION is the only lever that works.
+    # Cost of a genuinely dead worker is a 30 min wait before its jobs are reclaimed, which
+    # N8N_EXECUTIONS_QUEUE_RECOVERY_INTERVAL (20s, set above) already covers for orphans.
+    - QUEUE_WORKER_LOCK_DURATION=${QUEUE_WORKER_LOCK_DURATION:-1800000}
+    - QUEUE_WORKER_STALLED_INTERVAL=${QUEUE_WORKER_STALLED_INTERVAL:-60000}
+    # QUEUE_WORKER_MAX_STALLED_COUNT REMOVED (was :-5) -- it never did anything, and believing it
+    # did is what made the failures look inexplicable. n8n 2.x does not read this name: the four
+    # env vars @n8n/config/dist/configs/scaling-mode.config.js defines are LOCK_DURATION,
+    # LOCK_RENEW_TIME, STALLED_INTERVAL and TIMEOUT, and n8n ships
+    # dist/modules/breaking-changes/rules/v2/queue-worker-max-stalled-count.rule.js precisely
+    # because the setting was dropped in v2. Worse than inert: dist/scaling/scaling.service.js:89
+    # is `settings: { ...this.globalConfig.queue.bull.settings, maxStalledCount: 0 }` -- it spreads
+    # config in and then HARDCODES 0, so a stalled job gets zero retries, not the Bull default of 1.
+    # There is no supported way to buy retries here; the lock simply must not expire.
+    # This is exactly the failure mode the EXECUTIONS_DATA_PRUNE comment above warns about:
+    # an unknown env var is silently accepted and the only symptom is the thing never working.
+    - QUEUE_BULL_REDIS_PORT=6379
+    - QUEUE_BULL_REDIS_PASSWORD=${REDIS_PASSWORD}
+    - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY:?set in .env}
+    - N8N_USER_MANAGEMENT_JWT_SECRET=${N8N_USER_MANAGEMENT_JWT_SECRET:?set in .env}
+    # [decide 30k 2026-08-18] 1536 -> 2048 heap (cgroup 2G -> 2.5G below). A one-shot decide
+    # over the full ~39k-row table died at the V8 heap limit ("Ineffective mark-compacts near
+    # heap limit", container at 1.64GiB — the cgroup was NOT the binding wall) even after the
+    # decide chain was slimmed to ~half its bytes. The two unavoidable full-row item sets
+    # (entry trigger + exit rejoin, the caller contract) plus the caller's own table copy share
+    # one worker heap. Sized against that measurement; host had 1.8G available for the +0.5G.
+    # [decide 30k 2026-08-18 #2] 2048 -> 2600 heap, cgroup 2.5G -> 3.25G. Measured: the 30k
+    # one-shot's doc_base stage PASSES (73-79s) and the run dies at 2.499GiB/2.5G in the
+    # per-type phase. Sub-workflows run IN-PROCESS with their caller in queue mode (verified:
+    # 3/3 runs co-resident, other worker idle), so the caller's table copy + decide's retained
+    # sets share one heap — exactly like the real driver sweep will. Only the sweep worker
+    # balloons; the other worker idles ~200MB, so host exposure is one worker's peak.
+    - N8N_MEMORY_LIMIT=4G
+    - NODE_OPTIONS=--max-old-space-size=2600
+    # [2026-08-18] internal-mode experiment REVERTED same hour (owner order: no settings
+    # fiddling — external mode worked for weeks). The ack-drop stalls traced instead to NEW
+    # per-dispatch runner traffic added that night (router side-stamp code nodes shipping the
+    # full group payload on every action) — fixed at the workflow layer, not here.
+    - N8N_RUNNERS_ENABLED=true
+    - N8N_RUNNERS_MODE=external
+    # Each worker gets its OWN event-bus log file. Default basename is `n8nEventLog` for every
+    # process (@n8n/config event-bus.config.js), so both workers appended to one shared
+    # n8nEventLog-worker.log and any-concurrency could not tell which runner served a task --
+    # 45% of task spans landed in `runner-unattributed`. A worker's tasks are always served by
+    # ITS OWN sidecar (one broker per process), so a per-worker file makes attribution exact.
+    - N8N_EVENTBUS_LOGWRITER_LOGBASENAME=n8nEventLog-w1
+    - N8N_RUNNERS_AUTH_TOKEN=${N8N_RUNNERS_AUTH_TOKEN}
+    - N8N_RUNNERS_HEARTBEAT_INTERVAL=${N8N_RUNNERS_HEARTBEAT_INTERVAL:-90}
+    - N8N_RUNNERS_BROKER_LISTEN_ADDRESS=0.0.0.0
+    - N8N_RUNNERS_TASK_TIMEOUT=${N8N_RUNNERS_TASK_TIMEOUT:-300}
+    - N8N_RUNNERS_TASK_REQUEST_TIMEOUT=${N8N_RUNNERS_TASK_REQUEST_TIMEOUT:-120}
+    - N8N_DEFAULT_BINARY_DATA_MODE=filesystem
+    # EXECUTION PRUNING — NOTE THE MISSING `N8N_` PREFIX. These four were spelled
+    # `N8N_EXECUTIONS_DATA_*` here since the file was written, and n8n has been IGNORING ALL FOUR:
+    # @n8n/config's executions.config.js (n8n 2.17.0, read out of the running image 2026-08-09)
+    # declares them as `EXECUTIONS_DATA_PRUNE`, `EXECUTIONS_DATA_MAX_AGE`,
+    # `EXECUTIONS_DATA_PRUNE_MAX_COUNT`, `EXECUTIONS_DATA_SAVE_ON_PROGRESS` — unprefixed. So pruning
+    # was never enabled: measured the same day, `execution_data` was 1 560 MB of a 1 634 MB database
+    # with 27 332 executions and ZERO soft-deleted rows, i.e. nothing had ever been pruned.
+    #
+    # THE TRAP THAT MADE THIS EASY TO GET WRONG, spelled out so it is not re-introduced: n8n mixes
+    # the two conventions in ONE config file. `N8N_EXECUTIONS_QUEUE_RECOVERY_BATCH` and
+    # `N8N_EXECUTIONS_QUEUE_RECOVERY_INTERVAL` (set just below) genuinely ARE `N8N_`-prefixed;
+    # the data-retention ones are not. Prefixing by analogy is silently accepted — an unknown env
+    # var is not an error — and the only symptom is a table that never stops growing.
+    - EXECUTIONS_DATA_PRUNE=true
+    - EXECUTIONS_DATA_MAX_AGE=168
+    # 2000 -> 20000. 2000 was never applied (see above), so this is not a loosening of a working
+    # limit — it is choosing the first value that will ACTUALLY take effect. At the measured
+    # ~5 900 executions/hour this fleet produces under backfill, 2000 is ~20 minutes of history:
+    # it would hard-delete executions while they are still being read back through
+    # `/rest/executions/<id>`, which is the fleet's primary debugging surface. 20000 is ~3.4 h at
+    # that peak rate and still bounds the table, which is the point.
+    - EXECUTIONS_DATA_PRUNE_MAX_COUNT=20000
+    - EXECUTIONS_DATA_SAVE_ON_PROGRESS=false
+    - N8N_EXECUTIONS_TIMEOUT_MAX=${N8N_EXECUTIONS_TIMEOUT_MAX:-36000}
+    - NODE_FUNCTION_ALLOW_EXTERNAL=*
+    - N8N_LOG_LEVEL=${N8N_LOG_LEVEL:-info}
+    - N8N_DIAGNOSTICS_ENABLED=false
+    - N8N_SENTRY_DSN=${N8N_SENTRY_DSN:-}
+    - CREDENTIALS_OVERWRITE_DATA={"googleSheetsOAuth2Api":{"clientId":"${N8N_GOOGLE_OAUTH_CLIENT_ID}","clientSecret":"${N8N_GOOGLE_OAUTH_CLIENT_SECRET}"},"googleDriveOAuth2Api":{"clientId":"${N8N_GOOGLE_OAUTH_CLIENT_ID}","clientSecret":"${N8N_GOOGLE_OAUTH_CLIENT_SECRET}"},"googleSheetsTriggerOAuth2Api":{"clientId":"${N8N_GOOGLE_OAUTH_CLIENT_ID}","clientSecret":"${N8N_GOOGLE_OAUTH_CLIENT_SECRET}"},"gmailOAuth2":{"clientId":"${N8N_GMAIL_OAUTH_CLIENT_ID}","clientSecret":"${N8N_GMAIL_OAUTH_CLIENT_SECRET}"}}
+    - N8N_CUSTOM_EXTENSIONS=/home/node/custom-extensions
+    # Restated as an env var so worker-liveness.sh knows how many slots a full worker has.
+    # The `command:` above already reads the same variable, so the two cannot drift.
+    # NOT a concurrency change: still 8, per platform/profiles/perf-profiles.yml.
+    - N8N_WORKER_CONCURRENCY=${N8N_WORKER_CONCURRENCY:-8}
+    # File logging exists to feed the liveness probe, which needs THIS worker's own job
+    # start/finish lines. `docker logs` is not readable from inside the container, and n8n's
+    # queue metrics are no substitute: `isQueueMetricsEnabled` requires instanceType === 'main'
+    # (dist/scaling/scaling.service.js), and the counts are whole-queue totals that the OTHER
+    # worker keeps advancing, so they cannot tell the two workers apart.
+    #
+    # The path is deliberately absolute and OUTSIDE /home/node/.n8n. That directory is the
+    # shared `n8n_storage` volume, mounted into n8n main and BOTH workers, so n8n's default
+    # `logs/n8n.log` would interleave all three and destroy the per-worker attribution the
+    # probe depends on. Absolute paths are honoured -- `path.isAbsolute(...)` in
+    # @n8n/backend-common/dist/logging/logger.js. Console output is untouched, so `docker logs`
+    # keeps working exactly as before.
+    #
+    # Sizing: measured at 431 KiB/h on this worker, so 8 MiB x 2 files is ~37h of history and
+    # bounded at 16 MiB. The probe only ever reads the tail.
+    - N8N_LOG_OUTPUT=console,file
+    - N8N_LOG_FILE_LOCATION=/tmp/n8n-worker.log
+    - N8N_LOG_FILE_SIZE_MAX=8
+    - N8N_LOG_FILE_COUNT_MAX=2
+    volumes:
+    - n8n_storage:/home/node/.n8n
+    - ./blueprint/n8n:/home/node/workflows
+    - ./worker-liveness.sh:/worker-liveness.sh:ro
+    restart: unless-stopped
+    labels:
+      # OPT IN to platform-base/autoheal. `restart: unless-stopped` above reacts to the process
+      # EXITING; this label is what makes something react to the process being alive but STOPPED
+      # WORKING -- the 2026-08-10 wedge, which `unless-stopped` is structurally unable to see.
+      # Eligibility is declared here, in the same file as the service, so it appears in the same
+      # diff as any change to what this container does. autoheal is opt-in only: no service is
+      # enrolled by its mere existence.
+      #
+      # Safe for a worker specifically because a worker is stateless and its work is transactional:
+      # Bull re-queues whatever this worker held (QUEUE_WORKER_STALLED_INTERVAL / MAX_STALLED_COUNT
+      # above are what make that true), so a restart costs the in-flight executions a retry, not
+      # their result. That is emphatically NOT true of n8n-postgres, which is on autoheal's hard
+      # refusal list and carries no such label.
+      binaos.autoheal: "true"
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    depends_on:
+      n8n-postgres:
+        condition: service_healthy
+      n8n:
+        condition: service_healthy
+    healthcheck:
+      # WAS: `pgrep -f 'n8n worker' || exit 1` -- process existence only. On 2026-08-10 that
+      # reported `healthy` for the 2+ hours worker-1 processed ZERO executions while burning
+      # ~77% CPU, so effective queue capacity was halved with no signal anywhere. n8n's own
+      # /healthz (QUEUE_HEALTH_CHECK_ACTIVE) has the identical blind spot -- it is a static
+      # `res.send({status:'ok'})`. Both are argued out in full in worker-liveness.sh.
+      #
+      # Invoked through `sh` on purpose: this repo is checked out on /mnt/c, which reports every
+      # file as mode 755 regardless of the committed bit, so depending on the exec bit here
+      # would be a trap that only shows up on a Linux checkout.
+      test:
+      - CMD-SHELL
+      - sh /worker-liveness.sh
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      # 2, not 3: the probe already requires the fault to persist for its own grace window
+      # (240s) before it fails at all, so extra Docker retries just add latency to a decision
+      # that has already been damped.
+      retries: 2
+      # 180s, not 60s: a cold worker waits on n8n main being healthy and must log at least one
+      # job start before the probe has any progress to observe.
+      start_period: 180s
+  n8n-worker-1-runners:
+    container_name: n8n-worker-1-runners-${DEPLOYMENT_NAME:-bina-deployment}
+    image: n8nio/runners:${N8N_VERSION:?set N8N_VERSION in .env (see .env.ex)}
+    hostname: n8n-worker-1-runners
+    networks:
+    - traefik-network
+    environment:
+    - TZ=${TZ:-UTC}
+    - GENERIC_TIMEZONE=${GENERIC_TIMEZONE:-UTC}
+    - N8N_RUNNERS_AUTH_TOKEN=${N8N_RUNNERS_AUTH_TOKEN}
+    - N8N_RUNNERS_HEARTBEAT_INTERVAL=${N8N_RUNNERS_HEARTBEAT_INTERVAL:-90}
+    - N8N_RUNNERS_TASK_BROKER_URI=http://n8n-worker-1:5679
+    # Upstream default. task-runner-launcher's own struct tag, read out of the binary in the
+    # running image: `AutoShutdownTimeout env:"N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT, default=15"`.
+    # The 300 that used to sit here arrived unexplained in ff942977 and was never n8n's default.
+    # Idle shutdown is NOT the wedge fix -- a relaunched runner that comes back deaf is caught by
+    # a progress-based probe (see worker-liveness.sh), not by never relaunching.
+    - N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT=${N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT:-15}
+    - RUNNER_LIVENESS_LOG_GLOB=/n8n-data/n8nEventLog-w1-worker*.log
+    # ── SLOT INVARIANT: runner slots MUST be >= the worker's execution slots ──────────────
+    # N8N_RUNNERS_MAX_CONCURRENCY (here) vs N8N_WORKER_CONCURRENCY (on the worker this sidecar
+    # serves). Every execution lane can be inside a Code node at any moment, and a Code node
+    # needs a runner task slot. With fewer runner slots than worker slots the excess lanes do
+    # NOT queue politely - they starve, and they starve SILENTLY:
+    #   * the runner advertises free capacity as offers valid ~5.1s
+    #     (OFFER_VALID_TIME_MS=5000 + OFFER_VALID_EXTRA_MS=100, task-runner.js sendOffers)
+    #   * an offer accepted after it expired is refused with "Offer expired - not accepted
+    #     within validity window", which the broker logs at INFO and then simply waits
+    #   * an ack slower than the hardcoded 2000ms logs a WARN and also just waits
+    #   * nothing throws until N8N_RUNNERS_TASK_REQUEST_TIMEOUT
+    # Measured 2026-08-18: worker slots 20 vs runner slots 12 wedged 16 driver lanes for 15+
+    # minutes with 0 rows written, 0.3% CPU and not one error line. Keep these equal.
+    - N8N_RUNNERS_MAX_CONCURRENCY=${N8N_RUNNERS_MAX_CONCURRENCY:-8}
+    # [mega-decide 2026-08-18] Runner-side task timeout defaults to 60s when unset here (the
+    # worker-side value does not reach the sidecar). Measured: 100k decide killed at exactly 60s.
+    - N8N_RUNNERS_TASK_TIMEOUT=${N8N_RUNNERS_TASK_TIMEOUT:-900}
+    - N8N_RUNNERS_LAUNCHER_LOG_LEVEL=${N8N_LOG_LEVEL:-info}
+    - NODE_OPTIONS=--max-old-space-size=${N8N_RUNNERS_HEAP_MB:-1536}
+    volumes:
+    # READ-ONLY. The probe only reads n8n's event log; this container must never write to the
+    # volume n8n owns. It is the one place a deaf runner is visible from inside this container --
+    # the launcher's /healthz cannot see it, which is the whole 2026-08-18 incident.
+    - n8n_storage:/n8n-data:ro
+    - ./runner-liveness.sh:/runner-liveness.sh:ro
+    labels:
+      # OPT IN to platform-base/autoheal, on the same terms as the workers above: a sustained
+      # `unhealthy` from the progress probe below is what restarts this sidecar, and autoheal's
+      # streak + cooldown + per-window cap bound the damage if the probe is ever wrong. A runner
+      # sidecar is stateless -- it holds no queue position and no data -- so a restart costs at
+      # most the tasks in flight, which a wedged runner was not completing anyway.
+      binaos.autoheal: "true"
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          # HELD AT 1.5G — a planned cut to 768M was WITHDRAWN, 2026-08-06.
+          #
+          # These services declare NODE_OPTIONS=--max-old-space-size=1024 (above in this same
+          # service). A 768M cgroup ceiling sits BELOW the 1024M heap the runtime is told it may
+          # allocate, so the container would be OOM-killed the moment V8 actually used the heap it
+          # was granted — and only under load, which is when it matters. Observed peaks (10 /
+          # 135 / 293 MiB) say nothing about this: they are what the heap happened to reach, not
+          # what it is permitted to reach.
+          #
+          # RULE FOR THIS FILE: cgroup memory limit >= NODE heap x 1.3. The extra 30% is V8
+          # overhead, native buffers and RSS outside old-space — a Node process is never just its
+          # heap. 1024 x 1.3 = 1331M, so 1.5G is the floor here, not a generous allowance.
+          memory: 4G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '3'
+    depends_on:
+      n8n-worker-1:
+        condition: service_healthy
+        restart: true
+    healthcheck:
+      test:
+      - CMD-SHELL
+      # PROGRESS, not liveness. The probe this replaced was `wget --spider .../healthz` on the Go
+      # launcher, whose health server has ONE route returning a static {"status":"ok"} -- it
+      # answers 200 whenever the LAUNCHER is alive. On 2026-08-18 worker-2's launcher was alive
+      # and healthy for 35 minutes while the Node runner behind it answered nothing: 4,125
+      # unacknowledged task offers, near-zero completions, container green the whole time.
+      # runner-liveness.sh counts n8n's own task.requested/response.received pairs instead.
+      - sh /runner-liveness.sh
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 30s
+  n8n-worker-2:
+    container_name: n8n-worker-2-${DEPLOYMENT_NAME:-bina-deployment}
+    # The image the `n8n` service builds. Deliberately no build: block - redeclaring the same
+    # build is what produced three images of identical content.
+    image: binaos/n8n:${N8N_VERSION:?set N8N_VERSION in .env (see .env.ex)}
+    pull_policy: never   # locally built by the `n8n` service, never pullable - see n8n-worker-1
+    hostname: n8n-worker-2
+    entrypoint:
+    - tini
+    - --
+    command:
+    - sh
+    - -c
+    # ── SLOT INVARIANT (see the runner sidecar): N8N_WORKER_CONCURRENCY must be <=
+    # N8N_RUNNERS_MAX_CONCURRENCY of the runner serving THIS worker, or lanes starve silently.
+    - n8n worker --concurrency=${N8N_WORKER_CONCURRENCY:-8}
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          # HELD AT 2G — a planned cut to 1G was WITHDRAWN, 2026-08-06.
+          #
+          # The cut was sized from a 10-minute sample on an idle-ish, restarting host: worker-1
+          # 443MiB, worker-2 439MiB. Re-measured under real pipeline load during proof #5, with
+          # the same cgroup counter: worker-1 484MiB but **worker-2 1135MiB** — 2.6x the earlier
+          # reading and ABOVE the 1G ceiling that was about to be applied. The cut would have
+          # OOM-killed the busiest worker in the stack, and an OOM-killed worker is
+          # indistinguishable from the restart-orphaning this whole effort exists to remove.
+          #
+          # The asymmetry (484 vs 1135) is the point: whichever worker draws the heavy document
+          # is the one that spikes, so BOTH must be sized for the maximum, not the average.
+          # This is the "sized from a floor, not a maximum" trap, caught by measuring instead of
+          # assuming. Do not cut this without a sample taken under load.
+          # [decide 30k 2026-08-18 #2] 2.5G -> 3.25G with heap 2048 -> 2600 (see NODE_OPTIONS note).
+          memory: 4G
+        reservations:
+          cpus: '0.5'
+          # 1G reservation under a (previously) 2G limit was half the ceiling soft-reserved per
+          # worker. Dropped to 256M so the reservation is a floor, not a second ceiling.
+          memory: 256M
+    networks:
+    - traefik-network
+    environment:
+    - TZ=${TZ:-UTC}
+    - GENERIC_TIMEZONE=${GENERIC_TIMEZONE:-UTC}
+    - N8N_LISTEN_ADDRESS=0.0.0.0
+    - N8N_WORKER_SERVER_ADDRESS=0.0.0.0
+    - DB_TYPE=postgresdb
+    - DB_POSTGRESDB_HOST=n8n-postgres
+    - DB_POSTGRESDB_USER=${POSTGRES_USER:-root}
+    - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD:?set in .env}
+    - DB_POSTGRESDB_DATABASE=${POSTGRES_DB:-n8n}
+    - DB_POSTGRESDB_POOL_SIZE=${DB_POSTGRESDB_POOL_SIZE:-25}
+    - EXECUTIONS_MODE=queue
+    - QUEUE_BULL_REDIS_HOST=redis
+    # 300000 -> 1800000 (2026-08-11). THIS IS WHAT KILLED THE HOURLY FULL-TABLE SWEEP.
+    #
+    # indoxV2Driver01's Schedule Trigger is the ONLY entry point that reads the whole
+    # incoming_documents table; the webhook/integrated runs carry 1-97 lines each and never sweep.
+    # Measured over 24h: EVERY scheduled run failed -- 3 of 3, avg 601s, max 830s -- with
+    #   "This execution failed to be processed too many times and will no longer retry."
+    # That is Bull's stalled-job detector, not a workflow error. The sweep serialises ~17,800 rows
+    # through one job and blocks the worker's event loop past the 300s lock, so the lock expires,
+    # QUEUE_WORKER_STALLED_INTERVAL (60s) catches it, and the job is failed.
+    #
+    # Consequence, measured 2026-08-11: 6,681 documents (37.5% of the fleet) had NEVER been
+    # actioned -- no ACTION_LOG at all -- concentrated in a middle ID band. PG Get All is
+    # ORDER BY "ID", so the sweep re-processed the head every hour (95% of base extractions were
+    # rework) and never reached the tail, while the changelog entry point covered only the newest
+    # rows. One expired lock produced both symptoms.
+    #
+    # 1800000 = 30 min, ~2.2x the worst observed sweep. Sized against the sweep, not guessed: the
+    # lock only has to outlast the longest event-loop block, and a blocked loop cannot renew at
+    # QUEUE_WORKER_LOCK_RENEW_TIME either, so raising the DURATION is the only lever that works.
+    # Cost of a genuinely dead worker is a 30 min wait before its jobs are reclaimed, which
+    # N8N_EXECUTIONS_QUEUE_RECOVERY_INTERVAL (20s, set above) already covers for orphans.
+    - QUEUE_WORKER_LOCK_DURATION=${QUEUE_WORKER_LOCK_DURATION:-1800000}
+    - QUEUE_WORKER_STALLED_INTERVAL=${QUEUE_WORKER_STALLED_INTERVAL:-60000}
+    # QUEUE_WORKER_MAX_STALLED_COUNT REMOVED (was :-5) -- it never did anything, and believing it
+    # did is what made the failures look inexplicable. n8n 2.x does not read this name: the four
+    # env vars @n8n/config/dist/configs/scaling-mode.config.js defines are LOCK_DURATION,
+    # LOCK_RENEW_TIME, STALLED_INTERVAL and TIMEOUT, and n8n ships
+    # dist/modules/breaking-changes/rules/v2/queue-worker-max-stalled-count.rule.js precisely
+    # because the setting was dropped in v2. Worse than inert: dist/scaling/scaling.service.js:89
+    # is `settings: { ...this.globalConfig.queue.bull.settings, maxStalledCount: 0 }` -- it spreads
+    # config in and then HARDCODES 0, so a stalled job gets zero retries, not the Bull default of 1.
+    # There is no supported way to buy retries here; the lock simply must not expire.
+    # This is exactly the failure mode the EXECUTIONS_DATA_PRUNE comment above warns about:
+    # an unknown env var is silently accepted and the only symptom is the thing never working.
+    - QUEUE_BULL_REDIS_PORT=6379
+    - QUEUE_BULL_REDIS_PASSWORD=${REDIS_PASSWORD}
+    - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY:?set in .env}
+    - N8N_USER_MANAGEMENT_JWT_SECRET=${N8N_USER_MANAGEMENT_JWT_SECRET:?set in .env}
+    # [decide 30k 2026-08-18] 1536 -> 2048 heap (cgroup 2G -> 2.5G below). A one-shot decide
+    # over the full ~39k-row table died at the V8 heap limit ("Ineffective mark-compacts near
+    # heap limit", container at 1.64GiB — the cgroup was NOT the binding wall) even after the
+    # decide chain was slimmed to ~half its bytes. The two unavoidable full-row item sets
+    # (entry trigger + exit rejoin, the caller contract) plus the caller's own table copy share
+    # one worker heap. Sized against that measurement; host had 1.8G available for the +0.5G.
+    # [decide 30k 2026-08-18 #2] 2048 -> 2600 heap, cgroup 2.5G -> 3.25G. Measured: the 30k
+    # one-shot's doc_base stage PASSES (73-79s) and the run dies at 2.499GiB/2.5G in the
+    # per-type phase. Sub-workflows run IN-PROCESS with their caller in queue mode (verified:
+    # 3/3 runs co-resident, other worker idle), so the caller's table copy + decide's retained
+    # sets share one heap — exactly like the real driver sweep will. Only the sweep worker
+    # balloons; the other worker idles ~200MB, so host exposure is one worker's peak.
+    - N8N_MEMORY_LIMIT=4G
+    - NODE_OPTIONS=--max-old-space-size=2600
+    # [2026-08-18] internal-mode experiment REVERTED same hour (owner order: no settings
+    # fiddling — external mode worked for weeks). The ack-drop stalls traced instead to NEW
+    # per-dispatch runner traffic added that night (router side-stamp code nodes shipping the
+    # full group payload on every action) — fixed at the workflow layer, not here.
+    - N8N_RUNNERS_ENABLED=true
+    - N8N_RUNNERS_MODE=external
+    # Each worker gets its OWN event-bus log file. Default basename is `n8nEventLog` for every
+    # process (@n8n/config event-bus.config.js), so both workers appended to one shared
+    # n8nEventLog-worker.log and any-concurrency could not tell which runner served a task --
+    # 45% of task spans landed in `runner-unattributed`. A worker's tasks are always served by
+    # ITS OWN sidecar (one broker per process), so a per-worker file makes attribution exact.
+    - N8N_EVENTBUS_LOGWRITER_LOGBASENAME=n8nEventLog-w2
+    - N8N_RUNNERS_AUTH_TOKEN=${N8N_RUNNERS_AUTH_TOKEN}
+    - N8N_RUNNERS_HEARTBEAT_INTERVAL=${N8N_RUNNERS_HEARTBEAT_INTERVAL:-90}
+    - N8N_RUNNERS_BROKER_LISTEN_ADDRESS=0.0.0.0
+    - N8N_RUNNERS_TASK_TIMEOUT=${N8N_RUNNERS_TASK_TIMEOUT:-300}
+    - N8N_RUNNERS_TASK_REQUEST_TIMEOUT=${N8N_RUNNERS_TASK_REQUEST_TIMEOUT:-300}
+    - N8N_DEFAULT_BINARY_DATA_MODE=filesystem
+    # EXECUTION PRUNING — NOTE THE MISSING `N8N_` PREFIX. These four were spelled
+    # `N8N_EXECUTIONS_DATA_*` here since the file was written, and n8n has been IGNORING ALL FOUR:
+    # @n8n/config's executions.config.js (n8n 2.17.0, read out of the running image 2026-08-09)
+    # declares them as `EXECUTIONS_DATA_PRUNE`, `EXECUTIONS_DATA_MAX_AGE`,
+    # `EXECUTIONS_DATA_PRUNE_MAX_COUNT`, `EXECUTIONS_DATA_SAVE_ON_PROGRESS` — unprefixed. So pruning
+    # was never enabled: measured the same day, `execution_data` was 1 560 MB of a 1 634 MB database
+    # with 27 332 executions and ZERO soft-deleted rows, i.e. nothing had ever been pruned.
+    #
+    # THE TRAP THAT MADE THIS EASY TO GET WRONG, spelled out so it is not re-introduced: n8n mixes
+    # the two conventions in ONE config file. `N8N_EXECUTIONS_QUEUE_RECOVERY_BATCH` and
+    # `N8N_EXECUTIONS_QUEUE_RECOVERY_INTERVAL` (set just below) genuinely ARE `N8N_`-prefixed;
+    # the data-retention ones are not. Prefixing by analogy is silently accepted — an unknown env
+    # var is not an error — and the only symptom is a table that never stops growing.
+    - EXECUTIONS_DATA_PRUNE=true
+    - EXECUTIONS_DATA_MAX_AGE=168
+    # 2000 -> 20000. 2000 was never applied (see above), so this is not a loosening of a working
+    # limit — it is choosing the first value that will ACTUALLY take effect. At the measured
+    # ~5 900 executions/hour this fleet produces under backfill, 2000 is ~20 minutes of history:
+    # it would hard-delete executions while they are still being read back through
+    # `/rest/executions/<id>`, which is the fleet's primary debugging surface. 20000 is ~3.4 h at
+    # that peak rate and still bounds the table, which is the point.
+    - EXECUTIONS_DATA_PRUNE_MAX_COUNT=20000
+    - EXECUTIONS_DATA_SAVE_ON_PROGRESS=false
+    - N8N_EXECUTIONS_TIMEOUT_MAX=${N8N_EXECUTIONS_TIMEOUT_MAX:-36000}
+    - NODE_FUNCTION_ALLOW_EXTERNAL=*
+    - N8N_LOG_LEVEL=${N8N_LOG_LEVEL:-info}
+    - N8N_DIAGNOSTICS_ENABLED=false
+    - N8N_SENTRY_DSN=${N8N_SENTRY_DSN:-}
+    - CREDENTIALS_OVERWRITE_DATA={"googleSheetsOAuth2Api":{"clientId":"${N8N_GOOGLE_OAUTH_CLIENT_ID}","clientSecret":"${N8N_GOOGLE_OAUTH_CLIENT_SECRET}"},"googleDriveOAuth2Api":{"clientId":"${N8N_GOOGLE_OAUTH_CLIENT_ID}","clientSecret":"${N8N_GOOGLE_OAUTH_CLIENT_SECRET}"},"googleSheetsTriggerOAuth2Api":{"clientId":"${N8N_GOOGLE_OAUTH_CLIENT_ID}","clientSecret":"${N8N_GOOGLE_OAUTH_CLIENT_SECRET}"},"gmailOAuth2":{"clientId":"${N8N_GMAIL_OAUTH_CLIENT_ID}","clientSecret":"${N8N_GMAIL_OAUTH_CLIENT_SECRET}"}}
+    - N8N_CUSTOM_EXTENSIONS=/home/node/custom-extensions
+    # See n8n-worker-1 for why these five exist. Same values on purpose: the probe compares a
+    # worker against its OWN concurrency, and the log path is per-container (/tmp is not shared),
+    # so worker-2 needs no distinct filename. NOT a concurrency change: still 8.
+    - N8N_WORKER_CONCURRENCY=${N8N_WORKER_CONCURRENCY:-8}
+    - N8N_LOG_OUTPUT=console,file
+    - N8N_LOG_FILE_LOCATION=/tmp/n8n-worker.log
+    - N8N_LOG_FILE_SIZE_MAX=8
+    - N8N_LOG_FILE_COUNT_MAX=2
+    env_file:
+    - path: .env
+      required: false
+    volumes:
+    - n8n_storage:/home/node/.n8n
+    - ./blueprint/n8n:/home/node/workflows
+    - ./worker-liveness.sh:/worker-liveness.sh:ro
+    depends_on:
+      n8n-postgres:
+        condition: service_healthy
+      n8n:
+        condition: service_healthy
+    restart: unless-stopped
+    labels:
+      # Opt in to autoheal -- see n8n-worker-1 for the full argument. Both workers are equally
+      # eligible and equally protected: eligibility is not what decides a restart, a sustained
+      # `unhealthy` is, and on 2026-08-10 worker-2 was the one that was genuinely fine.
+      binaos.autoheal: "true"
+    healthcheck:
+      # Same replacement as n8n-worker-1 -- see there for the full argument. Both workers ran
+      # the same process-existence probe, so both had the same blind spot; worker-1 is simply
+      # the one that wedged first.
+      test:
+      - CMD-SHELL
+      - sh /worker-liveness.sh
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 2
+      start_period: 180s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+  n8n-worker-2-runners:
+    container_name: n8n-worker-2-runners-${DEPLOYMENT_NAME:-bina-deployment}
+    image: n8nio/runners:${N8N_VERSION:?set N8N_VERSION in .env (see .env.ex)}
+    hostname: n8n-worker-2-runners
+    networks:
+    - traefik-network
+    volumes:
+    # READ-ONLY. The probe only reads n8n's event log; this container must never write to the
+    # volume n8n owns. It is the one place a deaf runner is visible from inside this container --
+    # the launcher's /healthz cannot see it, which is the whole 2026-08-18 incident.
+    - n8n_storage:/n8n-data:ro
+    - ./runner-liveness.sh:/runner-liveness.sh:ro
+    labels:
+      # OPT IN to platform-base/autoheal, on the same terms as the workers above: a sustained
+      # `unhealthy` from the progress probe below is what restarts this sidecar, and autoheal's
+      # streak + cooldown + per-window cap bound the damage if the probe is ever wrong. A runner
+      # sidecar is stateless -- it holds no queue position and no data -- so a restart costs at
+      # most the tasks in flight, which a wedged runner was not completing anyway.
+      binaos.autoheal: "true"
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          # HELD AT 1.5G — a planned cut to 768M was WITHDRAWN, 2026-08-06.
+          #
+          # These services declare NODE_OPTIONS=--max-old-space-size=1024 (above in this same
+          # service). A 768M cgroup ceiling sits BELOW the 1024M heap the runtime is told it may
+          # allocate, so the container would be OOM-killed the moment V8 actually used the heap it
+          # was granted — and only under load, which is when it matters. Observed peaks (10 /
+          # 135 / 293 MiB) say nothing about this: they are what the heap happened to reach, not
+          # what it is permitted to reach.
+          #
+          # RULE FOR THIS FILE: cgroup memory limit >= NODE heap x 1.3. The extra 30% is V8
+          # overhead, native buffers and RSS outside old-space — a Node process is never just its
+          # heap. 1024 x 1.3 = 1331M, so 1.5G is the floor here, not a generous allowance.
+          memory: 4G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    environment:
+    - TZ=${TZ:-UTC}
+    - GENERIC_TIMEZONE=${GENERIC_TIMEZONE:-UTC}
+    - N8N_RUNNERS_AUTH_TOKEN=${N8N_RUNNERS_AUTH_TOKEN}
+    - N8N_RUNNERS_HEARTBEAT_INTERVAL=${N8N_RUNNERS_HEARTBEAT_INTERVAL:-90}
+    - N8N_RUNNERS_TASK_BROKER_URI=http://n8n-worker-2:5679
+    # Upstream default. task-runner-launcher's own struct tag, read out of the binary in the
+    # running image: `AutoShutdownTimeout env:"N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT, default=15"`.
+    # The 300 that used to sit here arrived unexplained in ff942977 and was never n8n's default.
+    # Idle shutdown is NOT the wedge fix -- a relaunched runner that comes back deaf is caught by
+    # a progress-based probe (see worker-liveness.sh), not by never relaunching.
+    - N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT=${N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT:-15}
+    - RUNNER_LIVENESS_LOG_GLOB=/n8n-data/n8nEventLog-w2-worker*.log
+    # ── SLOT INVARIANT: runner slots MUST be >= the worker's execution slots ──────────────
+    # N8N_RUNNERS_MAX_CONCURRENCY (here) vs N8N_WORKER_CONCURRENCY (on the worker this sidecar
+    # serves). Every execution lane can be inside a Code node at any moment, and a Code node
+    # needs a runner task slot. With fewer runner slots than worker slots the excess lanes do
+    # NOT queue politely - they starve, and they starve SILENTLY:
+    #   * the runner advertises free capacity as offers valid ~5.1s
+    #     (OFFER_VALID_TIME_MS=5000 + OFFER_VALID_EXTRA_MS=100, task-runner.js sendOffers)
+    #   * an offer accepted after it expired is refused with "Offer expired - not accepted
+    #     within validity window", which the broker logs at INFO and then simply waits
+    #   * an ack slower than the hardcoded 2000ms logs a WARN and also just waits
+    #   * nothing throws until N8N_RUNNERS_TASK_REQUEST_TIMEOUT
+    # Measured 2026-08-18: worker slots 20 vs runner slots 12 wedged 16 driver lanes for 15+
+    # minutes with 0 rows written, 0.3% CPU and not one error line. Keep these equal.
+    - N8N_RUNNERS_MAX_CONCURRENCY=${N8N_RUNNERS_MAX_CONCURRENCY:-8}
+    # [mega-decide 2026-08-18] Runner-side task timeout defaults to 60s when unset here (the
+    # worker-side value does not reach the sidecar). Measured: 100k decide killed at exactly 60s.
+    - N8N_RUNNERS_TASK_TIMEOUT=${N8N_RUNNERS_TASK_TIMEOUT:-900}
+    - N8N_RUNNERS_LAUNCHER_LOG_LEVEL=${N8N_LOG_LEVEL:-info}
+    - NODE_OPTIONS=--max-old-space-size=${N8N_RUNNERS_HEAP_MB:-1536}
+    depends_on:
+      n8n-worker-2:
+        condition: service_healthy
+        restart: true
+    restart: unless-stopped
+    healthcheck:
+      test:
+      - CMD-SHELL
+      # PROGRESS, not liveness. The probe this replaced was `wget --spider .../healthz` on the Go
+      # launcher, whose health server has ONE route returning a static {"status":"ok"} -- it
+      # answers 200 whenever the LAUNCHER is alive. On 2026-08-18 worker-2's launcher was alive
+      # and healthy for 35 minutes while the Node runner behind it answered nothing: 4,125
+      # unacknowledged task offers, near-zero completions, container green the whole time.
+      # runner-liveness.sh counts n8n's own task.requested/response.received pairs instead.
+      - sh /runner-liveness.sh
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '3'
+volumes:
+  n8n_storage: null
+  postgres_storage: null
+networks:
+  traefik-network:
+    external: true

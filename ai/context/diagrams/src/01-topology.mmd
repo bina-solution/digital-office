@@ -1,0 +1,54 @@
+flowchart TB
+    subgraph Internet
+      U["Owner / customer / visitor"]
+    end
+
+    subgraph GW["EDGE / GATEWAY node - Linux, public IP, edge host"]
+      TE["traefik - TLS, SSO, per-node Host() routers"]
+      GWY["network app :8984 - route table, enrollment, gateway"]
+      CON["console :8000"]
+      APPM["app-management"]
+      OFFS["offices :8983 - declares and converges further offices"]
+      AUTH["authentik - fleet identity"]
+      CRED["connections - credential plane"]
+      RESV["ReservedHost list from .generated/routing.override.yml"]
+      DYN[("network_dynamic - rendered routers")]
+      TE --> APPM
+      TE --> OFFS
+      OFFS -.->|"converge via computers"| NT
+      TE --> GWY
+      TE --> CON
+      GWY --> RESV
+      GWY --> DYN
+      TE -.reads.-> DYN
+      GWY --> CRED
+      TE --> AUTH
+    end
+
+    subgraph OFFICE["OFFICE node - behind NAT (owner Mac / customer laptop)"]
+      TO["traefik"]
+      NT["network app :8984"]
+      CO["console"]
+      DS["bina (agent)"]
+      SR1["site-runtime :8987"]
+      WO[("network_state - node identity")]
+      NT --> WO
+      TO --> CO
+      TO --> NT
+    end
+
+    subgraph SRV["SITE node - per-customer VPS, public IP"]
+      TS["traefik - own edge and own certificate"]
+      NS["network app"]
+      SR2["site-runtime :8987"]
+      WEB["site-1 / site-2 (nginx)"]
+      TS --> WEB
+      NS --> SR2
+    end
+
+    MG["sites - management"] -. "overlay: apply, start, logs" .-> SR2
+    MG -. "fallback: computers.exec (SSH)" .-> SR1
+    U -->|https| TE
+    U -->|"https - Class B, edge-direct"| TS
+    GWY <==>|"dow0 - WireGuard - keepalive 25s"| NT
+    GWY <==>|dow0| NS

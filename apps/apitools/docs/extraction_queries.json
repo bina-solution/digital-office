@@ -1,0 +1,628 @@
+{
+  "BASE › company": {
+    "action": "find option",
+    "action_value": "‹32 registry company ids›",
+    "value_validations": [],
+    "is_rtl": true,
+    "fallbacks": [
+      {
+        "action": "find option",
+        "action_value": "‹registry company names›",
+        "option_map": "‹name→id map›",
+        "match_mode": "name_substring",
+        "region": {
+          "y_max": 0.06
+        },
+        "exclude_near": [
+          "הכהנים",
+          "מ.ש הכהנים"
+        ],
+        "value_validations": []
+      },
+      {
+        "action": "find option",
+        "action_value": "‹registry company names›",
+        "option_map": "‹name→id map›",
+        "match_mode": "name_substring",
+        "region": {
+          "y_max": 0.55,
+          "exclude_below": "לכבוד"
+        },
+        "exclude_near": [
+          "הכהנים",
+          "מ.ש הכהנים"
+        ],
+        "value_validations": []
+      },
+      {
+        "action": "find option",
+        "action_value": "‹32 registry company ids›",
+        "fulltext_fallback": true,
+        "value_validations": []
+      }
+    ]
+  },
+  "BASE › type": {
+    "action": "find option",
+    "action_value": [
+      "תעודת משלוח"
+    ],
+    "fulltext_fallback": true,
+    "fulltext_region": 0.45,
+    "returns": "shipment",
+    "value_validations": [],
+    "fallbacks": [
+      {
+        "action": "find option",
+        "action_value": [
+          "גיול חובות פתוחים",
+          "תשלום משוקלל",
+          "יתרת חוב",
+          "כרטסת"
+        ],
+        "fulltext_fallback": true,
+        "returns": "balance_sheet",
+        "value_validations": []
+      },
+      {
+        "action": "find option",
+        "action_value": [
+          "חשבונית מס",
+          "חשבונית",
+          "קבלה"
+        ],
+        "fulltext_fallback": true,
+        "returns": "invoice",
+        "value_validations": []
+      }
+    ],
+    "default": "invoice"
+  },
+  "BASE › date [invoice]": {
+    "action": "find after",
+    "action_value": [
+      "תאריך חשבונית",
+      "תאריך התעודה",
+      "תאריך הזיכוי",
+      "תאריך הדפסה",
+      "תאריך הפקה",
+      "תאריך"
+    ],
+    "value_regex": "\\d{1,2}[./]\\d{1,2}[./]\\d{2,4}",
+    "is_rtl": true,
+    "value_validations": [],
+    "fallbacks": [
+      {
+        "action": "find regex",
+        "action_value": "\\d{1,2}/\\d{1,2}/20\\d\\d",
+        "order": "top",
+        "value_validations": []
+      }
+    ]
+  },
+  "BASE › date [shipment]": {
+    "action": "find near",
+    "action_value": [
+      "התעודה"
+    ],
+    "scope": "block",
+    "select": "nearest",
+    "value_regex": "\\d{1,2}[./]\\d{1,2}[./]\\d{2,4}",
+    "is_rtl": true,
+    "value_validations": [],
+    "fallbacks": [
+      {
+        "action": "find after",
+        "action_value": [
+          "תעודה",
+          "תאריך אספקה",
+          "תאריך חשבונית",
+          "תאריך הדפסה",
+          "תאריך"
+        ],
+        "value_regex": "\\d{1,2}[./]\\d{1,2}[./]\\d{2,4}",
+        "is_rtl": true,
+        "value_validations": []
+      },
+      {
+        "action": "find regex",
+        "action_value": "\\d{1,2}/\\d{1,2}/20\\d\\d",
+        "order": "top",
+        "value_validations": []
+      }
+    ]
+  },
+  "BASE › date [balance_sheet]": {
+    "action": "find near",
+    "action_value": [
+      "עד תאריך"
+    ],
+    "scope": "block",
+    "select": "nearest",
+    "anchor_exact": true,
+    "value_regex": "\\d{1,2}[./]\\d{1,2}[./]\\d{2,4}",
+    "is_rtl": true,
+    "value_validations": [
+      {
+        "validation_type": "not_starts_with",
+        "validation_value": "01/01"
+      },
+      {
+        "validation_type": "not_starts_with",
+        "validation_value": "31/12"
+      },
+      {
+        "validation_type": "not_contains",
+        "validation_value": "1980"
+      },
+      {
+        "validation_type": "not_contains",
+        "validation_value": "2029"
+      },
+      {
+        "validation_type": "not_contains",
+        "validation_value": "/80"
+      },
+      {
+        "validation_type": "not_contains",
+        "validation_value": "/29"
+      },
+      {
+        "validation_type": "not_contains",
+        "validation_value": "/90"
+      },
+      {
+        "validation_type": "not_contains",
+        "validation_value": "/00"
+      }
+    ],
+    "fallbacks": [
+      {
+        "action": "find regex",
+        "action_value": "\\d{1,2}[./]\\d{1,2}[./]\\d{2,4}",
+        "region": {
+          "y_max": 0.15
+        },
+        "order": "top",
+        "value_validations": [
+          {
+            "validation_type": "not_starts_with",
+            "validation_value": "01/01"
+          },
+          {
+            "validation_type": "not_starts_with",
+            "validation_value": "31/12"
+          },
+          {
+            "validation_type": "not_contains",
+            "validation_value": "1980"
+          },
+          {
+            "validation_type": "not_contains",
+            "validation_value": "2029"
+          },
+          {
+            "validation_type": "not_contains",
+            "validation_value": "/80"
+          },
+          {
+            "validation_type": "not_contains",
+            "validation_value": "/29"
+          },
+          {
+            "validation_type": "not_contains",
+            "validation_value": "/90"
+          },
+          {
+            "validation_type": "not_contains",
+            "validation_value": "/00"
+          }
+        ]
+      },
+      {
+        "action": "find near",
+        "action_value": [
+          "תשלום משוקלל",
+          "משוקלל"
+        ],
+        "scope": "block",
+        "select": "nearest",
+        "value_regex": "\\d{1,2}[./]\\d{1,2}[./]\\d{2,4}",
+        "is_rtl": true,
+        "value_validations": []
+      },
+      {
+        "action": "find after",
+        "action_value": [
+          "ליום",
+          "תאריך הדפסה",
+          "תאריך הפקה"
+        ],
+        "is_rtl": true,
+        "value_validations": [
+          {
+            "validation_type": "has_number"
+          },
+          {
+            "validation_type": "length_greater_than",
+            "validation_value": 5
+          },
+          {
+            "validation_type": "length_less_than",
+            "validation_value": 13
+          },
+          {
+            "validation_type": "not_contains",
+            "validation_value": ":"
+          },
+          {
+            "validation_type": "not_contains",
+            "validation_value": "1980"
+          },
+          {
+            "validation_type": "not_contains",
+            "validation_value": "2029"
+          },
+          {
+            "validation_type": "not_contains",
+            "validation_value": "משוקלל"
+          },
+          {
+            "validation_type": "not_contains",
+            "validation_value": "בע"
+          },
+          {
+            "validation_type": "not_starts_with",
+            "validation_value": "5"
+          }
+        ]
+      },
+      {
+        "action": "find after",
+        "action_value": [
+          "תאריך"
+        ],
+        "value_regex": "\\d{1,2}[./]\\d{1,2}[./]\\d{2,4}",
+        "is_rtl": true,
+        "value_validations": [
+          {
+            "validation_type": "not_starts_with",
+            "validation_value": "01/01"
+          },
+          {
+            "validation_type": "not_starts_with",
+            "validation_value": "31/12"
+          },
+          {
+            "validation_type": "not_contains",
+            "validation_value": "1980"
+          },
+          {
+            "validation_type": "not_contains",
+            "validation_value": "2029"
+          },
+          {
+            "validation_type": "not_contains",
+            "validation_value": "/80"
+          },
+          {
+            "validation_type": "not_contains",
+            "validation_value": "/29"
+          },
+          {
+            "validation_type": "not_contains",
+            "validation_value": "/90"
+          },
+          {
+            "validation_type": "not_contains",
+            "validation_value": "/00"
+          }
+        ]
+      }
+    ]
+  },
+  "INVOICE › amount": {
+    "action": "find after",
+    "action_value": [
+      "סה\"כ לתשלום",
+      "סכום לתשלום",
+      "סה\"כ לחובתכם",
+      "יתרה לתשלום",
+      "סה\"כ מחיר כולל מע\"מ",
+      "סה\"כ כולל מע\"מ",
+      "סך הכל לתשלום",
+      "סה''כ מחיר חשבונית זיכוי",
+      "סה\"כ מחיר חשבונית זיכוי",
+      "מחיר חשבונית זיכוי",
+      "סה\"כ מחיר",
+      "סה\"כ"
+    ],
+    "anchor_order": "bottom",
+    "is_rtl": true,
+    "value_validations": [
+      {
+        "validation_type": "is_money"
+      },
+      {
+        "validation_type": "not_equals",
+        "validation_value": "0.00"
+      },
+      {
+        "validation_type": "not_contains",
+        "validation_value": "ק\"ג"
+      }
+    ],
+    "fallbacks": [
+      {
+        "action": "find near",
+        "action_value": [
+          "סה"
+        ],
+        "scope": "row",
+        "select": "bottom",
+        "value_regex": "-[\\d,]+\\.\\d{2}|[\\d,]+\\.\\d{2}-",
+        "is_rtl": true,
+        "value_validations": []
+      },
+      {
+        "action": "find near",
+        "action_value": [
+          "סה"
+        ],
+        "scope": "row",
+        "select": "bottom",
+        "value_regex": "[\\d,]+\\.\\d{2}",
+        "is_rtl": true,
+        "value_validations": [
+          {
+            "validation_type": "is_money"
+          }
+        ]
+      }
+    ]
+  },
+  "INVOICE › invoice_id": {
+    "action": "find after",
+    "action_value": [
+      "חשבונית מס מרכזת",
+      "חשבונית מס מספר",
+      "חשבונית מס קבלה",
+      "מרכזת",
+      "מספר תעודה",
+      "חשבונית זיכוי",
+      "חשבונית מספר",
+      "מספר חשבונית",
+      "מס' חשבונית",
+      "חשבונית מס",
+      "אסמכתא",
+      "מספר"
+    ],
+    "is_rtl": true,
+    "value_regex": "[A-Za-z0-9$#][A-Za-z0-9/\\-]{3,}",
+    "value_validations": [
+      {
+        "validation_type": "has_number"
+      },
+      {
+        "validation_type": "length_greater_than",
+        "validation_value": 3
+      },
+      {
+        "validation_type": "length_less_than",
+        "validation_value": 22
+      },
+      {
+        "validation_type": "not_starts_with",
+        "validation_value": "557"
+      },
+      {
+        "validation_type": "not_starts_with",
+        "validation_value": "558"
+      },
+      {
+        "validation_type": "not_contains",
+        "validation_value": ":"
+      },
+      {
+        "validation_type": "not_contains",
+        "validation_value": ","
+      },
+      {
+        "validation_type": "not_contains",
+        "validation_value": "."
+      },
+      {
+        "validation_type": "not_starts_with",
+        "validation_value": "050"
+      },
+      {
+        "validation_type": "not_starts_with",
+        "validation_value": "052"
+      },
+      {
+        "validation_type": "not_starts_with",
+        "validation_value": "053"
+      },
+      {
+        "validation_type": "not_starts_with",
+        "validation_value": "054"
+      },
+      {
+        "validation_type": "not_starts_with",
+        "validation_value": "058"
+      }
+    ]
+  },
+  "BALANCE_SHEET › amount": {
+    "action": "find near",
+    "action_value": [
+      "יתרת החוב",
+      "יתרת חוב",
+      "יתרה סופית",
+      "יתרה"
+    ],
+    "scope": "column",
+    "select": "bottom",
+    "is_rtl": true,
+    "value_validations": [
+      {
+        "validation_type": "is_money"
+      },
+      {
+        "validation_type": "length_greater_than",
+        "validation_value": 4
+      }
+    ],
+    "fallbacks": [
+      {
+        "action": "find after",
+        "action_value": [
+          "סה\"כ לדו\"ח",
+          "סה\"כ לדוח",
+          "סה\"כ לחברה",
+          "יתרת חוב",
+          "סה\"כ לתשלום",
+          "סה\"כ כולל מע\"מ",
+          "סך הכל לתשלום"
+        ],
+        "anchor_order": "bottom",
+        "is_rtl": true,
+        "value_validations": [
+          {
+            "validation_type": "is_money"
+          },
+          {
+            "validation_type": "not_equals",
+            "validation_value": "0.00"
+          }
+        ]
+      },
+      {
+        "action": "find below",
+        "action_value": [
+          "יתרה לתשלום",
+          "יתרת החוב"
+        ],
+        "value_order": "bottom",
+        "is_rtl": true,
+        "value_validations": [
+          {
+            "validation_type": "is_money"
+          }
+        ]
+      },
+      {
+        "action": "find after",
+        "action_value": [
+          "הפרש",
+          "סה\"כ יתרת חובה",
+          "יתרתך בכרטיס ליום"
+        ],
+        "anchor_order": "bottom",
+        "is_rtl": true,
+        "value_validations": [
+          {
+            "validation_type": "is_money"
+          }
+        ]
+      }
+    ]
+  },
+  "SHIPMENT › shipment_id": {
+    "action": "find regex",
+    "action_value": "(S[HM0O]|ML)[A-Z0-9]{5,14}",
+    "value_validations": [],
+    "fallbacks": [
+      {
+        "action": "find after",
+        "action_value": [
+          "תעודת משלוח מספר",
+          "תעודת משלוח",
+          "מספר תעודה",
+          "תעודה מספר",
+          "מס' תעודה"
+        ],
+        "is_rtl": true,
+        "value_regex": "[A-Za-z0-9$#][A-Za-z0-9/\\-]{3,}",
+        "value_validations": [
+          {
+            "validation_type": "has_number"
+          },
+          {
+            "validation_type": "length_greater_than",
+            "validation_value": 3
+          },
+          {
+            "validation_type": "length_less_than",
+            "validation_value": 22
+          },
+          {
+            "validation_type": "not_starts_with",
+            "validation_value": "557"
+          },
+          {
+            "validation_type": "not_starts_with",
+            "validation_value": "558"
+          },
+          {
+            "validation_type": "not_contains",
+            "validation_value": ":"
+          },
+          {
+            "validation_type": "not_contains",
+            "validation_value": ","
+          },
+          {
+            "validation_type": "not_contains",
+            "validation_value": "."
+          }
+        ]
+      },
+      {
+        "action": "find below",
+        "action_value": [
+          "תעודת משלוח מספר",
+          "תעודת משלוח",
+          "מספר תעודה",
+          "תעודה מספר",
+          "מס' תעודה",
+          "מס'"
+        ],
+        "is_rtl": true,
+        "value_validations": [
+          {
+            "validation_type": "has_number"
+          },
+          {
+            "validation_type": "length_greater_than",
+            "validation_value": 3
+          },
+          {
+            "validation_type": "length_less_than",
+            "validation_value": 22
+          },
+          {
+            "validation_type": "not_starts_with",
+            "validation_value": "557"
+          },
+          {
+            "validation_type": "not_starts_with",
+            "validation_value": "558"
+          },
+          {
+            "validation_type": "not_contains",
+            "validation_value": ":"
+          },
+          {
+            "validation_type": "not_contains",
+            "validation_value": ","
+          },
+          {
+            "validation_type": "not_contains",
+            "validation_value": "."
+          }
+        ]
+      }
+    ]
+  }
+}
