@@ -69,11 +69,17 @@ DN="$(read_env DEPLOYMENT_NAME)"; DN="${DN:-bina-deployment}"
 # (issues/docker-credsstore-blocks-rebuilds.yaml, 2026-08-10). The file is the user's and is not
 # touched: this process is pointed at an empty client config of the project's own, and says so
 # once. A helper that exists is left alone, and so is a DOCKER_CONFIG somebody set.
+#
+# A config that names NO helper is the common case on plain Linux (`{"auths": {}}`), and there grep
+# finds nothing and exits 1. This runs as the file is sourced, under the CALLER's options: `bbox`
+# sets `-euo pipefail`, so a bare grep in the pipeline ended `./bbox run` with exit 1 before it had
+# printed a line — every fresh clone on such a machine (measured on the Dell, 2026-10-20, DGO-823).
+# The grep is braced with `|| true`, the idiom `_env_raw` uses.
 docker_creds_guard() {
   [ -z "${DOCKER_CONFIG:-}" ] || return 0
   local cfg="${HOME:-/root}/.docker/config.json" helper own
   [ -f "${cfg}" ] || return 0
-  helper="$(grep -o '"credsStore"[[:space:]]*:[[:space:]]*"[^"]*"' "${cfg}" 2>/dev/null | head -1 | sed 's/.*"\([^"]*\)"$/\1/')"
+  helper="$({ grep -o '"credsStore"[[:space:]]*:[[:space:]]*"[^"]*"' "${cfg}" 2>/dev/null || true; } | head -1 | sed 's/.*"\([^"]*\)"$/\1/')"
   [ -n "${helper}" ] || return 0
   command -v "docker-credential-${helper}" >/dev/null 2>&1 && return 0
   own="${REPO_ROOT}/data/.docker-client"
@@ -367,6 +373,11 @@ BBOX_COMPOSE="${BBOX_COMPOSE:-/usr/libexec/docker/cli-plugins/docker-compose}"
 # make two things of one file. The binary THIS machine runs is the fact — a host whose package has
 # moved off the installers' number is followed, not fought (it may be shared with another stack).
 export BBOX_COMPOSE_VERSION="${BBOX_COMPOSE_VERSION:-$("${BBOX_COMPOSE}" version --short 2>/dev/null || true)}"
+# A distro's package reports its own build suffix — Ubuntu's docker-compose-v2 says
+# `2.40.3+ds1-0ubuntu1` — and the images ask Docker's repository for exactly that string, which it
+# does not have ("Version … was not found"): app-management and bina-ds did not build on the Dell
+# (2026-10-20, DGO-823). The upstream version is the part before `+`.
+export BBOX_COMPOSE_VERSION="${BBOX_COMPOSE_VERSION%%+*}"
 
 # ── the repo's path AS THE DAEMON SEES IT ────────────────────────────────────────────────────
 # Exported so compose can mount the repo into app-management at the SAME absolute path it has on

@@ -21,22 +21,46 @@ done
 
 if [ -n "${OFFICE}" ]; then
   # Ask that office's machine, through the one door to machines. The reply is PUBLIC material only.
-  exec curl -fsS -m 60 -X POST "http://computers:8977/api/computers/${OFFICE}/exec" \
+  # `exit`, not `exec`: an `exec` inside a pipeline replaces only that pipeline's subshell, and the
+  # script went on to print THIS machine's identity after the other office's.
+  curl -fsS -m 60 -X POST "http://computers:8977/api/computers/${OFFICE}/exec" \
     -H 'content-type: application/json' \
     -d "{\"command\":\"cd ${REPO_ROOT} && ./bbox dgo identity ${VERB}\",\"timeout\":120}" \
     | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d.get("stdout","").strip() or d.get("reason",""));sys.exit(0 if d.get("code")==0 else 1)'
+  exit $?
 fi
 
-VOL="$(docker volume ls --format '{{.Name}}' 2>/dev/null | grep -E '(^|_)dgo_identity$' | head -1 || true)"
-if [ -z "${VOL}" ]; then
-  # The identity volume the OFFICE will mount is `<compose project>_dgo_identity`, and docker adds
-  # that prefix itself. Minting into a bare `dgo_identity` produced an app that could not see its own
-  # key (measured: /api/identity returned the empty-string fingerprint), so the prefix is taken from
-  # a volume this office already has.
-  PREFIX="$(docker volume ls --format '{{.Name}}' 2>/dev/null | grep -E '_dgo_extend_state$' | head -1 | sed 's/_dgo_extend_state$//' || true)"
-  VOL="${PREFIX:+${PREFIX}_}dgo_identity"
-fi
-docker volume create "${VOL}" >/dev/null
+# The volume is the one the OFFICE mounts: `<compose project>_dgo_identity`, which compose resolves
+# and its compiled configuration names. It is read from there and never guessed from the engine's
+# list. Guessing failed twice. A FIRST bring-up has no volume yet to take the prefix from, so the
+# keys went into a bare `dgo_identity` while the app mounted an empty `<project>_dgo_identity`, and
+# the office could never pair. The pairing screen said "no identity for this office" (the Dell's
+# fresh clone, 2026-10-21, DGO-825). And from then on the bare volume was the first `ls` match
+# (`dgo_identity` sorts before `digital-office_dgo_identity`), as another office's volume on a shared
+# engine can be.
+. "${REPO_ROOT}/scripts/lib.sh"
+# A question only: with no compiled configuration, dcx would render one (as whoever runs this, root
+# inside a container), so this refuses instead. `bbox run` renders before any prepare hook runs.
+[ -f "${REPO_ROOT}/.generated/compose.yml" ] \
+  || { echo "[dgo] identity: no compiled configuration yet (.generated/compose.yml) — ./bbox reconcile render" >&2; exit 1; }
+ERR="$(mktemp)"
+CFG="$(dcx config --format json 2>"${ERR}")" || {
+  echo "[dgo] identity: the compiled configuration could not be read:" >&2; tail -5 "${ERR}" >&2; rm -f "${ERR}"; exit 1; }
+rm -f "${ERR}"
+read -r VOL PROJECT < <(printf '%s' "${CFG}" | python3 -c 'import json, sys
+try:
+    d = json.load(sys.stdin)
+except ValueError:
+    d = {}
+v = ((d.get("volumes") if isinstance(d, dict) else None) or {}).get("dgo_identity") or {}
+print(v.get("name") or "-", d.get("name") or "-")' || true) || true
+[ -n "${VOL}" ] && [ "${VOL}" != "-" ] \
+  || { echo "[dgo] identity: the compiled configuration names no dgo_identity volume — is dgo-extend enabled?" >&2; exit 1; }
+# With compose's own labels, so the first `up` adopts the volume instead of warning that it "already
+# exists but was not created by Docker Compose".
+docker volume inspect "${VOL}" >/dev/null 2>&1 \
+  || docker volume create --label "com.docker.compose.project=${PROJECT}" \
+       --label com.docker.compose.volume=dgo_identity "${VOL}" >/dev/null
 # The image the app already builds: it carries identity.py and openssl, so this needs no pull and no
 # `pip install` on a machine that has nothing installed yet.
 # The module is fed on STDIN rather than mounted: mounting the checkout into a throwaway container

@@ -33,7 +33,7 @@ services:
     - --serversTransport.forwardingTimeouts.idleConnTimeout=600s
     - --certificatesresolvers.myresolver.acme.httpchallenge=true
     - --certificatesresolvers.myresolver.acme.httpchallenge.entrypoint=web
-    - --certificatesresolvers.myresolver.acme.email=${TRAEFIK_ACME_EMAIL:person194@example.com}
+    - --certificatesresolvers.myresolver.acme.email=${TRAEFIK_ACME_EMAIL:-person194@example.com}
     - --certificatesresolvers.myresolver.acme.storage=/etc/traefik/acme.json
     - --providers.docker.exposedbydefault=false
     - --providers.file.directory=/etc/traefik/
