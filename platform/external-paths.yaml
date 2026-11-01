@@ -1,0 +1,2 @@
+# Host paths referenced by an app that live OUTSIDE that app's own directory.
+# EMPTY = every app is self-contained. See scripts/refactor/paths-exist.py (gate G0).

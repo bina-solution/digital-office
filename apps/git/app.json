@@ -1,0 +1,185 @@
+{
+  "id": "git",
+  "title": {
+    "he": "ניהול גרסאות",
+    "en": "Version control"
+  },
+  "layer": 3,
+  "kind": "service",
+  "version": "0.2.0",
+  "summary": {
+    "he": "שכבת אבסטרקציה מעל VCS — חשבונות GitHub/GitLab, פורג' מקומי (Forgejo) לכל המאגרים, מראות של מאגרים חיצוניים, ודחיפת קוד בשם הבעלים",
+    "en": "An abstraction over the VCS APIs — GitHub/GitLab accounts, a local forge (Forgejo) that hosts and DISPLAYS every repository, mirrors of external repos, and code pushes acting as the owner"
+  },
+  "capabilities": [
+    {
+      "name": "git",
+      "type": "service",
+      "interface": "git.v1",
+      "endpoint": "http://git:8978",
+      "contract": "platform-service.v1",
+      "required_ops": [
+        "whoami",
+        "listRepos",
+        "getRepo",
+        "createRepo",
+        "listIssues",
+        "createIssue",
+        "updateIssue",
+        "commentIssue",
+        "listPRs",
+        "createPR",
+        "getPR",
+        "mergePR",
+        "commentPR",
+        "listReleases",
+        "createRelease",
+        "listBranches",
+        "createBranch",
+        "listCommits",
+        "getFile",
+        "putFile"
+      ],
+      "optional_ops": [
+        "listDir",
+        "deleteRepo",
+        "submitReview",
+        "deleteRelease",
+        "listMirrors",
+        "createMirror",
+        "deleteMirror",
+        "syncMirror"
+      ]
+    }
+  ],
+  "use": [
+    {
+      "capability": "identity",
+      "strength": "requires",
+      "after": true
+    },
+    {
+      "capability": "secrets",
+      "strength": "requires",
+      "after": true
+    },
+    {
+      "capability": "ui-kit",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
+    }
+  ],
+  "connections": [],
+  "compose": "docker-compose.yml",
+  "routing": [
+    {
+      "host": "git",
+      "port": 8978,
+      "auth": "sso",
+      "module": {
+        "group": "הגדרות",
+        "icon": "key",
+        "embed": true,
+        "alias": "git-accounts",
+        "id": "git-accounts",
+        "name": "חשבונות ומראות",
+        "desc": "חיבור חשבונות Git והצהרת מראות — מה שרק הלשכה יודעת",
+        "order": 40,
+        "service": "git",
+        "url_env": "GIT_URL",
+        "url": "http://git:8978"
+      },
+      "sso": {
+        "slug": "git",
+        "display_name": "Version control",
+        "default_host": "git.localhost",
+        "base_url_env": "GIT_BASE_URL",
+        "local_twin": true
+      }
+    },
+    {
+      "host": "forge",
+      "port": 3000,
+      "service": "forge",
+      "name": "forge",
+      "url_env": "FORGE_BASE_URL",
+      "auth": "sso",
+      "sso": {
+        "slug": "forge",
+        "display_name": "Forgejo",
+        "default_host": "forge.localhost",
+        "base_url_env": "FORGE_BASE_URL",
+        "local_twin": true
+      },
+      "module": {
+        "group": "עסק",
+        "icon": "git-branch",
+        "embed": false,
+        "external": true,
+        "id": "git",
+        "name": "ניהול גרסאות",
+        "desc": "Forgejo — כל המאגרים: מקומיים, מראות ומחוברים מספקים חיצוניים",
+        "order": 4
+      }
+    }
+  ],
+  "health": {
+    "structural": "auto",
+    "probe": {
+      "http": "http://git:8978/healthz",
+      "interval": "30s"
+    }
+  },
+  "data": {
+    "volumes": [
+      "git_state",
+      "forge_data"
+    ],
+    "on_uninstall": "keep"
+  },
+  "resources": {
+    "cpus": "1.5",
+    "memory": "1024M"
+  },
+  "observability": {
+    "sentry_platform": "python"
+  },
+  "agent": {
+    "context": "AGENT.md",
+    "order": 30
+  },
+  "contributes": {
+    "connection_probes": {
+      "git-accounts": {
+        "type": "http",
+        "url": "http://git:8978/healthz"
+      },
+      "git-forge": {
+        "type": "http",
+        "url": "http://forge:3000/api/healthz"
+      }
+    },
+    "connection_providers": [
+      {
+        "id": "git-accounts",
+        "title": "Git accounts — the repositories this deployment acts on",
+        "title_he": "חשבונות Git — המאגרים שהלשכה פועלת בהם",
+        "kind": "config",
+        "optional": true,
+        "platform_protocols": [
+          "git_github_token",
+          "git_gitlab_token",
+          "git_forge_local"
+        ],
+        "group": "ניהול גרסאות",
+        "now": "Nothing to type here, and that is the point: a git account is an INSTANCE of `git_github_token`, `git_gitlab_token` or `git_forge_local` in the credential plane, created and removed from the version-control screen at /a/git/, and its token never leaves that vault. The `git_forge_local` instance is the office's OWN forge (Forgejo) — created by this app's bootstrap on enable, so a fresh deployment can create a local repository without anyone pasting a key. This row carries the PROTOCOLS, so the accounts are visible in this catalog and in the console's account bar. The probe is the app's own /healthz: the row is green exactly while the service that acts on those accounts is up.",
+        "probe": {
+          "type": "http",
+          "url": "http://git:8978/healthz"
+        },
+        "wizard": "the version-control screen connects an account in four steps: provider → how to connect → paste token → verify. The local forge needs no wizard: it is connected by the app itself."
+      }
+    ]
+  }
+}

@@ -1,0 +1,59 @@
+# Discord through the office browser (browser42), in the owner's own account, signed in ONCE in the
+# live view. The account remembers WHICH server and channel it speaks in (guild_id, channel_id — asked
+# by the connect form). Discord forbids automating a user account: the office acts at a person's
+# pace, only on actions the owner started, and every WRITE is `draft` until one watched run passes.
+# Written 2026-09-29 from Discord's known structure (the server list is a nav labelled "Servers
+# sidebar", the message box a Slate editor); not yet observed on the owner's account.
+platform: discord
+version: 1
+status: draft
+origin: "https://discord.com"
+session:
+  signed_in: "nav[aria-label*='Servers'], [data-list-id=guildsnav]"
+  signed_out: "input[name=email], input[name=password], [class*=qrCode]"
+  wait: 15
+ops:
+  profile.get:
+    status: draft
+    why: "קריאה בלבד — שם השרת והסמל שלו, מעמוד הערוץ"
+    steps:
+      - {id: channel, action: goto, value: "https://discord.com/channels/{guild_id}/{channel_id}"}
+      - id: read-server
+        action: extract
+        out: profile
+        function: |
+          async () => {
+            const gid = location.pathname.split('/')[2] || '';
+            for (let i = 0; i < 150 && !document.querySelector('nav[aria-label$="(server)"], [data-list-item-id="guildsnav___' + gid + '"]'); i++)
+              await new Promise(r => setTimeout(r, 100));
+            const nav = document.querySelector('nav[aria-label$="(server)"]');
+            const item = document.querySelector('[data-list-item-id="guildsnav___' + gid + '"]');
+            const icon = item ? item.querySelector('img') : null;
+            const name = nav ? nav.getAttribute('aria-label').replace(/\s*\(server\)$/, '') :
+                         (item ? (item.getAttribute('aria-label') || '').trim() : null);
+            return JSON.stringify({ok: true, value: {name: name || null, handle: gid || null, bio: null,
+              avatar_url: icon ? icon.src : null}});
+          }
+
+  post.create.text:
+    status: draft
+    steps:
+      - {id: channel, action: goto, value: "https://discord.com/channels/{guild_id}/{channel_id}"}
+      - {id: type, action: fill, slowly: true, locator: {css: "div[role=textbox][data-slate-editor=true]"}, value: "{text}"}
+      - {id: send, action: press, value: "Enter"}
+      - {id: in-channel, action: wait_for, text: "{text_head}", seconds: 15}
+
+  post.create.image:
+    status: draft
+    why: "כפתור ההעלאה נפתח מתפריט „+” — טרם נצפה"
+    steps:
+      - {id: channel, action: goto, value: "https://discord.com/channels/{guild_id}/{channel_id}"}
+      - {id: type, action: fill, slowly: true, locator: {css: "div[role=textbox][data-slate-editor=true]"}, value: "{text}"}
+      - {id: plus, action: click, locator: {role: button, name: ["Upload a File", "Upload a file", "העלאת קובץ"]}}
+      - id: attach
+        action: choose_file
+        click: {role: menuitem, name: ["Upload a File", "Upload a file", "העלאת קובץ"]}
+        file: image
+      - {id: preview, action: wait_for, seconds: 3}
+      - {id: send, action: press, value: "Enter"}
+      - {id: in-channel, action: wait_for, text: "{text_head}", seconds: 20}

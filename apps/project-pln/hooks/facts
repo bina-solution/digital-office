@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+#: the facts a copy of this app is checked against — ONE list, read by backup, restore and verify
+#
+# facts   — invoked by hooks/backup and hooks/restore (and by `bbox export --verify`), never by hand.
+#
+# One file because a restore is judged by comparing what `backup` printed with what `restore` prints,
+# key by key: two lists of the same queries are two lists that drift, and a fact only one side emits
+# is dropped from the comparison without a word.
+#
+# Deliberately the nouns the owner would notice missing, not table counts of bookkeeping rows.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+. "${REPO_ROOT}/scripts/archive-lib.sh"   # archive_require / archive_container
+
+DB="$(archive_require plane-db)" || exit 1
+q() { docker exec "${DB}" psql -U plane -d plane -tAc "$1" 2>/dev/null | tr -d '\r' | tr -d ' '; }
+
+echo "FACT plane_users $(q 'select count(*) from users;')"
+echo "FACT plane_workspaces $(q 'select count(*) from workspaces;')"
+echo "FACT plane_projects $(q 'select count(*) from projects;')"
+echo "FACT plane_work_items $(q 'select count(*) from issues;')"
+echo "FACT plane_comments $(q 'select count(*) from issue_comments;')"
+
+# The object store, as an INDEX and as BYTES. The index is rows in the database (`file_assets` is
+# what Plane actually serves from — attachments, avatars, covers and page files all land there); the
+# bytes live in `project_pln_minio`, which the generic volume tar carries.
+echo "FACT plane_assets $(q 'select count(*) from file_assets;')"
+echo "FACT plane_attachment_rows $(q 'select count(*) from issue_attachments;')"
+echo "FACT plane_assets_sha $(q "select coalesce(md5(string_agg(id::text || coalesce(asset,'') || coalesce(entity_type,'') || coalesce(size::text,''), '|' order by id)), 'empty') from file_assets;")"
+
+# …and the bytes themselves, counted by the store that has to SERVE them. The three facts above are
+# all rows, so they come out equal on a restore that landed the database and lost the volume — the
+# one split they were written to catch. This one is asked of MinIO, under the credentials of the
+# office it is running on: an object the store cannot list is an attachment nobody can open.
+# (Counted with `mc`: the image carries no `find`, measured 2026-10-05.) An empty answer is a store
+# that did not answer, and the archiver fails on it rather than recording nothing.
+S3="$(archive_container plane-minio 2>/dev/null || true)"
+echo "FACT plane_objects $([ -n "${S3}" ] && docker exec "${S3}" sh -c \
+  'mc alias set facts http://127.0.0.1:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null 2>&1 \
+     && mc ready facts >/dev/null 2>&1 && mc ls --recursive facts/uploads 2>/dev/null | wc -l' \
+  2>/dev/null | tr -d '\r' | tr -d ' ')"
+exit 0

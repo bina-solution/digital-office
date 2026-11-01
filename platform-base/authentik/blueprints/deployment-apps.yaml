@@ -1,0 +1,248 @@
+version: 1
+metadata:
+  name: Deployment - ForwardAuth Applications
+  labels:
+    blueprints.goauthentik.io/instantiate: "true"
+    blueprints.goauthentik.io/description: |
+      Declarative configuration for all deployment services protected by
+      Authentik ForwardAuth. Auto-applied on startup — no manual setup needed.
+
+context:
+  authentik_external_host: !Format ["%s://%s/", !Env [AUTH_PROTOCOL, https], !Env [AUTH_EXTERNAL_URL, auth.localhost]]
+
+# ─── Proxy Providers (Forward Auth - Single Application) ───────────────────────
+#
+# The `!Env [<NAME>_BASE_URL, <default>]` names below are the VARIABLES of the hosts this base
+# estate owns, and nothing else — the values are fed into the authentik container by the compiler
+# (`platform/manager/reconcile.py`: committed names + every enabled app's routed host), because a
+# variable resolved here comes from the container's environment and not from .env directly. Adding
+# an app must not need an edit to this file: a host whose variable is not listed here and whose
+# provider slug is not taken gets its provider pair emitted in zz-generated-apps.yaml instead.
+# The `, <default>` half matters too: it is what a machine that sets no such variable gets, and the
+# compiler replaces it with the routed host whenever it knows one.
+
+entries:
+  - id: provider-traefik
+    model: authentik_providers_proxy.proxyprovider
+    state: present
+    identifiers:
+      name: Traefik Dashboard Provider
+    attrs:
+      authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+      invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
+      mode: forward_single
+      external_host: !Format ["%s://%s", !Env [AUTH_PROTOCOL, https], !Env [TRAEFIK_API_BASE_URL, traefik.localhost]]
+      access_token_validity: hours=24
+      intercept_header_auth: true
+
+  # ── Incoming Documents Provider ──
+
+  # ── Machine Dashboard Provider ──
+  - id: provider-machine
+    model: authentik_providers_proxy.proxyprovider
+    state: present
+    identifiers:
+      name: Machine Provider
+    attrs:
+      authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+      invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
+      mode: forward_single
+      external_host: !Format ["%s://%s", !Env [AUTH_PROTOCOL, https], !Env [MACHINE_BASE_URL, machine.localhost]]
+      access_token_validity: hours=24
+      intercept_header_auth: true
+
+  # ── App Management Provider (layer-1 control plane; base-estate SSO, hand-written like machine) ──
+  - id: provider-app-management
+    model: authentik_providers_proxy.proxyprovider
+    state: present
+    identifiers:
+      name: App Management Provider
+    attrs:
+      authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+      invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
+      mode: forward_single
+      external_host: !Format ["%s://%s", !Env [AUTH_PROTOCOL, https], !Env [APP_MANAGEMENT_BASE_URL, apps.localhost]]
+      access_token_validity: hours=24
+      intercept_header_auth: true
+
+  - id: app-app-management
+    model: authentik_core.application
+    state: present
+    identifiers:
+      slug: app-management
+    attrs:
+      name: App Management
+      provider: !KeyOf provider-app-management
+      policy_engine_mode: any
+
+  - id: provider-app-management-local
+    model: authentik_providers_proxy.proxyprovider
+    state: present
+    identifiers:
+      name: App Management Local Provider
+    attrs:
+      authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+      invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
+      mode: forward_single
+      external_host: http://apps.localhost
+      access_token_validity: hours=24
+      intercept_header_auth: true
+
+  - id: app-app-management-local
+    model: authentik_core.application
+    state: present
+    identifiers: { slug: app-management-local }
+    attrs: { name: App Management (local), provider: !KeyOf provider-app-management-local, policy_engine_mode: any }
+
+  # Any Concurrency's provider + application (and their -local twins) are COMPILED from its own
+  # routing[].sso since it moved to apps/ (core-001, 2026-10-09): the generated blueprint emits the
+  # same identifiers (`provider-any-concurrency`, `Any Concurrency Provider`, slug `any-concurrency`,
+  # and the `-local` twin), so authentik updates the rows it already holds rather than orphaning them.
+  - id: app-traefik
+    model: authentik_core.application
+    state: present
+    identifiers:
+      slug: traefik-dashboard
+    attrs:
+      name: Traefik Dashboard
+      provider: !KeyOf provider-traefik
+      policy_engine_mode: any
+
+
+  - id: app-machine
+    model: authentik_core.application
+    state: present
+    identifiers:
+      slug: machine
+    attrs:
+      name: Machine
+      provider: !KeyOf provider-machine
+      policy_engine_mode: any
+
+# ─── Local (*.localhost) ForwardAuth — same gating on local as on the VPS ───────
+# Mirror of the public providers, but external_host is <app>.localhost over http
+# (the `web` entrypoint). The outpost's authentik_host is env-driven (AUTH_PROTOCOL
+# /AUTH_EXTERNAL_URL) so locally it redirects to http://auth.localhost. One local
+# provider+app per gated app, registered in the outpost, + `middlewares=authentik`
+# on the matching -local router. CANARY: machine (verify before rolling out).
+
+  - id: provider-machine-local
+    model: authentik_providers_proxy.proxyprovider
+    state: present
+    identifiers:
+      name: Machine Local Provider
+    attrs:
+      authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+      invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
+      mode: forward_single
+      external_host: http://machine.localhost
+      access_token_validity: hours=24
+      intercept_header_auth: true
+
+  - id: app-machine-local
+    model: authentik_core.application
+    state: present
+    identifiers:
+      slug: machine-local
+    attrs:
+      name: Machine (local)
+      provider: !KeyOf provider-machine-local
+      policy_engine_mode: any
+  - id: provider-traefik-local
+    model: authentik_providers_proxy.proxyprovider
+    state: present
+    identifiers: { name: Traefik Local Provider }
+    attrs:
+      authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+      invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
+      mode: forward_single
+      external_host: http://traefik.localhost
+      access_token_validity: hours=24
+      intercept_header_auth: true
+  - id: app-traefik-local
+    model: authentik_core.application
+    state: present
+    identifiers: { slug: traefik-local }
+    attrs: { name: Traefik Dashboard (local), provider: !KeyOf provider-traefik-local, policy_engine_mode: any }
+
+  # ── Connections (credential plane) — https + local ──
+  - id: provider-connections
+    model: authentik_providers_proxy.proxyprovider
+    state: present
+    identifiers: { name: Connections Provider }
+    attrs:
+      authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+      invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
+      mode: forward_single
+      # scheme from AUTH_PROTOCOL so a localhost (http) deploy doesn't 302 the SSO callback to
+      # https://…localhost (no local cert → ERR_CERT_AUTHORITY_INVALID). https on a real-domain VPS.
+      external_host: !Format ["%s://%s", !Env [AUTH_PROTOCOL, https], !Env [CONNECTIONS_BASE_URL, connections.localhost]]
+      access_token_validity: hours=24
+      intercept_header_auth: true
+  - id: app-connections
+    model: authentik_core.application
+    state: present
+    identifiers: { slug: connections }
+    attrs: { name: חיבורים ומפתחות, provider: !KeyOf provider-connections, policy_engine_mode: any }
+  - id: provider-connections-local
+    model: authentik_providers_proxy.proxyprovider
+    state: present
+    identifiers: { name: Connections Local Provider }
+    attrs:
+      authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+      invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
+      mode: forward_single
+      external_host: http://connections.localhost
+      access_token_validity: hours=24
+      intercept_header_auth: true
+  - id: app-connections-local
+    model: authentik_core.application
+    state: present
+    identifiers: { slug: connections-local }
+    attrs: { name: Connections (local), provider: !KeyOf provider-connections-local, policy_engine_mode: any }
+
+  # ── Console (המרכז — unified shell) — https + local ──
+  - id: provider-console
+    model: authentik_providers_proxy.proxyprovider
+    state: present
+    identifiers: { name: Console Provider }
+    attrs:
+      authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+      invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
+      mode: forward_single
+      # scheme from AUTH_PROTOCOL (http on a localhost deploy) so the SSO callback isn't sent to
+      # https://console.localhost, which has no local cert. https on a real-domain VPS.
+      external_host: !Format ["%s://%s", !Env [AUTH_PROTOCOL, https], !Env [CONSOLE_BASE_URL, console.localhost]]
+      access_token_validity: hours=24
+      intercept_header_auth: true
+  - id: app-console
+    model: authentik_core.application
+    state: present
+    identifiers: { slug: console }
+    attrs: { name: המרכז, provider: !KeyOf provider-console, policy_engine_mode: any }
+  - id: provider-console-local
+    model: authentik_providers_proxy.proxyprovider
+    state: present
+    identifiers: { name: Console Local Provider }
+    attrs:
+      authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+      invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
+      mode: forward_single
+      external_host: http://console.localhost
+      access_token_validity: hours=24
+      intercept_header_auth: true
+  - id: app-console-local
+    model: authentik_core.application
+    state: present
+    identifiers: { slug: console-local }
+    attrs: { name: Console (local), provider: !KeyOf provider-console-local, policy_engine_mode: any }
+
+
+# ─── Embedded Outpost Configuration ───────────────────────────────────────────
+# Update the embedded outpost to include all ForwardAuth applications
+
+# NOTE: the embedded-outpost entry lives in zz-generated-apps.yaml.
+# It must enumerate EVERY proxy provider via !KeyOf, base and installable alike, so it is the
+# one entry that inherently knows the whole app set. Keeping it here would have forced this
+# file to name layer-3 providers again (gate G9). reconcile.py compiles it from the provider
+# ids in THIS file plus the ones it generates.

@@ -1,0 +1,42 @@
+# yaml-language-server: $schema=./schema.json
+title: "Traefik (and Portainer) mount the Docker socket read-write"
+opened: "2026-06-16"
+category: security
+severity: critical
+status: open  # 2026-07-30 triage: STILL OPEN — platform-base/traefik/docker-compose.yml:60 and apps/portainer/docker-compose.yml:19 both still bind the docker socket read-write and no socket-proxy service exists (refs moved off compose.yml / production/portainer/). 2026-08-04 re-triage: STILL OPEN — traefik + portainer both mount the docker socket RW.
+summary: "The internet-facing Traefik container has full Docker API access (root-on-host) via /var/run/docker.sock; any Traefik compromise = host takeover."
+
+description: |
+  ## Symptom / risk
+  `compose.yml` mounts the Docker control socket into Traefik:
+  ```yaml
+  - /var/run/docker.sock:/var/run/docker.sock   # compose.yml (traefik-deployment)
+  ```
+  The socket is the full Docker API — talking to it can `create` a container that
+  bind-mounts the host `/` as root. Traefik is the only internet-facing component
+  (ports 80/443), so ANY Traefik RCE/SSRF/CVE pivots to **root on the host** and
+  every container/secret. Portainer (`production/portainer/docker-compose.yml`)
+  also mounts it RW, but isn't internet-facing (lower priority).
+
+  `:ro` does NOT help — the socket is a bidirectional API; write verbs still work.
+
+  ## Fix (dependency-free, designed this session)
+  A **Caddy-based socket proxy** reusing the `caddy:2-alpine` image already in the
+  stack (no new image): a tiny service mounts the socket and exposes a GET-only
+  filter (`@notread not method GET HEAD -> 403`) on an internal network; Traefik
+  drops its socket mount and uses `--providers.docker.endpoint=tcp://docker-socket-proxy:2375`.
+  Traefik's docker provider only issues GETs, so discovery still works while
+  create/exec/start (POST) are blocked. Also add `no-new-privileges:true` + `cap_drop: [ALL]`.
+
+tasks:
+  - { text: "Add docker-socket-proxy service (caddy:2-alpine, GET-only Caddyfile, internal net)", done: false }
+  - { text: "Point Traefik at tcp://docker-socket-proxy:2375 and remove its socket mount", done: false }
+  - { text: "Verify all routes still resolve after the change", done: false }
+  - { text: "Apply the same proxy (or restrict) to Portainer's RW socket", done: false }
+  - { text: "Add no-new-privileges + cap_drop:[ALL] to Traefik", done: false }
+
+references:
+  - compose.yml
+  - production/portainer/docker-compose.yml
+  - "https://github.com/traefik/traefik/issues/4174"
+  - "https://amf3.github.io/articles/virtualization/docker_socket/"

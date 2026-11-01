@@ -1,0 +1,34 @@
+{
+  "id": "google-workspace-agent",
+  "title": {
+    "he": "סוכן Google Workspace",
+    "en": "Google Workspace Agent"
+  },
+  "layer": 3,
+  "kind": "blueprint",
+  "compose": null,
+  "summary": {
+    "he": "שרתי MCP שחושפים את Google Drive, Sheets ו-Gmail לסוכני AI ב-n8n, יחד עם בדיקת תקינות אינטגרציה. אוטומציה בלבד — האפליקציה לא מריצה קונטיינר.",
+    "en": "MCP servers exposing Google Drive, Sheets and Gmail to n8n AI agents, plus an integration health probe. Automation only — this app owns no container."
+  },
+  "capabilities": [],
+  "use": [
+    {
+      "capability": "workflow",
+      "strength": "requires",
+      "after": true
+    },
+    {
+      "capability": "secrets",
+      "strength": "requires",
+      "after": true
+    }
+  ],
+  "blueprints": {
+    "n8n": "blueprint/n8n"
+  },
+  "data": {
+    "volumes": [],
+    "on_uninstall": "purge"
+  }
+}

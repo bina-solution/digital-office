@@ -1,0 +1,1388 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>דרייב</title>
+<script>
+/* Relative-URL anchor. Embedded under the console, a base href is injected upstream
+   (so api/… and file/d/… resolve back through /a/localdrive/). Standalone the SPA uses
+   deep paths (/folder/<id>), so pin the base to root so relative URLs still resolve to
+   the app root. Built via the DOM (no literal base-tag markup) so it never suppresses the
+   console's own injection. */
+(function(){ if(!document.querySelector("base")){ var b=document.createElement("base");
+  b.setAttribute("href","/"); document.head.insertBefore(b, document.head.firstChild); } })();
+</script>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2356693f'/%3E%3Cpath d='M6 11a2 2 0 0 1 2-2h6l3 3h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2z' fill='%23f3f5f7'/%3E%3C/svg%3E">
+<style>
+/* ── דרייב — the same design line as מסמכים שלי / my-docs, business-platform layout: fixed viewport
+   height, internal scrolling, sticky table header, tree sidebar. Its own here: radii and type. The
+   colours are the office's palette, in the generated block below — nothing in this file writes one. */
+:root{
+  --radius:16px; --radius-sm:9px; --radius-pill:999px;
+  --font:"Segoe UI",system-ui,-apple-system,"Noto Sans Hebrew","Assistant",Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+/* @bina-theme-tokens:start */
+/* OLIVE GROVE — the one palette of the office (the owner, 2026-10-07 · DGO-450). Four hues, sampled
+   from his mock-up, and the ground they stand on. A screen never writes a colour: it names one of
+   these. Each hue is the colour itself (a FILL — a button, a bar, a dot), «-d» for text and thin
+   lines on the ground (4.5:1 or more), «-soft» and «-line» for a tint and its hairline, and «-ink»
+   for what is written ON the fill. The role names every screen already uses point at them:
+   (no backtick in this block: one of its copies lives inside a script's template string)
+     olive  the brand and the main action · what is well, what is done
+     sky    what is in motion, what only informs · a link
+     lime   look here — a warning, something waiting
+     plum   a person must act — a failure, a removal, the one final action
+   Contrast, measured (WCAG): ink on the ground 13.7 · muted 4.65 · light text on olive 5.51 and on
+   plum 9.54 · ink on lime 6.88 · its ink on sky 6.32 · sky-d 4.61 · lime-d 4.70 · violet 5.32 ·
+   on the desk: its ink 6.32 (dark: 13.96), and 11.2 where the sky pales (dark: 5.12). */
+:root,:root[data-theme="light"]{
+  color-scheme:light;
+  accent-color:var(--accent);   /* the browser's OWN controls - a checkbox, a radio, a range, a progress bar - on both grounds: said once, here (it was said for eight single controls, and every other one was the browser's blue) */
+  --bg:#f3f5f7; --surface:#fff; --surface-2:#f9fafb; --ink:#1f2a17; --muted:#6a7068; --line:#dcdfde;
+  --olive:#56693f; --olive-d:#475734; --olive-soft:#e7eae4; --olive-line:#bfc6b6; --olive-ink:#f3f5f7;
+  --sky:#7baae3; --sky-d:#2a6fc4; --sky-soft:#edf3fb; --sky-line:#cddff4; --sky-ink:#13263f;
+  --lime:#a9b84c; --lime-d:#69732e; --lime-soft:#f3f5e6; --lime-line:#dee4bb; --lime-ink:#1f2a17;
+  --plum:#5b3349; --plum-d:#4a303b; --plum-soft:#e8e2e6; --plum-line:#c1b1ba; --plum-ink:#f3f5f7;
+  --accent:var(--olive); --accent-d:var(--olive-d); --accent-soft:var(--olive-soft); --accent-ink:var(--olive-ink);
+  --blue:var(--sky-d); --amber:var(--lime-d); --red:var(--plum);
+  --violet:#7c5c6d;   /* plum, lifted a fifth toward white: someone has to look — nothing has failed */
+  --ok:var(--olive); --warn:var(--lime-d); --danger:var(--plum); --info:var(--sky-d);
+  --ok-soft:var(--olive-soft); --warn-soft:var(--lime-soft); --danger-soft:var(--plum-soft); --info-soft:var(--sky-soft);
+  --red-soft:var(--plum-soft); --amber-soft:var(--lime-soft); --blue-soft:var(--sky-soft); --violet-soft:var(--plum-soft);
+  --side:var(--olive); --side-ink:#f3f5f7; --side-mut:#dce1da; --side-line:#788765;
+  --desk:var(--sky); --desk-ink:var(--sky-ink);   /* desktop mode's ground is the sky (the owner, DGO-452), and what is written straight on it */
+  --scrim:rgba(31,42,23,.5);                      /* what dims a screen behind a pop-up */
+  --shadow:0 1px 3px rgba(31,42,23,.08),0 6px 24px rgba(31,42,23,.06);
+  --shadow-lg:0 20px 60px rgba(31,42,23,.28);
+  /* ONE COLOUR AND ONE ANIMAL PER OFFICE (the owner, 2026-10-09 · flt-002). When offices are linked,
+     a person reads WHICH office a thing belongs to without opening it, so each office gets a hue of
+     its own. The hue is an IDENTITY and never a health state: an office that stopped answering keeps
+     its colour, and the quiet mark is the one that says "not answering". Each is an ALIAS of the
+     palette's own hue — no fourth value is invented, and because the ground re-points the hue, the
+     office mark follows the ground by itself. Each office's animal (elephant, deer, eagle) is a
+     glyph of bina-icons.js. */
+  --office-hp:var(--muted);   /* hp · elephant — grey: the heavy laptop at home, in the palette's own grey */
+  --office-mac:var(--lime);   /* macbook · deer — yellow: the palette has one yellow and it is lime. A FILL, so what is written ON it is --lime-ink, never this */
+  --office-vps:var(--sky-d);  /* vps · eagle — deep sky blue, «the eagle in the clouds». THE OWNER'S OWN CHOICE (2026-10-09, in writing: vps = נשר + כחול-שמיים) — this line is the colour he picked, not a default kept for him */
+}
+
+/* ── A LINKED OFFICE'S MARK, BY NAME (flt-004) ───────────────────────────────────────────────
+   The link carries a NAME — mark: {color, animal} in the catalog, from the office's own identity
+   — and never a value: the office that DRAWS a linked tile owns the pixels, so it paints the name
+   with its own palette. These seven rules are that translation, one per family above; a screen sets
+   data-office-hue="lime" and paints var(--office-hue).
+   A name this file does not know paints nothing, which is why the vocabulary in
+   apps/dgo-extend/identity.py may only name families that exist here — and why --red and --ok
+   are not among them: they mean «danger» and «it is well» on every screen in the office. */
+[data-office-hue="grey"]   { --office-hue:var(--muted); }
+[data-office-hue="lime"]   { --office-hue:var(--lime); }
+[data-office-hue="sky"]    { --office-hue:var(--sky-d); }
+[data-office-hue="olive"]  { --office-hue:var(--olive-d); }
+[data-office-hue="plum"]   { --office-hue:var(--plum); }
+[data-office-hue="blue"]   { --office-hue:var(--blue); }
+[data-office-hue="violet"] { --office-hue:var(--violet); }
+/* the dark ground is the same four hues on the palette's own ink, and the SAME legend. Olive on that
+   ink is 2.5:1, so its text step there is olive LIFTED — its own hue and saturation, lighter (7.14
+   on a card, 4.82 on its own tint) — and the brand, the main action and «it is well» take that step.
+   Lime stays «look here» and the sky «in motion», as on the light ground: were lime the accent here
+   (it was, for a day), a warning, a selection and «it is well» were one colour. Each «-d» on its
+   own «-soft» there, measured: olive 4.82 · sky 4.62 · lime 4.63 · plum 4.71. */
+@media (prefers-color-scheme:dark){
+  :root{ color-scheme:dark;
+         --bg:#141b0f; --surface:#1f2a17; --surface-2:#192213; --ink:#f3f5f7; --muted:#a2a8a2; --line:#414a3b;
+         --olive-d:#a5ba8c; --olive-soft:#384629; --olive-line:#56693f;
+         --sky-d:#7baae3; --sky-soft:#2e3f38; --sky-line:#4d6a8c;
+         --lime-d:#a9b84c; --lime-soft:#3b4622; --lime-line:#69732e;
+         --plum-d:#ad99a4; --plum-soft:#402f33; --plum-line:#7c5c6d;
+         --accent:var(--olive-d); --accent-ink:var(--surface);
+         --red:#ad99a4; --violet:#bdadb6; --danger:#ad99a4; --ok:var(--olive-d); --side:var(--surface);
+         --desk:var(--sky-ink); --desk-ink:var(--ink); --scrim:rgba(0,0,0,.6);
+         --shadow:0 1px 3px rgba(0,0,0,.4),0 6px 24px rgba(0,0,0,.3);
+         --shadow-lg:0 20px 60px rgba(0,0,0,.55); }
+}
+:root[data-theme="midnight"]{
+  color-scheme:dark;
+  --bg:#141b0f; --surface:#1f2a17; --surface-2:#192213; --ink:#f3f5f7; --muted:#a2a8a2; --line:#414a3b;
+  --olive-d:#a5ba8c; --olive-soft:#384629; --olive-line:#56693f;
+  --sky-d:#7baae3; --sky-soft:#2e3f38; --sky-line:#4d6a8c;
+  --lime-d:#a9b84c; --lime-soft:#3b4622; --lime-line:#69732e;
+  --plum-d:#ad99a4; --plum-soft:#402f33; --plum-line:#7c5c6d;
+  --accent:var(--olive-d); --accent-ink:var(--surface);
+  --red:#ad99a4; --violet:#bdadb6; --danger:#ad99a4; --ok:var(--olive-d); --side:var(--surface);
+  --desk:var(--sky-ink); --desk-ink:var(--ink); --scrim:rgba(0,0,0,.6);
+  --shadow:0 1px 3px rgba(0,0,0,.4),0 6px 24px rgba(0,0,0,.3);
+  --shadow-lg:0 20px 60px rgba(0,0,0,.55);
+}
+/* THE KEYBOARD'S RING - what the browser draws around the stop the keyboard is on, in the palette, wherever
+   a part draws none of its own. It has no specificity at all (:where), so any rule of a part wins. Two
+   screens said this for themselves; on the others nearly every stop wore the browser's ring (DGO-455).
+   A field keeps the offset it has - fourteen rules draw a field's own outline and say no offset. An area
+   (a scroll box, a table) takes the ring inside, where nothing clips it; a control takes it outside,
+   where a filled button does not hide it. */
+:where(:focus-visible){outline:2px solid var(--accent)}
+:where(:focus-visible:not(a,button,summary,[role=button],input,select,textarea)){outline-offset:-2px}
+:where(a,button,summary,[role=button]):focus-visible{outline-offset:2px}
+/* HEBREW AT A HEAVY WEIGHT - on Windows, where the first family of --font is installed. "Segoe UI" has its
+   Hebrew in Light, Regular, Semibold and Bold. Asked for 800 or 900 the browser takes the family's Black
+   face, which has none, and so has every family after it - so the Hebrew of every title at 800 was drawn in
+   the system's last-resort serif, thin, beside Latin in Black: «חשבונות ומראות» at 20px is 150px wide at 700
+   and 120px at 800 (Chrome 154; the screens ask for 800 in 167 places, the question's title among them).
+   These faces give the family's HEBREW RANGE the faces that have it. A family a sheet names is no longer the
+   system's for those characters, so every weight and both styles are named, each as the system resolves it:
+   measured, only upright 800 and 900 change. Any other character is not theirs and goes on to the next
+   family the screen names - system-ui in --font, on Windows the same faces, Black included - which is why
+   G27 asks that system-ui follows wherever a screen names this family itself. Where the family is not
+   installed nothing here resolves and nothing changes. */
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Light");font-weight:100 300;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI");font-weight:400;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Semibold");font-weight:500 600;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Bold");font-weight:700 900;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Light Italic");font-weight:100 300;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Italic");font-weight:400;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Semibold Italic");font-weight:500 600;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Bold Italic");font-weight:700 900;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+/* @bina-theme-tokens:end */
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);
+  font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;overflow:hidden}
+h1,h2{margin:0}
+button{font-family:inherit;cursor:pointer;border:none;border-radius:8px}
+a{color:var(--accent-d);text-decoration:none}
+bdi{unicode-bidi:isolate}
+.mono{font-family:var(--mono)}
+/* Lucide line icons — one size rule for every glyph in the app (never emoji) */
+.ic-svg{width:16px;height:16px;flex:none;display:inline-block;vertical-align:-3px}
+
+/* the whole app fits any screen: both columns may shrink (min-width:0), never overflow */
+#app{display:grid;grid-template-columns:minmax(0,248px) minmax(0,1fr);height:100vh}
+
+/* ── sidebar: fixed column, own scroll region — light, subordinate panel (secondary to the console rail) ── */
+.side{background:var(--surface);color:var(--ink);display:flex;flex-direction:column;gap:6px;
+  padding:18px 14px 12px;min-height:0;min-width:0;border-inline-end:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:9px;font-size:20px;padding:2px 4px 10px}
+.brand .logo{background:var(--accent);color:var(--accent-ink);width:30px;height:30px;border-radius:9px;
+  display:grid;place-items:center;font-weight:800}
+.upbtn{display:flex;align-items:center;justify-content:center;gap:7px;cursor:pointer}
+.primary{background:var(--accent);color:var(--accent-ink);font-weight:700;padding:10px 14px;border-radius:8px}
+.primary:hover{background:var(--accent-d)}
+.block{width:100%}
+.navhead{font-size:11px;color:var(--muted);font-weight:700;letter-spacing:.06em;padding:10px 8px 4px;
+  display:flex;justify-content:space-between;align-items:center;gap:6px;cursor:pointer;min-width:0}
+.navhead .tog{display:inline-flex;transition:transform .15s}
+.navhead .tog .ic-svg{width:13px;height:13px}
+.navhead.closed .tog{transform:rotate(90deg)}
+.navempty{color:var(--muted);font-size:12px;padding:6px 10px}
+
+/* groups — rendered from a registered extension spec; this file knows nothing about their meaning */
+.grp{margin-bottom:2px;min-width:0}
+.grp-h{display:flex;align-items:center;gap:7px;color:var(--ink);font-weight:700;font-size:13px;
+  padding:7px 10px;border-radius:8px;cursor:pointer;user-select:none;min-width:0}
+.grp-h:hover{background:var(--accent-soft);color:var(--accent-d)}
+.grp-h .car{display:inline-flex;color:var(--muted);transition:transform .15s}
+.grp-h .car .ic-svg{width:13px;height:13px}
+.grp-h .gi{display:inline-flex;color:var(--muted)}
+.grp-h .gi .ic-svg{width:14px;height:14px}
+.grp-h .lbl{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.grp.closed .car{transform:rotate(90deg)}
+.grp-h .gcnt{font-size:11px;color:var(--muted);flex:none}
+.grp-body{display:flex;flex-direction:column;gap:1px;padding-inline-start:14px;margin:1px 0 4px}
+.grp.closed .grp-body{display:none}
+/* the twisty is its own hit target: clicking it opens the node, clicking the row opens the folder.
+   Merging the two is why "I only wanted to peek inside" navigates you away in bad file trees. */
+.tw{width:14px;flex:none;display:inline-grid;place-items:center;color:var(--muted);border-radius:4px}
+.tw .ic-svg{width:12px;height:12px;transition:transform .14s}
+.tw.shut .ic-svg{transform:rotate(90deg)}
+.tw:hover{background:var(--line)}
+.tw.leaf{visibility:hidden}
+
+.trashlink{color:var(--muted);text-decoration:none;font-size:13px;padding:8px 12px;border-radius:8px;
+  font-weight:600;display:flex;align-items:center;gap:8px}
+.trashlink:hover{background:var(--accent-soft);color:var(--accent-d)}
+.trashlink.active{background:var(--accent);color:var(--accent-ink)}
+.newfolder{background:transparent;color:var(--muted);border:1px dashed var(--line);padding:7px;
+  font-size:12.5px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:6px}
+.newfolder:hover{color:var(--accent-d);border-color:var(--accent)}
+
+/* ── account bar: which connection is this drive working on? Sits in the sidebar footer so it can
+   never clip against the viewport edge — it shrinks with its column and its menu opens inward. ── */
+.acct{position:relative;border-top:1px solid var(--line);padding-top:10px;margin-top:4px;min-width:0}
+.acct-btn{display:flex;align-items:center;gap:8px;width:100%;min-width:0;background:var(--surface-2);
+  border:1px solid var(--line);border-radius:9px;padding:7px 10px;font-size:12.5px;color:var(--ink);text-align:start}
+.acct-btn:hover{border-color:var(--accent)}
+.acct-lbl{font-weight:700;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acct-hint{color:var(--muted);font-size:11px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acct-chev{display:inline-flex;color:var(--muted);margin-inline-start:auto;flex:none}
+.acct-chev .ic-svg{width:13px;height:13px}
+.acct .dot{width:8px;height:8px;border-radius:99px;flex:none}
+.dot.ok{background:var(--ok)} .dot.warn{background:var(--lime)}
+.acct-menu{position:absolute;bottom:calc(100% + 6px);inset-inline-start:0;
+  width:max(100%,232px);max-width:min(300px,86vw);background:var(--surface);border:1px solid var(--line);
+  border-radius:12px;box-shadow:var(--shadow-lg);padding:6px;z-index:45;
+  max-height:60vh;overflow:auto}
+.acct-item{display:flex;align-items:center;gap:4px;border-radius:8px;min-width:0}
+.acct-item:hover{background:var(--accent-soft)}
+.acct-pick{flex:1;min-width:0;display:flex;align-items:center;gap:8px;background:transparent;
+  border-radius:8px;font-size:12.5px;color:inherit;padding:8px 10px;text-align:start}
+.acct-on{display:inline-flex;color:var(--accent-d);margin-inline-start:auto;flex:none}
+.acct-on .ic-svg{width:14px;height:14px}
+.acct-rm{width:28px;height:28px;flex:none;color:var(--muted);background:transparent}
+.acct-rm:hover{color:var(--red);background:var(--danger-soft)}
+.acct-rm .ic-svg{width:14px;height:14px}
+.acct-add{display:flex;align-items:center;gap:7px;width:100%;background:transparent;color:var(--accent-d);
+  font-weight:700;font-size:12.5px;padding:9px 10px;border-radius:8px;margin-top:4px;border-top:1px solid var(--line)}
+.acct-add:hover{background:var(--accent-soft)}
+.acct-warn{display:flex;align-items:flex-start;gap:6px;color:var(--amber);font-size:11px;font-weight:600;
+  padding:6px 4px 0;min-width:0}
+.acct-warn span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acct-warn .ic-svg{width:13px;height:13px}
+
+/* ── main: column, internal scroll ── */
+.main{display:flex;flex-direction:column;min-width:0;min-height:0;padding:0 28px}
+.topbar{display:flex;justify-content:space-between;align-items:center;gap:18px;flex-wrap:wrap;
+  border-bottom:1px solid var(--line);padding:18px 2px 14px;flex:none}
+.topbar h1{font-size:21px;font-weight:800;display:flex;align-items:center;gap:10px;min-width:0;
+  max-width:100%;white-space:nowrap;overflow:hidden}
+/* only the NAME shrinks; the state chip and the row action keep their size and stay reachable */
+.topbar h1 .tname{min-width:2em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.topbar h1 .chip,.topbar h1 .linkbtn{flex:none}
+.topbar h1 .th-ic{display:inline-flex;color:var(--muted);flex:none}
+.topbar h1 .th-ic .ic-svg{width:19px;height:19px}
+.topbar-tools{display:flex;align-items:center;gap:14px;min-width:0}
+.topbar .hint{color:var(--muted);font-size:12px;max-width:300px;text-align:start}
+#search{border:1px solid var(--line);border-radius:999px;padding:7px 16px;width:min(220px,44vw);font-family:inherit;
+  font-size:13px;background:var(--surface);color:var(--ink)}
+#search:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
+
+.dropstrip{flex:none;display:flex;align-items:center;gap:8px;border:1.5px dashed var(--line);
+  border-radius:10px;background:var(--surface);padding:6px 16px;margin:12px 0 0;color:var(--muted);
+  font-size:13px;position:relative}
+.dz-icon{display:inline-flex;color:var(--accent)}
+/* a short frame (a window in desktop mode): the strip that says where to drop steps aside — a drop
+   anywhere still uploads, and so does the menu's own button — unless it is showing an upload's
+   progress. At 640 × 330 the first screenful held one file. */
+@media (max-height:699px){
+  .dropstrip:not(:has(.up-progress:not(.hidden))){display:none}
+  .topbar{padding:8px 2px}
+  .topbar h1{font-size:18px}
+}
+/* choosing files is an action, so it is a button (one height: 30px) — a text link is for going somewhere */
+.dz-browse{display:inline-flex;align-items:center;height:30px;padding:0 12px;border:1px solid var(--line);border-radius:8px;
+  background:var(--surface);color:var(--ink);font-weight:600;font-size:12.5px;cursor:pointer}
+.dz-browse:hover{border-color:var(--accent);color:var(--accent-d)}
+@media (hover:none){.dz-say{display:none}}     /* nothing is dragged on a touch screen */
+.up-progress{position:absolute;inset-inline:12px;bottom:-5px;height:8px;background:var(--line);
+  border-radius:999px;overflow:hidden}
+.up-progress div{height:100%;width:0;background:var(--sky);transition:width .2s}   /* in motion: sky */
+.up-progress span{position:absolute;inset:0;font-size:9px;color:var(--ink);display:grid;place-items:center}
+
+.tablewrap{flex:1;min-height:0;overflow:auto;background:var(--surface);border:1px solid var(--line);
+  border-radius:12px;box-shadow:var(--shadow);margin-top:12px}
+table.data{width:100%;border-collapse:collapse}
+table.data th{position:sticky;top:0;z-index:2;text-align:right;font-size:12px;color:var(--muted);
+  font-weight:600;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--surface-2)}
+table.data td{padding:9px 14px;border-bottom:1px solid var(--line);font-size:13.5px}
+table.data tr:last-child td{border-bottom:none}
+table.data tbody tr{cursor:pointer}
+table.data tbody tr:hover{background:var(--accent-soft)}
+td.num{font-variant-numeric:tabular-nums;font-family:var(--mono);
+  direction:ltr;text-align:left;white-space:nowrap}
+.muted{color:var(--muted)}
+table.data th.more,table.data td.more{display:none;width:40px;padding-inline:2px}
+.morebtn{width:34px;height:34px;display:grid;place-items:center;border-radius:9px;background:none;color:var(--muted)}
+.morebtn:hover{background:var(--surface-2);color:var(--ink)}
+.morebtn .ic-svg{width:18px;height:18px}
+.empty{padding:48px 24px;text-align:center;color:var(--muted);display:grid;justify-items:center;align-content:center;gap:4px;min-height:260px}
+.empty b{color:var(--ink);font-size:15px;font-weight:700}
+.empty span{font-size:13px}
+.empty button{margin-top:10px}   /* the one way on from a state that has one («נסה שוב») */
+.empty-ic{display:grid;place-items:center;width:52px;height:52px;border-radius:14px;background:var(--surface-2);
+  border:1px solid var(--line);margin-bottom:10px}
+.empty-ic .ic-svg{width:24px;height:24px}
+.ficon{width:29px;height:29px;border-radius:8px;display:inline-grid;place-items:center;
+  background:var(--bg);color:var(--muted);margin-inline-end:10px;vertical-align:middle;flex:none}
+/* A file's kind is ONE colour wherever the file is shown — its row, its card, the card's band and
+   the tile in its details, as a wash of it — so «plum = PDF» is learned once and a folder of one
+   kind reads at a glance. A file of no known kind is muted on all four. (The simulation drew this
+   over the page; it is the page's own now, for every kind and not three.) */
+.ficon.pdf,.gcard .gt.pdf,.details .dthumb.pdf{background:var(--danger-soft);color:var(--red)}
+.ficon.img,.gcard .gt.img,.details .dthumb.img{background:var(--info-soft);color:var(--blue)}
+.ficon.xls,.gcard .gt.xls,.details .dthumb.xls{background:var(--accent-soft);color:var(--accent-d)}
+.ficon.ppt,.gcard .gt.ppt,.details .dthumb.ppt{background:var(--amber-soft);color:var(--amber)}
+.ficon.doc,.gcard .gt.doc,.details .dthumb.doc{background:var(--violet-soft);color:var(--violet)}
+
+.morelink{color:var(--accent-d);cursor:pointer;font-weight:700;text-decoration:underline}
+.statusbar{flex:none;padding:8px 4px 12px;color:var(--muted);font-size:12px;display:flex;gap:16px}
+
+/* a chip's colour comes from whoever registered the container; the neutral one is the drive's own */
+.chip{display:inline-block;font-size:11.5px;font-weight:700;padding:3px 10px;border-radius:999px;vertical-align:middle}
+.chip.subtle{background:var(--bg);color:var(--muted)}
+
+.rowact{display:flex;gap:4px;justify-content:flex-end;visibility:hidden}
+tr:hover .rowact{visibility:visible}
+.rowact button{background:var(--surface);border:1px solid var(--line);width:28px;height:28px;border-radius:7px;
+  color:var(--muted);display:inline-grid;place-items:center}
+.rowact button:hover{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-d)}
+.linkbtn{background:var(--surface);border:1px solid var(--line);width:30px;height:30px;border-radius:8px;flex:none;
+  color:var(--muted);display:inline-grid;place-items:center}
+.linkbtn:hover{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-d)}
+
+/* ── drawer / overlays ── */
+.drawer{position:fixed;inset:0 auto 0 0;width:min(540px,94vw);background:var(--surface);z-index:50;
+  display:flex;flex-direction:column;box-shadow:var(--shadow-lg)}
+.drawer-h{display:flex;justify-content:space-between;align-items:center;padding:15px 20px;border-bottom:1px solid var(--line)}
+.drawer-h h2{font-size:15.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.drawer-meta{padding:9px 20px;color:var(--muted);font-size:12.5px;border-bottom:1px solid var(--line)}
+.drawer-meta .num{font-family:var(--mono);font-size:11px;direction:ltr;unicode-bidi:isolate}
+.pvlink{color:var(--accent-d);font-weight:700;cursor:pointer}
+.pvlink:hover{text-decoration:underline}
+.pvlink .ic-svg{width:13px;height:13px}
+#pvFrame{flex:1;border:none;background:var(--surface-2)}
+.drawer-f{display:flex;gap:10px;padding:13px 20px;border-top:1px solid var(--line);flex-wrap:wrap}
+.drawer-f button{display:inline-flex;align-items:center;gap:6px}
+.ghost{background:var(--surface);border:1px solid var(--line);padding:8px 14px;font-weight:600}
+.ghost:hover{background:var(--accent-soft);border-color:var(--accent)}
+.danger{background:var(--danger-soft);color:var(--red);padding:8px 14px;font-weight:700}
+.x{background:var(--bg);width:30px;height:30px;border-radius:8px;color:var(--muted);display:grid;place-items:center}
+
+.overlay{position:fixed;inset:0;background:var(--scrim);z-index:40}
+.dropveil{position:fixed;inset:0;z-index:70;background:color-mix(in srgb,var(--accent) 12%,transparent);
+  border:3px dashed var(--accent);display:grid;place-items:center;pointer-events:none}
+.dropveil div{background:var(--surface);border:1px solid var(--accent);color:var(--accent-d);
+  font-weight:800;font-size:16px;border-radius:12px;padding:16px 28px;box-shadow:var(--shadow);
+  display:flex;align-items:center;gap:9px}
+.hidden{display:none!important}
+
+/* ── modal system (replaces browser prompt/confirm) ── */
+.modal{position:fixed;top:50%;inset-inline-start:50%;transform:translate(50%,-50%);z-index:60;
+  width:min(460px,92vw);max-height:82vh;background:var(--surface);border-radius:14px;
+  box-shadow:var(--shadow-lg);display:flex;flex-direction:column}
+.modal-h{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--line)}
+.modal-h h2{font-size:16px}
+.modal-b{padding:16px 20px;overflow:auto;display:flex;flex-direction:column;gap:12px}
+.modal-b input[type=text]{border:1px solid var(--line);border-radius:8px;padding:9px 12px;font-family:inherit;font-size:14px;width:100%}
+.modal-b input[type=text]:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
+.modal-f{display:flex;gap:10px;padding:14px 20px;border-top:1px solid var(--line);justify-content:flex-start;flex-wrap:wrap}
+.modal-f button{display:inline-flex;align-items:center;gap:6px}
+.pick-list{display:flex;flex-direction:column;gap:2px;max-height:44vh;overflow:auto}
+.pick-group{font-size:11.5px;color:var(--muted);font-weight:700;padding:8px 6px 3px}
+.pick{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;cursor:pointer;font-weight:600;font-size:13.5px}
+.pick:hover{background:var(--accent-soft)}
+.pick .dot{width:8px;height:8px;border-radius:99px;flex:none}
+.pick bdi{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nopreview{flex:1;display:grid;place-items:center;background:var(--surface-2)}
+.nopreview>div{text-align:center;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:10px}
+.nopreview .big{color:var(--line)}
+.nopreview .big .ic-svg{width:44px;height:44px}
+.nopreview .primary{display:inline-flex;align-items:center;gap:7px}
+.nopreview .open-ext{display:inline-flex;align-items:center;gap:6px}
+
+/* ── guided connect flow (§4b): every step visible, reversible, resolving to a state ── */
+.steps{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:11px;color:var(--muted);
+  border-bottom:1px solid var(--line);padding-bottom:10px}
+.step{display:inline-flex;align-items:center;gap:4px}
+.step:not(:last-child)::after{content:"";width:5px;height:5px;margin-inline:5px 2px;flex:none;
+  border-inline-end:1.5px solid var(--line);border-bottom:1.5px solid var(--line);transform:rotate(45deg)}
+.step b{font-weight:600}
+.step.on{color:var(--accent-d)} .step.on b{font-weight:800}
+.step.done{color:var(--accent)}
+.step .ic-svg{width:11px;height:11px}
+.provgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}
+.provcard{display:flex;flex-direction:column;align-items:flex-start;gap:6px;text-align:start;
+  background:var(--surface-2);border:1px solid var(--line);border-radius:12px;padding:14px}
+.provcard:hover{border-color:var(--accent);background:var(--accent-soft)}
+.provcard .pic{color:var(--accent-d)}
+.provcard .pic .ic-svg{width:22px;height:22px}
+.provcard .pt{font-weight:800;font-size:14px;display:flex;align-items:center;gap:6px}
+.provcard .pd{font-size:11.5px;color:var(--muted);line-height:1.45}
+.tag{background:var(--accent-soft);color:var(--accent-d);font-size:10px;font-weight:700;
+  border-radius:999px;padding:1px 7px}
+.methlist{display:flex;flex-direction:column;gap:8px}
+.methcard{display:flex;flex-direction:column;gap:4px;text-align:start;background:var(--surface-2);
+  border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.methcard:hover{border-color:var(--accent);background:var(--accent-soft)}
+.methcard .mt{font-weight:700;font-size:13.5px;display:flex;align-items:center;gap:6px}
+.methcard .md,.methcard .mn{font-size:11.5px;color:var(--muted)}
+.explain{background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:11px 13px;
+  font-size:12.5px;line-height:1.6}
+.waitbox,.okbox,.errbox{display:flex;align-items:flex-start;gap:11px;border-radius:10px;padding:13px;
+  font-size:13px;border:1px solid var(--line);background:var(--surface-2)}
+.okbox{background:var(--accent-soft);border-color:var(--olive-line)}
+.okbox .ic-svg{width:20px;height:20px;color:var(--accent-d);flex:none}
+.errbox{background:var(--danger-soft);border-color:var(--plum-line)}
+.errbox .ic-svg{width:20px;height:20px;color:var(--red);flex:none}
+.waitbox .spin{display:inline-flex;color:var(--accent-d);animation:sp 1.4s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.fld{display:flex;flex-direction:column;gap:5px;font-size:12.5px;font-weight:600}
+.fld span{color:var(--muted);font-weight:600}
+.fld input{font:inherit;font-weight:400;min-height:36px;padding:7px 11px;border:1px solid var(--line);
+  border-radius:9px;background:var(--surface);color:var(--ink)}
+.fld input:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
+.fld-wrapper{display:flex;flex-direction:column;gap:5px}
+.fld-wrapper .fld{margin:0}
+.fld-label{display:flex;align-items:center;justify-content:space-between;gap:8px;color:var(--muted);font-weight:600}
+.file-load-btn{color:var(--accent-d);padding:0;margin:0;cursor:pointer;display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;text-decoration:underline}
+.file-load-btn:hover{color:var(--accent);opacity:.85}
+.file-load-btn .ic-svg{width:14px;height:14px}
+.file-load-input{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+
+/* ── profile management (the engine plane) ──
+   A separate screen from the connect wizard on purpose: creating an IDENTITY and connecting to one
+   are different acts. The table is deliberately plain — this is an admin surface, and a row here
+   is a person's access, not a decoration. */
+.tag.warn{background:var(--danger-soft);color:var(--red)}
+.pftable{width:100%;border-collapse:collapse;font-size:12.5px}
+.pftable th{text-align:start;color:var(--muted);font-weight:700;font-size:11px;padding:6px 8px;
+  border-bottom:1px solid var(--line)}
+.pftable td{padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+.pftable td b{display:inline-flex;align-items:center;gap:6px}
+.pftable .muted{font-size:10.5px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.pf-act{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}
+.pf-act button{background:var(--surface-2);border:1px solid var(--line);border-radius:7px;
+  padding:4px 9px;font-size:11.5px;font-weight:600;color:var(--ink)}
+.pf-act button:hover:not(:disabled){border-color:var(--accent);background:var(--accent-soft)}
+.pf-act button:disabled{opacity:.45}
+.pf-act button.danger{color:var(--red)}
+.pf-act button.danger:hover{border-color:var(--red);background:var(--danger-soft)}
+/* A credential is shown exactly once and must be readable and selectable — this service stores only
+   its hash and genuinely cannot produce it a second time. */
+.keybox{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;word-break:break-all;
+  user-select:all;background:var(--surface-2);border:1px solid var(--line);border-radius:9px;
+  padding:11px 13px;margin-top:10px}
+
+/* ── selection, bulk bar, drag-move, context menu, sort ── */
+table.data tbody tr.sel{background:var(--accent-soft)}
+table.data tbody tr.sel:hover{background:var(--olive-line)}
+table.data tbody tr{user-select:none}
+.name-open{cursor:pointer}
+.name-open:hover{text-decoration:underline;color:var(--accent-d)}
+/* what is selected is said on the kit's display — olive, its ink — and acted on with the kit's keys:
+   a surface key for an action, the plum one for the removal. The same in either theme. */
+.bulkbar{flex:none;display:flex;align-items:center;gap:10px;background:var(--olive);color:var(--olive-ink);
+  border-radius:10px;padding:8px 16px;margin-top:12px;font-size:13px;flex-wrap:wrap}
+.bulkbar button{background:var(--surface);color:var(--ink);padding:6px 12px;font-weight:600;font-size:12.5px;
+  display:inline-flex;align-items:center;gap:6px}
+.bulkbar button:hover{background:var(--surface-2)}
+.bulkbar button.danger{background:var(--plum);color:var(--plum-ink)}
+.bulkbar button.danger:hover{filter:brightness(1.15)}
+/* a button like its neighbours, only quieter — it was an underlined link in a row of buttons */
+.bulkbar .ghostlink{background:transparent;color:inherit;box-shadow:inset 0 0 0 1px var(--side-line)}
+.bulkbar .ghostlink:hover{background:transparent;box-shadow:inset 0 0 0 1px currentColor}
+.dragghost{position:fixed;top:-200px;inset-inline-start:-200px;background:var(--ink);color:var(--surface);
+  padding:8px 16px;border-radius:9px;font-weight:700;font-size:13px;z-index:99;pointer-events:none}
+.ctx{position:fixed;z-index:90;background:var(--surface);border:1px solid var(--line);border-radius:10px;
+  box-shadow:var(--shadow-lg);padding:5px;min-width:180px}
+.ctx button{display:flex;align-items:center;width:100%;gap:9px;background:none;text-align:start;padding:8px 12px;
+  border-radius:7px;font-size:13.5px;font-weight:600;color:var(--ink)}
+.ctx button .ic-svg{width:14px;height:14px;color:var(--muted)}
+.ctx button:hover{background:var(--accent-soft)}
+.ctx button.danger{color:var(--red)}
+.ctx button.danger .ic-svg{color:var(--red)}
+.ctx hr{border:none;border-top:1px solid var(--line);margin:4px 0}
+th.sortable{cursor:pointer}
+th.sortable:hover{color:var(--ink)}
+th .arr{display:inline-flex;margin-inline-start:4px}
+th .arr .ic-svg{width:11px;height:11px}
+th .arr.up{transform:rotate(180deg)}
+td .chip{margin-inline-start:8px}
+
+/* ══ Drive-grade surfaces ══════════════════════════════════════════════════════════════════════
+   Everything below was added to close the gap against the product every user already knows. Each
+   block notes WHY it exists, because "it looks like Drive" is not a reason — the reason is always
+   a question the user is asking that the old screen could not answer. */
+
+/* ── system rail: bית / הדרייב שלי / משותף איתי / אחרונים / מסומן בכוכב / אשפה ──
+   Full-bleed pills like the real product: the active row reads as a place you are IN, not a link
+   you clicked. Counts stay muted — they inform, they don't compete. */
+.sysrail{display:flex;flex-direction:column;gap:1px;padding-bottom:8px;margin-bottom:2px;
+  border-bottom:1px solid var(--line)}
+
+/* ── storage meter ── */
+.storebox{border-top:1px solid var(--line);padding:10px 4px 4px;display:flex;flex-direction:column;gap:6px}
+.storebox .sl{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--muted);font-weight:600}
+.storebox .sl .ic-svg{width:13px;height:13px}
+.storebar{height:5px;border-radius:99px;background:var(--line);overflow:hidden}
+.storebar i{display:block;height:100%;background:var(--accent);border-radius:99px}
+.storebar.warn i{background:var(--amber)} .storebar.full i{background:var(--red)}
+.storebox .sn{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+
+/* ── toolbar row: breadcrumb · filter chips · view tools ── */
+.dtoolbar{flex:none;display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 2px 0}
+.crumbs{display:flex;align-items:center;gap:2px;min-width:0;flex-wrap:wrap;font-size:13px}
+.crumbs .cb{display:inline-flex;align-items:center;gap:5px;background:transparent;border:none;
+  color:var(--muted);font:inherit;font-size:13px;font-weight:600;padding:4px 8px;border-radius:7px;cursor:pointer}
+.crumbs .cb:hover{background:var(--surface-2);color:var(--ink)}
+.crumbs .cb.last{color:var(--ink);font-weight:800;font-size:15px}
+.crumbs .csep{color:var(--line);flex:none;display:grid}
+.crumbs .csep .ic-svg{width:13px;height:13px}
+.crumbs .cb .ic-svg{width:12px;height:12px;opacity:.7}
+
+/* Filter chips: a chip that is OFF is an offer, a chip that is ON is a statement plus its own undo.
+   Both live in the same row so the user never has to hunt for how to take a filter back off. */
+.chiprow{display:flex;align-items:center;gap:7px;flex-wrap:wrap;min-width:0}
+.fchip{display:inline-flex;align-items:center;gap:5px;background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--radius-pill);padding:5px 12px;font-size:12.5px;font-weight:600;color:var(--ink);cursor:pointer}
+.fchip:hover{background:var(--surface-2);border-color:var(--muted)}
+.fchip .ic-svg{width:12px;height:12px;color:var(--muted)}
+.fchip.on{background:var(--accent-soft);border-color:var(--olive-line);color:var(--accent-d)}
+.fchip.on .ic-svg{color:var(--accent-d)}
+.fchip .cx{opacity:.6;padding-inline-start:2px;display:grid}
+.fchip .cx .ic-svg{width:12px;height:12px}
+.fchip .cx:hover{opacity:1}
+.fchip.clearall{border-style:dashed;color:var(--muted);font-weight:600}
+.fmenu{position:absolute;z-index:80;background:var(--surface);border:1px solid var(--line);border-radius:10px;
+  box-shadow:var(--shadow-lg);padding:5px;min-width:180px;max-height:60vh;overflow:auto}
+.fmenu button{display:flex;align-items:center;gap:8px;width:100%;background:none;text-align:start;
+  padding:8px 11px;border-radius:7px;font-size:13px;font-weight:600;color:var(--ink)}
+.fmenu button:hover{background:var(--accent-soft)}
+.fmenu button.on{color:var(--accent-d)}
+.fmenu .fm-h{font-size:10.5px;color:var(--muted);font-weight:800;letter-spacing:.05em;padding:6px 11px 3px}
+
+.viewtools{display:flex;align-items:center;gap:2px;margin-inline-start:auto;flex:none}
+.vtb{background:transparent;color:var(--muted);padding:7px;border-radius:8px;display:inline-grid;place-items:center}
+.vtb:hover{background:var(--surface-2);color:var(--ink)}
+.vtb.on{background:var(--accent-soft);color:var(--accent-d)}
+.vtb .ic-svg{width:16px;height:16px}
+.vsep{width:1px;height:18px;background:var(--line);margin:0 5px}
+
+/* ── content row: list/grid + details pane ── */
+.contentrow{flex:1;min-height:0;display:flex;gap:14px;margin-top:12px}
+.contentrow .tablewrap{flex:1;min-width:0;margin-top:0}
+.details{flex:0 0 288px;max-width:288px;background:var(--surface);border:1px solid var(--line);
+  border-radius:12px;box-shadow:var(--shadow);overflow:auto;padding:16px;display:flex;
+  flex-direction:column;gap:14px}
+.details .dh{display:flex;align-items:flex-start;gap:10px}
+.details .dh .ficon{flex:none}
+.details .dname{font-weight:800;font-size:14px;line-height:1.35;min-width:0;word-break:break-word}
+.details .dthumb{height:118px;border-radius:10px;display:grid;place-items:center;background:var(--surface-2);
+  border:1px solid var(--line);color:var(--muted)}
+.details .dthumb .ic-svg{width:40px;height:40px}
+.details .dsec{font-size:10.5px;color:var(--muted);font-weight:800;letter-spacing:.05em;
+  border-top:1px solid var(--line);padding-top:11px}
+.details dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:7px 12px;font-size:12.5px}
+.details dt{color:var(--muted);font-weight:600;white-space:nowrap}
+.details dd{margin:0;font-weight:600;min-width:0;overflow-wrap:anywhere}
+.details .dacts{display:flex;gap:6px;flex-wrap:wrap}
+.details .dacts button{background:var(--surface-2);border:1px solid var(--line);color:var(--ink);
+  font-size:12px;font-weight:700;padding:6px 11px;display:inline-flex;align-items:center;gap:6px}
+.details .dacts button:hover{border-color:var(--accent);color:var(--accent-d)}
+.details .dempty{color:var(--muted);font-size:12.5px;text-align:center;padding:30px 8px;line-height:1.6}
+.detx{position:absolute;top:10px;inset-inline-start:10px;background:var(--surface-2);
+  border:1px solid var(--line);color:var(--muted);width:30px;height:30px;border-radius:8px;
+  display:grid;place-items:center}
+.detx:hover{color:var(--ink);border-color:var(--muted)}
+.details{position:relative}
+.detveil{position:fixed;inset:0;background:var(--scrim);z-index:69}
+
+/* ── grid view: recognition beats reading. A thumbnail band carries the file TYPE as colour+glyph,
+   so scanning 30 files is a glance instead of 30 reads. ── */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(178px,1fr));gap:12px;padding:14px}
+.gsec{grid-column:1/-1;font-size:11px;color:var(--muted);font-weight:800;letter-spacing:.05em;padding:4px 2px}
+.gcard{background:var(--surface);border:1px solid var(--line);border-radius:11px;overflow:hidden;
+  cursor:pointer;display:flex;flex-direction:column;user-select:none;transition:box-shadow .12s,border-color .12s}
+.gcard:hover{border-color:var(--muted);box-shadow:var(--shadow)}
+.gcard.sel{border-color:var(--accent);background:var(--accent-soft);box-shadow:0 0 0 1px var(--accent)}
+.gcard .gt{height:96px;display:grid;place-items:center;background:var(--surface-2);border-bottom:1px solid var(--line);color:var(--muted)}
+.gcard .gt .ic-svg{width:34px;height:34px}
+.gcard .gm{display:flex;align-items:center;gap:7px;padding:9px 10px;min-width:0}
+.gcard .gm .ficon .ic-svg{width:14px;height:14px}
+.gcard .gn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-size:12.5px;font-weight:700}
+/* A name that does not fit loses its END, never its beginning. The box that is cut is the name itself
+   (its <bdi>, which reads the way its own first letter does), not the right-to-left box around it —
+   cut by that one, a left-to-right name lost the side it starts on: «…ffice-browser.png». */
+.gcard .gn,.gfold b,.pvbar .pvn{display:flex}
+.gcard .gn bdi,.gfold b bdi,.pvbar .pvn bdi{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gcard .gstar{flex:none;color:var(--line);font-size:13px;line-height:1}
+.gcard .gstar.on{color:var(--lime)}
+.gfold{display:flex;align-items:center;gap:9px;background:var(--surface-2);border:1px solid var(--line);
+  border-radius:11px;padding:11px 12px;cursor:pointer;min-width:0}
+.gfold:hover{border-color:var(--accent);background:var(--accent-soft)}
+.gfold .ic-svg{width:17px;height:17px;color:var(--muted);flex:none}
+.gfold b{font-size:12.5px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gfold .n{margin-inline-start:auto;font-size:11px;color:var(--muted);flex:none}
+
+/* ── list extras: the star column, the owner avatar, the shared mark ── */
+td.starcell,th.starcell{width:30px;padding-inline:6px}
+.rstar{color:var(--line);cursor:pointer;font-size:15px;line-height:1;user-select:none}
+/* the star is drawn: an outline until it is on, then filled */
+.rstar .ic-svg,.gstar .ic-svg{width:1em;height:1em;vertical-align:-.12em}
+.rstar.on .ic-svg,.gstar.on .ic-svg{fill:currentColor}
+.rstar:hover{color:var(--muted)}
+.rstar.on{color:var(--lime)}
+.owav{width:22px;height:22px;border-radius:50%;color:var(--surface);font-size:10.5px;font-weight:700;
+  display:inline-grid;place-items:center;flex:none}
+td.owner{white-space:nowrap}
+td.owner .ow{display:inline-flex;align-items:center;gap:7px;font-size:12.5px}
+.shmark{display:inline-flex;color:var(--muted);margin-inline-start:7px}
+.shmark .ic-svg{width:12px;height:12px}
+/* folder rows inside the list — a drive's list mixes folders and files, folders first */
+tr.frow td .fname{font-weight:700}
+.fcount{font-size:11px;color:var(--muted);margin-inline-start:8px;white-space:nowrap}
+tr.frow .ficon{color:var(--muted)}
+
+/* ── full-screen preview overlay: a document deserves the whole screen. The chrome is dark so the
+   page itself is the brightest thing on screen, and every control sits in one bar. It is the
+   palette's deep blue with the sky written on it (6.32) — the one pair that stays in either theme. ── */
+.pvfull{position:fixed;inset:0;z-index:95;background:var(--sky-ink);display:flex;flex-direction:column}
+.pvfull.hidden{display:none}
+.pvbar{display:flex;align-items:center;gap:12px;padding:11px 18px;color:var(--sky);flex:none}
+.pvbar .pvn{font-weight:700;font-size:14px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:0 1 auto}
+/* A narrow screen: the actions are their icons (each still says what it does), the name gets the
+   room — six labelled buttons pushed it out of the bar and themselves off the screen's edge. */
+@media (max-width:900px){
+  .pvbar{gap:4px;padding:8px 10px}
+  .pvbar .pvn{flex:1 1 0}
+  .pvbar .pvsub,.pvbar button span{display:none}
+  .pvbar button{padding:9px}
+}
+/* a file with no preview: its name, what it is, and the one thing left to do with it */
+.pvnone{display:grid;place-items:center;text-align:center;padding:40px}
+.pvnone-ic{opacity:.35}
+.pvnone-ic .ic-svg{width:40px;height:40px}
+.pvnone-n{margin-top:14px;font-weight:700;font-size:15px;overflow-wrap:anywhere}
+.pvnone-s{font-size:12.5px;margin:4px 0 16px}
+.pvbar .pvsub{font-size:12px;opacity:.75;flex:none}
+.pvbar .sp{margin-inline-start:auto}
+.pvbar button{background:transparent;color:inherit;padding:7px 10px;border-radius:8px;
+  display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600}
+.pvbar button:hover,.pvnav:hover{background:color-mix(in srgb,var(--sky) 24%,transparent)}
+.pvbar .ic-svg{width:16px;height:16px}
+.pvstage{flex:1;min-height:0;display:grid;place-items:center;padding:0 18px 18px}
+.pvpaper{background:var(--surface);border-radius:6px;width:min(820px,100%);height:100%;overflow:auto;
+  box-shadow:var(--shadow-lg)}
+.pvpaper iframe{width:100%;height:100%;border:none;display:block}
+.pvnav{position:absolute;top:50%;transform:translateY(-50%);background:color-mix(in srgb,var(--sky) 12%,transparent);
+  color:var(--sky);width:38px;height:38px;border-radius:50%;display:grid;place-items:center}
+.pvnav.prev{inset-inline-start:14px} .pvnav.next{inset-inline-end:14px}
+
+/* ── share dialog: people first, general access second, link last — in the order the question is
+   actually asked ("who can see this?" before "what's the link?"). ── */
+.shrow{display:flex;align-items:center;gap:10px;padding:8px 2px}
+.shrow .who,.shgen .who{flex:1;min-width:0}
+.shrow .who b,.shgen .who b{display:block;font-size:13px}
+.shrow .who span,.shgen .who span{font-size:11.5px;color:var(--muted)}
+.shrow select{font-family:inherit;font-size:12.5px;border:1px solid var(--line);border-radius:8px;
+  padding:5px 8px;background:var(--surface);color:var(--ink)}
+.shgen{display:flex;align-items:center;gap:10px;border-top:1px solid var(--line);padding-top:12px;margin-top:6px}
+.shgen .gi{width:32px;height:32px;border-radius:50%;background:var(--accent-soft);color:var(--accent-d);
+  display:grid;place-items:center;flex:none}
+
+/* (There was a dark-theme section here: forty rules that re-coloured, for the dark ground, every
+   surface that hard-coded a light neutral. Nothing hard-codes one now — every rule above names a
+   token of the palette — so the dark ground needs no rule of its own.) */
+
+/* narrow screens (and the console's embedded frame): the sidebar tightens… */
+#sideToggle{display:none}
+.sideveil{position:fixed;inset:0;background:var(--scrim);z-index:55}
+/* the details pane is the first thing to go: it is enrichment, the list is the job */
+@media (max-width:1120px){
+  .details{position:fixed;inset-block:0;inset-inline-end:0;z-index:70;flex-basis:min(320px,88vw);
+    max-width:min(320px,88vw);border-radius:0;box-shadow:var(--shadow-lg)}
+  .details .detx{width:38px;height:38px}
+}
+/* above it the pane is a column, not an overlay — no veil, and the ✕ is redundant with the ⓘ */
+@media (min-width:1121px){ .detveil{display:none} }
+@media (max-width:820px){
+  #app{grid-template-columns:minmax(0,190px) minmax(0,1fr)}
+  .main{padding:0 14px}
+  .topbar .hint{display:none}
+  .dtoolbar{gap:8px}
+  .grid{grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;padding:10px}
+  .gcard .gt{height:78px}
+}
+@media (max-width:640px){
+  .viewtools{margin-inline-start:0}
+  .crumbs{flex-basis:100%}
+  .pvstage{padding:0 8px 10px}
+}
+/* …and below this a two-column layout stops being one: the sidebar becomes a drawer, so the file
+   list keeps the whole width and nothing is pushed off-screen. It is dir-rtl by construction, so
+   the physical right edge is the sidebar's own edge. */
+/* On a phone the list has room for ONE fact besides the name. Owner and date lose — the name is
+   what you are looking for and the size is what decides whether you tap it on mobile data. Losing a
+   column beats a horizontally-scrolling table, which hides the thing you came for off-screen. */
+@media (max-width:700px){
+  table.data th.owner,table.data td.owner,
+  table.data th.created,table.data td.created{display:none}
+  table.data td,table.data th{padding-inline:9px}
+}
+/* A tablet is in between: beside the Drive's own panel the list is ~600px, and five facts left the
+   name 250px of it — two-line names next to a column that said «אני» on every row, and a date
+   broken in two (measured 2026-10-06 at 834px). The owner goes first (it is in the details panel),
+   and a date is one token. */
+@media (max-width:1000px){
+  table.data th.owner,table.data td.owner{display:none}
+  table.data td,table.data th{padding-inline:10px}
+}
+table.data td.created{white-space:nowrap}
+/* …and the row's own buttons, which appear on HOVER. Where there is no hover (a finger) or no room
+   they were an invisible column that still took its width — 124px, 164px at finger size — and on
+   a phone the name was left a third of the row, wrapping word by word beside an empty half
+   (measured 2026-10-06 at 390px and 834px). The same four actions are the row's own menu
+   (long-press / right-click) and the selection bar. */
+@media (max-width:700px),(hover:none){
+  table.data th.acts,table.data td.acts{display:none}
+  table.data th.more,table.data td.more{display:table-cell}
+}
+@media (max-width:640px){
+  #app{grid-template-columns:minmax(0,1fr)}
+  .side{position:fixed;top:0;bottom:0;right:0;width:min(284px,86vw);z-index:56;
+    transform:translateX(105%);transition:transform .18s ease;
+    border-inline-end:none;border-inline-start:1px solid var(--line)}
+  /* the shadow is the OPEN menu's: on the parked one its 40px blur reached back over the page */
+  .side.open{transform:none;box-shadow:var(--shadow-lg)}
+  #sideToggle{display:inline-grid}
+  .main{padding:0 12px}
+  .modal{width:min(460px,94vw)}
+}
+/* ── a SHORT frame: a window in desktop mode ────────────────────────────────────────────────────
+   The list is this screen, and its chrome is fixed above it: in a window of 380 × 224 the title,
+   two rows of tools and the status line left the list its own header row and no row of files
+   (photographed 2026-10-07). There the chrome is tighter, and in the smallest windows the tools
+   are ONE row that scrolls sideways, so the list keeps the window (102px of it, measured). */
+@media (max-height:699px){
+  .dtoolbar{padding-top:6px;gap:6px 8px}
+  .contentrow{margin-top:8px}
+  .statusbar{padding:5px 4px 7px}
+}
+@media (max-height:399px){
+  .dtoolbar{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+  .dtoolbar::-webkit-scrollbar{display:none}
+  .dtoolbar>*{flex:none}
+  .crumbs{flex-basis:auto;flex-wrap:nowrap}
+  .chiprow{flex-wrap:nowrap}
+  .viewtools{margin-inline-start:0}
+}
+/* ── touch targets ──────────────────────────────────────────────────────────────────────────────
+   Apple asks for 44pt, Android for 48dp, and both exist because a fingertip is ~9mm and a mouse
+   cursor is one pixel. Several of these controls are 20–26px — fine for a pointer, a coin-toss for
+   a thumb. `pointer:coarse` is the right gate: it grows them on touch devices without inflating
+   the dense desktop layout the same controls were tuned for. */
+@media (pointer:coarse){
+  .rowact button{width:38px;height:38px}
+  .linkbtn{width:38px;height:38px}
+  .vtb{padding:11px}
+  .fchip{padding:9px 14px}
+  .fmenu button{padding:12px 14px}
+  .tw{width:26px;height:26px}
+  .rstar{font-size:18px;padding:6px}                 /* 30 wide: at 4px a side it was a 26px target */
+  .crumbs .cb{padding:9px 10px}
+  .side a.nl.sys{padding:11px 12px}
+  .ctx button{padding:12px 14px}
+  .pvbar button{padding:11px 12px}
+  .pvnav{width:46px;height:46px}
+  .x{width:38px;height:38px}
+}
+
+/* drive's own behaviour layered on the component's rows — nothing about size, colour or
+   state of a row is re-stated here. */
+.bnv-item.droptgt{outline:2px dashed var(--accent);outline-offset:-2px;background:var(--accent-soft);color:var(--accent-d)}
+.bnv-ic .ic-svg{width:16px;height:16px}
+/* tree twisty: drive's own control, sized to the row's icon box */
+.tw{width:14px;height:14px;flex:none;display:inline-flex;align-items:center;justify-content:center;color:var(--muted);cursor:pointer}
+.tw .ic-svg{width:12px;height:12px;transition:transform .15s}
+.tw.open .ic-svg{transform:rotate(180deg)}
+/* the count badge lives inside the component's trailing slot */
+.cnt{font-size:10.5px;background:var(--surface-2);color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:0 7px;font-variant-numeric:tabular-nums}
+.bnv-item.is-active .cnt{background:var(--accent-soft);color:var(--accent-d);border-color:transparent}
+
+.side{--bnv-bg:var(--surface-2);--bnv-ink:var(--ink);--bnv-ink-2:var(--muted);--bnv-line:var(--line)}
+.side .bnv-head .logo{width:28px;height:28px;border-radius:8px;background:var(--accent-soft);color:var(--accent-d);display:grid;place-items:center;font-weight:800;font-size:14px;flex:none}
+.side .bnv-head b{font-size:16px}
+
+/* @bina-nav:start */
+/* ── §1 the vocabulary ────────────────────────────────────────────────────── */
+.bnv{
+  --bnv-bg:var(--surface-2);
+  --bnv-ink:var(--ink);
+  --bnv-ink-2:var(--muted);
+  --bnv-hover:color-mix(in srgb, var(--bnv-ink) 6%, transparent);
+  --bnv-active:color-mix(in srgb, var(--bnv-ink) 10%, transparent);
+  --bnv-brand:var(--accent);
+  --bnv-brand-ink:var(--accent-d);
+  --bnv-brand-soft:var(--accent-soft);
+  --bnv-line:var(--line);
+
+  /* geometry — the rail (§3) and the sizes (§4) change THESE, never a rule */
+  --bnv-pad:8px 10px;
+  --bnv-gap:2px;
+  --bnv-row-w:100%;
+  --bnv-row-h:36px;
+  --bnv-row-pad:7px 8px;
+  --bnv-row-gap:8px;
+  --bnv-row-justify:flex-start;
+  --bnv-head-h:52px;
+  --bnv-head-pad:4px 6px 10px;
+  --bnv-head-justify:flex-start;
+  --bnv-primary-w:100%;
+  --bnv-primary-h:44px;
+  --bnv-primary-pad:10px 12px;
+  --bnv-primary-justify:flex-start;
+  --bnv-foot-align:stretch;
+  /* what a rail takes away — `none` per part, because only the owner of a rule may say what
+     that rule's display IS. A `display:none!important`-style override cannot be undone by a
+     narrower container, and a phone must be able to bring these back.
+     A rail takes away WORDS, never a way in: the names, the group heads, the search's field, and
+     «הצג עוד» (which is words) — so the rows «הצג עוד» folds are all there in a rail (`--bnv-rest`),
+     the search stays as its magnifier, and the collapse control stays, turned round, under the
+     avatar. It used to take those three away too: a rail had no search, was missing the folded
+     rows, and — once a person had chosen it — nothing left to press that would bring the menu back. */
+  --bnv-text:block;
+  --bnv-ghead:flex;
+  --bnv-field:block;     /* the search's field */
+  --bnv-more:block;
+  --bnv-rest:none;       /* the rows folded behind «הצג עוד», while they are folded */
+  --bnv-head-dir:row;    /* the brand row: avatar · name · collapse — a rail stacks what is left of it */
+  --bnv-turn:none;       /* the collapse control's arrow */
+  --bnv-side:252px;      /* read by .appgrid — the only width the host asks for */
+  --bnv-off:-100%;       /* where a closed drawer parks; flipped for RTL below */
+
+  background:var(--bnv-bg);
+  color:var(--bnv-ink);
+  display:flex;
+  flex-direction:column;
+  gap:var(--bnv-gap);
+  box-sizing:border-box;
+  height:100%;
+  min-height:0;
+  padding:var(--bnv-pad);
+  font-size:14px;
+  overflow:hidden;
+}
+
+/* ── §2 the parts ─────────────────────────────────────────────────────────── */
+.bnv-scroll{
+  flex:1;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+  gap:var(--bnv-gap);
+  overflow-y:auto;
+  overflow-x:hidden;
+  overscroll-behavior:contain;
+  scrollbar-width:thin;
+}
+.bnv-list{display:flex;flex-direction:column;gap:var(--bnv-gap);min-width:0}
+
+/* brand row: square avatar · name (+ one line of context) · the collapse control */
+.bnv-head{
+  display:flex;
+  flex-direction:var(--bnv-head-dir);
+  align-items:center;
+  justify-content:var(--bnv-head-justify);
+  gap:10px;
+  min-height:var(--bnv-head-h);
+  padding:var(--bnv-head-pad);
+  flex:none;
+  overflow:hidden;
+}
+.bnv-avatar{
+  width:28px;height:28px;border-radius:8px;flex:none;
+  display:grid;place-items:center;overflow:hidden;
+  background:var(--bnv-brand-soft);color:var(--bnv-brand-ink);
+  font-weight:800;font-size:14px;line-height:1;
+}
+.bnv-avatar img{width:100%;height:100%;object-fit:cover;display:block}
+.bnv-head-text{flex:1;min-width:0;display:var(--bnv-text)}
+/* (a brand line reads its own way — `dir=auto`, so what is cut is its end — and still sits on the menu's side) */
+.bnv-head b,.bnv-head small{text-align:-webkit-match-parent;text-align:match-parent}
+.bnv-head b{display:block;font-size:16px;line-height:22px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bnv-head small{display:block;color:var(--bnv-ink-2);font-size:11px;line-height:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bnv-collapse{
+  flex:none;width:28px;height:28px;padding:0;border:0;border-radius:8px;
+  background:transparent;color:var(--bnv-ink-2);
+  display:grid;place-items:center;cursor:pointer;
+}
+.bnv-collapse:hover{background:var(--bnv-hover);color:var(--bnv-ink)}
+.bnv-collapse:focus-visible{outline:2px solid var(--bnv-ink);outline-offset:-2px}
+.bnv-collapse svg{width:16px;height:16px;transform:var(--bnv-turn)}
+
+/* the ONE flat primary action — the same object in every app, at finger size */
+.bnv-primary{
+  box-sizing:border-box;flex:none;width:var(--bnv-primary-w);min-height:var(--bnv-primary-h);
+  display:flex;align-items:center;justify-content:var(--bnv-primary-justify);gap:8px;
+  padding:var(--bnv-primary-pad);border:0;border-radius:10px;
+  background:var(--bnv-brand-soft);color:var(--bnv-brand-ink);
+  font:inherit;font-size:14px;line-height:22px;font-weight:600;
+  text-align:start;text-decoration:none;cursor:pointer;
+}
+.bnv-primary:hover{background:color-mix(in srgb, var(--bnv-brand) 16%, transparent)}
+.bnv-primary:active{background:color-mix(in srgb, var(--bnv-brand) 24%, transparent)}
+.bnv-primary:focus-visible{outline:2px solid var(--bnv-brand);outline-offset:2px}
+.bnv-primary .bnv-label{flex:1}
+.bnv-primary[aria-disabled="true"],.bnv-primary:disabled{opacity:.5;cursor:default}
+
+/* a group: a named block of rows, with its own header */
+.bnv-group{display:flex;flex-direction:column;gap:var(--bnv-gap);min-width:0}
+.bnv-ghead{display:var(--bnv-ghead);align-items:center;gap:2px;min-height:28px;padding:6px 6px 0;flex:none}
+.bnv-gtitle{
+  flex:1;min-width:0;display:var(--bnv-text);
+  color:var(--bnv-ink-2);font-size:11px;line-height:16px;font-weight:600;letter-spacing:.04em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+/* a group action is a small icon button, and there are never more than two */
+.bnv-act{
+  flex:none;width:26px;height:26px;padding:0;border:0;border-radius:7px;
+  background:transparent;color:var(--bnv-ink-2);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;
+}
+.bnv-act:hover{background:var(--bnv-hover);color:var(--bnv-ink)}
+.bnv-act:focus-visible{outline:2px solid var(--bnv-ink);outline-offset:-2px}
+.bnv-act svg{width:15px;height:15px}
+
+/* search lives IN the menu — which is what frees the top of the page for content.
+   Its magnifier is a button (it puts the keyboard in the field), and in a rail it is the whole box:
+   the field is gone (`--bnv-field`), and a press opens the menu over the page, on the field. */
+.bnv-search{
+  display:flex;align-items:center;justify-content:var(--bnv-row-justify);flex:none;
+  margin:0 2px;min-height:34px;
+  border:1px solid var(--bnv-line);border-radius:8px;background:var(--bnv-bg);cursor:pointer;
+}
+.bnv-search button{
+  flex:none;align-self:stretch;width:30px;padding:0;border:0;border-radius:7px;
+  background:transparent;color:var(--bnv-ink-2);
+  display:inline-flex;align-items:center;justify-content:center;cursor:pointer;
+}
+.bnv-search button:hover{color:var(--bnv-ink)}
+.bnv-search button:focus-visible{outline:2px solid var(--bnv-ink);outline-offset:-2px}
+.bnv-search svg{width:15px;height:15px;flex:none}
+.bnv-search input{
+  display:var(--bnv-field);
+  flex:1;min-width:0;padding:7px 0;padding-inline-end:9px;border:0;background:transparent;color:inherit;
+  font:inherit;font-size:13px;line-height:20px;cursor:text;
+}
+.bnv-search input:focus{outline:none}
+.bnv-search:focus-within{border-color:color-mix(in srgb, var(--bnv-brand) 45%, transparent)}
+.bnv-search[hidden]{display:none}
+
+/* the row */
+.bnv-item{
+  box-sizing:border-box;
+  width:var(--bnv-row-w);
+  min-width:0;
+  min-height:var(--bnv-row-h);
+  display:flex;
+  align-items:center;
+  justify-content:var(--bnv-row-justify);
+  gap:var(--bnv-row-gap);
+  padding:var(--bnv-row-pad);
+  border:0;
+  border-radius:8px;
+  background:transparent;
+  color:var(--bnv-ink-2);
+  font:inherit;
+  font-size:14px;
+  line-height:22px;
+  font-weight:500;
+  text-align:start;
+  text-decoration:none;
+  cursor:pointer;
+}
+.bnv-item:hover{background:var(--bnv-hover);color:var(--bnv-ink)}
+.bnv-item:active{background:var(--bnv-active)}
+.bnv-item.is-active,.bnv-item[aria-current="page"]{
+  background:var(--bnv-active);
+  color:var(--bnv-ink);
+  font-weight:500;
+}
+.bnv-item:focus-visible{outline:2px solid var(--bnv-ink);outline-offset:-2px}
+.bnv-item[aria-disabled="true"],.bnv-item:disabled{opacity:.5;cursor:default}
+
+/* a REMOTE app — one that runs on a LINKED office, not on this machine
+   (ai/context/dgo-remote-apps.md §4). The row is a row like any other: same height, same hover,
+   same active tint. What says "not this machine" is one corner bracket in the logo's apps-line
+   colour, mirrored at the row's inline-start corner in BOTH directions (logical properties only —
+   this component has no physical direction anywhere, and the mark is not going to be the first).
+   The colour is the palette's «look here» in its line step (the lime the mark's apps carry). */
+.bnv-item.is-remote{position:relative}
+.bnv-item.is-remote::after{
+  content:"";position:absolute;inset-block-start:3px;inset-inline-start:3px;
+  width:7px;height:7px;pointer-events:none;
+  border-block-start:2px solid var(--lime-d);
+  border-inline-start:2px solid var(--lime-d);
+  border-start-start-radius:3px;
+}
+/* the office did not answer: the mark goes quiet, the row keeps its place — a tile that vanishes
+   is a tile nobody can ask about. The state is FORM here, not words: the office's tag (capped at
+   5em below — "MacBook לא זמינה" was drawn as "…acBook") turns the failure colour and the row dims;
+   the sentence is the row's tooltip. */
+.bnv-item.is-remote.is-offline::after{border-color:var(--bnv-ink-2)}
+/* …and the mark takes the OFFICE's own colour where the row knows which office it is: the shell adds
+   `office-<id>` (console/static/app.js, remoteCls) and the hue is the palette's family
+   `--office-hp/-mac/-vps` — declared in theme-tokens.css and nowhere else (G27/G82). An office with no
+   token keeps the lime this mark ships with, so a fourth office needs one token and no CSS. */
+.bnv-item.office-hp.is-remote::after{border-color:var(--office-hp)}
+.bnv-item.office-mac.is-remote::after{border-color:var(--office-mac)}
+.bnv-item.office-vps.is-remote::after{border-color:var(--office-vps)}
+.bnv-item.is-offline :is(.bnv-ic,.bnv-label){opacity:.72}
+.bnv-item.is-offline .bnv-meta{color:var(--danger)}
+/* `hidden` is how the search filters rows, and it has to beat `display:flex` above */
+.bnv-item[hidden],.bnv-empty[hidden],.bnv-group[hidden]{display:none}
+.bnv-ic{width:18px;height:18px;flex:none;display:inline-flex;align-items:center;justify-content:center}
+.bnv-ic svg,.bnv-ic .ic-svg{width:18px;height:18px;display:block}
+/* the label is what gives way — never the row, never the container.
+   A label that is a NAME someone gave (a folder, a mailbox) carries `dir="auto"`: it is cut at ITS
+   end, not the row's — «Plane — HP ומק» lost its first letters in a narrow rail («…ne — HP ומק») —
+   and `match-parent` keeps it on the row's reading edge whichever way it reads. */
+.bnv-label{flex:1;min-width:0;display:var(--bnv-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  text-align:-webkit-match-parent;text-align:match-parent}
+/* the SECOND column: a count, a size, a time. Tabular, so a list of them aligns. */
+.bnv-meta{
+  flex:none;display:var(--bnv-text);color:var(--bnv-ink-2);
+  font-size:12px;line-height:18px;font-variant-numeric:tabular-nums;
+}
+/* A REMOTE row's meta is a NAME, not a count — and a name may be long ("שרת פיתוח בינה סלושנס").
+   With `flex:none` (above) it held its full width, so the LABEL took the loss: measured on the live
+   rail (218px), `מסמכים שלי` — 73px of text — was drawn in 44px, while the office name kept 124px.
+   That inverts what a row is for: the app is the subject, the office is commentary.
+
+   `flex:0 1 auto` alone does NOT fix it, and that is worth writing down: the row is not overflowing
+   (18 + 8 + 44 + 8 + 124 + 16 = 218), so there is no shrink pressure to resolve — the label simply
+   sits at min-content while the meta takes what it asks for. Nothing is "squeezed out" to shrink.
+
+   So the meta gets a CAP of `min(40%, 5em)` — and the measurement is why it is a formula and not a
+   percentage. At the console's live rail (218px), a 40% cap left the office 81px and still ellipsized
+   the app name by 16px (`חיבורים ומפתחות`, 103px). Swept on the live row: 40% → name 87 (clipped),
+   30% → 107 (fits) + office 61, 26% → 115 + 53, 22% → 124 + 44. `5em` is 60px of office at this
+   font — the shortest tag that still names an office — and it leaves the label 107px, its full
+   width. The percentage half keeps a WIDE rail from giving the office an unbounded share; `flex:0 8`
+   then resolves what is left in the label's favour. `.is-remote` and not every meta on purpose: a
+   count has no office to name, and its fixed slot is what makes a column of them line up. */
+.bnv-item.is-remote .bnv-meta{
+  flex:0 8 auto;min-width:0;max-inline-size:min(40%,5em);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+/* trailing slot: a badge, a dot, a chevron. `nowrap` so it can never wrap into a second line. */
+.bnv-tail{flex:none;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;color:var(--bnv-ink-2);font-size:12px}
+.bnv-item:hover .bnv-tail,.bnv-item.is-active .bnv-tail{color:inherit}
+.bnv-badge{
+  flex:none;min-width:18px;height:18px;padding:0 5px;border-radius:999px;
+  background:var(--bnv-brand-soft);color:var(--bnv-brand-ink);
+  font-size:11px;line-height:18px;font-weight:700;text-align:center;
+}
+.bnv-item:hover .bnv-badge,.bnv-item.is-active .bnv-badge{background:color-mix(in srgb, var(--bnv-brand) 22%, transparent)}
+
+/* Priority+: the rows that did not fit, and the one row that reveals them. (A rail has no such
+   row to press — it is words — so there the folded rows are simply there: `--bnv-rest`.) */
+.bnv-rest{display:var(--bnv-rest);flex-direction:column;gap:var(--bnv-gap);min-width:0}
+.bnv-rest.is-open{display:flex}
+.bnv-more{
+  display:var(--bnv-more);flex:none;width:100%;min-height:28px;padding:4px 8px;border:0;border-radius:8px;
+  background:transparent;color:var(--bnv-ink-2);font:inherit;font-size:12px;font-weight:600;
+  text-align:start;cursor:pointer;
+}
+.bnv-more:hover{background:var(--bnv-hover);color:var(--bnv-ink)}
+.bnv-empty{padding:6px 8px;color:var(--bnv-ink-2);font-size:12px;line-height:18px}
+
+.bnv-foot{
+  flex:none;margin-top:auto;padding-top:10px;border-top:1px solid var(--bnv-line);
+  min-width:0;display:flex;flex-direction:column;gap:var(--bnv-gap);align-items:var(--bnv-foot-align);
+}
+.bnv-foot-text{
+  display:var(--bnv-text);padding:0 8px;max-width:100%;color:var(--bnv-ink-2);
+  font-size:11px;line-height:16px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.bnv-sep{height:1px;background:var(--bnv-line);margin:6px 8px;flex:none}
+
+/* ── §3 the rail: one state, two triggers, a list of values ────────────────── */
+/* `.bnv.is-rail` — a rail somebody chose: the menu's own collapse control (remembered per app),
+   or a host that collapses the menu by itself.
+   `.rail-host .bnv` — a host whose grid column decides and cannot put a class on the aside.
+   Both write the SAME values as the medium size class in §4, so the rail exists once.
+   The values are a rail's while it is SHUT. Opened — by its collapse control, or by its search —
+   it is the whole menu again, the values above, standing over the page (the rule under these).
+   `:where()` keeps that condition out of the selector's weight: the drawer of a phone-sized frame
+   must still out-rank a rail saved on a desktop. */
+:is(.bnv.is-rail,.rail-host .bnv):where(:not(.is-open)){
+  --bnv-pad:12px 10px;
+  --bnv-gap:6px;
+  --bnv-row-w:36px;
+  --bnv-row-h:36px;
+  --bnv-row-pad:0;
+  --bnv-row-gap:0;
+  --bnv-row-justify:center;
+  --bnv-head-h:36px;
+  --bnv-head-pad:0 0 10px;
+  --bnv-head-justify:center;
+  --bnv-primary-w:36px;
+  --bnv-primary-h:36px;
+  --bnv-primary-pad:0;
+  --bnv-primary-justify:center;
+  --bnv-foot-align:center;
+  --bnv-text:none;
+  --bnv-ghead:none;
+  --bnv-field:none;
+  --bnv-more:none;
+  --bnv-rest:flex;
+  --bnv-head-dir:column;
+  --bnv-turn:rotate(180deg);
+}
+/* An OPENED rail: the whole menu, standing over the page until a row is picked or it is shut — the
+   way to a rail's search, and to the names of its rows. (The rail by width says the same in §4.) */
+:is(.bnv.is-rail,.rail-host .bnv).is-open{position:fixed;inset-block:0;inset-inline-start:0;z-index:60;width:min(84vw,320px);box-shadow:var(--shadow-lg)}
+
+/* ── §4 the sizes ─────────────────────────────────────────────────────────── */
+/* The app declares ONE container (`.bnv-host`, on the element that wraps the shell) and one grid
+   (`.appgrid`, whose side column is `--bnv-side`). From there: ≥840px the full menu, 600–839px the
+   rail, <600px a drawer over one pane. Nothing here names a breakpoint of the WINDOW: the menu
+   answers the space it is actually given, so the same app is right in a 940px pane, in a 2000px
+   desktop, and on a 390px phone — which is exactly what a viewport query cannot do. */
+.bnv-host{container-type:inline-size;container-name:bnav}
+.appgrid{
+  display:grid;
+  grid-template-columns:var(--bnv-side,252px) minmax(0,1fr);
+  min-width:0;
+}
+/* …and its `min-height:0` (an app may scroll inside a fixed shell) carries NO weight, so that a
+   page which scrolls can say `min-height:100dvh` of its grid wherever it likes. At one class this
+   line beat a page that said so ABOVE the block: the menu's panel ended where the content did, half
+   way down the screen. Three pages moved their two lines below the block for it; the fourth — the
+   apps screen, whose list is short for as long as it loads — never did. */
+:where(.appgrid){min-height:0}
+/* THE MENU STAYS. Where the PAGE scrolls, the menu's cell is as tall as the page and the menu left
+   with it: by the end of a long list the notifications' filters and the apps' sections were a
+   screen and a half up, over a column left empty (2026-10-09, the live office: 2360px of page). It
+   is a frame tall at the most, and holds on to the frame's top. `:where()` keeps this at one class:
+   the drawer and the opened rail — `position:fixed`, at two classes and more — still say where
+   THEY stand. */
+:where(.appgrid) > .bnv{position:sticky;inset-block-start:0;max-height:100dvh}
+/* Which column the CONTENT is in — owned here, not by each app.
+   The menu is `position:fixed` below 600px, and a fixed child is not a grid item: the browser
+   places the remaining in-flow child (the content) into COLUMN 1, which is the side column. So the
+   content inherited the menu's width — 252px on a desktop, 56/64px in the rail, and 0px once the
+   phone collapses the side column. Measured 2026-10-01 at 390x844: `.pg` was 24px wide, mailview's
+   phone score was clipping 0.0/15, and every adopter's phone layout was a sliver.
+   It survived a green map because the DESKTOP profile has a fine pointer and a static aside: there
+   the menu IS a grid item, the content auto-places into column 2, and nothing looks wrong. */
+.appgrid > :not(.bnv):not(.bnv-scrim):not(.bnv-burger):not(.bnv-drawer){
+  grid-column:2;
+  min-width:0;
+}
+/* the burger: shown only where the menu is a drawer, and it is row-sized there */
+.bnv-burger{
+  display:none;flex:none;width:44px;height:44px;padding:0;border:0;border-radius:10px;
+  background:transparent;color:inherit;align-items:center;justify-content:center;cursor:pointer;
+}
+.bnv-burger:hover{background:color-mix(in srgb, currentColor 8%, transparent)}
+.bnv-burger:focus-visible{outline:2px solid currentColor;outline-offset:-2px}
+.bnv-burger svg{width:20px;height:20px}
+.bnv-scrim{
+  position:fixed;inset:0;z-index:55;border:0;padding:0;
+  background:var(--scrim);   /* the palette's own: mixed from the menu's ink it was a WHITE veil wherever that ink is light */
+  opacity:0;visibility:hidden;transition:opacity .18s ease;
+}
+.bnv-scrim.is-open{opacity:1;visibility:visible}
+
+/* medium — the rail, chosen by container width instead of by a class */
+@container bnav (max-width:839px){
+  .appgrid{--bnv-side:56px}
+  .bnv:where(:not(.is-open)){
+    --bnv-pad:12px 10px;
+    --bnv-gap:6px;
+    --bnv-row-w:36px;
+    --bnv-row-h:36px;
+    --bnv-row-pad:0;
+    --bnv-row-gap:0;
+    --bnv-row-justify:center;
+    --bnv-head-h:36px;
+    --bnv-head-pad:0 0 10px;
+    --bnv-head-justify:center;
+    --bnv-primary-w:36px;
+    --bnv-primary-h:36px;
+    --bnv-primary-pad:0;
+    --bnv-primary-justify:center;
+    --bnv-foot-align:center;
+    --bnv-text:none;
+    --bnv-ghead:none;
+    --bnv-field:none;
+    --bnv-more:none;
+    --bnv-rest:flex;
+    --bnv-head-dir:column;
+    --bnv-turn:rotate(180deg);
+  }
+  .bnv.is-open{position:fixed;inset-block:0;inset-inline-start:0;z-index:60;width:min(84vw,320px);box-shadow:var(--shadow-lg)}
+}
+/* …and a rail somebody CHOSE takes a rail's column — where the frame is wide enough to have given the
+   menu its whole one (below that the two size classes already say). Nothing said it: the icons of a
+   chosen rail stood in a column 252px wide. */
+@container bnav (min-width:840px){
+  .appgrid:has(> .bnv.is-rail){--bnv-side:56px}
+}
+/* compact — one pane, and the menu becomes a drawer over it.
+   `:is(.bnv,.bnv.is-rail,.rail-host .bnv)` is deliberate: a rail saved on a desktop must NOT
+   survive into a phone, so this block has to out-rank the class trigger and the host class. */
+@container bnav (max-width:599px){
+  .appgrid{--bnv-side:0px}
+  .bnv-burger{display:inline-flex}
+  :is(.bnv,.bnv.is-rail,.rail-host .bnv){
+    position:fixed;inset-block:0;inset-inline-start:0;z-index:60;
+    width:min(84vw,320px);box-sizing:border-box;
+    transform:translateX(var(--bnv-off,-100%));
+    transition:transform .18s ease;
+    --bnv-pad:8px 10px;
+    --bnv-gap:2px;
+    --bnv-row-w:100%;
+    --bnv-row-h:44px;
+    --bnv-row-pad:10px 8px;
+    --bnv-row-gap:8px;
+    --bnv-row-justify:flex-start;
+    --bnv-head-h:52px;
+    --bnv-head-pad:4px 6px 10px;
+    --bnv-head-justify:flex-start;
+    --bnv-primary-w:100%;
+    --bnv-primary-h:44px;
+    --bnv-primary-pad:10px 12px;
+    --bnv-primary-justify:flex-start;
+    --bnv-foot-align:stretch;
+    --bnv-text:block;
+    --bnv-ghead:flex;
+    --bnv-field:block;
+    --bnv-more:block;
+    --bnv-rest:none;
+    --bnv-head-dir:row;
+    --bnv-turn:none;
+  }
+  /* The shadow is the OPEN drawer's. On the parked one it still painted: a 40px grey band down the
+     screen edge, over the page, in every app that carries this menu (seen in five, 2026-10-06). */
+  :is(.bnv,.bnv.is-rail,.rail-host .bnv).is-open{
+    transform:none;
+    box-shadow:var(--shadow-lg);
+  }
+}
+/* in RTL the drawer parks on the other side — the only direction-dependent line in this file */
+:is([dir="rtl"],:dir(rtl)) .bnv{--bnv-off:100%}
+
+/* touch: the same rows, sized for a finger. bina keeps 36px on every pointer; a phone needs 44. */
+@media (pointer:coarse){
+  .bnv-item{min-height:44px;padding:10px 8px}
+  .bnv-primary{min-height:44px}
+  .bnv-search{min-height:44px}
+  .bnv-act{width:36px;height:36px}
+  :is(.bnv.is-rail,.rail-host .bnv):where(:not(.is-open)) .bnv-item{width:44px;height:44px;min-height:44px}
+  /* THE RAIL IS A RAIL ONLY IN THE RAIL RANGE. This rule used to read `(max-width:839px)`, which
+     also covers the compact range — and because it comes AFTER the compact block (§4), the same
+     specificity meant it won there: on any touch device narrower than 600px `--bnv-side` was 64px
+     instead of 0, so the drawer opened over a content column 64px wide.
+     Measured 2026-10-01 on the office's own capture at 390x844 (`is_mobile`/`has_touch`, i.e. the
+     profile the phone map uses): `.pg` came out 64px wide and mailview scored clipping 0.0/15 —
+     "text cut with no way to reach it" was not the app's layout, it was this line. The desktop
+     capture never saw it (fine pointer), which is why it survived a green map on both profiles. */
+  @container bnav (min-width:600px) and (max-width:839px){
+    .appgrid{--bnv-side:64px}
+  }
+  @container bnav (min-width:840px){
+    .appgrid:has(> .bnv.is-rail){--bnv-side:64px}
+  }
+}
+/* a SHORT panel — the menu of a window dragged small. Its head, its button and its foot are most
+   of 224px, and the rows were left a sliver to scroll in (measured 2026-10-07 in the drive's
+   menu: 20px for 416px of rows). There the PANEL scrolls, rows and all. */
+@media (max-height:399px){
+  .bnv{overflow-y:auto;overscroll-behavior:contain}
+  .bnv-scroll{flex:none;overflow:visible}
+  /* …and the page's own menu buttons are a cursor's size there, not a finger's: 44px of a head is a
+     fifth of such a window (a touch screen keeps the finger's size — it is not this window). */
+  @media (pointer:fine){.bnv-burger{width:32px;height:32px;border-radius:8px}}
+}
+@media (prefers-reduced-motion:reduce){
+  .bnv,.bnv *,.bnv-scrim{transition:none!important;animation:none!important}
+}
+/* @bina-nav:end */
+</style>
+</head>
+<body>
+<div id="app">
+  <aside class="side bnv">
+    <div class="brand bnv-head"><span class="logo">ד</span><b>דרייב</b></div>
+    <label class="upbtn primary block"><span data-ic="upload"></span> העלאת מסמכים<input type="file" id="filePick" multiple hidden></label>
+    <div class="sidescroll bnv-scroll">
+      <!-- System places. A drive's rail answers "where can a file be?" — three of these are not
+           places at all but standing QUERIES (recent / starred / shared-with-me), which is exactly
+           why they sit above the folder tree and not inside it. -->
+      <nav id="sysRail" class="sysrail bnv-list"></nav>
+      <!-- slot "rail" (§4c): whatever apps registered. Empty when nothing is registered — the drive
+           below is complete without it. -->
+      <div id="railMount"></div>
+      <nav id="folderTree">
+        <div class="navhead" id="treeHead"><span>התיקיות שלי</span><span class="tog" data-ic="chevron"></span></div>
+        <div id="treeList"></div>
+      </nav>
+    </div>
+    <button id="newFolderBtn" class="newfolder"><span data-ic="plus"></span> תיקייה חדשה</button>
+    <!-- storage meter: the only place the drive states its own limits, so it lives where the eye
+         lands last and never competes with navigation -->
+    <div id="storeBox" class="storebox"></div>
+    <div class="acct" id="acct"></div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <h1 id="viewTitle">דרייב</h1>
+      <button id="sideToggle" class="linkbtn" title="תיקיות" aria-label="תיקיות" data-ic="menu"></button>
+      <div class="topbar-tools">
+        <input id="search" type="search" placeholder="חיפוש בתיקייה…" autocomplete="off"/>
+        <div class="hint" id="folderHint"></div>
+      </div>
+    </header>
+
+    <!-- Toolbar: WHERE you are (breadcrumb) · HOW you narrow (filter chips) · HOW you look
+         (list/grid + details). Three different questions, so three visually distinct zones. -->
+    <div class="dtoolbar">
+      <nav id="crumbs" class="crumbs" aria-label="נתיב"></nav>
+      <div id="chips" class="chiprow"></div>
+      <div class="viewtools">
+        <button id="btnList" class="vtb" title="תצוגת רשימה" aria-label="תצוגת רשימה" data-ic="list-view"></button>
+        <button id="btnGrid" class="vtb" title="תצוגת רשת" aria-label="תצוגת רשת" data-ic="grid-view"></button>
+        <span class="vsep"></span>
+        <button id="btnInfo" class="vtb" title="פרטים" aria-label="פרטים" data-ic="info"></button>
+      </div>
+    </div>
+
+    <div id="dropstrip" class="dropstrip hidden">
+      <span class="dz-icon" data-ic="upload"></span>
+      <span class="dz-say">גרור קבצים לכל מקום במסך, או</span> <label class="dz-browse">בחר קבצים<input type="file" id="filePick2" multiple hidden></label>
+      <div id="upProgress" class="up-progress hidden"><div id="upBar"></div><span id="upLabel"></span></div>
+    </div>
+
+    <div id="bulkbar" class="bulkbar hidden">
+      <b id="bulkCount"></b>
+      <button data-bulk="move"><span data-ic="folder-input"></span> העברה</button>
+      <button data-bulk="trash"><span data-ic="trash"></span> לאשפה</button>
+      <button data-bulk="restore" class="hidden"><span data-ic="restore"></span> שחזור</button>
+      <button data-bulk="delete" class="hidden danger"><span data-ic="x-circle"></span> מחיקה סופית</button>
+      <button data-bulk="clear" class="ghostlink">ביטול בחירה</button>
+    </div>
+    <!-- content + details sit side by side so opening details NARROWS the list rather than covering
+         it — a pane that hides what you selected is worse than no pane -->
+    <div class="contentrow">
+      <div id="filesTable" class="tablewrap"><div class="empty">בחר תיקייה מהצד</div></div>
+      <aside id="details" class="details hidden"></aside>
+    </div>
+    <footer class="statusbar" id="statusbar"></footer>
+  </main>
+
+  <aside id="preview" class="drawer hidden">
+    <div class="drawer-h"><h2 id="pvName">תצוגה מקדימה</h2><button class="x" id="pvClose" data-ic="x"></button></div>
+    <div class="drawer-meta" id="pvMeta"></div>
+    <iframe id="pvFrame" title="preview"></iframe>
+    <div class="drawer-f">
+      <button class="ghost" id="pvRename"><span data-ic="pencil"></span> שינוי שם</button>
+      <button class="ghost" id="pvMove"><span data-ic="folder-input"></span> העברה</button>
+      <button class="danger" id="pvTrash"><span data-ic="trash"></span> לאשפה</button>
+    </div>
+  </aside>
+  <div id="overlay" class="overlay hidden"></div>
+  <div id="modal" class="modal hidden">
+    <div class="modal-h"><h2 id="mTitle"></h2><button class="x" id="mClose" data-ic="x"></button></div>
+    <div class="modal-b" id="mBody"></div>
+    <div class="modal-f" id="mFoot"></div>
+  </div>
+  <div id="dropveil" class="dropveil hidden"><div><span data-ic="upload"></span> שחרר כדי להעלות לתיקייה הנוכחית</div></div>
+  <div id="ctx" class="ctx hidden"></div>
+  <div id="pvfull" class="pvfull hidden"></div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

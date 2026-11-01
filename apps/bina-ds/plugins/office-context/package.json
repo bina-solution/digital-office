@@ -1,0 +1,13 @@
+{
+  "name": "@bina/dsh-office-context",
+  "description": "Registers the compiler's app registry (.generated/registry/agent-context.md) as one system-prompt section, re-read on every prompt assembly",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./package.json": "./package.json"
+  },
+  "license": "MIT"
+}

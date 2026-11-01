@@ -1,0 +1,50 @@
+{
+ "type": "ORDER",
+ "doc_class": "order",
+ "version": 2,
+ "_parked": "PARKED TYPE (2026-08-27, owner order). A order is RECORDED, not PROCESSED. This fixture previously specified a full 11-step extraction pipeline; that was never implemented and is now explicitly NOT the contract. Base extraction resolves COMPANY_ID / TYPE / DOC_DATE and the lane does nothing else: no per-type extraction, no selection, no ERP priority sync.",
+ "detect": {
+  "keywords_ref": "order_kws",
+  "strong": [
+   "הזמנת רכש"
+  ],
+  "priority": 30,
+  "ai_type_map": [
+   "ORDER"
+  ]
+ },
+ "router": {
+  "workflow": "indoxV2ActionsOrd01",
+  "decide": "__orderDecideFn",
+  "actions": [
+   "mark_completed"
+  ],
+  "_note": "ONE executable action. The driver drops every ACTION beginning 'no_action' before dispatch (indoxV2Driver01 :: 'If Action'), so no_action_already_completed and no_action_merged are inert verdicts that never reach the router. There is no restart_* action and none is needed: ACTION_RESTART != 'COMPLETED', so the lane answers mark_completed and the row lands."
+ },
+ "kw_extract": {
+  "fields": [],
+  "_note": "none — the lane runs no per-type extraction."
+ },
+ "ai_extract": {
+  "enabled": false,
+  "_note": "AI_TYPE only, from the shared BASE extractor (indoxV2ExtractInvoiceGemini01). No per-type AI call."
+ },
+ "select": {
+  "_note": "none — SelectType01 never runs for a parked type."
+ },
+ "sync": {
+  "priority": false,
+  "_note": "NEVER posted to the client's ERP. That is the point of parking it."
+ },
+ "pipeline": {
+  "steps": [
+   {
+    "action": "mark_completed",
+    "guard": "STATUS!='COMPLETED'",
+    "terminal": true
+   }
+  ],
+  "on_complete": "mark_completed"
+ },
+ "base": "GLOBAL"
+}

@@ -1,0 +1,122 @@
+# release-bundle — build the offline image bundle and MEASURE it.
+#
+# This lane exists to answer Milestone 1 in packaging/README.md: the "~2.4-3.2 GB compressed"
+# figure is currently an extrapolation from a single measured image, and everything downstream
+# (hosting cost, notarization strategy, whether a delta scheme is worth building) is priced off
+# it. Nothing gets decided on an extrapolation that a CI run can turn into a fact.
+#
+# It is manual-only on purpose. Building every first-party image and streaming the whole image
+# set through zstd -19 is tens of minutes and tens of GB of I/O; that is not something to hang
+# off every push.
+#
+# WHY NOT ON A DEV LAPTOP: measuring by `docker save` over the live image set on Docker Desktop
+# is what filled this repo's own dev machine to zero bytes free, wedged its WSL VM, and left a
+# 66 GB VHDX that does not shrink on its own. build-bundle.sh streams rather than materialising
+# the raw tar precisely because of that, but the runner is still the right place for it.
+name: release-bundle
+
+on:
+  workflow_dispatch:
+    inputs:
+      measure_only:
+        description: "Measure the compressed size, keep nothing (fast, no artifact)"
+        type: boolean
+        default: true
+      level:
+        description: "zstd level (19 = release, 3 = quick check)"
+        default: "19"
+      upload:
+        description: "Upload the bundle as a workflow artifact (only if measure_only is false)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: release-bundle
+  cancel-in-progress: true
+
+jobs:
+  bundle:
+    runs-on: [self-hosted, portable]
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          set -euo pipefail
+          command -v zstd >/dev/null || { echo "::error::zstd not installed on this runner"; exit 1; }
+          zstd --version
+          docker version --format '{{.Server.Version}}'
+          df -h . | tail -1
+
+      # G15 first: a bundle built from a floating tag is irreproducible (its signature attests to
+      # "whatever :latest was that day") and incomplete (anything unpinned is something the
+      # customer's airgapped machine must fetch at run time). Failing here is much cheaper than
+      # failing after a 40-minute build.
+      - name: G15 — every third-party image is pinned
+        run: python3 scripts/refactor/image-pin-lint.py
+
+      - name: Compile the stack
+        run: |
+          set -euo pipefail
+          [ -f .env ] || bash scripts/ci-env.sh
+          python3 platform/manager/reconcile.py render
+
+      # The bundle must contain every image the compiled stack references, so they all have to
+      # exist locally first. This is `bbox run`'s build+pull path without the bring-up.
+      - name: Build first-party images and pull the rest
+        run: |
+          set -euo pipefail
+          ./scripts/dc build
+          ./scripts/dc pull --ignore-buildable --quiet
+
+      - name: Measure
+        run: |
+          set -euo pipefail
+          packaging/build-bundle.sh --measure-only --level "${{ inputs.level }}" | tee measure.txt
+
+      - name: Build the artifact
+        if: ${{ !inputs.measure_only }}
+        run: |
+          set -euo pipefail
+          packaging/build-bundle.sh --level "${{ inputs.level }}" -o dist/images.tar.zst
+
+      - name: Summary
+        if: always()
+        run: |
+          set -euo pipefail
+          {
+            echo "## Offline bundle"
+            echo
+            echo '```'
+            cat measure.txt 2>/dev/null || echo "(measurement did not complete)"
+            echo '```'
+            echo
+            echo "### Extrapolation being tested"
+            echo "packaging/README.md predicts **2.4-3.2 GB** at zstd -19, from a ~9.3 GB"
+            echo "deduplicated image set and a 4.11x ratio measured on postgres:17."
+            if [ -f dist/images.tar.zst ]; then
+              echo
+              echo "### Artifact"
+              ls -lh dist/images.tar.zst | awk '{print "- size: " $5}'
+              echo "- sha256: \`$(cut -d' ' -f1 dist/images.tar.zst.sha256)\`"
+              echo "- images: $(wc -l < dist/images.tar.zst.images.txt)"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload
+        if: ${{ !inputs.measure_only && inputs.upload }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: offline-bundle
+          path: |
+            dist/images.tar.zst
+            dist/images.tar.zst.sha256
+            dist/images.tar.zst.images.txt
+          retention-days: 7
+          compression-level: 0   # already zstd -19; recompressing costs minutes and saves nothing
+
+      # A multi-GB file left on a self-hosted runner is how the next lane runs out of disk.
+      - name: Clean up
+        if: always()
+        run: rm -rf dist

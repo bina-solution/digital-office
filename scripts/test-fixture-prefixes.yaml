@@ -1,0 +1,442 @@
+# test-fixture-prefixes.yaml — the ONE place that says what a test-fixture row looks like.
+#
+# WHY THIS FILE EXISTS
+#
+# The INDOX E2E suites now run exclusively against the permanent `test` tenant (schema
+# `indox_test`, pinned via `__instance` on every run), so every tenant table below is scoped
+# `indox_test.`. This file predates that boundary, and its rules still bind inside it: for
+# years the suites seeded their fixtures straight into `public.incoming_documents` — the live
+# client table — and cleaned up afterwards with a prefix-scoped DELETE. On 2026-08-06 one of
+# those cleanups deleted **2,432 real client documents**: `syncV3SourcesTest01`'s "Cleanup SQL"
+# builds a join-shaped delete
+#
+#     delete from public.incoming_documents d using public.sync_ledger l
+#      where <prefix guard on l.source>
+#        and position('#inbox/' || l.platform_id in coalesce(d."SOURCE_LINK", '')) > 0
+#
+# in which (a) the only prefix guard is bound to the JOIN PARTNER, never to the deleted table,
+# and (b) the match is an unanchored substring test on an IMAP uid, so a fixture ledger row
+# whose `platform_id` is `1` matches every production document whose SOURCE_LINK contains
+# `#inbox/1...`. Measured on the live DB after the incident: platform_id `1` alone still
+# matches 12 of the 12 surviving `#inbox/` documents.
+#
+# The specific query was fixed. The CLASS was not: fourteen sibling cleanups differ only in
+# having been written correctly, and each one restates its own prefix list inline, so nothing
+# stops the fifteenth from being written wrong. This file is that missing single point of
+# truth, and `scripts/refactor/fixture-delete-scope-lint.py` (gate G58) is what makes it
+# mechanical rather than advisory.
+#
+# CONSUMERS (add yourself here when you add one)
+#   * scripts/refactor/fixture-delete-scope-lint.py   — gate G58, the enforcement. STATIC: it
+#     proves every cleanup query in every blueprint is prefix-scoped. It says nothing about
+#     whether that query ever runs.
+#   * apps/indox/hooks/fixture-sweep.py               — the crash-safety half, and the answer to
+#     the question G58 cannot ask. Every suite cleans up on its HAPPY PATH, inside n8n; a suite
+#     that crashes never reaches its own Cleanup node. `indoxV2 DOC BASE E2E Test` crashed at
+#     17:21 on 2026-08-06 and MEASURED 92 stranded fixture rows were still sitting in the live
+#     client table hours later (db_ 19 · dbe_ 9 · dbf_ 4 all stamped 17:21, plus plx_/plc_/gdx_/
+#     gdt_/bse2e_/sv3s_ from later runs; 33 of them parked in the MISSING_COMPANY_ID backlog as
+#     permanently unresolvable). `apps/indox/hooks/test.py` calls the sweep in a `finally` AND
+#     before the battery, so it survives the thing that crashed. It also builds the exclusion
+#     predicate below (`--print-exclusion`).
+#   * (STILL NOT WIRED) the live poll's pickup predicate — `indoxApi01.workflow.ts` node
+#     `indox-poll-q` "Get Changed Docs", whose only row-identity exclusion today is
+#     `"ID" <> '__bootstrap__'` — and the MISSING_COMPANY_ID backlog selectors in
+#     `indoxV2ActionsGlobal01` (`docBaseDecide`) and `indoxV2ActionsBS01` (`bsDecide`).
+#     `apps/indox/hooks/fixture-sweep.py --print-exclusion` emits the exact predicate; adopting
+#     it is what stops fixtures being COUNTED as production failures, and it is deliberately not
+#     applied here because it changes an ACTIVE production workflow and needs its own push window.
+#
+# `_` IS A LIKE WILDCARD. `"ID" like 'db_%'` matches `dbZanything`, not just `db_...`. Every
+# pattern registered here is stored WITHOUT the trailing `%` and the gate requires the SQL to
+# escape the underscore (`like 'db\_%'`). Only `mailOrgTest00001` got this right unaided.
+
+version: 1
+
+# The columns of indox_test.incoming_documents that may legitimately carry a fixture marker. A
+# DELETE scoped by anything NOT on this list is not scoped at all as far as G58 is concerned.
+marker_columns:
+  - ID
+  - SYNC_NAME
+  - SOURCE_ID
+  - HASH
+  - LINKED_BS
+  - COMPANY_ID
+
+# Every prefix any suite is allowed to write into indox_test.incoming_documents.
+# `owner` is the blueprint that seeds AND cleans it; `columns` are the marker columns it lands in.
+prefixes:
+  - prefix: "db_"
+    owner: apps/indox/blueprint/n8n/indoxV2DocBaseTest01.workflow.ts
+    columns: [ID]
+    note: DOC BASE decide-coverage seeds
+  - prefix: "dbf_"
+    owner: apps/indox/blueprint/n8n/indoxV2DocBaseTest01.workflow.ts
+    columns: [ID]
+    note: DOC BASE figure-lane seeds
+  - prefix: "dbe_"
+    owner: apps/indox/blueprint/n8n/indoxV2DocBaseTest01.workflow.ts
+    columns: [ID]
+    note: DOC BASE execute-coverage seeds
+  - prefix: "gdt_"
+    owner: apps/indox/blueprint/n8n/indoxV2GDocTest01.workflow.ts
+    columns: [ID]
+  - prefix: "gdx_"
+    owner: apps/indox/blueprint/n8n/indoxV2GDocTest01.workflow.ts
+    columns: [ID]
+    note: gdoc batch lanes (gdx_inv / gdx_ord / gdx_shp)
+  - prefix: "C_GDTEST"
+    owner: apps/indox/blueprint/n8n/indoxV2GDocTest01.workflow.ts
+    columns: [COMPANY_ID]
+    note: not an ID prefix — the synthetic company the gdoc suite files its docs under
+  - prefix: "plb_"
+    owner: apps/indox/blueprint/n8n/indoxV2PipelineTest01.workflow.ts
+    columns: [ID, LINKED_BS]
+  - prefix: "plc_"
+    owner: apps/indox/blueprint/n8n/indoxV2PipelineTest01.workflow.ts
+    columns: [ID]
+  - prefix: "plx_"
+    owner: apps/indox/blueprint/n8n/indoxV2PipelineTest01.workflow.ts
+    columns: [ID, LINKED_BS]
+  - prefix: "bse2e_"
+    owner: apps/indox/blueprint/n8n/indoxV2BSTest01.workflow.ts
+    columns: [ID]
+  - prefix: "cov_"
+    owner: apps/indox/blueprint/n8n/indoxV2BSTest01.workflow.ts
+    columns: [ID]
+    note: also appears as the sub-token in indoxV2GDocTest01's `gdt_cov_*`; that one is
+          covered by the `gdt_` registration, not by this row.
+  - prefix: "sli_"
+    owner: apps/indox/blueprint/n8n/indoxV2SealedInv01.workflow.ts
+    columns: [ID]
+    note: sealed per-action INVOICE lanes (sli_<action>_b<batch>_<i>); action log swept via doc_state_tables
+  - prefix: "sls_"
+    owner: apps/indox/blueprint/n8n/indoxV2SealedShip01.workflow.ts
+    columns: [ID]
+    note: sealed per-action SHIPMENT lanes
+  - prefix: "slb_"
+    owner: apps/indox/blueprint/n8n/indoxV2SealedBS01.workflow.ts
+    columns: [ID]
+    note: sealed per-action BALANCE_SHEET lanes
+  - prefix: "slo_"
+    owner: apps/indox/blueprint/n8n/indoxV2SealedOrd01.workflow.ts
+    columns: [ID]
+    note: sealed per-action ORDER lanes (parked class -- mark_completed only)
+  - prefix: "slr_"
+    owner: apps/indox/blueprint/n8n/indoxV2SealedRcp01.workflow.ts
+    columns: [ID]
+    note: sealed per-action RECEIPT lanes (parked class -- mark_completed only)
+  - prefix: "sv3f_"
+    owner: apps/indox/blueprint/n8n/syncFullTest01.workflow.ts
+    columns: [SYNC_NAME]
+  - prefix: "sv3s_"
+    owner: apps/indox/blueprint/n8n/syncSourcesTest01.workflow.ts
+    columns: [SYNC_NAME, SOURCE_ID, ID]
+    note: >
+      SOURCE_ID carries two DIFFERENT kinds of value under this prefix, and the second one is why
+      this note exists. The thin lanes write their own rows and can put `sv3s_...` anywhere they
+      like. The PROC lanes cannot: they run the unchanged v1 processors, so the row is written by
+      `SyncProcGDoc0001` / `SyncProcBS000001` under the PRODUCTION `SYNC_NAME`s (`drive-gdoc`,
+      `drive-bs`) — correct, because SYNC_NAME is what routing reads and a parity lane that changed
+      it would stop proving parity. Until 2026-08-07 that left the fixture folder id sitting
+      mid-string in a `SOURCE_LINK` URL as the only trace, which is not a marker: the suite's own
+      Cleanup SQL matched 0 rows, `fixture-sweep` matched 0 rows, and 12 rows accumulated in the
+      client's table. The writers now stamp `SOURCE_ID = 'sv3s_pg_src'` / `'sv3s_pv_src'` when — and
+      only when — the delivery carries `list_ctx.fixture_marker` (set by the suite, structurally
+      unreachable from a production registry entry; see syncV3Deliver0001's `Drive Proc Payload`).
+      So both consumers of this file work with the predicates they already had: the sweep's
+      `"SOURCE_ID" like 'sv3s\_%'`, and the suite's exact `"SOURCE_ID" = 'sv3s_pg_src'`.
+      `ID` was added 2026-08-07 for the three GMAIL proc lanes, which could not use `SOURCE_ID`:
+      their own assertions require it to be the sender, and `SYNC_NAME` must keep routing while
+      `COMPANY_ID` carries the sender->company parity claim and `HASH` is under a unique index.
+      `ID` is free there, and is already how eleven of the prefixes in this file mark their rows.
+      Value is `<source>-<gmail id>` because `ID` is the PRIMARY KEY — a constant would collide on
+      a re-run — so those cleanups match by anchored prefix (`"ID" like 'sv3s\_pd\_%'`), which is
+      the same form the other ID-marked prefixes use and is not containment.
+      The alternative — registering `SOURCE_LINK` as a marker column so a cleanup could match the
+      URL by containment — was rejected: it would dissolve G58 rule F3, which exists because
+      "mentions something of ours" cost 2,432 client documents.
+  - prefix: "sv3k_"
+    owner: apps/indox/blueprint/n8n/syncItemApiTest01.workflow.ts
+    columns: [ID]
+  - prefix: "sv3khash"
+    owner: apps/indox/blueprint/n8n/syncItemApiTest01.workflow.ts
+    columns: [HASH]
+    note: no trailing underscore in the literal itself (`sv3khash_A`, `sv3khash_O`)
+  - prefix: "mailorg_"
+    owner: apps/mail/blueprint/n8n/mailOrgTest00001.workflow.ts
+    columns: [SYNC_NAME]
+  - prefix: "sv3i_"
+    owner: apps/indox/blueprint/n8n/sv3Inject3x001.workflow.ts
+    columns: [SYNC_NAME, ID]
+    note: >
+      Added 2026-08-09 with the change that stopped `sv3Inject3x001` reading the LIVE registry.
+      It used to loop every row of `sync_registry` with no `enabled` filter, 3 documents each —
+      and `gmail-bs`/`gmail-doc`/`gmail-link` are all enabled and all name
+      `mail_imap_app_password-51185288`, the client's real Gmail. So a run appended 9 fixture
+      messages into the client's production mailbox and applied each pipe's REAL `to_sync` label,
+      which injected them into the live pipeline as genuine client documents. It was latent only
+      by accident: registry row `mail-private` has `connection: null` AND `labels: null`, so
+      `Plan` threw while building the array, before returning any items — one malformed row was
+      the entire thing standing between the injector and production. It now declares its own
+      five-entry registry (`sv3i_*`), local-bound, under settings key `sv3i_registry`.
+
+# FIXTURE ROWS IN TABLES OTHER THAN incoming_documents.
+#
+# `prefixes` above describes marked rows in the document table, matched with an anchored LIKE.
+# This section is for the other tables a suite has to write into, and it is deliberately a
+# DIFFERENT shape: **exact keys, never a pattern.**
+#
+# WHY EXACT AND NOT A PREFIX. These are client CONFIGURATION tables, not a document table with a
+# fixture-id convention. `tag_rules` is the deployment's Gmail label registry — 24 rows, every
+# one of them operational. A `"KEY" like 'sv3s%'` DELETE against it is the same shape as the
+# join that removed 2,432 client documents on 2026-08-06: a pattern standing in for identity.
+# An enumerated key list cannot over-match, and if a suite adds a fourth label it has to say so
+# here, which is the point.
+#
+# WHY THE SUITE NEEDS THIS AT ALL. `indoxSettings01/Build Gmail Labels` composes
+# `settings.gmail.labels[KEY] = {name: LABEL}` from `tag_rules`; `syncV3Unit0001/Take X` reads
+# that into `labels_map` (overwriting anything a caller passed); and `syncV3Deliver0001`'s
+# `nm()` resolves a label key ONLY through that map, throwing on anything else that is not a
+# literal label path. So a suite label that is not in `tag_rules` cannot be applied at all —
+# which is why gmail-bs produced zero label ops, silently, for as long as anyone has looked.
+#
+# CLEANUP RUNS ON THE FAILURE PATH. These are swept by `apps/indox/hooks/fixture-sweep.py`,
+# which `apps/indox/hooks/test.py` calls from a `finally` (and again before the next battery) —
+# NOT by a cleanup node inside the suite. A suite-internal cleanup only runs when the suite
+# reaches it, which means it leaks exactly when the suite failed; that is a live defect in the
+# `bs` suite as of 2026-08-07 and is not worth reproducing in a second table.
+# tag_rules RETIRED 2026-09-03 (one rules store — the mail app's organizer settings): no suite seeds
+# a rules row any more; a suite's own label key is used literally. The entries below are the
+# test REGISTRIES (settings rows), the only aux config a suite still installs.
+aux_tables:
+
+  # ── THE TEST REGISTRIES THEMSELVES (added 2026-08-09) ──────────────────────────────────
+  # A suite that installs a registry row and then dies leaves a PIPE CONFIGURED. That is a
+  # strictly worse leak than a stray document row: a document is inert, a registry entry is an
+  # instruction. Both suites already delete their own key on the happy path; these entries are
+  # the failure path, and they are the reason a mid-run crash can no longer leave a test pipe
+  # installed in the client's settings table.
+  #
+  # EXACT KEYS, for the reason stated at the top of this section — `indox_test.settings` is the
+  # tenant's configuration table and holds its `sync_registry` itself. A pattern here is the one
+  # mistake that could delete the tenant's live registry, so there is no pattern here.
+  #
+  # These were leaking, measured: syncV3FullTest01's `all`-lane teardown cleared
+  # `key like 'sv3f\_registry%'`, which does not match `sv3f_rg_registry`, so every full-battery
+  # run left the mirrored registry sitting in public.settings indefinitely. That predicate is
+  # fixed too; this is the half that survives the crash.
+  - table: indox_test.settings
+    key_column: key
+    owner: apps/indox/blueprint/n8n/syncFullTest01.workflow.ts
+    keys:
+      - sv3f_registry
+      - sv3f_rg_registry
+  - table: indox_test.settings
+    key_column: key
+    owner: apps/indox/blueprint/n8n/sv3Inject3x001.workflow.ts
+    keys:
+      - sv3i_registry
+
+# ── SAVED SETTINGS: A VALUE PARKED SOMEWHERE ELSE (added 2026-08-23) ────────────────
+#
+# These rows are NOT deletable, and that is the whole reason this section is separate from
+# `aux_tables`. A `<prefix>_prior_<key>` row is where a suite parked the client's real value
+# before overwriting the live one for the duration of a test. DELETING it -- which is all
+# `aux_tables` knows how to do -- destroys the only record of what the setting should be and
+# makes the test's value PERMANENT. The correct sweep is restore-then-delete, in that order.
+#
+# MEASURED, not hypothetical: `plt_prior_extraction_ai_enabled` was found holding 'true' after
+# `pipeline` hit its 1080s timeout budget and never reached its own `AI Toggle Restore` node.
+# The shipped fixture default is extraction_ai_enabled=false with extraction_local_enabled=true,
+# so the leak silently moved the WHOLE deployment onto the AI extraction path -- not just the
+# suites. On this box GEMINI_API_KEY and GOOGLE_VISION_API_KEY are placeholders and the standing
+# rule is that no test may require them; a leaked global turns that rule into a property of the
+# last run's exit status.
+#
+# Each suite now also self-heals ON ENTRY (undo any leftover, then save), which repairs the leak
+# at the start of the NEXT run of THAT suite. This section is the other half, and covers what
+# self-heal cannot: the window between the crash and that run -- during which real document
+# processing reads the leaked flag -- a suite that is renamed or deleted while a leak is
+# outstanding, and a leak that only a DIFFERENT suite's next run would have healed.
+#
+# EXACT KEYS, never a pattern. `indox_test.settings` is the tenant's configuration table; the
+# rule stated for aux_tables binds here identically.
+saved_settings:
+  - table: indox_test.settings
+    key_column: key
+    owner: apps/indox/blueprint/n8n/indoxV2PipelineTest01.workflow.ts
+    saves:
+      - prior_key: plt_prior_extraction_ai_enabled
+        target_key: extraction_ai_enabled
+  - table: indox_test.settings
+    key_column: key
+    owner: apps/indox/blueprint/n8n/indoxV2GDocTest01.workflow.ts
+    saves:
+      - prior_key: gdt_prior_extraction_ai_enabled
+        target_key: extraction_ai_enabled
+  - table: indox_test.settings
+    key_column: key
+    owner: apps/indox/blueprint/n8n/indoxV2BSTest01.workflow.ts
+    saves:
+      - prior_key: bst_prior_extraction_ai_enabled
+        target_key: extraction_ai_enabled
+  # [2026-09-02] the sync-pass suite's gate lane closes and reopens the tenant's sync gate
+  # (indoxSyncOn, read by syncV3Main0001 under its lock); the prior value is parked here.
+  - table: indox_test.settings
+    key_column: key
+    owner: apps/indox/blueprint/n8n/syncFullTest01.workflow.ts
+    saves:
+      - prior_key: sv3f_prior_indoxSyncOn
+        target_key: indoxSyncOn
+      - prior_key: sv3f_prior_indoxOn
+        target_key: indoxOn
+
+
+# ── THE SYNC STATE TABLES (added 2026-08-09) ──────────────────────────────────────────────
+#
+# `prefixes` covers `indox_test.incoming_documents`; `aux_tables` covers CONFIGURATION rows by
+# exact key. Neither covers the four tables the sync engine writes as it runs — and every suite
+# has always deleted from them in its own pre-run `Cleanup SQL`, inline, restating its own prefix
+# list. That is the exact fleet-of-fifteen shape that cost 2,432 client documents, and it has the
+# same crash hole as everything else here: the cleanup is at the START of the run, so a suite that
+# dies leaves its ledger, attempts, cursors and drive-file rows behind until someone runs it again.
+#
+# WHY A PREFIX IS CORRECT HERE AND NOT IN `aux_tables`. These are not configuration. They are
+# per-pipe state keyed by the pipe's own name, and a test pipe's name is a registered prefix by
+# construction — `sv3s_pg_…`, `sv3f_rg_drive`, `sv3i_gmail-doc`. Matching by prefix is matching by
+# identity. Production sources are `drive-gdoc`, `gmail-doc`, `mail-private`… none of which can
+# collide with a registered fixture prefix.
+#
+# `match_expr` is the column (or the expression over it) that carries the pipe name. `sync_ledger`
+# and friends store the LEDGER identity `<instance>/<pipe>` since phase 6b, so the instance has to
+# come off before the prefix test — which is what every suite's own SQL already does.
+#
+# The prefixes and their owners are NOT restated: this reuses the `prefixes` list above, so a suite
+# that registers a document prefix gets its sync state swept with no second declaration to drift.
+# Per-DOCUMENT state that lives outside incoming_documents. Same mechanism as sync_tables and
+# deliberately a separate key: those four are the v3 sync engine's own tables, keyed by pipe, and
+# calling this one a "sync table" would be a small lie that costs the next reader time.
+#
+# [2026-08-21] indox_action_execution_log is where ACTION_HISTORY moved on 2026-08-20, out of the
+# ACTION_LOG column. Every suite's cleanup deletes its documents and none of them knew about the
+# new table, so dispatch history outlived the rows it described: 47 doc_, 40 gdx_, 28 sv3s_,
+# 20 gdt_, 14 db_ rows when this was found. The pipeline suite then failed on its OWN leftovers -
+# "update_status_missing_link already dispatched (ACTION_HISTORY, no restart after it)" - a suite
+# blocked by the run before it, which is exactly the crash hole this script exists to close.
+#
+# A prefix match is safe here in a way it is NOT on tag_rules: "ID" holds the same document
+# identifiers incoming_documents."ID" holds, so a prefix already proven safe to delete there is
+# safe here by construction. tag_rules is a client CONFIGURATION table with its own key space,
+# which is why aux_tables enumerates exact keys instead.
+doc_state_tables:
+  - {table: indox_test.indox_action_execution_log, match_expr: '"ID"'}
+
+# `drive_files` is the ONE platform table here, and stays `public.` on purpose: it belongs to
+# the drive service, deployment-wide, not to a tenant schema — indox_test has no copy of it.
+# The other three are the sync engine's per-tenant state and live where the suites now run.
+sync_tables:
+  - table: indox_test.sync_ledger
+    match_expr: "regexp_replace(source,'^[^/]*/','')"
+  # sync_attempt folded into sync_ledger (attempts / not_before / last_error) on 2026-09-02
+  - table: indox_test.sync_cursor
+    match_expr: "regexp_replace(source,'^[^/]*/','')"
+  - table: public.drive_files
+    match_expr: "folder"
+
+# THE PIPELINE CARVE-OUT (requirement 4 of the fixture-safety task).
+#
+# Any "hide the test data" rule — the live poll's pickup predicate, the MISSING_COMPANY_ID
+# backlog population, dashboard counts — must exclude every prefix above EXCEPT these. The
+# `pipeline` suite exists precisely to prove that the LIVE poll picks its documents up; a
+# blanket "exclude all test prefixes" would make that suite assert nothing and pass anyway,
+# which is this repo's dominant defect class (an operation reporting success while doing
+# nothing). The exception lives here, next to the list it excepts, so the two cannot drift.
+live_poll_visible:
+  - "plx_"
+  - "plb_"
+
+# ── CREATION (the INSERT half of G58, added 2026-08-07) ──────────────────────────────────────
+#
+# G58 policed DELETE and UPDATE. Neither can see the defect that put 12 unmarked fixture rows in
+# the client's table: the row was CREATED unmarked, and a cleanup cannot scope to a marker that was
+# never written. The creation rules need three things this file is the right home for.
+#
+# THE WRITERS. A document row is almost never created by SQL in a blueprint. Measured across all 81
+# blueprints: ONE literal `insert into incoming_documents` (indoxApi01's central writer)
+# versus 61 `executeWorkflow` calls into a writer workflow. A creation gate that scanned for the
+# word INSERT would therefore have read past the incident and reported clean — so the gate looks
+# for calls to these ids, and this is the list.
+document_writers:
+  - indoxDocBatchUpsert01
+
+# THE CONTRACT TOKEN. A production workflow that a suite can drive must let a fixture identify the
+# rows it makes. The mechanism is `list_ctx.fixture_marker` -> syncV3Deliver0001's proc `ctx` ->
+# a registered marker column. The gate proves the PATH still exists by requiring the marker
+# column's value expression to mention this key; it cannot prove the value is right at runtime, and
+# does not claim to.
+fixture_marker_key: fixture_marker
+
+# Creation sites the gate cannot prove and that are legitimately unmarked. Same standing as
+# `mutation_allowlist`: the gate declining to claim safety, with the reasoning recorded, rather
+# than the rule being widened until it stops firing.
+insert_allowlist:
+  - file: apps/indox/blueprint/n8n/indoxApi01.workflow.ts
+    node: Build Deliver
+    reason: >
+      THE central production writer — the one place a row is actually INSERTed. It is not
+      fixture-reachable (no suite names it as a `processor_wf`; it is reached only through
+      indoxApiRouter01 as the storage layer), and it writes whatever columns its caller passed, so
+      it has no marker of its own to stamp and must not invent one. The marker obligation belongs
+      to the CALLER, which is exactly what I1 checks.
+
+# KNOWN-UNMARKED CREATION SITES — a defect ledger, NOT an allowlist.
+#
+# The entries above say "the gate cannot prove this, and here is why it is fine". These say the
+# opposite: the gate CAN see these, they ARE the defect, and they are not fixed yet. They are
+# exempted from failing the build only so the rule can ship enforcing today's boundary — a new
+# unmarked writer fails immediately — while the known three are fixed in their own window. Every
+# run prints them under KNOWN DEFECTS with this reason, so the exemption cannot go quiet.
+#
+# Removing an entry here must mean fixing the site, never deleting the line.
+#
+# EMPTY as of 2026-08-07, and it got here the right way. It held the three gmail proc processors
+# (`indoxGmailBSDownloader01`, `indoxGmailDocDownloader01`, `indoxGmailLinkDownloader01`), which
+# were fixture-reachable and wrote with no marker path. They were FIXED, not un-listed: each now
+# stamps `ID = <fixture marker>-<gmail id>` when a delivery carries one, and their three
+# `Cleanup SQL` doc predicates changed from the literal `false` — which is what "we create no rows"
+# had been asserted as — to a real anchored `"ID" like 'sv3s\_p{b,d,l}…%'`.
+insert_known_unmarked: []
+
+# Statements that legitimately delete rows this registry does not describe. Each needs a
+# reason; the gate names the entry when it skips something.
+delete_allowlist:
+  - file: apps/indox/blueprint/n8n/IndoxResetFull01.workflow.ts
+    node: Clear Table
+    reason: >
+      A reset tool. Its scope IS the whole table by design; whether that design is right is a
+      decision already flagged to the owner and deliberately out of scope for G58.
+  - file: apps/indox/blueprint/n8n/indoxApi01.workflow.ts
+    node: PG Delete
+    reason: >
+      The production API's own delete-by-explicit-ID (`"ID" = any(string_to_array($1,','))`).
+      Not a test cleanup — this is the writer doing what a caller asked for, one named row at
+      a time.
+
+# UPDATE entries (the gate covers UPDATE as well as DELETE since 2026-08-07).
+mutation_allowlist:
+  - file: apps/indox/blueprint/n8n/indoxApi01.workflow.ts
+    node: Build Merge Write
+    reason: >
+      The duplicate-resolution writer (`resolve_double`, 144 MERGED tombstones). Both statements
+      it emits are single-row updates bound by parameter — `update … where "ID" = $N` for the
+      winner and `update … set "STATUS"='MERGED', "MERGED_INTO"=$1 … where "ID" = $3` for each
+      named loser. Same shape and same justification as `PG Delete` above: a production writer
+      mutating rows a caller named, not a cleanup mutating a set.
+
+      The gate flags it only because the column name is produced by a `q('ID')` quoting helper,
+      so no literal `"ID"` appears for the marker-column test to see. That is the gate being
+      unable to prove scope, not evidence of missing scope — and the honest way to record that
+      is an allowlist entry with the reasoning, rather than teaching F4 to accept any `= $N`
+      predicate (which would also accept `where "STATUS" = $1`, and F4 exists to catch exactly
+      that).

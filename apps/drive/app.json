@@ -1,0 +1,173 @@
+{
+  "id": "drive",
+  "title": {
+    "he": "דרייב",
+    "en": "Drive"
+  },
+  "layer": 3,
+  "kind": "adapter",
+  "version": "1.0.0",
+  "summary": {
+    "he": "שירות הדרייב — אחסון קבצים ומתאמי ספקים",
+    "en": "Drive platform service — storage + provider adapters"
+  },
+  "capabilities": [
+    {
+      "name": "drive",
+      "type": "service",
+      "interface": "drive.v1",
+      "endpoint": "http://drive:8975",
+      "required_ops": [
+        "list",
+        "download",
+        "upload",
+        "move",
+        "update",
+        "delete",
+        "createFromText"
+      ],
+      "optional_ops": [
+        "watch",
+        "revisions"
+      ],
+      "contract": "platform-service.v1"
+    }
+  ],
+  "engine": {
+    "id": "drive_local",
+    "profiles": [
+      {
+        "id": "admin",
+        "display_name": "מנהל",
+        "admin": true
+      },
+      {
+        "id": "user2",
+        "display_name": "משתמש 2"
+      }
+    ]
+  },
+  "use": [
+    {
+      "capability": "workflow",
+      "strength": "requires",
+      "after": true
+    },
+    {
+      "capability": "sql",
+      "strength": "requires",
+      "after": true
+    },
+    {
+      "capability": "secrets",
+      "strength": "requires",
+      "after": true
+    },
+    {
+      "capability": "object-storage",
+      "strength": "requires",
+      "after": true,
+      "ops": [
+        "put",
+        "get",
+        "list",
+        "delete"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "supabase-service-key",
+      "required": true
+    },
+    {
+      "id": "supabase-db-password",
+      "required": true
+    }
+  ],
+  "blueprints": {
+    "n8n": "blueprint/n8n"
+  },
+  "compose": "docker-compose.yml",
+  "broker": {
+    "service": "drive",
+    "blank_env": [
+      "SUPABASE_DB_PASSWORD",
+      "SUPABASE_SERVICE_KEY"
+    ],
+    "entrypoint": [
+      "sh",
+      "/inject.sh",
+      "sh",
+      "-c",
+      "exec gunicorn -w 2 -b 0.0.0.0:8975 --timeout 120 --access-logfile - --access-logformat '{\"timestamp\":\"%(t)s\",\"client_ip\":\"%(h)s\",\"method\":\"%(m)s\",\"path\":\"%(U)s\",\"query\":\"%(q)s\",\"status\":%(s)s,\"response_bytes\":%(B)s,\"user_agent\":\"%(a)s\",\"duration_us\":%(D)s}' app:app"
+    ]
+  },
+  "routing": [
+    {
+      "host": "drive",
+      "port": 8975,
+      "auth": "sso",
+      "auth_exclude": [
+        "/file/d/"
+      ],
+      "emit_labels": false,
+      "module": {
+        "group": "עסק",
+        "icon": "folder",
+        "embed": true,
+        "alias": "drive",
+        "id": "drive",
+        "name": "דרייב",
+        "desc": "קבצים ומסמכים",
+        "order": 2,
+        "service": "drive",
+        "url_env": "DRIVE_URL",
+        "url": "http://drive:8975"
+      },
+      "sso": {
+        "slug": "drive",
+        "default_host": "drive.localhost",
+        "display_name": "Drive",
+        "local_twin": true,
+        "base_url_env": "DRIVE_BASE_URL"
+      }
+    }
+  ],
+  "health": {
+    "structural": "auto",
+    "probe": {
+      "http": "http://drive:8975/readyz",
+      "interval": "30s"
+    }
+  },
+  "data": {
+    "volumes": [
+      "localdrive_data"
+    ],
+    "on_uninstall": "prompt",
+    "sql": [
+      {
+        "instance": "supabase-db",
+        "database": "postgres",
+        "tables": [
+          "drive_files",
+          "drive_folders",
+          "drive_profiles"
+        ],
+        "note": "created by adapters/local.py and profiles.py"
+      }
+    ]
+  },
+  "observability": {
+    "sentry_platform": "python"
+  },
+  "contributes": {
+    "env": {
+      "any-concurrency": {
+        "CUSTOM_SOURCE_DRIVE": "drive-${DEPLOYMENT_NAME:-bina-deployment}=drive",
+        "CUSTOM_BUFFER_DRIVE": "8000"
+      }
+    }
+  }
+}

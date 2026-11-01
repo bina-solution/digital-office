@@ -1,0 +1,99 @@
+# yaml-language-server: $schema=./schema.json
+title: /config/companies writes never bust the n8n settings cache, so company edits silently do nothing for up to 20 minutes
+opened: '2026-08-06'
+category: bug
+severity: medium
+status: open
+summary: _invalidate_settings_cache() is called only from the settings PATCH handler, never from the /config/<table> patch/post/delete handlers that back the editable Companies grid. indoxSettings01 caches the companies-derived blob — including all_companies_identifiers, which drives company detection — for 1200s, so an operator's company edit lands in Postgres and shows in the UI while document processing keeps using the old list for up to 20 minutes. No error, no warning, and the operator's own verification confirms the wrong thing.
+description: |
+  `_invalidate_settings_cache()` is defined at
+  apps/indox/app/incoming_documents/api/__init__.py:164 and called from exactly
+  ONE place — line 5905, inside the settings PATCH handler, carrying the comment
+  "H5: make the write visible now, not up to 20 min from now".
+
+  It is NOT called from any of the `/config/<table>` write paths:
+
+      config_row_patch   @bp.patch("/config/<table>/<row_id>")
+      config_row_add     @bp.post("/config/<table>")
+      config_row_delete  @bp.delete("/config/<table>/<row_id>")
+
+  `companies` is the only entry in `_EDITABLE_CONFIG_TABLES`, and it backs the
+  editable data grid at INDOX › Settings › Companies.
+
+  Meanwhile `indoxSettings01` caches the companies-derived blob in kv-storage for
+  1200s. That blob is not incidental — it is what document processing runs on:
+  companies, company_name_by_identifier, company_name_by_mail,
+  company_id_by_mails, company_first_identifier_by_identifier,
+  all_companies_identifiers, company_prompt_bs_by_id, trusted_suppliers. Built by
+  node `Companies`, consumed by `indoxV2FigureCompanyId01` (which passes
+  all_companies_identifiers straight into apitools `find option`) and
+  `indoxProcessDocument01`.
+
+  RISK. The failure mode is the bad kind. An operator adds, corrects or deletes a
+  company; the grid updates immediately and the write really did land in
+  Postgres, so every signal says it worked. But detection keeps matching against
+  the OLD list for up to 20 minutes. A company added to fix a misdetection
+  appears not to fix it, and the natural next move is to conclude the fix was
+  wrong and change something else. Same silent-no-op class as `docker compose`
+  resolving zero services and exiting 0 (AGENTS.md rule 2).
+
+  It bit the own-company cleanup directly: removing the house company from
+  `companies` by SQL and then restarting the 52 mis-detected documents would have
+  re-detected them all as the house, because the restart would have run against
+  the cached pre-removal list. The cleanup scripts had to grow a hard stop
+  between their two halves specifically to work around this.
+
+  ONE ADJACENT DEFECT, in the same surface, verified on the live shlomo-laptop
+  instance 2026-08-06 12:10Z with the stack fully healthy:
+
+    `all_settings` is declared as a webhook node in `indoxSettings01` but has NO
+    row in n8n's `webhook_entity`, so `GET /webhook/all_settings` returns 404
+    permanently. `webhook_entity` holds exactly five rows for this workflow —
+    company, queries, query, setting, settings/invalidate-cache — and all five
+    return 200. This is a real registration gap, not an availability blip.
+
+  CORRECTED ATTRIBUTION — do not chase this one. An earlier pass on this same
+  investigation recorded `company`, `setting` and `queries` returning HTTP 500
+  with `relation "public.execution_entity" does not exist` from bull's
+  `Queue.onFailed`, alongside 690 crashed executions. That was NOT an
+  indoxSettings01 defect and NOT a database problem. A second deployment named
+  `restore-test` came up on the host at 11:48:58Z and attached containers to the
+  shared `traefik-network` claiming the BARE service aliases the live stack
+  resolves by (`n8n-postgres`, `supabase-db`, `db`). Docker round-robins an
+  alias, so roughly half of every DB connection from n8n and its workers landed
+  in an empty restore database. Error rate went 2.3% -> 32.5%; by 11:53 the
+  stack returned zero successes. The live databases were intact throughout.
+  Disconnecting those three containers from the network at ~12:02Z fixed it
+  immediately (12:03 and 12:04: 100 ok / 0 bad, 80 ok / 0 bad). The read-back
+  path described below works.
+
+  OPERATIONAL NOTE: the `restore-test` containers were disconnected but are
+  still RUNNING, so the collision can return if anything re-attaches them. The
+  cleanup runner has a pre-flight guard that aborts if any non-`*-shlomo-laptop`
+  container is a member of `traefik-network`, or if any of the three bare
+  aliases resolves to more than one IP across five lookups.
+
+  HOW TO CONFIRM THE CACHE IS FRESH (this is what the runner does): there is no
+  endpoint that returns `all_companies_identifiers` directly — `setting?key=` is
+  for `settings` table rows only and answers "Settings key not found" for it.
+  But `GET /webhook/company` returns the cached companies blob, and summing
+  `companies[*].identifiers` reconstructs the pool. Caveat: that sum runs 2
+  lower than the DB, because the Companies node keys `companies[name]` by NAME
+  and the table currently holds one duplicate name (ids 310 and 1308, both
+  'א. הובלות ומ', whose ids differ only by a leading zero: '068796531' vs
+  '68796531'), collapsing one entry and hiding its 2 identifiers. The
+  house-identifier count is unaffected — all three house rows have unique names
+  — so `house == 0` is the exact check.
+tasks:
+- text: Call `_invalidate_settings_cache()` after a successful write in config_row_patch, config_row_add and config_row_delete, matching the best-effort never-fails pattern at line 5905 (a write must never fail, or appear to fail, because the webhook was unreachable).
+  done: false
+- text: Add or extend a test asserting the invalidation webhook is hit on a companies write; the settings PATCH path should have one to copy.
+  done: false
+- text: Separately investigate why `all_settings` is declared as a webhook node in indoxSettings01 but never gets a webhook_entity row, so it 404s while its five siblings serve 200.
+  done: false
+references:
+- apps/indox/app/incoming_documents/api/__init__.py:164
+- apps/indox/app/incoming_documents/api/__init__.py:5905
+- apps/indox/blueprint/n8n/indoxSettings01.json
+- data/exclude/_runs/own-company-cleanup-20260806-part1-identifiers.sql
+- data/exclude/_runs/own-company-cleanup-20260806-part2-documents.sql

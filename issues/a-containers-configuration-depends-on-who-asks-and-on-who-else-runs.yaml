@@ -1,0 +1,126 @@
+# yaml-language-server: $schema=./schema.json
+title: A container's configuration depends on WHO asks compose for it and on WHICH OTHER apps are enabled — so a bring-up re-creates containers nobody changed
+opened: '2026-10-06'
+category: ops
+severity: high
+status: resolved
+summary: 'Measured on hp-laptop 2026-10-06: the next `bbox run` would re-create 10 of 39 running containers (the edge, two databases, Plane, Drive, the agent) because one app was added days ago; the control plane and `scripts/dc` each compile a different configuration than `bbox` for 8–9 services.'
+description: |
+  ## What was measured (hp-laptop, 2026-10-06 03:10, nothing changed — compose's own `--dry-run`)
+
+  `dcx --dry-run up -d --no-build` (the function `bbox run` and every hook use) answers `Recreate` for
+  **10 of 39** running containers: `traefik`, `supabase-db`, `plane-db`, `project-pln`, `drive`,
+  `bina-ds`, `machine`, `notifications`, `computers`, `any-concurrency`. Not one of them was edited.
+  The other 29 answer `Running`.
+
+  Three independent leaks, each a fact about the MACHINE or the OFFICE that ends up inside the
+  configuration of one container:
+
+  ### 1. The CPU cap of every container is a function of every other enabled app
+
+  `.generated/cpu-budget.yml` (scripts/perf-profile-apply → cpu-budget-lint.py `render_overlay`) scales
+  every enabled service's `deploy.resources.limits.cpus` by `budget / declared sum` and
+  `reconcile.compose_files()` merges it LAST. The cap is part of compose's config hash, so the scale
+  is part of every container's identity:
+
+  * the ten above were created at scale 1.000 and the overlay now says 0.899 ("declare 17.80 vCPU
+    of caps; the profile's budget is 16.00") — `traefik 1 -> 0.9`, `supabase-db 1 -> 0.9`,
+    `bina-ds 2 -> 1.8`, `project-pln 1.37 -> 1.35`, …;
+  * simulated on this checkout, per profile: switching `portainer` on (+1 vCPU) moves the cap of
+    **24 of 26** capped services under `ci-small` / `vps` (0.899 -> 0.851); `n8n` moves 24 of 26
+    under every profile. An app with no cap of its own (`hello-bina`) moves none — which is why the
+    install that was timed for the sign-in work (30 s, no sign-in container touched) did not show it.
+
+  So "switch one app on" is, at the next bring-up, "restart most of the office, databases
+  included". The cap is enforced by the kernel and has to follow the running set — but it is
+  runtime state of the SET, and `docker update --cpus` changes a running container's quota without
+  re-creating it.
+
+  ### 2. The docker socket path is the caller's, not the host's
+
+  Compose files mount `${BBOX_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock`. On the host
+  CLI that is `/run/bbox-docker.sock`; inside a container that runs compose (app-management for an
+  install's hooks, bina-ds for an agent's `./bbox run`) lib.sh's engine detection lands on the path
+  INSIDE that container, `/var/run/docker.sock`, and compose hands it to the daemon as a HOST path.
+  `dc config` from the two places differs in exactly that one key for 8 services: `any-concurrency`,
+  `app-management`, `autoheal`, `bina-ds`, `connections`, `data-management`, `machine`, `traefik`.
+  On hp-laptop both paths happen to reach the same engine (one daemon, two sockets), so the cost
+  is a re-creation at every alternation between the CLI and the plane. On a machine where
+  `/var/run/docker.sock` is ANOTHER engine (Docker Desktop — the case lib.sh:153 warns about), a
+  container re-created by the plane is handed the wrong engine.
+
+  ### 3. The zone is read from wherever compose was started
+
+  `dcx` exports the host's zone (`export_host_tz`); `scripts/dc` — "the shell-callable face of dcx" —
+  does not, and inside a container `host_tz` reads the CONTAINER's `/etc/timezone`:
+
+      host CLI (dcx)            TZ=Asia/Jerusalem
+      host CLI (scripts/dc)     TZ unset -> each compose file's own default (UTC, or Asia/Jerusalem)
+      inside app-management     dcx would export TZ=Etc/UTC
+      inside bina-ds            env TZ=Asia/Jerusalem, dcx would export TZ=Etc/UTC
+
+  Four compose files interpolate it (`n8n`, `postgres`, `project-pln`, `bina-ds`); `scripts/dc` and
+  `dcx` disagree on 9 services here (`db` and the eight n8n services). An n8n brought up from the
+  apps screen, by an agent, or by `./scripts/dc up -d n8n` runs its schedule triggers three hours
+  off — the failure lib.sh's own comment names ("it silently shifts every cron by the delta").
+
+  ### 4. Each container that runs compose runs its OWN compose
+
+  The MacBook's answer (`scripts/config-by-caller.sh` there, 2026-10-06 03:44): 18 of 25 services
+  differ between the agent's shell (inside bina-ds) and app-management, every one on the same key —
+  `volumes[N].bind.create_host_path: 'True' here, 'None' there`. Nobody declares that key; it is how
+  two versions of docker compose normalise the same short-syntax bind. bina-ds and app-management
+  each carry the compose plugin their image was built with, so on that office every alternation
+  between "the agent ran `./bbox run`" and "an install from the apps screen" re-creates what the
+  other one created. That is what the Mac measured as "an install of hello-bina re-created
+  authentik-worker and authentik-bootstrap" (the hook's `up -d --no-deps` ran in app-management
+  over containers the agent's shell had created) while the next install — same caller — re-created
+  nothing. On hp-laptop the host shell and app-management agree on that key; bina-ds was not
+  compared there.
+
+  ## Fix (this commit), and what the landing measured (hp-laptop, 2026-10-06 16:59)
+
+  1. The CPU budget's scale left the compose configuration. The plan is one rendered file (under
+     `x-cpu-budget`, which compose reads past); `cpu-budget-lint.py --apply` tells it to the kernel
+     with `docker update`, and `dcx` runs that after every `up` (never after a dry run). Compose is
+     handed only a cap this machine has too few cores to create at all.
+  2. `scripts/dc` runs compose THROUGH `dcx`; a container that brings containers up is handed the
+     host's zone (`BBOX_HOST_TZ`) and the host's path of the socket (`BBOX_HOST_DOCKER_SOCK`).
+  3. The compose a host runs is the fact: lib.sh exports its version and the images that bring
+     containers up are built with it (`ARG COMPOSE_VERSION`). Nothing is installed or downgraded on
+     a machine. Gate G74 (`compose-pin-lint.py`) holds it.
+
+  The landing was one full `bbox run`: 29 of 45 services re-created — once, as predicted by the dry
+  run — and 16 kept (the edge, n8n, supabase); every container healthy afterwards (36 healthy, 9
+  with no healthcheck), the eight neighbour containers untouched. Then, `scripts/config-by-caller.sh`:
+
+      compose per caller: host 5.3.1 · app-management 5.3.1 · bina-ds 5.3.1
+      1. this shell vs app-management: none of 45 service(s) differ
+      1. this shell vs bina-ds: none of 45 service(s) differ
+      2. a bring-up from here would re-create: none
+      3. containers whose CPU quota is not the budget's: none
+
+  And the proof the scale is no longer anybody's identity: the plan rendered for another profile
+  (budget 16 -> 24, scale 0.612 -> 0.918) — a bring-up would re-create nothing; 29 quotas told to the
+  kernel (the edge's `cpu.max` 61000 -> 92000 of 100000, same container); put back, 29 again;
+  containers re-created by all of it: 0 of 45.
+
+  Not landed here: the MacBook (it lands by pulling this commit and one `./bbox run` of its own).
+tasks:
+- text: 'DONE (2026-10-06) — CPU caps leave the compose configuration: the budget stays one rendered plan, and one step applies it to the running set with `docker update --cpus` after every `up` (compose_files() stops merging the overlay; `_effective_cpu_budget` goes). One last re-creation when it lands, at a quiet moment.'
+  done: true
+- text: 'DONE (2026-10-06) — One zone, whoever asks: `scripts/dc` runs compose through `dcx` instead of beside it, and a container that runs compose is handed the host''s zone at creation and uses it.'
+  done: true
+- text: 'DONE (2026-10-06) — One socket path, whoever asks: a container that runs compose is handed the HOST path of the socket it holds, and interpolates that — never the path inside itself.'
+  done: true
+- text: 'DONE (2026-10-06) — One compose for every caller: the plugin version is declared once and every image that runs compose (app-management, bina-ds, and the host installer) takes it from there — or those containers stop carrying a compose of their own and ask one owner to run it.'
+  done: true
+- text: 'DONE (2026-10-06) — The check exists — `bash scripts/config-by-caller.sh [service …]`, read-only, exit 1 unless both answers are `none` (hp-laptop 2026-10-06 03:40: 18 of 39 services differ between the host shell and app-management — the zone on 11, the socket path on 8, bina-ds on both — and a bring-up would re-create 12). It found the fourth key on the Mac office (section 4); wire it into `bbox baseline` once tasks 1–3 make it pass.'
+  done: true
+references:
+- scripts/lib.sh
+- scripts/dc
+- scripts/perf-profile-apply
+- scripts/refactor/cpu-budget-lint.py
+- platform/manager/reconcile.py
+- issues/state-captured-at-creation-never-reconciles.yaml

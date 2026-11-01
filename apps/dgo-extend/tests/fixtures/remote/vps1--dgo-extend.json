@@ -1,0 +1,16 @@
+{
+  "office": "vps1",
+  "alias": "dgo-extend",
+  "label": "שרת פיתוח בינה סלושנס",
+  "module": {
+    "id": "dgo-extend.vps1",
+    "name": "הרחבת הלשכה",
+    "icon": "building",
+    "group": "תשתית",
+    "desc": "לשכות נוספות, קישורים ואפליקציות שמונחות עליהן",
+    "order": 10,
+    "embed": "/a/dgo-extend/"
+  },
+  "base": "http://dgo-extend:8983/peer/vps1/dgo-extend/",
+  "ok": false
+}

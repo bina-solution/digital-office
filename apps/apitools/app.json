@@ -1,0 +1,147 @@
+{
+  "id": "apitools",
+  "title": {
+    "he": "כלי מסמכים",
+    "en": "API Tools"
+  },
+  "layer": 3,
+  "kind": "service",
+  "version": "0.5.3",
+  "summary": {
+    "he": "OCR, חילוץ ערכים ושירות המסמכים העסקיים",
+    "en": "OCR, value extraction and the document ledger"
+  },
+  "capabilities": [
+    {
+      "name": "ocr",
+      "type": "protocol",
+      "endpoint": "http://apitools:8080",
+      "required_ops": [
+        "documentOcr",
+        "documentJsonQuery",
+        "findOptionMatching",
+        "columnExtraction"
+      ]
+    },
+    {
+      "name": "ledger",
+      "type": "protocol",
+      "endpoint": "http://apitools:8080",
+      "required_ops": [
+        "business",
+        "customers",
+        "items",
+        "documents",
+        "issue",
+        "download"
+      ]
+    }
+  ],
+  "use": [
+    {
+      "capability": "sql",
+      "strength": "requires",
+      "after": true
+    },
+    {
+      "capability": "secrets",
+      "strength": "requires",
+      "after": true
+    }
+  ],
+  "connections": [
+    {
+      "id": "supabase-db-password",
+      "required": true
+    },
+    {
+      "id": "gemini-key",
+      "required": false
+    },
+    {
+      "id": "google-vision-key",
+      "required": false
+    },
+    {
+      "id": "n8n-encryption-key",
+      "required": false
+    },
+    {
+      "id": "gsheet-sa-selector",
+      "required": false
+    },
+    {
+      "id": "n8n-postgres",
+      "required": true
+    }
+  ],
+  "compose": "docker-compose.yml",
+  "routing": [
+    {
+      "host": "apitools",
+      "port": 8080,
+      "auth": "sso",
+      "emit_labels": false,
+      "sso": {
+        "slug": "apitools",
+        "display_name": "Api Tools",
+        "default_host": "apitools.localhost",
+        "base_url_env": "APITOOLS_BASE_URL",
+        "local_twin": true
+      }
+    }
+  ],
+  "health": {
+    "structural": "auto",
+    "probe": {
+      "http": "http://apitools:8080/business",
+      "interval": "30s"
+    }
+  },
+  "data": {
+    "volumes": [],
+    "on_uninstall": "prompt",
+    "paths": [
+      "apps/apitools/storage",
+      "apps/apitools/logs"
+    ],
+    "sql": [
+      {
+        "instance": "supabase-db",
+        "database": "postgres",
+        "tables": [
+          "business_documents",
+          "business_document_events",
+          "business_sequences",
+          "business_consents",
+          "business_settings",
+          "customers",
+          "items",
+          "ocr_cache"
+        ],
+        "note": "created by src/doc_data/db.py and src/ocr_core/ocr_cache.py"
+      }
+    ]
+  },
+  "resources": {
+    "cpus": "4",
+    "memory": "4g"
+  },
+  "observability": {
+    "sentry_platform": "python"
+  },
+  "contributes": {
+    "env": {
+      "any-concurrency": {
+        "APITOOLS_CONTAINER": "apitools",
+        "CUSTOM_SOURCE_ALIAS": "apitools"
+      },
+      "console": {
+        "APITOOLS_URL": "${MY_DOCS_APITOOLS_URL:-http://apitools:8080}"
+      }
+    },
+    "connection_probes": {
+      "google-vision-key": "http://apitools:8080/health"
+    }
+  }
+}

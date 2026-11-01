@@ -1,0 +1,839 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# Prevent Git-Bash/MSYS from rewriting container paths. No-op on real Linux.
+export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
+
+# n8n-push — restore the n8n instance from the declarative blueprint (apps/n8n/blueprint.yml).
+# Fully human-readable; safe to re-run (idempotent). Steps (n8n >= 2.17.0):
+#   0. owner       -> bootstrap from .env (N8N_OWNER_*) via the REST setup endpoint, if none exists yet
+#   1. credentials -> import:credentials CREATE-IF-MISSING (never overwrites an existing/re-authed cred)
+#   1.5 reseed     -> PATCH env-driven creds from .env (credential_overrides) — re-encrypts under current key
+#                     SKIPS any cred whose ${VAR}s are unset/empty (never blanks a live secret — see step 1.5)
+#   2. workflows   -> import:workflow       (per file; upsert by id — does NOT delete extra workflows)
+#   3. re-activate -> bulk SQL active=true   (the active set, in one UPDATE; triggers register on restart)
+#      (tags are restored natively by import:workflow from each file's id'd `tags` — no separate step)
+#   4. restart n8n -> so re-activated triggers actually register/run
+#
+# import:workflow / import:credentials re-own everything to the current owner, so the result is coherent
+# on any machine. Env: N8N_CONTAINER=... to override the derived container name.
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # read_env, DN, N8N_CONTAINER, PG_CONTAINER (overridable via env)
+
+# performance profile: refresh the .env block + perf_* settings rows (no-op if unset)
+( cd "${REPO_ROOT}" && python3 scripts/perf-profile-apply ) || true
+N8N_DIR="${REPO_ROOT}/apps/n8n"
+WF_DIR="${N8N_DIR}/blueprint/n8n"; CRED_DIR="${N8N_DIR}/credentials"
+# Reset-proof local cache of FULL (encrypted) credentials — git-ignored, written by n8n-pull. Lets OAuth
+# creds survive a `down -v` reset when N8N_ENCRYPTION_KEY is unchanged (the key comes from .env). Preferred
+# over the git manifest (data:"") on import. If the key changed, these won't decrypt → re-auth as usual.
+STATE_DIR="${N8N_DIR}/.credentials-state"
+BLUEPRINT="${N8N_DIR}/blueprint.yml"
+log() { echo "[n8n-push] $*"; }
+
+# Scope: `bbox n8n <app> push` (or --app <id>) pushes ONE app's declared blueprint instead of all.
+# Everything else the hook does is instance-global (owner, credentials, activation, restart) and
+# still runs — scoping narrows WHICH workflows are staged, not whether the instance is made sane.
+APP_SCOPE=""
+_rest=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --app)   APP_SCOPE="${2:-}"; shift 2 || shift ;;
+    --app=*) APP_SCOPE="${1#--app=}"; shift ;;
+    *)       _rest="${_rest} $1"; shift ;;
+  esac
+done
+
+# ── Mutual exclusion — `flock`, not the `processLock01` Redis mechanism ──────────────────────────
+# processLock01 (Redis INCR + TTL, ~1,700 calls/day) is the right tool for locking BETWEEN n8n
+# workflow executions — it exists inside n8n, is reachable only from n8n nodes, and its TTL model
+# fits short-lived in-workflow criticial sections. This lock is needed BEFORE n8n can be assumed to
+# be up at all (a push can run against a stack that just crashed, or during `bbox reset`), and needs
+# to serialize processes that may not be n8n workflows (a human's `bbox n8n push`, onboarding's
+# automatic push, an agent-runner job, CI). A shell-level lock on the one thing every caller shares —
+# this checkout's filesystem — has no such dependency. `flock` specifically (not a hand-rolled PID
+# file) because its lock is held by an open file descriptor, not a value on disk: the kernel releases
+# it the instant the holding process exits for ANY reason (normal return, uncaught error, SIGINT,
+# SIGKILL) — there is no "stale lock" state to design a TTL or liveness-check around, because a dead
+# holder cannot keep the fd open. That directly answers the observed failure (a killed push wedging
+# every push after it).
+LOCK_FILE="${REPO_ROOT}/.n8n-push.lock"
+LOCK_META="${LOCK_FILE}.meta"
+exec 9>"${LOCK_FILE}"
+if ! flock -n 9; then
+  _holder="$(cat "${LOCK_META}" 2>/dev/null || echo 'unknown holder (meta file missing)')"
+  echo "${cy:-}[n8n-push] LOCKED — another push is already running: ${_holder}${c0:-}" >&2
+  echo "[n8n-push] waiting for it to finish (checking every 15s; giving up after 15m)..." >&2
+  _waited=0
+  while ! flock -n 9; do
+    sleep 15; _waited=$((_waited + 15))
+    if [ "${_waited}" -ge 900 ]; then
+      echo "${cr:-}[n8n-push] ERROR: still locked after 15m — refusing to wait longer.${c0:-}" >&2
+      echo "[n8n-push]        Current holder: $(cat "${LOCK_META}" 2>/dev/null || echo 'unknown')" >&2
+      echo "[n8n-push]        This is a live flock, not a stale PID file — if it says a process is" >&2
+      echo "[n8n-push]        still holding it, that process genuinely still has the lock file open." >&2
+      echo "[n8n-push]        Check it (ps, docker), or re-run once it finishes." >&2
+      exit 1
+    fi
+    echo "[n8n-push]   ...still waiting (${_waited}s elapsed) — holder: $(cat "${LOCK_META}" 2>/dev/null || echo 'unknown')" >&2
+  done
+  echo "[n8n-push] lock acquired — proceeding." >&2
+fi
+# Record who holds it (PID + host + start time + scope) so the message above is never "unknown", and
+# release the metadata (not the flock itself — that's the kernel's job) on any exit path.
+_PUSH_STARTED="$(date -u +%FT%TZ)"
+printf 'pid=%s host=%s started=%s(UTC) scope=%s\n' "$$" "$(hostname 2>/dev/null || echo '?')" \
+  "${_PUSH_STARTED}" "${APP_SCOPE:-all}" > "${LOCK_META}"
+
+# ── APPEND BEFORE DELETING — a forensic record that self-deletes is not a record. ───────────────
+# The meta file only describes the CURRENT holder, so it must go on exit or the next reader sees a
+# ghost. But it was the ONLY artefact naming who pushed, and it was removed at exactly the moment
+# the question gets asked: on 2026-08-07 a suite execution was cancelled minutes before a push, the
+# push was blamed for it in a status report, and by the time anyone looked the `pid=… scope=…` line
+# had already been deleted — nobody could confirm or refute it from disk. (The real cause turned out
+# to be the workflow's own 860s executionTimeout, to the second.) So the line is appended to a log
+# that outlives the run, together with when it finished and how it exited. Same reasoning as the
+# n8n execution list: you cannot reconstruct a timeline from state that only describes "now".
+PUSH_LOG="${REPO_ROOT}/data/_registry_backup/n8n-push.log"
+_push_record() {
+  local rc=$?
+  mkdir -p "$(dirname "${PUSH_LOG}")" 2>/dev/null
+  printf '%s  finished=%s(UTC) exit=%s  %s\n' \
+    "$(cat "${LOCK_META}" 2>/dev/null | tr -d '\n')" "$(date -u +%FT%TZ)" "${rc}" \
+    "$(git -C "${REPO_ROOT}" rev-parse --short HEAD 2>/dev/null || echo 'no-git')" \
+    >> "${PUSH_LOG}" 2>/dev/null
+  rm -f "${LOCK_META}"
+  return "${rc}"
+}
+trap _push_record EXIT
+
+# ── Loud downtime notice — `bbox n8n push` restarts the WHOLE stack (n8n + workers + task-runners),
+#    which takes authentik's forward-auth down with it for the duration. Anyone hitting a protected
+#    console/UI during that window sees a raw, unexplained `HTTP ERROR 500` — this exists so nobody
+#    is surprised by that. ──
+echo "${c1:-}[n8n-push] ================================================================${c0:-}" >&2
+echo "${c1:-}[n8n-push]  FULL-STACK RESTART — this push restarts n8n + workers + task-runners${c0:-}" >&2
+echo "${c1:-}[n8n-push]  at the end. Expect a few minutes of downtime: the console, any-concurrency${c0:-}" >&2
+echo "${c1:-}[n8n-push]  and every authentik-protected route will 500/hang until n8n (and authentik's${c0:-}" >&2
+echo "${c1:-}[n8n-push]  forward-auth check against it) come back up.${c0:-}" >&2
+echo "${c1:-}[n8n-push] ================================================================${c0:-}" >&2
+
+log "Container: ${N8N_CONTAINER}"
+docker ps --format '{{.Names}}' | grep -Fxq "${N8N_CONTAINER}" || { echo "Error: '${N8N_CONTAINER}' not running." >&2; exit 1; }
+[ -f "${BLUEPRINT}" ] || { echo "Error: ${BLUEPRINT} not found. Run ./bbox n8n pull all first." >&2; exit 1; }
+
+# ── platform schema (01_platform.sql) — applied here, not in a separate onboard hook, so ANY path ──
+#    that restores the blueprint (bbox n8n push, app-management's _blueprint_apply, reconcile_once)
+#    guarantees the schema other apps build on exists first. Instance-global like everything else
+#    below this point — unaffected by --app scoping.
+#
+# THE BUG THIS FIXES — a from-zero install ended with ZERO INDOX tables. Commit 0f69eb7e ("give each
+# app its own schema") split one fixtures file into three; only apps/indox/blueprint/fixtures/schema.sql
+# kept an applier (INDOX's own n8n workflow). apps/n8n/schema/01_platform.sql defines
+# public.touch_updated_at(), which INDOX's schema.sql:197 attaches a trigger to — the n8n Postgres node
+# sends that whole file as ONE multi-statement query, so when the trigger failed with "function
+# touch_updated_at() does not exist", the ~100 already-succeeded create-table statements rolled back
+# with it. Zero tables, not a partial schema, and it looked like the fixtures file was missing when it
+# wasn't (served correctly, HTTP 200, byte-identical) — a dependency of it simply had no owner.
+#
+# Re-applying is safe: every statement in 01_platform.sql is `if not exists` / `or replace`.
+SQL="${N8N_DIR}/schema/01_platform.sql"
+[ -f "${SQL}" ] || { echo "Error: platform schema missing: ${SQL}" >&2; exit 1; }
+if PG_DB="$(cn supabase-db)" && [ -n "${PG_DB}" ]; then
+  t=0; until docker exec "${PG_DB}" pg_isready -U postgres -q 2>/dev/null || [ "${t}" -ge 60 ]; do
+    sleep 3; t=$((t + 3))
+  done
+  # ON_ERROR_STOP=1: this file is the FOUNDATION other schemas attach to, so a partial apply is worse
+  # than a loud failure — that is the exact mistake being fixed here.
+  if out="$(docker exec -i "${PG_DB}" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -q < "${SQL}" 2>&1)"; then
+    fn="$(docker exec "${PG_DB}" psql -U postgres -d postgres -tAc \
+          "SELECT to_regprocedure('public.touch_updated_at()') IS NOT NULL;" 2>/dev/null | tr -d ' \r')"
+    if [ "${fn}" = "t" ]; then
+      log "platform schema applied (public.touch_updated_at + app_logs present)"
+    else
+      echo "Error: platform schema ran but touch_updated_at() is ABSENT — every app schema that" >&2
+      echo "       attaches a trigger to it will roll back ENTIRELY. Do not trust a green install." >&2
+      exit 1
+    fi
+  else
+    echo "Error: platform schema FAILED to apply:" >&2
+    printf '%s\n' "${out}" | tail -6 | sed 's/^/  /' >&2
+    echo "       app schemas depending on it will roll back whole. Fix before pushing again." >&2
+    exit 1
+  fi
+
+  # ── PostgREST reachability — assert the assumption that let 99_grants.sql be deleted ────────────
+  # Every app table in `public` is reachable through kong/PostgREST because the supabase image runs
+  # ALTER DEFAULT PRIVILEGES on the schema, so a table gets anon/authenticated/service_role the moment
+  # it is created — including tables an app installed months from now creates, which is more than a
+  # one-shot `grant on all tables` could ever promise. This is the assertion that the assumption still
+  # holds. pg_default_acl is checked (not today's tables' grants) because existing tables keep whatever
+  # they were granted at creation time and cannot tell you the NEXT one is covered. Both owner roles
+  # are checked: `postgres` is what this hook and the n8n Postgres node connect as, `supabase_admin` is
+  # what the image's own migrations use.
+  missing="$(docker exec "${PG_DB}" psql -U postgres -d postgres -tAc "
+    SELECT string_agg(o.owner || '/' || r.role, ', ')
+      FROM (VALUES ('postgres'),('supabase_admin')) AS o(owner)
+     CROSS JOIN (VALUES ('anon'),('authenticated'),('service_role')) AS r(role)
+     WHERE NOT EXISTS (
+       SELECT 1 FROM pg_default_acl d
+         JOIN pg_namespace n ON n.oid = d.defaclnamespace
+         JOIN pg_roles ro    ON ro.oid = d.defaclrole
+        WHERE n.nspname = 'public' AND d.defaclobjtype = 'r'
+          AND ro.rolname = o.owner
+          AND array_to_string(d.defaclacl, ',') LIKE '%' || r.role || '=%');" 2>/dev/null | tr -d '\r')"
+  if [ -z "${missing}" ]; then
+    log "PostgREST default privileges present (anon/authenticated/service_role on new public tables)"
+  else
+    echo "Error: supabase's DEFAULT PRIVILEGES on schema public no longer cover: ${missing}" >&2
+    echo "       Every table an app creates from now on will be INVISIBLE to PostgREST — kong will" >&2
+    echo "       answer 401/404 on routes that exist. Restore it:" >&2
+    echo "       ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;" >&2
+    exit 1
+  fi
+else
+  # Not an error in every deployment: an estate with no supabase provider has nowhere to put this.
+  log "no supabase-db container — platform schema not applied"
+fi
+
+# Encryption-key fingerprint check (credential secrets need the matching key to decrypt)
+# WHAT IS COMPARED, AND WHY NOT THE BLUEPRINT'S RECORDED VALUE (2026-10-09, DGO-74). The blueprint's
+# `encryption_key_fingerprint` is the fingerprint of the key the TEMPLATE ships (.env.ex). A value
+# committed to git can describe exactly one deployment, so every office whose .env was generated —
+# every fresh install, and this one — read as a mismatch; and because this instance holds 24
+# credentials, that mismatch was FATAL: `bbox n8n push all` refused outright, 0 workflows, and
+# ci-verify's push check failed twice and took the whole verification down with it (measured
+# 2026-10-09). The fact that decides whether a push is safe is whether the RUNNING instance matches
+# the key the stack will BOOT with (.env): if it does, the next boot decrypts what is stored, and the
+# push is as safe as it looks. The template's fingerprint is still reported, named as the template's.
+FP_WANT="$(printf '%s' "$(read_env N8N_ENCRYPTION_KEY)" | { command -v sha256sum >/dev/null 2>&1 && sha256sum || shasum -a 256; } | cut -c1-16)"
+FP_TPL="$(grep -E '^encryption_key_fingerprint:' "${BLUEPRINT}" | sed -E 's/.*"(.*)".*/\1/')"
+FP_HAVE="$(printf '%s' "$(docker exec "${N8N_CONTAINER}" printenv N8N_ENCRYPTION_KEY 2>/dev/null | tr -d '\r')" | { command -v sha256sum >/dev/null 2>&1 && sha256sum || shasum -a 256; } | cut -c1-16)"
+if [ -n "${FP_WANT}" ] && [ "${FP_WANT}" != "${FP_HAVE}" ]; then
+  # A key mismatch is only FATAL when this instance already holds credentials encrypted under a
+  # different key. Then step 1.5's PATCH makes n8n decrypt the stored blob first, that throws
+  # `bad decrypt`, and the whole push dies — workflows included. The operator sees four
+  # unrelated-looking red checks and no ui-map, an hour into a baseline.
+  #
+  # On a FRESH instance the same mismatch is harmless: there is nothing to decrypt, the credentials
+  # are created and then reseeded from .env under whatever key this instance has. CI works exactly
+  # this way — `ci-env.sh` mints throwaway secrets, so its key never matches the blueprint — and
+  # making the mismatch unconditionally fatal took CI down with `n8n-push failed (after retries)`,
+  # 0 workflows and 0 credentials. Measured, not theorised, in both directions.
+  _cred_rows="$(docker exec -e PGPASSWORD="$(read_env POSTGRES_PASSWORD)" "${PG_CONTAINER}"                   psql -U "$(read_env POSTGRES_USER)" -d "$(read_env POSTGRES_DB)" -tAc                   'select count(*) from credentials_entity;' 2>/dev/null | tr -d ' 
+')"
+  if [ -n "${_cred_rows}" ] && [ "${_cred_rows}" -gt 0 ] 2>/dev/null; then
+    cat >&2 <<EOF
+[n8n-push] FATAL: N8N_ENCRYPTION_KEY in .env does not match the running instance, and this instance
+           already holds ${_cred_rows} credential(s) encrypted under a different key.
+             .env (what the next boot uses) : ${FP_WANT}
+             this instance has              : ${FP_HAVE}
+
+  Updating them requires decrypting them first, which will fail and take the whole push with it —
+  workflows included.
+
+  Fix: the key in .env must be the key this instance is holding, or the next boot cannot decrypt what
+  is stored. Put the instance's key back into .env, then recreate n8n:
+
+      ./bbox reset --force && ./bbox run
+
+  If you rotated the key deliberately, re-capture the blueprint instead: ./bbox n8n pull
+EOF
+    exit 1
+  fi
+  log "NOTE: N8N_ENCRYPTION_KEY in .env does not match the running instance (.env=${FP_WANT} instance=${FP_HAVE}),"
+  log "      but this instance holds no credentials yet — they will be created and reseeded from .env"
+  log "      under this instance's key. Committed credential SECRETS will not decrypt; re-auth any"
+  log "      OAuth credential in the UI."
+fi
+
+# ── 0) Owner bootstrap (idempotent) — n8n has no native owner env var, so create it from .env via the
+#       REST setup endpoint when the instance has no owner yet. Skipped if one already exists. ──
+OE="$(read_env N8N_OWNER_EMAIL)"; OP="$(read_env N8N_OWNER_PASSWORD)"
+OF="$(read_env N8N_OWNER_FIRSTNAME)"; OL="$(read_env N8N_OWNER_LASTNAME)"
+# Poll /rest/settings until n8n answers (it may not be ready right after a restart). `|| true` keeps
+# `set -e` from killing the script on a transient wget/parse failure.
+NEEDS_SETUP=""
+for _ in $(seq 1 20); do
+  # parse INSIDE the container — the host (e.g. WSL) may not have node, which silently broke detection
+  # (→ "unknown" → owner bootstrap skipped → fresh instance left with no account).
+  NEEDS_SETUP="$(docker exec "${N8N_CONTAINER}" sh -c 'wget -q -O - http://127.0.0.1:5678/rest/settings 2>/dev/null | node -e '\''let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(JSON.parse(s).data.userManagement.showSetupOnFirstLoad?"yes":"no")}catch(e){process.stdout.write("")}})'\''' 2>/dev/null || true)"
+  [ -n "${NEEDS_SETUP}" ] && break
+  sleep 2
+done
+[ -z "${NEEDS_SETUP}" ] && NEEDS_SETUP="unknown"
+case "${NEEDS_SETUP}" in
+  yes)
+    if [ -n "${OE}" ] && [ -n "${OP}" ]; then
+      log "No owner yet — bootstrapping ${OE} from .env (N8N_OWNER_*)..."
+      docker exec -e OE="${OE}" -e OP="${OP}" -e OF="${OF:-Admin}" -e OL="${OL:-User}" "${N8N_CONTAINER}" node -e '
+        const http=require("http");
+        const body=JSON.stringify({email:process.env.OE,firstName:process.env.OF,lastName:process.env.OL,password:process.env.OP});
+        const r=http.request({host:"127.0.0.1",port:5678,path:"/rest/owner/setup",method:"POST",headers:{"Content-Type":"application/json","Content-Length":Buffer.byteLength(body)}},res=>{let d="";res.on("data",c=>d+=c).on("end",()=>{if(res.statusCode===200)console.log("[n8n-push]   owner created ("+process.env.OE+")");else console.log("[n8n-push]   ⚠ owner setup HTTP "+res.statusCode+": "+d.slice(0,160))})});
+        r.on("error",e=>console.log("[n8n-push]   ⚠ owner setup error: "+e.message));r.write(body);r.end();'
+      # surface the result — don't let a failed bootstrap pass silently
+      sleep 1
+      if [ "$(docker exec "${N8N_CONTAINER}" sh -c 'wget -q -O - http://127.0.0.1:5678/rest/settings 2>/dev/null | node -e '\''let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(JSON.parse(s).data.userManagement.showSetupOnFirstLoad?"yes":"no")}catch(e){process.stdout.write("?")}})'\''' 2>/dev/null || echo '?')" = "yes" ]; then
+        log "  ⚠ WARNING: owner STILL not set after bootstrap — instance is UNUSABLE. Check n8n logs / N8N_OWNER_* password policy."
+      fi
+    else
+      log "  ⚠ WARNING: no owner and N8N_OWNER_EMAIL/PASSWORD not set in .env — instance will be UNUSABLE. Set them and re-run 'bbox n8n push'."
+    fi ;;
+  no)
+    log "Owner already exists — skipping bootstrap." ;;
+  *)
+    log "  ⚠ WARNING: could not determine owner state (n8n /rest/settings unreachable) — bootstrap NOT attempted. Check 'bbox status' and n8n logs, then re-run." ;;
+esac
+
+# ── 0.5) Community node packages — BAKED into the image (apps/n8n/Dockerfile) and loaded from
+#         N8N_CUSTOM_EXTENSIONS. Verify the blueprint manifest matches what's baked; warn on drift. ──
+CN="$(awk '/^community_nodes:/{f=1;next} /^[a-zA-Z_]+:/{f=0} f && /- "/{gsub(/^[^"]*"|".*$/,"");print}' "${BLUEPRINT}")"
+if [ -n "${CN}" ]; then
+  drift=0
+  while IFS= read -r spec; do
+    [ -n "$spec" ] || continue
+    pkg="${spec%@*}"
+    if ! docker exec "${N8N_CONTAINER}" sh -c "[ -d /home/node/.n8n/nodes/node_modules/${pkg} ]" 2>/dev/null; then
+      log "  WARNING: blueprint lists '${spec}' but it is NOT present (baked+seeded) — add it to apps/n8n/Dockerfile and rebuild."
+      drift=1
+    fi
+  done <<EOF
+${CN}
+EOF
+  [ "$drift" = 0 ] && log "Community nodes: all $(printf '%s\n' "${CN}" | grep -c .) manifest entries are baked in the image."
+fi
+
+# ── 1) Credentials (NON-DESTRUCTIVE: create-if-missing only) ──
+# import:credentials UPSERTS by id, so re-importing would OVERWRITE a credential that was already
+# re-authed on this instance with the blueprint's stored blob — which may be encrypted under a DIFFERENT
+# N8N_ENCRYPTION_KEY (key drift) and would RE-BREAK working OAuth creds. So import ONLY creds whose id is
+# not already in the DB; existing creds are left untouched and (for env-managed ones) refreshed by the
+# reseed step (1.5) below. OAuth creds that don't exist yet get a shell here, then need UI/onboarding re-auth.
+# Prefer the reset-proof FULL-cred cache (real encrypted blobs) over the git manifest (data:"") so OAuth
+# survives a reset when the key is unchanged; fall back to the manifest (fresh clone / different machine).
+CSRC="${CRED_DIR}"
+if ls "${STATE_DIR}"/*.json >/dev/null 2>&1; then CSRC="${STATE_DIR}"; log "Using local credential-state cache (full blobs) for import."; fi
+if ls "${CSRC}"/*.json >/dev/null 2>&1; then
+  EXISTING_IDS="$(docker exec -e PGPASSWORD="$(read_env POSTGRES_PASSWORD)" "${PG_CONTAINER}" \
+    psql -U "$(read_env POSTGRES_USER)" -d "$(read_env POSTGRES_DB)" -tAc 'select id from credentials_entity;' \
+    2>/dev/null | tr -d '\r' | sed '/^$/d' || true)"
+  NEWLIST=""; skip=0
+  for f in "${CSRC}"/*.json; do
+    id="$(basename "$f" .json)"
+    if printf '%s\n' "${EXISTING_IDS}" | grep -Fxq "${id}"; then skip=$((skip+1)); else NEWLIST="${NEWLIST} $(basename "$f")"; fi
+  done
+  # Manifests NEW to the repo may be missing from the cred-state cache (it only holds creds
+  # that existed at the last pull) — union them in so a new committed cred still gets created.
+  if [ "${CSRC}" != "${CRED_DIR}" ]; then
+    for f in "${CRED_DIR}"/*.json; do
+      id="$(basename "$f" .json)"
+      [ -f "${CSRC}/${id}.json" ] && continue
+      if ! printf '%s\n' "${EXISTING_IDS}" | grep -Fxq "${id}"; then
+        cp "$f" "${CSRC}/${id}.json"; NEWLIST="${NEWLIST} ${id}.json"
+      fi
+    done
+  fi
+  if [ -n "${NEWLIST}" ]; then
+    new=$(printf '%s' "${NEWLIST}" | wc -w | tr -d ' ')
+    log "Importing ${new} NEW credential(s) (create-if-missing; ${skip} existing left untouched)..."
+    docker exec "${N8N_CONTAINER}" sh -c 'rm -rf /tmp/n8n-push-cred && mkdir -p /tmp/n8n-push-cred'
+    # shellcheck disable=SC2086
+    tar -C "${CSRC}" -cf - ${NEWLIST} | docker exec -i "${N8N_CONTAINER}" tar -C /tmp/n8n-push-cred -xf -
+    docker exec "${N8N_CONTAINER}" n8n import:credentials --separate --input=/tmp/n8n-push-cred \
+      2>&1 | grep -viE '"event"|error tracking|deprecat' | grep -iE 'imported|success|error' | tail -2 || true
+  else
+    log "Credentials: all ${skip} already exist — none re-imported (non-destructive). Env-managed ones refreshed below."
+  fi
+else
+  log "No credentials in blueprint (skipping)."
+fi
+
+# ── 1.5) Reseed env-driven credentials from blueprint `credential_overrides` ──
+# These local/owned creds get their data (re)written from .env via PATCH /rest/credentials/<id>, which
+# RE-ENCRYPTS under the CURRENT key — so they work even when the imported blob is undecryptable (key drift).
+# Declared in blueprint.yml as `<id>: {"name","type","data":{field:"${ENV}"|literal}}`. Workflows unchanged.
+#
+# NEVER BLANK A LIVE SECRET. An unset-or-empty `${VAR}` used to resolve to "" and get PATCHed in,
+# so a push silently re-encrypted an EMPTY secret over a working credential. Measured 2026-08-09:
+# `.env` had `GEMINI_API_KEY=` (empty; `.env.ex` carries a value), so every push blanked
+# `6mfcsdRaqQ4IdQ8Y` (ai-studio-bs-extraction) and `Balance Sheet Extractor - v2- shmuel` failed
+# 100% with "Forbidden - perhaps check your credentials?" from its Gemini node. `BmKlKWiEeZAxNWyi`
+# (Chat Auth) was blanked the same way by CHAT_AUTH_USER/PASS being absent from `.env` entirely.
+# This step is INSTANCE-GLOBAL — `bbox n8n <app> push` narrows only which WORKFLOWS are staged —
+# so a scoped push of one app blanked an unrelated app's credential. Three more overrides
+# (Priority Production, priority test, Document AI Connection) reference empty vars and were
+# only spared because they were never populated.
+# Invariant: a credential is reseeded ONLY when every `${VAR}` it references has a non-empty value.
+# Otherwise it is SKIPPED, loudly, and the live blob is left alone. Gate: G63
+# (`scripts/refactor/credential-blank-lint.py`).
+OVR_BLOCK="$(sed -n '/^credential_overrides:/,$p' "${BLUEPRINT}" 2>/dev/null)"
+if printf '%s\n' "${OVR_BLOCK}" | grep -qE '^[[:space:]]{2}[A-Za-z0-9_-]+:[[:space:]]*\{'; then
+  # Extract referenced env vars from the ENTRY lines only (not comments), so a `${ENV}` in a comment
+  # doesn't become a (missing) var that fails read_env under set -e.
+  REF_VARS="$(printf '%s\n' "${OVR_BLOCK}" | grep -E '^[[:space:]]{2}[A-Za-z0-9_-]+:[[:space:]]*\{' | grep -oE '\$\{[A-Za-z0-9_]+\}' | tr -d '${}' | sort -u)"
+  RESEED_ENV=(-e "OWNER_EMAIL=${OE}" -e "OWNER_PASSWORD=${OP}")
+  for v in ${REF_VARS}; do RESEED_ENV+=(-e "${v}=$(read_env "${v}" || true)"); done
+  log "Reseeding env-driven credentials from .env (credential_overrides)..."
+  printf '%s' "${OVR_BLOCK}" | docker exec -i "${RESEED_ENV[@]}" "${N8N_CONTAINER}" node -e '
+    const http=require("http"); let block="";
+    process.stdin.on("data",d=>block+=d).on("end",async()=>{
+      const items=[];
+      for(const line of block.split("\n")){
+        const m=line.match(/^\s{2}([A-Za-z0-9_-]+):\s*(\{.*\})\s*$/); if(!m) continue;
+        let spec; try{spec=JSON.parse(m[2]);}catch(e){continue;}
+        const data={}; const unset=[];
+        // An UNSET or EMPTY ${VAR} is "I have no value for this", NOT "set the field to empty".
+        // Collect them; the PATCH loop below then SKIPS the whole credential rather than
+        // re-encrypting a blank secret over a working live one. See the block comment above.
+        for(const [k,v] of Object.entries(spec.data||{})){
+          if(typeof v!=="string"){ data[k]=v; continue; }
+          data[k]=v.replace(/\$\{([A-Za-z0-9_]+)\}/g,(_,n)=>{
+            const val=process.env[n];
+            if(val===undefined||val===""){ unset.push(n); return ""; }
+            return val;
+          });
+        }
+        items.push({id:m[1],name:spec.name,type:spec.type,data,unset});
+      }
+      if(!items.length){console.log("[n8n-push]   credential_overrides: none parsed");return;}
+      function req(path,method,body,cookie){return new Promise((res,rej)=>{
+        const data=body?JSON.stringify(body):null;
+        const r=http.request({host:"127.0.0.1",port:5678,path,method,headers:Object.assign({"Content-Type":"application/json","browser-id":"reseed"},data?{"Content-Length":Buffer.byteLength(data)}:{},cookie?{Cookie:cookie}:{})},resp=>{let d="";resp.on("data",c=>d+=c).on("end",()=>res({status:resp.statusCode,body:d,sc:resp.headers["set-cookie"]}));});
+        r.on("error",rej); if(data)r.write(data); r.end();
+      });}
+      let cookie="";
+      for(let i=0;i<20;i++){ try{ const lg=await req("/rest/login","POST",{emailOrLdapLoginId:process.env.OWNER_EMAIL,password:process.env.OWNER_PASSWORD}); if(lg.sc){cookie=lg.sc.map(c=>c.split(";")[0]).join("; ");break;} }catch(e){} await new Promise(r=>setTimeout(r,1000)); }
+      if(!cookie){console.log("[n8n-push]   reseed: could not log in as owner — skipping");return;}
+      let ok=0, skipped=0;
+      for(const it of items){
+        if(it.unset && it.unset.length){
+          skipped++;
+          console.log("[n8n-push]   SKIP "+it.id+" ("+it.name+") — unset/empty in .env: "+
+                      Array.from(new Set(it.unset)).join(", ")+
+                      " — LIVE CREDENTIAL LEFT UNTOUCHED (fill the var, then re-push)");
+          continue;
+        }
+        try{ const r=await req("/rest/credentials/"+it.id,"PATCH",{name:it.name,type:it.type,data:it.data},cookie); if(r.status>=200&&r.status<300)ok++; else console.log("[n8n-push]   reseed "+it.id+" HTTP "+r.status+" "+(r.body||"").slice(0,80)); }catch(e){console.log("[n8n-push]   reseed "+it.id+" err "+e.message);}
+      }
+      console.log("[n8n-push]   reseeded "+ok+"/"+(items.length-skipped)+" env-driven credential(s) from .env"+
+                  (skipped?("; "+skipped+" SKIPPED to avoid blanking a live secret"):""));
+    });'
+fi
+
+# ── 2) Workflows (upsert) + 3) re-activate the active ones (publish:workflow) — single in-container pass ──
+# Blueprints are code. This guard demanded *.json — the one thing 52b32aa4 ("96 workflows as
+# *.workflow.ts, JSON era removed") deleted — so `bbox n8n push all` aborted here on every
+# invocation with "no workflows/ in blueprint", roughly twenty lines ABOVE the loop that compiles
+# .workflow.ts into JSON and would have satisfied it: a precondition checking the pre-migration
+# layout, ahead of the code that handles the post-migration one.
+#
+# It asks for .workflow.ts ONLY, deliberately. Accepting .json too would leave a second place
+# tolerating the retired era, and the whole cost of this migration was consumers that kept
+# half-accepting the old form instead of failing loudly. A stray .json here is handled further
+# down, where the transition guard says the .ts form is authoritative and names the file to delete.
+if [ -d "${WF_DIR}" ] && ls "${WF_DIR}"/*.workflow.ts >/dev/null 2>&1; then
+  :
+else
+  echo "Error: ${WF_DIR} holds no *.workflow.ts — blueprints are code, and there is nothing to push." >&2
+  exit 1
+fi
+docker exec "${N8N_CONTAINER}" sh -c 'rm -rf /tmp/n8n-push-wf && mkdir -p /tmp/n8n-push-wf'
+# host-side staging copy: perf-profile workflow knobs are applied here (manifest-driven),
+# BEFORE the tar — repo files stay at defaults
+STAGE_DIR="${REPO_ROOT}/.n8n-push-stage"
+rm -rf "${STAGE_DIR}" && mkdir -p "${STAGE_DIR}"
+# Blueprint ownership is DECLARED, not globbed: every app that ships workflows names the dir in
+# its own manifest (`blueprints.n8n`), and the compiler resolves them. The old
+# `apps/*/blueprint/n8n` glob could not respect platform.state.yaml enablement, could not tell an
+# app's dir from a stray one, and made this layer-2 hook enumerate layer-3 paths by hand.
+# APP_SCOPE (set by `bbox n8n <app> push`) narrows the push to one app; empty = every app.
+# tr -d '\r': python on Windows prints CRLF, and a trailing CR makes every path glob miss
+# (same trap compose_args() in scripts/lib.sh documents).
+_bp_list="$( cd "${REPO_ROOT}" && python3 platform/manager/reconcile.py blueprints \
+               ${APP_SCOPE:+--for "${APP_SCOPE}"} | tr -d '\r' )" || {
+  echo "Error: could not resolve n8n blueprints from the app manifests." >&2; exit 1; }
+[ -n "${_bp_list}" ] || { echo "Error: no app declares blueprints.n8n${APP_SCOPE:+ for '${APP_SCOPE}'}." >&2; exit 1; }
+WRAP="${N8N_DIR}/tooling/wrap.mjs"
+while IFS="$(printf '\t')" read -r _aid _rel; do
+  [ -n "${_rel}" ] || continue
+  _dir="${REPO_ROOT}/${_rel}"
+  # Blueprints are CODE (.workflow.ts — see ai/context/n8n-as-code-migration.md): compile them to
+  # import JSON through wrap.mjs (the lossless graft lives there). Plain *.json alongside is still
+  # staged as-is so a mid-migration or hand-dropped file cannot silently vanish.
+  _src="${_dir}"
+  if ls "${_dir}"/*.workflow.ts >/dev/null 2>&1; then
+    _gen="${REPO_ROOT}/.generated/n8n/${_aid}"
+    rm -rf "${_gen}" && mkdir -p "${_gen}"
+    "$(bbox_node)" "${WRAP}" compile "${_dir}" "${_gen}" >/dev/null || {
+      echo "Error: wrap.mjs compile failed for '${_aid}' (${_rel}) — fix the .workflow.ts before pushing." >&2
+      rm -rf "${STAGE_DIR}"; exit 1; }
+    _src="${_gen}"
+  fi
+  for _f in "${_src}"/*.json; do
+    [ -e "${_f}" ] || continue
+    _b="$(basename "${_f}")"
+    # A collision would silently drop one side — fail loudly and name both owners.
+    if [ -e "${STAGE_DIR}/${_b}" ]; then
+      echo "Error: workflow filename collision '${_b}' — '${_aid}' and an earlier blueprint both own it." >&2
+      rm -rf "${STAGE_DIR}"; exit 1
+    fi
+    cp "${_f}" "${STAGE_DIR}/"
+  done
+  # Transition guard: a dir holding BOTH forms for the same id is ambiguous — the compiled .ts won;
+  # say so rather than silently ignoring the stray json.
+  if [ "${_src}" != "${_dir}" ]; then
+    for _f in "${_dir}"/*.json; do
+      [ -e "${_f}" ] || continue
+      log "  NOTE ${_aid}: stray $(basename "${_f}") ignored — the .workflow.ts form is authoritative; delete the json."
+    done
+  fi
+  log "  ${_aid}: $(ls "${STAGE_DIR}" | wc -l | tr -d ' ') staged so far"
+done <<EOF
+${_bp_list}
+EOF
+# Kept in a variable rather than recomputed: the staging dir is deleted a few lines below, and the
+# post-import assertion needs this number.
+STAGED_N=$(ls "${STAGE_DIR}"/*.json 2>/dev/null | wc -l | tr -d ' ')
+echo "[n8n-push] staged ${STAGED_N} workflow(s) from $(printf '%s\n' "${_bp_list}" | wc -l | tr -d ' ') declared blueprint(s)${APP_SCOPE:+ [scope=${APP_SCOPE}]}"
+( cd "${REPO_ROOT}" && python3 scripts/perf-profile-apply --stage .n8n-push-stage ) || true
+tar -C "${STAGE_DIR}" -cf - . | docker exec -i "${N8N_CONTAINER}" tar -C /tmp/n8n-push-wf -xf -
+# ── Pre-create every tag the staged workflows reference ──
+# n8n's bulk `import:workflow` creates a workflow's tags as it goes, and `tag_entity` has a UNIQUE
+# index on name. Twenty tag names here are shared by more than one workflow (`indox` alone by 48),
+# so the bulk run races to INSERT the same tag twice and the whole import aborts:
+#
+#   duplicate key value violates unique constraint "idx_812eb05f7451ca757fb98444ce"
+#
+# and NOTHING lands — 82 staged, 0 imported. The failure needs an EMPTY tag table to appear, so a
+# machine that has ever run a push is immune and a fresh one is not. That is the exact shape of bug
+# the fresh-machine lane exists for, and it cost a full baseline to find.
+#
+# Inserting them up front, once, in a single statement removes the race: every tag already exists
+# by the time the importer looks, so it attaches instead of creating. ON CONFLICT makes it
+# idempotent, so this is a no-op on a warm instance.
+log "Pre-creating workflow tags (n8n's bulk import races on shared tag names)..."
+_tags_sql="$(python3 - "$(npath "${STAGE_DIR}")" <<'PYTAGS'
+import json, os, sys, glob, uuid
+seen = set()
+for f in sorted(glob.glob(os.path.join(sys.argv[1], "*.json"))):
+    try:
+        w = json.load(open(f, encoding="utf-8"))
+    except Exception:
+        continue
+    for t in (w.get("tags") or []):
+        n = t.get("name") if isinstance(t, dict) else t
+        if n:
+            seen.add(str(n)[:24])          # tag_entity.name is varchar(24)
+vals = ",".join("('%s','%s')" % (str(uuid.uuid4())[:36], n.replace("'", "''")) for n in sorted(seen))
+if vals:
+    print('INSERT INTO tag_entity (id, name) VALUES %s ON CONFLICT (name) DO NOTHING;' % vals)
+PYTAGS
+)"
+if [ -n "${_tags_sql}" ]; then
+  # A warning here was the wrong call. If this step cannot run, the import WILL race on a shared
+  # tag name, land a partial set, and the completeness assertion below fails with a count — which
+  # sends whoever reads it looking at the import instead of at this. Fail at the cause, and print
+  # what psql actually said rather than swallowing it.
+  if _tags_err="$(docker exec -e PGPASSWORD="$(read_env POSTGRES_PASSWORD)" "${PG_CONTAINER}" \
+                    psql -U "$(read_env POSTGRES_USER)" -d "$(read_env POSTGRES_DB)" \
+                    -q -v ON_ERROR_STOP=1 -c "${_tags_sql}" 2>&1)"; then
+    log "  tags ready"
+  else
+    echo "[n8n-push] FATAL: could not pre-create workflow tags in ${PG_CONTAINER}." >&2
+    echo "           Without them n8n's bulk import races on the tag names shared between" >&2
+    echo "           workflows and imports only part of the set." >&2
+    echo "           psql said: ${_tags_err}" >&2
+    exit 1
+  fi
+fi
+
+rm -rf "${STAGE_DIR}"
+# ── Integration-API backend substitution (retired) ──
+# indoxApiRouter01 used to carry a `const BACKEND='<default>'` toggle (sheets | supabase)
+# that we resolved here from .env INDOX_DATA_BACKEND -> settings backend_data -> default.
+# Google Sheets is now fully legacy: the router talks ONLY to indoxApiSupabase01, so the
+# toggle, the staged-copy sed and the INDOX_DATA_BACKEND knob are all gone.
+
+# GlitchTip Error Reporter (sAjhxlLTUq9vEL8L) forwards every failed-workflow event to GlitchTip so it
+# surfaces in the התראות center. The committed JSON hardcodes the REMOTE prod URL+key; rewrite them
+# per-deployment from N8N_SENTRY_DSN (http://KEY@HOST/PROJECT). Ingest via the INTERNAL glitchtip host
+# (docker network) — reliable + works identically on local and the remote server. Without a DSN the
+# committed remote value is kept (a no-op for the prod stack that owns it).
+# NOTE (2026-08-06): the filename below was `sAjhxlLTUq9vEL8L.json` — the workflow's OLD id. The
+# blueprint now commits it as `glitchtipReporter01.json`, so the `test -f` below never matched and
+# this whole function silently returned via its "not in this push's scope" branch on EVERY push.
+# N8N_SENTRY_DSN has therefore never been applied by any recent push; the committed hardcoded
+# URL/key are what actually run. Classic silent no-op — the guard meant for scoped pushes swallowed
+# a real breakage. Same stale id also broke step 3b's exclusion list (see there).
+# 2026-08-06 (again): the reporter was MERGED INTO errorHandler01 at the owner's request ("one
+# error handler workflow"), so the DSN now lives in that file. Repointed here in the same change
+# that moved it — a filename in this hook and a filename on disk are two lists that must agree,
+# and this exact pair has already drifted twice.
+substitute_sentry_dsn() {
+  local file="errorHandler01.json" dsn key proj ingest
+  # This workflow belongs to the n8n app's own blueprint. A scoped push (`bbox n8n <app> push`)
+  # stages only that app's files, so it is legitimately absent — skip instead of dying, or the
+  # scoped push aborts before importing anything.
+  docker exec "${N8N_CONTAINER}" test -f "/tmp/n8n-push-wf/${file}" 2>/dev/null || {
+    log "sentry: ${file} not in this push's scope — skipping"; return; }
+  dsn="$(read_env N8N_SENTRY_DSN "")"
+  # NEVER fail open. This used to "keep the committed URL", which on 2026-07-17 sent 1,888 staging
+  # errors into ANOTHER deployment's GlitchTip, tagged environment:production and indistinguishable
+  # from that client's real errors. The blueprint now commits the in-network host (glitchtip:8000),
+  # so an unset DSN can only ever reach THIS deployment's GlitchTip and 404 there — loud, local, and
+  # incapable of touching someone else's estate.
+  [ -n "${dsn}" ] || { log "sentry: N8N_SENTRY_DSN unset — Error Reporter stays on this deployment's ${N8N_SENTRY_INGEST:-http://glitchtip:8000} (events will 404 until glitchtip-push runs)"; return; }
+  key="$(printf '%s' "${dsn}" | sed -E 's#^[a-z]+://([^@]+)@.*#\1#')"
+  proj="$(printf '%s' "${dsn}" | sed -E 's#.*/([0-9]+)/?$#\1#')"
+  ingest="${N8N_SENTRY_INGEST:-http://glitchtip:8000}"
+  [ -n "${key}" ] && [ -n "${proj}" ] || { log "sentry: could not parse N8N_SENTRY_DSN — skipping"; return; }
+  log "sentry: GlitchTip Error Reporter -> ${ingest}/api/${proj}/store/ (key ${key%${key#????????}}…)"
+  docker exec "${N8N_CONTAINER}" sh -c \
+    "sed -i -E 's#https?://[^\\\"]*/api/[0-9]+/store/#${ingest}/api/${proj}/store/#g; s/sentry_key=[a-f0-9]+/sentry_key=${key}/g' /tmp/n8n-push-wf/${file}"
+}
+substitute_sentry_dsn
+
+# ── Telegram error-notifier gate (optional, default OFF) ──
+# errorHandler01's "Telegram" node has never had a working token: .env's TELEGRAM_BOT_TOKEN is the
+# literal placeholder "your-telegram-bot-token-here" (synced into credential EmuwriU7cnK5nZTM on
+# every restart) and 0 executions of it have ever succeeded. Because that node has no
+# continueOnFail/onError, its failure marked the WHOLE errorHandler01 execution as error/crashed on
+# every single run (execution_entity, 2026-08-05) even though the GlitchTip report and the
+# lock/dead-letter branches downstream of Error Trigger had already completed — a second failure
+# from the error handler itself, burying every real one. ERROR_NOTIFY_TELEGRAM gates the branch
+# (default false, since no real token exists); even with it true, an empty or still-placeholder
+# token disables the branch anyway, so turning the flag on without also setting a real token cannot
+# reproduce this bug. The workflow file commits `disabled:true` on the node as its safe default;
+# this function is the only thing that ever turns it back on.
+gate_telegram_notifier() {
+  local file="errorHandler01.json" want tok reason=""
+  # Same scoping rule as substitute_sentry_dsn: a scoped `bbox n8n <app> push` may legitimately not
+  # stage this platform-base file — skip rather than die.
+  docker exec "${N8N_CONTAINER}" test -f "/tmp/n8n-push-wf/${file}" 2>/dev/null || {
+    log "telegram-gate: ${file} not in this push's scope — skipping"; return; }
+  want="$(read_env ERROR_NOTIFY_TELEGRAM)"; want="${want:-false}"
+  tok="$(read_env TELEGRAM_BOT_TOKEN)"
+  if [ "${want}" != "true" ]; then
+    reason="ERROR_NOTIFY_TELEGRAM=${want} (must be exactly 'true')"
+  elif [ -z "${tok}" ] || [ "${tok}" = "your-telegram-bot-token-here" ]; then
+    reason="TELEGRAM_BOT_TOKEN is empty or still the placeholder"
+  fi
+  if [ -n "${reason}" ]; then
+    log "telegram-gate: Telegram branch stays DISABLED (${reason})"
+    docker exec -e TG_REASON="${reason}" "${N8N_CONTAINER}" node -e '
+      const fs=require("fs"); const p="/tmp/n8n-push-wf/errorHandler01.json";
+      const w=JSON.parse(fs.readFileSync(p,"utf8"));
+      const n=(w.nodes||[]).find(x=>x.name==="Telegram");
+      if(!n){ console.log("[n8n-push]   telegram-gate: WARNING Telegram node not found — nothing to gate"); process.exit(0); }
+      if(n.disabled!==true){ n.disabled=true; fs.writeFileSync(p, JSON.stringify(w,null,2)); }
+      console.log("[n8n-push]   telegram-gate: disabled (" + process.env.TG_REASON + ")");'
+  else
+    log "telegram-gate: Telegram branch ENABLED (ERROR_NOTIFY_TELEGRAM=true, real token present)"
+    docker exec "${N8N_CONTAINER}" node -e '
+      const fs=require("fs"); const p="/tmp/n8n-push-wf/errorHandler01.json";
+      const w=JSON.parse(fs.readFileSync(p,"utf8"));
+      const n=(w.nodes||[]).find(x=>x.name==="Telegram");
+      if(!n){ console.log("[n8n-push]   telegram-gate: WARNING Telegram node not found — nothing to gate"); process.exit(0); }
+      if(n.disabled){ delete n.disabled; fs.writeFileSync(p, JSON.stringify(w,null,2)); }
+      console.log("[n8n-push]   telegram-gate: enabled");'
+  fi
+}
+gate_telegram_notifier
+
+# ── GlitchTip error-reporter gate (optional, default OFF) ──────────────────────────────────────
+# Same class of defect as the Telegram branch above, and the same remedy — deliberately a COPY of
+# gate_telegram_notifier's shape rather than a second pattern.
+#
+# THE BUG (RCA 2026-08-06). glitchtipReporter01's HTTP Request node had no onError, so an
+# unreachable/rejecting sink marked the WHOLE reporter execution as `error`. Step 3b below then
+# stamped settings.errorWorkflow=errorHandler01 onto the reporter itself (its exclusion list named
+# the workflow's OLD id, `sAjhxlLTUq9vEL8L`, so the reporter was never actually excluded) — and
+# errorHandler01's "Call 'GlitchTip Error Reporter'" node calls the reporter. That closes a cycle:
+# reporter fails -> errorHandler01 -> calls reporter -> fails -> ... Measured over 2026-08-06
+# 01:10-01:45Z: 1,205 reporter errors against 1,481 handler executions in ONE hour, near-1:1, while
+# the whole rest of the estate produced ~250 real errors. 93% of the error board was the error
+# reporter reporting on itself.
+#
+# The workflow file now carries the structural half of the fix (HTTP Request onError=
+# continueErrorOutput -> "Sink Unreachable (suppressed)"), so the reporter cannot emit an error
+# execution no matter what the sink does. This function is the CONFIG half: when reporting is off
+# or unconfigured, the reporter should not even attempt a send, and must say so visibly.
+#
+# ERROR_REPORT_GLITCHTIP gates it (default false). Even set to true, an unset N8N_SENTRY_DSN or an
+# unreachable sink keeps it off — so turning the flag on without a working sink cannot reproduce
+# the bug. The skip is written into the Code node's GEN:REPORT_GATE block, which makes the skipped
+# execution carry `__report_skipped: true` plus the reason and the error it WOULD have reported —
+# never a bare success ("succeeds while doing nothing" is the dominant defect class here).
+gate_glitchtip_reporter() {
+  local file="errorHandler01.json" want dsn reason="" ingest_host ingest_port
+  docker exec "${N8N_CONTAINER}" test -f "/tmp/n8n-push-wf/${file}" 2>/dev/null || {
+    log "glitchtip-gate: ${file} not in this push's scope — skipping"; return; }
+  want="$(read_env ERROR_REPORT_GLITCHTIP)"; want="${want:-false}"
+  dsn="$(read_env N8N_SENTRY_DSN)"
+  if [ "${want}" != "true" ]; then
+    reason="ERROR_REPORT_GLITCHTIP=${want} (must be exactly 'true')"
+  elif [ -z "${dsn}" ]; then
+    reason="N8N_SENTRY_DSN is unset"
+  else
+    # Reachability, checked FROM n8n (the only vantage point that matters) against the ingest host
+    # this push is about to write into the workflow. A stopped/unreachable glitchtip disables
+    # reporting rather than letting every error attempt a doomed POST.
+    ingest_host="$(printf '%s' "${N8N_SENTRY_INGEST:-http://glitchtip:8000}" | sed -E 's#^[a-z]+://##; s#[:/].*$##')"
+    ingest_port="$(printf '%s' "${N8N_SENTRY_INGEST:-http://glitchtip:8000}" | sed -E 's#^[a-z]+://[^:/]+:?##; s#/.*$##')"
+    ingest_port="${ingest_port:-8000}"
+    if ! docker exec "${N8N_CONTAINER}" sh -c \
+         "nc -z -w 3 '${ingest_host}' '${ingest_port}' 2>/dev/null || wget -q -T 3 -O /dev/null 'http://${ingest_host}:${ingest_port}/' 2>/dev/null"; then
+      reason="sink ${ingest_host}:${ingest_port} is unreachable from n8n"
+    fi
+  fi
+  if [ -n "${reason}" ]; then
+    log "glitchtip-gate: error reporting DISABLED (${reason})"
+  else
+    log "glitchtip-gate: error reporting ENABLED (ERROR_REPORT_GLITCHTIP=true, DSN set, sink reachable)"
+  fi
+  docker exec -e GT_REASON="${reason}" "${N8N_CONTAINER}" node -e '
+    const fs=require("fs"); const p="/tmp/n8n-push-wf/errorHandler01.json";
+    const w=JSON.parse(fs.readFileSync(p,"utf8"));
+    // Find the node by its GEN MARKER, not by name. Names are a second list that has to be kept
+    // in step with this hook, and that pairing has now drifted three times today (an old workflow
+    // id in substitute_sentry_dsn, an old id in step 3b, a deleted script in gates.sh). The marker
+    // travels WITH the code it guards, so renaming the node cannot silently disable the gate.
+    const n=(w.nodes||[]).find(x=>x.parameters&&typeof x.parameters.jsCode==="string"
+                                  &&x.parameters.jsCode.indexOf("GEN:REPORT_GATE:BEGIN")!==-1);
+    if(!n){
+      console.log("[n8n-push]   glitchtip-gate: WARNING no node carries a GEN:REPORT_GATE block — nothing to gate"); process.exit(0); }
+    const reason=process.env.GT_REASON||"";
+    const enabled=reason?"false":"true";
+    const re=/(\/\/ GEN:REPORT_GATE:BEGIN[\s\S]*?)const REPORTING_ENABLED = (?:true|false);\n\s*const DISABLED_REASON = "(?:[^"\\]|\\.)*";/;
+    if(!re.test(n.parameters.jsCode)){
+      console.log("[n8n-push]   glitchtip-gate: WARNING GEN:REPORT_GATE block missing or malformed — NOT gated"); process.exit(0); }
+    n.parameters.jsCode=n.parameters.jsCode.replace(re,
+      (m,head)=>head+"const REPORTING_ENABLED = "+enabled+";\nconst DISABLED_REASON = "+JSON.stringify(reason)+";");
+    fs.writeFileSync(p, JSON.stringify(w,null,2));
+    console.log("[n8n-push]   glitchtip-gate: REPORTING_ENABLED="+enabled+(reason?" ("+reason+")":""));'
+}
+gate_glitchtip_reporter
+
+# Bulk import in ONE CLI call (n8n >= 2.17.0 handles --separate cleanly) — ~100x fewer process spawns
+# than per-file. import:workflow always imports INACTIVE, so re-activate the active set afterwards.
+# Tags: import:workflow applies each file's `tags` natively (upsert by id) — the blueprint's id'd tags
+# are restored declaratively. (Only NAME-only tags without ids break it via the unique-name constraint;
+# n8n-pull always writes id'd tags, so this is a non-issue.)
+log "Importing workflows (bulk)..."
+docker exec "${N8N_CONTAINER}" n8n import:workflow --separate --input=/tmp/n8n-push-wf \
+  2>&1 | grep -viE '"event"|error tracking|deprecat' | grep -iE 'imported|error' | tail -1 | sed 's/^/[n8n-push]   /'
+
+# ASSERT the import actually landed everything. `import:workflow` is NOT transactional: it stops at
+# the first failure and keeps whatever it already wrote. That is how the shared-tag duplicate-key
+# bug hid for so long — on one machine it collided near the end and imported 80 of 84, which read
+# in CI as a counting discrepancy rather than an import failure; on a fresh one it collided
+# immediately and imported 0. A push that silently delivers a SUBSET of the platform's automations
+# is worse than one that fails, because everything downstream then tests a system nobody described.
+if [ -z "${APP_SCOPE:-}" ]; then          # a scoped push only ever stages one app's workflows
+  _have=$(docker exec -e PGPASSWORD="$(read_env POSTGRES_PASSWORD)" "${PG_CONTAINER}" \
+            psql -U "$(read_env POSTGRES_USER)" -d "$(read_env POSTGRES_DB)" -tAc \
+            'select count(*) from workflow_entity;' 2>/dev/null | tr -d ' \r')
+  if [ -n "${_have}" ] && [ "${_have}" -lt "${STAGED_N:-0}" ] 2>/dev/null; then
+    echo "[n8n-push] FATAL: staged ${STAGED_N} workflow(s) but n8n holds ${_have}." >&2
+    echo "           import:workflow stops at the first failure and keeps what it already wrote," >&2
+    echo "           so this is a PARTIAL import, not a slow one. Re-run it raw to see the cause:" >&2
+    echo "             docker exec ${N8N_CONTAINER} n8n import:workflow --separate --input=/tmp/n8n-push-wf" >&2
+    exit 1
+  fi
+  log "  verified ${_have}/${STAGED_N} workflow(s) present"
+fi
+
+log "Re-activating + PUBLISHING active workflows (bulk; triggers register on restart)..."
+# FAST path: collect the active set's ids in ONE node pass (no per-workflow CLI),
+# then a SINGLE SQL UPDATE.
+#
+# CRITICAL (n8n >= 2.x publish model): `active=true` ALONE is NOT enough. n8n only
+# registers triggers for PUBLISHED workflows — those with a non-null activeVersionId.
+# import:workflow leaves activeVersionId NULL, so a bare `SET active=true` produces
+# DRAFT workflows that the UI shows as "active" but n8n never actually activates
+# (runtime /rest/active-workflows = 0 — a silent false-active). Publishing just means
+# activeVersionId = the current versionId (verified: no workflow_published_version row
+# needed), so we set both in one UPDATE. This is what `publish:workflow` does per-id,
+# but ~61 CLI boots (~286s) collapse to 1 node read + 1 SQL (seconds).
+# Terminology + why both fields: ai/context/archive/indox-pre-2026-09/workflow-state-sync.md
+# Bug that motivated this: issues/n8n-active-state-publish.yaml
+ACTIVE_IDS="$(docker exec "${N8N_CONTAINER}" node -e '
+  const fs=require("fs"),p=require("path"),d="/tmp/n8n-push-wf",o=new Set();
+  for(const f of fs.readdirSync(d)){ if(!f.endsWith(".json")) continue;
+    try{const w=JSON.parse(fs.readFileSync(p.join(d,f),"utf8"));
+        if(w&&w.active&&w.id){const id=String(w.id).replace(/[^A-Za-z0-9_-]/g,""); if(id) o.add(id);}}catch(e){}
+  }
+  process.stdout.write([...o].map(i=>"\x27"+i+"\x27").join(","));' 2>/dev/null)"
+if [ -n "${ACTIVE_IDS}" ]; then
+  N_ACTIVE="$(printf '%s' "${ACTIVE_IDS}" | tr ',' '\n' | grep -c .)"
+  if docker exec -e PGPASSWORD="$(read_env POSTGRES_PASSWORD)" "${PG_CONTAINER}" \
+       psql -U "$(read_env POSTGRES_USER)" -d "$(read_env POSTGRES_DB)" -tAc \
+       "UPDATE workflow_entity SET active=true, \"activeVersionId\"=\"versionId\" WHERE id IN (${ACTIVE_IDS});" >/dev/null 2>&1; then
+    log "  WF_RESULT activated+published=${N_ACTIVE} (bulk SQL: active + activeVersionId)"
+  else
+    log "  WARN bulk activate failed — falling back to per-workflow publish"
+    docker exec "${N8N_CONTAINER}" sh -c '
+      for f in /tmp/n8n-push-wf/*.json; do
+        a=$(node -e "try{process.stdout.write(require(process.argv[1]).active?\"1\":\"0\")}catch(e){process.stdout.write(\"0\")}" "$f" 2>/dev/null)
+        [ "$a" = "1" ] || continue
+        id=$(node -e "try{process.stdout.write(require(process.argv[1]).id||\"\")}catch(e){}" "$f" 2>/dev/null)
+        [ -n "$id" ] && n8n publish:workflow --id="$id" >/dev/null 2>&1 || true
+      done' 2>/dev/null
+  fi
+else
+  log "  no active workflows in blueprint"
+fi
+
+# ── 3b) Default error workflow: wire every ACTIVE real workflow that lacks its own
+# errorWorkflow to the Error Handler (→ GlitchTip Error Reporter → GlitchTip → התראות).
+# The blueprint only sets errorWorkflow on a subset, so failures in extractors/processors
+# never surfaced as notifications (just red bars in any-concurrency). Exclude the error
+# workflows themselves (loop) + Test/_diag/[FV]/[CI]/Seed-Fixtures/MCP (noise during tests).
+# The restart below makes it live (active workflows cache settings at activation).
+# The default MUST be a workflow id that actually exists. It previously defaulted to
+# 'RqAY1Z1i2F7ZaPbe', which does not exist in workflow_entity — so every push stamped a DANGLING
+# errorWorkflow onto each active workflow that lacked one. n8n then logs "Could not find workflow"
+# and creates ZERO execution rows, so the failure is invisible: the alerting chain is silently dead
+# and nothing in the UI says so. Measured 2026-08-05: 21 workflows still carried the dead id.
+#
+# 2026-08-06 — THE EXCLUSION LIST WAS STALE, AND IT BUILT A LOOP. It named 'sAjhxlLTUq9vEL8L', the
+# reporter's OLD id; the workflow is 'glitchtipReporter01' today. So every push stamped
+# errorWorkflow=errorHandler01 onto the GlitchTip reporter — and errorHandler01 CALLS the reporter.
+# Reporter fails -> errorHandler01 fires -> calls reporter -> fails -> ... a self-sustaining cycle
+# (1,205 reporter errors vs 1,481 handler runs in one hour, 2026-08-06 01:10-01:45Z). Both ids are
+# excluded now: the current one to fix it, the old one kept so a stale DB row cannot resurrect it.
+# Verified live 2026-08-06: workflow_entity['glitchtipReporter01'].settings did carry the stamp.
+EH_ID="${INDOX_ERROR_HANDLER_ID:-errorHandler01}"
+if docker exec -e PGPASSWORD="$(read_env POSTGRES_PASSWORD)" "${PG_CONTAINER}" \
+     psql -U "$(read_env POSTGRES_USER)" -d "$(read_env POSTGRES_DB)" -tAc \
+     "UPDATE workflow_entity
+        SET settings = jsonb_set(coalesce(settings::jsonb,'{}'::jsonb),'{errorWorkflow}',to_jsonb('${EH_ID}'::text))::json
+      WHERE active=true AND (settings->>'errorWorkflow') IS NULL
+        AND id NOT IN ('${EH_ID}','glitchtipReporter01','sAjhxlLTUq9vEL8L')
+        AND name !~ '(Test|_diag|\[FV\]|\[CI\]|Seed Fixtures|MCP Server)';" >/dev/null 2>&1; then
+  log "  wired Error Handler onto active workflows missing errorWorkflow (errors -> GlitchTip -> התראות)"
+fi
+
+# ── 4) Restart so re-activated triggers register ──
+# Task-runner containers restart WITH n8n: after an n8n restart the launcher/broker handshake
+# can wedge ("Waiting for launcher's task offer to be accepted..." forever) — every Code node
+# then hangs. Seen on slow CI runners; a clean runner restart deterministically reattaches.
+log "Restarting n8n (+ workers + task runners) so re-activated workflows take effect..."
+dcx restart n8n >/dev/null 2>&1 || true
+# Workers too: CLI import + bulk SQL bypass the Redis pubsub reload events, so long-running
+# workers keep serving a stale in-memory copy (workflow settings like saveDataSuccessExecution
+# silently ignored until worker restart).
+dcx restart n8n-worker-1 n8n-worker-2 >/dev/null 2>&1 || true
+dcx restart n8n-task-runners n8n-worker-1-runners >/dev/null 2>&1 || true
+dcx restart n8n-worker-2-runners >/dev/null 2>&1 || true
+# The restart kills in-flight action chains, whose doc_step locks would otherwise freeze
+# their docs for the full TTL (kills never fire the error workflow) — sweep them now.
+RP="$(grep -E '^REDIS_PASSWORD=' "${REPO_ROOT}/.env" | cut -d= -f2- || true)"
+if [ -n "${RP}" ]; then
+  SWEPT=$(docker exec "redis-${DN}" sh -c "redis-cli -a '${RP}' --no-auth-warning --scan --pattern 'n8n.process_lock.doc_step.*' | while read -r k; do redis-cli -a '${RP}' --no-auth-warning del \"\$k\" >/dev/null && echo x; done | wc -l" 2>/dev/null || echo 0)
+  log "Swept ${SWEPT:-0} stale doc_step lock(s) (restart kills chains; kills leak locks)."
+fi
+log "Done (owner + workflows + credentials restored)."
+log "NOTE: credential secrets decrypt only with the matching N8N_ENCRYPTION_KEY — otherwise re-auth"
+log "      each credential in the UI."

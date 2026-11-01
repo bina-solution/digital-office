@@ -1,0 +1,11 @@
+stateDiagram-v2
+    [*] --> preflight
+    preflight --> refused: docker not 28, ports busy, disk short, DNS mismatch
+    preflight --> fetching: every check passes
+    fetching --> bootstrapping: ref cloned, or bundle checksum verified
+    bootstrapping --> verifying: bbox run returned and health probes answered
+    verifying --> active: checklist green
+    verifying --> failed: any capability check fails and names itself
+    failed --> bootstrapping: retry is an ensure, never a blind re-run
+    active --> drifted: running commit differs from the declared ref, or a probe regresses
+    drifted --> active: re-ensure

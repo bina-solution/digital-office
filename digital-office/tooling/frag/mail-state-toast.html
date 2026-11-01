@@ -1,0 +1,86 @@
+<section class="screen" data-screen="mail-state-toast">
+<style>
+[data-screen="mail-state-toast"] .mlx-sb{background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:16px;padding:11px 22px}
+[data-screen="mail-state-toast"] .mlx-err{display:inline-flex;align-items:center;gap:7px;color:var(--red);font-weight:700;font-size:13.5px;white-space:nowrap}
+[data-screen="mail-state-toast"] .mlx-err .d{width:8px;height:8px;border-radius:50%;background:var(--red)}
+[data-screen="mail-state-toast"] .mlx-locbtn{display:inline-flex;align-items:center;gap:8px;border:1px solid #bfe0d1;color:var(--green-d);background:#fff;border-radius:9px;padding:7px 14px;font-weight:700;font-size:13.5px;cursor:pointer}
+[data-screen="mail-state-toast"] .amber{color:#9a5314;font-size:13.5px;font-weight:600}
+[data-screen="mail-state-toast"] .mlx-cols{position:relative;display:flex;gap:20px;padding:20px 24px;flex:1;min-height:0}
+[data-screen="mail-state-toast"] .mlx-labels{width:238px;min-width:238px;display:flex;flex-direction:column}
+[data-screen="mail-state-toast"] .mlx-lhead{display:flex;align-items:center;gap:8px;font-size:16px;font-weight:800;color:var(--ink);padding:2px 4px 14px}
+[data-screen="mail-state-toast"] .mlx-all{display:flex;align-items:center;justify-content:center;gap:8px;background:var(--green);color:#fff;border-radius:10px;padding:11px;font-weight:700;font-size:15px}
+[data-screen="mail-state-toast"] .mlx-sec{color:var(--muted);font-size:13px;font-weight:700;margin:18px 4px 6px}
+[data-screen="mail-state-toast"] .mlx-more{display:flex;align-items:center;justify-content:space-between;color:var(--muted);font-size:13px;padding:4px}
+[data-screen="mail-state-toast"] .mlx-acct{margin-top:auto;color:var(--muted);font-size:12.5px;text-align:right;padding:8px 4px}
+[data-screen="mail-state-toast"] .mlx-list{flex:1;display:flex;flex-direction:column;min-width:0}
+[data-screen="mail-state-toast"] .mlx-listhead{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:2px 4px 16px}
+[data-screen="mail-state-toast"] .mlx-title{display:flex;align-items:center;gap:10px;font-size:24px;font-weight:800;color:var(--ink)}
+[data-screen="mail-state-toast"] .mlx-search{border:1px solid var(--line);border-radius:999px;padding:9px 18px;color:#9aa;font-size:13.5px;background:#fff;white-space:nowrap}
+[data-screen="mail-state-toast"] .mlx-card{flex:1;background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+[data-screen="mail-state-toast"] .mlx-card table.tbl td{padding:11px 16px}
+[data-screen="mail-state-toast"] .mlx-card .day-row td{padding:6px 16px;color:var(--muted);font-size:12px}
+[data-screen="mail-state-toast"] .mlx-count{text-align:right;color:var(--muted);font-size:13px;padding:10px 4px 0}
+[data-screen="mail-state-toast"] .mlx-toast{position:absolute;left:50%;bottom:26px;transform:translateX(-50%);background:#12241d;color:#fff;border-radius:12px;padding:14px 34px;font-weight:700;font-size:15px;z-index:5;box-shadow:0 14px 34px rgba(0,0,0,.30)}
+</style>
+<div class="viewport">
+  <aside class="dv-rail">
+    <div class="logo">מ</div>
+    <div class="ri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></div>
+    <div class="ri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></div>
+    <div class="ri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M3 7a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div>
+    <div class="ri on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg></div>
+    <div class="ri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5 5h14l3 7v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-6z"/></svg></div>
+    <div class="ri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5.7a8.5 8.5 0 1 1 16.1-3.8z"/></svg></div>
+    <div class="ri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
+    <div class="ri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></div>
+    <div class="ri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><rect x="2" y="3" width="20" height="6" rx="1"/><rect x="2" y="9" width="20" height="6" rx="1"/><rect x="2" y="15" width="20" height="6" rx="1"/></svg></div>
+    <div class="ri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></div>
+    <div class="ri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg></div>
+    <div class="ri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><circle cx="8" cy="15" r="4"/><path d="m10.85 12.15 8.15-8.15 2 2-2 2 2 2-3 3-2-2-2 2"/></svg></div>
+    <div class="ri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-2.82 1.17V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 8 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 8.6a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9z"/></svg></div>
+  </aside>
+  <main class="hm-main">
+    <div class="hm-top" style="position:relative"><div class="grp"><div class="hm-title">מייל</div><button class="hm-burger">☰</button></div><div class="grp" style="position:absolute;left:262px;top:50%;transform:translateY(-50%)"><div class="hm-search"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4-4"/></svg><span>חיפוש</span><span class="kbd">Ctrl K</span></div></div><div class="grp left"><span style="color:var(--muted);font-size:13px">תיבת דואר עסקית</span><div class="pill-amber">⚙ 7 שלבי התקנה</div></div></div>
+    <div class="mlx-sb">
+      <span class="mlx-err"><span class="d"></span> שגיאה</span>
+      <button class="mlx-locbtn">מקומי <span style="font-size:11px">▾</span></button>
+      <button class="btn btn-sm" style="line-height:1.1;text-align:center;padding:5px 12px">+<br>חבר חשבון חדש</button>
+      <div class="row" style="gap:12px;margin-inline:auto">
+        <span class="muted" style="font-size:13px;white-space:nowrap;display:inline-flex;align-items:center;gap:6px"><span>🕐</span>נבדק ב‑14:56</span>
+        <button class="btn btn-sm" style="padding:5px 9px">⟳</button>
+        <span class="amber">השירות לא השיב לבדיקת החיבור המתוזמנת. ייתכן שהוא מופעל מחדש כרגע.</span>
+      </div>
+    </div>
+    <div class="hm-scroll" style="display:flex;flex-direction:column">
+      <div class="mlx-cols">
+        <div class="mlx-labels">
+          <div class="mlx-lhead"><span>🚨</span><span>דורש טיפול</span></div>
+          <div class="mlx-all"><span>📥</span> כל הדואר</div>
+          <div class="mlx-sec">תוויות סנכרון</div>
+          <div class="mlx-more">תוויות נוספות <span>▾</span></div>
+          <div class="mlx-acct">מקומי · indox@local.test</div>
+        </div>
+        <div class="mlx-list">
+          <div class="mlx-listhead">
+            <div class="mlx-title"><span>📥</span> כל הדואר</div>
+            <div class="mlx-search">חיפוש… (גם from:&quot;…&quot; ו‑label:’וכו’)</div>
+          </div>
+          <div class="mlx-card">
+            <table class="tbl">
+              <thead><tr><th>סטטוס</th><th>מאת</th><th>נושא · תוויות</th><th>תאריך</th></tr></thead>
+              <tbody>
+                <tr class="day-row"><td colspan="4">היום</td></tr>
+                <tr><td class="muted">—</td><td>מערכת INDOX</td><td>מסמך התקבל ועובד</td><td class="muted">היום 14:52</td></tr>
+                <tr><td class="muted">—</td><td>לקוח חדש</td><td>בקשה להצעת מחיר</td><td class="muted">היום 14:52</td></tr>
+                <tr><td class="muted">—</td><td>ספק הענן בע&quot;מ</td><td>חשבונית #INV-2048 — יולי</td><td class="muted">היום 14:52</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="mlx-count">3 הודעות</div>
+        </div>
+        <div class="mlx-toast">התווית נוספה</div>
+      </div>
+    </div>
+  </main>
+</div>
+</section>

@@ -1,0 +1,68 @@
+{
+  "id": "app-management",
+  "title": {
+    "he": "ניהול אפליקציות",
+    "en": "App Management"
+  },
+  "layer": 1,
+  "kind": "service",
+  "version": "1.0.0",
+  "summary": {
+    "he": "מרכז הבקרה של הפלטפורמה — התקנה, הפעלה, כיבוי והסרה של אפליקציות",
+    "en": "The platform control plane — install, enable, disable and uninstall apps"
+  },
+  "capabilities": [
+    {
+      "name": "control-plane",
+      "type": "protocol",
+      "endpoint": "http://app-management:8080"
+    }
+  ],
+  "use": [
+    {
+      "capability": "data-management",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
+    }
+  ],
+  "connections": [],
+  "compose": "docker-compose.yml",
+  "routing": [
+    {
+      "host": "apps",
+      "port": 8080,
+      "auth": "sso",
+      "module": {
+        "group": "תשתית",
+        "icon": "grid",
+        "embed": true,
+        "alias": "app-management",
+        "id": "apps",
+        "name": "אפליקציות",
+        "desc": "כל האפליקציות — פתיחה, הפעלה, כיבוי, התקנה והסרה",
+        "order": 9,
+        "url_env": "APP_MANAGEMENT_URL",
+        "url": "http://app-management:8080"
+      }
+    }
+  ],
+  "health": {
+    "structural": "auto",
+    "probe": {
+      "http": "http://app-management:8080/healthz",
+      "interval": "30s"
+    }
+  },
+  "data": {
+    "volumes": [],
+    "on_uninstall": "keep"
+  },
+  "resources": {
+    "cpus": "0.5",
+    "memory": "256M"
+  },
+  "observability": {
+    "sentry_platform": "python"
+  }
+}

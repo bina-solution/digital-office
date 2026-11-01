@@ -1,0 +1,144 @@
+# yaml-language-server: $schema=./schema.json
+title: What changed in the INDOX pipeline overnight 2026-08-10/11, why, and how each was proven. Written so none of it has to be re-derived.
+opened: '2026-08-11'
+severity: medium
+status: resolved
+summary: What changed in the INDOX pipeline overnight 2026-08-10/11, why, and how each was proven. Written so none of it has to be re-derived.
+description: |
+  id: indox-night-of-2026-08-10-fixes
+  As first recorded — opened: 2026-08-11T02:10Z · severity: (none was recorded; `medium` is this conversion's) · status: landed-and-verified
+
+  ## Headline metrics
+
+  ```yaml
+  note: COMPLETED counted by STATUS delta, never by ACTION_LOG stamp (only ~28% of completed rows carry one) and never by updated_at (~4,500 rows were rewritten backwards). Base progress is a POPULATION DELTA of BASE_EXTRACTION_COMPLETED, not a touch count -- a touch count cannot distinguish a row that EARNS the flag inside the window from one being re-extracted.
+  session_start_to_0210Z:
+    completions_per_hour:
+      from: 12
+      to: 85
+    duplicate_actions_per_doc:
+      from: 9.93
+      to: 0.0
+    single_value_extractions:
+      from: 47
+      to: 5
+      target: 0
+    false_max_iterations:
+      from: 45
+      to: 0
+    action_router_p99:
+      from: 605s
+      to: ~40s
+    per_type_extraction:
+      from: 602s
+      to: 2-4s
+    error_rate:
+      from: 279/hr
+      to: 0.15% between import windows
+    net_queue:
+      from: growing
+      to: -70/hr draining
+  ```
+
+  ## Fixes
+
+  ```yaml
+  - id: transport
+    what: Six workflows called the Gemini/BS extractors over httpRequest to /webhook/invoice_extractor with timeout 600000.
+    why_it_was_slow: 'A webhook call creates a NEW Bull job while the caller already holds one of 16 slots, so it waits for a slot that cannot free until it finishes, and burns the full timeout. executeWorkflow runs INTEGRATED in the caller''s slot. Measured: extract_invoice_google_ai consumed 224 of 480 available slot-minutes -- 47% of machine capacity.'
+    why_it_hid: BaseDocEx01 had been converted long ago and ran at 28s, but its node is STILL NAMED "Extract Base via Webhook". Two transports, identical names, 20x difference. A leftover ZZAbGemProbe01 shows someone had previously A/B-tested exactly this.
+    files:
+    - ShipmentDocEx01
+    - InvoiceDocEx01
+    - BsDocEx01
+    - indoxV2ActionsGlobal01
+    - indoxV2ActionsGDoc01
+    - indoxV2ActionsShip01
+    - indoxV2ActionsBS01
+  - id: P1
+    what: 'indoxV2ActionsGlobal01 / Decide DOC BASE Action: iteration counting now counts DISTINCT triples.'
+    was: const _iter = (String(normDoc.ACTION_LOG || '').match(/\d{13}/g) || []).length;
+    now: new Set((String(normDoc.ACTION_LOG || '').match(/,\s*[^,0-9][^,]*,\s*1\d{12},\s*\d+/g) || []).map(s => s.trim())).size
+    why: 'ACTION_LOG duplicated itself (see P2), inflating the count 5.5-6.2x, worst observed 12.5x in the live population (a single triple repeated 67x inside one row). 501 documents were over the 50-attempt cap by occurrence count and only 8 by true count -- 98% of max-outs were false, at ~45-62/hour, and 199 of the retired documents were typed, companied and one dispatch from COMPLETED. Deduping on the TRIPLE, not the bare timestamp: two different actions can share a millisecond because the lock key is ID::ACTION, so they run concurrently by design.'
+  - id: P2
+    what: 'Postgres function incdoc_action_log_append: append only the non-overlapping tail.'
+    was: merged := old_log || ', ' || new_log;   -- when position(old_log in new_log) = 0
+    why: Writers send $json.ACTION_LOG + ', <entry>' computed from the snapshot handed to them AT DISPATCH. Concurrent actions on one document are BY DESIGN (lock key ID::ACTION), so when the row moved between dispatch and write the stale prefix failed the containment test and the ENTIRE history was re-appended. One CREATE OR REPLACE repairs all 76 writer expressions across 5 workflows at once.
+    subtlety_that_nearly_broke_it: 'Pure longest-common-prefix DECAPITATES entries. When two writers log the SAME action name, the LCP swallows the name and the appended tail becomes a nameless "<ts>, <execid>" -- precisely the one-shot-marker loss the fix exists to prevent. The deployed version adds a mid-entry guard: if the logs diverge on a purely numeric token the divergence is INSIDE an entry, so step back one token. Stepping back can only ever append MORE, never less.'
+    proof: 'Tested out of band on 1,419 REAL production merge pairs, recovered by splitting logs at the '', , '' seam the old function left behind. Old function created 799 duplicate entries; new function 0. Append-only and no-entry-lost held 1419/1419 for both. Live after 10 minutes: inflation 1.000, zero new seams, zero rows lost an entry.'
+    locking: 'Catalog-only swap. Measured in a rolled-back transaction: NO lock of any kind on public.incoming_documents.'
+  - id: P3
+    what: 'Decide DOC BASE Action: the STATUS === ''MAX_ITERATIONS'' short-circuit is now conditional on _iter >= _maxIter.'
+    why: It ran BEFORE _maxIter was computed and returned no_action_max_iterations unconditionally, so MAX_ITERATIONS was a one-way door. Defensible while the counter was inflated; not once P1 landed. _maxIter was moved above the guard (order matters -- declaring it after would be a TDZ error).
+    critical_dependency: P3 WAS INERT ON ITS OWN for 40 minutes. Get Changed Docs excluded MAX_ITERATIONS at the top of its eligibility predicate, so those rows were never dispatched to the gate P3 opened. Only 8 of 346 escaped, via the driver's internal check_next/group_action cascade which does not re-consult the poll. Three locks; opening two changes nothing.
+  - id: eligibility
+    what: indoxApiSupabase01 / Get Changed Docs
+    changes:
+    - removed 'MAX_ITERATIONS' from the elig WHERE's not-in list; KEPT it in the duplicate-detector subquery (correct -- a maxed row should not count as a duplicate twin)
+    - added `or ("STATUS" = 'NEEDS_REVIEW' and "NEXT_RETRY_AT" = 'infinity')` to the retry arm, freeing 261 permanently walled rows
+    - added MISSING_LINK, ACTION_REQUIRED, MAX_ITERATIONS to the recov flag so released rows land in the BOUNDED s_recov slice
+    reversal_of_a_documented_decision: 'The file said MAX_ITERATIONS was "DELIBERATELY still excluded" because an earlier arm admitted them unfiltered and burned 25% of pickup capacity on rows decide answered no_action_* for. That reasoning was correct AT THE TIME. P3 removes its premise: decide now returns real actions for the 338 under-cap rows.'
+    proof: 'At +20 min: 11 MAX_ITERATIONS and 13 NEEDS_REVIEW documents touched per 10-minute sample, dispatching to Selection & Score / Extract Per Type / Mark Invoice Completed1 -- real actions, not no-ops. runs_per_doc = 1.00 on every action, so they walk their chains rather than churning. 16 formerly-MAX_ITERATIONS documents have reached COMPLETED.'
+  - id: P4
+    what: 'Build: UPDATE COMPANY_ID no longer stamps FIGURE_COMPANY_COMPLETED unconditionally.'
+    why: apitools sheds under load (93% of /documentOcr calls returned 429). indoxV2UploadApiTools01 / OCR Shed correctly emits retryable:true, but the failure path stamped the completion flag anyway, closing the exact gate the retry depended on. All 114 API_TOOLS_FAILED rows carried FIGURE_COMPANY_COMPLETED=true with no COMPANY_ID; a transient 429 permanently relabelled the document MISSING_COMPANY_ID.
+  - id: P5
+    what: errorHandler01 and four inline retryOrDeadletter blocks stop minting NEEDS_REVIEW and NEXT_RETRY_AT='infinity'.
+    why: 'Owner''s ruling: need_review "is madeup by some agent, originaly should be one of the other statuses". 547 of 1,206 had RETRY_COUNT=0 so could not have come from a dead-letter at all; 543 carried no ERROR; 131 had no ACTION_LOG. These recorded facts about a RUN, not verdicts about a DOCUMENT -- the distinction the estate already articulated in Terminalize Stalled.'
+  - id: P9
+    what: indoxGmailBSDownloader01 sets STATUS=TO_EXTRACT (was omitted entirely).
+    why: All 54 NULL-STATUS rows were SYNC_NAME='gmail-bs'. Correctness, not a blocker -- NULL was already admitted by pickup.
+  ```
+
+  ## Deliberately not done
+
+  ```yaml
+  - id: P7
+    what: Flipping load_settings:true so the owner's OldDocumentMonthsBack=6 reaches anyOldDate (which runs at a hardcoded 24).
+    why_not: 'Replaying the live anyOldDate over all 17,904 rows: 1,276 documents would flip to OLD, INCLUDING 414 already COMPLETED. OLD is excluded from pickup, so the pipeline could never undo it -- 414 finished client documents would be irreversibly un-finished. Also lower value than it looks: syncV3Unit0001 already enforces the 6-month window AT INGESTION, so the 24 only governs terminalisation of what is already in the table.'
+  - id: mark_completed_gate
+    what: Adding hasAllRequiredFields() to the GDoc and Shipment mark_completed sites (BS has it, they do not).
+    why_not: Real defect -- 1,393 of 6,618 COMPLETED rows have no DOC_ID. But mark_completed is the LAST resort and its else-branch is no_action_already_completed, so a naive gate converts a false-clean into a silent STALL. BS's gdoc contract applied verbatim would block 2,385 live documents (INVOICE 1,342, SHIPMENT 918, ORDER 125), and 329 of those have SHIPMENT_ID_COMPLETED set with the value absent -- "we looked, there is none", which this estate treats as an ANSWER. A narrower DOC_ID gate catches only 403 of 1,393. Every version trades a cosmetic inaccuracy for a real outage.
+  - id: per_type_backfill
+    what: Re-running the 5,092 COMPLETED documents that never passed the second extraction point.
+    why_not: They are not broken -- 6,617 of 6,618 have a COMPANY_ID, all have a TYPE. They completed under the old single-point pipeline. `fully` measures REFACTOR COVERAGE, not data loss. Re-running them would roughly double remaining work on a saturated box. Owner decision, not an agent's.
+  ```
+
+  ## Still blocked
+
+  ```yaml
+  - see: issues/indox-scheduled-sweep-stalled-2026-08-11.yaml
+    summary: 'Hourly full-table sweep fails every run (n8n hardcodes maxStalledCount:0; sweep runs 601-830s against a 300s lock). Fix written to platform-base/n8n/docker-compose.yml but needs the worker containers RECREATED, which the permission classifier declined. NOTE: remote workers being brought up on the portable box carry the corrected lock from line one, so the sweep may start succeeding there without the local recreation.'
+  ```
+
+  ## Protected against reconcile
+
+  ```yaml
+  why: ./bbox run POSTs /api/reconcile and pushes repo blueprints over live workflows. A fix that exists only in the live DB is one reconcile from gone.
+  synced:
+  - apps/indox/blueprint/n8n/indoxV2ActionsGlobal01.json -- P1 and P3, 94 nodes preserved, backup in scratchpad
+  - apps/indox/blueprint/fixtures/schema.sql -- the P2 trigger function, quoting verified by executing the block inside a rolled-back transaction (the file's own header records that a quoting error here once broke the entire schema apply)
+  not_yet_synced: P4/P5/P6/P9 workflow edits made by lanes -- worth a sweep before any reconcile.
+  ```
+
+  ## Verification of p1 and p3
+
+  ```yaml
+  method: Ran the LIVE Decide DOC BASE Action code against four constructed documents. n8n execute could not be used -- it binds task-broker port 5679, already held by the live instance.
+  results:
+  - 60 DUPLICATE triples, IN_PROGRESS  -> __route_gdoc__           (not maxed)      PASS
+  - 60 DISTINCT triples, IN_PROGRESS   -> mark_max_iterations      (ceiling intact) PASS
+  - MAX_ITERATIONS, 5 distinct         -> __route_gdoc__           (released)       PASS
+  - MAX_ITERATIONS, 60 distinct        -> no_action_max_iterations (terminal intact) PASS
+  ```
+
+  ## Traps that cost time tonight
+
+  - ACTION_LOG tokens are HUMAN DISPLAY NAMES ('Extract Base Doc', 'STATUS COMPLETED', 'mark_max_iterations'), not action slugs. Two queries keyed on lowercase slugs returned 0 rows, which reads exactly like 'nothing is happening'.
+  - In psql, (x = y)::text yields 'true'/'false', NOT 't'/'f'. A bash loop comparing to "t" never matched and deactivated a live router six times -- 221 errors, 191 failed dispatches.
+  - Reconstructing a gate condition from null columns is NOT evidence of what the machine does. A gate-firing table built that way wrongly blamed BALANCE_SHEET for single-value extraction; Decide BS Action never applies that gate.
+  - Get Changed Docs contains THREE `not in (...)` lists. A regex testing all of them reported MAX_ITERATIONS 'still excluded' twice when only the duplicate-detector's copy matched. Check WHICH occurrence.
+  - .generated/compose.runtime.yml is a stale Jul 28 artifact. The stack composes from .generated/compose.yml, a 26-line include: file that pulls platform-base/*/docker-compose.yml directly -- so editing the source IS editing what deploys. Reading the stale file produced a wrong conclusion that settings had never been deployed.
+  - n8n import:workflow sets active=false AND activeVersionId=NULL. Checking only active=true after re-activating is a FALSE PASS -- activeVersionId can still point at the old version. Verify activeVersionId = versionId AND grep the live nodes for the change.
+  - Executions sitting in status='running' for hours are orphan DB rows, not held slots. Verify against bull:jobs:active before concluding capacity is lost.
+  - A webhook execution's startedAt is JOB CREATION time, so stoppedAt-startedAt includes Bull queue wait. With ~2,000 jobs waiting this inflates every duration and makes queue wait look like slot occupancy.

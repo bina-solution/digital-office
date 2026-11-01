@@ -1,0 +1,1340 @@
+<!doctype html>
+<html>
+<meta charset="utf-8"/>
+<title>חיבורים ומפתחות</title>
+<style>
+:root{   /* this screen's own: type — the colours are the office's palette, in the block below */
+  --font:"Segoe UI",system-ui,-apple-system,"Noto Sans Hebrew","Assistant",Arial,sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+/* @bina-theme-tokens:start */
+/* OLIVE GROVE — the one palette of the office (the owner, 2026-10-07 · DGO-450). Four hues, sampled
+   from his mock-up, and the ground they stand on. A screen never writes a colour: it names one of
+   these. Each hue is the colour itself (a FILL — a button, a bar, a dot), «-d» for text and thin
+   lines on the ground (4.5:1 or more), «-soft» and «-line» for a tint and its hairline, and «-ink»
+   for what is written ON the fill. The role names every screen already uses point at them:
+   (no backtick in this block: one of its copies lives inside a script's template string)
+     olive  the brand and the main action · what is well, what is done
+     sky    what is in motion, what only informs · a link
+     lime   look here — a warning, something waiting
+     plum   a person must act — a failure, a removal, the one final action
+   Contrast, measured (WCAG): ink on the ground 13.7 · muted 4.65 · light text on olive 5.51 and on
+   plum 9.54 · ink on lime 6.88 · its ink on sky 6.32 · sky-d 4.61 · lime-d 4.70 · violet 5.32 ·
+   on the desk: its ink 6.32 (dark: 13.96), and 11.2 where the sky pales (dark: 5.12). */
+:root,:root[data-theme="light"]{
+  color-scheme:light;
+  accent-color:var(--accent);   /* the browser's OWN controls - a checkbox, a radio, a range, a progress bar - on both grounds: said once, here (it was said for eight single controls, and every other one was the browser's blue) */
+  --bg:#f3f5f7; --surface:#fff; --surface-2:#f9fafb; --ink:#1f2a17; --muted:#6a7068; --line:#dcdfde;
+  --olive:#56693f; --olive-d:#475734; --olive-soft:#e7eae4; --olive-line:#bfc6b6; --olive-ink:#f3f5f7;
+  --sky:#7baae3; --sky-d:#2a6fc4; --sky-soft:#edf3fb; --sky-line:#cddff4; --sky-ink:#13263f;
+  --lime:#a9b84c; --lime-d:#69732e; --lime-soft:#f3f5e6; --lime-line:#dee4bb; --lime-ink:#1f2a17;
+  --plum:#5b3349; --plum-d:#4a303b; --plum-soft:#e8e2e6; --plum-line:#c1b1ba; --plum-ink:#f3f5f7;
+  --accent:var(--olive); --accent-d:var(--olive-d); --accent-soft:var(--olive-soft); --accent-ink:var(--olive-ink);
+  --blue:var(--sky-d); --amber:var(--lime-d); --red:var(--plum);
+  --violet:#7c5c6d;   /* plum, lifted a fifth toward white: someone has to look — nothing has failed */
+  --ok:var(--olive); --warn:var(--lime-d); --danger:var(--plum); --info:var(--sky-d);
+  --ok-soft:var(--olive-soft); --warn-soft:var(--lime-soft); --danger-soft:var(--plum-soft); --info-soft:var(--sky-soft);
+  --red-soft:var(--plum-soft); --amber-soft:var(--lime-soft); --blue-soft:var(--sky-soft); --violet-soft:var(--plum-soft);
+  --side:var(--olive); --side-ink:#f3f5f7; --side-mut:#dce1da; --side-line:#788765;
+  --desk:var(--sky); --desk-ink:var(--sky-ink);   /* desktop mode's ground is the sky (the owner, DGO-452), and what is written straight on it */
+  --scrim:rgba(31,42,23,.5);                      /* what dims a screen behind a pop-up */
+  --shadow:0 1px 3px rgba(31,42,23,.08),0 6px 24px rgba(31,42,23,.06);
+  --shadow-lg:0 20px 60px rgba(31,42,23,.28);
+  /* ONE COLOUR AND ONE ANIMAL PER OFFICE (the owner, 2026-10-09 · flt-002). When offices are linked,
+     a person reads WHICH office a thing belongs to without opening it, so each office gets a hue of
+     its own. The hue is an IDENTITY and never a health state: an office that stopped answering keeps
+     its colour, and the quiet mark is the one that says "not answering". Each is an ALIAS of the
+     palette's own hue — no fourth value is invented, and because the ground re-points the hue, the
+     office mark follows the ground by itself. Each office's animal (elephant, deer, eagle) is a
+     glyph of bina-icons.js. */
+  --office-hp:var(--muted);   /* hp · elephant — grey: the heavy laptop at home, in the palette's own grey */
+  --office-mac:var(--lime);   /* macbook · deer — yellow: the palette has one yellow and it is lime. A FILL, so what is written ON it is --lime-ink, never this */
+  --office-vps:var(--sky-d);  /* vps · eagle — deep sky blue, «the eagle in the clouds». THE OWNER'S OWN CHOICE (2026-10-09, in writing: vps = נשר + כחול-שמיים) — this line is the colour he picked, not a default kept for him */
+}
+
+/* ── A LINKED OFFICE'S MARK, BY NAME (flt-004) ───────────────────────────────────────────────
+   The link carries a NAME — mark: {color, animal} in the catalog, from the office's own identity
+   — and never a value: the office that DRAWS a linked tile owns the pixels, so it paints the name
+   with its own palette. These seven rules are that translation, one per family above; a screen sets
+   data-office-hue="lime" and paints var(--office-hue).
+   A name this file does not know paints nothing, which is why the vocabulary in
+   apps/dgo-extend/identity.py may only name families that exist here — and why --red and --ok
+   are not among them: they mean «danger» and «it is well» on every screen in the office. */
+[data-office-hue="grey"]   { --office-hue:var(--muted); }
+[data-office-hue="lime"]   { --office-hue:var(--lime); }
+[data-office-hue="sky"]    { --office-hue:var(--sky-d); }
+[data-office-hue="olive"]  { --office-hue:var(--olive-d); }
+[data-office-hue="plum"]   { --office-hue:var(--plum); }
+[data-office-hue="blue"]   { --office-hue:var(--blue); }
+[data-office-hue="violet"] { --office-hue:var(--violet); }
+/* the dark ground is the same four hues on the palette's own ink, and the SAME legend. Olive on that
+   ink is 2.5:1, so its text step there is olive LIFTED — its own hue and saturation, lighter (7.14
+   on a card, 4.82 on its own tint) — and the brand, the main action and «it is well» take that step.
+   Lime stays «look here» and the sky «in motion», as on the light ground: were lime the accent here
+   (it was, for a day), a warning, a selection and «it is well» were one colour. Each «-d» on its
+   own «-soft» there, measured: olive 4.82 · sky 4.62 · lime 4.63 · plum 4.71. */
+@media (prefers-color-scheme:dark){
+  :root{ color-scheme:dark;
+         --bg:#141b0f; --surface:#1f2a17; --surface-2:#192213; --ink:#f3f5f7; --muted:#a2a8a2; --line:#414a3b;
+         --olive-d:#a5ba8c; --olive-soft:#384629; --olive-line:#56693f;
+         --sky-d:#7baae3; --sky-soft:#2e3f38; --sky-line:#4d6a8c;
+         --lime-d:#a9b84c; --lime-soft:#3b4622; --lime-line:#69732e;
+         --plum-d:#ad99a4; --plum-soft:#402f33; --plum-line:#7c5c6d;
+         --accent:var(--olive-d); --accent-ink:var(--surface);
+         --red:#ad99a4; --violet:#bdadb6; --danger:#ad99a4; --ok:var(--olive-d); --side:var(--surface);
+         --desk:var(--sky-ink); --desk-ink:var(--ink); --scrim:rgba(0,0,0,.6);
+         --shadow:0 1px 3px rgba(0,0,0,.4),0 6px 24px rgba(0,0,0,.3);
+         --shadow-lg:0 20px 60px rgba(0,0,0,.55); }
+}
+:root[data-theme="midnight"]{
+  color-scheme:dark;
+  --bg:#141b0f; --surface:#1f2a17; --surface-2:#192213; --ink:#f3f5f7; --muted:#a2a8a2; --line:#414a3b;
+  --olive-d:#a5ba8c; --olive-soft:#384629; --olive-line:#56693f;
+  --sky-d:#7baae3; --sky-soft:#2e3f38; --sky-line:#4d6a8c;
+  --lime-d:#a9b84c; --lime-soft:#3b4622; --lime-line:#69732e;
+  --plum-d:#ad99a4; --plum-soft:#402f33; --plum-line:#7c5c6d;
+  --accent:var(--olive-d); --accent-ink:var(--surface);
+  --red:#ad99a4; --violet:#bdadb6; --danger:#ad99a4; --ok:var(--olive-d); --side:var(--surface);
+  --desk:var(--sky-ink); --desk-ink:var(--ink); --scrim:rgba(0,0,0,.6);
+  --shadow:0 1px 3px rgba(0,0,0,.4),0 6px 24px rgba(0,0,0,.3);
+  --shadow-lg:0 20px 60px rgba(0,0,0,.55);
+}
+/* THE KEYBOARD'S RING - what the browser draws around the stop the keyboard is on, in the palette, wherever
+   a part draws none of its own. It has no specificity at all (:where), so any rule of a part wins. Two
+   screens said this for themselves; on the others nearly every stop wore the browser's ring (DGO-455).
+   A field keeps the offset it has - fourteen rules draw a field's own outline and say no offset. An area
+   (a scroll box, a table) takes the ring inside, where nothing clips it; a control takes it outside,
+   where a filled button does not hide it. */
+:where(:focus-visible){outline:2px solid var(--accent)}
+:where(:focus-visible:not(a,button,summary,[role=button],input,select,textarea)){outline-offset:-2px}
+:where(a,button,summary,[role=button]):focus-visible{outline-offset:2px}
+/* HEBREW AT A HEAVY WEIGHT - on Windows, where the first family of --font is installed. "Segoe UI" has its
+   Hebrew in Light, Regular, Semibold and Bold. Asked for 800 or 900 the browser takes the family's Black
+   face, which has none, and so has every family after it - so the Hebrew of every title at 800 was drawn in
+   the system's last-resort serif, thin, beside Latin in Black: «חשבונות ומראות» at 20px is 150px wide at 700
+   and 120px at 800 (Chrome 154; the screens ask for 800 in 167 places, the question's title among them).
+   These faces give the family's HEBREW RANGE the faces that have it. A family a sheet names is no longer the
+   system's for those characters, so every weight and both styles are named, each as the system resolves it:
+   measured, only upright 800 and 900 change. Any other character is not theirs and goes on to the next
+   family the screen names - system-ui in --font, on Windows the same faces, Black included - which is why
+   G27 asks that system-ui follows wherever a screen names this family itself. Where the family is not
+   installed nothing here resolves and nothing changes. */
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Light");font-weight:100 300;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI");font-weight:400;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Semibold");font-weight:500 600;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Bold");font-weight:700 900;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Light Italic");font-weight:100 300;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Italic");font-weight:400;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Semibold Italic");font-weight:500 600;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Bold Italic");font-weight:700 900;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+/* @bina-theme-tokens:end */
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--font);font-size:14px;line-height:1.5;direction:rtl;-webkit-font-smoothing:antialiased}
+.mono{font-family:var(--mono);direction:ltr;unicode-bidi:isolate}
+.wrap{max-width:1000px;margin:0 auto;padding:18px 22px 64px}
+button{font-family:inherit;cursor:pointer;border:none;background:none}
+.hidden{display:none!important}
+
+/* ── utility bar ── */
+.bar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:16px}
+.brand{display:flex;align-items:center;gap:9px}
+.brand .mk{width:30px;height:30px;border-radius:9px;background:var(--olive);color:var(--olive-ink);
+  display:grid;place-items:center;font-size:15px;box-shadow:var(--shadow)}
+.brand b{font-size:16px;font-weight:700;letter-spacing:-.2px}
+.bar .grow{flex:1}
+.hstrip{display:flex;align-items:center;gap:14px;font-size:12.5px;color:var(--muted);font-weight:600}
+.hstrip .hi{display:flex;align-items:center;gap:6px;white-space:nowrap}
+.hstrip .d{width:8px;height:8px;border-radius:50%}
+.hstrip .d.ok{background:var(--ok)} .hstrip .d.need{background:var(--violet)} .hstrip .d.bad{background:var(--red)} .hstrip .d.tot{background:var(--muted)}
+.hstrip b{color:var(--ink);font-variant-numeric:tabular-nums;font-size:13.5px}
+.abtns{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.btn{background:var(--accent);color:var(--accent-ink);font-weight:600;padding:8px 14px;font-size:13px;border-radius:9px;display:inline-flex;align-items:center;gap:6px;transition:.12s}
+.btn:hover{background:var(--accent-d)}
+.btn.ghost{background:var(--surface);border:1px solid var(--line);color:var(--ink)}
+.btn.ghost:hover{border-color:var(--accent);color:var(--accent-d);background:var(--accent-soft)}
+.btn.danger{background:var(--red);color:var(--surface)} .btn.danger:hover{background:var(--plum-d)}
+.btn.sm{padding:6px 11px;font-size:12.5px}
+/* (what a finger hits is 30px each way: a dialog's buttons were 29 high as one font draws their line and 30 as
+   another does - under a finger a button's height is said, not left to the font) */
+@media (pointer:coarse){.btn{min-height:30px}}
+/* the action row is ONE family: one height, a label on one line, the primary first and the
+   destructive last — outlined, and red only when it is pointed at */
+.abtns .btn{height:32px;padding:0 12px;white-space:nowrap}
+.btn.ghost.danger{background:transparent;color:var(--red);border:1px solid color-mix(in srgb, var(--red) 35%, var(--line))}
+.btn.ghost.danger:hover{background:var(--red);border-color:var(--red);color:var(--surface)}
+
+/* ── tabs + search ── */
+.nav{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.grow{flex:1}
+.search{position:relative;min-width:180px;max-width:270px;flex:1}
+.search input{width:100%;border:1px solid var(--line);border-radius:10px;padding:8px 12px;padding-inline-start:32px;font-family:inherit;font-size:13px;background:var(--surface);color:var(--ink);transition:.12s}
+.search input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.search .ci{position:absolute;inset-inline-start:11px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:14px;pointer-events:none}
+.filt{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);font-weight:600;border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:7px 11px;cursor:pointer;transition:.12s}
+.filt:hover{border-color:var(--violet);color:var(--violet)}
+.filt.on{background:var(--violet-soft);border-color:transparent;color:var(--violet)}
+
+.phint{color:var(--muted);font-size:12.5px;margin:0 2px 12px;line-height:1.5}
+/* a short frame (a window in desktop mode): the sentence about the list steps aside for the list,
+   and the controls are two rows of it — in the smallest window they were four, and the list began
+   under the window's edge (photographed 2026-10-07 at 380 × 224) */
+@media (max-height:699px){
+  .phint{display:none}
+  .wrap{padding-top:10px}
+  .bar,.nav{margin-bottom:8px}
+  .abtns{gap:6px}
+  .abtns .btn{height:28px;padding:0 8px;font-size:12px}
+  .filt{padding:5px 9px;font-size:12px}
+  .search{min-width:110px}
+  .search input{padding-block:5px}
+}
+
+/* ── table ── */
+.tbl{background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);overflow:hidden}
+.thead{display:grid;grid-template-columns:38px minmax(0,1fr) 200px 96px 30px;gap:12px;align-items:center;
+  padding:9px 16px;border-bottom:1px solid var(--line);color:var(--muted);font-size:11px;font-weight:700;letter-spacing:.02em}
+.thead span:nth-child(3),.thead span:nth-child(4){padding-inline-start:2px}
+.item{border-bottom:1px solid var(--line)}
+.item:last-child{border-bottom:none}
+.row{display:grid;grid-template-columns:38px minmax(0,1fr) 200px 96px 30px;gap:12px;align-items:center;
+  padding:11px 16px;cursor:pointer;transition:background .1s}
+.row:hover{background:var(--surface-2)}
+.item.open .row{background:var(--surface-2)}
+.tile{position:relative;width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-size:15px;font-weight:700;flex:none}
+.tile.p-app{background:var(--accent-soft);color:var(--accent-d)}
+.tile.p-auth{background:var(--blue-soft);color:var(--blue)}
+.tile.p-infra{background:var(--violet-soft);color:var(--violet)}
+.tile .st{position:absolute;inset-block-end:-2px;inset-inline-end:-2px;width:11px;height:11px;border-radius:50%;border:2px solid var(--surface)}
+/* the product's legend: green done · violet waits for a person · red failed. A credential that
+   is missing waits for somebody to type it — it is not a failure — and amber means RUNNING. */
+.tile .st.healthy{background:var(--ok)} .tile .st.needs_action,.tile .st.missing{background:var(--violet)}
+.tile .st.degraded{background:var(--red)} .tile .st.unset{background:var(--line)}
+.item.open .tile .st{border-color:var(--surface-2)}
+.nm{min-width:0}
+.nm .t{font-size:13.5px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nm .s{display:flex;gap:7px;align-items:center;margin-top:1px;color:var(--muted);font-size:11.5px;min-width:0}
+.nm .s .usr{color:var(--accent-d);font-weight:600;white-space:nowrap}
+.nm .s .what{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.nm .s .chip{font-size:11.5px;font-weight:700;color:var(--muted);background:var(--bg);border-radius:5px;padding:1px 6px;white-space:nowrap}
+.val{display:flex;align-items:center;gap:6px;justify-content:flex-start;min-width:0}
+.val .v{font-size:12.5px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px}
+.val .v.dots{letter-spacing:2px;color:var(--muted)}
+.val .v.clear{color:var(--ink)}
+.val .v.derived{font-style:italic;color:var(--muted);font-size:11.5px}
+.ib{width:30px;height:30px;border-radius:7px;display:grid;place-items:center;font-size:13px;color:var(--muted);flex:none;transition:.12s}
+.ib:hover{background:var(--accent-soft);color:var(--accent-d)}
+.src{font-size:11.5px;font-weight:700;padding:2px 8px;border-radius:999px;white-space:nowrap;text-align:center;justify-self:start}
+.src.db{background:var(--accent-soft);color:var(--accent-d)}
+.src.env{background:var(--bg);color:var(--muted)}
+.src.minted{background:var(--blue-soft);color:var(--blue)}
+.src.derived{background:var(--violet-soft);color:var(--violet)}
+.src.unset{background:transparent;color:var(--muted);border:1px dashed var(--line)}
+.chev{color:var(--muted);font-size:15px;line-height:0;transition:transform .15s;justify-self:center}
+.item.open .chev{transform:rotate(180deg);color:var(--accent-d)}
+
+/* ── expanded field editor ── */
+.exp{padding:6px 16px 18px;background:var(--surface-2);border-top:1px solid var(--line)}
+.exp .about{color:var(--muted);font-size:12px;line-height:1.6;margin:8px 4px 14px;padding:9px 12px;background:var(--surface);border:1px solid var(--line);border-radius:10px}
+.exp .about b{color:var(--ink)}
+.flds{display:flex;flex-direction:column;gap:2px}
+.fld{display:grid;grid-template-columns:118px minmax(0,1fr) auto;gap:12px;align-items:center;padding:9px 6px;border-bottom:1px solid var(--line)}
+.fld:last-child{border-bottom:none}
+.fld .fl{font-size:12.5px;color:var(--muted);font-weight:600}
+.fld .fl .req{color:var(--red);margin-inline-start:3px}
+.fv{display:flex;align-items:center;gap:8px;min-width:0}
+.fv input{flex:1;min-width:0;border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-family:inherit;font-size:13px;background:var(--surface);color:var(--ink);transition:.12s}
+.fv input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.fv input.mono{font-family:var(--mono)}
+.fv .shown{flex:1;font-family:var(--mono);direction:ltr;unicode-bidi:isolate;font-size:12.5px;color:var(--ink);
+  background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:7px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fv .dots{flex:1;letter-spacing:3px;color:var(--muted);font-size:14px;padding:7px 10px}
+.fa{display:flex;align-items:center;gap:4px}
+.fbadge{font-size:11.5px;font-weight:700;padding:2px 7px;border-radius:999px;white-space:nowrap}
+.fbadge.db{background:var(--accent-soft);color:var(--accent-d)} .fbadge.env{background:var(--bg);color:var(--muted)}
+.fbadge.unset{background:transparent;color:var(--muted);border:1px dashed var(--line)}
+.foot{display:flex;gap:8px;flex-wrap:wrap;margin-top:15px;padding-top:13px;border-top:1px solid var(--line)}
+
+.spin,.empty{padding:44px;text-align:center;color:var(--muted);font-size:13px}
+.empty .ic{font-size:26px;display:block;margin-bottom:8px;opacity:.5}
+
+/* ── modal + drawer (a notice and a yes/no are the office's own: `binaTell` / `binaAsk`) ── */
+/* A dialog is whole at any height. The card was as tall as its form and centred in a frame that does
+   not scroll: in a desktop window dragged in to its smallest, and on a phone on its side, «הוספת סוד
+   חדש» had its title and both its buttons outside the frame, with no way to reach them. Now the card is
+   at most the frame and scrolls; its title stays at the top and its action row at the bottom (what a
+   refused action says here is a notice, so nothing is hidden above a row that stays). --mp is the
+   card's padding, said once: the two that stay take it with them and stick that far past the content
+   edge - which is where a padded scroller measures `top` and `bottom` from. */
+.ov{position:fixed;inset:0;background:var(--scrim);display:flex;align-items:center;justify-content:center;z-index:60;backdrop-filter:blur(2px);padding:16px}
+.modal{--mp:24px;background:var(--surface);border-radius:18px;padding:var(--mp);width:min(460px,92vw);max-height:100%;overflow:auto;box-shadow:var(--shadow-lg)}
+.modal h3{position:sticky;top:calc(-1*var(--mp));z-index:1;margin:calc(-1*var(--mp)) calc(-1*var(--mp)) 6px;padding:var(--mp) var(--mp) 10px;background:var(--surface);font-size:17px}
+@media (max-height:399px){.ov{padding:8px}.modal{--mp:14px}}
+.modal label{display:block;font-size:12.5px;color:var(--muted);font-weight:600;margin-bottom:12px}
+.modal input,.modal select{width:100%;border:1px solid var(--line);border-radius:9px;padding:9px 11px;font-family:inherit;font-size:13px;margin-top:5px;color:var(--ink);background:var(--surface)}
+.modal input:focus,.modal select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.modal .mbody{font-size:13px;color:var(--ink);line-height:1.6}
+.modal .mf{display:flex;gap:8px;justify-content:flex-end;position:sticky;bottom:calc(-1*var(--mp));
+  margin:8px calc(-1*var(--mp)) calc(-1*var(--mp));padding:8px var(--mp) var(--mp);background:var(--surface)}
+.drawer{position:fixed;inset:0 auto 0 0;width:min(440px,94vw);background:var(--surface);z-index:60;box-shadow:var(--shadow-lg);display:flex;flex-direction:column}
+.drawer-h{display:flex;justify-content:space-between;align-items:center;padding:18px 20px;border-bottom:1px solid var(--line)}
+.drawer-h h3{margin:0;font-size:16px}
+.drawer-b{overflow:auto;padding:4px 0}
+.aev{display:flex;justify-content:space-between;gap:12px;padding:11px 20px;border-bottom:1px solid var(--line);font-size:12.5px}
+.aev .ae-e{font-weight:600}.aev .ae-e .ev{color:var(--accent-d)} .aev .ae-t{color:var(--muted);white-space:nowrap}
+@media(max-width:680px){
+  .thead{display:none}
+  .row{grid-template-columns:34px minmax(0,1fr) 30px;grid-template-areas:"t n c" "t v c" "t s c"}
+  .row .tile{grid-area:t}.row .nm{grid-area:n}.row .val{grid-area:v;justify-content:flex-start}.row .src{grid-area:s;justify-self:start}.row .chev{grid-area:c}
+  .fld{grid-template-columns:1fr;gap:6px}
+}
+.ci{width:1em;height:1em;vertical-align:-.14em;display:inline-block;flex:none}
+
+/* ── the app shell: menu column + content column ───────────────────────────── */
+.shell{display:flex;flex-direction:row;align-items:stretch;min-height:100dvh}
+/* `height:auto`, said out loud: the component's own `height:100%` is not `auto`, so the flex row did
+   not stretch this column — and against a shell with no definite height it then resolved to the
+   height of the three menu rows. The panel ended a third of the way down with a border under it,
+   and on a phone the rest of its column was a blank strip beside the squeezed content. */
+.shell .side{flex:none;width:238px;height:auto;align-self:stretch;border-inline-end:1px solid var(--line);background:var(--surface-2)}
+.shell .content{flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden}
+.shell .content .wrap{flex:1;min-height:0;overflow-y:auto;max-width:none}
+.shell .side .logo{width:28px;height:28px;border-radius:8px;background:var(--accent-soft);color:var(--accent-d);display:grid;place-items:center;flex:none;font-size:15px}
+.shell .side{--bnv-bg:var(--surface-2);--bnv-ink:var(--ink);--bnv-ink-2:var(--muted);--bnv-line:var(--line)}
+.shell .side .bnv-tail{display:inline-flex;align-items:center;gap:6px;font-variant-numeric:tabular-nums}
+.shell .side .bnv-tail .need,.shell .side .bnv-tail .bad{width:7px;height:7px;border-radius:50%;background:var(--violet);flex:none}
+.shell .side .bnv-tail .bad{background:var(--red)}
+.shell .side .hstrip{flex-wrap:wrap;justify-content:center;padding:0}
+@media (max-width:900px){
+  .shell .side{width:64px}
+  .shell .side .bnv-label{display:none}
+  .shell .side .bnv-item{width:44px;height:44px;min-height:44px;justify-content:center;padding:0;gap:0;position:relative}
+  /* the count is a badge ON the icon — beside it, in a 44px row, it was glued to the glyph and its
+     attention dot was cut by the panel's edge */
+  .shell .side .bnv-tail{position:absolute;top:2px;inset-inline-end:2px;font-size:10px;line-height:1;gap:2px}
+  .shell .side .bnv-head b,.shell .side .bnv-foot-text{display:none}
+}
+/* A phone has no room for a rail, and three icons with a number over each said nothing: the three
+   sections become one row of named tabs over the list, each with its count. */
+@media (max-width:640px){
+  .shell{flex-direction:column}
+  .shell .side{width:auto;border-inline-end:0;border-bottom:1px solid var(--line)}
+  .shell .side .bnv-head,.shell .side .bnv-foot,.shell .side .bnv-ic{display:none}
+  .shell .side .bnv-scroll{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:8px 12px;flex:none}
+  .shell .side .bnv-item{width:auto;height:auto;min-height:44px;padding:5px 8px;gap:6px;justify-content:center}
+  .shell .side .bnv-label{display:inline;flex:0 1 auto;font-size:12px;line-height:1.25;white-space:normal;text-align:center}
+  .shell .side .bnv-tail{position:static;font-size:11.5px}
+}
+/* …and in a small WINDOW (a pointer, not a finger) the tabs are a pointer's height */
+@media (max-width:640px) and (max-height:699px) and (pointer:fine){
+  .shell .side .bnv-scroll{padding-block:5px}
+  .shell .side .bnv-item{min-height:32px;padding-block:2px}
+}
+
+/* @bina-nav:start */
+/* ── §1 the vocabulary ────────────────────────────────────────────────────── */
+.bnv{
+  --bnv-bg:var(--surface-2);
+  --bnv-ink:var(--ink);
+  --bnv-ink-2:var(--muted);
+  --bnv-hover:color-mix(in srgb, var(--bnv-ink) 6%, transparent);
+  --bnv-active:color-mix(in srgb, var(--bnv-ink) 10%, transparent);
+  --bnv-brand:var(--accent);
+  --bnv-brand-ink:var(--accent-d);
+  --bnv-brand-soft:var(--accent-soft);
+  --bnv-line:var(--line);
+
+  /* geometry — the rail (§3) and the sizes (§4) change THESE, never a rule */
+  --bnv-pad:8px 10px;
+  --bnv-gap:2px;
+  --bnv-row-w:100%;
+  --bnv-row-h:36px;
+  --bnv-row-pad:7px 8px;
+  --bnv-row-gap:8px;
+  --bnv-row-justify:flex-start;
+  --bnv-head-h:52px;
+  --bnv-head-pad:4px 6px 10px;
+  --bnv-head-justify:flex-start;
+  --bnv-primary-w:100%;
+  --bnv-primary-h:44px;
+  --bnv-primary-pad:10px 12px;
+  --bnv-primary-justify:flex-start;
+  --bnv-foot-align:stretch;
+  /* what a rail takes away — `none` per part, because only the owner of a rule may say what
+     that rule's display IS. A `display:none!important`-style override cannot be undone by a
+     narrower container, and a phone must be able to bring these back.
+     A rail takes away WORDS, never a way in: the names, the group heads, the search's field, and
+     «הצג עוד» (which is words) — so the rows «הצג עוד» folds are all there in a rail (`--bnv-rest`),
+     the search stays as its magnifier, and the collapse control stays, turned round, under the
+     avatar. It used to take those three away too: a rail had no search, was missing the folded
+     rows, and — once a person had chosen it — nothing left to press that would bring the menu back. */
+  --bnv-text:block;
+  --bnv-ghead:flex;
+  --bnv-field:block;     /* the search's field */
+  --bnv-more:block;
+  --bnv-rest:none;       /* the rows folded behind «הצג עוד», while they are folded */
+  --bnv-head-dir:row;    /* the brand row: avatar · name · collapse — a rail stacks what is left of it */
+  --bnv-turn:none;       /* the collapse control's arrow */
+  --bnv-side:252px;      /* read by .appgrid — the only width the host asks for */
+  --bnv-off:-100%;       /* where a closed drawer parks; flipped for RTL below */
+
+  background:var(--bnv-bg);
+  color:var(--bnv-ink);
+  display:flex;
+  flex-direction:column;
+  gap:var(--bnv-gap);
+  box-sizing:border-box;
+  height:100%;
+  min-height:0;
+  padding:var(--bnv-pad);
+  font-size:14px;
+  overflow:hidden;
+}
+
+/* ── §2 the parts ─────────────────────────────────────────────────────────── */
+.bnv-scroll{
+  flex:1;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+  gap:var(--bnv-gap);
+  overflow-y:auto;
+  overflow-x:hidden;
+  overscroll-behavior:contain;
+  scrollbar-width:thin;
+}
+.bnv-list{display:flex;flex-direction:column;gap:var(--bnv-gap);min-width:0}
+
+/* brand row: square avatar · name (+ one line of context) · the collapse control */
+.bnv-head{
+  display:flex;
+  flex-direction:var(--bnv-head-dir);
+  align-items:center;
+  justify-content:var(--bnv-head-justify);
+  gap:10px;
+  min-height:var(--bnv-head-h);
+  padding:var(--bnv-head-pad);
+  flex:none;
+  overflow:hidden;
+}
+.bnv-avatar{
+  width:28px;height:28px;border-radius:8px;flex:none;
+  display:grid;place-items:center;overflow:hidden;
+  background:var(--bnv-brand-soft);color:var(--bnv-brand-ink);
+  font-weight:800;font-size:14px;line-height:1;
+}
+.bnv-avatar img{width:100%;height:100%;object-fit:cover;display:block}
+.bnv-head-text{flex:1;min-width:0;display:var(--bnv-text)}
+/* (a brand line reads its own way — `dir=auto`, so what is cut is its end — and still sits on the menu's side) */
+.bnv-head b,.bnv-head small{text-align:-webkit-match-parent;text-align:match-parent}
+.bnv-head b{display:block;font-size:16px;line-height:22px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bnv-head small{display:block;color:var(--bnv-ink-2);font-size:11px;line-height:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bnv-collapse{
+  flex:none;width:28px;height:28px;padding:0;border:0;border-radius:8px;
+  background:transparent;color:var(--bnv-ink-2);
+  display:grid;place-items:center;cursor:pointer;
+}
+.bnv-collapse:hover{background:var(--bnv-hover);color:var(--bnv-ink)}
+.bnv-collapse:focus-visible{outline:2px solid var(--bnv-ink);outline-offset:-2px}
+.bnv-collapse svg{width:16px;height:16px;transform:var(--bnv-turn)}
+
+/* the ONE flat primary action — the same object in every app, at finger size */
+.bnv-primary{
+  box-sizing:border-box;flex:none;width:var(--bnv-primary-w);min-height:var(--bnv-primary-h);
+  display:flex;align-items:center;justify-content:var(--bnv-primary-justify);gap:8px;
+  padding:var(--bnv-primary-pad);border:0;border-radius:10px;
+  background:var(--bnv-brand-soft);color:var(--bnv-brand-ink);
+  font:inherit;font-size:14px;line-height:22px;font-weight:600;
+  text-align:start;text-decoration:none;cursor:pointer;
+}
+.bnv-primary:hover{background:color-mix(in srgb, var(--bnv-brand) 16%, transparent)}
+.bnv-primary:active{background:color-mix(in srgb, var(--bnv-brand) 24%, transparent)}
+.bnv-primary:focus-visible{outline:2px solid var(--bnv-brand);outline-offset:2px}
+.bnv-primary .bnv-label{flex:1}
+.bnv-primary[aria-disabled="true"],.bnv-primary:disabled{opacity:.5;cursor:default}
+
+/* a group: a named block of rows, with its own header */
+.bnv-group{display:flex;flex-direction:column;gap:var(--bnv-gap);min-width:0}
+.bnv-ghead{display:var(--bnv-ghead);align-items:center;gap:2px;min-height:28px;padding:6px 6px 0;flex:none}
+.bnv-gtitle{
+  flex:1;min-width:0;display:var(--bnv-text);
+  color:var(--bnv-ink-2);font-size:11px;line-height:16px;font-weight:600;letter-spacing:.04em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+/* a group action is a small icon button, and there are never more than two */
+.bnv-act{
+  flex:none;width:26px;height:26px;padding:0;border:0;border-radius:7px;
+  background:transparent;color:var(--bnv-ink-2);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;
+}
+.bnv-act:hover{background:var(--bnv-hover);color:var(--bnv-ink)}
+.bnv-act:focus-visible{outline:2px solid var(--bnv-ink);outline-offset:-2px}
+.bnv-act svg{width:15px;height:15px}
+
+/* search lives IN the menu — which is what frees the top of the page for content.
+   Its magnifier is a button (it puts the keyboard in the field), and in a rail it is the whole box:
+   the field is gone (`--bnv-field`), and a press opens the menu over the page, on the field. */
+.bnv-search{
+  display:flex;align-items:center;justify-content:var(--bnv-row-justify);flex:none;
+  margin:0 2px;min-height:34px;
+  border:1px solid var(--bnv-line);border-radius:8px;background:var(--bnv-bg);cursor:pointer;
+}
+.bnv-search button{
+  flex:none;align-self:stretch;width:30px;padding:0;border:0;border-radius:7px;
+  background:transparent;color:var(--bnv-ink-2);
+  display:inline-flex;align-items:center;justify-content:center;cursor:pointer;
+}
+.bnv-search button:hover{color:var(--bnv-ink)}
+.bnv-search button:focus-visible{outline:2px solid var(--bnv-ink);outline-offset:-2px}
+.bnv-search svg{width:15px;height:15px;flex:none}
+.bnv-search input{
+  display:var(--bnv-field);
+  flex:1;min-width:0;padding:7px 0;padding-inline-end:9px;border:0;background:transparent;color:inherit;
+  font:inherit;font-size:13px;line-height:20px;cursor:text;
+}
+.bnv-search input:focus{outline:none}
+.bnv-search:focus-within{border-color:color-mix(in srgb, var(--bnv-brand) 45%, transparent)}
+.bnv-search[hidden]{display:none}
+
+/* the row */
+.bnv-item{
+  box-sizing:border-box;
+  width:var(--bnv-row-w);
+  min-width:0;
+  min-height:var(--bnv-row-h);
+  display:flex;
+  align-items:center;
+  justify-content:var(--bnv-row-justify);
+  gap:var(--bnv-row-gap);
+  padding:var(--bnv-row-pad);
+  border:0;
+  border-radius:8px;
+  background:transparent;
+  color:var(--bnv-ink-2);
+  font:inherit;
+  font-size:14px;
+  line-height:22px;
+  font-weight:500;
+  text-align:start;
+  text-decoration:none;
+  cursor:pointer;
+}
+.bnv-item:hover{background:var(--bnv-hover);color:var(--bnv-ink)}
+.bnv-item:active{background:var(--bnv-active)}
+.bnv-item.is-active,.bnv-item[aria-current="page"]{
+  background:var(--bnv-active);
+  color:var(--bnv-ink);
+  font-weight:500;
+}
+.bnv-item:focus-visible{outline:2px solid var(--bnv-ink);outline-offset:-2px}
+.bnv-item[aria-disabled="true"],.bnv-item:disabled{opacity:.5;cursor:default}
+
+/* a REMOTE app — one that runs on a LINKED office, not on this machine
+   (ai/context/dgo-remote-apps.md §4). The row is a row like any other: same height, same hover,
+   same active tint. What says "not this machine" is one corner bracket in the logo's apps-line
+   colour, mirrored at the row's inline-start corner in BOTH directions (logical properties only —
+   this component has no physical direction anywhere, and the mark is not going to be the first).
+   The colour is the palette's «look here» in its line step (the lime the mark's apps carry). */
+.bnv-item.is-remote{position:relative}
+.bnv-item.is-remote::after{
+  content:"";position:absolute;inset-block-start:3px;inset-inline-start:3px;
+  width:7px;height:7px;pointer-events:none;
+  border-block-start:2px solid var(--lime-d);
+  border-inline-start:2px solid var(--lime-d);
+  border-start-start-radius:3px;
+}
+/* the office did not answer: the mark goes quiet, the row keeps its place — a tile that vanishes
+   is a tile nobody can ask about. The state is FORM here, not words: the office's tag (capped at
+   5em below — "MacBook לא זמינה" was drawn as "…acBook") turns the failure colour and the row dims;
+   the sentence is the row's tooltip. */
+.bnv-item.is-remote.is-offline::after{border-color:var(--bnv-ink-2)}
+/* …and the mark takes the OFFICE's own colour where the row knows which office it is: the shell adds
+   `office-<id>` (console/static/app.js, remoteCls) and the hue is the palette's family
+   `--office-hp/-mac/-vps` — declared in theme-tokens.css and nowhere else (G27/G82). An office with no
+   token keeps the lime this mark ships with, so a fourth office needs one token and no CSS. */
+.bnv-item.office-hp.is-remote::after{border-color:var(--office-hp)}
+.bnv-item.office-mac.is-remote::after{border-color:var(--office-mac)}
+.bnv-item.office-vps.is-remote::after{border-color:var(--office-vps)}
+.bnv-item.is-offline :is(.bnv-ic,.bnv-label){opacity:.72}
+.bnv-item.is-offline .bnv-meta{color:var(--danger)}
+/* `hidden` is how the search filters rows, and it has to beat `display:flex` above */
+.bnv-item[hidden],.bnv-empty[hidden],.bnv-group[hidden]{display:none}
+.bnv-ic{width:18px;height:18px;flex:none;display:inline-flex;align-items:center;justify-content:center}
+.bnv-ic svg,.bnv-ic .ic-svg{width:18px;height:18px;display:block}
+/* the label is what gives way — never the row, never the container.
+   A label that is a NAME someone gave (a folder, a mailbox) carries `dir="auto"`: it is cut at ITS
+   end, not the row's — «Plane — HP ומק» lost its first letters in a narrow rail («…ne — HP ומק») —
+   and `match-parent` keeps it on the row's reading edge whichever way it reads. */
+.bnv-label{flex:1;min-width:0;display:var(--bnv-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  text-align:-webkit-match-parent;text-align:match-parent}
+/* the SECOND column: a count, a size, a time. Tabular, so a list of them aligns. */
+.bnv-meta{
+  flex:none;display:var(--bnv-text);color:var(--bnv-ink-2);
+  font-size:12px;line-height:18px;font-variant-numeric:tabular-nums;
+}
+/* A REMOTE row's meta is a NAME, not a count — and a name may be long ("שרת פיתוח בינה סלושנס").
+   With `flex:none` (above) it held its full width, so the LABEL took the loss: measured on the live
+   rail (218px), `מסמכים שלי` — 73px of text — was drawn in 44px, while the office name kept 124px.
+   That inverts what a row is for: the app is the subject, the office is commentary.
+
+   `flex:0 1 auto` alone does NOT fix it, and that is worth writing down: the row is not overflowing
+   (18 + 8 + 44 + 8 + 124 + 16 = 218), so there is no shrink pressure to resolve — the label simply
+   sits at min-content while the meta takes what it asks for. Nothing is "squeezed out" to shrink.
+
+   So the meta gets a CAP of `min(40%, 5em)` — and the measurement is why it is a formula and not a
+   percentage. At the console's live rail (218px), a 40% cap left the office 81px and still ellipsized
+   the app name by 16px (`חיבורים ומפתחות`, 103px). Swept on the live row: 40% → name 87 (clipped),
+   30% → 107 (fits) + office 61, 26% → 115 + 53, 22% → 124 + 44. `5em` is 60px of office at this
+   font — the shortest tag that still names an office — and it leaves the label 107px, its full
+   width. The percentage half keeps a WIDE rail from giving the office an unbounded share; `flex:0 8`
+   then resolves what is left in the label's favour. `.is-remote` and not every meta on purpose: a
+   count has no office to name, and its fixed slot is what makes a column of them line up. */
+.bnv-item.is-remote .bnv-meta{
+  flex:0 8 auto;min-width:0;max-inline-size:min(40%,5em);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+/* trailing slot: a badge, a dot, a chevron. `nowrap` so it can never wrap into a second line. */
+.bnv-tail{flex:none;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;color:var(--bnv-ink-2);font-size:12px}
+.bnv-item:hover .bnv-tail,.bnv-item.is-active .bnv-tail{color:inherit}
+.bnv-badge{
+  flex:none;min-width:18px;height:18px;padding:0 5px;border-radius:999px;
+  background:var(--bnv-brand-soft);color:var(--bnv-brand-ink);
+  font-size:11px;line-height:18px;font-weight:700;text-align:center;
+}
+.bnv-item:hover .bnv-badge,.bnv-item.is-active .bnv-badge{background:color-mix(in srgb, var(--bnv-brand) 22%, transparent)}
+
+/* Priority+: the rows that did not fit, and the one row that reveals them. (A rail has no such
+   row to press — it is words — so there the folded rows are simply there: `--bnv-rest`.) */
+.bnv-rest{display:var(--bnv-rest);flex-direction:column;gap:var(--bnv-gap);min-width:0}
+.bnv-rest.is-open{display:flex}
+.bnv-more{
+  display:var(--bnv-more);flex:none;width:100%;min-height:28px;padding:4px 8px;border:0;border-radius:8px;
+  background:transparent;color:var(--bnv-ink-2);font:inherit;font-size:12px;font-weight:600;
+  text-align:start;cursor:pointer;
+}
+.bnv-more:hover{background:var(--bnv-hover);color:var(--bnv-ink)}
+.bnv-empty{padding:6px 8px;color:var(--bnv-ink-2);font-size:12px;line-height:18px}
+
+.bnv-foot{
+  flex:none;margin-top:auto;padding-top:10px;border-top:1px solid var(--bnv-line);
+  min-width:0;display:flex;flex-direction:column;gap:var(--bnv-gap);align-items:var(--bnv-foot-align);
+}
+.bnv-foot-text{
+  display:var(--bnv-text);padding:0 8px;max-width:100%;color:var(--bnv-ink-2);
+  font-size:11px;line-height:16px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.bnv-sep{height:1px;background:var(--bnv-line);margin:6px 8px;flex:none}
+
+/* ── §3 the rail: one state, two triggers, a list of values ────────────────── */
+/* `.bnv.is-rail` — a rail somebody chose: the menu's own collapse control (remembered per app),
+   or a host that collapses the menu by itself.
+   `.rail-host .bnv` — a host whose grid column decides and cannot put a class on the aside.
+   Both write the SAME values as the medium size class in §4, so the rail exists once.
+   The values are a rail's while it is SHUT. Opened — by its collapse control, or by its search —
+   it is the whole menu again, the values above, standing over the page (the rule under these).
+   `:where()` keeps that condition out of the selector's weight: the drawer of a phone-sized frame
+   must still out-rank a rail saved on a desktop. */
+:is(.bnv.is-rail,.rail-host .bnv):where(:not(.is-open)){
+  --bnv-pad:12px 10px;
+  --bnv-gap:6px;
+  --bnv-row-w:36px;
+  --bnv-row-h:36px;
+  --bnv-row-pad:0;
+  --bnv-row-gap:0;
+  --bnv-row-justify:center;
+  --bnv-head-h:36px;
+  --bnv-head-pad:0 0 10px;
+  --bnv-head-justify:center;
+  --bnv-primary-w:36px;
+  --bnv-primary-h:36px;
+  --bnv-primary-pad:0;
+  --bnv-primary-justify:center;
+  --bnv-foot-align:center;
+  --bnv-text:none;
+  --bnv-ghead:none;
+  --bnv-field:none;
+  --bnv-more:none;
+  --bnv-rest:flex;
+  --bnv-head-dir:column;
+  --bnv-turn:rotate(180deg);
+}
+/* An OPENED rail: the whole menu, standing over the page until a row is picked or it is shut — the
+   way to a rail's search, and to the names of its rows. (The rail by width says the same in §4.) */
+:is(.bnv.is-rail,.rail-host .bnv).is-open{position:fixed;inset-block:0;inset-inline-start:0;z-index:60;width:min(84vw,320px);box-shadow:var(--shadow-lg)}
+
+/* ── §4 the sizes ─────────────────────────────────────────────────────────── */
+/* The app declares ONE container (`.bnv-host`, on the element that wraps the shell) and one grid
+   (`.appgrid`, whose side column is `--bnv-side`). From there: ≥840px the full menu, 600–839px the
+   rail, <600px a drawer over one pane. Nothing here names a breakpoint of the WINDOW: the menu
+   answers the space it is actually given, so the same app is right in a 940px pane, in a 2000px
+   desktop, and on a 390px phone — which is exactly what a viewport query cannot do. */
+.bnv-host{container-type:inline-size;container-name:bnav}
+.appgrid{
+  display:grid;
+  grid-template-columns:var(--bnv-side,252px) minmax(0,1fr);
+  min-width:0;
+}
+/* …and its `min-height:0` (an app may scroll inside a fixed shell) carries NO weight, so that a
+   page which scrolls can say `min-height:100dvh` of its grid wherever it likes. At one class this
+   line beat a page that said so ABOVE the block: the menu's panel ended where the content did, half
+   way down the screen. Three pages moved their two lines below the block for it; the fourth — the
+   apps screen, whose list is short for as long as it loads — never did. */
+:where(.appgrid){min-height:0}
+/* THE MENU STAYS. Where the PAGE scrolls, the menu's cell is as tall as the page and the menu left
+   with it: by the end of a long list the notifications' filters and the apps' sections were a
+   screen and a half up, over a column left empty (2026-10-09, the live office: 2360px of page). It
+   is a frame tall at the most, and holds on to the frame's top. `:where()` keeps this at one class:
+   the drawer and the opened rail — `position:fixed`, at two classes and more — still say where
+   THEY stand. */
+:where(.appgrid) > .bnv{position:sticky;inset-block-start:0;max-height:100dvh}
+/* Which column the CONTENT is in — owned here, not by each app.
+   The menu is `position:fixed` below 600px, and a fixed child is not a grid item: the browser
+   places the remaining in-flow child (the content) into COLUMN 1, which is the side column. So the
+   content inherited the menu's width — 252px on a desktop, 56/64px in the rail, and 0px once the
+   phone collapses the side column. Measured 2026-10-01 at 390x844: `.pg` was 24px wide, mailview's
+   phone score was clipping 0.0/15, and every adopter's phone layout was a sliver.
+   It survived a green map because the DESKTOP profile has a fine pointer and a static aside: there
+   the menu IS a grid item, the content auto-places into column 2, and nothing looks wrong. */
+.appgrid > :not(.bnv):not(.bnv-scrim):not(.bnv-burger):not(.bnv-drawer){
+  grid-column:2;
+  min-width:0;
+}
+/* the burger: shown only where the menu is a drawer, and it is row-sized there */
+.bnv-burger{
+  display:none;flex:none;width:44px;height:44px;padding:0;border:0;border-radius:10px;
+  background:transparent;color:inherit;align-items:center;justify-content:center;cursor:pointer;
+}
+.bnv-burger:hover{background:color-mix(in srgb, currentColor 8%, transparent)}
+.bnv-burger:focus-visible{outline:2px solid currentColor;outline-offset:-2px}
+.bnv-burger svg{width:20px;height:20px}
+.bnv-scrim{
+  position:fixed;inset:0;z-index:55;border:0;padding:0;
+  background:var(--scrim);   /* the palette's own: mixed from the menu's ink it was a WHITE veil wherever that ink is light */
+  opacity:0;visibility:hidden;transition:opacity .18s ease;
+}
+.bnv-scrim.is-open{opacity:1;visibility:visible}
+
+/* medium — the rail, chosen by container width instead of by a class */
+@container bnav (max-width:839px){
+  .appgrid{--bnv-side:56px}
+  .bnv:where(:not(.is-open)){
+    --bnv-pad:12px 10px;
+    --bnv-gap:6px;
+    --bnv-row-w:36px;
+    --bnv-row-h:36px;
+    --bnv-row-pad:0;
+    --bnv-row-gap:0;
+    --bnv-row-justify:center;
+    --bnv-head-h:36px;
+    --bnv-head-pad:0 0 10px;
+    --bnv-head-justify:center;
+    --bnv-primary-w:36px;
+    --bnv-primary-h:36px;
+    --bnv-primary-pad:0;
+    --bnv-primary-justify:center;
+    --bnv-foot-align:center;
+    --bnv-text:none;
+    --bnv-ghead:none;
+    --bnv-field:none;
+    --bnv-more:none;
+    --bnv-rest:flex;
+    --bnv-head-dir:column;
+    --bnv-turn:rotate(180deg);
+  }
+  .bnv.is-open{position:fixed;inset-block:0;inset-inline-start:0;z-index:60;width:min(84vw,320px);box-shadow:var(--shadow-lg)}
+}
+/* …and a rail somebody CHOSE takes a rail's column — where the frame is wide enough to have given the
+   menu its whole one (below that the two size classes already say). Nothing said it: the icons of a
+   chosen rail stood in a column 252px wide. */
+@container bnav (min-width:840px){
+  .appgrid:has(> .bnv.is-rail){--bnv-side:56px}
+}
+/* compact — one pane, and the menu becomes a drawer over it.
+   `:is(.bnv,.bnv.is-rail,.rail-host .bnv)` is deliberate: a rail saved on a desktop must NOT
+   survive into a phone, so this block has to out-rank the class trigger and the host class. */
+@container bnav (max-width:599px){
+  .appgrid{--bnv-side:0px}
+  .bnv-burger{display:inline-flex}
+  :is(.bnv,.bnv.is-rail,.rail-host .bnv){
+    position:fixed;inset-block:0;inset-inline-start:0;z-index:60;
+    width:min(84vw,320px);box-sizing:border-box;
+    transform:translateX(var(--bnv-off,-100%));
+    transition:transform .18s ease;
+    --bnv-pad:8px 10px;
+    --bnv-gap:2px;
+    --bnv-row-w:100%;
+    --bnv-row-h:44px;
+    --bnv-row-pad:10px 8px;
+    --bnv-row-gap:8px;
+    --bnv-row-justify:flex-start;
+    --bnv-head-h:52px;
+    --bnv-head-pad:4px 6px 10px;
+    --bnv-head-justify:flex-start;
+    --bnv-primary-w:100%;
+    --bnv-primary-h:44px;
+    --bnv-primary-pad:10px 12px;
+    --bnv-primary-justify:flex-start;
+    --bnv-foot-align:stretch;
+    --bnv-text:block;
+    --bnv-ghead:flex;
+    --bnv-field:block;
+    --bnv-more:block;
+    --bnv-rest:none;
+    --bnv-head-dir:row;
+    --bnv-turn:none;
+  }
+  /* The shadow is the OPEN drawer's. On the parked one it still painted: a 40px grey band down the
+     screen edge, over the page, in every app that carries this menu (seen in five, 2026-10-06). */
+  :is(.bnv,.bnv.is-rail,.rail-host .bnv).is-open{
+    transform:none;
+    box-shadow:var(--shadow-lg);
+  }
+}
+/* in RTL the drawer parks on the other side — the only direction-dependent line in this file */
+:is([dir="rtl"],:dir(rtl)) .bnv{--bnv-off:100%}
+
+/* touch: the same rows, sized for a finger. bina keeps 36px on every pointer; a phone needs 44. */
+@media (pointer:coarse){
+  .bnv-item{min-height:44px;padding:10px 8px}
+  .bnv-primary{min-height:44px}
+  .bnv-search{min-height:44px}
+  .bnv-act{width:36px;height:36px}
+  :is(.bnv.is-rail,.rail-host .bnv):where(:not(.is-open)) .bnv-item{width:44px;height:44px;min-height:44px}
+  /* THE RAIL IS A RAIL ONLY IN THE RAIL RANGE. This rule used to read `(max-width:839px)`, which
+     also covers the compact range — and because it comes AFTER the compact block (§4), the same
+     specificity meant it won there: on any touch device narrower than 600px `--bnv-side` was 64px
+     instead of 0, so the drawer opened over a content column 64px wide.
+     Measured 2026-10-01 on the office's own capture at 390x844 (`is_mobile`/`has_touch`, i.e. the
+     profile the phone map uses): `.pg` came out 64px wide and mailview scored clipping 0.0/15 —
+     "text cut with no way to reach it" was not the app's layout, it was this line. The desktop
+     capture never saw it (fine pointer), which is why it survived a green map on both profiles. */
+  @container bnav (min-width:600px) and (max-width:839px){
+    .appgrid{--bnv-side:64px}
+  }
+  @container bnav (min-width:840px){
+    .appgrid:has(> .bnv.is-rail){--bnv-side:64px}
+  }
+}
+/* a SHORT panel — the menu of a window dragged small. Its head, its button and its foot are most
+   of 224px, and the rows were left a sliver to scroll in (measured 2026-10-07 in the drive's
+   menu: 20px for 416px of rows). There the PANEL scrolls, rows and all. */
+@media (max-height:399px){
+  .bnv{overflow-y:auto;overscroll-behavior:contain}
+  .bnv-scroll{flex:none;overflow:visible}
+  /* …and the page's own menu buttons are a cursor's size there, not a finger's: 44px of a head is a
+     fifth of such a window (a touch screen keeps the finger's size — it is not this window). */
+  @media (pointer:fine){.bnv-burger{width:32px;height:32px;border-radius:8px}}
+}
+@media (prefers-reduced-motion:reduce){
+  .bnv,.bnv *,.bnv-scrim{transition:none!important;animation:none!important}
+}
+/* @bina-nav:end */
+</style>
+
+<div class="shell">
+  <!-- THE SIDE MENU — the same component, row and palette as every other app
+       (platform-base/bina-ui/bina-nav.css, gate G27). The three pillars were a segmented control
+       in the toolbar; they are a menu now, so this screen reads like the rest of the office. -->
+  <aside class="side bnv" aria-label="ניווט">
+    <div class="brand bnv-head"><span class="logo">
+      <svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg>
+    </span><b>חיבורים ומפתחות</b></div>
+    <nav class="bnv-scroll" id="menu"></nav>
+    <div class="bnv-foot"><div class="bnv-foot-text"><div class="hstrip" id="hstrip"></div></div></div>
+  </aside>
+  <main class="content">
+  <div class="wrap">
+  <div class="bar">
+    <div class="grow"></div>
+    <div class="abtns">
+      <button class="btn sm" onclick="addSecret()" title="שמירת סוד חדש בכספת"><svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg> סוד חדש</button>
+      <button class="btn ghost sm" onclick="load()"><svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg> רענון</button>
+      <button class="btn ghost sm" onclick="openAudit()"><svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg> יומן</button>
+      <button class="btn ghost danger sm" onclick="wipeVault()" title="מוחק כל סוד שנשמר — טוקנים, חשבונות מחוברים והכל; ה־.env נשאר"><svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> מחק סודות</button>
+    </div>
+  </div>
+
+  <div class="nav">
+    <div class="grow"></div>
+    <div class="filt" id="filt" onclick="toggleAttn()"><span><svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg></span> רק דורשים טיפול</div>
+    <div class="search"><svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg><input id="q" placeholder="חיפוש…" oninput="render()"></div>
+  </div>
+
+  <div class="phint" id="phint"></div>
+  <div id="body"><div class="spin">טוען…</div></div>
+  </div><!-- /.wrap -->
+  </main>
+</div><!-- /.shell -->
+
+<script>
+/* @bina-ask:start */
+var binaAsk, binaTell;
+(function () {
+  var doc = document;
+  var CSS = ".bask{position:fixed;inset:0;z-index:2147483000;display:grid;grid-template:minmax(0,1fr)/minmax(0,1fr);place-items:center;padding:16px;background:var(--scrim)}"
+    + ".bask-card{display:flex;flex-direction:column;width:min(440px,100%);max-height:100%;overflow:auto;box-sizing:border-box;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:16px;padding:20px;box-shadow:var(--shadow-lg);font:14px/1.5 var(--font,system-ui,sans-serif);text-align:start;outline:0}"
+    + ".bask-card h2{margin:0 0 8px;font-size:16px;font-weight:800;line-height:1.35}"
+    + ".bask-read{overflow:auto}.bask-read:not(:empty){min-height:19px}"   // never squeezed to nothing: a line of it stays, and past that the card itself scrolls
+    + ".bask-card p{margin:0 0 6px;font-size:13px;color:var(--muted)}"
+    + ".bask-read p:last-child{margin:0}"
+    + ".bask-facts{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:10px 0 0;padding:10px 12px;background:var(--surface-2);border:1px solid var(--line);border-radius:9px}"
+    + ".bask-facts dt{color:var(--muted);font-size:11px;font-weight:600;line-height:1.7}"
+    + ".bask-facts dd{margin:0;font-size:12.5px;font-weight:600;overflow-wrap:anywhere;unicode-bidi:plaintext;text-align:right}"
+    + ".bask-field{display:grid;gap:5px;margin-top:10px;font-size:12px;font-weight:600;color:var(--muted)}"
+    + ".bask-field input{font:inherit;font-size:13px;font-weight:400;height:36px;padding:0 10px;border:1px solid var(--line);border-radius:9px;background:var(--surface);color:var(--ink)}"
+    + ".bask-said{margin-top:10px;padding:8px 12px;border-radius:9px;border-inline-start:4px solid var(--red);background:color-mix(in srgb,var(--red) 14%,var(--surface));font-size:12.5px;overflow-wrap:anywhere}"
+    + ".bask-said:empty{display:none}"
+    + ".bask-acts{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}"
+    + ".bask-btn{height:34px;padding:0 16px;border-radius:9px;border:1px solid var(--line);background:transparent;color:var(--ink);font:inherit;font-size:13px;font-weight:700;cursor:pointer}"
+    + ".bask-btn.primary{background:var(--accent);border-color:transparent;color:var(--accent-ink)}"
+    + ".bask-btn.danger{background:var(--red);border-color:transparent;color:var(--surface)}"
+    + ".bask-btn:disabled{opacity:.5;cursor:default}"
+    + ".bask-field input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}"
+    + "@media (pointer:coarse){.bask-btn{height:44px}.bask-field input{height:44px}}"
+    + "@media (max-height:399px){.bask{padding:8px}.bask-card{padding:12px}.bask-acts{margin-top:10px}}"   // the side menu's own short frame
+    + "#bina-tell{position:fixed;inset-block-end:16px;inset-inline-start:16px;z-index:2147483001;display:grid;gap:8px;max-width:min(420px,calc(100vw - 32px))}"
+    + ".btell{--c:var(--ok);padding:10px 14px;border-radius:12px;background:color-mix(in srgb,var(--c) 14%,var(--surface));color:var(--ink);border:1px solid color-mix(in srgb,var(--c) 38%,var(--surface));border-inline-start:4px solid var(--c);font:13px/1.45 var(--font,system-ui,sans-serif);box-shadow:var(--shadow-lg);cursor:pointer;text-align:start}"
+    + ".btell.warn{--c:var(--lime)}.btell.bad{--c:var(--red)}"   // --ok and --red, not the bare hues: they are the steps that are lifted on the dark ground
+    + ".btell small{display:block;margin-top:2px;font-size:11.5px;color:var(--muted);overflow-wrap:anywhere;unicode-bidi:plaintext}"
+    + ".btell button{margin-inline-start:12px;padding:0;border:0;background:none;font:inherit;font-weight:800;color:var(--blue);text-decoration:underline;cursor:pointer}";
+
+  function el(tag, cls, text) {
+    var n = doc.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+  function style() {
+    if (doc.getElementById("bina-ask-css")) return;
+    var s = el("style", "", CSS);
+    s.id = "bina-ask-css";
+    doc.head.appendChild(s);
+  }
+
+  binaAsk = function (q) {
+    style();
+    return new Promise(function (resolve) {
+      var back = doc.activeElement, field = null, must = q.input && q.input.must;
+      var scrim = el("div", "bask"), card = el("div", "bask-card"), read = el("div", "bask-read"), said = el("div", "bask-said");
+      card.setAttribute("role", "alertdialog");
+      card.setAttribute("aria-modal", "true");
+      card.setAttribute("dir", "rtl");
+      card.setAttribute("tabindex", "-1");
+      said.setAttribute("role", "alert");
+      card.appendChild(el("h2", "", q.title));
+      card.appendChild(read);
+      String(q.body || "").split(/\n+/).forEach(function (line) { if (line.trim()) read.appendChild(el("p", "", line)); });
+      if (q.facts && q.facts.length) {
+        var dl = el("dl", "bask-facts");
+        q.facts.forEach(function (f) { dl.appendChild(el("dt", "", f[0])); dl.appendChild(el("dd", "", f[1])); });
+        read.appendChild(dl);
+      }
+      if (q.input) {
+        var lab = el("label", "bask-field", q.input.label || "");
+        field = el("input");
+        field.value = q.input.value || "";
+        if (q.input.dir) field.setAttribute("dir", q.input.dir);
+        lab.appendChild(field);
+        card.appendChild(lab);
+      }
+      var acts = el("div", "bask-acts"), no = el("button", "bask-btn", q.cancel || "ביטול"),
+          yes = el("button", "bask-btn " + (q.danger ? "danger" : "primary"), q.ok || "אישור");
+      no.setAttribute("type", "button");
+      yes.setAttribute("type", "button");
+      acts.appendChild(no);
+      acts.appendChild(yes);
+      card.appendChild(said);
+      card.appendChild(acts);
+      scrim.appendChild(card);
+      doc.body.appendChild(scrim);
+
+      function fit() { if (must) yes.disabled = field.value.trim() !== must; }
+      function home() { (field || (q.danger ? no : yes)).focus(); }
+      function done(v) {
+        doc.removeEventListener("keydown", key, true);
+        scrim.remove();
+        if (back && back.focus) back.focus();
+        resolve(v);
+      }
+      function cancel() { if (!no.disabled) done(field ? null : false); }
+      function agree() {
+        if (yes.disabled) return;
+        var v = field ? field.value : true;
+        if (!q.run) return done(v);
+        yes.disabled = no.disabled = true;                // in flight: busy, and there is nothing left to cancel
+        yes.textContent = "מבצע…";
+        said.textContent = "";
+        card.focus();
+        Promise.resolve(v).then(q.run).then(function () { done(v); }, function (e) {
+          yes.textContent = q.ok || "אישור";
+          yes.disabled = no.disabled = false;
+          fit();
+          said.textContent = (e && e.message) || "הפעולה נכשלה";
+          home();
+        });
+      }
+      function key(e) {
+        if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); cancel(); }
+        else if (e.key === "Enter" && field && doc.activeElement === field) { e.preventDefault(); agree(); }
+        else if (e.key === "Tab") {                       // the page behind is not reachable while asked
+          var ring = [field, no, yes].filter(function (n) { return n && !n.disabled; });
+          var i = ring.indexOf(doc.activeElement);
+          e.preventDefault();
+          if (ring.length) ring[(i + (e.shiftKey ? ring.length - 1 : 1)) % ring.length].focus();
+        }
+        else if (/^(Arrow|Page)(Up|Down)$/.test(e.key) && doc.activeElement !== field && read.scrollHeight > read.clientHeight) {
+          e.preventDefault();                               // the focus lives on the buttons, outside what scrolls
+          read.scrollTop += (/Up$/.test(e.key) ? -1 : 1) * (/^Page/.test(e.key) ? read.clientHeight : 40);
+        }
+      }
+      yes.addEventListener("click", agree);
+      no.addEventListener("click", cancel);
+      scrim.addEventListener("mousedown", function (e) { if (e.target === scrim) cancel(); });
+      if (field) field.addEventListener("input", fit);
+      doc.addEventListener("keydown", key, true);
+      fit();
+      home();
+    });
+  };
+
+  // The third word is how long the notice stays (ms) — or what more it carries: { ms, more, act, stay }.
+  //   more  the service's own sentence, on a line of its own under the notice's words
+  //   act   [label, fn] — one way on from the notice (an undo, a refresh): pressing it runs fn and takes the notice down
+  //   stay  no clock: the notice is there until it is pressed
+  binaTell = function (text, kind, opt) {
+    style();
+    var o = opt && typeof opt === "object" ? opt : { ms: opt };
+    var box = doc.getElementById("bina-tell");
+    if (!box) { box = el("div"); box.id = "bina-tell"; doc.body.appendChild(box); }
+    var n = el("div", "btell " + (kind || "ok"), text);
+    n.setAttribute("role", kind === "bad" ? "alert" : "status");
+    n.setAttribute("dir", "rtl");
+    if (o.more) n.appendChild(el("small", "", o.more));
+    if (o.act) {
+      var go = el("button", "", o.act[0]);
+      go.setAttribute("type", "button");
+      go.addEventListener("click", function (e) { e.stopPropagation(); n.remove(); o.act[1](); });
+      n.appendChild(go);
+    }
+    n.addEventListener("click", function () { n.remove(); });
+    box.appendChild(n);
+    if (!o.stay) setTimeout(function () { n.remove(); }, o.ms || (kind === "bad" ? 9000 : 5200));
+    return n;
+  };
+})();
+/* @bina-ask:end */
+/* @bina-said:start */
+var binaSaid = (status) => (!status ? "אין תשובה מהשירות"
+  : status < 300 ? "התשובה אינה מה שהמסך ציפה לו — רענן את הדף"
+  : status === 401 ? "הכניסה פגה — רענן את הדף" : status === 403 ? "אין הרשאה לפעולה הזאת"
+  : status === 404 ? "השירות לא מכיר את הבקשה הזאת"
+  : status > 501 && status < 505 ? "השירות אינו זמין כרגע" : status >= 500 ? "השירות נתקל בשגיאה"
+  : "הבקשה נדחתה");
+// a request that could not even be sent answers like one that was refused, with status 0
+var binaNoAnswer = () => ({ ok: false, status: 0, json: async () => ({}), text: async () => "" });
+/* @bina-said:end */
+const PILLARS=[
+  {id:'app-password',ic:'<svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg>',he:'סיסמאות אפליקציות',hint:'סיסמאות הכניסה של האפליקציות בלשכה. כאן מגלים אותן, עורכים ומחליפים.'},
+  {id:'auth',        ic:'<svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>',he:'חיבורי אימות',    hint:'חיבורים לשירותים חיצוניים — מפתחות API, OAuth, סריקת QR, חשבונות שירות ותעודות. חיבור, בדיקה וניתוק מנוהלים כאן.'},
+  {id:'infra',       ic:'<svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',he:'סודות מערכת',     hint:'סודות התשתית — מפתחות הצפנה, JWT, סיסמאות בסיסי־נתונים ומפתחות שורש. נוצרים אוטומטית; היזהר בהחלפה.'},
+];
+const KIND={'text-secret':'סוד','password':'סיסמה','oauth-client':'OAuth','oauth-grant':'OAuth','qr-session':'QR','sa-key':'חשבון שירות','cert':'תעודה','config':'תצורה','derived':'נגזר','basic-auth':'אימות בסיסי'};
+const PROTO_ICON={'api-key':'<svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg>','bearer-token':'<svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg>','basic-auth':'<svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>','oauth2':'<svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>','qr':'<svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="20" x="5" y="2" rx="2"/><path d="M12 18h.01"/></svg>','service-account':'<svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>','certificate':'<svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>'};
+const PROTO_LABEL={'api-key':'מפתח API','bearer-token':'טוקן','basic-auth':'אימות בסיסי','oauth2':'OAuth 2.0','qr':'סריקת QR','service-account':'חשבון שירות','certificate':'תעודה'};
+const SRC={'db':'נשמר','env':'ברירת מחדל','minted':'נוצר אוטו׳','derived':'נגזר','unset':'לא מוגדר'};
+const STAT={'healthy':'תקין','needs_action':'דורש טיפול','missing':'חסר','unset':'לא מוגדר','degraded':'תקלה'};
+let ROWS=[], TAB='app-password', OPEN=null, ATTN=false;
+// Was the list READ: null while the first answer is awaited, false when it could not be read, true once it was.
+// A list that was never read is not an empty one — nothing is counted of it and nothing is said to be missing.
+let READ=null;
+
+const esc=s=>(s==null?'':String(s)).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+// What the service answered. A refusal carries `ok:false` whatever its body says, so an action reads ONE
+// field: «נשמר» used to be said off a 400, and «נותק» off a bot that had not logged out.
+// …and an answer that is not the service's own JSON — none at all, the 502 page a proxy answers while the service
+// restarts, the sign-in page once the session ran out — is named for what it is, in the office's words: every
+// one of them was called «שגיאת רשת».
+async function api(p,m,b){
+  const r=await fetch(p,{method:m||'GET',headers:{'Content-Type':'application/json'},body:b?JSON.stringify(b):undefined}).catch(binaNoAnswer);
+  const d=r.status?await r.json().catch(()=>null):null;
+  if(d==null){const e=new Error(binaSaid(r.status));binaTell(e.message,'bad');throw e;}
+  if(!r.ok&&typeof d==='object')d.ok=false;return d;
+}
+function aboutText(r){
+  const app=r.app, nm=esc((app&&app.name)||r.title_he||r.title||r.id);
+  if(r.pillar==='app-password') return `סיסמת הכניסה שלך ל־<b>${nm}</b>. כאן אפשר לצפות בשם המשתמש ובסיסמה, לשנות אותם, או לפתוח את האפליקציה — בלי לגעת בקבצי המערכת.`;
+  if(r.pillar==='auth'){const svc=(r.consumers&&r.consumers.length)?` עבור <b>${esc(r.consumers.join(', '))}</b>`:'';return `חיבור <b>${PROTO_LABEL[r.protocol]||'אימות'}</b>${svc}. חבר, בדוק או החלף את פרטי החיבור מכאן.`;}
+  return r.rotate_warn?`סוד תשתית רגיש. <b>שים לב:</b> החלפתו משפיעה על שירותים אחרים ועלולה לדרוש הפעלה מחדש.`:`סוד תשתית פנימי — נוצר ומנוהל אוטומטית. בדרך כלל אין צורך לגעת בו.`;}
+
+function tileGlyph(r){
+  if(r.pillar==='app-password'){const nm=(r.app&&r.app.name)||r.title||r.id;return esc(nm.replace(/[^A-Za-z0-9]/,'').slice(0,1).toUpperCase()||'•');}
+  if(r.pillar==='auth')return PROTO_ICON[r.protocol]||'<svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg>';
+  return '<svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
+}
+
+async function load(){
+  // a request that could not be sent has been SAID by api(), as a notice: what it throws ends here — every caller
+  // of load() left it uncaught (the button, the page's start, each action's reload)
+  if(READ===false){READ=null;document.getElementById('body').innerHTML='<div class="spin">טוען…</div>';}   // asked again: it shows
+  const d=await api('api/connections').catch(()=>null);
+  // …and a list that was NEVER read says so where it stands (render): under the notice it went on saying «טוען…»
+  // for good. What was listed once stays — a later refresh that fails empties nothing.
+  const unread=()=>{if(READ!==true)READ=false;render();};
+  if(!d)return unread();
+  // a refusal is said, and what was listed stays: an emptied table would read «אין סודות בקטגוריה זו.»
+  if(d.ok===false&&!d.connections){unread();return binaTell('טעינת החיבורים נכשלה','bad');}
+  ROWS=d.connections||[];READ=true;
+  renderHealth(d.summary); renderTabs(); render();
+}
+function renderHealth(s){
+  const by=(s&&s.by_status)||{}; const attn=(by.needs_action||0)+(by.missing||0);
+  const total=(s&&s.total)||ROWS.length, rest=total-(by.healthy||0)-attn-(by.degraded||0);
+  // Each count AFTER its name, as the menu's rows above it read («סיסמאות אפליקציות 5»): a name and a number,
+  // whatever the number. Number first, the strip said one in the plural — «1 תקלות», «1 דורשים טיפול».
+  document.getElementById('hstrip').innerHTML=
+    `<span class="hi"><span class="d ok"></span>תקינים <b>${by.healthy||0}</b></span>`+
+    (attn?`<span class="hi"><span class="d need"></span>דורשים טיפול <b>${attn}</b></span>`:'')+
+    (by.degraded?`<span class="hi"><span class="d bad"></span>תקלות <b>${by.degraded}</b></span>`:'')+
+    // …and whatever is none of the three: the parts have to add up to the total beside them. They
+    // read 29 + 2 + 2 under «53 סה״כ» — the twenty not set up were counted and never named.
+    (rest>0?`<span class="hi"><span class="d tot"></span>לא מוגדרים <b>${rest}</b></span>`:'')+
+    `<span class="hi">סה״כ <b>${total}</b></span>`;
+}
+// The rows are the shared component's (.bnv-item / .bnv-ic / .bnv-label / .bnv-tail), so this app
+// contributes ids, labels and counts — never a size, a colour or a hover state. The warning dot
+// rides in the TRAILING slot beside the count, which is where every other app puts a count.
+// The rows are constants, so the menu is drawn when the page starts — it stood as a blank column whenever the
+// list did not arrive — and a row carries its count only of a list that was read.
+function renderTabs(){
+  document.getElementById('menu').innerHTML=PILLARS.map(p=>{
+    const rs=ROWS.filter(r=>r.pillar===p.id);
+    const bad=rs.some(r=>r.status==='degraded'), need=rs.some(r=>['needs_action','missing'].includes(r.status));
+    return `<button class="bnv-item${TAB===p.id?' is-active':''}" onclick="setTab('${p.id}')" title="${p.he}">`
+         + `<span class="bnv-ic">${p.ic}</span><span class="bnv-label">${p.he}</span>`
+         + `<span class="bnv-tail">${READ===true?rs.length:''}${bad?'<span class="bad" title="תקלה"></span>':need?'<span class="need" title="דורש טיפול"></span>':''}</span></button>`;
+  }).join('');
+}
+function setTab(id){TAB=id;OPEN=null;renderTabs();render();}
+function toggleAttn(){ATTN=!ATTN;document.getElementById('filt').classList.toggle('on',ATTN);render();}
+
+function render(){
+  const q=(document.getElementById('q').value||'').trim().toLowerCase();
+  const pil=PILLARS.find(p=>p.id===TAB);
+  document.getElementById('phint').textContent=pil.hint;
+  // an unread list is not searched, filtered or called empty: a row of the menu pressed over a silent service
+  // would have answered «אין סודות בקטגוריה זו.» (while the first answer is awaited the page's «טוען…» stands)
+  if(READ!==true){if(READ===false)document.getElementById('body').innerHTML='<div class="empty">החיבורים לא נטענו — «רענון» קורא אותם שוב.</div>';return;}
+  let rows=ROWS.filter(r=>r.pillar===TAB);
+  if(ATTN) rows=rows.filter(r=>['needs_action','missing','degraded'].includes(r.status));
+  if(q) rows=rows.filter(r=>((r.title_he||'')+' '+(r.title||'')+' '+r.id+' '+((r.app&&r.app.name)||'')).toLowerCase().includes(q));
+  rows.sort((a,b)=>(a.title_he||a.title||a.id).localeCompare(b.title_he||b.title||b.id,'he'));
+  if(!rows.length){
+    document.getElementById('body').innerHTML=`<div class="tbl"><div class="empty"><span class="ic"><svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></span>${q||ATTN?'אין תוצאות התואמות לסינון.':'אין סודות בקטגוריה זו.'}</div></div>`;
+    return;
+  }
+  const head=`<div class="thead"><span></span><span>שם</span><span>ערך</span><span>מקור</span><span></span></div>`;
+  document.getElementById('body').innerHTML=`<div class="tbl">${head}${rows.map(itemHtml).join('')}</div>`;
+  if(OPEN && rows.some(r=>r.id===OPEN)) openCred(OPEN,true);
+}
+
+function nameSub(r){
+  const parts=[];
+  if(r.app&&r.app.user) parts.push(`<span class="usr"><svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> ${esc(r.app.user)}</span>`);
+  if(r.pillar==='auth'&&r.protocol) parts.push(`<span class="chip">${PROTO_ICON[r.protocol]||''} ${PROTO_LABEL[r.protocol]||''}</span>`);
+  // WHAT the credential is, in words, with its id one hover away. A row of an app is titled by the
+  // app, so two rows of one app («Plane», «Plane») were told apart only by `project-pln-owner` and
+  // `project-pln-api-key`. The words are the provider's own title, without the app's name it opens with.
+  const app=r.pillar==='app-password'&&r.app&&r.app.name, he=r.title_he||'';
+  const what=app&&he.startsWith(app)?he.slice(app.length).replace(/^[\s—–-]+/,''):'';
+  if(what) parts.push(`<span class="what">${esc(what)}</span>`);
+  return parts.join('');
+}
+function valCell(r){
+  // «לא מוגדר» is said ONCE per row: when the source pill beside this cell already says it, the
+  // value cell has nothing to add (on a phone the two sat one under the other).
+  if(r.status==='unset'||(!r.masked&&!r.clear&&!r.secret&&!(r.kind==='derived')))
+    return r.source==='unset' ? '' : `<span class="v dots">לא מוגדר</span>`;
+  if(r.kind==='derived'||(r.masked&&String(r.masked).startsWith('derived')))
+    return `<span class="v derived">נגזר אוטומטית</span>`;
+  if(!r.secret && r.clear!=null)
+    return `<span class="v clear mono" title="${esc(r.clear)}">${esc(r.clear)}</span>`;
+  if(r.masked){
+    const rev=r.reveal_ok!==false?`<button class="ib" title="גלה" onclick="event.stopPropagation();revealPrimary('${r.id}')"><svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>`:'';
+    return `<span class="v dots" id="pv_${r.id}">••••••••</span>${rev}`;
+  }
+  return `<span class="v dots">—</span>`;
+}
+function itemHtml(r){
+  const title=(r.pillar==='app-password'&&r.app&&r.app.name)||r.title_he||r.title||r.id;
+  return `<div class="item" id="it_${r.id}">
+    <div class="row" onclick="toggleRow('${r.id}')">
+      <div class="tile p-${r.pillar==='app-password'?'app':(r.pillar==='auth'?'auth':'infra')}">${tileGlyph(r)}<span class="st ${r.status}" title="${STAT[r.status]||r.status}"></span></div>
+      <div class="nm" title="${esc(r.id)}"><div class="t">${esc(title)}</div><div class="s">${nameSub(r)}</div></div>
+      <div class="val">${valCell(r)}</div>
+      <div class="src ${r.source}">${SRC[r.source]||r.source}</div>
+      <div class="chev"><svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></div>
+    </div>
+    <div class="exp hidden" id="ex_${r.id}"></div>
+  </div>`;
+}
+
+async function revealPrimary(id){
+  const d=await api('api/reveal/'+id,'POST',{});
+  const el=document.getElementById('pv_'+id); if(!el)return;
+  if(d.value==null){binaTell(d.note||'אין ערך להצגה','warn');return;}
+  el.textContent=d.value; el.className='v mono';
+  const btn=el.nextElementSibling; if(btn)btn.outerHTML=`<button class="ib" title="העתק" onclick="event.stopPropagation();copyText('${esc(d.value).replace(/'/g,"\\'")}')"><svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></button>`;
+  clearTimeout(el._h); el._h=setTimeout(()=>render(),20000);
+}
+// «הועתק ללוח» is said when the browser took it — it used to be said whether or not there was a clipboard
+function copyText(v){(navigator.clipboard?navigator.clipboard.writeText(v):Promise.reject()).then(()=>binaTell('הועתק ללוח'),()=>binaTell('ההעתקה נחסמה בדפדפן','bad'));}
+
+function toggleRow(id){ if(OPEN===id){closeCred(id);} else { if(OPEN)closeCred(OPEN); openCred(id); } }
+function closeCred(id){OPEN=null;const it=document.getElementById('it_'+id);const ex=document.getElementById('ex_'+id);if(it)it.classList.remove('open');if(ex){ex.classList.add('hidden');ex.innerHTML='';}}
+async function openCred(id,keep){
+  OPEN=id;
+  const it=document.getElementById('it_'+id), ex=document.getElementById('ex_'+id);
+  if(!it||!ex)return;
+  it.classList.add('open'); ex.classList.remove('hidden');
+  ex.innerHTML=`<div class="about">טוען…</div>`;
+  const c=await api('api/cred/'+id);
+  const r=ROWS.find(x=>x.id===id)||{};
+  const about=`<div class="about">${aboutText(r)}</div>`;
+  const fields=(c.fields||[]).map(f=>fldHtml(id,f)).join('');
+  ex.innerHTML=`${about}<div class="flds">${fields}</div>${footHtml(r)}`;
+}
+function fldHtml(cid,f){
+  const badge=`<span class="fbadge ${f.source}">${SRC[f.source]||f.source}</span>`;
+  const revert=f.source==='db'?`<button class="btn ghost sm" onclick="revertField('${cid}','${f.key}')" title="מוחק את הערך שנשמר כאן ומחזיר את ברירת המחדל של הלשכה"><svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg> ברירת מחדל</button>`:'';
+  let control;
+  if(f.derived){
+    control=`<div class="fv"><span class="shown" style="color:var(--muted);font-style:italic">נגזר אוטומטית ממפתח אחר</span></div>`;
+  } else if(!f.secret){
+    control=`<div class="fv"><input id="fi_${cid}_${f.key}" value="${esc(f.clear==null?'':f.clear)}" placeholder="לא מוגדר" oninput="dirty('${cid}','${f.key}')">
+      <span id="fs_${cid}_${f.key}"></span></div>`;
+  } else {
+    control=`<div class="fv"><span class="dots" id="fv_${cid}_${f.key}">••••••••</span>
+      <button class="ib" title="גלה" onclick="revealField('${cid}','${f.key}',${f.primary})"><svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
+      <button class="ib" title="ערוך" onclick="editField('${cid}','${f.key}')"><svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button></div>`;
+  }
+  return `<div class="fld" id="fld_${cid}_${f.key}">
+    <div class="fl">${esc(f.label)}${f.primary&&f.source==='unset'?'<span class="req">•</span>':''}</div>
+    ${control}
+    <div class="fa">${revert}${badge}</div>
+  </div>`;
+}
+function footHtml(r){
+  const b=[];
+  if(r.app&&r.app.url) b.push(`<button class="btn ghost sm" onclick="window.open('${esc(r.app.url)}','_blank')"><svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg> פתח ${esc(r.app.name||'אפליקציה')}</button>`);
+  if(r.pillar==='auth'&&(r.kind==='oauth-grant'||r.kind==='oauth-client')) b.push(`<button class="btn ghost sm" onclick="connect('${r.id}')"><svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></svg> ${r.status==='healthy'?'חבר מחדש':'חבר'}</button>`);
+  if(r.pillar==='auth'&&r.kind==='qr-session') b.push(`<button class="btn ghost sm" onclick="showQr('${r.id}')"><svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="20" x="5" y="2" rx="2"/><path d="M12 18h.01"/></svg> סרוק QR</button>`);
+  if(r.pillar==='auth'&&r.source!=='unset') b.push(`<button class="btn ghost sm" onclick="test('${r.id}')"><svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 2v7.53a2 2 0 0 1-.21.9L4.72 20.55a1 1 0 0 0 .9 1.45h12.76a1 1 0 0 0 .9-1.45l-5.07-10.12a2 2 0 0 1-.21-.9V2"/><path d="M8.5 2h7"/><path d="M7 16h10"/></svg> בדוק חיבור</button>`);
+  if(r.rotatable) b.push(`<button class="btn ghost sm" onclick="rotate('${r.id}')"><svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg> החלף סוד</button>`);
+  if(r.pillar==='auth'&&r.status==='healthy'&&(r.kind==='oauth-grant'||r.kind==='qr-session')) b.push(`<button class="btn ghost sm danger" onclick="disc('${r.id}')"><svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></svg> נתק</button>`);
+  return b.length?`<div class="foot">${b.join('')}</div>`:'';
+}
+
+/* field-level edit */
+function dirty(cid,key){const el=document.getElementById('fs_'+cid+'_'+key);if(el&&!el.dataset.d){el.dataset.d=1;el.innerHTML=`<button class="ib" title="שמור" onclick="saveField('${cid}','${key}')" style="color:var(--accent-d)"><svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button>`;}}
+async function saveField(cid,key){const inp=document.getElementById('fi_'+cid+'_'+key);const v=inp?inp.value:null;if(v==null||v==='')return;const d=await api('api/set/'+cid,'POST',{field:key,value:v});if(!d.ok)return binaTell('השמירה נכשלה','bad');binaTell('נשמר');openCred(cid);load();}
+async function revealField(cid,key,primary){
+  const d=await api('api/reveal/'+cid,'POST',primary?{}:{field:key});
+  const el=document.getElementById('fv_'+cid+'_'+key); if(!el)return;
+  if(d.value==null){binaTell(d.note||'אין ערך להצגה','warn');return;}
+  el.className='shown'; el.textContent=d.value;
+  el.parentElement.querySelectorAll('.ib')[0].outerHTML=`<button class="ib" title="העתק" onclick="copyText('${esc(d.value).replace(/'/g,"\\'")}')"><svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></button>`;
+}
+function editField(cid,key){
+  const fld=document.getElementById('fld_'+cid+'_'+key);
+  const fv=fld.querySelector('.fv');
+  fv.innerHTML=`<input class="mono" id="fi_${cid}_${key}" placeholder="ערך חדש" autocomplete="off">
+    <button class="ib" title="שמור" onclick="saveField('${cid}','${key}')" style="color:var(--accent-d)"><svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button>
+    <button class="ib" title="בטל" onclick="openCred('${cid}')"><svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>`;
+  fv.querySelector('input').focus();
+}
+async function revertField(cid,key){
+  if(!await binaAsk({title:'להחזיר את השדה לברירת המחדל?',body:'הערך שנשמר יימחק והשדה יחזור לברירת המחדל של הלשכה.',ok:'החזר',danger:true}))return;
+  const prov=(await api('api/cred/'+cid)); const primary=(prov.fields||[]).find(f=>f.key===key&&f.primary);
+  const d=await api('api/set/'+cid,'DELETE',primary?{}:{field:key});
+  if(!d.ok)return binaTell('ההחזרה נכשלה','bad');
+  binaTell('הוחזר לברירת מחדל'); openCred(cid); load();
+}
+
+/* credential-level actions */
+function connect(id){window.open('oauth/'+id+'/start?go=1','_blank');}
+async function test(id){
+  const busy=binaTell('בודק…');let d;
+  try{d=await api('api/conn/'+id+'/test','POST');}finally{busy.remove();}
+  // the notice's tone says how it went (a drawn mark's markup used to be written into the line, as text)
+  binaTell((STAT[d.status]||'הבדיקה נכשלה')+(d.detail?' · '+d.detail:''),d.ok?'ok':d.status&&d.status!=='degraded'?'warn':'bad');load();
+}
+async function rotate(id){
+  const r=ROWS.find(x=>x.id===id)||{}, imp=(r.impact&&r.impact.length)?r.impact.join(', '):'';
+  if(!await binaAsk({title:`להחליף את «${r.title_he||(r.app&&r.app.name)||r.title||id}»?`,ok:'החלף',danger:!!r.rotate_warn,
+      body:'ערך חדש ייווצר וייכנס לתוקף מיד.'+(imp?'\nייתכן שתידרש הפעלה מחדש של מה שמושפע.':'')+(r.rotate_warn?'\n'+r.rotate_warn:''),
+      facts:imp?[['ישפיע על',imp]]:[]}))return;
+  const d=await api('api/regenerate/'+id,'POST');
+  if(!d.ok)return binaTell('ההחלפה נכשלה','bad');
+  binaTell('הוחלף'+((d.impact&&d.impact.length)?' · ישפיע על '+d.impact.join(', '):'')); load();
+}
+async function disc(id){
+  const r=ROWS.find(x=>x.id===id)||{};
+  if(!await binaAsk({title:'לנתק את החיבור?',facts:[['חיבור',r.title_he||r.title||id]],ok:'נתק',danger:true}))return;
+  const d=await api('api/disconnect/'+id,'POST');
+  if(!d.ok)return binaTell('הניתוק נכשל','bad');
+  binaTell('נותק');load();
+}
+
+/* modals (a yes/no is the office's own question — `binaAsk`, in the copied block above) */
+async function wipeVault(){
+  // Reset the credential plane: clear EVERYTHING the vault holds (OAuth grants, connected
+  // accounts/instances, every saved override) so no client secret survives on the host. .env is the
+  // deployment's declared baseline and is untouched — connections fall back to it. Irreversible:
+  // grants must be re-consented, accounts re-connected. So the action is not offered until its own
+  // words are typed, and the backend also demands {confirm:"wipe"} so a stray call can't nuke the estate.
+  if(await binaAsk({title:'למחוק את כל הסודות השמורים?',ok:'מחק הכל',danger:true,
+      body:'פעולה בלתי הפיכה. יימחקו כל הסודות השמורים — הרשאות Google/OAuth, כל החשבונות המחוברים (מייל/דרייב), וכל הערכים שהוזנו ידנית.\nברירות המחדל של הלשכה יישארו, ותצטרך לחבר מחדש את החשבונות.',
+      input:{label:'להמשך, הקלד: מחק הכל',must:'מחק הכל'}})==null)return;
+  // a relative address, like every other call here: under the console the absolute one went to the console
+  const r=await api('api/vault/wipe','POST',{confirm:'wipe'});
+  // (each count after its name — a name and a number, whatever the number: «נמחקו: 1 ערכים, 1 חשבונות» said one in the plural)
+  if(r&&r.ok){const w=r.wiped||{};binaTell(`נמחקו — ערכים: ${w.overrides||0} · חשבונות: ${w.instances||0} · מפתחות: ${w.minted||0}`);load();}
+  else binaTell('המחיקה נכשלה','bad');
+}
+function addSecret(){
+  const ov=document.createElement('div');ov.className='ov';ov.onclick=e=>{if(e.target===ov)ov.remove();};
+  ov.innerHTML=`<div class="modal"><h3>הוספת סוד חדש</h3>
+    <label>מזהה<input id="as_id" placeholder="my-service-token" autocomplete="off"></label>
+    <label>כותרת (רשות)<input id="as_title" placeholder="תיאור קריא" autocomplete="off"></label>
+    <label>קטגוריה<select id="as_pillar"><option value="auth">חיבורי אימות</option><option value="app-password">סיסמאות אפליקציות</option><option value="infra">סודות מערכת</option></select></label>
+    <label>ערך<input id="as_val" placeholder="הערך הסודי" autocomplete="off"></label>
+    <div class="mf"><button class="btn ghost sm" data-x>ביטול</button><button class="btn sm" data-ok>הוסף</button></div></div>`;
+  ov.querySelector('[data-x]').onclick=()=>ov.remove();
+  ov.querySelector('[data-ok]').onclick=async()=>{
+    const id=ov.querySelector('#as_id').value.trim(), v=ov.querySelector('#as_val').value;
+    if(!id||!v){binaTell('נדרשים מזהה וערך','warn');return;}
+    const pillar=ov.querySelector('#as_pillar').value;
+    const d=await api('api/add','POST',{id,value:v,title:ov.querySelector('#as_title').value.trim()||id,pillar});
+    if(!d.ok)return binaTell('ההוספה נכשלה','bad');          // the sheet stays: what was typed is not lost
+    ov.remove();binaTell('נוסף');TAB=pillar;renderTabs();load();
+  };
+  document.body.appendChild(ov);ov.querySelector('#as_id').focus();
+}
+async function showQr(id){
+  const st=await api('api/qr/'+id);
+  const ov=document.createElement('div');ov.className='ov';ov.onclick=e=>{if(e.target===ov)ov.remove();};
+  ov.innerHTML=`<div class="modal"><h3>שיוך ${esc(id)}</h3>`+
+    (st.qr_png?`<div style="text-align:center"><img src="api/qr/${id}/png" style="width:250px;max-width:100%;border-radius:10px"></div><p style="font-size:12.5px;color:var(--muted);text-align:center;margin-top:12px">פתחו ווצאפ ← מכשירים מקושרים ← סרקו את הקוד.</p>`
+     :`<p class="mbody">${st.is_connected?'מחובר <svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>':'הבוט מתחבר… נסו שוב בעוד רגע.'}</p>`)+
+    `<div class="mf"><button class="btn ghost sm" onclick="this.closest('.ov').remove()">סגור</button></div></div>`;
+  document.body.appendChild(ov);
+}
+async function openAudit(){
+  const d=await api('api/audit');
+  const dr=document.createElement('div');dr.className='drawer';
+  const EV={reveal:'גילוי',edit:'עריכה',rotate:'החלפה',test:'בדיקה',connect:'חיבור',revoke:'ניתוק'};
+  const ev=(d.audit||[]).map(e=>`<div class="aev"><span class="ae-e"><span class="ev">${EV[e.event]||e.event}</span> · ${esc(e.id)}${e.field?' · '+esc(e.field):''}</span><span class="ae-t">${new Date(e.t*1000).toLocaleString('he-IL')}</span></div>`).join('')||'<div class="empty">אין אירועים עדיין.</div>';
+  dr.innerHTML=`<div class="drawer-h"><h3>יומן פעילות</h3><button class="ib" onclick="this.closest('.drawer').remove()"><svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button></div><div class="drawer-b">${ev}</div>`;
+  document.body.appendChild(dr);
+}
+renderTabs();render();load();
+</script>

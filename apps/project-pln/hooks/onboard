@@ -1,0 +1,190 @@
+#!/usr/bin/env bash
+#: project-pln — the office's Plane, brought up as a WORKING instance, not just a running container
+#
+# onboard — Plane's bring-up bootstrap, invoked generically by `bbox run` (run_app_hooks) for every
+# enabled app once the stack is up; the CLI knows nothing about this app. It is also the app's own
+# verb: `./bbox project-pln onboard`.
+#
+# THE PROBLEM IT DELETES. Plane ships no bootstrap. A fresh instance refuses every sign-in until a
+# human fills in the instance-admin form under /god-mode/ (`Instance.is_setup_done` is the flag every
+# auth view checks), and then that same human has to create a workspace and a project before there is
+# anything to click on. Every other app in this office arrives configured — n8n opens holding this
+# office's workflows, the forge opens with an account that already exists — so on this platform the
+# wizard is not a product, it is a missing declaration. `bootstrap.yaml` (the state) + `bootstrap.py`
+# (the applier) + this hook (the driver) are that declaration.
+#
+# WHY `onboard` AND NOT `prepare`: prepare runs BEFORE containers start, and this one needs migrations
+# finished, so it belongs in the phase that runs after `up --wait`. It is a no-op once the instance is
+# bootstrapped, so `bbox run` may call it on every bring-up, forever.
+#
+# THE PASSWORD IS THE ONLY SECRET, and it is handled the way platform-base/glitchtip/hooks/push
+# handles its admin password: read from .env, or minted into .env when the office has none, passed to
+# the container through the ENVIRONMENT (-e, never argv, never a file in the image) and never echoed
+# — output says WHERE it is, not what it is. So a fresh `git clone` + `./bbox run` ends with a login
+# the owner can actually use, and the value is in the one place this deployment keeps secrets.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # say, colors, cn, running, dcx, read_env, DEPLOYMENT_DOMAIN
+
+SVC=project-pln
+MANAGE="python3 /app/backend/manage.py"
+SPEC_FILE="${REPO_ROOT}/apps/project-pln/bootstrap.yaml"
+APPLIER="${REPO_ROOT}/apps/project-pln/bootstrap.py"
+ENV_FILE="${REPO_ROOT}/.env"
+# The app's OWN cold-start allowance, not a number invented here: `progress_deadline_seconds: 1800`
+# in app.json is what the manifest already declares a first boot may take (the README measures 4–21
+# minutes for the migrator plus the API's startup), and `bbox run`'s own wait is only 300s. On the
+# warm path this whole loop costs one round trip; on a cold one it is the difference between "the
+# office came up" and "run the verb again", which is exactly the wizard this hook exists to delete.
+WAIT_SECS="${PLANE_ONBOARD_WAIT:-1800}"
+
+# The owner's identity in this office is not a Plane fact: it is the same human as everywhere else,
+# so it defaults to the credentials the deployment already minted for him (N8N_OWNER_*, the office's
+# owner identity since long before Plane existed). Plane keeps its OWN password, though — inheriting
+# n8n's would copy a secret into a second product's database for no gain.
+# Resolution order for every value below: the CALLER's environment first, then .env. That is what
+# makes a one-off "this instance belongs to someone else now" a single command line instead of an
+# edit to a secrets file — and .env stays the answer for everything that should be permanent.
+ADMIN_EMAIL="${PLANE_OWNER_EMAIL:-$(read_env PLANE_OWNER_EMAIL)}"
+ADMIN_EMAIL="${ADMIN_EMAIL:-$(read_env N8N_OWNER_EMAIL)}"
+
+# A PLACEHOLDER OWNER IS NOT AN OWNER (DGO-13). The fallback chain ends in whatever this deployment
+# happened to mint for CI (`ci@local.dev`), and on the owner's own office that address became the
+# instance administrator — an account nobody can read mail for, whose password lives in a vault row
+# beside a person who never asked for it. Refusing here is the difference between "the office has an
+# owner" and "the office has a login". Name the key, never guess the replacement.
+case "${ADMIN_EMAIL}" in
+  *@local.dev|*@example.com|*@example.org|your-*|*-here|*@localhost)
+    say "${cr}[project-pln] refusing: PLANE_OWNER_EMAIL resolves to '${ADMIN_EMAIL}', which is a placeholder.${c0}"
+    say "${cy}[project-pln]   set the real address in .env and run this again:${c0}"
+    say "${cy}[project-pln]     PLANE_OWNER_EMAIL=<his address>        # .env, then ./bbox project-pln onboard${c0}"
+    say "${cy}[project-pln]   to hand an instance over, add PLANE_OWNER_TAKE_OVER=1 (see AGENT.md).${c0}"
+    exit 0 ;;                      # loud, but not fatal: a bring-up must not die on this
+esac
+ADMIN_EMAIL="${ADMIN_EMAIL:-owner@${DEPLOYMENT_DOMAIN:-localhost}}"
+ADMIN_PASSWORD="${PLANE_OWNER_PASSWORD:-$(read_env PLANE_OWNER_PASSWORD)}"
+ADMIN_FIRST="${PLANE_OWNER_FIRSTNAME:-$(read_env PLANE_OWNER_FIRSTNAME)}"; ADMIN_FIRST="${ADMIN_FIRST:-$(read_env N8N_OWNER_FIRSTNAME)}"
+ADMIN_LAST="${PLANE_OWNER_LASTNAME:-$(read_env PLANE_OWNER_LASTNAME)}";  ADMIN_LAST="${ADMIN_LAST:-$(read_env N8N_OWNER_LASTNAME)}"
+# The hand-over consent (see bootstrap.py). It can come from `.env` or from the shell, so a one-off
+# "this instance is his now" does not require editing the file first.
+TAKE_OVER="${PLANE_OWNER_TAKE_OVER:-$(read_env PLANE_OWNER_TAKE_OVER)}"
+
+[ -f "${APPLIER}" ]    || { say "${cr}[project-pln] ${APPLIER} is missing — cannot bootstrap${c0}"; exit 1; }
+[ -f "${SPEC_FILE}" ]  || { say "${cr}[project-pln] ${SPEC_FILE} is missing — cannot bootstrap${c0}"; exit 1; }
+[ -f "${ENV_FILE}" ]   || { say "${cy}[project-pln] no .env — skipping the bootstrap${c0}"; exit 0; }
+
+# ── 1. the app must be up, and its database migrated, before any of this can be written ─────────
+if ! running "$(cn "${SVC}")"; then
+  say "[project-pln] starting the app (its first boot runs the migrator; this can take minutes)…"
+  dcx up -d "${SVC}" >/dev/null 2>&1 || true
+fi
+
+# The readiness probe IS the query this hook needs anyway: it names the office's owner and counts him
+# in the users table, which cannot answer until the migrator has finished. A curl of `/` would answer
+# from Caddy a second after start, long before the API is usable — the same reason the app's own
+# healthcheck probes the API rather than the front page.
+ready=0
+waited=0
+while [ "${waited}" -lt "${WAIT_SECS}" ]; do
+  probe="$(dcx exec -T -e PLANE_OWNER_EMAIL="${ADMIN_EMAIL}" "${SVC}" ${MANAGE} shell -c \
+             'import os;from plane.db.models import User;print("PLANE_USERS", User.objects.filter(email=os.environ["PLANE_OWNER_EMAIL"].lower()).count())' \
+             2>/dev/null | tr -d '\r' | grep -o 'PLANE_USERS [0-9]*' | tail -1)"
+  case "${probe}" in
+    "PLANE_USERS 0"|"PLANE_USERS 1")
+      # "0" is the instance the owner has never signed into (a fresh office); "1" is one that is
+      # already his. Both mean: the schema is there and the ORM answers.
+      OWNER_EXISTS="${probe##* }"; ready=1; break ;;
+  esac
+  waited=$((waited + 15))
+  [ $((waited % 60)) -eq 0 ] && say "[project-pln] waiting for the database to be ready… (${waited}s)"
+  sleep 15
+done
+if [ "${ready}" != 1 ]; then
+  say "${cy}[project-pln] the app is not ready to be bootstrapped yet (waited ${WAIT_SECS}s)${c0}"
+  say "${cy}[project-pln]   inspect: ./scripts/dc logs --tail 50 ${SVC}${c0}"
+  say "${cy}[project-pln]   then:     ./bbox project-pln onboard${c0}"
+  exit 0                       # loud, but not fatal: a bring-up must not die on one app's timing
+fi
+
+# ── 2. the password: read it, or mint it exactly once, when the office has no owner yet ────────
+MINTED=0
+if [ -z "${ADMIN_PASSWORD}" ] && [ "${OWNER_EXISTS}" = 0 ]; then
+  ADMIN_PASSWORD="$(python3 -c 'import secrets;print(secrets.token_urlsafe(32))')"
+  MINTED=1
+  # Written the same way glitchtip's DSNs are: update the line if it exists, else append. The value
+  # is never printed — by this hook, by `bbox run`, or in any log it produces.
+  if grep -qE '^PLANE_OWNER_PASSWORD=' "${ENV_FILE}"; then
+    sed -i.bak "s#^PLANE_OWNER_PASSWORD=.*#PLANE_OWNER_PASSWORD=${ADMIN_PASSWORD}#" "${ENV_FILE}" && rm -f "${ENV_FILE}.bak"
+  else
+    printf 'PLANE_OWNER_PASSWORD=%s\n' "${ADMIN_PASSWORD}" >>"${ENV_FILE}"
+  fi
+fi
+
+# ── 3. the declared state, rendered host-side (no yaml library is required in the image) ────────
+SPEC="$(python3 -c 'import json,sys,yaml;print(json.dumps(yaml.safe_load(open(sys.argv[1],encoding="utf-8")),ensure_ascii=False))' "${SPEC_FILE}" 2>/dev/null)"
+if [ -z "${SPEC}" ]; then
+  say "${cr}[project-pln] could not read ${SPEC_FILE} (is PyYAML installed for python3?)${c0}"
+  exit 1
+fi
+
+# ── 4. apply it ─────────────────────────────────────────────────────────────────────────────────
+OUT="$(mktemp)"
+dcx exec -T \
+  -e PLANE_BOOTSTRAP="${SPEC}" \
+  -e PLANE_OWNER_EMAIL="${ADMIN_EMAIL}" \
+  -e PLANE_OWNER_PASSWORD="${ADMIN_PASSWORD}" \
+  -e PLANE_OWNER_FIRSTNAME="${ADMIN_FIRST}" \
+  -e PLANE_OWNER_LASTNAME="${ADMIN_LAST}" \
+  -e PLANE_OWNER_TAKE_OVER="${TAKE_OVER}" \
+  "${SVC}" ${MANAGE} shell <"${APPLIER}" >"${OUT}" 2>&1
+RC=$?
+unset ADMIN_PASSWORD SPEC
+
+# Only the app's own log lines are shown. RESULT| carries the machine-readable outcome and is parsed,
+# never printed: it is the one line that could grow a secret if a later change adds one to it.
+sed -n 's/^\[project-pln\] //p' "${OUT}" | sed 's/^/  /'
+RESULT="$(sed -n 's/^RESULT|//p' "${OUT}" | tail -1)"
+if [ "${RC}" -ne 0 ] || [ -z "${RESULT}" ]; then
+  say "${cr}[project-pln] the bootstrap FAILED${c0}"
+  grep -v '^\[project-pln\]' "${OUT}" | grep -v '^RESULT|' | tail -12 | sed 's/^/  /'
+  rm -f "${OUT}"
+  exit 1
+fi
+rm -f "${OUT}"
+
+# A refused bootstrap must not be reported as a successful one. The applier says `skipped` when the
+# instance already belongs to somebody else — nothing was written, so nothing here may claim there is
+# now a login waiting at the URL.
+SKIPPED="$(printf '%s' "${RESULT}" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("skipped") or "")' 2>/dev/null)"
+if [ -n "${SKIPPED}" ]; then
+  say "[project-pln] nothing to do — this instance already has an administrator, and that login stands."
+  say "[project-pln]   ${ADMIN_EMAIL} was NOT added as a second owner. To adopt this instance with it,"
+  say "[project-pln]   set PLANE_OWNER_EMAIL in .env to the existing administrator's address."
+  exit 0
+fi
+
+summary="$(printf '%s' "${RESULT}" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+w = d.get("workspace") or {}
+counts = d.get("counts") or {}
+print("created=%d kept=%d projects=%s users=%s work_items=%s" % (
+    len(d.get("created") or []), len(d.get("kept") or []),
+    counts.get("projects"), counts.get("users"), counts.get("work_items")))
+print("workspace=%s" % w.get("slug", "-"))
+for p in d.get("problems") or []:
+    print("problem: %s" % p)
+' 2>/dev/null)"
+printf '%s\n' "${summary}" | sed 's/^/  /'
+
+ORIGIN="$(read_env PROJECT_PLN_BASE_URL)"; ORIGIN="${ORIGIN:-plane.localhost:8080}"
+say "[project-pln] bootstrapped — sign in at $(read_env PROJECT_PLN_PROTOCOL || printf http)://${ORIGIN}/ as ${ADMIN_EMAIL}"
+if [ "${MINTED}" = 1 ]; then
+  say "[project-pln] its password was minted into .env as PLANE_OWNER_PASSWORD (never printed here)."
+  say "[project-pln]   read it with:  grep '^PLANE_OWNER_PASSWORD=' .env"
+elif [ "${OWNER_EXISTS}" = 0 ]; then
+  say "[project-pln] its password is the one already in .env (PLANE_OWNER_PASSWORD)."
+else
+  say "[project-pln] this owner already existed — his password is unchanged (change it from the sign-in screen if it is lost)."
+fi

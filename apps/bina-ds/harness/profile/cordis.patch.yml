@@ -1,0 +1,120 @@
+# The Bina profile layer — applied over dsh-base and dsh-web-app (packages/bundle/*/cordis.patch.yml
+# in the harness repo). A patch replaces the targeted row's whole `config`, so each row below
+# restates every key it owns.
+
+# The browser HTTP carrier. Stock `dsh web` binds loopback and derives host/port from its own flags;
+# as a platform service the process must answer on the container's network interface, where only
+# Traefik (behind authentik forward-auth) can reach it. Port 3080 is the harness default.
+- id: webserver
+  config:
+    host: '0.0.0.0'
+    port: 3080
+    compression: gzip
+    compressionLevel: 1
+    compressionThresholdBytes: 1024
+
+# No browser to open inside a container; the URL line still goes to the log.
+- id: web-runtime
+  config:
+    openBrowser: false
+    printUrl: true
+    surfaceContext: true
+    trustedHosts: !!js (process.env.DSH_TRUSTED_HOSTS ?? '').split(/\s+/).filter(Boolean)
+
+# The /api trust fence: every authority a browser reaches this app by (port-less = any port).
+- id: connection
+  config:
+    trustedHosts: !!js (process.env.DSH_TRUSTED_HOSTS ?? '').split(/\s+/).filter(Boolean)
+
+# The Bina additions to the browser roster.
+- insert:
+    # Hebrew UI: adds the `he` language, one dictionary per harness namespace, and RTL direction.
+    - id: locale-he
+      name: '@bina/dsh-client-locale-he'
+
+# The sidebar brand: the office agent's own name and mark instead of the vendor's. Same two slots,
+# same registration shape as the row it replaces (ui-brand-official is disabled just below).
+- insert:
+    - id: ui-brand-bina
+      name: '@bina/dsh-client-ui-brand-bina'
+- id: ui-brand-official
+  disabled: true
+
+# ── the conversation in the address bar ───────────────────────────────────────────────────────
+# The one office app that could not be linked to a screen: the console URL was `#/m/bina` whatever
+# conversation was open, because the harness's browser half has no URL routing and keeps its
+# selection in the browser's own storage. This plugin is the app's half of the console's existing
+# contract — it opens `?s=<sessionId>` off its own URL when the shell hands one over, and reports
+# the open conversation back so the shell writes it into the address bar. The id is the session's
+# durable identity (the same one `bbox agent list` prints). Owner request 2026-10-12.
+- insert:
+    - id: session-link
+      name: '@bina/dsh-client-session-link'
+
+# A link to the office itself opens in the tab the person is already in. The harness's renderer sends
+# every http(s) link to a new tab — right for a source on the web, wrong for a console deep link to a
+# screen of this office (the owner, 2026-10-08: «it opens a new window although I asked that by
+# default it opens in the same browser window I am already in»).
+- insert:
+    - id: office-links
+      name: '@bina/dsh-client-office-links'
+
+# ── the office agent ───────────────────────────────────────────────────────────────────────────
+# "תצורות סוכן" are preset DIRECTORIES discovered from roots. The office ships its own root beside
+# this file (agent-presets/<id>/{agent.cordis.yml,preset.yml,skills/}) and makes עזריה the default
+# for every new conversation. The harness's shipped set (标准模式/ptc/minimal/cordis) is dropped:
+# their display text is not localizable and none of them knows the office. `trust: system` keeps
+# the shipped preset non-deletable from the UI; a copy the owner makes lands under
+# $DSH_HOME/.agent-presets (user root, kept on by default) and can be edited or removed there.
+- id: agent-presets
+  config:
+    default: azaria
+    includeShippedRoot: false
+    includeUserRoot: true
+    roots:
+      - path: !!js "process.getBuiltinModule('node:url').fileURLToPath(new URL('agent-presets/', baseUrl))"
+        trust: system
+
+# The office checkout as a workspace, registered at boot (plugins/office-workspace); the path comes
+# from DSH_OFFICE_ROOT (entrypoint.sh), the title is what the hero's workspace chip shows.
+- insert:
+    - id: office-workspace
+      name: '@bina/dsh-office-workspace'
+      config:
+        title: הלשכה הדיגיטלית
+
+# ── the office timeline ───────────────────────────────────────────────────────────────────────
+# Every session event of this harness, projected into spans and kept in $DSH_HOME/timeline, which
+# the adapter serves as the lane apps/bina-ds/app.json declares (SPAN_SOURCE_BINA -> any-concurrency,
+# "כל מקביל"). The plugin needs nothing but the sessions store the harness already runs; it writes
+# asynchronously and never blocks a turn (plugins/timeline-lanes/lib/index.js).
+- insert:
+    - id: timeline-lanes
+      name: '@bina/dsh-timeline-lanes'
+      config:
+        keepDays: 14
+
+# ── the price of a conversation ───────────────────────────────────────────────────────────────
+# The harness's footer counts tokens ("1.9 מיליון"); the owner asked for the money instead, in the
+# currency set in Settings. One projection unit prices every billed sample by the model that served
+# it and by DeepSeek's peak/off-peak rate, and the plugin's browser half shows it in the composer
+# pill the token figure used to occupy. The three values below are the COMPOSITION layer of the
+# `cost-meter` settings section: the owner's own values are stored on the volume and override them,
+# live, from Settings → תוספים. See plugins/cost-meter/README.md.
+- insert:
+    - id: cost-meter
+      name: '@bina/dsh-cost-meter'
+      config:
+        currency: ₪
+        usdRate: 3.7
+        peakPricing: true
+
+# ── production quiet ──────────────────────────────────────────────────────────────────────────
+# dsh-client-hmr is the harness's dev hot-reload driver ("Dev-only", its own header). dsh-web-app
+# mounts it unconditionally, and its node half polls (statSync) every client bundle on an interval —
+# 500 ms by default, forever, NODE_ENV=production notwithstanding. Measured 2026-09-30 on an idle
+# harness: the only work the main thread did. A minute keeps the row — its browser half expects the
+# SSE endpoint — and removes the cost. `pollIntervalMs` is the row's whole config.
+- id: client-hmr
+  config:
+    pollIntervalMs: 60000

@@ -1,0 +1,113 @@
+# yaml-language-server: $schema=./schema.json
+title: bbox hands the CLI and the CONTAINERS different Docker engines, and traefik mounts a directory
+opened: '2026-08-21'
+severity: high
+status: in-progress
+summary: bbox hands the CLI and the CONTAINERS different Docker engines, and traefik mounts a directory
+description: |
+  area: layer 0 / engine selection / routing
+  As first recorded — status: partially-fixed
+
+  ## Verified 2026-08-22
+
+  Both prescribed fixes are present in scripts/lib.sh on this checkout:
+
+    1. "write the result back" — bbox_engine_chosen() (lib.sh:204) does exactly what this issue
+       asked for, and bbox_select_engine() now routes every branch through it, including the
+       BBOX_DOCKER_HOST escape hatch:
+
+           export DOCKER_HOST="$1" BBOX_ENGINE_RESOLVED=1
+           case "$1" in unix://*) export BBOX_DOCKER_SOCK="${1#unix://}" ;; esac
+
+    2. "assert it is a socket" — bbox_assert_engine_socket() (lib.sh:230) checks [ -S ... ], and
+       distinguishes the directory case with a message naming the path and the remedy.
+
+  STILL OPEN, and it is the same shape as bbox-run-ignores-overlays.yaml: the assert guards only
+  ONE of the two compose entry points.
+
+      grep -c bbox_assert_engine_socket scripts/dc   ->  0
+
+  dcx() calls it (lib.sh:335). scripts/dc does not — it goes straight to
+  `"${BBOX_COMPOSE}" $(compose_args) ...` with no engine assertion. So `./scripts/dc up -d` can
+  still hand traefik, machine, connections, app-management and any-concurrency a bind-mount source
+  that is not a socket, and reproduce the original silent 404 outage in full. Every bbox verb is
+  protected; the documented sibling entry point is not.
+
+  Fix the remainder by having scripts/dc call bbox_assert_engine_socket before exec'ing compose —
+  it already sources lib.sh, so the function is in scope. Better still, move the assert into
+  compose_args() so it cannot be forgotten by a third entry point later.
+
+  ## Context
+
+  Measured on portable-ubuntu (192.168.16.103) bringing up platform-os-indox-final from a
+  fresh clone, 2026-08-21.
+
+  `bbox run` printed:
+
+      [bbox] cannot provision /run/bbox-docker.sock (needs root or passwordless sudo)
+             - using whichever daemon answers
+
+  and carried on. bbox_select_engine() then resolved DOCKER_HOST=unix:///var/run/docker.sock
+  for the CLI - correctly, that is the only daemon answering. But it never wrote that decision
+  back to BBOX_DOCKER_SOCK, which stayed at its default /run/bbox-docker.sock.
+
+  scripts/lib.sh:151 exports BBOX_DOCKER_SOCK specifically so compose can interpolate it into
+  the socket bind-mount of traefik, machine, connections, app-management, any-concurrency and
+  portainer. Its own comment says why:
+
+      "A container handed Docker Desktop's socket does not fail - it succeeds against the
+       WRONG engine. Traefik is the one that shows."
+
+  This bug is that sentence one step further along: the path does not exist at all, so Docker
+  created it as a DIRECTORY and traefik bind-mounted that.
+
+      $ ls -ld /run/bbox-docker.sock
+      drwxr-xr-x 2 root root 40 Aug 21 12:34 /run/bbox-docker.sock
+
+      $ docker inspect --format '{{range .Mounts}}{{.Source}}{{end}}' traefik-posnet
+      /run/bbox-docker.sock -> /var/run/docker.sock
+
+      traefik ERR "Failed to retrieve information of the docker client and server host"
+                  "Cannot connect to the Docker daemon at unix:///var/run/docker.sock"
+                  providerName=docker
+
+  Result: traefik runs, reports healthy, and routes NOTHING. That is the exact symptom
+  CLAUDE.md attributes to Docker 29 - and on this box Docker 29 was NOT the cause (see
+  docker29-traefik-warning-does-not-reproduce.yaml). Anyone hitting this reads the CLAUDE.md
+  note, changes their Docker version, and is still broken.
+
+  ## Impact
+
+  Any host where the project engine cannot be provisioned - no root, no passwordless sudo,
+  i.e. every developer laptop that has not run `bbox install` - silently gets a routing-dead
+  stack, and the documented explanation points at the wrong thing.
+
+  ## Reproduce
+
+  On a host with no /run/bbox-docker.sock and a running system dockerd, as a non-root user
+  without passwordless sudo:
+
+      ./bbox run
+      docker inspect --format '{{range .Mounts}}{{.Source}}{{end}}' traefik-<deployment>
+      # -> /run/bbox-docker.sock, which is a directory
+      docker logs traefik-<deployment> | grep 'Cannot connect'
+
+  ## Fix
+
+  bbox_select_engine() must write its result back, so the two can never disagree:
+
+      export DOCKER_HOST="${ep}" BBOX_ENGINE_RESOLVED=1
+      # hand containers the SAME endpoint the CLI just chose
+      case "${ep}" in unix://*) export BBOX_DOCKER_SOCK="${ep#unix://}" ;; esac
+
+  Secondly, a socket bind-mount whose source is missing should be a hard error rather than a
+  silently-created directory: assert `[ -S "${BBOX_DOCKER_SOCK}" ]` before compose runs. The
+  failure is invisible precisely because Docker is helpful here.
+
+  NOTE for anyone working around this by hand: putting BBOX_DOCKER_SOCK in .env does NOT work.
+  lib.sh EXPORTS the default, and an exported environment variable takes precedence over the
+  .env file in compose interpolation. It has to be exported in the shell.
+
+  ## Workaround
+
+  export BBOX_DOCKER_SOCK=/var/run/docker.sock

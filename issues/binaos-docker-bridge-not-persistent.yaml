@@ -1,0 +1,103 @@
+# yaml-language-server: $schema=./schema.json
+title: binaos-docker.service fails at EVERY boot - its binaos0 bridge does not survive a reboot
+opened: '2026-08-21'
+severity: medium
+status: in-progress
+summary: binaos-docker.service fails at EVERY boot - its binaos0 bridge does not survive a reboot
+description: |
+  area: packaging / private engine
+
+  ## Context
+
+  portable-ubuntu has the project's private engine installed and enabled, and it has been dead
+  since the machine was last rebooted - and, by the same mechanism, since the day it was
+  installed:
+
+      x binaos-docker.service - BinaOS container engine (private instance)
+        Loaded: loaded (/etc/systemd/system/binaos-docker.service; enabled)
+        Active: failed (Result: exit-code)
+        dockerd[13134]: failed to start daemon: Error initializing network controller:
+            error creating default "bridge" network:
+            bridge device with non default name binaos0 must be created manually
+        systemd[1]: binaos-docker.service: Start request repeated too quickly.
+        restart counter is at 11
+
+  packaging/linux/fetch-runtime.sh:220 creates the bridge - but only at INSTALL time:
+
+      if ! ip link show binaos0 >/dev/null 2>&1; then
+        ip link add name binaos0 type bridge
+        ip addr add 10.201.0.1/24 dev binaos0
+      fi
+      ip link set binaos0 up
+
+  An `ip link` bridge is not persistent. After the first reboot it is gone, dockerd refuses to
+  create a bridge under any name but docker0, the unit burns its five restarts in three seconds
+  and gives up for good. The host then silently falls back to the system Docker 29 - the engine
+  this platform explicitly does not want to use - and every downstream symptom
+  (see ufw-forward-drop-blocks-container-egress.yaml) follows from that.
+
+  issues/portable-box-docker-29-and-remote-worker-dns.yaml recorded "binaos-docker.service is
+  separately still in 'failed'" on 2026-08-11 without reaching the cause. The same file records
+  docker.service dying the same way earlier in August - a boot race that cost a week of an
+  always-on compute box - and recommends "a systemd drop-in (After=containerd.service + a
+  longer restart budget) so a slow boot does not silently cost a week". That recommendation was
+  never applied, and this is the second unit lost to it.
+
+  ## Fix
+
+  Make the bridge part of starting the service, and stop the rate limit turning a slow boot into
+  a permanent outage. /etc/systemd/system/binaos-docker.service.d/bridge.conf:
+
+      [Unit]
+      StartLimitIntervalSec=0
+
+      [Service]
+      ExecStartPre=-/usr/sbin/ip link add name binaos0 type bridge
+      ExecStartPre=-/usr/sbin/ip addr add 10.201.0.1/24 dev binaos0
+      ExecStartPre=/usr/sbin/ip link set binaos0 up
+      RestartSec=3
+
+  fetch-runtime.sh should WRITE that drop-in at install time rather than creating the bridge
+  imperatively once. The unit already carries Requires=containerd.service; the restart budget is
+  the remaining half.
+
+  ## Verification
+
+  The installer's own "do not trust enabled, prove the daemon answers" loop is the right shape
+  and should be re-run after a reboot, not only after an install:
+
+      DOCKER_HOST=unix:///run/binaos-docker.sock docker version --format '{{.Server.Version}}'
+
+  ## The packaging half, done (2026-10-07, branch dgo-pair)
+
+  `packaging/linux/fetch-runtime.sh` writes the unit itself, so the lines went into the unit
+  rather than into a drop-in beside it:
+
+      [Unit]     StartLimitIntervalSec=0
+      [Service]  ExecStartPre=/bin/sh -c 'ip link show binaos0 >/dev/null 2>&1 || { ip link add name
+                 binaos0 type bridge && ip addr add 10.201.0.1/24 dev binaos0; }; ip link set binaos0 up'
+                 RestartSec=3
+
+  and the install-time `ip link add` is gone - one place makes the bridge, on every start. (One
+  command through `/bin/sh` and not three `ExecStartPre=-` lines: `ip` is not at one path on every
+  distribution, and a step that may fail quietly is how "address already there" and "could not
+  create the bridge" come to look the same.)
+
+  Checked without installing anything, on hp-laptop:
+
+  - the installer rendered from the script's own heredoc parses, and holds exactly one line that
+    creates a bridge - the unit's;
+  - `systemd-analyze verify` on the rendered unit says one thing only, that dockerd is not
+    installed on this machine (a deliberately misspelt key in a copy is named, so the silence
+    means something);
+  - the ExecStartPre command in a network namespace of its own (`unshare -n`): first start - exit
+    0, bridge UP with 10.201.0.1/24; second start - exit 0, still one address; a fresh namespace,
+    which is what a reboot leaves - no bridge, then exit 0 and the address is back.
+
+  Not checked, and it is the point of the issue: the box itself. An engine installed before this
+  change still has the old unit; it gets the new one by running the installer again.
+tasks:
+- text: "The unit makes its bridge on every start and has no start limit (StartLimitIntervalSec=0, ExecStartPre, RestartSec=3); the install-time `ip link add` is removed"
+  done: true
+- text: "On portable-ubuntu: install the runtime again, reboot, and run the verification command above - the engine answers after the reboot"
+  done: false

@@ -1,0 +1,267 @@
+# yaml-language-server: $schema=./schema.json
+title: Fully-extracted documents are re-processed ~9x and retired to MAX_ITERATIONS instead of COMPLETED, because the status write dies on n8n's internal DB pool
+opened: '2026-08-11'
+severity: critical
+status: in-progress
+summary: 'COMPLETED is pinned near 6,389/16,824 while base extraction runs 70-130/hr at 56-79% rework. The state machine is NOT wrong: decide returns mark_completed correctly. The STATUS write is lost, so the pickup re-selects the same rows forever until the action counter trips and the document is retired to MAX_ITERATIONS — a terminal status it can never leave.'
+description: |
+  id: indox-completion-loop-root-cause-2026-08-10
+  As first recorded — status: root-cause-proven; fix in progress (retire redundant upsert layer)
+
+  ## Objective
+
+  #1 — all six-month docs synced + COMPLETED
+
+  ## Proof
+
+  ```yaml
+  the_loop_is_real:
+    source: 'n8n execution_metadata — the driver stamps key=''ids'' (document ids) and key=''actions'' per execution. This is the driver''s own record, not inference. NOTE: values are truncated at n8n''s 512-char custom-data cap (this is the "Custom data value over 512 characters" log spam), so counts are LOWER BOUNDS and never false positives.'
+    examples:
+    - doc: doc_mshcwoo6dajvcn
+      driver_executions: 148
+      window: 17:37 -> 19:05 (88 minutes)
+      sample_executions:
+      - 914397
+      - 915152
+      - 915293
+      - 916351
+      - 934387
+    - doc: doc_msmk9ibfywgqto
+      driver_executions: 120
+    - doc: doc_msmk92mmiwtdwm
+      driver_executions: 118
+    - doc: doc_msm3o0fhz66jkb
+      note: identical action set 44 times
+    not_lock_skips: 'The exection_type=''executing_action'' stamp is written by node ''Execution Data3'', whose ancestors include ''If NOT LOCKED'' and ''Join LOCKED''. The stamp is therefore DOWNSTREAM of the lock check: these were real dispatches that passed the lock, not skips.'
+    real_work_confirmation: BaseDocEx01 ran 2,515 executions in 2 hours against 277 distinct documents = 9.08 extractions per document. Independent of the metadata.
+    disproven_hypothesis: 'The "batchSize 10 fan-out" theory is WRONG (owner rejected it twice, and the data agrees). ACTION_LOG entries written by one execution all carry a SINGLE timestamp (exec 885026/885558/885737: 10 entries, 1 distinct timestamp each) — one write logged ten times by the append-only trigger. The "17.2 actions per document" figure is a logging artifact.'
+  decide_is_correct:
+    method: Extracted the LIVE 'Decide Shipment Action' / 'Decide GDoc Action' node source from the EXECUTING version (activeVersionId -> workflow_history.nodes, not the workflow_entity draft) and ran it against the real row JSON.
+    result_over_181_fully_gated_open_docs:
+      no_action_double: 94
+      mark_completed: 45
+      get_short_doc_id: 15
+      update_name: 10
+      other_extraction_actions: 17
+    conclusion: 45 documents are decided mark_completed on every sweep and do not complete. The routing is right; the write is lost.
+    worked_example:
+      doc: doc_mshcwoo6dajvcn
+      decide_returns: mark_completed
+      every_gate_satisfied:
+        COMPANY_DOC_ID: 21/136535
+        SHORT_DOC_ID: '36535'
+        NAME: טכנו איתן-36535
+        DOC_TOTAL_AMOUNT: 13,659.00
+        DOC_DATE: 01/04/2026
+        all_seven_completion_flags: true
+      observed: STATUS read TO_EXTRACT at 19:22 and MAX_ITERATIONS by 20:00 — the loop retired it DURING the investigation. A finished, correctly-decided document was killed instead of completed.
+  where_the_write_dies:
+    error: timeout exceeded when trying to connect
+    stack: '@n8n/typeorm -> PostgresDriver.obtainMasterConnection (pg-pool)'
+    significance: This is n8n's INTERNAL metadata database, not INDOX's Supabase. The pool is DB_POSTGRESDB_POOL_SIZE=25 per process against 16 worker slots.
+    measured:
+      driver_error_rate: 209 of 401 executions errored in 2h (52%)
+      failing_nodes:
+      - node: Get Line By ID
+        failed_after_ms: 82610
+        note: received 120 items from MAP ID, returned 0
+      - node: Map ACTION_LINE
+        failed_after_ms: 99354
+      errors_by_workflow_60m:
+        indox-v2 Upsert (central): 60
+        Batch Upsert: 53
+        Incoming Documents v2 (driver): 47
+        Base Document Extraction: 38
+      note: 113 of 279 errors (40%) are in the upsert chain itself
+    corroboration: Independent workflow audit (issues/indox-workflow-audit-2026-08-10.yaml) found the write path is a 5-deep nested chain accounting for 19,228 of 42,808 executions (44.9% of the estate), with sampled failures overwhelmingly this same pool timeout. All sub-executions are mode='integrated', so each hop costs a postgres CONNECTION, not queue time.
+    lock_leak: When 'Call INDOX UPSERT' fails, 'SB Unlock Doc' never runs and the doc_step lock leaks until its 600s TTL. 166 keys held at audit time, 97 later. This delays re-pickup but does not prevent it.
+  ```
+
+  ## Final verified state 2026-08-11 2340z
+
+  ```yaml
+  headline: The duplication defect is fixed and measured. Landed duplicate actions went from a 2-hour window of 40 pairs to 24, live dispatch duplication from ~25 per 5-minute window to 14 of 548 pairs (2.6%) — and five of those eight are ONE stale batch execution (1019495) overlapping newer individual re-dispatches, not eight independent races. dup/doc 9.93 peak -> 1.13.
+  the_single_biggest_throughput_fix:
+    what: 'per-type extraction''s Gemini call: httpRequest -> executeWorkflow'
+    before: InvoiceDocEx01 602s, ShipmentDocEx01 601s, on EVERY execution
+    after: 2-4s
+    why: 'The httpRequest hit /webhook/invoice_extractor with timeout:600000. A webhook call creates a NEW Bull job, but the caller already held one of 16 slots — so it waited for a slot that could not free until it finished, and burned the full 600s timeout every time. The Gemini extractor itself averages 18s; the transport was the entire cost. executeWorkflow runs INTEGRATED in the caller''s existing slot: no new job, no queue, no deadlock.'
+    how_it_hid: BaseDocEx01 had ALREADY been converted and ran at 28s, but its node is still NAMED 'Extract Base via Webhook'. The stale name made two different transports look identical. A leftover scratch workflow, ZZAbGemProbe01 ('ZZ A/B Gem transport probe'), exists because someone previously A/B-tested exactly this.
+  verified_landed:
+  - processLock01 two-runs mutex — lock reply completeness 23.2% -> 100%
+  - unlock moved INTO indox api > upsert (every action ends in an upsert)
+  - lock TTL 600 -> 5400 — MUST stay above indoxV2Driver01's 3600s executionTimeout
+  - driver rewired to POST the separated router; If2 / Execute Workflow / MAP ID1 / Dispatch Action Lines deleted
+  - indoxV2ActionRouter01 created, webhook-registered — first real Bull parallelism (queue was wait=0 active=1 all night)
+  - GETALL cap 20000 removed -> limit 100001 with CAP+1 so the guard is reachable
+  - 'R1: indoxV2Upsert01 retired, volume -87%, zero callers'
+  - FIELDS-aware AI cache — 42% hit rate measured, zero extra paid calls
+  - autoheal + its liveness probe (the probe was 100% false-positive on rotated logs)
+  - indox_execution_mode corrected all-in-one -> parallel-actions to match reality
+  metrics_start_to_end:
+    completed_per_hour: 12 -> 27
+    errors_per_hour: 279 -> 37 (of which ~19 are our own deploy windows)
+    single_value_extractors_per_hour: 47 -> 15
+    extract_invoice_google_ai_per_hour: 119 -> 39
+    highlight_coverage: 367/4402 (8%) -> 3078/3128 (98.4%)
+    per_type_extraction: 601s -> 2-4s
+    dup_per_doc: 9.93 -> 1.13
+  still_open:
+  - single-value extractors 15/hr and extract_invoice_google_ai 39/hr — target 0
+  - 'LIKELY CAUSE, unverified: per-type writes AI_SHIPMENT_IDS but the gate reads SHIPMENT_DOC_ID — extraction works, the gate checks the wrong column. Same shape as the query_invoice_id case already fixed in that file.'
+  - indoxDocBatchUpsert01 not retired; 11 callers still route through it
+  - 6 uninvokable active workflows (whatsappApi01, gmailApiRouter01, JQExV3Order00001, indoxGmailActionProcessor01, sv3Inject3x001, IndoxInjectDemo01) — deactivation blocked by the permission classifier
+  - 27 permanent doc_step locks (ttl=-1) — needs ioredis in the RUNNER image; n8n's Redis node has no EXPIRE NX and Code nodes run in runners where the library is absent
+  - executionTimeout=3600 is configured on 5 workflows and does NOT enforce — driver observed at 19,525s
+  - $('Companies') in 'If group action' references a node absent from the driver; the try/catch always returns true so the all-in-one branch has never executed (0 vs 1,070)
+  corrections_i_had_to_make_to_my_own_diagnosis:
+  - '''Execute Workflow was broken'' — WRONG. It resolved and ran successfully in 262/686 executions. The ''not active'' errors were our own import windows.'
+  - '''the lock is bypassed everywhere'' — overstated. Check LOCKED ran in 387/686 and blocked ~125 passes; only the action lane skipped it.'
+  - dup/doc built on execution_metadata.ids — WRONG SOURCE, truncated at 512 chars (~22 of 120 ids). Retracted.
+  - '''started=364 ended=0'' — a measurement bug: those keys are HASHES, GET returns WRONGTYPE. Needs HGET.'
+  - '''80 of 80 never picked up'' — WRONG, same truncation. They rank 1-2 in the pickup slices.'
+  - '''per-type is starved'' — WRONG. Its queue was 612; base extraction''s was 6,743.'
+  - '''worker-1 is idle'' — WRONG. A docker stats point sample; it had finished MORE jobs than worker-2.'
+  - lock TTL retuned 5400 -> 1800 then REVERTED — the bound is the driver's 3600s timeout, not the chain p99.
+  - removed the test-mode lock bypasses then REVERTED — they are a deliberate affordance, not the If2 anti-pattern.
+  ```
+
+  ## Session end state 2026-08-11
+
+  ```yaml
+  everything_converges_on_one_root: 'Four separate symptoms are one defect. With the production loop continuation broken, a document gets exactly ONE action per pickup, so: (1) it is re-picked for every subsequent action, which is the dup/doc figure; (2) the selection stage is starved because the 120-row budget goes to the 6,859 documents needing base extraction; (3) mark_completed is dispatched and the loop dies before it lands; (4) documents exhaust their iteration budget while waiting and are retired to MAX_ITERATIONS.'
+  stage_by_stage_population_delta:
+    method: two snapshots 254s apart; POPULATION counts, not touch counts
+    base_extraction: +40  (~570/hr) — working
+    typed: +41  (~580/hr) — working
+    per_type: +9   — slow but moving
+    selection: 0    — FROZEN
+    completed: 0    — FROZEN
+    max_iterations: +9   — documents destroyed (sustained rate ~10/hr, 167 -> 192 over the session)
+    executions_in_window: 5106
+  selection_is_starved_not_broken: 'The write path is intact: ''Build: Batch Update - Selection & Score'' carries all 16 fields including SELECTION_COMPLETED, and the chain terminates cleanly at the upsert. The problem is throughput — 15 select_invoice_values dispatches in 60 minutes against 191 documents waiting at that gate. ~13 hours of queue, growing.'
+  quality_defect_recorded_separately: SELECTION_COMPLETED is written as ={{ true }} UNCONDITIONALLY, so it records that selection was ATTEMPTED, not that it produced an answer. Part of why 1,371 COMPLETED rows are missing required fields. Not the freeze cause; matters for the "fully processed" bar.
+  permanent_lock_leak:
+    measured: 27 of 250 doc_step keys at ttl=-1 (10.8%), acquisition counters up to 34
+    healthy: 223 keys with sane TTLs (152 at 301-600s, 71 at 61-300s)
+    cause: STAMP LOCK TTL fires only on the winner path; any failure before it leaves a key with no expiry
+    fix_dispatched: EXPIRE <key> <ttl> NX on BOTH branches (Redis is 7.4.10). NX is mandatory — a bare EXPIRE would refresh the TTL on every contended poll and make a busy document's lock immortal, strictly worse than the leak. Self-heals the existing 27 within one TTL window, no manual Redis surgery.
+  landed_and_verified_tonight:
+  - processLock01 mutex two-runs fix — lock reply completeness 23.2% -> 100%
+  - indoxDocBatchUpsert01 — error-path unlock added (was leaking on every failed upsert)
+  - R1 — indoxV2Upsert01 pass-through retired, 16 call sites re-pointed, its volume -87%
+  - indoxV2ExtractInvoiceGemini01 — FIELDS-aware cache with merge, proven zero extra paid calls
+  - autoheal sidecar + worker liveness probe fixed (was 100% false-positive on rotated logs)
+  - 'watchdog: dup/doc and inactive_targets detectors; stall counter anchored to container start'
+  trajectory:
+    errors_per_hour: 279 -> 60
+    single_value_extractors_per_hour: 34 -> 14
+    rework: 89% -> ~66%
+    completed: 6,389 -> 6,396 (essentially flat)
+    intake: 67/hr -> 145/hr (backlog widening)
+  two_repo_landmines_caught_before_any_push:
+  - 'processLock01: repo copy was missing ''First Acquire?'' and ''STAMP LOCK TTL'' — a push would have made EVERY lock permanent.'
+  - 'indoxV2Driver01: repo 131 nodes vs live 132; the node only in live is ''Dispatch Action Lines'' — a push would have deleted the one working dispatcher.'
+  ```
+
+  ## What actually fires the duplicate actions
+
+  ```yaml
+  answer: 'indoxV2Driver01 RE-ENTERS ITSELF. ''Group By ACTION'' feeds ''Dispatch Action Lines'', an executeWorkflow node targeting the LITERAL indoxV2Driver01 with ACTION_LINES={{ $json.items }} and waitForSubWorkflow:false. Each pass re-reads the pending set, so any document whose action did not stick is still pending and is dispatched again. Confirmed by the parentExecution chain: every duplicated execution''s parent is another indoxV2Driver01 execution, lastNode=''Redis1''.'
+  not_webhooks: The webhook fan-out path ('Start Sub-Workflow via Webhook') is DEAD — its target webhook incoming-documents-016 is disabled and unregistered, so it would 404. The live re-entry is the executeWorkflow self-call.
+  worked_example:
+    documents:
+    - doc_msm3jikzv7t7w2
+    - doc_msmqu0zwmmqcka
+    - doc_msm3huy0gxocvk
+    executions:
+    - 953133
+    - 953196
+    - 953235
+    - 953284
+    - 953331
+    - 953398
+    pairwise_overlap: 3 of 3 across all 15 pairs — every execution carried the IDENTICAL 3 documents
+    timing: 19:35:34.072, 19:35:46.347, 19:35:52.951, 19:36:11.446, 19:36:21.657, 19:36:34.528
+    note: NOT concurrent (gaps of 12/6/19/10/13s) and all mode=integrated. line_count decreases 22->22->22->21->19->19 as other work drains while the same 3 documents ride every pass. Their outline is select_invoice_values_x_22_actions_x_7, and the action list includes mark_completed — dispatched repeatedly, landing never.
+  spec_violated: 'ROUTERS-ARCHITECTURE.md §2 specifies "GET doc by id -> acquire doc_step lock -> DISPATCH -> router returns ONE action''s result -> Batch Upsert (sets a *_COMPLETED flag + unlocks) -> loop". One action per iteration, under a lock, unlock inside Batch Upsert. All three are broken live: the lock is inert, the unlock runs only on the success path, and the driver re-enters itself.'
+  still_happening: yes — dispatches per document 5.82 -> 7.44 -> 9.93 (peak) -> 3.22 -> 4.86 -> 2.60
+  last_observed: 20:10:37, doc_msm3ox0t708agq, 7 dispatches
+  ```
+
+  ## Why it stayed hidden
+
+  - Parent execution DATA is pruned while the row survives, so n8n's 'View parent execution' dead-ends one hop up. 913686 and 890440 are gone entirely while 722379 from 07:21 is still held.
+  - ACTION_LOG inflates: the append trigger rewrites one execution's single write as N identical entries, so counting there yields a fake ~17x that is pure artifact.
+  - execution_metadata truncates at n8n's 512-char custom-data cap (the 'Custom data value over 512 characters' log spam), silently cutting the id list.
+  - Lock SKIPS are correct by design, so the one alarming-looking signal is expected noise — while the real failure was documents ABSENT from the lock reply entirely.
+  - The failure is recorded as a STRING inside a document field (ERROR: ... sub-workflow error: Workflow is not active ...), never as an alert.
+
+  ## Detectors added 2026-08-10
+
+  ```yaml
+  where: scratchpad/watchdog.sh (2-minute tick)
+  dup_per_doc:
+    what: dispatches per document over 30 minutes; ROUTERS-ARCHITECTURE.md §2 says this must be 1.00
+    source_discipline: 'Counted from execution_metadata key=''ids'', whose ''executing_action'' stamp is written by ''Execution Data3'' DOWNSTREAM of ''If NOT LOCKED'' — so every counted row got past the mutex and is a real dispatch. Never from ACTION_LOG. Truncation makes it a LOWER bound: it can under-report, never cry wolf.'
+    reading_at_install: 5.25
+  inactive_dispatch_targets:
+    what: any of the 15 executeWorkflow targets with active=false or activeVersionId IS NULL
+    why: OUR OWN DEPLOYS CREATE THIS. import:workflow sets active=false AND activeVersionId=NULL; until activate lands, every dispatch into that target throws and every affected document is re-queued. BaseDocEx01 was re-imported 17:28:49 and 'not active' errors spiked to 138 in the following hour.
+    escalation: outranks every other flag, including a completions stall, which it usually causes
+  ```
+
+  ## Largest single error source
+
+  ```yaml
+  node: indoxV2Driver01 / 'Execute Workflow'
+  error: Workflow is not active and cannot be executed. (getPublishedWorkflowData)
+  share: 120 of 167 driver errors in 2h = 72%
+  why_it_can_never_succeed: Its resource-locator target is the expression value "={{ $workflow.id }}" with mode:'id' — the stored cachedResultUrl is that literal expression URL-encoded (/workflow/=%7B%7B%20$workflow.id%20%7D%7D). n8n 2.x requires an executeWorkflow target to be PUBLISHED; this does not resolve to one, so it throws every run.
+  why_disabling_is_safe:
+  - It has NO outgoing edges in the live connections — a dead end, output consumed by nothing.
+  - It is fed from 'MAP ID1', which is itself DISABLED (data passes straight through).
+  - 'The real dispatch is a DIFFERENT node that works: ''Dispatch Action Lines'' does the same fire-and-forget self-dispatch (waitForSubWorkflow:false) against the LITERAL ''indoxV2Driver01'' and succeeds — confirmed in the per-node census of executions 955781 and 955778, where it ran with 1 item while ''Execute Workflow'' errored with 0.'
+  do_not: Do NOT repair it by swapping the expression for the literal id. That switches ON a self-dispatch that has never once run, alongside one that already works; the plausible outcomes are double dispatch or runaway recursion. Removing the error is the goal.
+  knock_on: An unhandled node error ends the driver execution, so post-action bookkeeping never runs — which is the same mechanism behind the doc_step lock leak.
+  ```
+
+  ## Damage
+
+  ```yaml
+  max_iterations_total: 167
+  max_iterations_that_were_fully_extracted: 118
+  meaning: 118 finished documents were burned into a terminal, never-completable status by this loop after accumulating 469-509 ACTION_LOG parts.
+  still_at_risk: 86 READY documents currently sitting in TO_EXTRACT
+  ```
+
+  ## Open population by next action
+
+  ```yaml
+  extract_base_doc: 6859
+  get_company_name: 1042
+  company_stage: 724
+  per_type_or_naming: 480
+  extract_base_doc_no_fid: 387
+  mark_completed: 179
+  select_values: 176
+  type_stage: 103
+  ```
+
+  ## Fix in progress
+
+  ```yaml
+  chosen: Audit recommendation R1 — retire indoxV2Upsert01 ('Upsert (central)'), a pure pass-through with zero business logic (Redis GET -> always-false IF -> a Code node whose whole body is `return $('When Called').all();`). Proven 1:1 with its child (2,989 = 2,989 executions) and adding ~5.7s (26%) per call. Its only purpose is a test-capture seam whose two consumers are INACTIVE.
+  rationale: The failure is connection ACQUISITION, which scales with the NUMBER of concurrent executions. Removing a whole redundant execution layer from every write reduces that directly.
+  rejected_alternative: Shrinking the pickup batch (limit 120) would be BACKWARDS — smaller batches mean MORE executions and MORE pool pressure, not less.
+  explicitly_not_doing: 'Not retiring indoxDocBatchUpsert01 (audit R4): it holds ''SB Unlock Doc'', the release half of the doc_step lock. Moving that changes lock semantics. Not raising DB_POSTGRESDB_POOL_SIZE: 3 processes x 25 = 75 against max_connections=100 leaves no room, and postgres is capped at 2GB.'
+  ```
+
+  ## Constraints honoured
+
+  - No document rows edited — no bulk UPDATEs, no hand-set STATUS or flags.
+  - No ./bbox run. No git checkout.
+  - Execution history left enabled.
+  - Worker concurrency unchanged.
+  - COMPLETED counted by STATUS delta only, never ACTION_LOG stamp or updated_at.

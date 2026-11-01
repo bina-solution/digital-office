@@ -1,0 +1,40 @@
+# yaml-language-server: $schema=./schema.json
+title: The whole-corpus GETALL path hard-fails at 20,000 rows and the table is at 16,457 (82%), growing ~1,700/day — roughly two days of runway
+opened: '2026-08-10'
+severity: high
+status: open
+summary: '''PG Get All'' in indoxApiSupabase01 reads the entire incoming_documents table with `order by "ID" limit 20000`, and ''Guard Get Size'' throws when it sees more than CAP=20000 rows. The guard is correct and deliberate — it refuses rather than truncating, because a silent truncation would hide rows from every dedup sweep, and because the whole table must fit in a 1536MB worker heap while every executeWorkflow hop copies it. But the cap is a fixed number in a growing table.'
+description: |
+  id: getall-20k-cap-two-day-fuse · area: indox api - supabase / GETALL / dedup sweep
+
+  ## Measured 2026-08-10t14:25z
+
+  ```yaml
+  rows_in_incoming_documents: 16457
+  cap: 20000
+  headroom_pct: 18
+  ingest_rate_today: ~1700/day
+  estimated_runway: ~2.1 days
+  cap_history: raised 5001 -> 20000 on 2026-08-05 when the table held 6,203 rows (~3.2x headroom)
+  ```
+
+  ## What actually happens at the cap
+
+  Guard Get Size throws "indox api: query returned more than 20000 rows of incoming_documents. Refusing to load the table into the worker heap." Every caller of GETALL fails from that moment on — it does not degrade, it stops.
+
+  ## Correction to an earlier report
+
+  A state-machine mapping pass reported this path as already dead ("errors 2/2 in the retained window"). That is not the case as of 2026-08-10. GETALL runs hourly at :05 and the observed results were 12:05 success, 13:05 error, 14:05 success — one intermittent failure ("Task execution aborted because runner became unresponsive"), not a dead path. The cap is the real defect; the intermittent runner timeout is a second, smaller one and is consistent with a single query materialising 16k rows into the worker heap.
+
+  ## Recommended fix
+
+  ```yaml
+  principle: Do NOT raise the cap again. Each raise moves a whole-table materialisation closer to the worker heap limit the guard exists to protect, and the next raise has to be justified against 1536MB rather than against row count.
+  preferred: Make GETALL paginate with a keyset cursor on "ID" (the column it already orders by, so the page boundary is stable and no row can be skipped or repeated), and have the caller loop pages. This removes the ceiling entirely rather than deferring it, and it also fixes the intermittent runner timeout, since no single query has to materialise the whole table.
+  alternative_if_pagination_is_too_invasive: Push the dedup sweep's predicate INTO the query so it stops asking for every row. The sweep only needs rows with a usable business key; the dup-detector subquery already in 'Get Changed Docs' shows the shape. This is a smaller change but leaves a (higher) ceiling in place.
+  explicitly_not_recommended: Raising CAP to a bigger fixed number, or removing Guard Get Size. The guard failing loudly is the reason this was found with two days to spare instead of discovered as a silent wrong answer.
+  ```
+
+  ## Deploy notes
+
+  Both nodes live in indoxApiSupabase01, which also holds the pickup query ('Get Changed Docs'). That file took four imports on 2026-08-10; batch this with any other change to it. import:workflow sets active=false AND activeVersionId=NULL and this build refuses executeWorkflow calls into inactive sub-workflows, so after import run `n8n update:workflow --id=indoxApiSupabase01 --active=true`, then force runtime re-registration via /tmp/reload.js (expect `activate status: 200`), then verify zero "not active" errors before proceeding.

@@ -1,0 +1,80 @@
+# yaml-language-server: $schema=./schema.json
+title: state captured at CREATION never reconciles with a .env edited afterwards
+opened: '2026-08-24'
+severity: high
+status: in-progress
+summary: state captured at CREATION never reconciles with a .env edited afterwards
+description: |
+  ## Context
+
+  Three separate failures on the portable box turned out to be one defect class. In each, some
+  state was captured when an object was CREATED, the .env was edited afterwards, and nothing
+  reconciles the two - so the live system keeps running on values nobody can see in any file.
+
+  THE TIMESTAMPS ARE THE WHOLE STORY:
+
+      authentik-worker container created    2026-08-23 09:23
+      authentik-postgres created            2026-08-23 09:23
+      authentik-server/bootstrap created    2026-08-23 22:23
+      .env last modified                    2026-08-24 00:22
+
+  INSTANCE 1 - the SSO redirect (fixed 2026-08-24). Container env is baked at creation. The worker
+  was 13 hours older than the rest of the stack, so it still carried AUTH_EXTERNAL_URL=auth.localhost,
+  AUTH_PROTOCOL=https and CONSOLE_BASE_URL=console2.localhost. The worker is the process that
+  APPLIES BLUEPRINTS, and two live values are derived from that env - the outpost's authentik_host
+  and the console provider's external_host. Bootstrap wrote the correct values at startup and the
+  worker's periodic reconciliation overwrote them, so the deployment worked in the evening and was
+  broken by morning with nothing changed. The reboot only decided who wrote last.
+
+  INSTANCE 2 - the akadmin password. AUTHENTIK_BOOTSTRAP_PASSWORD is consumed ONLY when the initial
+  user is created. The postgres volume dates from 09:23; every later .env edit was silently inert,
+  so the live password stayed at its 09:23 value while .env moved on. The repo default was rejected
+  and the file gave no clue why.
+
+  INSTANCE 3 - the data-management image. /app is BAKED, so app.py and inventory.py in the image are
+  whatever they were at build time. Editing them in the repo changes nothing until a rebuild - which
+  is a milder version of the same trap, and the reason a fix can look committed and correct while
+  the running service does not have it.
+
+  WHY IT KEEPS WINNING: every instance LOOKS fine. The file on disk is right, the config is right,
+  and the running system disagrees silently. There is no error, and grep cannot find the problem
+  because the wrong value exists only inside a container or a database.
+
+  ## Action
+
+  - THE RULE, worth a gate: any container or volume whose CREATION TIME PREDATES the current .env
+    is a drift risk, and should be reported as such. It is cheap to compute - `docker inspect
+    -f {{.Created}}` against the .env mtime - and it would have caught all three instances above
+    before any of them cost a debugging session.
+  - Blueprint-derived values deserve particular suspicion, because the applying process (the
+    authentik WORKER, not the server and not the bootstrap) re-applies on a schedule and will
+    silently revert a hand-correction. Fixing the DB without fixing that process's env buys minutes.
+  - A stronger fix for the credential case specifically: a bootstrap password that is only read at
+    creation should either be reconciled on every boot, or the deployment should refuse to start
+    when .env names a password that does not match the live one - silence is the failure here.
+  - NOT a fix: hand-editing the database. That was tried for the outpost host and the worker
+    overwrote it, which is what led to the root cause.
+
+  ## The rule this record asked for, 2026-10-06 (branch dgo-pair)
+
+  "Any container whose creation predates the current .env is a drift risk, and should be reported."
+  The report exists, and it is exact rather than a guess from two timestamps: `bbox status` prints the
+  running containers that are **not what the files say now** — compose's own answer, from a dry run
+  of the bring-up (`stale_containers` in scripts/lib.sh). An edited `.env` value, a port, a label, an
+  alias: whatever would make a bring-up re-create a container makes it appear on that line, and
+  nothing else does.
+
+  It found a fourth instance on the day it was written: `n8n-postgres` had been bound to loopback in
+  the files and was still publishing its port on every interface. Measured on hp-laptop:
+
+      before   n8n-postgres published 0.0.0.0:10001 and [::]:10001
+      after    n8n-postgres published 127.0.0.1:10001          (re-created by `scripts/dc up -d`, no build)
+      proof the question can answer: 0 containers as the files are · 29 with one input changed for
+      the asking only · 0 again
+
+  What this does NOT cover, and stays open here:
+  - INSTANCE 2, a value read once at creation and kept in a database (the bootstrap password): no
+    container is stale, so nothing is named. The record's proposal stands — reconcile it on every
+    boot, or refuse to start when the declared value is not the live one.
+  - INSTANCE 3, an image built from files that have changed since: a bring-up without `--build`
+    re-creates nothing, so this line is silent about it too.

@@ -1,0 +1,198 @@
+{
+  "id": "project-pln",
+  "title": {
+    "he": "ניהול פרויקטים",
+    "en": "Projects"
+  },
+  "layer": 3,
+  "kind": "service",
+  "version": "0.1.0",
+  "summary": {
+    "he": "Plane — פרויקטים, משימות, מחזורים ומודולים. מקומי, בלי תלות בשירות ענן",
+    "en": "Self-hosted Plane — projects, work items, cycles and modules, with no cloud dependency"
+  },
+  "compose": "docker-compose.yml",
+  "connections": [
+    {
+      "id": "plane-cloud-api-token",
+      "required": false
+    },
+    {
+      "id": "project-pln-owner",
+      "required": false,
+      "service": "project-pln"
+    },
+    {
+      "id": "project-pln-api-key",
+      "required": false,
+      "service": "project-pln"
+    }
+  ],
+  "contributes": {
+    "connection_probes": {
+      "project-pln-accounts": {
+        "type": "http",
+        "url": "http://project-pln/api/instances/"
+      }
+    },
+    "connection_providers": [
+      {
+        "id": "project-pln-accounts",
+        "title": "Plane accounts — the office's own instance",
+        "title_he": "חשבונות Plane — המופע של הלשכה",
+        "kind": "config",
+        "optional": true,
+        "platform_protocols": [
+          "plane_local_admin",
+          "plane_local_api_token"
+        ],
+        "group": "ניהול פרויקטים",
+        "now": "Nothing to type, and that is the point: these are INSTANCES of `plane_local_admin` (the owner's sign-in) and `plane_local_api_token` (the key the office itself uses against the API) in the credential plane. `hooks/onboard` creates both when it bootstraps the instance, and their values never leave the vault — the account screen lists them and reveals them one at a time, audit-logged, exactly like the local forge's token. Plane has no office-written UI of its own, so this screen IS where the password is read. Sign-in itself is at the app's own host (this is not SSO).",
+        "probe": {
+          "type": "http",
+          "url": "http://project-pln/api/instances/"
+        },
+        "wizard": "nothing to fill in: `./bbox project-pln onboard` creates the login and the key, and stores both here. To use a different owner address or password, set PLANE_OWNER_EMAIL / PLANE_OWNER_PASSWORD in .env BEFORE the first bootstrap."
+      },
+      {
+        "id": "project-pln-owner",
+        "title": "Plane owner account (email + password)",
+        "title_he": "Plane — חשבון הבעלים (דוא״ל וסיסמה)",
+        "kind": "password",
+        "pillar": "app-password",
+        "app": {
+          "name": "Plane",
+          "url_env": "PROJECT_PLN_BASE_URL",
+          "user_env": "PLANE_OWNER_EMAIL"
+        },
+        "env": "PLANE_OWNER_PASSWORD",
+        "envs_extra": [
+          "PLANE_OWNER_EMAIL"
+        ],
+        "group": "ניהול פרויקטים",
+        "now": "The sign-in this office's Plane is brought up with. The password is seeded from PLANE_OWNER_PASSWORD in .env (scripts/ci-env.sh mints it on a fresh machine; an empty value is minted here on the first boot) and `hooks/onboard` applies it to the owner's account. Plane has no office-written UI, so this row — and not a .env file — is where the owner reads it; editing it here wins over .env, and the next `./bbox run` (or `./bbox project-pln onboard`) makes the account match.",
+        "probe": {
+          "type": "http",
+          "url": "http://project-pln/api/instances/"
+        },
+        "wizard": "nothing to fill in: the owner account and the workspace are created by hooks/onboard"
+      },
+      {
+        "id": "project-pln-api-key",
+        "title": "Plane API key — the office's own",
+        "title_he": "Plane — מפתח ה-API של הלשכה",
+        "kind": "text-secret",
+        "pillar": "app-password",
+        "app": {
+          "name": "Plane",
+          "url_env": "PROJECT_PLN_BASE_URL"
+        },
+        "env": "PLANE_LOCAL_API_TOKEN",
+        "group": "ניהול פרויקטים",
+        "now": "The key the office itself uses against Plane's API (header X-API-Key, 60 req/min). `hooks/onboard` mints it once as a `plane_api_…` token in Plane's own table and writes it into .env as PLANE_LOCAL_API_TOKEN, so it is readable here and nowhere else; a token the owner REVOKES in Plane is never resurrected.",
+        "probe": {
+          "type": "present"
+        },
+        "wizard": "nothing to fill in: minted by hooks/onboard"
+      },
+      {
+        "id": "plane-cloud-api-token",
+        "title": "Plane Cloud — אסימון API",
+        "kind": "text-secret",
+        "env": "PLANE_CLOUD_API_TOKEN",
+        "group": "עסק",
+        "now": "Personal access token from Plane Cloud (Profile settings → Personal access tokens, starts with plane_api_). Read ONCE by apps/project-pln/hooks/import-cloud to bring the owner's existing cloud workspace into this local instance over the documented REST API (60 req/min per key). It is not used at runtime — the local instance never talks to the cloud.",
+        "probe": {
+          "type": "present"
+        },
+        "wizard": "הדבק את האסימון מ-Plane Cloud (מתחיל ב-plane_api_)"
+      }
+    ],
+    "env": {
+      "any-concurrency": {
+        "SPAN_SOURCE_PLANE": "http://project-pln:3006/timeline/spans",
+        "SPAN_BUFFER_PLANE": "20000"
+      }
+    }
+  },
+  "use": [
+    {
+      "capability": "sql",
+      "own_instance": true,
+      "reason": "Plane requires PostgreSQL 15.7+ and starts its own with max_connections=1000, and its migrations own the schema. The platform's server is capped at 100 connections and carries the whole office, so a Plane connection storm there is an office outage — this app carries plane-db instead."
+    },
+    {
+      "capability": "kv",
+      "own_instance": true,
+      "reason": "Plane uses Redis as cache, session store and Celery result backend, with its own eviction behaviour. Sharing the platform's redis would mix its keys and evictions with every other app's cache, and the dedicated container costs ~4 MiB."
+    }
+  ],
+  "routing": [
+    {
+      "host": "plane",
+      "port": 80,
+      "auth": "sso",
+      "module": {
+        "group": "עסק",
+        "icon": "check",
+        "embed": true,
+        "id": "project-pln",
+        "name": "ניהול פרויקטים",
+        "desc": "Plane — פרויקטים ומשימות",
+        "order": 35,
+        "alias": "plane",
+        "url": "http://project-pln:80",
+        "url_env": "PROJECT_PLN_URL",
+        "passthrough": [
+          {
+            "path": "/",
+            "match": "prefix",
+            "transport": "http",
+            "strip_mount_prefix": true
+          }
+        ],
+        "external": true
+      },
+      "sso": {
+        "slug": "plane",
+        "display_name": "Plane",
+        "default_host": "plane.localhost",
+        "base_url_env": "PROJECT_PLN_BASE_URL",
+        "local_twin": true
+      }
+    }
+  ],
+  "progress_deadline_seconds": 1800,
+  "health": {
+    "structural": "auto",
+    "probe": {
+      "http": "http://project-pln/api/instances/",
+      "interval": "60s"
+    }
+  },
+  "data": {
+    "volumes": [
+      "project_pln_data",
+      "project_pln_logs",
+      "project_pln_db",
+      "project_pln_redis",
+      "project_pln_minio"
+    ],
+    "on_uninstall": "keep",
+    "sql": [
+      {
+        "instance": "plane-db",
+        "database": "plane",
+        "note": "Plane owns this instance entirely - workspaces, projects, work items, users"
+      }
+    ]
+  },
+  "resources": {
+    "cpus": "1.5",
+    "memory": "1536M"
+  },
+  "agent": {
+    "context": "AGENT.md",
+    "order": 40
+  }
+}

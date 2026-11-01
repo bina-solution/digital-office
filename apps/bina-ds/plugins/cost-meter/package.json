@@ -1,0 +1,34 @@
+{
+  "name": "@bina/dsh-cost-meter",
+  "description": "The office's price meter for the agent harness: a session projection that prices every billed token by the model that served it and DeepSeek's peak/off-peak rate, a composer pill that shows the conversation's cost in the currency set in Settings, and the settings card that sets it",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./pricing": "./lib/pricing.js",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "test": "node --test test/"
+  },
+  "dependencies": {
+    "@deepseek-ai/schemastery": "3.18.2",
+    "zod": "^4"
+  },
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-client-ui-chat",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-settings-plugins"
+      ]
+    }
+  },
+  "license": "MIT"
+}

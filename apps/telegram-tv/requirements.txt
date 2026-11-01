@@ -1,0 +1,12 @@
+# telegram-tv — five packages, and each one is load-bearing.
+#
+# telethon is the whole point of the app: the films are video messages in channels, and only an
+# MTProto USER client can enumerate dialogs and read a channel's history (the Bot API has no such
+# call — see tvclient.py). segno renders the login QR, pure Python, no Pillow: the QR is the
+# "link a desktop device" flow, and it is what makes a login possible without typing a code.
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+requests==2.32.3
+telethon==1.45.0
+segno==1.6.6
+sentry-sdk>=2.0

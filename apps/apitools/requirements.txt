@@ -1,0 +1,29 @@
+Flask>=2.2.2
+flask-cors>=4.0.0
+pdf2image>=1.14.0
+Pillow==10.3.0
+requests==2.31.0
+# headless build: same cv2 API without the X11/GUI stack. The only cv2.imshow call in
+# this repo is inside an example function nothing calls (ocr_processor.ocr_example), so
+# no runtime path needs the GUI.
+opencv-python-headless==4.9.0.80
+numpy~=1.26.4
+pytesseract~=0.3.10
+layoutparser~=0.3.4
+fuzzywuzzy
+python-Levenshtein
+# Pinned: 26.0.0 leaks stale entries into the arbiter's WORKERS set, so the
+# master burns the full graceful_timeout (stop_grace_period) on every shutdown
+# even when workers have already exited — making `docker compose down`/restart
+# hang ~120s. 23.0.0 keeps the same graceful worker-drain (long OCR still
+# protected) without the master-side stall.
+gunicorn==23.0.0
+python-dotenv>=1.0.0
+sentry-sdk[flask]>=2.0.0
+# doc-gen: model -> realistic Hebrew PDF/PNG rendering (also OCR-coord tooling)
+pymupdf>=1.26
+# doc_data business-document store — Postgres/Supabase source of truth
+psycopg2-binary>=2.9
+cryptography>=42
+weasyprint>=62
+zxing-cpp>=2.2

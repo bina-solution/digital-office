@@ -1,0 +1,25 @@
+{
+  "name": "@bina/dsh-client-session-link",
+  "description": "The conversation in the address bar: the harness's browser half adopts a session id arriving as its own inner route (`/?s=<sessionId>`) and reports every change of the open conversation back to the shell (`bina:route`), so the console URL is a copyable deep link to one conversation",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-api-session-controller"
+      ]
+    }
+  },
+  "license": "MIT"
+}

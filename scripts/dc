@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+# dc — `docker compose` for this stack, from anywhere (shell, CI step, Makefile).
+#
+#   ./scripts/dc ps
+#   ./scripts/dc up -d --wait
+#   OVERLAYS="platform/profiles/ci-images.yml" ./scripts/dc up -d
+#
+# Services are COMPILED into .generated/ from apps/*/app.json + platform.state.yaml; the root
+# compose.yml holds only the shared network. A bare `docker compose` therefore resolves zero
+# services and exits 0 — a silent no-op. This wrapper is the shell-callable face of dcx()
+# (scripts/lib.sh) so YAML steps get the same guarantee scripts do. Enforced by gate G7,
+# scripts/refactor/compose-invocation-lint.py.
+#
+# OVERLAYS: space-separated extra -f files appended AFTER the compiled ones (compose merges
+# later files over earlier), for cross-cutting profiles under platform/profiles/.
+set -euo pipefail
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
+
+# A TRUNCATED .env is worse than a missing one, and compose will not tell you.
+#
+# Observed 2026-07-29: a concurrent writer rewrote .env while a build was reading it. compose read
+# an empty file, every ${VAR:-default} fell back, DEPLOYMENT_NAME became "ci", and redis, n8n and
+# chat were recreated under -ci names alongside the real ones. Nothing errored — compose considered
+# it a perfectly good configuration for a different deployment.
+#
+# So: if .env exists it must be non-empty AND still declare DEPLOYMENT_NAME. That single key is the
+# right canary because it is what names every container; if it is gone, the file is not a partial
+# read we can survive, it is a different stack.
+if [ -f "${REPO_ROOT}/.env" ]; then
+  if [ ! -s "${REPO_ROOT}/.env" ]; then
+    echo "dc: .env exists but is EMPTY — refusing to run." >&2
+    echo "    A truncated .env makes compose fall back to defaults and address a DIFFERENT" >&2
+    echo "    deployment (containers get recreated under the default name). Restore it first." >&2
+    exit 1
+  fi
+  if ! grep -qE '^[[:space:]]*DEPLOYMENT_NAME=' "${REPO_ROOT}/.env"; then
+    echo "dc: .env does not declare DEPLOYMENT_NAME — refusing to run." >&2
+    echo "    Either the file was truncated mid-write, or it is not this stack's .env." >&2
+    exit 1
+  fi
+fi
+
+# An overlay is named from the repo root, or by a whole path — dcx takes both, and this check
+# refused the second ("overlay not found") for a file that was there.
+for f in ${OVERLAYS:-}; do
+  case "${f}" in /*) [ -f "${f}" ] ;; *) [ -f "${REPO_ROOT}/${f}" ] ;; esac     || { echo "dc: overlay not found: ${f}" >&2; exit 1; }
+done
+
+# THROUGH dcx, not beside it. This file used to carry its own copy of the invocation, and the copy
+# had drifted: no host zone (so a service brought up from here ran on its compose file's default —
+# n8n's schedule three hours off the one `bbox run` made), and the overlays appended twice. dcx is
+# the one place that knows the binary, the compiled files, the zone, the socket's host path, the
+# heavy-job slot, the guard for a command that would replace the container it runs in, and the CPU
+# budget that follows an `up` — and every caller gets all of it.
+rc=0
+dcx "$@" || rc=$?
+
+# ── the disk does not fill up silently ──────────────────────────────────────────────────────────
+# A rebuild leaves the image it replaced DANGLING (compose re-tags `<project>-<service>`), so every
+# `up -d --build` in this office costs the size of what it replaced, for ever: 36G/58G by 2026-10-01
+# with a `docker system df` nobody looked at. Two prunes, both after a SUCCESSFUL build and neither
+# touching anything a container is using:
+#
+#   * `image prune -f` — dangling images only. A rollback image that matters is not dangling: it
+#     carries a name (bina-ds' self-update tags its predecessor `<image>:previous` before it
+#     replaces it, which is exactly how `dc up -d --build bina-ds` can be rolled back at all).
+#     Keeping a `:previous` tag for EVERY service was considered and rejected: it doubles the image
+#     cost of the whole estate to serve a rollback almost nobody performs, while every app's real
+#     source of truth is the checkout — `git checkout <commit>` and a rebuild is the rollback.
+#   * `builder prune -f` — the build cache, which is the other half of the same leak. Weekly rather
+#     than per-build: a cache that is thrown away after every build stops being a cache (the second
+#     build of the day pays full price again). The stamp file is the schedule, so no daemon, no
+#     cron and no root.
+#
+# Reclaimed space is printed, because a cleanup nobody sees is a cleanup nobody believes.
+if [ "${rc}" -eq 0 ] && compose_is_build "$@"; then
+  before="$(df -k "${REPO_ROOT}" | awk 'NR==2{print $4}')"
+  docker image prune -f >/dev/null 2>&1 || true
+  stamp="${REPO_ROOT}/data/.locks/builder-prune.stamp"
+  now="$(date +%s)"
+  last=0
+  [ -f "${stamp}" ] && last="$(cat "${stamp}" 2>/dev/null || echo 0)"
+  case "${last}" in ''|*[!0-9]*) last=0 ;; esac
+  if [ $(( now - last )) -ge 604800 ]; then
+    docker builder prune -f >/dev/null 2>&1 || true
+    mkdir -p "$(dirname "${stamp}")" 2>/dev/null && printf '%s\n' "${now}" >"${stamp}" 2>/dev/null || true
+    echo "dc: build cache pruned (weekly)"
+  fi
+  after="$(df -k "${REPO_ROOT}" | awk 'NR==2{print $4}')"
+  [ -n "${before}" ] && [ -n "${after}" ] && [ "${after}" -gt "${before}" ] \
+    && echo "dc: reclaimed $(( (after - before) / 1024 )) MiB (free $(df -h "${REPO_ROOT}" | awk 'NR==2{print $4}'))"
+fi
+exit "${rc}"

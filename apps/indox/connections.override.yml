@@ -1,0 +1,28 @@
+# incoming-documents -> connections cutover (compose override).
+# Apply:  docker compose -f development/incoming-documents/docker-compose.yml \
+#                        -f apps/<id>/incoming-documents.inject.override.yml up -d
+#
+# Original CMD (Dockerfile):  gunicorn --config gunicorn.conf.py main:application
+#
+# Secrets now sourced from connections /api/export/incoming-documents (the manifest lists them, and the
+# `as:` aliases emit the Google client under the GSHEET_* names this service reads):
+#   n8n-encryption-key   -> N8N_ENCRYPTION_KEY          (MUST match n8n to decrypt cred rows)
+#   google-oauth-client  -> GSHEET_OAUTH_CLIENT_ID/SECRET (aliased from N8N_GOOGLE_OAUTH_CLIENT_*)
+#   supabase-service-key -> SUPABASE_SERVICE_KEY
+#   gemini-key           -> GEMINI_API_KEY
+# Non-secret selectors (GSHEET_CREDS_EMAIL, *_N8N_TYPE, N8N_DB_DSN) stay as-is.
+services:
+  incoming-documents:
+    volumes:
+      - ../../platform-base/connections/inject.sh:/inject.sh:ro
+    environment:
+      - CONN_URL=http://connections:8990
+      - CONN_SERVICE=incoming-documents
+      # blank the secrets so they MUST come from connections (never from raw .env)
+      - N8N_ENCRYPTION_KEY=
+      - GSHEET_OAUTH_CLIENT_ID=
+      - GSHEET_OAUTH_CLIENT_SECRET=
+      - SUPABASE_SERVICE_KEY=
+      - GEMINI_API_KEY=
+    entrypoint: ["sh","/inject.sh","sh","-c",
+      "exec gunicorn --config gunicorn.conf.py main:application"]

@@ -1,0 +1,52 @@
+{
+  "feature": "find-option-matching",
+  "description": "Validate 'find option' action: given a list of candidate texts, check which ones appear in the OCR output. Tests correctness with small option sets and timeout resilience with large option sets.",
+  "endpoint": "/documentJsonQuery",
+  "upload_endpoint": "/documentOcr",
+  "cases_source": "fixtures/fixtures.json",
+  "query_params": {},
+  "assertions": [
+    {
+      "name": "no_error",
+      "source": "query_response.error",
+      "operator": "is_none"
+    },
+    {
+      "name": "has_result",
+      "source": "query_response.result.result",
+      "operator": "not_none"
+    },
+    {
+      "name": "has_matches",
+      "source": "query_response.result.result.matches",
+      "operator": "not_none"
+    },
+    {
+      "name": "match_count",
+      "source": "analysis.match_count",
+      "operator": "equals"
+    },
+    {
+      "name": "expected_options_found",
+      "source": "analysis.matched_option_names",
+      "operator": "equals"
+    },
+    {
+      "name": "no_false_positives",
+      "source": "analysis.unexpected_matches",
+      "operator": "equals"
+    },
+    {
+      "name": "completed_within_timeout",
+      "source": "analysis.completed",
+      "operator": "truthy"
+    }
+  ],
+  "expected": {
+    "no_error": true,
+    "has_result": true,
+    "has_matches": true,
+    "completed_within_timeout": true,
+    "no_false_positives": []
+  }
+}

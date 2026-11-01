@@ -1,0 +1,42 @@
+# apps/archify — the office's diagrams: every source under ./diagrams, rendered and served.
+#
+# One container and no state: the sources are in git (mounted read-only), the rendered pages are
+# made at start and whenever a source changes, and they live in the container's own /tmp. There is
+# nothing here to back up, which is why the manifest declares no volume.
+services:
+  archify:
+    # The image CI publishes for this commit (DGO-41). `pull_policy: missing` means it is fetched
+    # only when it is not here already; the `build:` below stays as the fallback, and is what an
+    # office uses until CI publishes one.
+    image: ghcr.io/solomonboltin/digital-office/archify:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: archify-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: archify
+    restart: unless-stopped
+    volumes:
+      - ./diagrams:/diagrams:ro
+    networks:
+      - traefik-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-5s}
+      retries: 5
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.3'
+          memory: 256M
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+
+networks:
+  traefik-network:
+    external: true

@@ -1,0 +1,29 @@
+# yaml-language-server: $schema=./schema.json
+title: "Authentik hardening: password policy + CSP header"
+opened: "2026-06-16"
+category: security
+severity: medium
+status: open  # 2026-07-30 triage: STILL OPEN — no password-policy/HIBP entry in platform-base/authentik/blueprints/*.yaml and no CSP middleware anywhere in the tree (refs moved production/authentik/ -> platform-base/authentik/). 2026-08-04 re-triage: STILL OPEN.
+summary: "Authentik runs with defaults — no strengthened password policy (length/HIBP) and no Content-Security-Policy header at the edge."
+
+description: |
+  ## Symptom / risk
+  Authentik is secure out-of-the-box but not hardened for a public deployment:
+  - **Password policy** is default. Per Authentik's own hardening guide, set a
+    minimum length of 15 and enable the "Check haveibeenpwned.com" blocklist.
+  - **No CSP header** — Authentik doesn't set Content-Security-Policy natively; it
+    should be added at the reverse proxy (Traefik) to mitigate content-injection.
+
+  ## Fix
+  - Add a Password policy (min length 15 + HIBP) bound to the relevant flows
+    (declaratively in `production/authentik/blueprints/deployment-apps.yaml`).
+  - Add a Traefik headers middleware setting a sane CSP and attach it to the
+    public routers (`-https`).
+
+tasks:
+  - { text: "Add password policy (min 15 + HIBP) to the blueprint and bind to enrollment/login", done: false }
+  - { text: "Add a Traefik CSP headers middleware; attach to public routers", done: false }
+
+references:
+  - production/authentik/blueprints/deployment-apps.yaml
+  - "https://docs.goauthentik.io/security/security-hardening/"

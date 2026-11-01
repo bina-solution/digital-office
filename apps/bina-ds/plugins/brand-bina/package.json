@@ -1,0 +1,24 @@
+{
+  "name": "@bina/dsh-client-ui-brand-bina",
+  "description": "Bina brand occupants for the harness web client: the name \"בינה\" and mark in the sidebar brand slots and the blank-session hero, in place of the DeepSeek wordmark and whale, and no vendor preview pill beside the hero title",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-client-ui-sidebar",
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ]
+    }
+  },
+  "license": "MIT"
+}

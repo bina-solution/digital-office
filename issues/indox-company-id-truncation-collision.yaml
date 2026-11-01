@@ -1,0 +1,74 @@
+# yaml-language-server: $schema=./schema.json
+title: normalizeCompanyID truncates ח.פ. to 6 digits and gates 100%-certainty auto-approval on it
+opened: '2026-08-05'
+severity: low
+status: open
+summary: normalizeCompanyID truncates ח.פ. to 6 digits and gates 100%-certainty auto-approval on it
+description: |
+  ## Context
+
+  Found while sweeping for identity-construction defects. Recording rather than fixing, per the
+  owner's explicit call: this is pre-existing behaviour, not a regression, and not worth churning
+  the auto-approval path over right now.
+
+  Three workflows carry an identical copy of a "Selection & Scoring Logic1" node:
+
+      apps/indox/blueprint/n8n/indoxV2ActionsShip01.json
+      apps/indox/blueprint/n8n/indoxV2ActionsGDoc01.json
+      apps/indox/blueprint/n8n/indoxV2Driver01.json
+
+  Each defines:
+
+      function normalizeCompanyID(val) {
+        if (!has(val)) return null;
+        let digitsOnly = String(val).replace(/\D/g, '');
+        return digitsOnly.slice(-6).padStart(6, '0');
+      }
+      function normalizeDocID(val) {
+        ...
+        return digitsOnly.slice(-5).padStart(5, '0');
+      }
+
+  The 6-digit company key is then used for two decisions:
+
+    1. idMismatch — whether the AI-extracted and keyword-extracted company ids "confirm" each other.
+    2. TRUSTED_SUPPLIER — if the normalised id matches a pre-approved supplier for the same source
+       type, the document is force-set to SELECTION_CERTAINTY = 100, SELECTION_COMPLETED = true.
+
+  ## Risk
+
+  Israeli ח.פ. numbers are 9 digits. Truncating to the last 6 means two different real companies
+  whose numbers differ only in the leading 3 digits collapse to the same key:
+
+      514123456  ->  123456
+      999123456  ->  123456
+
+  If one of those is a trusted supplier, a document actually belonging to the OTHER company is
+  silently auto-approved at 100% certainty on a financial document, and ledger-matched to the wrong
+  company. The same collapse can also mask a genuine AI-vs-keyword extraction disagreement as
+  "confirmed".
+
+  Probability of an accidental 6-digit-suffix collision between two of this client's actual
+  suppliers is low. The consequence if it happens is a wrong-company financial match that nothing
+  downstream would flag — it enters the ledger wearing a 100%-certainty badge.
+
+  ## Related
+
+  Same family as the known SHORT_DOC_ID `slice(-5)` truncation, which the same audit found is used
+  as a matching key in at least 5 further places:
+    indoxGmailLinkDownloader01.json:467
+    indoxV2Driver01.json:3235, 4108
+    indoxV2ActionsShip01.json:3131, 3168
+    indoxV2ActionsBS01.json:1197, 1239
+  and the separate (now FIXED) `replace(/D/g,'')` missing-backslash typo in indoxSettings01.json's
+  Companies node, which broke the trusted-supplier key from the other direction.
+
+  Full context: ai/context/AUDIT-FINDINGS-2026-08-05.md (finding M2).
+
+  ## If we ever fix it
+
+  Compare on the full digit string rather than a 6-digit suffix. The truncation appears to exist to
+  tolerate identifiers written with differing prefixes/formatting; if that tolerance is genuinely
+  needed, normalise formatting (strip non-digits — which the code already does) and compare in full,
+  rather than discarding leading digits. Any change here must be validated against the real
+  companies table before shipping, because it directly gates an auto-approval path.

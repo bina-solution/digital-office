@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+#: start <slug> <direct-url> [requirements-json] | inspect|status|verify|finish <slug> | goto|click|extract|screenshot <slug> <name> [full]|read <slug> [max-chars] | fill|press <slug> <handle> <value> | captcha <slug> [detect|click <index[,index]>|click @x:y] | goal <slug> <url> <topic> | watch <slug>
+# task — noninteractive Browser42 task protocol for delegated browsing. All output is one JSON
+# object. The browser container owns CDP, native-group allocation, retries, task state, evidence,
+# and acceptance checks; callers supply only a slug, direct URL, and declarative actions.
+# `watch` is host-side: it tails the durable events journal (no runner slot, no CDP).
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+
+if [ "${1:-}" = "watch" ]; then
+  SLUG="${2:?usage: bbox b42 task watch <slug>}"
+  EVENTS="${REPO_ROOT}/data/browser42/tasks/${SLUG}/events.jsonl"
+  TASK="${REPO_ROOT}/data/browser42/tasks/${SLUG}/task.json"
+  [ -f "${TASK}" ] || die "task '${SLUG}' not found under data/browser42/tasks/"
+  echo "[watch] ${SLUG} — tailing ${EVENTS} (Ctrl+C to stop)"
+  touch "${EVENTS}"
+  tail -n +1 -f "${EVENTS}"
+  exit 0
+fi
+
+RUNNER="$(docker ps --filter name=browser42-task-runner --format '{{.Names}}' | head -1)"
+[ -n "${RUNNER}" ] || die "browser42-task-runner not running — run 'bbox run' first"
+docker exec -i "${RUNNER}" python3 /task-client.py "$@"

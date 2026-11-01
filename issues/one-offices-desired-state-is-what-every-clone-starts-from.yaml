@@ -1,0 +1,98 @@
+# yaml-language-server: $schema=./schema.json
+title: "platform.state.yaml is tracked, so git carries ONE office's runtime: every fresh clone starts from the Mac office's choices (and its link to vps1), and a pull replaces or blocks every other office"
+opened: 2026-10-06
+category: bug
+severity: high
+status: blocked
+summary: "The desired-state file is the file the console writes AND the file git ships. The copy on dgo-pair and on origin/dgo since b7f3ba9c (2026-10-04) is the Mac office's runtime — notifications, machine, any-concurrency, autoheal, n8n and nine more switched off `by: user`, plus that office's `remote:` block for vps1. A fresh clone starts from it; a pull on an office whose file is unchanged silently takes it (vps1 would lose n8n, indox, mail at its next reconcile); a pull on an office whose file is changed is refused. The HP office hides its file with a per-clone git flag. Gate G23 is red over three of its lines. The fix — the office's file leaves git, a tracked default beside it — is designed and prepared, and its one irreversible step (stop tracking the file on the shared branch) is the owner's to take."
+description: |
+  ## Measured (hp-laptop, 2026-10-06, dgo-pair @ 4e6e9c55)
+
+  * `git show HEAD:platform.state.yaml` is not a default. It carries `app-management: { state:
+    enabled, by: dgo-extend }`, `autoheal / n8n / notifications / any-concurrency / machine /
+    data-management / apitools / indox / drive / mail: { state: disabled, by: user }`, and a
+    top-level `remote:` block: `office: vps1`, `address: 10.79.2.2`, `fetched: 1791129653`, with
+    15 of vps1's apps (indox, my-docs, drive, mail, …). That is the Mac office's working copy:
+    13 of its 39 apps are on (app-management, authentik, bina-ds, bina-ui, computers, connections,
+    console, dgo-extend, digital-assets, git, postgres, redis, traefik).
+  * How it got there: `b7f3ba9c` ("merge hp-dgo", 2026-10-04) is a merge whose result differs from
+    BOTH parents for this file (`dad40e66`: notifications/machine `{ enabled: true }`; `4ebe96f6`:
+    the same) — the merging office's working copy was committed with the merge. Before it,
+    `4ebe96f6` had committed the HP office's minimal app set on purpose, and `7045a9a7`
+    (2026-09-29) a snapshot of the Mac's. The last copy that was a default is `0f8f3cfa`
+    (2026-08-31).
+  * `git merge-base HEAD origin/dgo` = `b7f3ba9c`, and `git diff b7f3ba9c origin/dgo --
+    platform.state.yaml` is empty: **origin/dgo already carries the same copy.**
+  * The HP office: `git ls-files -v platform.state.yaml` → `S` (skip-worktree). Its real state
+    (drive, data-management, project-pln, archify, browser42 enabled; its own `remote:` for the
+    Mac) differs from HEAD and is hidden from `git status` by a flag set by hand on this clone.
+  * Gate G23 (`gallery-default-lint`): red — browser42, supabase, hello-bina carry `state:` and
+    `by:`. It reads the WORKING file, so on an office it judges that office's runtime, and in a
+    clean clone it judges whichever office's copy was committed last.
+
+  ## What follows from it
+
+  1. **A fresh install is not the product.** `bbox run` on a new clone compiles the committed copy:
+     no notifications, no machine screen, no n8n, no drive/mail/indox — and a `remote:` block that
+     renders tiles and routes for an office the new machine is not linked to.
+  2. **A pull changes what an office runs, or cannot be made.** Git's rule for a tracked file:
+     unchanged locally → replaced by the incoming copy; changed locally → the merge is refused.
+     `apps/indox/RELEASE-DECISIONS.md` records the server's `git status` as "platform.state.yaml
+     only", i.e. changed — so today a pull there is refused, loudly. A server whose copy happened
+     to be unchanged would take the Mac's set at its next reconcile and stop n8n, indox and mail.
+  3. **Each office needs a private trick to keep working** (the HP's skip-worktree flag), and the
+     trick is not declared anywhere — the opposite of "declarative and part of the OS".
+  4. `dgo-extend`'s converge knows and compensates: its state step says "`code` checks out a
+     commit whose platform.state.yaml is the HOME office's (that file is tracked…)" and switches
+     off whatever the declaration does not name.
+
+  ## The fix (prepared, not applied)
+
+  The office's `platform.state.yaml` stops being tracked — it is the office's own file, like
+  `.env` beside `.env.ex` — and a tracked `platform.state.default.yaml` holds what a fresh install
+  starts from: every app a plain `{ enabled: true|false }`, no `state:`, no `by:`, no `remote:`.
+  The path every reader uses does not change (57 files name it), so the change is small:
+
+  * `reconcile.ensure_state()` — the compiler creates the file when the office has none: the copy
+    git last had for this checkout (what a pull has just removed, read back from the reflog), else
+    the default on a first run; an office that has compiled before and has nothing to put back is
+    stopped rather than started from the default.
+  * G23 judges the default file (and that the office's file is not tracked), with a self-test.
+  * `converge`'s repair arm restores from the version's default; `packaging/stage-control.py`
+    ships the default too; `.gitignore` names the office's file.
+  * The proposed default, from the owner's decision recorded in the file (2026-09-17: the platform,
+    the four business apps, the office agent — and nothing else): 19 of 40 apps on — the seven
+    layer-1 apps, console, n8n, notifications, any-concurrency, machine, data-management, bina-ui,
+    apitools, indox, bina-ds, drive, mail. The other 21 ship disabled, the ten apps that joined
+    after that decision among them (computers, git, sites, domains, telegram-tv, project-pln,
+    dgo-extend, social-list, digital-assets, archify) — **this list is the owner's to confirm.**
+
+  What each office sees at the pull that brings it: the HP and any office with a changed copy —
+  git refuses until the file is set aside and put back (two moves, nothing lost); an office with
+  an unchanged copy — git removes the file and the next `bbox` puts the same bytes back.
+
+  ## Why it stopped here
+
+  Stopping to track the file changes a resource three offices share (HP, Mac, vps1 by merge), and
+  the step was refused in the working session as exactly that: a change to a shared resource the
+  owner had not asked for. That is the right owner for it. Everything short of that step that is
+  correct either way was landed (see tasks); the rest waits for the decision.
+tasks:
+  - text: "G33 green: the second writer of the state file (converge's served block) goes through reconcile remote-set — 16150f44"
+    done: true
+  - text: "One reader: G30, G65 and G8 read the enabled set through reconcile.load_state()/disposition — 4e6e9c55"
+    done: true
+  - text: "OWNER: decide that platform.state.yaml leaves git (untracked, with a tracked platform.state.default.yaml), and confirm the default list (19 on / 21 off above)"
+    done: false
+  - text: "After the decision: land the prepared change (ensure_state, the default file, G23 on the default, converge's repair arm, packaging, .gitignore), prove the three pull cases on real clones, then each office pulls"
+    done: false
+  - text: "OWNER, before any pull on vps1 in the meantime: its state file must be set aside first — origin/dgo's copy is the Mac office's"
+    done: false
+references:
+  - platform.state.yaml
+  - platform/manager/reconcile.py
+  - scripts/refactor/gallery-default-lint.py
+  - scripts/refactor/state-writer-lint.py
+  - apps/dgo-extend/converge.py
+  - packaging/stage-control.py
+  - apps/indox/RELEASE-DECISIONS.md

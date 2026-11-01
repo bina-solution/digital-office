@@ -1,0 +1,17 @@
+{
+ "count.live.one": "משימת רקע אחת רצה",
+ "count.live.other": "{count} משימות רקע רצות",
+ "count.idle.one": "משימת רקע אחת",
+ "count.idle.other": "{count} משימות רקע",
+ "list.aria": "משימות רקע",
+ "status.running": "רץ",
+ "status.stopping": "נעצר",
+ "status.completed": "הושלם",
+ "status.killed": "בוטל",
+ "status.failed": "נכשל",
+ "duration.seconds": "{seconds} שנ׳",
+ "duration.minutes": "{minutes} דק׳ {seconds} שנ׳",
+ "duration.hours": "{hours} שע׳ {minutes} דק׳",
+ "duration.title.live": "רץ כבר {duration}",
+ "duration.title.done": "ארך {duration}"
+}

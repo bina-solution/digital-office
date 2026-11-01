@@ -1,0 +1,146 @@
+# yaml-language-server: $schema=./schema.json
+title: "A linked office's app tile fails as a blank frame with no sentence, because the console can only detect a failed frame that is same-origin — and the liveness field it reads is never written"
+opened: 2026-10-04
+category: bug
+severity: high
+status: resolved
+summary: "On vps1's console the `bina.macbook` tile ('בינה ודעת', this MacBook's `bina-ds`) opened a cross-origin frame whose content never painted; the owner saw the browser's dead-frame placeholder and nothing else. `externalFallback()` returns early for cross-origin frames, `REMOTE_DOWN` is therefore never set, and `remote.ok` — which `remoteInfo()` trusts — has no writer anywhere. The office-level truth (`/api/link` → `state: down`, `state_error: ConnectionResetError`) was fetched by app-management and dropped."
+description: |
+  ## Measured (2026-10-04)
+
+  * Console at `console.staging.digital-office.co.il`; the rail carries
+    `id: bina.macbook`, `external: true`, `host: bina.macbook` from
+    `.generated/registry/console.modules.yaml` (the compiler's record of this office's `serve:`).
+  * `externalUrl()` frames it at `https://bina.macbook.console.staging.digital-office.co.il/a/bina/`
+    (`platform-base/console/static/app.js:~114`). That host resolves (wildcard), has a Let's Encrypt
+    certificate **for exactly that name**, and its router answers 302 to its own authentik provider —
+    the edge is healthy.
+  * Behind it the door forwards through the office link, which is dead: from vps1,
+    `dgo-link` logs `door: nothing answers at 10.79.2.1:9002 (timed out)` and
+    `dgo-extend: nothing answers at 10.79.2.1:8983`; `wg show wg0` reports a handshake 15 hours old.
+  * The frame is cross-origin, so `externalFallback()` (`app.js:126-141`) hits
+    `catch (e) { return; }` — "cross-origin: it loaded" — and never calls `renderExternalNotice()`.
+  * `remoteInfo(m).off` is `r.ok === false || REMOTE_DOWN.has(String(m.id))` (`app.js:195`).
+    `console/app.py:144` reads `entry.get("ok")` from `/app/peers.d/*.json`; the only writer
+    (`apps/dgo-extend/peers.py:95-110`) emits `{office, alias, label, module, base}`. Nothing writes
+    `ok`, and `projection.save_status`'s `remote-status.json` (`projection.py:491-494`) is never read
+    by the console.
+
+  ## Why it is structural
+
+  A remote app is framed cross-origin **by construction** (`<alias>.<office>.console.<host>`), so the
+  one detector the console owns for "the frame did not come up" is disabled for exactly the apps it
+  was written for. The careful card it would have shown (`app.js:151-156`, naming the office and
+  distinguishing "מכובה, מנותקת או שהקישור אליה נפל" from "הטעינה לא הושלמה") is unreachable. And
+  because `REMOTE_DOWN` is only ever `add`ed (`app.js:135`, `:184`), a single observed blank frame
+  would mark the app dead for the life of the page even after recovery.
+
+  ## Impact
+
+  The owner cannot tell "the MacBook is off" from "the tunnel is down" from "the app's container is
+  down" from "SSO did not complete" — and the platform knows the first distinction already
+  (`/api/link.state`), it just does not carry it into the surface the owner clicks.
+
+  ## Fix (see ai/context/connection-status-standard.md §7, P1–P2)
+
+  1. `peers.py` writes `ok` (+ `at`, + a cause class) into every peer record from
+     `remote-status.json`, per office and per app, and the console renders `is-offline` from it
+     **before** anything is opened.
+  2. The mark clears when a later verdict is `ok` (evidence expires with evidence).
+  3. `openModule` pre-flights an `external`/`remote` module against the backend verdict and renders
+     the Hebrew card instead of the frame when it is not `ok`.
+  4. A cross-origin watchdog (a heartbeat served through the same door, or `postMessage` from a
+     wrapper page) so a frame that never paints is detected at all.
+  ## Done on dgo-pair (2026-10-06)
+
+  * **One verdict, one writer.** `apps/dgo-extend/app.py::_verdict` answers per linked office:
+    `{ok, hop}` with `hop` one of `tunnel` (her catalog did not arrive and no handshake in three
+    minutes), `office` (catalog silent behind a live or unmeasured tunnel) or `door` (her catalog
+    arrived, this pair's door does not answer here). `/api/link` carries it per item, and after every
+    projection pass `peers.publish_link` writes `{at, offices}` into the directory the console
+    already mounts (`link.json`). The office's own screen reads `verdict.hop` instead of working
+    the same thing out from three other fields.
+  * **The console reads it** (`console/app.py::_link_verdicts`, `_judged`): every linked-office tile
+    carries `remote.ok`, and `remote.why` — the hop as a Hebrew sentence, said once in `_HOP_HE` —
+    when it is not. A file older than five minutes is no measurement and marks nothing. No time goes
+    on the tile, so `/api/version`'s registry stamp moves only when a verdict turns. The orphan
+    reader (`entry.get("ok")`) is gone.
+  * **The shell** marks before opening (rail: the office tag in the failure colour and the row
+    dimmed — the tag is capped at 5em and the words were drawn as "…acBook"; tile: the state on a
+    line of its own; tooltip: the hop), opens an own-host tile of an unreachable office as the card
+    with «נסה שוב» (a real attempt, once) and «פתיחה בחלון נפרד», and at its next question to the
+    server takes the marks off again. `REMOTE_DOWN` — evidence that never expired — is deleted. A
+    verdict that turns under a working app redraws the marks and reloads nothing.
+  * **The console's own card** (a proxied tile whose office did not answer) names the measured hop
+    and asks again by itself every 15 s, so it becomes the app when there is one.
+  * **Proof.** `platform-base/console/test_app.py` (14 pass), `bbox dgo test 1` check DGO-155 on the
+    live pair (API, file and all 10 MacBook tiles agree, file 15 s old), and the fault-injected
+    `console/link down` flows in `digital-office/sim/flow-qa.py`: 6 at desktop, 7 at phone size.
+
+  ## Left
+
+  * The cross-origin watchdog. The pre-flight covers every hop the link measures; a frame on a real
+    domain that fails for a reason nobody measures is still the browser's own page. It needs a real
+    domain to prove — vps1 is on `dgo`, not here. Where the dead frame comes FROM is known, and that
+    is where to end it rather than watch for it: the link's own door answers with an empty body
+    (`link-proxy.py`: `Door._serve` sends `404`/`502` with `Content-Length: 0`, `Forwarder._serve`
+    closes the connection). On a `.localhost` office the console's proxy turns both into its card;
+    on a real domain the nested host is served by the edge straight from the door, so the empty
+    answer IS the frame. The change: a page request gets a Hebrew card from the door, with a header
+    naming the reason, and the console keeps its own (better) card when it sees that header. Mind
+    `converge._refusal_origin`, which reads an empty 404 as a dead host — a door-made 404 with a
+    body must stay one.
+  * Hops nobody measures yet: the far edge and the far app's container (the console says
+    "הלשכה ענתה, אבל האפליקציה הזאת לא זמינה בה" with the status when the office answers an error).
+
+  ## 2026-10-07 — the door answers for itself (the "watchdog" task, done at the source)
+
+  * `apps/dgo-extend/link-proxy.py::_say`: the three things only the link knows — no app under that
+    name (404), the app behind the door does not answer (502), nobody answered through the tunnel
+    (502; it used to be a closed connection) — are answered by the door. A page request gets a
+    small Hebrew card that asks again every 15 s; anything else gets the bare status, as before.
+    Both carry `X-Dgo-Door: no-app | app-down | unreachable`. The card's `<html>` carries
+    `data-card`, as the console's own cards now do, so that whatever reads a page rather than looks
+    at it (the live UI map) can tell a card from a screen.
+  * `platform-base/console/app.py`: with that header on a page request the console answers with its
+    own card — it knows the office by name and what the link last measured — and says which of the
+    three it is (`_DOOR_SAID`). An API call still gets the door's status as it is.
+  * `converge._refusal_origin` is not affected: its probes send no `Accept: text/html`, so a
+    door-made 404 reaches them with an empty body, as before, and stays a dead host.
+  * Measured on hp-laptop (2026-10-07 01:15; `dgo-link-hp` on the image built from this change), from
+    inside the link's namespace, asking the serving door `10.79.4.1:9004` for a host it does not give:
+
+        Accept text/html        -> 404 · X-Dgo-Door: no-app · text/html; charset=utf-8 · 856 bytes
+                                   "האפליקציה לא ניתנת כאן — הלשכה ענתה, אבל היא לא נותנת אפליקציה בשם
+                                   הזה ללשכות מקושרות. המסך הזה בודק שוב בעצמו."
+        Accept application/json -> 404 · X-Dgo-Door: no-app · Content-Length: 0
+
+  * `bbox dgo test 1`: 0 failing, 1 not applicable, with the new pure check `c_door_says` (three
+    reasons × page/call over a socket pair). Console tests 15/15, one new
+    (`test_what_the_links_own_door_said_becomes_this_consoles_card`).
+  * A frame cannot come up empty for any reason the link knows about, so there is nothing left for a
+    watchdog to watch. What this does NOT cover, and is not this issue: a far app that answers 200
+    with a page that then breaks in the browser — that is the app's own failure state, on its own
+    screen.
+  * The Mac office answers this way once it runs this change: its door is the one a frame on
+    `*.macbook.<domain>` is served from.
+tasks:
+  - text: "Write `ok`/`at`/`cause` into `/app/peers.d/*.json` from `remote-status.json` (dgo-extend/peers.py)"
+    done: true
+  - text: "Render the offline mark in the rail/home/palette/dock from that field before opening, and clear it on recovery"
+    done: true
+  - text: "Pre-flight `external`/`remote` modules in `openModule` and render `renderExternalNotice()` instead of a dead frame"
+    done: true
+  - text: "Add the cross-origin frame watchdog (heartbeat through the door or postMessage wrapper)"
+    done: true
+  - text: "Extend the notice to name the hop (tunnel / door / edge / SSO / container) and offer its action"
+    done: true
+  - text: "Fault-injection fixture + flow-qa suite at desktop and mobile that asserts the card names the broken hop"
+    done: true
+references:
+  - ai/context/connection-status-standard.md
+  - ai/context/dgo-remote-apps.md
+  - platform-base/console/static/app.js
+  - platform-base/console/app.py
+  - apps/dgo-extend/peers.py
+  - apps/dgo-extend/projection.py

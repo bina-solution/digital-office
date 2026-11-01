@@ -1,0 +1,176 @@
+#!/usr/bin/env bash
+# DGO Extend — before the container starts: make an office that knew `offices` work under its new name.
+# The migration is idempotent and cheap (a few greps and, once, a volume copy).
+set -euo pipefail
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+bash "${REPO_ROOT}/apps/dgo-extend/hooks/migrate"
+
+# ── an office is ready to be PAIRED from its first run ───────────────────────────────────────────
+# Two fresh offices on one network must be able to pair from their screens with nothing typed into a
+# terminal first (owner, 2026-10-05). Each step below used to be a refusal on the pairing screen
+# with a command in it. All are idempotent, none is fatal — an office that cannot be paired is
+# still an office.
+
+# 1. AN IDENTITY. Pairing needs the office's two keys, minted on the machine and kept in the app's
+#    own volume; the screen answered "run `bbox dgo identity mint`". Minting never replaces an
+#    identity that exists (identity.py refuses without --force) — a new key is a new office to
+#    every peer. The label is the machine's name: it is where the office's default id comes from.
+bash "${REPO_ROOT}/apps/dgo-extend/hooks/identity" mint >/dev/null 2>&1 \
+  || echo "[dgo] note: this office's identity could not be minted now — pairing will say so (bbox dgo identity mint)"
+
+# 2. AN ADDRESS ANOTHER OFFICE CAN DIAL. A tunnel needs ONE side that listens, and an office that
+#    declared nothing only dials — so two fresh offices refused each other ("neither office
+#    published a UDP address"). A LOCAL office on a machine that can receive declares its LAN
+#    address in .env, the same four lines an owner would write (.env.ex documents them):
+#      · only for a local office (DEPLOYMENT_DOMAIN localhost/unset) — a public server's exposure
+#        is its owner's decision, never a default;
+#      · only where a packet can arrive: not the macOS engine (its guest forwards TCP 80/443 and
+#        nothing else), not WSL in NAT mode (only `mirrored` shares the machine's ports);
+#      · only when nothing was declared (both the address and the port empty or absent), and never
+#        when DGO_WG_AUTO=0 says "this office only dials".
+#    On Windows the firewall half is `bbox.cmd run`'s (scripts/windows/firewall-converge.ps1 — one
+#    consent prompt). A lease that moved is corrected on the next run, for an address this hook wrote.
+#
+#    AND WHERE NO PACKET CAN ARRIVE, THE OFFICE SAYS WHY. "Declares nothing" used to be the whole
+#    answer, so the screen read "none — this office only dials" on a Windows laptop and on a Mac
+#    alike, and two such offices learned they could not pair only after exchanging both codes. The
+#    reason is a fact of the machine, which a container cannot see — so it is recorded here, in the
+#    same file and under the same rule (only where nothing else is said): DGO_WG_DIAL_ONLY=wsl-nat
+#    or =engine-guest. The app turns it into a sentence with what would change it
+#    (pair_api.DIAL_ONLY_HE). It is cleared, and the address declared, on the first run in which the
+#    machine can receive. A declared address is NEVER removed here: a detector that fails must not
+#    be able to take a working office off the network.
+#
+#    THE macOS ENGINE'S GUEST sees neither its Mac's LAN address nor whether anything is forwarded
+#    to it, so the engine says both or neither (ai/context/dgo-pairing-contract.md, "the engine's
+#    half"): BBOX_HOST_LAN_ADDR and BBOX_HOST_UDP_PORT in the guest's environment mean "a UDP packet
+#    sent to that address and port on the Mac arrives here on the same port". With both, the guest
+#    is a machine that can receive; without, it is `engine-guest`, as it has always been.
+ENV_FILE="${REPO_ROOT}/.env"
+PORT=51830
+guest_forward() {
+  # the engine's two facts, both well-formed — anything less is "nothing is forwarded"
+  [[ "${BBOX_HOST_LAN_ADDR:-}" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || return 1
+  [[ "${BBOX_HOST_UDP_PORT:-}" =~ ^[0-9]{2,5}$ ]] && [ "${BBOX_HOST_UDP_PORT}" -le 65535 ] || return 1
+}
+cannot_listen() {
+  # prints WHY a packet cannot arrive here, or nothing when one can
+  if [ -n "${BBOX_IN_GUEST:-}" ]; then                                     # the macOS engine's guest
+    guest_forward || echo "engine-guest"
+    return 0
+  fi
+  if grep -qi microsoft /proc/version 2>/dev/null; then                    # WSL: mirrored networking only
+    [ "$(wslinfo --networking-mode 2>/dev/null || true)" = "mirrored" ] || echo "wsl-nat"
+  fi
+  return 0
+}
+lan_address() {
+  if [ -n "${BBOX_IN_GUEST:-}" ]; then printf '%s\n' "${BBOX_HOST_LAN_ADDR:-}"; return 0; fi
+  # the address this machine uses to reach its own network — a fact of the routing table, not a guess
+  ip -4 route get 192.0.2.1 2>/dev/null | awk '{for (i = 1; i <= NF; i++) if ($i == "src") {print $(i + 1); exit}}'
+}
+#
+#    FROM INSIDE A CONTAINER NONE OF THIS CAN BE MEASURED, so nothing is decided there. The office's
+#    own agent runs `bbox run` from its harness container (scripts/lib.sh knows the case by the same
+#    file). In there `ip route` answers the CONTAINER's address on a docker bridge, WSL's networking
+#    mode cannot be asked, and BBOX_IN_GUEST is not set — measured 2026-10-05: on a Windows machine
+#    that IS mirrored this hook, run from a container, recorded DGO_WG_DIAL_ONLY=wsl-nat; on the
+#    MacBook office it would have declared 172.17.0.2 as the address other offices dial, and did not
+#    only because that container has no `ip`. A run from the machine decides; a run from a container
+#    leaves `.env` exactly as it is.
+if [ -f "${ENV_FILE}" ] && [ ! -f /.dockerenv ]; then
+  WHY="$(cannot_listen)"
+  ADDR=""
+  [ -n "${WHY}" ] || ADDR="$(lan_address || true)"
+  if [ -n "${BBOX_IN_GUEST:-}" ] && [ -z "${WHY}" ]; then PORT="${BBOX_HOST_UDP_PORT}"; fi
+  if [ -n "${WHY}" ] || [ -n "${ADDR}" ]; then
+    # `cd` first and hand python a RELATIVE path: the shell knows its own spelling of the checkout,
+    # a native python does not always (gate G10 — the same reason apps/indox/hooks/sync does it).
+    (
+      cd "${REPO_ROOT}" && python3 - .env "${ADDR}" "${WHY}" "${PORT}" <<'PY'
+import re
+import sys
+
+path, addr, why, udp = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+text = open(path, encoding="utf-8", newline="").read()
+nl = "\r\n" if "\r\n" in text else "\n"
+
+
+def value(name):
+    found = ""
+    for line in text.splitlines():
+        m = re.match(rf"^\s*{re.escape(name)}\s*=(.*)$", line)
+        if m:
+            found = m.group(1).strip().strip('"').strip("'")
+    return found
+
+
+def put(body, name, val):
+    """Replace the LAST assignment of `name` (compose's rule), or append one."""
+    lines = body.split(nl)
+    last = max((i for i, ln in enumerate(lines) if re.match(rf"^\s*{re.escape(name)}\s*=", ln)), default=-1)
+    if last >= 0:
+        lines[last] = f"{name}={val}"
+        return nl.join(lines)
+    return body.rstrip("\r\n") + nl + f"{name}={val}" + nl
+
+
+domain = value("DEPLOYMENT_DOMAIN")
+if domain not in ("", "localhost"):
+    sys.exit(0)
+only_dials = value("DGO_WG_AUTO") == "0"
+auto = value("DGO_WG_AUTO") == "1"
+endpoint, port = value("DGO_WG_ENDPOINT"), value("DGO_WG_PUBLISH_PORT")
+new = text
+
+# WHY NOT — recorded only where nothing else is said. The owner's "only dials" and a declared
+# address both speak for themselves; a reason left beside either would be a second opinion.
+reason = "" if (only_dials or endpoint or port) else why
+if reason != value("DGO_WG_DIAL_ONLY") and (reason or "DGO_WG_DIAL_ONLY" in text):
+    if "DGO_WG_DIAL_ONLY" not in text:
+        new = new.rstrip("\r\n") + nl + nl + (
+            "# Written by apps/dgo-extend/hooks/prepare: why this machine cannot be dialed by another office"
+            + nl + "# (the office's own screen says it, with what would change it). Cleared by the same hook."
+            + nl)
+    new = put(new, "DGO_WG_DIAL_ONLY", reason)
+    if reason == "wsl-nat":
+        print("[dgo] this office can only DIAL other offices: WSL runs in NAT networking, so nothing on your "
+              "network can reach it.")
+        print("[dgo]   to make it dialable: run `bbox.cmd dialable` (it asks first, then sets WSL's mirrored "
+              "networking and restarts WSL), then `bbox.cmd run`. Windows 11 22H2 or later.")
+    elif reason == "engine-guest":
+        print("[dgo] this office can only DIAL other offices: the macOS engine lets no packet in from the "
+              "network. It pairs with any office that can be dialed (Windows, Linux, a server).")
+
+if only_dials or why or not addr:
+    pass                                # nothing to declare: the owner said so, or no packet can arrive
+elif not endpoint and not port:
+    # nothing declared: this office becomes dialable on its LAN address
+    if "DGO_WG_AUTO" not in text:
+        new = new.rstrip("\r\n") + nl + nl + (
+            "# Written by apps/dgo-extend/hooks/prepare: a local office is dialable on its LAN address, so"
+            + nl + "# two offices on one network can pair from their screens. DGO_WG_AUTO=0 = this office only dials."
+            + nl)
+    for name, val in (("DGO_WG_AUTO", "1"), ("DGO_WG_ENDPOINT", addr), ("DGO_WG_PUBLISH_PORT", udp),
+                      ("DGO_WG_PUBLISH_BIND", "0.0.0.0"), ("DGO_WG_PORT", udp)):
+        new = put(new, name, val)
+    print(f"[dgo] this office is now dialable for pairing at {addr}:{udp}/udp (declared in .env)")
+elif auto and endpoint and endpoint != addr and re.fullmatch(r"\d{1,3}(\.\d{1,3}){3}", endpoint):
+    # an address THIS hook wrote, and the lease moved: declare the one the machine has now
+    new = put(new, "DGO_WG_ENDPOINT", addr)
+    print(f"[dgo] this machine's LAN address changed ({endpoint} -> {addr}); .env follows it. "
+          f"An office paired with this one still dials {endpoint} — pair again, or reserve the address in the router.")
+if new != text:
+    with open(path, "w", encoding="utf-8", newline="") as f:
+        f.write(new)
+PY
+    ) || true
+  fi
+fi
+
+# 3. WHAT LINKED OFFICES GIVE is part of this office's desired state, and `bbox run` is what
+#    converges it: asked HERE, before the compiler runs, so an app a peer published since the last
+#    run becomes a route and a tile in THIS run — on a machine with no door to itself as well (see
+#    hooks/project). Never fatal: a peer that is asleep, or an app that is not up yet, must not stop
+#    an office starting.
+bash "${REPO_ROOT}/apps/dgo-extend/hooks/project" --quiet || true

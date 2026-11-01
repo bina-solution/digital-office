@@ -1,0 +1,101 @@
+{
+ "type": "GLOBAL",
+ "is_base": true,
+ "version": 1,
+ "_role": "Base fixture applied to ALL docs first (was indoxV2Decide01 pre-router). Owns company_id, type, name + guards.",
+ "classify": {
+  "method": "apitools find_option over the UNION of every fixture's detect.keywords",
+  "type_by_kw": "keyword -> type map assembled from all fixtures' detect blocks",
+  "tie_break": "strong_keywords, then detect.priority",
+  "fallback": "on no keyword match -> aiExtract AI_TYPE, mapped via each fixture's detect.ai_type_map",
+  "sets": [
+   "TYPE",
+   "FIGURE_TYPE_COMPLETED"
+  ]
+ },
+ "company": {
+  "method": "apitools find_option over company tax-ids (companies table)",
+  "guard": "!COMPANY_ID && (!FIGURE_COMPANY_COMPLETED || STATUS==ACTION_RESTART) && !!LINK",
+  "sets": [
+   "COMPANY_ID",
+   "FIGURE_COMPANY_COMPLETED"
+  ]
+ },
+ "settings_refs": {
+  "max_actions_per_doc": 25,
+  "old_document_months_back": 6,
+  "activePrioritySync": false,
+  "_note": "max_actions_per_doc counts DISPATCHES since the last restart (indox_action_execution_log, row-carried as __dispatches_since_restart); old_document_months_back is the OldDocumentMonthsBack setting (fixture seeds 6) — the same bound sync discovery applies, so an old document is neither listed nor processed."
+ },
+ "pipeline": {
+  "steps": [
+   {
+    "action": "normalize_and_dateformat",
+    "guard": "always",
+    "_desc": "coerce ''/undefined->null; 'true'/'false'->bool; Excel-serial *DATE*->DD/MM/YYYY"
+   },
+   {
+    "action": "adopt_ai_type",
+    "guard": "isBlank(TYPE)||TYPE=='UNKNOWN' ; AI_TYPE present",
+    "_desc": "TYPE = AI_TYPE"
+   },
+   {
+    "action": "no_action_delete_row",
+    "guard": "!ID",
+    "terminal": true
+   },
+   {
+    "action": "old_date",
+    "guard": "anyOldDate([RECEIVED_DATE,DOC_DATE,AI_DOC_DATE,BS_LINE_DATE,LOCAL_DOC_DATE]) ; cutoff=old_document_months_back",
+    "route": "update_status_old_doc",
+    "_desc": "the entry gate, before any routing: an old document is terminalised OLD and never extracted"
+   },
+   {
+    "action": "duplicate",
+    "guard": "IS_MAIN_DOUBLE (SQL detector in the driver's Enrich Double Lines: biz key COMPANY_ID+DOC_ID, then HASH, then COMPANY_ID+SHORT_DOC_ID)",
+    "route": "indoxDoubleMergeOn ? action_merge_doubles : no_action_merge_blocked ; non-main -> update_status_double"
+   },
+   {
+    "action": "max_iterations",
+    "guard": "__dispatches_since_restart >= max_actions_per_doc && STATUS not in (COMPLETED, OLD, ACTION_RESTART)",
+    "route": "mark_max_iterations"
+   },
+   {
+    "action": "pause",
+    "guard": "STATUS=='PAUSE'",
+    "route": "no_action_paused"
+   },
+   {
+    "action": "extract_base_doc",
+    "guard": "LINK && LINK_CONNECTION && !TYPE && !BASE_EXTRACTION_COMPLETED",
+    "sets": "LOCAL_* / AI_* readings, API_TOOLS_ID, THUMBNAIL, BASE_EXTRACTION_COMPLETED",
+    "_desc": "BaseDocEx01: local (JQExV3 base) + AI (Gemini) readings in parallel, the filename company match; no finals are written here"
+   },
+   {
+    "action": "select_base",
+    "guard": "!BASE_SELECTION_COMPLETED || BASE_SELECTION_HASH != base_selection_hash(row)",
+    "sets": "COMPANY_ID, TYPE, DOC_DATE, COMPANY_BY_SENDER, TYPE_BY_SOURCE, BASE_SELECTION_COMPLETED, BASE_SELECTION_HASH",
+    "_desc": "SelectBase01: company legs (LOCAL/AI, filename, sender, text) and the weighted type vote (engines + the registry's type_authority)"
+   },
+   {
+    "action": "get_company_name",
+    "guard": "COMPANY_ID && isBlank(COMPANY_NAME) && !COMPANY_NAME_COMPLETED",
+    "sets": "COMPANY_NAME",
+    "onFail": "update_status_unknwon_company"
+   }
+  ],
+  "_then": "TYPE resolved -> engine loads fixture[TYPE] and runs its pipeline.steps.",
+  "_optional_extension": "the user's design: GLOBAL could ALSO own doc_id + date (a type-aware get_doc_id/get_date after classify), so every doc has company/type/id/date before the type pipeline. That MOVES id/date from the per-type pipeline to GLOBAL (a small, clean behaviour shift)."
+ },
+ "dispatch": {
+  "by": "doc_class",
+  "map": {
+   "bs": "indoxV2ActionsBS01",
+   "line": "(BS-spawned invoice -> invoice)",
+   "shipment": "indoxV2ActionsShip01",
+   "invoice": "indoxV2ActionsInv01",
+   "order": "indoxV2ActionsOrd01",
+   "receipt": "indoxV2ActionsRcp01"
+  }
+ }
+}

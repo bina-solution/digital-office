@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# install-windows — one-time host prep for running this stack on Windows.
+#
+# There is exactly one way to run this stack on Windows: clone it onto the C: drive, then
+# `bbox.cmd run` from CMD/PowerShell in that directory. bbox.cmd hands off to WSL, where the
+# project's OWN Docker engine runs the stack — Docker Desktop is never used, installed or not.
+# See ai/context/running-on-wsl.md for the full explanation and the terms ("Docker Desktop" vs
+# "the project engine") used throughout.
+#
+# This script runs INSIDE the WSL distro (bbox.cmd invokes it there, same as every other bbox
+# command) and prepares exactly two things a fresh machine is missing: the WSL host setting that
+# makes Unix file permissions work on a C:\ checkout, and the Linux-side tools (git, Docker CE) —
+# identical to what a Debian VPS needs, since that's genuinely what this distro is.
+#
+# Usage: bbox install windows   (via bbox.cmd on Windows; running scripts/install-windows directly
+#                                 inside the WSL distro also works)
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "${SCRIPT_DIR}/lib.sh"   # REPO_ROOT, colors, ok/warn/bad
+echo "install-windows — host prerequisites"
+
+case "$(uname -r 2>/dev/null)" in
+  *microsoft*|*WSL*) ok "running inside a WSL distro" ;;
+  *) warn "this does not look like WSL — on Windows, run 'bbox.cmd install windows' from CMD, not this script directly" ;;
+esac
+
+# metadata: without it, EVERY file under /mnt/c reports mode 777 and chmod is a silent no-op.
+# ensure_acme_perms (in bbox) then cannot hold acme.json at 600, and traefik falls back to a
+# self-signed cert with no error. This is the one setting that makes a C:\ checkout viable at all.
+WSLCONF=/etc/wsl.conf
+if [ -r "${WSLCONF}" ] && grep -q '^\s*options\s*=.*metadata' "${WSLCONF}" 2>/dev/null; then
+  ok "WSL metadata automount already enabled (/etc/wsl.conf)"
+else
+  warn "WSL metadata automount is NOT enabled — file permissions on C:\\ will not work"
+  if [ "$(id -u)" = 0 ]; then
+    { [ -f "${WSLCONF}" ] && cp "${WSLCONF}" "${WSLCONF}.bak-$(date +%Y%m%d 2>/dev/null || echo backup)"; } || true
+    if grep -q '^\[automount\]' "${WSLCONF}" 2>/dev/null; then
+      warn "  /etc/wsl.conf already has an [automount] section — add \"options = \\\"metadata,umask=22,fmask=11\\\"\" to it by hand"
+    else
+      printf '\n[automount]\noptions = "metadata,umask=22,fmask=11"\n' >> "${WSLCONF}"
+      warn "  added [automount] to ${WSLCONF} — run 'wsl --shutdown' from Windows (NOT from in here), then re-run this"
+    fi
+  else
+    warn "  need root to edit ${WSLCONF} — re-run: wsl -d Ubuntu -u root -- bash -lc 'bbox install windows'"
+  fi
+fi
+
+# git + Docker CE + traefik-network + portainer password + .env: identical steps to a Debian VPS,
+# because that's genuinely what this distro is. One implementation, not a second copy of it.
+bash "${REPO_ROOT}/debian-install.sh"
+
+echo "${cg}Windows host ready.${c0} From CMD/PowerShell in this directory: bbox.cmd run"

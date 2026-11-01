@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+#: declare that redis holds nothing worth carrying — and prove it, every export
+#
+# backup <outdir> <mode>   — invoked by scripts/deployment-archive.py, never by hand.
+#
+# THIS HOOK EXISTS TO SAY NO, AND TO KEEP SAYING NO ONLY WHILE IT IS TRUE.
+#
+# `redis_data` is a real 8 MB volume with a real dump.rdb, so leaving it out of an archive looks
+# like an oversight. It is not. Measured on this estate 2026-08-06:
+#
+#   db0   78 keys, 71 with a TTL          db1   53,613 keys, 53,599 with a TTL
+#   the 21 non-expiring keys were, in full: bull:jobs:{active,id,priority,26046} and
+#   n8n:cache:{project-owner,workflow-activation-errors,workflow-project}
+#
+# Every one is a queue internal or an n8n cache. Nothing here is deployment state — the sync cursors
+# people assume live in redis are supabase tables (`sync_cursor`, `sync_ledger`, `sync_pipe_state`),
+# and the INDOX `incoming_docs_actions:*` idempotency markers all carry TTLs.
+#
+# Carrying it would be worse than useless. Restoring `n8n.process_lock.*` hands the new machine
+# locks held by a process that no longer exists — INDOX's processLock01 would then skip work while
+# reporting success, which is this repo's single most repeated bug shape. Restoring `bull:jobs:*`
+# resurrects job ids for work that already ran.
+#
+# So instead of a comment in a skip list that nobody re-checks, this hook RE-MEASURES the claim on
+# every export and FAILS if it stops being true. A key with no TTL that is not a bull/n8n internal
+# is new durable state, and the honest response is to stop the export and make somebody look.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+. "${REPO_ROOT}/scripts/archive-lib.sh"   # archive_require / archive_stop / archive_project
+
+C="$(archive_container redis || true)"
+if [ -z "${C}" ]; then
+  echo "[redis/backup] redis is not running — cannot verify the no-durable-state claim; skipping anyway" >&2
+  echo "SKIPVOL redis_data"
+  exit 0
+fi
+PW="$(read_env REDIS_PASSWORD)"
+rc() { docker exec "${C}" redis-cli ${PW:+-a "${PW}"} --no-auth-warning "$@" 2>/dev/null; }
+
+# ONE round trip per database, evaluated inside redis.
+#
+# The first version of this scanned the keyspace and asked `TTL` per key over `docker exec`. On this
+# estate that is 53,691 container executions, and the export sat in this hook for eleven minutes
+# before anyone noticed — a verification step that costs more than the backup is a verification step
+# people will delete. SCAN + TTL inside a single EVAL is the same question asked once.
+#
+# The prefix list is the "known ephemeral" set, and every entry is a claim about a subsystem:
+#   bull:*                      n8n's queue (bullmq)
+#   n8n:cache:*, n8n.exec.*     n8n's own caches and per-execution scratch
+#   n8n.process_lock.*          INDOX's processLock01 — actively harmful to carry
+#   incoming_docs_actions:*     INDOX per-document idempotency markers, all TTL'd
+#   authentik_proxy_session_*   forward-auth outpost sessions; carrying them would move live
+#                               browser sessions to a machine whose cookies do not match
+#   _kombu.binding.*,           Celery's broker bindings and its unacknowledged-task set, written by
+#   unacked, unacked_index
+#                               authentik-worker. Genuinely non-expiring, and genuinely not state:
+#                               a fresh worker re-declares its own bindings on connect, and moving
+#                               `unacked` would hand the new machine tasks whose payloads reference
+#                               a queue that no longer exists.
+#   public:authentik_cache:*    authentik's Django channels/message cache — per-session UI messages.
+#
+# The last three were found BY THIS CHECK on its first real run (13 keys), which is the argument for
+# measuring rather than asserting: the prefix list written from a manual scan an hour earlier had
+# already missed a subsystem.
+LUA='local n=0 local s={} local c="0"
+repeat
+  local r = redis.call("SCAN", c, "COUNT", 1000)
+  c = r[1]
+  for _, k in ipairs(r[2]) do
+    if not (k:find("^bull:") or k:find("^n8n:cache:") or k:find("^n8n%.exec%.")
+            or k:find("^n8n%.process_lock%.") or k:find("^incoming_docs_actions:")
+            or k:find("^authentik_proxy_session_") or k:find("^_kombu%.binding%.")
+            or k == "unacked" or k == "unacked_index" or k:find("^public:authentik_cache:")) then
+      if redis.call("TTL", k) == -1 then
+        n = n + 1
+        if #s < 8 then s[#s+1] = k end
+      end
+    end
+  end
+until c == "0"
+return n .. "|" .. table.concat(s, " ")'
+
+unexpected=0; sample=""
+for db in 0 1; do
+  out="$(rc -n "${db}" --no-raw eval "${LUA}" 0 2>/dev/null | tr -d '"' | tr -d '\r')"
+  case "${out}" in
+    ''|*[!0-9]*'|'*) : ;;
+  esac
+  n="${out%%|*}"
+  case "${n}" in ''|*[!0-9]*) n=0 ;; esac
+  unexpected=$((unexpected + n))
+  [ "${n}" -gt 0 ] && sample="${sample} db${db}:[${out#*|}]"
+done
+
+echo "FACT durable_keys ${unexpected}"
+echo "SKIPVOL redis_data"
+if [ "${unexpected}" -gt 0 ]; then
+  cat >&2 <<EOF
+[redis/backup] FAILING THE EXPORT: ${unexpected} redis key(s) have no TTL and are not a known
+  ephemeral prefix, so redis may now hold durable state this archive would silently drop.
+  Sample:${sample}
+  Either the key belongs to a store that should own it, or this hook's prefix list needs the new
+  prefix added WITH A REASON. Do not silence it by widening the list without one.
+EOF
+  exit 1
+fi
+exit 0

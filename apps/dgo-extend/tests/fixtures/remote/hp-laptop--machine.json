@@ -1,0 +1,15 @@
+{
+  "office": "hp-laptop",
+  "alias": "machine",
+  "label": "המחשב הנייד",
+  "module": {
+    "id": "machine.hp-laptop",
+    "name": "מכונה",
+    "icon": "server",
+    "group": "תשתית",
+    "desc": "מדדי מארח ו-Docker",
+    "order": 8,
+    "embed": "/a/machine/"
+  },
+  "base": "http://dgo-extend:8983/peer/hp-laptop/machine/"
+}

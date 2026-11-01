@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+#: snapshot n8n's own state (database dump + the .n8n volume) for `bbox export`
+#
+# backup <outdir> <mode>   — invoked by scripts/deployment-archive.py, never by hand.
+#
+# WHY THIS IS THE APP'S JOB AND NOT THE DRIVER'S. n8n's state is a live PostgreSQL cluster. Tarring
+# `postgres_storage` file-by-file while workers are executing produces a data directory torn across
+# a checkpoint — it restores, it starts, and it is corrupt in ways that surface days later. The app
+# that owns the database is the only thing that knows the database must be dumped rather than
+# copied, so it says so here instead of the driver keeping a list of "these volumes are special".
+#
+# CONSISTENCY. `pg_dump` runs in a REPEATABLE READ transaction, so what it writes is the database as
+# of the instant it started, even with 75 active workflows writing throughout. That is a genuine
+# point-in-time snapshot of THIS store. It says nothing about agreement with supabase's store — see
+# `--quiesce` in the driver.
+#
+# The protocol back to the driver is three line types on stdout:
+#   ARTIFACT <relpath>   a file this hook wrote inside <outdir>
+#   SKIPVOL  <volume>    a declared volume this hook has handled, so the driver must not tar it
+#   FACT     <k> <v>     something that must still be true after a restore. hooks/restore prints the
+#                        same keys from the RESTORED instance and the driver diffs them, which is
+#                        what makes "the restore worked" a measurement instead of an assumption.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+. "${REPO_ROOT}/scripts/archive-lib.sh"   # archive_require / archive_stop / archive_project
+
+OUT="${1:?usage: backup <outdir> <mode>}"
+MODE="${2:-full}"
+PGU="$(read_env POSTGRES_USER)"; PGD="$(read_env POSTGRES_DB)"; PGP="$(read_env POSTGRES_PASSWORD)"
+
+running "${PG_CONTAINER}" || { echo "[n8n/backup] ${PG_CONTAINER} is not running — cannot dump" >&2; exit 1; }
+
+q() { docker exec -e PGPASSWORD="${PGP}" "${PG_CONTAINER}" psql -U "${PGU}" -d "${PGD}" -tAc "$1" 2>/dev/null | tr -d '\r' | tr -d ' '; }
+
+# ── 1. the database ─────────────────────────────────────────────────────────────────────────────
+# Custom format (-Fc): compressed, and pg_restore can then reorder/parallelise and skip objects.
+# --no-owner/--no-acl: the restore target's role names are its own business; a dump that insists on
+# the source's roles fails on any machine provisioned with a different POSTGRES_USER, which is
+# exactly the "moved to another laptop" case this whole capability exists for.
+EXCL=()
+if [ "${MODE}" = "config" ]; then
+  # Execution history is 2,936 MB of a 2,991 MB database on this estate (55,346 rows, almost all of
+  # it TOAST), and n8n prunes it at 168h anyway — so it is the single biggest thing worth NOT
+  # carrying. The SCHEMA is still dumped for each of these; only the rows are dropped, so the
+  # restored instance has the tables and starts clean.
+  for t in execution_data execution_entity execution_metadata execution_annotations \
+           execution_annotation_tags workflow_history workflow_statistics workflow_publish_history \
+           insights_raw insights_by_period insights_metadata; do
+    EXCL+=(--exclude-table-data="${t}")
+  done
+fi
+docker exec -e PGPASSWORD="${PGP}" "${PG_CONTAINER}" \
+  pg_dump -U "${PGU}" -d "${PGD}" -Fc --no-owner --no-acl "${EXCL[@]}" > "${OUT}/n8n.dump.part" \
+  || { echo "[n8n/backup] pg_dump failed" >&2; rm -f "${OUT}/n8n.dump.part"; exit 1; }
+mv "${OUT}/n8n.dump.part" "${OUT}/n8n.dump"
+echo "ARTIFACT n8n.dump"
+echo "SKIPVOL postgres_storage"
+
+# ── 2. the .n8n volume ──────────────────────────────────────────────────────────────────────────
+# What is actually in it, measured: `nodes/` 204 MB (the five community node packages this estate's
+# workflows import — carried in BOTH modes, because a restore that has to reach npm is a restore
+# that fails on an offline machine), `storage/` 1.6 GB in 35,062 files (execution BINARY data, since
+# N8N_DEFAULT_BINARY_DATA_MODE=filesystem — the filesystem half of the execution history the config
+# mode already drops from the database), `config` 88 bytes holding a SECOND copy of the encryption
+# key that n8n wrote itself on first boot, and the event logs.
+#
+# That `config` file is a trap worth naming: it is n8n's own key store, unmanaged by this repo, and
+# it WINS over nothing but exists anyway. Carrying it keeps the restored instance's two copies in
+# agreement; carrying it without .env would still leave credentials undecryptable, which is why the
+# driver copies .env first.
+PROJ="$(archive_project)"
+VOLEX=()
+[ "${MODE}" = "config" ] && VOLEX=(--exclude ./storage --exclude "./n8nEventLog*")
+docker run --rm -v "${PROJ}_n8n_storage:/v:ro" -v "${OUT}:/out" alpine \
+  tar czf /out/n8n_storage.tar.gz.part "${VOLEX[@]}" -C /v . \
+  || { echo "[n8n/backup] volume tar failed" >&2; exit 1; }
+mv "${OUT}/n8n_storage.tar.gz.part" "${OUT}/n8n_storage.tar.gz"
+echo "ARTIFACT n8n_storage.tar.gz"
+echo "SKIPVOL n8n_storage"
+
+# ── 3. the facts a restore must reproduce ───────────────────────────────────────────────────────
+echo "FACT workflows $(q 'select count(*) from workflow_entity;')"
+echo "FACT workflows_active $(q 'select count(*) from workflow_entity where active;')"
+echo "FACT credentials $(q 'select count(*) from credentials_entity;')"
+echo "FACT webhooks $(q 'select count(*) from webhook_entity;')"
+echo "FACT tags $(q 'select count(*) from tag_entity;')"
+# `user` is a reserved word, so the identifier must reach psql double-quoted. Written with a bash
+# double-quoted string because inside SINGLE quotes the backslashes survive literally and psql gets
+# `\"user\"` — which it rejects, and `q` swallows stderr, so the FACT silently came out EMPTY. An
+# empty fact compares equal to nothing and would have made the owner-account check vacuous.
+echo "FACT users $(q "select count(*) from \"user\";")"
+echo "FACT settings $(q 'select count(*) from settings;')"
+[ "${MODE}" = "full" ] && echo "FACT executions $(q 'select count(*) from execution_entity;')"
+# A checksum over every credential's ciphertext. Row counts prove the rows arrived; this proves the
+# SECRETS arrived byte-identical, which is the half that a dump/restore across encryption keys
+# silently loses.
+echo "FACT credential_blob_sha $(q "select md5(string_agg(data, '' order by id)) from credentials_entity;")"
+# 16-char sha256 prefix of the live key — the same fingerprint form hooks/push already compares
+# against blueprint.yml, so operators see one spelling of "the keys match", not two.
+KEY="$(docker exec "${N8N_CONTAINER}" printenv N8N_ENCRYPTION_KEY 2>/dev/null | tr -d '\r' || true)"
+[ -n "${KEY}" ] && echo "FACT encryption_key_fp $(printf '%s' "${KEY}" | sha256sum | cut -c1-16)"
+exit 0

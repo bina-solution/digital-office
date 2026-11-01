@@ -1,0 +1,280 @@
+# אתר תדמית לעסק / לחברת שירותים
+#
+# The pattern for a COMPANY'S OWN SITE — the site that sells the business itself rather than a
+# product: who we are, what we do, the work we have done, how we work, and how to reach us, plus the
+# legal pages a business site is expected to have (privacy, terms, accessibility).
+#
+# Its identity is the COMPANY's (`identity.name.*`, `identity.logo.*`, `identity.contact.*`) — the
+# slots `business-basic` already defines, given a website target so the site can read them. A
+# product of that company keeps its own identity in `startup-website` (`identity.product.*`), which
+# is what lets one business run both sites from one assets screen without the two fighting over a
+# value.
+#
+# Conventions (same as `startup-website`): `content.website.business.<page>.<part>` where `<page>` is the
+# page's own name in the URL and `<part>` is `title` (the <title>/SEO title), `heading` (the page's
+# first heading) or `intro` (the opening paragraph). `targets: [website]` is what publishes a slot
+# into the bundle the `sites` app serves.
+id: business-website
+version: 1
+order: 5
+name:
+  he: אתר תדמית לעסק
+  en: Business website
+summary:
+  he: אתר התדמית של העסק עצמו — מי אנחנו, מה אנחנו עושים, העבודות שעשינו, איך עובדים איתנו ואיך
+    יוצרים קשר, עם עמודי המדיניות שהאתר חייב. הזהות היא של החברה, בנפרד מזהות המוצרים שלה.
+  en: The business's own site — who we are, what we do, the work we have done, how we work together
+    and how to reach us, with the legal pages a business site needs. The identity is the COMPANY's,
+    kept apart from its products'.
+# What it LINKS rather than repeats: the company's name, logo, tagline, descriptions, contacts and
+# hours are `business-basic`'s slots, and this pattern only gives them a WEBSITE target by inheriting
+# them. One business, one place those facts live — the logo and the general data stay in the basic
+# blueprint, exactly as they are for every other channel.
+extends:
+- business-basic
+slots:
+
+# ── the company's identity: inherited from `business-basic`, nothing to redeclare here ───────────
+# ── the home page ────────────────────────────────────────────────────────────────────────────────
+- key: content.website.business.home.hero
+  section: content
+  group: home
+  kind: text
+  label:
+    he: כותרת הגיבור
+    en: Hero headline
+  required: true
+  targets:
+  - channel: website
+- key: content.website.business.home.subtitle
+  section: content
+  group: home
+  kind: richtext
+  label:
+    he: תת־כותרת דף הבית
+    en: Home subtitle
+  targets:
+  - channel: website
+- key: content.website.business.cta
+  section: content
+  group: home
+  kind: text
+  label:
+    he: כפתור הפעולה הראשי
+    en: Primary call to action
+  targets:
+  - channel: website
+- key: content.website.business.home.about-heading
+  section: content
+  group: home
+  kind: text
+  label:
+    he: כותרת „מי אנחנו” בדף הבית
+    en: Home — about heading
+  targets:
+  - channel: website
+- key: content.website.business.home.services-heading
+  section: content
+  group: home
+  kind: text
+  label:
+    he: כותרת „הפתרונות שלנו”
+    en: Home — services heading
+  targets:
+  - channel: website
+- key: content.website.business.home.proof-heading
+  section: content
+  group: home
+  kind: text
+  label:
+    he: כותרת „התוצאות / האימפקט”
+    en: Home — proof heading
+  targets:
+  - channel: website
+- key: content.website.business.footer.tagline
+  section: content
+  group: footer
+  kind: text
+  label:
+    he: שורת התחתית
+    en: Footer line
+  targets:
+  - channel: website
+
+# ── search and sharing ───────────────────────────────────────────────────────────────────────────
+- key: content.website.business.seo-title
+  section: content
+  group: seo
+  kind: text
+  label:
+    he: כותרת ל-SEO (דף הבית)
+    en: SEO title (home)
+  constraints:
+    max_len: 60
+  targets:
+  - channel: website
+  - channel: google-search
+- key: content.website.business.seo-meta
+  section: content
+  group: seo
+  kind: text
+  label:
+    he: תיאור המטא (דף הבית)
+    en: Meta description (home)
+  constraints:
+    max_len: 160
+  targets:
+  - channel: website
+  - channel: google-search
+- key: content.website.business.og-title
+  section: content
+  group: seo
+  kind: text
+  label:
+    he: כותרת לשיתוף (OG)
+    en: Share title (OG)
+  targets:
+  - channel: website
+- key: content.website.business.og-description
+  section: content
+  group: seo
+  kind: text
+  label:
+    he: תיאור לשיתוף (OG)
+    en: Share description (OG)
+  targets:
+  - channel: website
+
+# ── the pages a business site always has ─────────────────────────────────────────────────────────
+- key: content.website.business.about.title
+  section: content
+  group: about
+  kind: text
+  label: {he: כותרת עמוד האודות, en: About page title}
+  targets: [{channel: website}]
+- key: content.website.business.about.heading
+  section: content
+  group: about
+  kind: text
+  label: {he: הכותרת הראשית באודות, en: About heading}
+  targets: [{channel: website}]
+- key: content.website.business.about.intro
+  section: content
+  group: about
+  kind: richtext
+  label: {he: פסקת הפתיחה באודות, en: About intro}
+  targets: [{channel: website}]
+- key: content.website.business.services.title
+  section: content
+  group: services
+  kind: text
+  label: {he: כותרת עמוד השירותים, en: Services page title}
+  targets: [{channel: website}]
+- key: content.website.business.services.heading
+  section: content
+  group: services
+  kind: text
+  label: {he: הכותרת הראשית בשירותים, en: Services heading}
+  targets: [{channel: website}]
+- key: content.website.business.services.intro
+  section: content
+  group: services
+  kind: richtext
+  label: {he: פסקת הפתיחה בשירותים, en: Services intro}
+  targets: [{channel: website}]
+- key: content.website.business.projects.title
+  section: content
+  group: projects
+  kind: text
+  label: {he: כותרת עמוד העבודות, en: Work page title}
+  targets: [{channel: website}]
+- key: content.website.business.projects.heading
+  section: content
+  group: projects
+  kind: text
+  label: {he: הכותרת הראשית בעבודות, en: Work heading}
+  targets: [{channel: website}]
+- key: content.website.business.how-we-work.title
+  section: content
+  group: how-we-work
+  kind: text
+  label: {he: כותרת עמוד איך אנחנו עובדים, en: How we work page title}
+  targets: [{channel: website}]
+- key: content.website.business.how-we-work.heading
+  section: content
+  group: how-we-work
+  kind: text
+  label: {he: הכותרת הראשית באיך אנחנו עובדים, en: How we work heading}
+  targets: [{channel: website}]
+- key: content.website.business.news.title
+  section: content
+  group: news
+  kind: text
+  label: {he: כותרת עמוד החדשות, en: News page title}
+  targets: [{channel: website}]
+- key: content.website.business.news.heading
+  section: content
+  group: news
+  kind: text
+  label: {he: הכותרת הראשית בחדשות, en: News heading}
+  targets: [{channel: website}]
+- key: content.website.business.careers.title
+  section: content
+  group: careers
+  kind: text
+  label: {he: כותרת עמוד הקריירה, en: Careers page title}
+  targets: [{channel: website}]
+- key: content.website.business.careers.heading
+  section: content
+  group: careers
+  kind: text
+  label: {he: הכותרת הראשית בקריירה, en: Careers heading}
+  targets: [{channel: website}]
+- key: content.website.business.contact.title
+  section: content
+  group: contact
+  kind: text
+  label: {he: כותרת עמוד יצירת הקשר, en: Contact page title}
+  targets: [{channel: website}]
+- key: content.website.business.contact.heading
+  section: content
+  group: contact
+  kind: text
+  label: {he: הכותרת הראשית ביצירת קשר, en: Contact heading}
+  targets: [{channel: website}]
+- key: content.website.business.privacy.title
+  section: content
+  group: privacy
+  kind: text
+  label: {he: כותרת עמוד הפרטיות, en: Privacy page title}
+  targets: [{channel: website}]
+- key: content.website.business.privacy.heading
+  section: content
+  group: privacy
+  kind: text
+  label: {he: הכותרת הראשית בפרטיות, en: Privacy heading}
+  targets: [{channel: website}]
+- key: content.website.business.terms.title
+  section: content
+  group: terms
+  kind: text
+  label: {he: כותרת עמוד התקנון, en: Terms page title}
+  targets: [{channel: website}]
+- key: content.website.business.terms.heading
+  section: content
+  group: terms
+  kind: text
+  label: {he: הכותרת הראשית בתקנון, en: Terms heading}
+  targets: [{channel: website}]
+- key: content.website.business.accessibility.title
+  section: content
+  group: accessibility
+  kind: text
+  label: {he: כותרת הצהרת הנגישות, en: Accessibility page title}
+  targets: [{channel: website}]
+- key: content.website.business.accessibility.heading
+  section: content
+  group: accessibility
+  kind: text
+  label: {he: הכותרת הראשית בהצהרת הנגישות, en: Accessibility heading}
+  targets: [{channel: website}]

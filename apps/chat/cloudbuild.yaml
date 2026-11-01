@@ -1,0 +1,13 @@
+steps:
+  - name: 'gcr.io/cloud-builders/gcloud'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        gcloud compute ssh instance-20241230-133133 \
+          --command="sudo systemctl stop app1"
+        gcloud compute scp  / instance-20241230-133133:/home/solomonBoltin/app1
+        gcloud compute ssh instance-20241230-133133 \
+          --command="sudo systemctl start app1"
+
+timeout: 1200s

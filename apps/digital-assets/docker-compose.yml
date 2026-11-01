@@ -1,0 +1,60 @@
+# digital-assets — the business's digital front: slots → versions → the active one → every channel.
+#
+# No secret lives here and no platform is spoken to from here: social accounts are the `social`
+# capability's (social-list), websites are the `sites` capability's. The volume holds what is ours
+# and nobody else can answer: the slots, every version of every asset (files, content-addressed),
+# the active choices, the channel bindings, and the ledger of what was delivered where.
+services:
+  digital-assets:
+    # The image CI publishes for this commit (DGO-41). `pull_policy: missing` means it is
+    # fetched only when it is not here already, so a checkout that has built it is untouched;
+    # the `build:` below stays as the fallback. Needs the GHCR package readable — a package made
+    # from a private repo is private, so `docker login ghcr.io` on a machine that must pull.
+    image: ghcr.io/solomonboltin/digital-office/digital-assets:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: digital-assets-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: digital-assets
+    restart: unless-stopped
+    environment:
+      - SENTRY_DSN=${DIGITAL_ASSETS_SENTRY_DSN:-}
+      - DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-bina-deployment}
+      - APP_STATE_DIR=/data
+      # the in-network address other apps fetch files from (social-list downloads the logo from here)
+      - DIGITAL_ASSETS_URL=http://digital-assets:8985
+      - SOCIAL_URL=${SOCIAL_URL:-http://social-list:8986}
+      - SITES_URL=${SITES_URL:-http://sites:8979}
+    volumes:
+      - digital_assets_state:/data
+    networks:
+      - traefik-network
+    healthcheck:
+      # python, never curl: python:3.12-slim has no curl (gate G18).
+      test: ["CMD", "python", "-c", "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://localhost:8985/healthz',timeout=8).status==200 else 1)"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          # a small SQLite store, a thumbnail or an SVG render on demand (cached on disk)
+          cpus: '0.4'
+          memory: 256M
+        reservations:
+          cpus: '0.02'
+          memory: 48M
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+
+volumes:
+  digital_assets_state:
+
+networks:
+  traefik-network:
+    external: true

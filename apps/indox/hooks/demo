@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+#: declarative demo injection (list | run <welcome|small|large>)
+# bbox indox demo — consolidated, blueprint-driven INDOX demo injection.
+# Thin wrapper → python orchestrator (reads apps/indox/blueprint/demo/<name>.yml, drives the INDOX API).
+set -euo pipefail
+HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$(cd "${HOOK_DIR}/../../.." && pwd)/scripts/lib.sh"   # npath()
+cd "$(cd "${HOOK_DIR}/.." && pwd)"
+export PYTHONIOENCODING=utf-8 PYTHONUNBUFFERED=1
+# npath: `pwd` yields an MSYS path and python.exe reads it as C:\c\Users\… — same bug that made
+# every INDOX suite unrunnable on Windows.
+exec python3 "$(npath "${HOOK_DIR}")/demo.py" "$@"
+# probe: reads n8n/_probe-corpus

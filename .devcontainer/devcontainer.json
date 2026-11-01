@@ -1,0 +1,8 @@
+{
+    "name": "Debian",
+    "image": "debian:latest",
+    "features": {
+        "ghcr.io/devcontainers/features/docker-from-docker:1": {}
+    },
+    "terminal.integrated.defaultProfile.linux": "/bin/bash"
+}

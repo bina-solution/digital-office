@@ -1,0 +1,231 @@
+# apps/project-pln — Plane Community Edition (AGPL-3.0-only) as one office app.
+#
+# One application container plus four dependencies it cannot live without, each pinned and each with
+# its own volume. Why they are not the platform's own services:
+#
+#   * plane-db   Plane requires PostgreSQL 15.7+ and starts its own with max_connections=1000; its
+#                migrations own the schema. Sharing the platform db would mean one tenant of a
+#                100-connection server that the whole office also depends on — a connection storm in
+#                Plane would take the office down with it. It gets its own server; the password is
+#                the only new secret.
+#                The broker is REDIS, not RabbitMQ: `patches/redis-broker.py` adds the one line
+#                upstream is missing (CELERY_BROKER_URL = REDIS_URL when AMQP_URL is unset), so
+#                Celery runs on the kv container the app already carries. Measured before: RabbitMQ
+#                burned ~14% of a core at idle with one user; after: the whole stack is under 5%.
+#   * plane-minio  Every attachment, avatar and export is an S3 object: settings sets
+#                STORAGES["default"] to S3Storage unconditionally, so there is NO filesystem
+#                storage backend to switch to. USE_MINIO=1 makes the public URL and the presigned
+#                POST both point at the PUBLIC origin (<WEB_URL netloc>/uploads), which is why the
+#                app's Caddyfile (not the office edge) owns the /uploads route.
+#   * plane-redis  Cache, sessions and the Celery result store.
+#
+# The application container is the upstream All-In-One image (web + admin + api + worker + Caddy),
+# trimmed to four supervisor programs by ./Dockerfile — see that file for what is dropped and why.
+
+services:
+  project-pln:
+    # The image CI publishes for this commit (DGO-41). `pull_policy: missing` means it is
+    # fetched only when it is not here already, so a checkout that has built it is untouched;
+    # the `build:` below stays as the fallback. Needs the GHCR package readable — a package made
+    # from a private repo is private, so `docker login ghcr.io` on a machine that must pull.
+    image: ghcr.io/solomonboltin/digital-office/project-pln:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # The Hebrew interface, as a release asset of the AGPL `plane-he` patch build. Both are
+        # pinned together AND to an IMMUTABLE release: the tag carries the commit that built it, so
+        # a later patch build cannot change the bytes behind this URL (it gets its own tag). The
+        # Dockerfile refuses a URL without a checksum, because "download a
+        # tarball and untar it into the app" is exactly the step where a silent substitution would
+        # be invisible. Override either in .env to move to a newer build; empty both to fall back to
+        # upstream's English SPA.
+        PLANE_HE_WEB_URL: ${PLANE_HE_WEB_URL:-https://github.com/solomonBoltin/plane-he/releases/download/he-v1.4.2-c45a21d/plane-web-he-v1.4.2.tar.gz}
+        PLANE_HE_WEB_SHA256: ${PLANE_HE_WEB_SHA256:-a13d4adc2846e639e83e0e8b60598563f6aad8e9bfdfd278392a8ad1aded9da9}
+    container_name: project-pln-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: project-pln
+    restart: unless-stopped
+    environment:
+      # The public origin exactly as the browser spells it — scheme AND port. On macOS the office
+      # edge is 8080, so `.env` sets PROJECT_PLN_BASE_URL=plane.localhost:8080 and PROJECT_PLN_PROTOCOL=http;
+      # a mismatch here shows up as a login that redirects to the wrong host and cross-origin
+      # failures, not as a clean error.
+      - DOMAIN_NAME=${PROJECT_PLN_BASE_URL:-plane.${DEPLOYMENT_DOMAIN:-localhost}}
+      - APP_PROTOCOL=${PROJECT_PLN_PROTOCOL:-https}
+      # TWO SPELLINGS, and the difference is not cosmetic: `PROJECT_PLN_BASE_URL` is a BARE host
+      # because reconcile renders it into a traefik `Host()` rule (a rule carrying a port matches
+      # nothing — that is exactly how plane.console.localhost:8080 answered 404), while WEB_URL and
+      # CORS must be the FULL browser origin, port and scheme included. Same split the platform uses
+      # for authentik (AUTHENTIK_BASE_URL vs AUTH_EXTERNAL_URL).
+      - WEB_URL=${PROJECT_PLN_PUBLIC_URL:-${PROJECT_PLN_PROTOCOL:-https}://${PROJECT_PLN_BASE_URL:-plane.${DEPLOYMENT_DOMAIN:-localhost}}}
+      - CORS_ALLOWED_ORIGINS=${PROJECT_PLN_PUBLIC_URL:-${PROJECT_PLN_PROTOCOL:-https}://${PROJECT_PLN_BASE_URL:-plane.${DEPLOYMENT_DOMAIN:-localhost}}},http://${PROJECT_PLN_BASE_URL:-plane.${DEPLOYMENT_DOMAIN:-localhost}},https://${PROJECT_PLN_BASE_URL:-plane.${DEPLOYMENT_DOMAIN:-localhost}}
+      - SITE_ADDRESS=:80
+      - DATABASE_URL=postgresql://plane:${PLANE_DB_PASSWORD:?set PLANE_DB_PASSWORD in .env — scripts/ci-env.sh mints it on a fresh machine}@plane-db:5432/plane
+      - REDIS_URL=redis://plane-redis:6379/0
+      - AWS_REGION=${PLANE_S3_REGION:-us-east-1}
+      - AWS_ACCESS_KEY_ID=${PLANE_S3_ACCESS_KEY:-plane-access-key}
+      - AWS_SECRET_ACCESS_KEY=${PLANE_S3_SECRET_KEY:?set PLANE_S3_SECRET_KEY in .env — scripts/ci-env.sh mints it on a fresh machine}
+      - AWS_S3_BUCKET_NAME=uploads
+      - AWS_S3_ENDPOINT_URL=http://plane-minio:9000
+      - USE_MINIO=1
+      - MINIO_ENDPOINT_SSL=0
+      - FILE_SIZE_LIMIT=${PLANE_FILE_SIZE_LIMIT:-52428800}
+      # Memory is the binding constraint on this machine, not CPU. Each of these is a full Django
+      # process; the defaults let gunicorn fork per core and Celery spawn a thread per core.
+      # TWO, not one. A gunicorn master whose only worker dies keeps sitting in do_select with no
+      # child at all — nothing binds :3004 and Caddy waits its timeout on every request, while the
+      # healthcheck (which asks the API through :80) is the only thing that notices. Two workers
+      # means one death is not an outage, and it is ~90 MiB of RSS on this engine.
+      - GUNICORN_WORKERS=${PLANE_GUNICORN_WORKERS:-2}
+      - CELERY_WORKER_CONCURRENCY=1
+      # Email+password sign-in, so a first boot does not depend on outbound SMTP to log in. The
+      # office's own GreenMail (mailserver:25) can carry the app's outgoing mail if wanted.
+      - ENABLE_EMAIL_PASSWORD=1
+      # NO public sign-up. The door to this app is the office SSO (routing auth: sso); an open
+      # registration form behind it is an account-creating machine on a company host. Measured
+      # before the fix: GET /api/instances/ answered `enable_signup: true`.
+      - ENABLE_SIGNUP=0
+      - API_KEY_RATE_LIMIT=${PLANE_API_KEY_RATE_LIMIT:-60/minute}
+      # Plane keeps the FULL response of every request made with an API key, and the office's own
+      # task CLI makes those all day (every `tasks list` is the whole project): about 200 MB a day
+      # on hp-laptop. Upstream keeps 14 days; three is enough to see what an agent did, and the
+      # daily prune runs now that the worker carries the scheduler.
+      - API_ACTIVITY_LOG_RETENTION_DAYS=${PLANE_API_LOG_RETENTION_DAYS:-3}
+      - DEBUG=0
+      - TZ=${TZ:-Asia/Jerusalem}
+      # Off unless the operator says otherwise, in .env. See patches/no-phone-home.py: this
+      # is the layer that survives a database flag, a restored archive or a UI toggle.
+      - PLANE_TELEMETRY=${PLANE_TELEMETRY:-0}
+      # The credential plane, for the one thing this app does in it: `bootstrap.py` stores the
+      # owner's sign-in and the office's API key as INSTANCES there (so they are readable in the
+      # console's account screen and nowhere else), the same way apps/git stores its forge account.
+      # In-network only; nothing here is exposed to a browser.
+      - CONNECTIONS_URL=${CONNECTIONS_URL:-http://connections:8990}
+    volumes:
+      - project_pln_data:/app/data
+      - project_pln_logs:/app/logs
+    depends_on:
+      plane-db:
+        condition: service_healthy
+      plane-redis:
+        condition: service_started
+      plane-minio:
+        condition: service_started
+    networks: [project-pln-net, traefik-network]
+    labels:
+      # This container is on TWO networks: its own (database, queue, object store) and
+      # traefik-network. For a multi-network container the edge must be TOLD which address to dial —
+      # without this it has to guess, and guessing is how a route silently points at an interface
+      # traefik cannot reach. (Measured while building this app: the line is correct but is NOT the
+      # reason a new host can 404 — see the traefik note in README.md.)
+      - traefik.docker.network=traefik-network
+      # A SUSTAINED `unhealthy` restarts this container (platform-base/autoheal — opt-in, by this
+      # label). Docker computes health and does nothing with it: on 2026-09-30 the API's one worker
+      # died, its master stayed up, and the app answered nothing for ten hours. The check below is
+      # strict since then; this is what acts on it. Only this container — its database, queue and
+      # object store are not enrolled, and autoheal refuses a database by name even if one were.
+      - binaos.autoheal=true
+    healthcheck:
+      # Django answering through the in-container Caddy is the real readiness signal: Caddy alone
+      # comes up in a second, long before migrations finish, so probing `/` would report healthy
+      # while every API call still 502s. Any answer below 500 means the API is serving.
+      # `$$code` — compose would otherwise substitute `$code` itself and hand the shell `=...`.
+      test:
+        - CMD-SHELL
+        # STRICT, and bounded: the API either answers 200 or this container is unhealthy. The old
+        # test accepted anything that was not 000/5xx — so a Caddy that answers with a 200 SHELL or a
+        # 404 while the API is dead kept the container "healthy" (measured: /api/instances/ → 000
+        # inside the container, health green). `-m 8` stays under the healthcheck's own 10s timeout,
+        # so a hung request fails the check instead of being killed mid-measurement.
+        - 'test "$$(curl -s -o /dev/null -m 8 -w "%{http_code}" http://127.0.0.1/api/instances/)" = "200"'
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 10
+      # 25 minutes — longer than the slowest boot measured here (21 min, on a loaded engine; the
+      # common case is 1.5–4). The point is not to make the app available sooner (traefik routes on
+      # `healthy` either way) but to stop reporting `unhealthy` for merely BOOTING: the API walks
+      # ~100 `configure_instance` keys and then runs `collectstatic` before gunicorn binds, and a
+      # container that spends that time looking broken is a container someone will "fix" by
+      # restarting — which begins the boot again. A genuinely broken boot still surfaces: the logs
+      # name the step, and `progress_deadline_seconds: 1800` is the control plane's own deadline.
+      start_period: 1500s
+    deploy:
+      resources:
+        limits: { cpus: '1.5', memory: 1536M }
+
+  plane-db:
+    container_name: plane-db-${DEPLOYMENT_NAME:-bina-deployment}
+    image: postgres:15.7-alpine
+    restart: unless-stopped
+    # 1000 is Plane's own default; 200 is what one gunicorn worker, one Celery worker and a
+    # migrator can actually use, and it keeps the shared-memory footprint of a 5 GiB engine sane.
+    command: postgres -c 'max_connections=200' -c 'shared_buffers=128MB'
+    environment:
+      POSTGRES_USER: plane
+      POSTGRES_PASSWORD: ${PLANE_DB_PASSWORD:?set PLANE_DB_PASSWORD in .env — scripts/ci-env.sh mints it on a fresh machine}
+      POSTGRES_DB: plane
+    volumes:
+      - project_pln_db:/var/lib/postgresql/data
+    networks: [project-pln-net]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U plane -d plane"]
+      interval: 10s
+      timeout: ${HEALTHCHECK_TIMEOUT:-5s}
+      retries: 12
+      start_period: 20s
+    deploy:
+      resources:
+        limits: { cpus: '0.5', memory: 384M }
+
+  plane-redis:
+    container_name: plane-redis-${DEPLOYMENT_NAME:-bina-deployment}
+    image: valkey/valkey:7.2.11-alpine
+    restart: unless-stopped
+    volumes:
+      - project_pln_redis:/data
+    networks: [project-pln-net]
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 15s
+      timeout: ${HEALTHCHECK_TIMEOUT:-5s}
+      retries: 5
+    deploy:
+      resources:
+        limits: { cpus: '0.2', memory: 128M }
+
+  plane-minio:
+    container_name: plane-minio-${DEPLOYMENT_NAME:-bina-deployment}
+    # The image Plane's own CE release compose ships. `minio/minio` and `quay.io/minio/minio` no
+    # longer publish these tags, so this rebuild (pgsty, the Pigsty project) is upstream's choice,
+    # not ours — recorded here because a third-party rebuild deserves to be a deliberate one.
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
+    restart: unless-stopped
+    command: server /export --console-address ":9090"
+    environment:
+      MINIO_ROOT_USER: ${PLANE_S3_ACCESS_KEY:-plane-access-key}
+      MINIO_ROOT_PASSWORD: ${PLANE_S3_SECRET_KEY:?set PLANE_S3_SECRET_KEY in .env — scripts/ci-env.sh mints it on a fresh machine}
+    volumes:
+      - project_pln_minio:/export
+    networks: [project-pln-net]
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 20s
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 8
+      start_period: 20s
+    deploy:
+      resources:
+        limits: { cpus: '0.3', memory: 320M }
+
+volumes:
+  project_pln_data:
+  project_pln_logs:
+  project_pln_db:
+  project_pln_redis:
+  project_pln_minio:
+
+networks:
+  traefik-network:
+    external: true
+  project-pln-net:

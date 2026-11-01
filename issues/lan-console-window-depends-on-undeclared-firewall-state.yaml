@@ -1,0 +1,110 @@
+# yaml-language-server: $schema=./schema.json
+title: post-reboot network state on the portable box breaks BOTH inbound routing AND all container egress
+opened: '2026-08-24'
+severity: critical
+status: open
+summary: post-reboot network state on the portable box breaks BOTH inbound routing AND all container egress
+description: |
+  ## Context
+
+  The portable box (192.168.16.103) serves console3.localhost correctly and is
+  nonetheless unreachable from the laptop. Measured 2026-08-24 ~10:19 UTC.
+
+  THE STACK IS CORRECT - this is not a routing or traefik bug:
+
+      traefik-posnet publishes   0.0.0.0:80->80/tcp, 0.0.0.0:443->443/tcp
+      host listeners             0.0.0.0:80 LISTEN, 0.0.0.0:443 LISTEN
+      from the BOX itself, Host: console3.localhost
+        http://192.168.16.103/  -> 302   (the authentik redirect - correct)
+        http://127.0.0.1/       -> 302
+      via an SSH tunnel from the laptop, same Host header -> 302
+
+  THE PATH IS FILTERED, and only for the web ports:
+
+      from the laptop:  22 OPEN | 80 FILTERED | 443 FILTERED | 8080 FILTERED
+
+  FILTERED means the connect TIMED OUT, not REFUSED. Something listens (proved
+  above), so a refusal would mean no listener; a timeout means the packets are
+  dropped in the path.
+
+  WHY THIS IS AN ISSUE AND NOT A ONE-OFF - it worked earlier and no config changed:
+
+      every /etc/ufw/*.rules file    mtime Jul 24 08:53 (package defaults, untouched)
+      /etc/ufw/ufw.conf              ENABLED=yes
+      box booted                     2026-08-24 07:38:55
+      ufw active                     2026-08-24 07:39:21
+      docker active                  2026-08-24 07:40:56
+
+  A peer session reached the console at 22:38 the previous evening. Between then
+  and now the ONLY change is the reboot. No ufw rule was ever added for 80/443 -
+  their rule files predate all of this work by a month - so the reachability that
+  existed last night came from RUNTIME state, not from anything declared. Port 22
+  keeps working precisely because it IS declared: a persisted allow rule written
+  at install time.
+
+  So the LAN window is not a property of the deployment. It is a property of
+  whatever the firewall happened to be doing at the time, and it did not survive
+  a reboot. That is the defect, independently of which specific rule is missing.
+
+
+  ─────────────────────────────────────────────────────────────────────────────────────────────
+  WIDENED 2026-08-24 ~11:10 UTC - THE INBOUND BLOCK IS HALF OF IT. Found while a routine image
+  rebuild refused to finish: NO CONTAINER ON THIS BOX CAN REACH THE INTERNET.
+
+      from a container   deb.debian.org:80    TIMEOUT after 6.0s
+      from a container   deb.debian.org:443   TIMEOUT after 6.0s
+      from a container   1.1.1.1:443          TIMEOUT after 6.0s
+      from a container   1.1.1.1:80           TIMEOUT after 6.0s
+      from the HOST      deb.debian.org:80    HTTP 500 in 0.11s   (a response = the path works)
+      from the HOST      deb.debian.org       HTTP 200 in 0.18s
+
+  Reproduced from TWO unrelated containers (data-management, apitools), so it is the box, not one
+  container's config.
+
+  IT IS NOT DNS, and it is not IPv6 - both were measured and both are fine:
+      in-container resolve of deb.debian.org   -> 151.101.2.132 in 0.03s
+      in-container IPv6 connect                -> fails INSTANTLY (0.00s, ENETUNREACH), so it is
+                                                  not an IPv6 timeout stall either
+  DNS resolves and IPv6 fails fast. What hangs is plain IPv4 TCP egress from the bridge network,
+  which is the signature of a FORWARD/masquerade rule that did not survive the reboot.
+
+  WHAT IT COSTS, and why this is critical rather than cosmetic:
+    - ANY image build that fetches something (apt, pip, npm) HANGS. Observed twice: a
+      data-management rebuild sat on `apt-get update` for 6+ minutes at 0% CPU before being killed,
+      which is how this was found at all.
+    - ANY container calling an external API fails the same way. On a deployment whose extraction
+      path can call Gemini/Vision, that is a silent, total outage of those calls - they do not
+      error fast, they hang.
+    - The two symptoms share a window: the box rebooted 2026-08-24 07:38:55 and BOTH directions
+      broke. The ufw rule files are untouched since Jul 24, so nothing was reconfigured; this is
+      runtime firewall state that did not come back.
+
+  NOTE the usual assumption does not hold here and should not be repeated: ufw
+  normally does NOT filter docker-published ports, because docker installs its own
+  chains that bypass ufw's INPUT. Something more specific is happening on this
+  host. The rule files are root-owned 0640 and `sudo` on the box refuses without a
+  tty, so the ruleset COULD NOT BE READ and the exact mechanism is unproven. Do
+  not close this by guessing at it.
+
+  ## Action
+
+  - OWNER, FIRST (needs sudo; cannot be done from a session): restore container
+    egress. Until that is back this box cannot build an image or call an external API, which
+    blocks far more than the console window. Check the FORWARD policy and the docker
+    masquerade rules, since DNS and IPv6 are both proven healthy and only IPv4 TCP egress
+    from the bridge hangs.
+  - OWNER (needs sudo on the portable box; cannot be done from a session):
+    read the live ruleset, then declare an explicit allow for the web ports on the
+    LAN interface so the window is a stated rule rather than incidental state.
+    Confirm it survives a reboot - that is the actual acceptance test here, since
+    the previous window did not.
+  - PLATFORM (the real fix): a bbox that is meant to serve a console on the LAN
+    should DECLARE that exposure and verify it, rather than inheriting whatever the
+    host firewall is doing. Today nothing in the repo states which ports a bbox
+    expects to be reachable from the LAN, so nothing can check it and a reboot can
+    silently close the window. `bbox run` already autodetects and adapts per host;
+    LAN exposure belongs in that same contract.
+  - MEANWHILE: an SSH tunnel to the box's port 80 with `Host: console3.localhost`
+    reaches the console and needs no secret, so console behaviour stays verifiable
+    while the firewall question is open. It is NOT a substitute for the real-URL
+    check - that one needs the port open.

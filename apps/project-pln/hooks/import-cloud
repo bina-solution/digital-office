@@ -1,0 +1,209 @@
+#!/usr/bin/env bash
+#: import the owner's Plane Cloud workspace into this local instance
+# import-cloud — bring an existing Plane Cloud workspace across, over Plane's REST API on BOTH
+# sides. There is no official cloud → self-hosted migration (upstream issue #1070, closed) and the
+# built-in importers are Cloud/Commercial-only, so this drives `plane-migrate` (PyPI, third-party),
+# which maps work-item types, states, labels, members, estimates, work items, relations, links,
+# comments, modules, cycles, intake and pages.
+#
+#   bbox project-pln import-cloud            # STEP 1 — create any missing local project, write a plan
+#   … review apps/project-pln/import-plans/<KEY>-plan.yaml (the member mappings) …
+#   bbox project-pln import-cloud --apply    # STEP 2 — move the work items in
+#
+# The two steps are separate on purpose. `--dst-project` is a UUID lookup, so a local project
+# that does not exist yet cannot even be PLANNED against — step 1 creates it (empty) and says
+# so, and step 2 refuses to run without the plan the review produced.
+#
+# WHAT DOES NOT COME ACROSS, in every case: **pages** (plane-migrate needs a browser session
+# cookie for them) and **attachments** (the bytes live in the cloud's object-storage bucket,
+# which this tool cannot read). Never call the result a complete migration.
+#
+# TWO SECRETS, both from .env, never from the command line (`ps` and shell history are not a
+# credential store):
+#
+#   PLANE_CLOUD_API_TOKEN   Plane Cloud → Profile settings → Personal access tokens (plane_api_…).
+#                           Declared as the `plane-cloud-api-token` connection in app.json, so the
+#                           office's Connections screen holds it.
+#   PLANE_LOCAL_API_TOKEN   a token minted in THIS instance: sign in at http://plane.localhost:8080,
+#                           Profile settings → Personal access tokens.
+#
+# Both are single-use credentials: revoke them in the two UIs when the import is done.
+#
+# THREE THINGS THAT ARE EASY TO GET WRONG, and are handled here on purpose:
+#
+#   1. **`--src-project` takes the project UUID, not its identifier.** `/projects/<x>/` is a UUID
+#      lookup; passing `TEST` answers `404 Page not found`, and plane-migrate reports that as
+#      "Cannot access source project TEST" — which reads like a permissions problem and is not.
+#   2. **Every project-scoped endpoint answers 403 for a workspace member with no `ProjectMember`
+#      row.** A token minted by someone invited to the workspace but never added to the project sees
+#      an empty-looking API. Verified: the same token reads states/work-items once the row exists.
+#   3. **The destination project must already exist**, and it is matched by IDENTIFIER (`CHK`), not
+#      by name. This script creates the missing ones through the API rather than leaving the
+#      operator to click them in — and says so per project, because that is a side effect.
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # say, die, warn, read_env, colors, running
+
+PN_MIGRATE_IMAGE="${PN_MIGRATE_IMAGE:-python:3.12-slim}"
+SRC_URL="${PLANE_CLOUD_URL:-https://api.plane.so}"
+DST_URL="${PLANE_LOCAL_URL:-http://project-pln}"
+PLAN_DIR="${REPO_ROOT}/apps/project-pln/import-plans"
+
+APPLY=0
+ONLY=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --apply) APPLY=1 ;;
+    --only)  ONLY+=("--only" "$2"); shift ;;
+    --src-url) SRC_URL="$2"; shift ;;
+    --dst-url) DST_URL="$2"; shift ;;
+    -h|--help) sed -n '2,30p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) die "unknown argument: $1 (try --help)" ;;
+  esac
+  shift
+done
+
+SRC_TOKEN="${PLANE_CLOUD_API_TOKEN:-$(read_env PLANE_CLOUD_API_TOKEN)}"
+DST_TOKEN="${PLANE_LOCAL_API_TOKEN:-$(read_env PLANE_LOCAL_API_TOKEN)}"
+SRC_WORKSPACE="${PLANE_CLOUD_WORKSPACE:-$(read_env PLANE_CLOUD_WORKSPACE)}"
+DST_WORKSPACE="${PLANE_LOCAL_WORKSPACE:-$(read_env PLANE_LOCAL_WORKSPACE)}"
+
+[ -n "${SRC_TOKEN}" ] || die "PLANE_CLOUD_API_TOKEN is not set — create one in Plane Cloud (Profile settings → Personal access tokens) and put it in .env, or add it on the Connections screen (declared as the 'plane-cloud-api-token' connection)."
+[ -n "${DST_TOKEN}" ] || die "PLANE_LOCAL_API_TOKEN is not set — sign in at ${DST_URL} (in the browser: http://plane.localhost:8080), Profile settings → Personal access tokens, and put it in .env."
+[ -n "${SRC_WORKSPACE}" ] || die "PLANE_CLOUD_WORKSPACE is not set — the workspace SLUG from the cloud URL (app.plane.so/<slug>/)."
+[ -n "${DST_WORKSPACE}" ] || die "PLANE_LOCAL_WORKSPACE is not set — the workspace slug of this instance."
+
+# EXPORTED, because `docker run -e SRC_TOKEN` copies the value from the docker CLI's OWN environment:
+# a shell variable that was never exported becomes an empty string inside the container, and
+# plane-migrate then reports "Missing required: --src-token or env PLANE_SRC_TOKEN" — which reads
+# like a missing token rather than an unexported variable. Measured exactly that.
+export SRC_TOKEN DST_TOKEN
+
+DN="$(read_env DEPLOYMENT_NAME)"; DN="${DN:-bina-deployment}"
+running "project-pln-${DN}" || die "project-pln is not running — './scripts/dc up -d project-pln' first."
+
+# Reads EVERY page: the API answers `{results, next_page_results, next_cursor}`, and a workspace with
+# more than one page of projects would otherwise be migrated silently half-way.
+# Prints one `id<TAB>identifier<TAB>name` row per project.
+list_projects() {   # <url> <token> <workspace-slug> <label>
+  local url="$1" token="$2" ws="$3" label="$4" cursor="" page=0 body
+  while :; do
+    local q="?per_page=100"
+    [ -n "${cursor}" ] && q="?per_page=100&cursor=${cursor}"
+    body="$(curl -fsS -H "X-API-Key: ${token}" "${url}/api/v1/workspaces/${ws}/projects/${q}")" \
+      || die "could not read the ${label} project list from ${url} — check the token and the workspace slug"
+    out="$(printf '%s' "${body}" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+for p in (d.get("results") or []):
+    print("%s\t%s\t%s" % (p["id"], p.get("identifier") or "", (p.get("name") or "").replace("\t", " ")))
+print("__META__" + json.dumps({"next": bool(d.get("next_page_results")), "cursor": d.get("next_cursor") or ""}))
+')" || die "could not parse the ${label} project list from ${url}"
+    printf '%s\n' "${out}" | grep -v '^__META__' || true
+    meta="$(printf '%s\n' "${out}" | grep -m1 '^__META__' || true)"
+    page=$((page + 1))
+    [ "${page}" -lt 50 ] || die "project list pagination did not terminate for the ${label} workspace"
+    cursor="$(printf '%s' "${meta}" | python3 -c 'import json,sys; d=json.loads(sys.stdin.read().replace("__META__","",1) or "{}"); print((d.get("cursor") or "") if d.get("next") else "")')"
+    [ -n "${cursor}" ] || break
+  done
+}
+
+say "source:      ${SRC_URL}  (workspace ${SRC_WORKSPACE})"
+say "destination: ${DST_URL}  (workspace ${DST_WORKSPACE})"
+say "mode:        $([ "${APPLY}" = 1 ] && echo 'APPLY — this writes into the local instance' || echo 'DRY RUN — reads both sides, writes a plan, nothing else')"
+
+mkdir -p "${PLAN_DIR}"
+
+say "reading the cloud project list…"
+mapfile -t SRC_ROWS < <(list_projects "${SRC_URL}" "${SRC_TOKEN}" "${SRC_WORKSPACE}" source)
+
+say "reading the local project list…"
+mapfile -t DST_ROWS < <(list_projects "${DST_URL}" "${DST_TOKEN}" "${DST_WORKSPACE}" destination)
+
+# Counting happens WHILE populating, and the loops use the `+`-guard form, because of a bash trap
+# that hits exactly the real case: under `set -u`, `${#A[@]}` and `"${A[@]}"` on an associative
+# array that was declared but never assigned are "unbound variable" errors (bash 5.2, verified).
+# A DESTINATION with no projects yet — the state every real import starts in — is that empty array.
+# The symptom was `import-cloud: line 126: DST_ID: unbound variable` after both lists had been read.
+declare -A SRC_ID SRC_NAME DST_ID
+src_count=0 dst_count=0
+for row in ${SRC_ROWS[@]+"${SRC_ROWS[@]}"}; do
+  IFS=$'\t' read -r id key name <<<"${row}"
+  [ -n "${key}" ] || continue
+  SRC_ID["${key}"]="${id}"; SRC_NAME["${key}"]="${name}"; src_count=$((src_count + 1))
+done
+for row in ${DST_ROWS[@]+"${DST_ROWS[@]}"}; do
+  IFS=$'\t' read -r id key name <<<"${row}"
+  [ -n "${key}" ] || continue
+  DST_ID["${key}"]="${id}"; dst_count=$((dst_count + 1))
+done
+
+[ "${src_count}" -gt 0 ] || die "the cloud workspace reported no projects — is the token scoped to a workspace that has some?"
+say "${src_count} project(s) in the cloud, ${dst_count} locally"
+
+FAILED=0
+for key in $(printf '%s\n' "${!SRC_ID[@]}" | sort); do
+  sid="${SRC_ID[${key}]}"
+
+  # ── the destination project must EXIST before anything can be planned or moved ────────────────
+  # `--dst-project` is a UUID lookup, so a project the local instance does not have cannot even be
+  # DRY-RUN against: plane-migrate answers "Cannot access destination project". The previous version
+  # of this hook only created it under --apply, so the planning run skipped those projects entirely
+  # — no plan file was written — and --apply then pointed at a plan that did not exist. Creating an
+  # EMPTY project is the one write the planning step makes, it is additive and trivially reversible,
+  # and it is announced per project rather than done quietly.
+  if [ -z "${DST_ID[${key}]:-}" ]; then
+    say "${key}: no local project with this identifier — creating one (empty)…"
+    payload="$(python3 -c 'import json,sys; print(json.dumps({"name": sys.argv[1], "identifier": sys.argv[2]}))' "${SRC_NAME[${key}]}" "${key}")"
+    created="$(curl -fsS -X POST -H "X-API-Key: ${DST_TOKEN}" -H 'content-type: application/json' -d "${payload}" \
+      "${DST_URL}/api/v1/workspaces/${DST_WORKSPACE}/projects/")" \
+      || { bad "${key}: could not create the local project"; FAILED=$((FAILED + 1)); continue; }
+    DST_ID["${key}"]="$(printf '%s' "${created}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
+    ok "${key}: created locally — a real run fills it, a plan run leaves it empty"
+  fi
+  did="${DST_ID[${key}]}"
+  plan="/plans/${key}-plan.yaml"
+
+  # --apply needs the plan that the review step produced. It is NOT regenerated here: the tool's
+  # workflow is plan → review → apply, and re-planning during apply would silently discard the
+  # member mappings the operator just filled in.
+  if [ "${APPLY}" = 1 ] && [ ! -f "${PLAN_DIR}/${key}-plan.yaml" ]; then
+    bad "${key}: no plan at ${PLAN_DIR}/${key}-plan.yaml — run 'bbox project-pln import-cloud' (without --apply), review the plan, then apply"
+    FAILED=$((FAILED + 1)); continue
+  fi
+
+  say "── ${key}  (${sid} → ${did})"
+  set +e
+  docker run --rm --network traefik-network \
+    -e SRC_TOKEN -e DST_TOKEN \
+    -v "${PLAN_DIR}:/plans" \
+    "${PN_MIGRATE_IMAGE}" sh -c "
+      pip install -q plane-migrate >/dev/null 2>&1 || { echo 'pip install plane-migrate failed'; exit 1; }
+      exec plane-migrate \
+        --src-url '${SRC_URL}' --src-token \"\$SRC_TOKEN\" \
+        --src-workspace '${SRC_WORKSPACE}' --src-project '${sid}' \
+        --dst-url '${DST_URL}' --dst-token \"\$DST_TOKEN\" \
+        --dst-workspace '${DST_WORKSPACE}' --dst-project '${did}' \
+        --plan-file ${plan} \
+        ${ONLY[@]+"${ONLY[@]}"} \
+        $([ "${APPLY}" = 1 ] && echo "--members-map ${plan}" || echo "--dry-run")
+    "
+  rc=$?
+  set -e
+  [ ${rc} -eq 0 ] || { bad "${key}: migration failed (exit ${rc})"; FAILED=$((FAILED + 1)); }
+done
+
+echo
+if [ "${APPLY}" = 1 ]; then
+  say "done — ${FAILED} project(s) failed. Plans and logs are in ${PLAN_DIR}."
+else
+  say "plan step complete — a plan per project in ${PLAN_DIR}, and an EMPTY local project for any"
+  say "identifier that did not exist yet (the step above said which). Nothing else was written."
+  say "Review each plan — especially the unmatched member list, which needs a human because cloud"
+  say "emails rarely match local ones — then run again with --apply to move the work items."
+fi
+say "NOT migrated by any of this: pages (they need a browser session cookie) and attachments — the"
+say "files live in the cloud's object-storage bucket, which plane-migrate cannot reach. Both are"
+say "listed in apps/project-pln/README.md; do not report a complete migration without saying so."
+[ "${FAILED}" -eq 0 ] || exit 1

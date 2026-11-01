@@ -1,0 +1,21 @@
+{
+ "loading": "קורא…",
+ "loadMore": "טעינת עוד",
+ "changed": "הקובץ השתנה, מוצג התוכן הקודם.",
+ "reloadNow": "טעינה מחדש",
+ "reload": "קריאת הקובץ מחדש",
+ "wrap.enable": "הפעלת גלישת שורות",
+ "wrap.disable": "כיבוי גלישת שורות",
+ "wrap.aria": "גלישת שורות",
+ "openWith": "פתיחה באמצעות",
+ "viewer.text": "טקסט רגיל",
+ "resourceUnavailable": "שירות משאבי הקבצים לא זמין.",
+ "rendererUnavailable": "התצוגה המקדימה של {name} לא זמינה.",
+ "unsupportedFile": "תצוגה מקדימה עדיין לא זמינה לסוג הקובץ הזה.",
+ "error.notFound": "הקובץ לא נמצא. ייתכן שהועבר או נמחק.",
+ "error.tooLarge": "העמוד הזה חורג ממגבלת {limit} ולא ניתן לקרוא אותו.",
+ "error.notText": "תצוגה מקדימה עדיין לא זמינה לסוג הקובץ הזה.",
+ "error.notRegularFile": "לא קובץ רגיל, אין מה להציג.",
+ "error.unavailable": "הקריאה נכשלה: {message}",
+ "retry": "ניסיון חוזר"
+}

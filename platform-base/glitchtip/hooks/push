@@ -1,0 +1,165 @@
+#!/usr/bin/env bash
+set -euo pipefail
+export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
+# glitchtip-push — declaratively configure GlitchTip so it routes errors from the
+# deployment's apps. Idempotent, network-free (pure Django ORM via manage.py shell),
+# and DETERMINISTIC: each project's DSN public key is sha256(GLITCHTIP_SECRET_KEY:name),
+# so the SAME DSNs survive a `down -v` (the apps' *_SENTRY_DSN in .env stay valid).
+#
+# Creates: superuser (from GLITCHTIP_ADMIN_*), the org named ${BUSINESS_NAME} (slug =
+# COMPANY_SLUG, the slug notifications polls), team "developers", and a
+# project per app. Prints each DSN. Run after `docker compose up -d glitchtip`.
+#
+# Projects: default list, or override with GLITCHTIP_PROJECTS="n8n|node,apitools|python".
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# An app hook lives at <root>/<id>/hooks/, so lib.sh is three levels up — not beside it.
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # read_env, DN, npath, dcx
+GT="${GLITCHTIP_CONTAINER:-glitchtip-${DN}}"
+log() { echo "[glitchtip-push] $*"; }
+
+docker ps --format '{{.Names}}' | grep -Fxq "${GT}" || { echo "Error: '${GT}' not running." >&2; exit 1; }
+
+# Creds from .env, falling back to the shell environment (so CI / ad-hoc runs can pass them).
+ADMIN_EMAIL="$(read_env GLITCHTIP_ADMIN_EMAIL)"; ADMIN_EMAIL="${ADMIN_EMAIL:-${GLITCHTIP_ADMIN_EMAIL:-admin@local.dev}}"
+ADMIN_PASS="$(read_env GLITCHTIP_ADMIN_PASSWORD)"; ADMIN_PASS="${ADMIN_PASS:-${GLITCHTIP_ADMIN_PASSWORD:-}}"
+SECRET="$(read_env GLITCHTIP_SECRET_KEY)"; SECRET="${SECRET:-${GLITCHTIP_SECRET_KEY:-}}"
+# read_env resolves ${BUSINESS_NAME} inside .env, so the org is the business, not a past client.
+ORG_NAME="$(read_env GLITCHTIP_ORG_NAME)"; ORG_NAME="${ORG_NAME:-${GLITCHTIP_ORG_NAME:-${BUSINESS_NAME:-Deployment}}}"
+TEAM_SLUG="${GLITCHTIP_TEAM_SLUG:-developers}"
+# DSN INGEST host the apps SEND events to. Every reporting app is a server-side container on
+# the docker network, so the INTERNAL host `glitchtip:8000` is the right target: it resolves
+# via docker DNS, needs no Traefik/TLS hop, and — critically — the EXTERNAL `glitchtip.<domain>`
+# does NOT resolve inside containers (verified: getaddrinfo fails), so external-host DSNs
+# silently drop every event. Override with GLITCHTIP_INGEST_HOST only for out-of-network senders.
+GT_HOST="$(read_env GLITCHTIP_INGEST_HOST)"; GT_HOST="${GT_HOST:-${GLITCHTIP_INGEST_HOST:-glitchtip:8000}}"
+# Project list: GLITCHTIP_PROJECTS env override, else the COMPILED list.
+#
+# glitchtip is a layer-2 base app and must not know its consumers by name. Each app declares
+# `observability.sentry_platform` in its OWN app.json; reconcile.py derives the list into
+# .generated/glitchtip.projects.yml, so the projects are exactly the enabled apps that asked
+# for one. The old hardcoded blueprint list still named librechat and feature-validation long
+# after both were parked in attic/ — that is the drift this removes.
+#
+# NO silent fallback to a stale default: this script once fell back to a 4-project default when
+# its input moved, leaving 11 apps with no error project. Missing input is now a hard error.
+GEN_PROJECTS="${REPO_ROOT}/.generated/glitchtip.projects.yml"
+[ -f "$GEN_PROJECTS" ] || ( cd "${REPO_ROOT}" && python3 platform/manager/reconcile.py render ) >/dev/null 2>&1 || true
+BP_PROJECTS=""
+[ -f "$GEN_PROJECTS" ] && BP_PROJECTS="$(grep -E "^[[:space:]]*-[[:space:]]*\{[[:space:]]*name:" "$GEN_PROJECTS"   | sed -E "s/.*name:[[:space:]]*([A-Za-z0-9_-]+).*platform:[[:space:]]*([A-Za-z0-9_-]+).*/\1|\2/" | paste -sd, -)"
+if [ -z "${GLITCHTIP_PROJECTS:-}" ] && [ -z "$BP_PROJECTS" ]; then
+  echo "Error: no project list; expected .generated/glitchtip.projects.yml — run: python3 platform/manager/reconcile.py render" >&2
+  exit 1
+fi
+PROJECTS="${GLITCHTIP_PROJECTS:-$BP_PROJECTS}"
+[ -n "$ADMIN_PASS" ] || { echo "Error: GLITCHTIP_ADMIN_PASSWORD not set in .env" >&2; exit 1; }
+[ -n "$SECRET" ]     || { echo "Error: GLITCHTIP_SECRET_KEY not set in .env" >&2; exit 1; }
+
+log "Configuring GlitchTip (${GT}) — org='${ORG_NAME}', host='${GT_HOST}'..."
+# Capture to a temp file (not heredoc-inside-$(), which bash warns about + truncates).
+GT_OUT="$(mktemp)"
+docker exec -i \
+  -e GT_ADMIN_EMAIL="$ADMIN_EMAIL" -e GT_ADMIN_PASS="$ADMIN_PASS" -e GT_SECRET="$SECRET" \
+  -e GT_ORG="$ORG_NAME" -e GT_TEAM="$TEAM_SLUG" -e GT_HOST="$GT_HOST" -e GT_PROJECTS="$PROJECTS" \
+  "$GT" python manage.py shell >"$GT_OUT" 2>&1 <<'PY' || true
+import os, uuid, hashlib
+from django.utils.text import slugify
+from django.contrib.auth import get_user_model
+from apps.teams.models import Organization, Team
+from apps.organizations_ext.models import OrganizationUser, OrganizationUserRole
+from apps.projects.models import Project, ProjectKey
+
+def log(m): print("[glitchtip-push]  " + m)
+User = get_user_model()
+email = os.environ["GT_ADMIN_EMAIL"]; secret = os.environ["GT_SECRET"]; host = os.environ["GT_HOST"]
+
+# 1) superuser (idempotent)
+admin = User.objects.filter(email=email).first()
+if not admin:
+    admin = User.objects.create_superuser(email=email, password=os.environ["GT_ADMIN_PASS"])
+    log("created superuser " + email)
+else:
+    log("superuser exists " + email)
+
+# 2) org + owner membership
+org, created = Organization.objects.get_or_create(slug=slugify(os.environ["GT_ORG"]), defaults={"name": os.environ["GT_ORG"]})
+log(("created" if created else "exists") + " org " + org.slug)
+if not org.is_member(admin):
+    org.add_user(admin, role=OrganizationUserRole.OWNER)
+    log("added owner to org")
+ou = OrganizationUser.objects.filter(organization=org, user=admin).first()
+
+# 3) team
+team, tcreated = Team.objects.get_or_create(slug=os.environ["GT_TEAM"], organization=org)
+log(("created" if tcreated else "exists") + " team " + team.slug)
+if ou:
+    team.members.add(ou)
+
+# 4) projects + deterministic DSN keys
+n = 0
+for spec in os.environ["GT_PROJECTS"].split(","):
+    spec = spec.strip()
+    if not spec: continue
+    name, _, platform = spec.partition("|"); platform = platform or "other"
+    proj, pcreated = Project.objects.get_or_create(slug=slugify(name), organization=org, defaults={"name": name, "platform": platform})
+    team.projects.add(proj)
+    det = hashlib.sha256((secret + ":" + name).encode()).hexdigest()[:32]
+    key_uuid = uuid.UUID(det)
+    pk = ProjectKey.objects.filter(project=proj).first()
+    if pk:
+        if str(pk.public_key).replace("-", "") != det:
+            pk.public_key = key_uuid; pk.save()
+    else:
+        ProjectKey.objects.create(project=proj, public_key=key_uuid)
+    n += 1
+    print("DSN|%s|http://%s@%s/%d" % (name, det, host, proj.id))
+log("projects configured: %d" % n)
+
+# 5) read API token for the self-developed notifications service (התראות) — idempotent by label.
+#    The token line is filtered out of the displayed output below and only written to .env.
+try:
+    from apps.api_tokens.models import APIToken
+    tok = APIToken.objects.filter(user=admin, label="notifications-poller").first()
+    if not tok:
+        tok = APIToken.objects.create(user=admin, label="notifications-poller")
+    for flag in ("org:read", "project:read", "event:read", "member:read", "team:read"):
+        try: setattr(tok.scopes, flag, True)
+        except Exception: pass
+    tok.save()
+    print("APITOKEN|%s" % str(tok.token))
+    log("minted notifications-poller API token")
+except Exception as e:
+    log("APIToken mint skipped: %r" % e)
+PY
+OUT="$(cat "$GT_OUT")"; rm -f "$GT_OUT"
+printf '%s\n' "$OUT" | grep -E '^\[glitchtip|^DSN\|' || true
+
+# Write each deterministic DSN into .env as <PROJECT>_SENTRY_DSN so apps route errors OUT
+# OF THE BOX (idempotent: update the line if present, else append). DSNs are stable across
+# down -v, so this never churns. Set GLITCHTIP_WRITE_DSN=0 to skip.
+ENV_FILE="${GLITCHTIP_DSN_ENV_FILE:-${REPO_ROOT}/.env}"
+if [ "${GLITCHTIP_WRITE_DSN:-1}" = 1 ] && [ -f "$ENV_FILE" ]; then
+  while IFS='|' read -r _tag name dsn; do
+    [ "$_tag" = "DSN" ] && [ -n "$name" ] && [ -n "$dsn" ] || continue
+    var="$(printf '%s_SENTRY_DSN' "$name" | tr '[:lower:]-' '[:upper:]_')"
+    if grep -qE "^${var}=" "$ENV_FILE"; then
+      sed -i "s#^${var}=.*#${var}=${dsn}#" "$ENV_FILE"
+    else
+      printf '%s=%s\n' "$var" "$dsn" >> "$ENV_FILE"
+    fi
+    log "  wrote ${var} -> $(basename "$ENV_FILE")"
+  done <<< "$(printf '%s\n' "$OUT" | grep '^DSN|')"
+  log "Apps route errors out of the box; (re)start them to pick up new DSNs."
+  # notifications-poller read token -> GLITCHTIP_API_TOKEN (value never echoed; the APITOKEN|
+  # line is excluded from the display grep above, so the secret stays out of logs/transcript).
+  APITOK="$(printf '%s\n' "$OUT" | sed -n 's/^APITOKEN|//p' | head -1)"
+  if [ -n "$APITOK" ]; then
+    if grep -qE '^GLITCHTIP_API_TOKEN=' "$ENV_FILE"; then
+      sed -i "s#^GLITCHTIP_API_TOKEN=.*#GLITCHTIP_API_TOKEN=${APITOK}#" "$ENV_FILE"
+    else
+      printf 'GLITCHTIP_API_TOKEN=%s\n' "$APITOK" >> "$ENV_FILE"
+    fi
+    log "  wrote GLITCHTIP_API_TOKEN -> $(basename "$ENV_FILE") (notifications poller)"
+  fi
+fi

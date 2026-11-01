@@ -1,0 +1,37 @@
+# yaml-language-server: $schema=./schema.json
+title: "Authentik 2024.12 is outdated — affected by 2025 CVEs (session revocation, RAC token)"
+opened: "2026-06-16"
+category: security
+severity: medium
+status: open  # 2026-07-30 triage: STILL OPEN — platform-base/authentik/docker-compose.yml:10,102,161 all still ghcr.io/goauthentik/server:2024.12. 2026-08-04 re-triage: STILL OPEN — platform-base/authentik/docker-compose.yml still pins the 2024.12 image.
+summary: "Authentik image is goauthentik/server:2024.12, predating fixes for CVE-2025-29928 (sessions not revoked) and CVE-2025-52553 (RAC token)."
+
+description: |
+  ## Symptom / risk
+  All Authentik services run `ghcr.io/goauthentik/server:2024.12`
+  (`production/authentik/docker-compose.yml`). Known 2025 CVEs:
+
+  - **CVE-2025-29928** — with **DB session storage**, deleting/invalidating a session
+    via UI/API does NOT revoke it. Directly relevant to the observed "still logged in
+    after logout" concern: empirically logout DID gate fresh requests in testing, but
+    if any hard-reload-after-logout still grants access, this CVE is the cause.
+  - **CVE-2025-52553** — RAC single-connection token isn't scoped to the authorizing
+    user's session (only relevant if the RAC provider is used).
+
+  Session storage is currently unset (default). Confirm whether it's DB-backed.
+
+  ## Fix
+  - Upgrade Authentik to a current release (re-test the declarative blueprints +
+    the local-auth parity afterward).
+  - Until upgraded: if RAC is used, set RAC token duration to `minutes=5` + "delete on
+    disconnect"; verify session storage / logout-revocation behaviour.
+
+tasks:
+  - { text: "Confirm Authentik session storage backend (DB vs cache)", done: false }
+  - { text: "Bump image tag to a current Authentik release; re-apply blueprints; smoke-test login + forward-auth", done: false }
+  - { text: "Re-test logout actually revokes on hard reload", done: false }
+
+references:
+  - production/authentik/docker-compose.yml
+  - "https://docs.goauthentik.io/security/cves/CVE-2025-29928/"
+  - "https://docs.goauthentik.io/security/cves/CVE-2025-52553/"

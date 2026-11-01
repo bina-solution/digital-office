@@ -1,0 +1,11 @@
+# The image is the service, not the repo checkout. `COPY *.py .` in the Dockerfile picks up every
+# module by glob so a new source file can never be forgotten — this file is what keeps that glob
+# from also shipping the unit tests and local build residue (RELEASE-DECISIONS N12: "test modules
+# leave the image").
+test_*.py
+conftest.py
+__pycache__/
+.pytest_cache/
+*.pyc
+*.md
+.dockerignore

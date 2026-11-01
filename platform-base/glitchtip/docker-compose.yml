@@ -1,0 +1,209 @@
+# Config below was layered by production/compose.override.yml before the platform-OS
+# refactor; merged here so this app owns its complete definition.
+services:
+  glitchtip:
+    image: glitchtip/glitchtip:6.2.2
+    container_name: glitchtip-${DEPLOYMENT_NAME:-bina-deployment}
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          # 2G -> 768M, 2026-08-06. Measured high-water 276MiB (~2.8x headroom retained). This is
+          # error-reporting infrastructure, not the pipeline — it had the third-largest ceiling in
+          # the stack while using a quarter of a gigabyte.
+          memory: 768M
+        reservations:
+          cpus: '0.2'
+          memory: 512M
+    environment:
+    - DATABASE_URL=postgres://glitchtip:${GLITCHTIP_DB_PASSWORD:?set in .env}@glitchtip-postgres:5432/glitchtip
+    - VALKEY_URL=redis://glitchtip-valkey:6379/0
+    - SECRET_KEY=${GLITCHTIP_SECRET_KEY:?set in .env}
+    - PORT=8000
+    - EMAIL_URL=${GLITCHTIP_EMAIL_URL:-consolemail://}
+    - GLITCHTIP_DOMAIN=${AUTH_PROTOCOL:-https}://${GLITCHTIP_BASE_URL:-glitchtip.${DEPLOYMENT_DOMAIN:-localhost}}
+    - DEFAULT_FROM_EMAIL=${GLITCHTIP_FROM_EMAIL:-noreply@${DEPLOYMENT_DOMAIN:-localhost}}
+    - CELERY_WORKER_AUTOSCALE=1,3
+    - GLITCHTIP_MAX_EVENT_LIFE_DAYS=${GLITCHTIP_MAX_EVENT_LIFE_DAYS:-90}
+    - ENABLE_USER_REGISTRATION=${GLITCHTIP_ENABLE_REGISTRATION:-true}
+    - ENABLE_ORGANIZATION_CREATION=${GLITCHTIP_ENABLE_ORG_CREATION:-false}
+    volumes:
+    - glitchtip_uploads:/code/uploads
+    networks:
+    - traefik-network
+    - glitchtip-internal
+    depends_on:
+      glitchtip-postgres:
+        condition: service_healthy
+      glitchtip-valkey:
+        condition: service_started
+      glitchtip-migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/_health/')"
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    labels:
+    - traefik.enable=true
+    - traefik.docker.network=traefik-network
+    - traefik.http.routers.glitchtip-local.rule=Host(`glitchtip.localhost`)
+    - traefik.http.routers.glitchtip-local.entrypoints=web
+    - traefik.http.routers.glitchtip-local.service=glitchtip
+    - traefik.http.routers.glitchtip-http.rule=Host(`${GLITCHTIP_BASE_URL}`)
+    - traefik.http.routers.glitchtip-http.entrypoints=web
+    - traefik.http.routers.glitchtip-http.service=glitchtip
+    - traefik.http.routers.glitchtip-https.rule=Host(`${GLITCHTIP_BASE_URL}`)
+    - traefik.http.routers.glitchtip-https.entrypoints=websecure
+    - traefik.http.routers.glitchtip-https.tls=true
+    - traefik.http.routers.glitchtip-https.tls.certresolver=myresolver
+    - traefik.http.routers.glitchtip-https.service=glitchtip
+    - traefik.http.services.glitchtip.loadbalancer.server.port=8000
+    - traefik.http.services.glitchtip.loadbalancer.healthcheck.path=/_health/
+    - traefik.http.services.glitchtip.loadbalancer.healthcheck.interval=30s
+    - traefik.http.services.glitchtip.loadbalancer.healthcheck.timeout=10s
+  glitchtip-worker:
+    image: glitchtip/glitchtip:6.2.2
+    container_name: glitchtip-worker-${DEPLOYMENT_NAME:-bina-deployment}
+    restart: unless-stopped
+    command: ./bin/run-celery-with-beat.sh
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          # 1G -> 384M, 2026-08-06. Measured high-water: glitchtip-worker 173MiB (2.2x headroom),
+          # glitchtip-postgres 94MiB (4.1x). Taken to 384M rather than 512M to bring the declared
+          # total under the G30 budget; glitchtip is error-reporting infrastructure that is not on
+          # the document path and is stopped entirely by quiet mode, so it is the right place to
+          # find the last ~100 MiB rather than taking it from the pipeline.
+          memory: 384M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    environment:
+    - DATABASE_URL=postgres://glitchtip:${GLITCHTIP_DB_PASSWORD:?set in .env}@glitchtip-postgres:5432/glitchtip
+    - VALKEY_URL=redis://glitchtip-valkey:6379/0
+    - SECRET_KEY=${GLITCHTIP_SECRET_KEY:?set in .env}
+    - EMAIL_URL=${GLITCHTIP_EMAIL_URL:-consolemail://}
+    - GLITCHTIP_DOMAIN=${AUTH_PROTOCOL:-https}://${GLITCHTIP_BASE_URL:-glitchtip.${DEPLOYMENT_DOMAIN:-localhost}}
+    - DEFAULT_FROM_EMAIL=${GLITCHTIP_FROM_EMAIL:-noreply@${DEPLOYMENT_DOMAIN:-localhost}}
+    - CELERY_WORKER_AUTOSCALE=1,3
+    - GLITCHTIP_MAX_EVENT_LIFE_DAYS=${GLITCHTIP_MAX_EVENT_LIFE_DAYS:-90}
+    volumes:
+    - glitchtip_uploads:/code/uploads
+    networks:
+    - glitchtip-internal
+    depends_on:
+      glitchtip-postgres:
+        condition: service_healthy
+      glitchtip-valkey:
+        condition: service_started
+      glitchtip-migrate:
+        condition: service_completed_successfully
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+  glitchtip-migrate:
+    image: glitchtip/glitchtip:6.2.2
+    container_name: glitchtip-migrate-${DEPLOYMENT_NAME:-bina-deployment}
+    command: ./bin/run-migrate.sh
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    environment:
+    - DATABASE_URL=postgres://glitchtip:${GLITCHTIP_DB_PASSWORD:?set in .env}@glitchtip-postgres:5432/glitchtip
+    - VALKEY_URL=redis://glitchtip-valkey:6379/0
+    - SECRET_KEY=${GLITCHTIP_SECRET_KEY:?set in .env}
+    networks:
+    - glitchtip-internal
+    depends_on:
+      glitchtip-postgres:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+  glitchtip-postgres:
+    image: postgres:16-alpine
+    container_name: glitchtip-postgres-${DEPLOYMENT_NAME:-bina-deployment}
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          # 1G -> 384M, 2026-08-06. Measured high-water: glitchtip-worker 173MiB (2.2x headroom),
+          # glitchtip-postgres 94MiB (4.1x). Taken to 384M rather than 512M to bring the declared
+          # total under the G30 budget; glitchtip is error-reporting infrastructure that is not on
+          # the document path and is stopped entirely by quiet mode, so it is the right place to
+          # find the last ~100 MiB rather than taking it from the pipeline.
+          memory: 384M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    environment:
+    - POSTGRES_DB=glitchtip
+    - POSTGRES_USER=glitchtip
+    - POSTGRES_PASSWORD=${GLITCHTIP_DB_PASSWORD:?set in .env}
+    volumes:
+    - glitchtip_postgres_data:/var/lib/postgresql/data
+    networks:
+    - glitchtip-internal
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - pg_isready -U glitchtip -d glitchtip
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-5s}
+      retries: 5
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+  glitchtip-valkey:
+    # redis:7-alpine, not valkey/valkey:alpine — valkey is a Redis fork and glitchtip only needs a
+    # RESP broker (VALKEY_URL is already a redis:// URL). The platform `redis` app pulls
+    # redis:7-alpine anyway, so this reuses an image already on disk instead of adding a second one.
+    # It stays a SEPARATE instance on glitchtip-internal on purpose: the shared cache runs
+    # maxmemory 256mb + noeviction, and a celery backlog there would take the platform down.
+    image: redis:7-alpine
+    container_name: glitchtip-valkey-${DEPLOYMENT_NAME:-bina-deployment}
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+    networks:
+    - glitchtip-internal
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+volumes:
+  glitchtip_uploads: null
+  glitchtip_postgres_data: null
+networks:
+  traefik-network:
+    external: true
+  glitchtip-internal:
+    driver: bridge

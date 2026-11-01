@@ -1,0 +1,892 @@
+{
+  "updatedAt": "2025-12-22T22:34:17.430Z",
+  "createdAt": "2025-08-09T19:47:05.887Z",
+  "id": "indoxDocGet01",
+  "name": "Get Incoming Document",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// --- Data Filtering and Processing ---\n// This code applies the filters to the retrieved Google Sheets data\n\nconst allData = $('COMPLEX GSHEET QUERY').all();\nconst filterConfig = $('Code - Process Get Request').first().json;\n\n// Helper function to check if a value matches the filter\nfunction matchesFilter(rowValue, filter) {\n  if (!rowValue) rowValue = '';\n  const rowValueStr = rowValue.toString().toLowerCase();\n  const filterValueStr = filter.value.toLowerCase();\n  \n  switch (filter.type) {\n    case 'exact':\n      return rowValueStr === filterValueStr;\n    case 'contains':\n      return rowValueStr.includes(filterValueStr);\n    default:\n      return false;\n  }\n}\n\n// Filter the data based on the provided filters\nconst filteredResults = allData.filter(item => {\n  const row = item.json;\n  \n  // All filters must match (AND logic)\n  return filterConfig.filters.every(filter => {\n    const fieldValue = row[filter.field];\n    return matchesFilter(fieldValue, filter);\n  });\n});\n\n// Prepare response data\nconst responseData = {\n  totalFound: filteredResults.length,\n  filters: filterConfig.filters.map(f => ({\n    field: f.field,\n    type: f.type,\n    value: f.value\n  })),\n  data: filteredResults.map(item => item.json)\n};\n\n// Return filtered results\nreturn filteredResults.length > 0 \n  ? [{ json: responseData }]\n  : [{ json: { ...responseData, error: 'No matching records found' } }];"
+      },
+      "id": "21a0d49e-b983-4efa-a711-f2a08159ae9c",
+      "name": "Code - Filter Data1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        912,
+        -16
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"success\": false, \"error\": $json.error || \"No documents found matching the specified criteria\", \"totalFound\": $json.totalFound || 0, \"filters\": $json.filters || [] } }}",
+        "options": {
+          "responseCode": 404
+        }
+      },
+      "id": "e90e019a-b73e-4322-a0cc-9f8c3794735e",
+      "name": "Response - Get Fail1",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        656,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// --- Enhanced Process Get Request ---\n// This code supports multiple query types: exact match, contains, and multiple field filtering\n\nconst query = $json.query || $json;\n\n// Define valid searchable fields\nconst validFields = [\n  'ID', 'TYPE', 'COMPANY_DOC_ID', 'COMPANY_ID', 'COMPANY_NAME', 'HASH', \"SHORT_DOC_ID\",\n  'NAME', 'LINK', 'SOURCE_TYPE', 'SOURCE_ID', 'STATUS', 'REQUIRED_ACTION'\n];\n\n// Helper function to validate field names\nfunction isValidField(field) {\n  return validFields.includes(field.toUpperCase());\n}\n\n// Initialize filters array\nconst filters = [];\n\n// Process query parameters\nfor (const [key, value] of Object.entries(query)) {\n  if (!value || value === '') continue; // Skip empty values\n  \n  const upperKey = key.toUpperCase();\n  \n  // Handle 'contains' queries (field_contains=value)\n  if (key.endsWith('_contains')) {\n    const fieldName = key.replace('_contains', '').toUpperCase();\n    if (isValidField(fieldName)) {\n      filters.push({\n        type: 'contains',\n        field: fieldName,\n        value: value.toString()\n      });\n    }\n  }\n  // Handle exact match queries\n  else if (isValidField(upperKey)) {\n    filters.push({\n      type: 'exact',\n      field: upperKey,\n      value: value.toString()\n    });\n  }\n}\n\n// Validate that at least one filter was provided\nif (filters.length === 0) {\n  throw new Error('Validation failed: At least one valid query parameter is required. Valid fields: ' + validFields.join(', '));\n}\n\n// Return the filters configuration\nreturn {\n  json: {\n    filters: filters,\n    queryType: filters.length === 1 ? 'single' : 'multiple',\n    totalFilters: filters.length\n  }\n};"
+      },
+      "id": "f0ea880c-f7d8-409a-a428-fd0ab060440a",
+      "name": "Code - Process Get Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        32,
+        64
+      ],
+      "executeOnce": true,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"success\": true, \"message\": \"Documents retrieved successfully\", \"totalFound\": $json.totalFound, \"filters\": $json.filters, \"data\": $json.data } }}",
+        "options": {}
+      },
+      "id": "63dcdf58-0129-44af-94a0-48e2672bc3c8",
+      "name": "Response - Get Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1104,
+        -16
+      ],
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "path": "incoming_document",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "1ab8e306-925f-433e-bc7e-be1a2e496674",
+      "name": "Webhook - Get",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        64
+      ],
+      "webhookId": "get_incoming_document"
+    },
+    {
+      "parameters": {
+        "dataToSave": {
+          "values": [
+            {
+              "key": "TYPE",
+              "value": "GET"
+            },
+            {
+              "key": "INPUT",
+              "value": "={{ $json.toJsonString() }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executionData",
+      "typeVersion": 1.1,
+      "position": [
+        256,
+        288
+      ],
+      "id": "c16e4216-6999-4cd6-947e-0802b7a9eb45",
+      "name": "Execution Data"
+    },
+    {
+      "parameters": {
+        "inputSource": "jsonExample",
+        "jsonExample": "{\n  \"ID\": \"\",\n  \"COMPANY_ID\": \"\",\n  \"SHORT_DOC_ID\": \"\"\n}"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -256,
+        -560
+      ],
+      "id": "b13c5a07-12d1-422d-a5f7-3f2587f9c6fd",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $input.all().length  > 1}}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    },
+                    "id": "a79b3730-2780-4797-97af-446e22399131"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "batch"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "58e282c5-7f2e-4d76-8f85-d44bff5c03a9",
+                    "leftValue": "={{ $json.keys().length > 1 || $json.keys()?.[0] != \"ID\" }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "complex"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "1dde1677-945e-4bc0-b2d9-2ead9493269e",
+                    "leftValue": "={{ true }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "simple_get_by_key"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "none"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        144,
+        -576
+      ],
+      "id": "87351cbf-7cf1-4e0a-b1ad-c970854b36d5",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo",
+          "mode": "list",
+          "cachedResultName": "AutomationValues",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 542119184,
+          "mode": "list",
+          "cachedResultName": "מסמכים נכנסים",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo/edit#gid=542119184"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "=ID",
+              "lookupValue": "={{ $json.ID }}"
+            }
+          ]
+        },
+        "combineFilters": "AND",
+        "options": {}
+      },
+      "id": "7c7b46b7-def7-4d50-9711-a7b8706d0c5a",
+      "name": "GET SINGEL BY ID",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        800,
+        -528
+      ],
+      "alwaysOutputData": true,
+      "executeOnce": false,
+      "retryOnFail": true,
+      "waitBetweenTries": 3000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "e2knIZpw8YF0QBAB",
+          "name": "Google Sheets person17@example.com"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "url": "https://sheets.googleapis.com/v4/spreadsheets/1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo/values/מסמכים נכנסים!A:Z",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        256,
+        -128
+      ],
+      "id": "26d10d1f-dd8c-410c-8b59-5da43d609fe3",
+      "name": "GET ALL HTTP REQUEST",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "e2knIZpw8YF0QBAB",
+          "name": "Google Sheets person17@example.com"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo",
+          "mode": "list",
+          "cachedResultName": "AutomationValues",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 542119184,
+          "mode": "list",
+          "cachedResultName": "מסמכים נכנסים",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo/edit#gid=542119184"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        896,
+        -1056
+      ],
+      "id": "6fcaa1c8-ffaa-4a42-878f-510fbb7f4bb9",
+      "name": "Get ALL GSHEET",
+      "executeOnce": true,
+      "retryOnFail": true,
+      "waitBetweenTries": 3000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "e2knIZpw8YF0QBAB",
+          "name": "Google Sheets person17@example.com"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 542119184,
+          "mode": "list",
+          "cachedResultName": "מסמכים נכנסים",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo/edit#gid=542119184"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "={{ $json.filters[0]?.field ?? \"EMPTY\" }}",
+              "lookupValue": "={{ $json.filters[0]?.value ?? \"\" }}"
+            },
+            {
+              "lookupColumn": "={{ $json.filters[1]?.field ?? \"EMPTY\" }}",
+              "lookupValue": "={{ $json.filters[1]?.value ?? \"\" }}"
+            }
+          ]
+        },
+        "combineFilters": "AND",
+        "options": {}
+      },
+      "id": "35aea228-99b6-478f-9c37-324ed755fa07",
+      "name": "COMPLEX GSHEET QUERY",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        272,
+        32
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "e2knIZpw8YF0QBAB",
+          "name": "Google Sheets person17@example.com"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        624,
+        -880
+      ],
+      "id": "07586021-8b21-42db-b7a3-53d834e04e16",
+      "name": "Batch Processing"
+    },
+    {
+      "parameters": {
+        "jsCode": "const sheet_rows = $(\"Get ALL GSHEET\").all() \nconst input_items = $input.all();\n\nif (input_items.length === 0) return [];\n\n// Analyze input items to determine if they all share the same filter keys\nconst filterKeySignatures = new Map();\nconst inputItemsBySignature = new Map();\n\nfor (const inputItem of input_items) {\n  const keys = Object.keys(inputItem.json).sort();\n  const signature = keys.join(',');\n  \n  if (!inputItemsBySignature.has(signature)) {\n    filterKeySignatures.set(signature, keys);\n    inputItemsBySignature.set(signature, []);\n  }\n  inputItemsBySignature.get(signature).push(inputItem);\n}\n\nconsole.log(`Processing ${input_items.length} items with ${filterKeySignatures.size} unique filter signature(s)`);\n\n// Build indexes for each unique key signature\nconst indexes = new Map();\n\nfor (const [signature, filterKeys] of filterKeySignatures) {\n  const index = new Map();\n  \n  for (const rowItem of sheet_rows) {\n    const key = filterKeys.map(k => `${rowItem.json[k]}`).join('|');\n    \n    if (!index.has(key)) {\n      index.set(key, []);\n    }\n    index.get(key).push(rowItem.json);\n  }\n  \n  indexes.set(signature, index);\n  console.log(`Built index for [${filterKeys.join(', ')}]: ${index.size} unique combinations`);\n}\n\n// Lookup matches for all input items\nconst results = [];\n\nfor (const [signature, items] of inputItemsBySignature) {\n  const filterKeys = filterKeySignatures.get(signature);\n  const index = indexes.get(signature);\n  \n  for (const inputItem of items) {\n    const key = filterKeys.map(k => `${inputItem.json[k]}`).join('|');\n    const matches = index.get(key) || [];\n    \n    results.push({\n      filter: inputItem.json,\n      matches: matches,\n      matchCount: matches.length\n    });\n  }\n}\n\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        -880
+      ],
+      "id": "d2acbc84-bef9-421c-a92c-3b690d3cba44",
+      "name": "Filter Matching"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        624,
+        -528
+      ],
+      "id": "335d4cb9-a577-4ceb-8f7b-de69f766f6f9",
+      "name": "SINGEL GET"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ═══════════════════════════════════════════════════════\n// OPTIMIZED REQUEST PARSER\n// Determines query type and prepares filter configuration\n// ═══════════════════════════════════════════════════════\n\nconst input = $input.all();\n\n// Determine query type\nconst isBatch = input.length > 1;\nconst firstItem = input[0].json;\nconst keys = Object.keys(firstItem);\n\n// Check if it's a simple ID lookup\nconst isSimpleId = keys.length === 1 && keys[0] === 'ID';\n\nif (isBatch) {\n  // BATCH QUERY - Multiple items to find\n  const allHaveSameKeys = input.every(item => {\n    const itemKeys = Object.keys(item.json).sort();\n    return JSON.stringify(itemKeys) === JSON.stringify(keys.sort());\n  });\n  \n  if (!allHaveSameKeys) {\n    throw new Error('Batch query items must have identical key structure');\n  }\n  \n  return [{\n    json: {\n      queryType: 'BATCH',\n      filterKeys: keys,\n      filters: input.map(item => item.json),\n      itemCount: input.length,\n      useGoogleNode: false // Always use custom filter for batch\n    }\n  }];\n}\n\nif (isSimpleId) {\n  // SIMPLE ID LOOKUP - Use native Google Sheets node (fastest)\n  return [{\n    json: {\n      queryType: 'SIMPLE_ID',\n      idValue: firstItem.ID,\n      useGoogleNode: true\n    }\n  }];\n}\n\n// COMPLEX FILTER - Multiple conditions\nreturn [{\n  json: {\n    queryType: 'COMPLEX',\n    filterKeys: keys,\n    filters: [firstItem],\n    useGoogleNode: keys.length <= 3 // Use Google node if 3 or fewer filters\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -160,
+        -1904
+      ],
+      "id": "d6f2a794-dcce-4f35-8d29-c45b25e337bb",
+      "name": "Parse Request"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.useGoogleNode }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true"
+                    },
+                    "id": "524a16fb-fa79-4aa7-bfcd-d9310b0f6641"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "use_google_node"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        48,
+        -1904
+      ],
+      "id": "8ecc09fc-e4af-41d8-af66-efcc2a028d75",
+      "name": "Route Query"
+    },
+    {
+      "parameters": {
+        "operation": "getMany",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('When Executed by Another Workflow').first().json.spreadsheetId || '1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo' }}",
+          "mode": "id"
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        288,
+        -2000
+      ],
+      "id": "95b03c28-e0c4-4c5e-ba23-311b0ac590e8",
+      "name": "Google Sheets Query",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "e2knIZpw8YF0QBAB",
+          "name": "Google Sheets person17@example.com"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "getMany",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('When Executed by Another Workflow').first().json.spreadsheetId || '1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo' }}",
+          "mode": "id"
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        288,
+        -1808
+      ],
+      "id": "315b3d1b-2037-45e5-8977-e0e97c0af962",
+      "name": "Get All Data",
+      "executeOnce": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "e2knIZpw8YF0QBAB",
+          "name": "Google Sheets person17@example.com"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ═══════════════════════════════════════════════════════\n// OPTIMIZED FILTER ENGINE\n// High-performance filtering for complex and batch queries\n// ═══════════════════════════════════════════════════════\n\nconst allData = $('Get All Data').all();\nconst config = $('Parse Request').first().json;\n\n// Performance optimization: Build lookup structures\nconst startTime = Date.now();\n\n// Helper: Check if row matches ALL filter conditions\nfunction matchesAllConditions(row, filterObj) {\n  return Object.entries(filterObj).every(([key, value]) => {\n    const rowValue = row[key];\n    \n    // Handle null/undefined\n    if (rowValue == null) return value == null;\n    \n    // Strict equality for numbers, case-insensitive for strings\n    if (typeof rowValue === 'number' || typeof value === 'number') {\n      return rowValue == value; // Loose equality for number comparison\n    }\n    \n    return String(rowValue).toLowerCase() === String(value).toLowerCase();\n  });\n}\n\nif (config.queryType === 'BATCH') {\n  // BATCH OPTIMIZATION: Create hash map for O(1) lookups\n  const filterKeys = config.filterKeys;\n  \n  // Create hash keys for all filter conditions\n  const filterHashes = new Set();\n  config.filters.forEach(filter => {\n    const hashKey = filterKeys.map(key => String(filter[key]).toLowerCase()).join('||');\n    filterHashes.add(hashKey);\n  });\n  \n  // Filter data using hash lookup\n  const results = allData.filter(item => {\n    const row = item.json;\n    const rowHash = filterKeys.map(key => String(row[key] || '').toLowerCase()).join('||');\n    return filterHashes.has(rowHash);\n  });\n  \n  const processingTime = Date.now() - startTime;\n  \n  return [{\n    json: {\n      queryType: 'BATCH',\n      totalFound: results.length,\n      requestedItems: config.itemCount,\n      processingTimeMs: processingTime,\n      filters: config.filters,\n      data: results.map(item => item.json)\n    }\n  }];\n}\n\n// COMPLEX FILTER: Match against single filter object\nconst filter = config.filters[0];\nconst results = allData.filter(item => matchesAllConditions(item.json, filter));\n\nconst processingTime = Date.now() - startTime;\n\nreturn [{\n  json: {\n    queryType: 'COMPLEX',\n    totalFound: results.length,\n    processingTimeMs: processingTime,\n    filters: [filter],\n    data: results.map(item => item.json)\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        512,
+        -1808
+      ],
+      "id": "a6bf946b-0a76-4371-8f4c-aa8a2731d057",
+      "name": "Custom Filter Engine"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ═══════════════════════════════════════════════════════\n// FORMAT GOOGLE NODE RESPONSE\n// Standardizes output from native Google Sheets node\n// ═══════════════════════════════════════════════════════\n\nconst config = $('Parse Request').first().json;\nconst results = $input.all();\n\nreturn [{\n  json: {\n    queryType: config.queryType,\n    totalFound: results.length,\n    processingTimeMs: 0, // Google node handles this internally\n    filters: config.queryType === 'SIMPLE_ID' \n      ? [{ ID: config.idValue }] \n      : config.filters,\n    data: results.map(item => item.json)\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        512,
+        -2000
+      ],
+      "id": "2c2864c8-5fe4-4c1e-9e88-75811a1cc03f",
+      "name": "Format Response"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        720,
+        -1904
+      ],
+      "id": "a2f62386-aecf-4bb4-9dca-46b874d61578",
+      "name": "Output"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Loop over input items and remove null/undefined values\nfor (const item of $input.all()) {\n  // Remove keys with null or undefined values\n  for (const key in item.json) {\n    if (item.json[key] === null || item.json[key] === undefined) {\n      delete item.json[key];\n    }\n  }\n}\n\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -48,
+        -560
+      ],
+      "id": "efe72914-10d1-4c25-82b8-8243dc19889e",
+      "name": "Filter Nulls"
+    },
+    {
+      "parameters": {
+        "jsCode": "// --- Data Filtering and Processing ---\n// This code applies the filters to the retrieved Google Sheets data\n\nconst allData = $('COMPLEX GSHEET QUERY').all();\nconst filterConfig = $('Code - Process Get Request').first().json;\n\n// Helper function to check if a value matches the filter\nfunction matchesFilter(rowValue, filter) {\n  if (!rowValue) rowValue = '';\n  const rowValueStr = rowValue.toString().toLowerCase();\n  const filterValueStr = filter.value.toLowerCase();\n  \n  switch (filter.type) {\n    case 'exact':\n      return rowValueStr === filterValueStr;\n    case 'contains':\n      return rowValueStr.includes(filterValueStr);\n    default:\n      return false;\n  }\n}\n\n// Filter the data based on the provided filters\nconst filteredResults = allData.filter(item => {\n  const row = item.json;\n  \n  // All filters must match (AND logic)\n  return filterConfig.filters.every(filter => {\n    const fieldValue = row[filter.field];\n    return matchesFilter(fieldValue, filter);\n  });\n});\n\n// Prepare response data\nconst responseData = {\n  totalFound: filteredResults.length,\n  filters: filterConfig.filters.map(f => ({\n    field: f.field,\n    type: f.type,\n    value: f.value\n  })),\n  data: filteredResults.map(item => item.json)\n};\n\n// Return filtered results\nreturn filteredResults.length > 0 \n  ? [{ json: responseData }]\n  : [{ json: { ...responseData, error: 'No matching records found' } }];"
+      },
+      "id": "18a0d783-84a4-4bb9-8220-c6f8e583c9f0",
+      "name": "Code - Filter Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1248,
+        -480
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d4ecbb1a-a26d-436e-ae49-460bb0422773",
+              "name": "matches",
+              "value": "={{ [$json] }}",
+              "type": "array"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1040,
+        -544
+      ],
+      "id": "1ff12802-7d9b-4e8e-8f62-f57d1f43f6b4",
+      "name": "Edit Fields"
+    }
+  ],
+  "connections": {
+    "Code - Filter Data1": {
+      "main": [
+        [
+          {
+            "node": "Response - Get Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Process Get Request": {
+      "main": [
+        [
+          {
+            "node": "COMPLEX GSHEET QUERY",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Execution Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "GET ALL HTTP REQUEST",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Response - Get Fail1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook - Get": {
+      "main": [
+        [
+          {
+            "node": "Code - Process Get Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Filter Nulls",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Batch Processing",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Batch Processing",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "SINGEL GET",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "COMPLEX GSHEET QUERY": {
+      "main": [
+        [
+          {
+            "node": "Code - Filter Data1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Response - Get Fail1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET SINGEL BY ID": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Batch Processing": {
+      "main": [
+        [
+          {
+            "node": "Get ALL GSHEET",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Filter Matching",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SINGEL GET": {
+      "main": [
+        [
+          {
+            "node": "GET SINGEL BY ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Request": {
+      "main": [
+        [
+          {
+            "node": "Route Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Query": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets Query",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get All Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets Query": {
+      "main": [
+        [
+          {
+            "node": "Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get All Data": {
+      "main": [
+        [
+          {
+            "node": "Custom Filter Engine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Custom Filter Engine": {
+      "main": [
+        [
+          {
+            "node": "Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Response": {
+      "main": [
+        [
+          {
+            "node": "Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Nulls": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {
+    "When Executed by Another Workflow": [
+      {
+        "json": {
+          "ID": "682656165s1yyor",
+          "COMPANY_ID": null,
+          "SHORT_DOC_ID": null
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "ID": "644982822su0mdn",
+          "COMPANY_ID": null,
+          "SHORT_DOC_ID": null
+        },
+        "pairedItem": {
+          "item": 1
+        }
+      },
+      {
+        "json": {
+          "ID": "5487791274oacxz",
+          "COMPANY_ID": null,
+          "SHORT_DOC_ID": null
+        },
+        "pairedItem": {
+          "item": 2
+        }
+      }
+    ]
+  },
+  "versionId": "afb0caba-caeb-47c9-9ee3-48d24fa571be",
+  "activeVersionId": "afb0caba-caeb-47c9-9ee3-48d24fa571be",
+  "versionCounter": 59,
+  "triggerCount": 1,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2025-08-09T19:47:05.887Z",
+      "createdAt": "2025-08-09T19:47:05.887Z",
+      "role": "workflow:owner",
+      "workflowId": "indoxDocGet01",
+      "projectId": "EChUnhWXmjrEc3fG",
+      "project": {
+        "updatedAt": "2024-09-26T18:07:08.765Z",
+        "createdAt": "2024-09-26T17:59:24.039Z",
+        "id": "EChUnhWXmjrEc3fG",
+        "name": "Shlomo Bolo <person8@example.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null
+      }
+    }
+  ]
+}

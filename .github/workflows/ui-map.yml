@@ -1,0 +1,284 @@
+name: ui-map
+
+# Brings the stack up, walks every UI view in the source-derived inventory, and publishes
+# ONE big mockup image of the whole platform plus two coverage numbers:
+#   view coverage    — captured / declared views
+#   UI-code coverage — % of view-code lines that ran while the shots were taken
+#
+# Runs on the self-hosted runner (same DinD host as indox-e2e) because it needs the full
+# stack + browser42, and GitHub-hosted minutes are billing-blocked (see CI_VERIFY_PAUSED
+# on ci-verify.yml). Report-only for now: UI_MAP_GATE stays 0 until the metric settles,
+# so a flaky browser can't block a deploy while we drive coverage up.
+
+on:
+  push:
+    branches: [main, release-v2-lockin, platform-os-refactor]
+    paths-ignore: ['.ci-cd/**']
+  workflow_dispatch:
+    inputs:
+      gate:
+        description: "Fail the run on uncaptured views / low view-code coverage"
+        type: boolean
+        default: false
+      shards:
+        description: "Parallel capture containers (each its own Chromium). 8 saturates the 32-core VPS; lower on small runners."
+        type: string
+        default: "8"
+      profiles:
+        description: "View profiles to capture (comma-separated: desktop,tablet,mobile). Empty = the ci_matrix in scripts/ui-coverage/view-profiles.yaml."
+        type: string
+        default: ""
+
+permissions:
+  contents: write
+  checks: write
+
+jobs:
+  # One job resolves which view profiles to capture, so the list lives in exactly one tracked place
+  # (scripts/ui-coverage/view-profiles.yaml `ci_matrix`) and adding a profile needs no workflow edit.
+  profiles:
+    if: ${{ vars.UI_MAP_PAUSED != '1' }}
+    runs-on: [self-hosted, portable]
+    outputs:
+      matrix: ${{ steps.pick.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: pick
+        shell: bash
+        run: |
+          if [ -n "${{ inputs.profiles }}" ]; then
+            LIST="${{ inputs.profiles }}"
+            M=$(python3 -c "import json,sys;print(json.dumps([x.strip() for x in sys.argv[1].split(',') if x.strip()]))" "$LIST")
+          else
+            M=$(python3 -c "import json,yaml;print(json.dumps(yaml.safe_load(open('scripts/ui-coverage/view-profiles.yaml'))['ci_matrix']))")
+          fi
+          echo "matrix=$M" >> "$GITHUB_OUTPUT"
+          echo "capturing profiles: $M"
+
+  ui-map:
+    needs: profiles
+    if: ${{ vars.UI_MAP_PAUSED != '1' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: ${{ fromJson(needs.profiles.outputs.matrix) }}
+    # Self-hosted, like every other lane here — hosted queues forever while the quota is out.
+    # (Originally: GitHub-hosted by default, because the VPS was a stopgap while minutes were
+    # exhausted). Bonus: a hosted runner is NOT docker-in-docker, so the container bind-mount and
+    # networking the capture relies on behave normally (the runner fs IS the daemon fs, and it can
+    # reach container IPs) — the exact environment where the capture is proven to work locally. Set
+    # the UI_MAP_RUNNER repo variable to a self-hosted/larger label to override.
+    runs-on: ${{ vars.UI_MAP_RUNNER != '' && vars.UI_MAP_RUNNER || 'self-hosted' }}
+    timeout-minutes: 60
+    env:
+      # the UI stack: everything that serves a screen. Capture spins up its own Chromium
+      # containers (bbox ui-map), so no browser is in this list.
+      # apitools = my-docs' BFF backend, but apitools PERSISTS to supabase Postgres — so
+      # my-docs renders empty until `db` is up. The supabase stack (db/meta/rest/storage/
+      # studio/kong) also backs the console drive view (storage:5000, via drive on
+      # supabase-net) and the INDOX documents grid (kong -> postgrest). n8n serves the INDOX
+      # sync/tests webhooks. WITHOUT these the map is a wall of "hostname not found" / empty
+      # tables — they are the single biggest source of the error banners on the map.
+      # mailserver+inbox back mailview and let the mail seed inject messages.
+      # Capture no longer uses browser42 — `bbox ui-map` builds a tiny single-purpose Chromium
+      # image and runs N of them on the stack network, reaching the console directly. So the heavy
+      # browser42 trio (browser + mcp + caddy) is out of the bring-up entirely.
+      # SERVICES is DERIVED (see the "Derive SERVICES" step). No roots = every app enabled in
+      # platform.state.yaml; LANE_EXCLUDE below reproduces this lane's previous hand-written set
+      # exactly, so capture behaviour is unchanged. The win: a new app's UI now enters the map
+      # automatically instead of waiting for someone to remember this list.
+      #
+      # app-management is now STARTED: it owns the apps screen (console no longer renders one), so
+      # excluding it would leave a declared console_embed module with nothing behind it.
+      # WORTH REVIEWING: this lane still never starts the n8n workers. Drop an entry to widen the map.
+      LANE_EXCLUDE: >-
+        browser42-browser,browser42-mcp,browser42-reaper,browser42-caddy,
+        glitchtip,glitchtip-worker,glitchtip-migrate,glitchtip-postgres,glitchtip-valkey,
+        portainer,redisinsight,webmail,indox-demo-docs,
+        n8n-task-runners,n8n-worker-1,n8n-worker-1-runners,n8n-worker-2,n8n-worker-2-runners
+
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+
+      - name: Reset docker state (fresh-machine semantics)
+        run: ./bbox reset --force --remove-orphans || true
+
+      - name: Cap CPU limits to the runner
+        run: |
+          python3 scripts/ci/cap-cpus.py
+
+      - name: Generate CI .env
+        run: |
+          chmod +x scripts/ci-env.sh
+          ./scripts/ci-env.sh
+          # incoming-documents defaults SUPABASE_BASE_URL to http://kong:8000, which only
+          # resolves on supabase-net — but the app runs on traefik-network only, where kong is
+          # aliased `supabase-kong` (apps/supabase/docker-compose.yml:96). Point it at
+          # that alias so the INDOX documents grid (kong -> postgrest) resolves instead of 500ing.
+          grep -q '^INCOMING_DOCS_SUPABASE_URL=' .env \
+            && sed -i 's#^INCOMING_DOCS_SUPABASE_URL=.*#INCOMING_DOCS_SUPABASE_URL=http://supabase-kong:8000#' .env \
+            || echo 'INCOMING_DOCS_SUPABASE_URL=http://supabase-kong:8000' >> .env
+          # apitools -> supabase Postgres: use db's traefik-network alias (apitools is on
+          # traefik-network only; the bare container name resolves to db's supabase-net IP and
+          # hangs, leaving my-docs empty because every apitools DB call times out).
+          grep -q '^APITOOLS_DB_HOST=' .env \
+            && sed -i 's#^APITOOLS_DB_HOST=.*#APITOOLS_DB_HOST=supabase-db#' .env \
+            || echo 'APITOOLS_DB_HOST=supabase-db' >> .env
+
+      - name: Rebuild app images from source (no stale UI)
+        run: |
+          # ROOT CAUSE of "the screenshots are an old version": bbox run == `docker compose
+          # up -d` with NO --build, and bbox reset == `down -v` which KEEPS images. On the
+          # persistent self-hosted runner the app images are cached from earlier builds, and
+          # compose never rebuilds on source changes — so capture photographs stale UI even
+          # though checkout pulled current source. Force a rebuild of the first-party app
+          # images from the checked-out tree before bring-up, so the map is always current.
+          . ./scripts/lib.sh && ensure_network   # one implementation (scripts/lib.sh)
+          ./scripts/dc build --pull \
+            console my-docs connections incoming-documents mailview drive \
+            machine notifications any-concurrency chat
+
+      - name: Derive SERVICES from the capability graph
+        run: |
+          set -euo pipefail
+          # Single source of truth for "what does this lane start": apps/*/app.json, not a list
+          # in this file. LANE_EXCLUDE is the deliberate, reviewable trim.
+          bash scripts/ci/derive-services.sh
+
+      - name: Bring up the UI stack
+        run: |
+          . ./scripts/lib.sh && ensure_network   # one implementation (scripts/lib.sh)
+          BBOX_WAIT_TIMEOUT=600 ./bbox run --wait $SERVICES || \
+            ./scripts/dc up -d $SERVICES
+
+      - name: "TIMED: capture UI map + coverage"
+        env:
+          # sharded, containerized capture (no browser42). Push stays modest; a dispatch can raise
+          # shards to saturate the 32-core runner. bbox ui-map installs its own host deps + seeds.
+          UI_MAP_SHARDS: ${{ github.event_name == 'workflow_dispatch' && inputs.shards || '4' }}
+          UI_MAP_GATE: ${{ inputs.gate && '1' || '0' }}
+        run: |
+          t0=$(date +%s)
+          PROG=/tmp/ui-map-progress.log; : > "$PROG"
+          # ── LIVE PROGRESS HEARTBEAT ──────────────────────────────────────────────────────────
+          # GitHub log DOWNLOAD is not granted to this integration (get_job_logs 404s even on
+          # COMPLETED jobs), so the only way to see what a run does is to have the run publish its
+          # own progress somewhere git can read. Every 15s, snapshot the capture log into an ORPHAN
+          # commit (plumbing only — never touches the index/worktree, so it can't disturb bbox
+          # ui-map) and force-push it to the throwaway branch `ci-ui-map-progress`. Read it with:
+          #   git fetch origin ci-ui-map-progress && git show FETCH_HEAD:progress.log
+          push_progress() {
+            local blob tree commit
+            blob=$(git hash-object -w "$PROG" 2>/dev/null) || return 0
+            tree=$(printf '100644 blob %s\tprogress.log\n' "$blob" | git mktree 2>/dev/null) || return 0
+            commit=$(printf 'ui-map progress (run #%s)\n' "${{ github.run_number }}" | git commit-tree "$tree" 2>/dev/null) || return 0
+            git push -f origin "$commit:refs/heads/ci-ui-map-progress" >/dev/null 2>&1 || true
+          }
+          ( while true; do push_progress; sleep 15; done ) & HB=$!
+          # HARD-BOUND the whole capture with SIGKILL so the step ALWAYS finishes and the JOB
+          # completes (a hung inner docker build/run ignores SIGTERM, so bound the top of the tree
+          # with --signal=KILL). `|| true` keeps the step green (non-gating) so publish/upload run.
+          timeout --signal=KILL "${UI_MAP_STEP_TIMEOUT:-1500}" ./bbox ui-map --profile "${{ matrix.profile }}" 2>&1 | tee -a "$PROG" || \
+            echo "::warning::bbox ui-map (${{ matrix.profile }}) exited non-zero or was killed at ${UI_MAP_STEP_TIMEOUT:-1500}s" | tee -a "$PROG"
+          kill "$HB" 2>/dev/null || true
+          { echo "=== post-capture ==="; echo "UI_MAP_SECONDS=$(( $(date +%s) - t0 ))";
+            echo "screenshots: $(ls -1 data/ui-map/output/ui/*.png 2>/dev/null | wc -l)";
+            echo "results json: $(ls -1 data/ui-map/ui-capture-results*.json 2>/dev/null | wc -l)";
+            ls -la data/ui-map/ 2>/dev/null; } | tee -a "$PROG"
+          push_progress   # final snapshot so the branch holds the complete log
+          echo "UI_MAP_SECONDS=$(( $(date +%s) - t0 ))" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish UI-coverage report
+        if: always() && hashFiles('ci-artifacts/ui-coverage.junit.xml') != ''
+        uses: mikepenz/action-junit-report@v5
+        with:
+          report_paths: ci-artifacts/ui-coverage.junit.xml
+          check_name: ui-coverage
+          detailed_summary: true
+          include_passed: true
+          fail_on_failure: false
+
+      # G4 compares against .ci-cd/ui-map/screenshots/ — explicitly the PRE-REFACTOR baseline. The
+      # refactor changed the UI on purpose (the apps screen moved from a console view to the
+      # app-management app; localdrive became drive; feature-validation moved to apps/apitools/,
+      # where its dashboard is now embedded from), and this
+      # lane deliberately never starts browser42/glitchtip/portainer/redisinsight, so their
+      # reference views can never appear in the capture. A stale reference must not hard-fail a lane
+      # this file already declares report-only — it is gated by UI_MAP_GATE like every other metric
+      # here, so the delta is REPORTED every run and only blocks on an explicit dispatch.
+      # Accept the current UI as the new truth with:
+      #   python3 scripts/refactor/ui-pixel-diff.py --rebaseline
+      - name: "G4 — pixel diff vs the committed UI reference"
+        env:
+          UI_MAP_GATE: ${{ inputs.gate && '1' || '0' }}
+        run: |
+          if python3 scripts/refactor/ui-pixel-diff.py; then
+            echo "G4 clean — capture matches the reference."
+          elif [ "${UI_MAP_GATE}" = "1" ]; then
+            echo "::error::G4 reported a UI delta and UI_MAP_GATE=1"
+            exit 1
+          else
+            echo "::warning::G4 reported a UI delta vs the PRE-REFACTOR reference (report-only). Rebaseline once the post-refactor UI is accepted."
+          fi
+
+      - name: Upload artifacts (full-res shots + map)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-map-${{ matrix.profile }}-${{ github.run_number }}
+          path: |
+            ci-artifacts/ui-map/**
+            ci-artifacts/screenshots-ui/**
+            ci-artifacts/ui-*.json
+            ci-artifacts/ui-coverage.*
+          retention-days: 14
+
+      # Publish the composite + report AND the individual per-view screenshots to .ci-cd/ui-map/
+      # so every captured screen is browsable in the repo, not only in the 14-day artifact.
+      - name: Publish map to .ci-cd/
+        if: always() && github.event_name != 'pull_request'
+        run: |
+          # Only the desktop profile refreshes the committed publish — it is the gated reference.
+          # tablet/mobile ship as run artifacts so a matrix leg can never rewrite the baseline.
+          if [ "${{ matrix.profile }}" != "desktop" ]; then
+            echo "profile ${{ matrix.profile }} — artifact only, not publishing to .ci-cd"; exit 0
+          fi
+          mkdir -p .ci-cd/ui-map/screenshots
+          # GUARD: a failed/hung capture produces zero fresh screenshots. Do NOT let that wipe the
+          # last good published map (run #25 did exactly this — the 8-shard hang left screenshots-ui
+          # empty, so the old rm -rf deleted all 76 good per-view images). Only refresh when this run
+          # actually captured something; otherwise leave the previous publish untouched.
+          fresh="$(ls -1 ci-artifacts/screenshots-ui/*.png 2>/dev/null | wc -l)"
+          if [ "$fresh" -gt 0 ]; then
+            cp ci-artifacts/ui-map/ui-map.png   .ci-cd/ui-map/ 2>/dev/null || true
+            cp ci-artifacts/ui-map/index.html   .ci-cd/ui-map/ 2>/dev/null || true
+            cp ci-artifacts/ui-coverage.md      .ci-cd/ui-map/ 2>/dev/null || true
+            cp ci-artifacts/ui-code-coverage.json .ci-cd/ui-map/ 2>/dev/null || true
+            # individual full-res screenshots (one PNG per captured view) — refresh the folder
+            # each run so removed/renamed views don't leave stale images behind.
+            rm -rf .ci-cd/ui-map/screenshots && mkdir -p .ci-cd/ui-map/screenshots
+            cp ci-artifacts/screenshots-ui/*.png .ci-cd/ui-map/screenshots/ 2>/dev/null || true
+            echo "published ${fresh} per-view screenshots (refreshed map + coverage)"
+          else
+            echo "::warning::capture produced 0 screenshots — keeping the previous published map untouched"
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -f .ci-cd/ui-map
+          git diff --cached --quiet || \
+            git commit -m "ci(ui-map): publish platform UI map + coverage (run #${{ github.run_number }}) [skip ci]"
+          for i in 1 2 3; do
+            git push origin "HEAD:${GITHUB_REF_NAME}" && break
+            git pull --rebase origin "${GITHUB_REF_NAME}" || true
+          done
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          docker ps -a --format '{{.Names}}\t{{.Status}}' | head -40
+          docker logs --tail 60 "$(docker ps --format '{{.Names}}' | grep browser42-browser | head -1)" || true
+
+      - name: Teardown
+        if: always()
+        run: ./bbox reset --force --remove-orphans || true

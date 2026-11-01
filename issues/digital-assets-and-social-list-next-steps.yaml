@@ -1,0 +1,63 @@
+# yaml-language-server: $schema=./schema.json
+title: 'digital-assets + social-list: sign the office browser in to every network, watch each first write, finish the website write path'
+opened: '2026-09-29'
+category: feature
+severity: medium
+status: in-progress
+summary: 'Both apps run on the engine and in the console; every network connects through the office browser (browser42) — there is no hand-off kind any more. Facebook is connected and read through b42. Left: the owner signs in once to Instagram, X, YouTube, GitHub, Discord and links WhatsApp Web; each draft script is observed and its first write watched; `sites` gets the data-da write path.'
+description: |
+  ## Where it stands (2026-09-29, evening)
+  - Enabled and running on the macOS engine; both screens open inside the console (/a/digital-assets/,
+    /a/social-list/) and console deep links reopen the exact screen (#/m/social-list/matrix,
+    #/m/digital-assets/s/identity?slot=…) through the `bina:route` bridge.
+  - The console used to freeze its app-route map at start, so an app enabled later answered
+    `unknown_app`; it now re-reads .generated/registry/console.app_bases.json when it changes.
+  - The apps screen ("0 אפליקציות") was /api/apps taking 62–67 s behind a 40 s proxy; now 0.8–1.5 s
+    (one sparse docker list, cached 4 s) and the screen keeps the last list on a failed poll.
+  - NO HAND-OFF: the owner's rule "everything should work without handoff, use the b42 inside the
+    digital office". platforms.yaml v3 has two kinds (browser — recommended everywhere — and api);
+    X, Discord and WhatsApp are browser networks with their terms shown as information. LinkedIn,
+    TikTok, Telegram and Threads left social-list (they had no automation) and are digital-assets
+    `listing` channels until each gets a browser script.
+  - Proven through the real browser42: the social-list browser self-test 5/5 on the test network;
+    Facebook connected (Bina Solutions page, read back: name, id, link, avatar, cover); the logo
+    plan pushes to Facebook through the office browser.
+  - b42 stability: every navigation used to take a full accessibility snapshot (megabytes on X and
+    Facebook) and the MCP process died "JavaScript heap out of memory" three times; social-list and
+    domains now navigate without one (`open(snapshot=False)`), and @playwright/mcp is pinned to 0.0.83.
+  - Login detection per network: each script names `session.signed_in` / `signed_out` marks, because
+    a signed-out X or WhatsApp page has no password field for the generic probe to see.
+
+  ## Sign-in state inside b42 (probed 2026-09-29)
+  facebook ✓ signed in · instagram ✗ login form · x ✗ onboarding · youtube ✗ "Sign in" ·
+  github ✗ signed out · discord ✗ login + QR · whatsapp — splash, not linked yet.
+tasks:
+- text: 'Owner: sign in ONCE in the office browser''s live view (/a/browser42/) to Instagram, X, YouTube (Google), GitHub and Discord, and link WhatsApp Web by scanning its QR code from the phone. Nothing in the office types a password.'
+  done: false
+- text: 'After each sign-in: social-list → חיבור → <network> → דפדפן הלשכה (Discord asks for the server and channel ids). The connect reads the profile as proof; fix the draft profile.get of scripts/<network>.yaml from what the page really shows.'
+  done: false
+- text: 'Watch the first run of each write (`watch: true`, owner looking at the live view): Facebook post.create.text / avatar / cover first; promote an op to `verified` in its script only after the read-back passed.'
+  done: false
+- text: 'Facebook: profile.update.bio (the Page''s Intro) and links have no script yet (capabilities answer `no` with the reason); observe the Intro editor and write them.'
+  done: false
+- text: Write post.list / post.delete scripts (Facebook, X) so the social-list account page shows recent posts and a post can be removed.
+  done: false
+- text: 'apps/sites: add GET /api/sites/{id}/slots (scan via site_kit) and POST /api/sites/{id}/slots/apply (dir sites only; dry-run by default; copy files to site/_da/). digital-assets already calls the second one and degrades to a clear message without it.'
+  done: false
+- text: 'Map the owner''s website texts with data-da attributes (the scan of bina-solutions.co.il: 0 mapped, 112 hand-written texts/images) — in the site''s own repo, then build with `site_kit.py apply`.'
+  done: false
+- text: 'Console: read GET http://digital-assets:8985/api/brand (capability `brand`, weak) for the business logo next to the business name — without naming the app (gate G9).'
+  done: false
+- text: 'LinkedIn, TikTok, Telegram, Threads: when wanted, add each to social-list''s catalogue as a browser network with a script, and flip its digital-assets channel back to `social`.'
+  done: false
+- text: Hebrew translations for the English research notes (slot constraints.note, media unit purpose/copy) — shown collapsed as 'research note (English)' today.
+  done: false
+- text: Tests for the propagation plan (specificity rule, language rule, manual opt-in) and for the social-list adapters with recorded API responses.
+  done: false
+references:
+- apps/digital-assets/README.md
+- apps/social-list/AGENT.md
+- apps/social-list/platforms.yaml
+- apps/social-list/scripts/
+- apps/social-list/research/platforms.md
+- ai/context/browser-session-connection.md

@@ -1,0 +1,62 @@
+{
+  "id": "ollama",
+  "title": {
+    "he": "מודלים מקומיים",
+    "en": "Ollama"
+  },
+  "layer": 3,
+  "kind": "service",
+  "version": "1.0.0",
+  "summary": {
+    "he": "הרצת מודלי שפה מקומית",
+    "en": "Run local LLMs on your own hardware"
+  },
+  "capabilities": [
+    {
+      "name": "llm-local",
+      "type": "protocol",
+      "endpoint": "http://ollama:11434",
+      "required_ops": [
+        "generate",
+        "chat",
+        "embeddings",
+        "pull"
+      ]
+    }
+  ],
+  "use": [],
+  "connections": [],
+  "compose": "docker-compose.yml",
+  "routing": [
+    {
+      "host": "ollama",
+      "port": 11434,
+      "auth": "sso",
+      "emit_labels": false,
+      "sso": {
+        "slug": "ollama",
+        "base_url_env": "OLLAMA_BASE_URL",
+        "default_host": "ollama.localhost",
+        "display_name": "Ollama",
+        "local_twin": false
+      }
+    }
+  ],
+  "health": {
+    "structural": "auto",
+    "probe": {
+      "http": "http://ollama:11434/api/tags",
+      "interval": "60s"
+    }
+  },
+  "data": {
+    "volumes": [
+      "ollama_data"
+    ],
+    "on_uninstall": "prompt"
+  },
+  "resources": {
+    "cpus": "1.5",
+    "memory": "6g"
+  }
+}

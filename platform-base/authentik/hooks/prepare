@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+#: start identity first and block until SSO really serves every gated host
+#
+# prepare — authentik's own head start. Invoked generically by `bbox run` via run_app_hooks;
+# the CLI does not know this app exists.
+#
+# This was TWO special cases inside `bbox run`, both recorded as gate G31 debt (release plan
+# G2.3) and both the last app-specific bring-up logic left in layer 0:
+#
+#   1. `dc up -d authentik-postgres authentik-server authentik-worker authentik-bootstrap redis`
+#      followed by `sleep ${BBOX_AUTH_HEADSTART:-15}` — the CLI starting one app's services by
+#      name, before the rest of the stack.
+#   2. `docker volume inspect "${COMPOSE_PROJECT_NAME}_authentik_postgres_data"` to choose the
+#      whole-stack `--wait` ceiling: 600s when the volume was absent, 300s when it existed.
+#
+# Both are facts about THIS app — how slow its first boot is, and which volume proves it has
+# already had one. An app may start the services it OWNS; what it may not do is have the CLI
+# start them by name, or teach the CLI how to recognise its own cold start.
+#
+# WHY A HEAD START EXISTS AT ALL. authentik's first boot runs its migrations and then applies
+# every blueprint SERIALLY, and both are CPU-heavy. Raced against the whole stack's image builds
+# and container boots they get starved: measured at ~20 minutes to initialise, against a few
+# minutes when authentik gets the cores to itself first. ci-verify.yml has run it as an explicit
+# "phase 1" for exactly this reason, and says so in the workflow.
+#
+# WHY IT NOW WAITS RATHER THAN SLEEPING 15s. The 15-second lead was always marginal —
+# correctness came from the whole-stack `--wait` afterwards, which is precisely why the CLI
+# needed a bigger ceiling on a cold start and grew special case 2 to work out when. Waiting HERE
+# for our own sentinel collapses both into one: by the time `bbox run` reaches its `up --wait`,
+# this app has nothing left to do, so the CLI needs no app-specific timeout to hand it and no
+# app-specific probe to pick one.
+#
+# WHAT THE SENTINEL MEANS, and why waiting on it is not paranoia. authentik-bootstrap's
+# healthcheck is outpost-ready.py: it goes healthy only once the EMBEDDED OUTPOST actually
+# SERVES every gated host (forward-auth answers ≠ 404), not merely once the blueprint has
+# written provider rows. The outpost syncs those rows asynchronously — rows-written is L2,
+# outpost-serving is L3 — and that gap is what made every *.localhost 404 for a window right
+# after a reset while the bring-up reported itself healthy. Gating on the sentinel is what
+# closed it; the old proxyprovider DB-count poll could not see the difference.
+#
+# NON-FATAL, deliberately, exactly as the head start was (`|| true`). A slow identity boot must
+# not abort a bring-up that is otherwise fine: bbox's own `up --wait` still gates the stack after
+# this returns, so a timeout here costs a warning, not a deployment.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # say, colors, running, dcx, DN
+
+# Already up = a reconcile run, not a bring-up. Nothing to lead, and no point re-waiting on a
+# sentinel the stack-wide `--wait` is about to gate on anyway. Same guard the head start had.
+running "authentik-server-${DN}" && exit 0
+
+# COLD vs WARM, decided by OUR OWN volume — the probe that used to live in bbox. It is these
+# migrations and this serial blueprint application that dominate a cold start, so the presence
+# of this app's database volume is the precise signal that they have already run once.
+# Project name derived, not hardcoded: bbox invokes compose with `--project-directory .` from the
+# repo root, so the prefix is the repo directory's name. Guessing wrong only reads as "cold" and
+# costs a larger ceiling on a wait that usually returns early — never a false ready.
+proj="${COMPOSE_PROJECT_NAME:-$(basename "${REPO_ROOT}" | tr '[:upper:]' '[:lower:]')}"
+if docker volume inspect "${proj}_authentik_postgres_data" >/dev/null 2>&1; then
+  wt=300    # warm: state already exists, nothing to migrate
+  say "[authentik] starting identity first — waiting up to ${wt}s for the SSO sentinel…"
+else
+  wt=600    # cold: first bring-up, migrations + blueprints + outpost sync all have to happen
+  say "[authentik] cold start detected (no existing state) — allowing ${wt}s to initialise"
+fi
+
+# OUR OWN services, named from inside the app that owns them. `redis` is deliberately NOT listed
+# even though authentik runs on it (DB index 1): compose starts it regardless through this app's
+# own `depends_on: redis: condition: service_healthy`, and naming a shared service here would be
+# this app reaching outside itself — the same mistake bbox was making, one level down.
+dcx up -d --wait --wait-timeout "${wt}" \
+    authentik-postgres authentik-server authentik-worker authentik-bootstrap \
+  || say "${cy}[authentik] SSO not ready within ${wt}s — the stack wait still gates on it; check 'bbox logs authentik-bootstrap'${c0}"

@@ -1,0 +1,138 @@
+{
+  "id": "digital-assets",
+  "title": {
+    "he": "נכסים דיגיטליים",
+    "en": "Digital assets"
+  },
+  "layer": 3,
+  "kind": "service",
+  "version": "0.1.0",
+  "summary": {
+    "he": "כל מה שהעסק מציג לעולם — לוגו, שם, תיאורים, תוכן ומדיה — במשבצות מסודרות לפי תבניות, ומשם לכל ערוץ: רשתות, אתר ומוצרים",
+    "en": "Everything the business shows the world — logo, name, descriptions, content and media — as slots organised by blueprints, pushed to every channel: networks, website and products"
+  },
+  "capabilities": [
+    {
+      "name": "digital-assets",
+      "type": "protocol",
+      "interface": "digital-assets.v1",
+      "endpoint": "http://digital-assets:8985",
+      "contract": "platform-service.v1",
+      "required_ops": [
+        "listSlots",
+        "getSlot",
+        "addAsset",
+        "setActive",
+        "plan",
+        "publish",
+        "listMedia",
+        "addMedia",
+        "createPost"
+      ],
+      "optional_ops": [
+        "getBrand",
+        "getBundle",
+        "listBlueprints",
+        "applyBlueprint",
+        "listChannels",
+        "bindChannel"
+      ]
+    },
+    {
+      "name": "brand",
+      "type": "protocol",
+      "interface": "brand.v1",
+      "endpoint": "http://digital-assets:8985",
+      "required_ops": [
+        "getBrand"
+      ]
+    }
+  ],
+  "use": [
+    {
+      "capability": "identity",
+      "strength": "requires",
+      "after": true
+    },
+    {
+      "capability": "social",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak",
+      "ops": [
+        "listAccounts",
+        "updateProfile",
+        "createPost",
+        "capabilities"
+      ]
+    },
+    {
+      "capability": "sites",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak",
+      "ops": [
+        "listSites"
+      ]
+    },
+    {
+      "capability": "ui-kit",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
+    }
+  ],
+  "connections": [],
+  "compose": "docker-compose.yml",
+  "routing": [
+    {
+      "host": "digital-assets",
+      "port": 8985,
+      "auth": "sso",
+      "module": {
+        "group": "עסק",
+        "icon": "palette",
+        "embed": true,
+        "alias": "digital-assets",
+        "id": "digital-assets",
+        "name": "נכסים דיגיטליים",
+        "desc": "הזהות, התוכן והמדיה של העסק — ומשם לכל ערוץ",
+        "order": 4,
+        "service": "digital-assets",
+        "url_env": "DIGITAL_ASSETS_URL",
+        "url": "http://digital-assets:8985"
+      },
+      "sso": {
+        "slug": "digital-assets",
+        "display_name": "Digital assets",
+        "default_host": "digital-assets.localhost",
+        "base_url_env": "DIGITAL_ASSETS_BASE_URL",
+        "local_twin": true
+      }
+    }
+  ],
+  "health": {
+    "structural": "auto",
+    "probe": {
+      "http": "http://digital-assets:8985/healthz",
+      "interval": "30s"
+    }
+  },
+  "data": {
+    "volumes": [
+      "digital_assets_state"
+    ],
+    "on_uninstall": "keep"
+  },
+  "resources": {
+    "cpus": "0.4",
+    "memory": "256M"
+  },
+  "observability": {
+    "sentry_platform": "python"
+  },
+  "agent": {
+    "context": "AGENT.md",
+    "order": 24
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "@bina/dsh-plugin-voice",
+  "description": "Recording button and live Hebrew dictation in the composer: the browser cuts the audio into segments, this plugin's Host half relays them to the office's own speech service (apitools-asr) and can send the finished transcript into the conversation as a user message",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ]
+    }
+  },
+  "license": "MIT"
+}

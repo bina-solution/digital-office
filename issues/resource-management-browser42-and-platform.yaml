@@ -1,0 +1,131 @@
+# yaml-language-server: $schema=./schema.json
+title: "Resource management: browser42 declares 3.7 GB / 6 vCPU on a 4.9 GiB guest, and the platform has no memory-aware admission"
+opened: "2026-09-18"
+category: performance
+severity: high
+status: open
+summary: "On an 8 GB Mac (5 GiB Lima guest) `bbox run` starts 43 containers, the guest ends at 78 MB free with no swap, the console lags, and the 300 s health gate times out — browser42 alone declares 3.7 GB across six containers and defaults to 6 vCPUs on a 4-vCPU guest; nothing sizes the enabled set to the machine."
+
+description: |
+  ## Symptom (measured 2026-09-18, macOS 8 GB host, Lima/vz guest 4 vCPU / 5 GiB)
+  - `./bbox run` built everything, then `not all services healthy within 300s` — `connections-local`
+    errored with `timeout waiting for dependencies`; ~20 containers reported `unhealthy`.
+  - Inside the guest: `Mem: total 4904  used 4715  free 78  available 188  Swap: 0` and **43**
+    containers running. The host itself had ~56 MB free pages; the VM process sat at 112% CPU.
+  - The owner's verdict on the live console: "everything is very slow and laggy". The UI was
+    correct; the machine was starved.
+
+  ## browser42 specifically (`apps/browser42/docker-compose.yml`)
+  Six services, every one with a reservation the guest cannot honour together:
+
+  | service | cpus | memory |
+  |---|---|---|
+  | browser42-browser | `${BROWSER42_CPUS:-6}` | 1536M (+512M reservation) |
+  | browser42-mcp | 0.5 | 512M |
+  | browser42-task-runner | 1 | 512M |
+  | browser42-caddy | 0.5 | 256M |
+  | browser42-reaper | 0.25 | 256M |
+  | browser42-task-watchdog | 0.1 | 128M |
+  | **total** | **8.35** | **3712M** |
+
+  - The CPU default is **6** on a machine that hands the guest **4** — `vm_cpus()` in
+    `packaging/macos/engine.sh` caps at 4, `ci-small` assumes 2. The comment says "portable like
+    apitools" but apitools' default is `0` (unlimited), browser42's is a hard 6.
+  - Stopping its six containers (`docker stop`, volumes kept) took the guest from `available 188`
+    to `available 843` MB and `used 4715` to `4061` — **~650 MB back on a 4.9 GiB guest**, with
+    the declared 3.7 GB never having been honourable in the first place.
+  - It is an optional operator tool (`platform.state.yaml`: "Nothing declares a dependency on its
+    `browser` capability"), yet it was `enabled` and started with the chassis on a machine that
+    cannot afford it. Disabled today by `bbox apps disable browser42` (state written, by: cli).
+
+  ## The platform-wide gaps this exposed
+  1. **No memory-aware admission.** `ensure_perf_profile` sizes *knobs* (n8n concurrency,
+     APITOOLS_MEM) from cores + memory, but nothing checks the SUM of the enabled apps' declared
+     limits against the docker host before `compose up`. G30 (`memory-budget-lint.py`) is a repo
+     ratchet on the declared sum, not a runtime gate; it also needs PyYAML and does not run on this
+     Mac. The `ci-small` floor is 5 GiB and the 20-app default render already exceeds it several
+     times over (see perf-profiles.yml: "the sum was 36.4 GiB against hosts of 7-16 GiB").
+  2. **`bbox apps disable` does not converge.** It writes the disposition and re-renders, then tells
+     you to run `bbox run` — which on this machine is a 5-minute health wait. There is no
+     `bbox <app> down` for an app whose containers are already running; the operator has to
+     `docker stop` them by hand inside the engine.
+  3. **The health gate is blind to the cause.** 300 s of "waiting for healthy" with the guest at 78 MB
+     free ends in a generic timeout. The gate should read `free`/`docker stats` on failure and say
+     "memory-starved: N containers, X GiB declared, Y GiB available; disable <largest optional apps>".
+  4. **Optional apps get pulled in silently.** `supabase` is `enabled: false` in state but is
+     rendered anyway as provider of `object-storage` for `drive` — five more containers (kong,
+     rest, storage, studio, meta) that never appear in the enabled list. That is correct
+     resolution, but the operator sees no cost for it.
+  5. **The Lima guest gets 5 of 8 GiB and no swap.** macOS keeps 3 GiB for itself + Chrome + the
+     Claude app; the guest has no swap at all, so the first over-commit is an OOM or a stall, not a
+     slowdown. `engine.sh` calls this "tight, and deliberate"; the measurement says it is below the
+     floor once the default app set is up.
+
+  ## Measured: resident memory per container after browser42 was stopped (cgroup memory.current, MiB)
+  33 containers, guest `used 4197 / available 706`. n8n worker-2 (+ its runners) had already
+  exited on its own during the starved window.
+
+  | MiB | container | note |
+  |---|---|---|
+  | 510 | authentik-worker | chassis (SSO) |
+  | 372 | bina-ds | new agent app; declared 1g |
+  | 287 | apitools | APITOOLS_MEM=3G on ci-small |
+  | 274 | supabase-studio | UI only — nothing depends on it |
+  | 253 | supabase-kong | gateway drive's object-storage goes through |
+  | 232 | n8n | |
+  | 192 | authentik-server | chassis |
+  | 177 | n8n-webhook | |
+  | 148 | supabase-storage | what drive actually needs |
+  | 117 | incoming-documents | |
+  | 105 | supabase-meta | Studio's backend only |
+  | 96 | supabase-db | |
+  | 94 | n8n-postgres | |
+  | 87 | mailview · 81 drive · 80 traefik · 78 app-management · 75 authentik-postgres · 71 any-concurrency | |
+  | ≤57 each | machine, mailserver, mailapi, notifications, console, connections, data-management, supabase-rest, redis, mailboxd, indox-demo-docs, autoheal, authentik-bootstrap | |
+
+  Reading: `supabase` was pulled in for ONE capability (`object-storage`, for drive) and costs
+  ~910 MB of which ~380 MB (studio + meta) serves nothing on this machine. A capability-scoped
+  render — start only the services that provide the used capability — would halve that app.
+
+  ## Then the guest died
+  ~15 minutes after browser42 was stopped (33 containers, `available 706`), a `docker stop` of
+  studio+meta returned ssh exit 255 with no output: the Lima instance was **stopped**. Lima's
+  host-agent log shows a fresh VZ boot at 12:22:21 — `engine.sh cmd_shell` auto-starts a stopped
+  guest, so the next `bbox engine shell` silently rebooted the VM, and every `unless-stopped`
+  container came back with it. The serial log is empty after the reboot, so the crash itself left
+  no record on the host. A 5 GiB guest with no swap does not degrade; it stalls, then dies, and
+  the wrapper hides the death.
+
+  ## Proposed direction
+  - browser42: lower defaults to what a 2-vCPU / 5 GiB floor allows (browser 2 cpus / 1G, drop
+    reservations), or gate the whole app behind a `requires: { mem_gb: 8 }` envelope so the
+    resolver refuses to enable it on a machine below that.
+  - Add `requires` (cores / mem_gb) to `app.json` for every optional app and have the resolver
+    (`platform/manager/reconcile.py`) compare the enabled set's declared sum to the docker host at
+    render time; warn at 2.5x, refuse optional apps past it.
+  - `bbox apps disable <app>` should stop and remove that app's containers (data kept) as part of
+    the verb, or grow a `bbox <app> down`.
+  - On a health-gate timeout, print the memory picture and the three largest optional apps.
+  - Measure the running set with `docker stats` per profile (the numbers perf-profiles.yml says it
+    does not have) and record them here.
+
+tasks:
+  - { text: "browser42: cut default cpus from 6 to 2 and memory to ≤1G; drop the reservation block", done: false }
+  - { text: "browser42: declare a machine envelope (requires.mem_gb ≥ 8) and have the resolver honour it", done: false }
+  - { text: "app.schema.json: add `requires: {cores, mem_gb}`; resolver sums enabled limits vs docker host at render", done: false }
+  - { text: "bbox apps disable <app>: stop + remove that app's containers (volumes kept) instead of 'run bbox run'", done: false }
+  - { text: "health gate: on timeout print free memory, container count, declared sum, largest optional apps", done: false }
+  - { text: "Render cost of transitively-pulled optional apps (supabase via drive) in `bbox apps list`", done: false }
+  - { text: "macOS engine: give the guest swap (or zram) so over-commit degrades instead of stalling", done: false }
+  - { text: "engine.sh: when `shell`/`exec` finds the guest Stopped, SAY it died (and keep the previous serial log) before auto-starting", done: false }
+  - { text: "Record measured per-container memory for ci-small on this Mac (docker stats) in this issue", done: true }
+  - { text: "supabase: capability-scoped render — drive needs storage+kong+rest, not studio+meta (~380 MB)", done: false }
+
+references:
+  - apps/browser42/docker-compose.yml
+  - packaging/macos/engine.sh
+  - platform/profiles/perf-profiles.yml
+  - scripts/refactor/memory-budget-lint.py
+  - platform/manager/reconcile.py
+  - platform.state.yaml
+  - bbox

@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פאנל DNS — מתקן בדיקה</title>
+<style>
+  body{font-family:system-ui,"Segoe UI",Arial,sans-serif;margin:0;background:#f4f6f8;color:#15202b}
+  header{background:#0e5e49;color:#fff;padding:12px 20px;display:flex;gap:18px;align-items:center}
+  header b{font-size:16px}
+  nav a{color:#d9f2e8;text-decoration:none;margin-inline-end:14px;font-size:14px}
+  main{padding:22px;max-width:900px;margin:0 auto}
+  h1{font-size:19px;margin:0 0 14px}
+  table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #e3e8ec;border-radius:10px;overflow:hidden}
+  th,td{padding:9px 10px;border-bottom:1px solid #eef1f4;text-align:start;font-size:14px}
+  th{background:#fbfcfd;color:#65727e;font-size:12.5px}
+  button{font:inherit;padding:8px 14px;border-radius:8px;border:1px solid #e3e8ec;background:#fff;cursor:pointer}
+  button.primary{background:#0e9f6e;border-color:#0e9f6e;color:#fff;font-weight:700}
+  button.danger{color:#c0392b}
+  .dlg{position:fixed;inset:0;background:rgba(10,20,15,.38);display:none;align-items:center;justify-content:center}
+  .dlg.open{display:flex}
+  .card{background:#fff;border-radius:14px;padding:20px 22px;width:420px;box-shadow:0 20px 60px rgba(0,0,0,.25)}
+  .card h2{font-size:16px;margin:0 0 12px}
+  label{display:block;font-size:12.5px;color:#65727e;font-weight:600;margin:10px 0 4px}
+  input,select{width:100%;padding:9px 10px;border:1px solid #e3e8ec;border-radius:8px;font:inherit;box-sizing:border-box}
+  .row{display:flex;gap:8px;margin-top:16px}
+  .muted{color:#65727e;font-size:12.5px}
+</style>
+</head>
+<body>
+<header>
+  <b>פאנל הדומיין — מתקן בדיקה</b>
+  <nav>
+    <a href="/fixture/panel?section=home">אתרים</a>
+    <a href="/fixture/panel?section=dns">הגדרות DNS</a>
+    <a href="/fixture/panel?section=mail">דואר</a>
+  </nav>
+</header>
+<main>
+  <h1>רשומות DNS — example.co.il</h1>
+  <p class="muted">המסך הזה מדמה פאנל ניהול אמיתי: טבלה, דיאלוג הוספה, שמירה וקריאה חוזרת.
+    הוא קיים כדי לבדוק את שכבת ההמרה של הלשכה (browser_ops) בדפדפן אמיתי.</p>
+  <div id="status" class="muted"></div>
+  <table id="records">
+    <thead><tr><th>סוג</th><th>שם</th><th>ערך</th><th>TTL</th><th>פעולות</th></tr></thead>
+    <tbody id="rows"><tr><td colspan="5" class="muted">טוען…</td></tr></tbody>
+  </table>
+  <div class="row">
+    <button class="primary" id="btn-add-record">הוספת רשומה</button>
+    <button id="btn-refresh">רענון</button>
+  </div>
+</main>
+
+<div class="dlg" id="dlg">
+  <form class="card" id="form">
+    <h2>הוספת רשומת DNS</h2>
+    <label for="f-name">שם</label>
+    <input id="f-name" name="name" value="@">
+    <label for="f-type">סוג</label>
+    <select id="f-type" name="type">
+      <option>A</option><option>AAAA</option><option>CNAME</option>
+      <option>MX</option><option>TXT</option>
+    </select>
+    <label for="f-content">ערך</label>
+    <input id="f-content" name="content" placeholder="1.2.3.4">
+    <label for="f-ttl">TTL</label>
+    <input id="f-ttl" name="ttl" value="3600">
+    <div class="row">
+      <button class="primary" type="submit" id="btn-save">שמור</button>
+      <button type="button" id="btn-cancel">ביטול</button>
+    </div>
+  </form>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+async function load() {
+  const r = await fetch('/fixture/api/records?domain=example.co.il');
+  const d = await r.json();
+  const body = $('rows');
+  body.innerHTML = d.records.length ? '' : '<tr><td colspan="5" class="muted">אין רשומות</td></tr>';
+  d.records.forEach((rec) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${rec.type}</td><td>${rec.name}</td><td>${rec.content}</td>
+      <td>${rec.ttl}</td><td><button class="danger" data-del="${rec.content}">מחק</button></td>`;
+    body.appendChild(tr);
+  });
+  document.querySelectorAll('[data-del]').forEach((b) => {
+    b.onclick = async () => {
+      await fetch('/fixture/api/records?domain=example.co.il&content=' +
+        encodeURIComponent(b.dataset.del), { method: 'DELETE' });
+      $('status').textContent = 'הרשומה נמחקה';
+      load();
+    };
+  });
+  $('status').textContent = d.records.length + ' רשומות';
+}
+$('btn-add-record').onclick = () => { $('dlg').classList.add('open'); $('f-name').focus(); };
+$('btn-cancel').onclick = () => $('dlg').classList.remove('open');
+$('btn-refresh').onclick = load;
+$('form').onsubmit = async (e) => {
+  e.preventDefault();
+  await fetch('/fixture/api/records', { method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ domain: 'example.co.il', name: $('f-name').value, type: $('f-type').value,
+                           content: $('f-content').value, ttl: $('f-ttl').value }) });
+  $('dlg').classList.remove('open');
+  $('status').textContent = 'הרשומה נשמרה';
+  load();
+};
+load();
+</script>
+</body>
+</html>

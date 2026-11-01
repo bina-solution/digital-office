@@ -1,0 +1,45 @@
+# yaml-language-server: $schema=./schema.json
+title: '`__CFG()` in "Decide DOC BASE Action" never receives `_cfg`, so every settings-driven value in the state machine''s decide logic has silently been using its hardcoded fallback'
+opened: '2026-08-10'
+severity: medium
+status: open
+summary: '`__CFG()` reads `$(''Companies'').first().json` — a node that only executes on the `update_company_name` branch, so it is unreachable in decide mode and throws — and then falls back to `$input.first().json._cfg`. Nothing in the fleet ever sets `_cfg` on a call into indoxV2ActionsGlobal01. There is no third source. So every `__CFG()` consumer has always taken its inline default, and `public.settings` has never influenced decide.'
+description: |
+  id: cfg-never-reaches-decide · area: indox state machine / indoxV2ActionsGlobal01 / indoxSettings01
+
+  ## Proof
+
+  - `resolver_gen` appears in exactly ONE active workflow fleet-wide: indoxSettings01. Not in indoxV2Decide01 and not in indoxV2Driver01 — the only two callers of indoxV2ActionsGlobal01.
+  - 0 of 96 recent indoxV2ActionsGlobal01 executions contain the string `resolver_gen_company` anywhere in their payload.
+  - The same is therefore true of `max_actions_per_doc`, which was assumed to be arriving by that route. It is not; the ceiling of 50 is the inline default, not configuration.
+
+  ## Live consequences
+
+  ```yaml
+  old_document_cutoff:
+    configured: public.settings.OldDocumentMonthsBack = 6
+    actually_enforced: 24 (the inline fallback for old_document_months_back)
+    measured_cost_2026-08-10T17:40Z:
+      open_docs_within_6_months: 9562
+      open_docs_6_to_24_months: 267
+      open_docs_older_than_24_months: 17
+      corpus_6_to_24_months: 595
+    assessment: A real correctness defect — the client's stated scope is the last 6 months and the system enforces 24 — but a SMALL one. 267 out-of-scope open documents is 2.7% of the open backlog. It is not a throughput lever and should not be sold as one.
+  max_actions_per_doc:
+    configured: unknown (never read)
+    actually_enforced: 50
+    assessment: Benign today because 50 is a sensible ceiling, but it means the iteration budget cannot be tuned from settings, and anyone who changes that row will see no effect.
+  future_settings: 'The real cost is forward-looking: any new setting wired through `__CFG()` will silently do nothing, and will appear to work because the fallback is always a plausible value. This is the same failure shape as the completion flags — a mechanism that reports success while doing nothing.'
+  ```
+
+  ## Recommended fix
+
+  ```yaml
+  principle: Either make the `_cfg` channel real, or delete it and read settings where they are needed. Two sources of truth where one is permanently unreachable is worse than one.
+  option_a_preferred: Have the CALLERS (indoxV2Decide01 and indoxV2Driver01) attach `_cfg` to the payload they pass into indoxV2ActionsGlobal01, which is what `__CFG()` already expects. One change at each caller, no new nodes in the router, and every existing consumer starts working at once.
+  option_b_used_today: A lane needed `resolver_gen_company` before this could be fixed and read it directly from `public.extraction_queries` with its own postgres node inside indoxV2ActionsGlobal01 (`Load Company Resolver Gen`), preferring `__CFG()` when present so it becomes dead weight rather than a competing source once the channel works. That is a correct local workaround, not the fix.
+  do_not: Do not "fix" this by changing the fallbacks to match settings. That hardcodes the configuration a second time and leaves the channel broken.
+  ```
+references:
+- issues/completion-flags-record-attempts-not-answers.yaml
+- issues/state-machine-map-2026-08-10.yaml

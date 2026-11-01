@@ -1,0 +1,140 @@
+# release-binaries — build, test and publish the office's three native binaries.
+#
+# What ships from here (core-005 / core-006 / core-007): dgo-install (the tiny signed bootstrapper),
+# dgo (DGO core's CLI) and forward-auth (the identity plane), each for windows/darwin/linux × amd64/arm64,
+# with SHA256SUMS and the per-OS download tree (dgo-core + manifest.json) the installer verifies.
+# The build is ONE script — packaging/build-binaries.sh — so what this lane publishes is what anybody
+# can re-derive from the tag on a laptop (the script proves its own reproducibility on every run).
+#
+# Two triggers, two meanings:
+#   * a version tag (v1.4.0) is the owner's release button: the binaries are attached to a GitHub
+#     release of that tag;
+#   * workflow_dispatch is a dry run: the same build, uploaded only as a workflow artifact.
+#
+# Signing is optional and never silent. If the repository secret DGO_RELEASE_KEY (an Ed25519 private
+# key, PEM) exists, every manifest is signed and every dgo-install binary bakes in the matching public
+# key and its target's manifest URL. Without it the stubs are the inert template and the manifests are
+# manifest.unsigned.json — the installer refuses both (fail-closed), and the summary says so in red.
+# The key never lives in the repo; this lane holds it for the seconds of one job and deletes it after.
+#
+# GitHub-hosted: cross-compiling three stdlib-only Go modules needs no docker, no network and about
+# two minutes; the self-hosted `portable` runner is for the stack lanes.
+name: release-binaries
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to stamp (no leading v). Empty = 0.0.0-dev+<sha>"
+        default: ""
+
+permissions:
+  contents: write   # used by exactly one step, on a tag: attaching the binaries to the release
+
+concurrency:
+  group: release-binaries-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  binaries:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: false   # stdlib-only modules: no go.sum, nothing to cache
+
+      - name: Version
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          elif [ -n "${{ inputs.version }}" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="0.0.0-dev+$(git rev-parse --short HEAD)"
+          fi
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+          echo "version: ${VERSION}"
+
+      - name: Release key (only when the secret exists)
+        env:
+          DGO_RELEASE_KEY: ${{ secrets.DGO_RELEASE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -n "${DGO_RELEASE_KEY}" ]; then
+            umask 077
+            printf '%s\n' "${DGO_RELEASE_KEY}" > "${RUNNER_TEMP}/release-key.pem"
+            echo "SIGN_ARGS=--sign-key ${RUNNER_TEMP}/release-key.pem" >> "$GITHUB_ENV"
+            echo "signing: yes"
+          else
+            echo "SIGN_ARGS=" >> "$GITHUB_ENV"
+            echo "::warning::no DGO_RELEASE_KEY secret — manifests are UNSIGNED drafts and dgo-install is the inert template; nothing here is installable"
+          fi
+
+      - name: Build, test, prove reproducible
+        run: |
+          set -euo pipefail
+          bash packaging/build-binaries.sh --selftest
+          bash packaging/build-binaries.sh "${VERSION}" --check-reproducible ${SIGN_ARGS}
+
+      - name: Summary
+        if: always()
+        run: |
+          set -euo pipefail
+          {
+            echo "## Native binaries ${VERSION}"
+            echo
+            if [ -n "${SIGN_ARGS}" ]; then echo "**Signed** manifests (DGO_RELEASE_KEY present)."; else echo "**UNSIGNED drafts** — no DGO_RELEASE_KEY; the installer refuses these."; fi
+            echo
+            echo '```'
+            cat dist/bin/SHA256SUMS 2>/dev/null || echo "(no build output)"
+            echo '```'
+            echo
+            echo "Download tree (what the website serves to dgo-install):"
+            echo '```'
+            (cd dist/dl 2>/dev/null && find . -type f | sort) || echo "(none)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dgo-binaries-${{ env.VERSION }}
+          path: |
+            dist/bin
+            dist/dl
+          retention-days: 30
+          if-no-files-found: error
+
+      # The owner's button: a tag. Everything above ran on a dry run too; only this step publishes.
+      - name: GitHub release (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          notes="$(mktemp)"
+          {
+            echo "DGO native binaries ${VERSION} — dgo-install, dgo, forward-auth for windows/darwin/linux × amd64/arm64."
+            echo
+            echo "Built by packaging/build-binaries.sh (CGO_ENABLED=0, -trimpath, reproducible; the run's log holds the proof)."
+            if [ -n "${SIGN_ARGS}" ]; then echo "Manifests signed with the release key."; else echo "**Unsigned drafts** — not installable until a release key is configured."; fi
+            echo
+            echo '```'
+            cat dist/bin/SHA256SUMS
+            echo '```'
+          } > "${notes}"
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release upload "${GITHUB_REF_NAME}" dist/bin/* --clobber
+          else
+            gh release create "${GITHUB_REF_NAME}" dist/bin/* --title "DGO ${VERSION}" --notes-file "${notes}"
+          fi
+
+      - name: Forget the key
+        if: always()
+        run: rm -f "${RUNNER_TEMP}/release-key.pem"

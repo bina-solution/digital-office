@@ -1,0 +1,37 @@
+{
+  "id": "raphael",
+  "title": {
+    "he": "רפאל",
+    "en": "Raphael"
+  },
+  "layer": 3,
+  "kind": "blueprint",
+  "compose": null,
+  "summary": {
+    "he": "הסוכן המשמר — אוטומציות n8n שסורקות את ה-DGO לפי לוח זמנים ומפעילות את רפאל רק על חריגה. האפליקציה אינה מריצה קונטיינר; הסוכן עצמו הוא preset ב-bina-ds.",
+    "en": "The guardian agent's automations — scheduled n8n scans that trigger Raphael only on an anomaly. Owns no container; the agent itself is a bina-ds preset."
+  },
+  "capabilities": [],
+  "use": [
+    {
+      "capability": "workflow",
+      "strength": "requires",
+      "after": true
+    },
+    {
+      "capability": "notify",
+      "strength": "wants",
+      "after": true
+    }
+  ],
+  "blueprints": {
+    "n8n": "blueprint/n8n"
+  },
+  "agent": {
+    "context": "AGENT.md"
+  },
+  "data": {
+    "volumes": [],
+    "on_uninstall": "purge"
+  }
+}

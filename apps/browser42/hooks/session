@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+#: get-or-mint the stable session slug for this task (pass --fresh for a clean slate)
+# session — resolve/mint the session slug (idempotent): same name in the same session =
+# same slug, forever. Resolution order: explicit name > $BROWSER42_SESSION (agent-host
+# identity) > fresh `.current` marker > minted auto-*. `--fresh` clears the previous
+# attempt's group and starts over. The printed slug is what you pass to `bbox b42 group`.
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # say, die, colors, DOCKER_HOST
+
+BROWSER="$(docker ps --filter name=browser42-browser --format '{{.Names}}' | head -1)"
+[ -n "${BROWSER}" ] || die "browser42-browser not running — run 'bbox run' first"
+docker exec -e BROWSER42_SESSION="${BROWSER42_SESSION:-}" -i "${BROWSER}" python3 /group-manager.py session "$@"

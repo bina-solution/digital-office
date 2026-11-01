@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+#: snapshot the identity provider's database (users, groups, tokens, providers, outposts)
+#
+# backup <outdir> <mode>   — invoked by scripts/deployment-archive.py, never by hand.
+#
+# Authentik is where "the same auth users" actually lives — supabase's `auth.users` is empty on this
+# estate and every SSO-gated surface (console, connections, machine, drive, mail UI) is gated by
+# authentik's forward-auth. Its blueprints are in git and re-applied on every boot, so the SCHEMA
+# and the provider set would come back on their own; what would NOT is the user rows, their password
+# hashes, group membership, API tokens and the OAuth2 app tokens users already consented to.
+#
+# The blueprints being declarative is exactly why this dump is still needed and still cheap: 32 MB,
+# and the alternative is every person re-registering.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+. "${REPO_ROOT}/scripts/archive-lib.sh"   # archive_require / archive_stop / archive_project
+
+OUT="${1:?usage: backup <outdir> <mode>}"
+C="$(archive_require authentik-postgres)"
+[ -n "${C}" ] || { echo "[authentik/backup] no authentik-postgres container running" >&2; exit 1; }
+U="${AUTHENTIK_PG_USER:-authentik}"; D="${AUTHENTIK_PG_DB:-authentik}"
+
+docker exec "${C}" pg_dump -U "${U}" -d "${D}" -Fc --no-owner --no-acl > "${OUT}/authentik.dump.part" \
+  || { echo "[authentik/backup] pg_dump failed" >&2; rm -f "${OUT}/authentik.dump.part"; exit 1; }
+mv "${OUT}/authentik.dump.part" "${OUT}/authentik.dump"
+echo "ARTIFACT authentik.dump"
+echo "SKIPVOL authentik_postgres_data"
+
+q() { docker exec "${C}" psql -U "${U}" -d "${D}" -tAc "$1" 2>/dev/null | tr -d '\r' | tr -d ' '; }
+echo "FACT users $(q 'select count(*) from authentik_core_user;')"
+echo "FACT groups $(q 'select count(*) from authentik_core_group;')"
+echo "FACT tokens $(q 'select count(*) from authentik_core_token;')"
+echo "FACT providers $(q 'select count(*) from authentik_core_provider;')"
+echo "FACT applications $(q 'select count(*) from authentik_core_application;')"
+# Password hashes, not just the count of people. A restore that recreated three users with fresh
+# hashes would pass a row count and fail every login.
+echo "FACT user_sha $(q "select md5(string_agg(username||coalesce(password,''), '|' order by username)) from authentik_core_user;")"
+exit 0

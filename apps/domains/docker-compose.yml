@@ -1,0 +1,72 @@
+# domains — the office's domains and their providers, as one platform service (see app.py).
+#
+# NO SECRET IS MOUNTED HERE. Every provider account is an INSTANCE in the credential plane
+# (protocols domain_cloudflare_token / domain_godaddy_key / domain_registry_whois), read at call time
+# from `connections`; this container's environment carries no token and no key file. The volume holds
+# the office's own watch list — which domains this business cares about, when each was last checked
+# and what the registry said — because that list is OURS and no provider can answer it.
+services:
+  domains:
+    # The image CI publishes for this commit (DGO-41). `pull_policy: missing` means it is
+    # fetched only when it is not here already, so a checkout that has built it is untouched;
+    # the `build:` below stays as the fallback. Needs the GHCR package readable — a package made
+    # from a private repo is private, so `docker login ghcr.io` on a machine that must pull.
+    image: ghcr.io/solomonboltin/digital-office/domains:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: domains-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: domains
+    restart: unless-stopped
+    environment:
+      - SENTRY_DSN=${DOMAINS_SENTRY_DSN:-}
+      - DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-bina-deployment}
+      - CONNECTIONS_URL=${CONNECTIONS_URL:-http://connections:8990}
+      # the sites service, for the domain↔site link (best-effort: the screen renders without it)
+      - SITES_URL=${SITES_URL:-http://sites:8979}
+      - NOTIFICATIONS_URL=${NOTIFICATIONS_URL:-http://notifications:8977}
+      - DOMAINS_STATE_DIR=/data
+      # the office BROWSER, for providers that publish no API at all (see browser_session.py and
+      # ai/context/browser-session-connection.md). The token is the same one the browser app itself
+      # is configured with; the endpoint is in-network only. Without both, the app works exactly as
+      # before and simply reports that portal actions are unavailable.
+      - BROWSER_SESSION_ENDPOINT=${BROWSER_SESSION_ENDPOINT:-http://browser42-caddy:80/mcp}
+      - BROWSER42_MCP_TOKEN=${BROWSER42_MCP_TOKEN:-}
+      # WHOIS is a shared public service: each domain at most this often, and never in a crawl.
+      - DOMAINS_WHOIS_HOURS=${DOMAINS_WHOIS_HOURS:-12}
+      - DOMAINS_EXPIRY_WARN_DAYS=${DOMAINS_EXPIRY_WARN_DAYS:-60}
+      - DOMAINS_EXPIRY_URGENT_DAYS=${DOMAINS_EXPIRY_URGENT_DAYS:-14}
+    volumes:
+      - domains_state:/data
+    networks:
+      - traefik-network
+    healthcheck:
+      # python, never curl: python:3.12-slim has no curl (gate G18).
+      test: ["CMD", "python", "-c", "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://localhost:8980/healthz',timeout=8).status==200 else 1)"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          # A WHOIS watch an hour, a DNS query when somebody looks, and no browser, no build, no
+          # index. 0.2 CPU is generous for it.
+          cpus: '0.2'
+          memory: 160M
+        reservations:
+          cpus: '0.02'
+          memory: 32M
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+
+volumes:
+  domains_state:
+
+networks:
+  traefik-network:
+    external: true

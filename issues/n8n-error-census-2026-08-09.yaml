@@ -1,0 +1,212 @@
+# yaml-language-server: $schema=./schema.json
+title: n8n error census 2026-08-09 18:10-21:10 UTC — 82 errors, re-decoded per execution and fixed
+opened: '2026-08-09'
+category: ops
+severity: high
+status: in-progress
+summary: Every n8n error in a 3-hour window, decoded from the compacted execution_data format. 82 errors, 0 crashes. The first pass grouped them by WORKFLOW and inferred one cause per group; decoding each execution INDIVIDUALLY showed that three of the seven groups are several unrelated defects wearing one name, and that two of the stated causes were wrong. Corrected findings, the fixes, and the proofs are below. Recorded because the owner's standard is "never just restart and assume fixed; dig into the cause and the pattern".
+description: |
+  As first recorded — category: reliability
+
+  METHOD. n8n stores execution_data as a flat array where a purely-numeric string is an INDEX
+  into that same array; a naive read returns "8" instead of a message. Everything below was
+  recovered with a recursive dereferencer with cycle and depth guards (tmp/decomp2.py — the
+  earlier scratchpad/decomp.py is gone; decomp2.py is a working replacement, and unlike the
+  first pass it was run over EVERY failing execution, not a sample).
+
+  WHAT THE PER-EXECUTION DECODE CHANGED
+  Three groups were composites, and the biggest single cause in the census was never named:
+
+  ── THE LINK-FABRICATION DEFECT (21 of the 82, spread across 2 "groups") ──────────────
+  `'https://drive.google.com/file/d/' + <id>` was applied to whatever id an upload returned,
+  including the LOCAL drive engine's `lf<hex>` ids. That is a well-formed Google URL for a file
+  that is not on Google. It was stored as the row's LINK, and every later consumer routed on the
+  HOSTNAME, so the download went to the Google service account, which correctly 404'd.
+    * 15 of G1's 24 are this, with `connection_id=drive_google_service_account-ea660043` and a
+      fileId of `https://drive.google.com/file/d/lf19fd702b2ed1d16ff3074` (etc.). Only 12
+      DISTINCT ids produced the 24 errors — `lf19fd19b797efa776a9a21` was re-attempted 5 times
+      in a row, because a 404 was raised as an exception and an exception means retry.
+    * The fabrication sites: indoxGmailLinkDownloader01 `Upsert Incoming Document`.LINK,
+      indoxGmailDocDownloader01, and apps/indox/app/incoming_documents/api/__init__.py:4049
+      (`/documents/upload`, which uploads through the LOCAL engine).
+    * syncV3Deliver0001 had already deleted its own copy of this fallback and written down why
+      ("A wrong link is worse than an absent one: absent prompts a question, wrong gets
+      clicked"), and api/__init__.py `_resolve_open_url` documents the same mistake as fixed.
+      These were the copies neither reached.
+
+  ── GROUP 1 — drive api, 24 errors, 19:57-20:58. THREE causes, not one. ───────────────
+    * 15 — the link fabrication above (local id -> Google connection). NOT "a file the client
+      moved or trashed": these files were never on Google.
+    *  5 — one genuinely unresolvable Google id, `1lCGj_Z-InBSM5OGuxVmXxvBs9hjvdArH`, retried
+      five times. This one IS the vanished-source case the first pass described.
+    *  4 — not `d:download` at all. `d:upload` at 19:57, "This operation expects the node's
+      input data to contain a binary file 'data', but none was found" (profile_id=admin,
+      folderId=ld19fd16971a5e326590441). Unrelated defect, still open (task 8).
+
+  ── GROUP 2 — invoice Extractor - Gemini, 18 errors, 20:52-21:06. NOT quota, NOT auth. ─
+    Both hypotheses were wrong. The raw upstream envelopes are:
+      404 `{"code":404,"message":"Requested entity was not found.","status":"NOT_FOUND"}`  (x3)
+      400 `{"code":400,"message":"Request contains an invalid argument.","status":"INVALID_ARGUMENT"}` (x15)
+    No RESOURCE_EXHAUSTED, no UNAUTHENTICATED, no PERMISSION_DENIED, no retryDelay, no quota
+    metadata anywhere in the 18 payloads. The cause is the INPUT: six stub fixtures with forged
+    extensions — a 0-byte `unknown-unknown.jpg` and 32-39 byte "PDFs" whose entire content is one
+    line of ASCII (`sv3f mixed mail attachment 99464`) — each retried 3x = 18. The 0-byte JPEG
+    yields a File resource that never materialises, hence NOT_FOUND rather than INVALID_ARGUMENT.
+    Counter-proof that the credential and quota are fine: 507 SUCCESSES on the same node, model
+    (`models/gemini-3.1-pro-preview`) and credential in the same window, including a 9.21 MB scan.
+    The credential `ai-studio-bs-extraction [env-managed]` (6mfcsdRaqQ4IdQ8Y) is healthy;
+    GEMINI_API_KEY is set in .env (len 39) and deliberately absent from the container env — it
+    lives only in the encrypted credential row, reseeded by platform-base/n8n/hooks/push.
+    Fixture provenance: sv3Inject3x001 / syncV3FullTest01 / mailOrgTest00001 + a manual
+    sa-fix-test-invoice.pdf. Synthetic seeds reaching the live extractor (task 9).
+
+  ── GROUP 3 — mail api, 14 errors, 19:34-21:01. Also three causes. ────────────────────
+    Only 3 of the 14 are the HTML-500 the group was named for:
+    * 3 — `http:get` on `/message/0?id=...&connection_id=mail_imap_app_password-51185288`,
+      HTTP 500 with a 265-byte Flask HTML page. Real cause, from the mailapi tracebacks:
+        LookupError: unknown encoding: iso-8859-8-i   (apps/mail/mailapi/app.py:938 and :940)
+      `iso-8859-8-i` is a valid IANA charset (Hebrew, implicit bidi) that Python's codec registry
+      has no alias for. The `"replace"` errors-arg does not save it: LookupError comes from the
+      CODEC LOOKUP, before any byte is decoded. Hebrew senders emit it, so this fires on real
+      client mail. It surfaced as HTML because service.py registered only AdapterError and
+      ProfileError handlers — no generic one — so everything else fell through to Flask's stock
+      page. Exactly the class the mailview half was fixed for today; this was the other half.
+    * 6 — `http:addLabels`, 400, `unsupported protocol 'drive_google_service_account'`.
+    * 5 — `http:search`/`http:get`, 400, mailapi's explicit `connection_id` refusal, with the
+      value rendered EMPTY.
+    The last two are one defect with G4's connection failures: identity leaking across app
+    boundaries — a DRIVE connection id handed to a MAIL op, and mail ops called with none at
+    all (task 10).
+
+  ── GROUP 4 — Gmail Link Downloader, 12 errors, 19:34-19:58. FIVE causes. ─────────────
+    The stated cause (ExpressionError, invalid expression, undefined) is exactly ONE of the 12.
+    *  5 — `Stop and Error: Not PDF`, errorMessage `error_not_pdf`. A DELIBERATE stopAndError on
+      a non-PDF download: the workflow was throwing on purpose. Largest cause in the group.
+    *  5 — mail ops with no `connection_id` (3 `http:get`, 2 `http:search`) — see G3.
+    *  1 — `d:upload` with no binary (same as G1's four).
+    *  1 — ExpressionError at `Upsert Incoming Document`.
+    The owner's hand-edits (Edit Fields, Get a message, Code in JavaScript1) were verified
+    present and byte-identical in repo and live before editing, and are untouched.
+
+  ── GROUP 5 — apitools 429, 6 errors, 21:09-21:10. As described. ─────────────────────
+    `server_busy` on `Document OCR2`; the bulkhead is by design, killing the document is not.
+    3 errors on Upload Doc To API TOOLS + 3 on its caller Base Document Extraction, all inside
+    47 seconds. n8n silently clamps waitBetweenTries to 5s and maxTries to 5 in
+    workflow-execute.js, so the node's configured 15000ms backoff has never once been honoured.
+
+  ── GROUP 6 — uq_incdoc_hash, 6 errors across 6 workflows at 20:56:34-37. NOT YET FIXED. ─
+    Diagnosis confirmed and sharpened. The DELIVER write path is ALREADY safe —
+    indoxApiSupabase01 `Build Deliver` emits `insert ... on conflict ("HASH") where <partial-index
+    predicate> do nothing`. The failure is on the OTHER write path: `PG Upsert`, an n8n Postgres
+    node with operation=upsert and matchingColumns=["ID"], which generates
+    `on conflict ("ID")` — so a collision on the SECOND unique index, uq_incdoc_hash, is not a
+    conflict target and hard-errors. `Resolve IDs` does dedup by HASH, but against `Load Match
+    Index`, a SNAPSHOT read before the write; the six failures landed in one second, inside the
+    snapshot's staleness window. See task 6 for the exact fix.
+
+  ── GROUP 7 — task-runner 300s timeout, 1 error, 20:03. Watch. ───────────────────────
+    Not reproducing at the load it was recorded at. See task 11 for what appeared instead.
+
+  ## Updated
+
+  ```yaml
+  2026-08-09
+  ...
+  ```
+
+  ## Deployed
+
+  ```yaml
+  method: |
+    Surgical, per the owner's constraint that the continuous client backfill stays up: docker cp <file> n8n-shlomo-laptop:/tmp/stage/ ; n8n import:workflow --separate --input=/tmp/stage ; then `update workflow_entity set active=true, "activeVersionId"="versionId"` (import lands as a DRAFT in n8n 2.x and does nothing without it). Every workflow was EXPORTED LIVE FIRST and the patch applied to that export, never to the repo copy, so no other lane's or the owner's UI edits were reverted; the same patch was applied to the repo blueprint separately. n8n was never restarted.
+  verified:
+  - n8n-shlomo-laptop / worker-1 / worker-2 RestartCount=0, still running, after both batches
+  - all four workflows active=t and versionId=activeVersionId (published, not draft)
+  - 8,090 executions completed after the census window with 3 errors, none of them G1-G6
+  ```
+
+  ## Open after this pass
+
+  ```yaml
+  live_now: G1, G2, G4 (the not-PDF plurality + the LINK fabrication), G5 — 4 workflows, published, n8n never restarted. G3 (mailapi charset + JSON errorhandler) went live 2026-08-10 via a --no-deps single-container rebuild; see task 3.
+  repo_only: the /documents/upload LINK fabrication (indox api), indoxGmailDocDownloader01 — still need an image rebuild
+  untouched: G6 (write path — NOT landed, and the prescribed statement is verified WRONG; see task 6), G7, and tasks 8-12
+  new_finding_for_another_lane: |
+    COMPLETION HAS FLATLINED, and it is not G6. Rows are still being INGESTED (315-828 created per hour through 23:00) but public.incoming_documents COMPLETED has not moved from 6,243 for over two hours: COMPLETED-by-updated_at goes 14:00 -> 4,606, 15:00 -> 349, 16:00 -> 132, 17:00 -> 36, 18:00 -> 71, 19:00 -> 56, 20:00 -> 109, 21:00 -> 56, then NOTHING in 22:00 or 23:00, while TO_EXTRACT climbed 4,308 -> 4,472 in the same window. Executions are still succeeding in volume (~20k in three hours, 30 errors), so this is documents entering and not finishing, not the pipeline being down. Almost certainly the same family as task 11 (Bull stalled-job exhaustion) and the completion-throughput lane's concurrency change. Belongs to that lane — worker concurrency is theirs — but it is the biggest thing visible in the data right now, and it is why "a rising COMPLETED count" could not be used as the acceptance signal for any change tonight.
+  ```
+tasks:
+- text: 'GROUP 1 (24) — drive d:download on unresolvable ids — id: 1 · proof: TWO fixes, both live. (a) indoxV2ExtractInvoiceGemini01 `Download LINK` now routes on the ID SHAPE, not the hostname: `^l[fd][0-9a-f]{8,}$` means the local engine, so a poisoned `drive.google.com/file/d/lf19fd...` LINK goes to profile_id=admin instead of the Google service account. This repairs rows that ALREADY carry the bad LINK, which a source-side fix alone cannot. (b) driveApi01 `d:download` is now onError=continueErrorOutput into a `Download Miss` code node: a 404 (or the local adapter''s Hebrew "הקובץ אינו קיים") becomes `{ok:false, error:''source_gone'', needs_review:true, http_status}` and flows to `Done`, so the execution succeeds and stops being retried; a 5xx, a timeout or an auth refusal is RE-THROWN untouched, because those are transient and the caller''s retry is correct for them. Callers already gate on `If Binary`/`If No Binary` and have their own FILE_NOT_FOUND branch, so a binary-less result is the shape they were already written for. Proved by replaying all 12 distinct recovered fileIds and 5 error envelopes through the deployed expressions inside n8n''s own node runtime: the 15 local ids route LOCAL, the real Google ids route GOOGLE, 404-and-Hebrew-404 classify as source_gone, 503/401/ETIMEDOUT re-throw.'
+  done: true
+- text: 'GROUP 2 (18) — Gemini Document Processor: recover the RAW upstream error before fixing — id: 2 · proof: Raw envelopes recovered (400 INVALID_ARGUMENT x15, 404 NOT_FOUND x3) and correlated 1:1 against binary metadata: 6 documents of 0-39 bytes. The 32-byte "PDF" for exec 563517 was read off disk — its entire content is the ASCII line `sv3f mixed mail attachment 99464`. Neither quota nor auth: 507 successes on the same credential and model in the same window. Fix live: a `Check Doc Bytes` -> `Doc Bytes OK?` pre-flight in front of `Document Processor` refuses anything under 1 KB (parsing n8n''s formatted fileSize, and failing OPEN on an unparseable one so a format change can never block a real document), routing to `Report Unusable Document` which emits `{success:false, error:''unusable_document'', needs_review:true, bytes, details}` — deliberately NOT the existing ''LLM Faild'', because the LLM was not called and blaming it sends the next reader to the wrong place. `Document Processor` also gained onError=continueErrorOutput into the existing `Response Format: No LLM Output`, so an unforeseen bad document cannot take a run down. Proved against the real recovered fileSizes: 0 B / 32 B / 35 B / 39 B all REFUSE, the 9.21 MB scan that succeeded still CALLS, an unparseable size still CALLS.'
+  done: true
+- text: |-
+    GROUP 3 (14) — mail api http:get receiving an HTML 500: surface the real status/body — id: 3 · deployed_2026-08-10: LIVE. Rebuilt with `docker compose -f .generated/compose.yml -f .generated/routing.override.yml -f .generated/connections.override.yml --project-directory . up -d --build --no-deps mailapi`. NOT `bbox run mailapi`: reading bbox first showed `run` also does `ensure_perf_profile`, `run_app_hooks prepare` for EVERY app, `ensure_converged` (POSTs the control-plane `/api/reconcile`, the path that pushes n8n blueprints from the repo and has clobbered the owner's UI edits twice today) and `run_app_hooks onboard` — and `reconcile.py services --for mail` resolves the mail closure to include n8n, both workers, the task-runners, postgres and redis. With ~18k documents mid-backfill and a hard "never restart n8n", `--no-deps` on the one service is the only correct path. Compose recreated mailapi ONLY. PROOFS. (a) Pre-deploy, inside the running container, the OLD expression raised the real defect: `LookupError: unknown encoding: iso-8859-8-i`. (b) Post-deploy the live module has the fix — `import app; app.decode_part` resolves, 4 call sites in /app/app.py and 4 in /app/local_app.py. (c) Variant coverage: `iso-8859-8-i`, `-e`, uppercase `ISO-8859-8-I` and plain `iso-8859-8` all decode to the right Hebrew; bogus/empty charsets fall back to utf-8 with NO raise (mojibake, by design). (d) END-TO-END through the route that used to 500: a real message declaring `charset="iso-8859-8-i"` with iso-8859-8 octets was APPENDed to the LOCAL TEST mailbox (mail_imap_local-10ebefad, indox@local.test — the client's Gmail was never written to) and fetched back with `GET /message/108`: HTTP 200, subject `בדיקת קידוד`, body_text `שלום, מצורפת חשבונית לתשלום.` — correct, no 500, no HTML page. (e) service.py now registers handlers for AdapterError, ProfileError AND Exception. HEALTH AFTER: container healthy, RestartCount=0; /healthz 200, /readyz 200 (ready:true), /connections 200 (6 connections, active mail_imap_app_password-51185288), /stats 200; live pipeline traffic (POST /search, GET /organizer/settings from n8n) serving 200s. N8N UNTOUCHED, verified by before/after snapshot: n8n, worker-1, worker-2, task-runners, n8n-postgres, supabase-db and redis all have IDENTICAL StartedAt and RestartCount=0, and every workflow_entity row has the same versionId/activeVersionId/updatedAt as before the rebuild. Also shipped in the same image (pre-existing uncommitted work, verified complete and safe, not this lane's): the mailapi Dockerfile's JSON --access-logformat (already identical to what the running container had, so a no-op) and fixtures/tag_rules.json (SAFE: organizer_seed.py is create-only — `/data/organizer-defaults.json` already exists on the persistent volume with the new hyphenated Hebrew names, so no re-seed and no change to the client's live label rules). Owner-protected gunicorn worker count and IMAP pool sizing were not touched. SECOND REBUILD, same command, 23:56Z: the `label:` lane finished after the first one, so the image was rebuilt again to carry both fixes. Pre-flight before it: `decode_part` in the tree was diffed against the RUNNING container's copy and was byte-identical (22 lines), call sites 5/5 in app.py and 4/4 in local_app.py, and service.py was byte-identical to the deployed file — confirming that lane's "did not touch service.py or decode_part" claim rather than trusting it; all 15 modules compiled; their test_label_vocabulary.py passed 10/10. After it: charset end-to-end re-run and still PASS (GET /message/109 -> 200, correct Hebrew subject and body), /healthz /readyz /connections /stats all 200, container healthy, RestartCount=0, both lanes' symbols present in /app/app.py, gunicorn still `-w 1 --threads 12`. n8n, both workers, task-runners, n8n-postgres, supabase-db and redis again byte-identical StartedAt and RestartCount=0 across BOTH rebuilds.
+     · proof: Root-caused to `LookupError: unknown encoding: iso-8859-8-i` at apps/mail/mailapi/app.py:938 and :940 (3 tracebacks in the container log, one per 500). FIXED IN THE REPO, NOT YET LIVE: (a) a new `decode_part()` helper normalises the IANA-only `-i`/`-e` bidi suffixes to the real codec and falls back to utf-8 rather than raising, applied to all EIGHT decode sites across app.py and local_app.py; (b) a generic `@app.errorhandler(Exception)` in service.py returns JSON naming the exception type and path (HTTPException keeps its own status), so the next unforeseen failure is legible from the caller instead of needing a log dive. All three files compile. DEPLOY STEP OUTSTANDING: `docker cp` into `mailapi-shlomo-laptop: /app/` was refused by this environment's permission classifier (n8n's /tmp/stage is allowed; overwriting a running container's application source is not). Needs either an approved `docker cp apps/mail/mailapi/{app,local_app,service}.py mailapi-shlomo-laptop:/app/` followed by a mailapi restart, or a normal image rebuild. Rollback copies of the three live files are in tmp/g3_live/.
+  done: true
+- text: 'GROUP 4 (12) — gmail-link: needs_review instead of a throw — id: 4 · proof: The 5-error plurality was a deliberate `Stop and Error: Not PDF`. Replaced live with a `Not A PDF (needs review)` code node feeding the workflow''s normal terminal (`Prepare Output`), emitting `{success:false, error:''not_a_pdf'', needs_review:true, mimeType, fileName}` — the mail carried a link, the link resolved, and what came back is not a document; retrying cannot change that. Repo and live were diffed first and were identical (32 nodes, same params, same connections), so the owner''s UI edits were confirmed intact and were built on, not reverted. The LINK fabrication in `Upsert Incoming Document` was fixed in the same deploy (see the top section) — that is the source of G1''s 15. Still open in this workflow: the 5 connection_id failures (task 10), the 1 d:upload no-binary (task 8), the 1 ExpressionError (task 12).'
+  done: true
+- text: 'GROUP 5 (6) — apitools 429 must not kill a document — id: 5 · proof: `Document OCR2` is now onError=continueErrorOutput into an `OCR Shed` node that recognises 429 / server_busy / "too many requests" and degrades through this workflow''s OWN existing convention — an item carrying `error`, which the `Return` node already turns into ok:false — marked retryable:true and needs_review:false, because nothing is wrong with the document and the next sweep should pick it up unchanged. Anything that is NOT a shed is re-thrown. waitBetweenTries corrected 15000 -> 5000 and maxTries left at 5: those are the values n8n actually enforces after its silent clamp, so the node''s configuration now states what it really does instead of implying a 15s backoff that has never run. The apitools bulkhead itself is untouched — it is behaving as designed.'
+  done: true
+- text: |-
+    GROUP 6 (6) — uq_incdoc_hash collision: needs INSERT ... ON CONFLICT at the write path — id: 6 · decision: STILL NOT LANDED — but now for a MEASURED reason, not caution. Do not land the statement printed in the original `next:` below: it is verified WRONG. See verified_2026-08-10. · verified_2026-08-10: A dedicated lane took this on, reproduced everything on real data in a scratch clone of public.incoming_documents (`create table ... (like ... including all)`, so the real partial unique index came with it), seeded with 180 REAL rows, every case run in a transaction and rolled back. Findings, in order of importance:
+    (1) THE PRESCRIBED STATEMENT SILENTLY WRITES TO THE WRONG DOCUMENT. Its `coalesce` resolves the HASH twin FIRST and the caller's "ID" only as a fallback. That inverts the precedence of `Resolve IDs` directly upstream, which does the opposite — an existing caller ID wins, and only then does it try a logical match. PROVED: caller names R2 (10316097696htaw) while carrying R1's hash; the prescribed statement wrote 'CALLER MEANT R2' into R1 (1023348463y1cx5) and left R2 untouched. Today that case raises a visible uq_incdoc_hash error. Trading a loud error for a silent wrong-row write, on the single write path of an 18k-document client corpus, is strictly worse than the bug it fixes.
+    (2) IT HARD-ERRORS ON HASH='unknown'. The prose says to reuse the index predicate verbatim, but the statement omits `lower(...) <> 'unknown'` and guards only the PARAM, not the column. Rows with HASH='unknown' are outside the partial index so many may exist; the scalar subquery then raises `more than one row returned by a subquery used as an expression` — a hard failure on the single write path. PROVED with two 'unknown' rows present. It does not fire today only because the table currently holds 0 such rows (13,383 indexed + 660 NULL, 0 empty, 0 'unknown', 0 duplicate hashes) — that is data luck, not correctness.
+    (3) IT DROPS `RETURNING *`. n8n's upsert node generates `... ON CONFLICT ("ID") DO UPDATE SET ... RETURNING *` (helpers/utils.js addReturning, default outputColumns=['*']), and `PG Upsert` is a TERMINAL node — its output IS what indoxApiSupabase01 returns to every caller of the UPSERT action. Dropping RETURNING would empty that contract fleet-wide.
+    (4) NOT a defect, tested and cleared: `INSERT ... SELECT` with stringified params into the six non-text columns (ITERATION_COUNT/RETRY_COUNT int, priority_sync bool, created_at/ updated_at/NEXT_RETRY_AT timestamptz) coerces correctly.
+    THE CORRECTED STATEMENT (verified on real rows; keep VALUES form, keep RETURNING, preserve Resolve IDs' precedence, reuse the index predicate on BOTH sides, LIMIT 1 for robustness):
+      insert into public.incoming_documents ("ID", <cols>)
+      values (
+        coalesce(
+          (select d."ID" from public.incoming_documents d where d."ID" = $id),
+          (select d."ID" from public.incoming_documents d
+             where d."HASH" = $hash and $hash <> '' and lower($hash) <> 'unknown' limit 1),
+          $id),
+        <vals>)
+      on conflict ("ID") do update set <col> = excluded.<col>, ...
+      returning *
+    Cases proved: A brand-new ID + brand-new HASH -> INSERT (180->181 rows); B existing ID -> UPDATE in place (180->180); C brand-new ID + EXISTING HASH (the actual defect) -> UPDATES the twin, row count unchanged, zero ghost rows, where today's statement raises; D wrong-row case -> still errors exactly as today, no silent misdirect; E HASH='unknown' -> resolves cleanly where the prescribed statement dies; F item with no HASH key -> INSERT. The residual race (two truly-simultaneous brand-new hashes) is still closed only by retry — `PG Upsert` already carries retryOnFail=true/maxTries=4/waitBetweenTries=3000, and with the resolution INSIDE the statement the loser's retry succeeds instead of repeating the failure.
+    WHY IT IS STILL NOT LANDED — the benefit measured out to ~zero:
+      * The "6 errors across 6 workflows" are not 6 defects. They are ONE document failing TWO
+        write attempts, recorded once per workflow up two sub-workflow call chains
+        (559287 indoxV2Driver01 <- 559288 indoxV2ActionsShip01; 559294 indoxV2Upsert01 <-
+        559295 indoxDocBatchUpsert01 <- 559296 indoxApiRouter01 <- 559297 indoxApiSupabase01).
+      * Both collided on the SAME hash, 456d9e7e5ea944d2cc472954eb5d21cd. That row exists today:
+        doc_msm0vrh6vaud1v, "סימנט אי.אס.-13003", SHIPMENT, STATUS=COMPLETED, updated_at
+        20:56:33.504 — ONE SECOND BEFORE the first failure at 20:56:34.429. The concurrent writer
+        won and the document was never lost; the failures cost a redundant UPDATE, not content.
+      * ZERO recurrences since: the only uq_incdoc_hash errors in the whole table of executions
+        are those 6, all inside the 20:00 hour. The following three hours ran ~20,000 executions
+        with 30 errors, none of them this one.
+      Replacing the single write path (a new Build code node generating per-item dynamic column
+      sets over 105 columns incl. a Hebrew-named one, plus an executeQuery node) to recover one
+      redundant update, while 4,347 documents sit queued in TO_EXTRACT, is the wrong trade. The
+      SQL is proven; the generator that would emit it per-item would be new unproven code on the
+      hot path. Land it when the backfill is idle, with the corrected statement above.
+    Rollback artifact if someone does land it: the pre-change published export was taken at 2026-08-09 (versionId 18d1f8c2-01aa-4bb8-ba8d-f0a73ec53f31, active=t, versionId == activeVersionId); re-import + re-publish is restart-free.
+     · next: SUPERSEDED — the statement below is the ORIGINAL, UNVERIFIED prescription. It is retained only so the correction above has something to point at. DO NOT PASTE IT INTO A WORKFLOW.
+      with resolved as (
+        select coalesce((select "ID" from public.incoming_documents
+                         where "HASH" = $hash and $hash is not null and $hash <> ''), $id) as id)
+      insert into public.incoming_documents ("ID", <cols>)
+      select resolved.id, <vals> from resolved
+      on conflict ("ID") do update set <col> = excluded.<col>, ...
+  done: false
+- text: 'GROUP 7 (1) — task-runner 300s timeout under load; watch — id: 7 · next: Still not reproducing. But see task 11 — a different saturation failure did appear.'
+  done: false
+- text: 'NEW — d:upload invoked with no binary on the input (5 errors: 4 in G1, 1 in G4) — id: 8 · next: `d:upload` fails with "This operation expects the node''s input data to contain a binary file ''data'', but none was found [item 0]" (params: name=<hebrew>-82426.pdf, folderId=ld19fd16971a5e326590441, profile_id=admin). A caller reaches the upload op having lost its binary. Was miscounted inside G1''s 24 and G4''s 12; it is its own defect.'
+  done: false
+- text: 'NEW — synthetic test fixtures are reaching the live AI extractor — id: 9 · next: The six documents behind ALL 18 Gemini errors are seed fixtures with forged extensions from sv3Inject3x001 / syncV3FullTest01 / mailOrgTest00001, plus a manual sa-fix-test-invoice.pdf. Task 2''s guard now stops them costing API calls and failed executions, but they should not be in the live document stream at all. Find how they get in and gate them at ingest.'
+  done: false
+- text: 'NEW — connection identity leaks across app boundaries (11 errors) — id: 10 · next: One defect, two shapes, spread across G3 and G4 and closely related to G1''s root cause. (a) 6x `http:addLabels` -> 400 `unsupported protocol ''drive_google_service_account''`: a DRIVE connection id passed to a MAIL op. (b) 5x mail ops called with connection_id EMPTY, refused by mailapi''s `_explicit_connection_required`. Both are the same underlying thing as the local-id-to-Google-connection bug: a connection/engine identity travelling somewhere it does not belong. Worth one pass that finds where connection ids are chosen and threaded, rather than five spot fixes.'
+  done: false
+- text: 'NEW — queue stalled-job exhaustion (the only errors since the fixes went live) — id: 11 · next: In the 70 minutes and 8,090 executions after the census window, the only 3 errors were "This execution failed to be processed too many times and will no longer retry" on Incoming Documents v2 / indox api - supabase / Sync v3 Reconcile, all at 22:08:07 — Bull''s stalled-job retry limit, not any of G1-G7. Same family as G7 (worker saturation) and almost certainly the completion-throughput lane''s concurrency change. Flagged for that lane; not touched here, since worker concurrency is theirs.'
+  done: false
+- text: 'NEW — ExpressionError at gmail-link `Upsert Incoming Document` (1 error) — id: 12 · next: The single error the census attributed all 12 of G4 to. `Invalid expression`, value undefined. The node reads six `$(''...'').item.json.*` paths that each assume an upstream node produced an item; one did not. Low volume, but it is the guard the census asked for.'
+  done: false
+references:
+- tmp/decomp2.py — the recursive dereferencer (cycle + depth guarded) used for every execution here
+- tmp/proof.js — replays the real recovered fileIds, fileSizes and error envelopes through the deployed guards
+- tmp/live/ — the pre-patch live exports; tmp/g3_live/ — the pre-patch mailapi container files (rollback)
+- issues/apitools-vision-key-rotation.yaml
+- issues/mailapi-labels-add-500-under-load.yaml — related to task 10
+- final-indox.md section H4 — earlier error census, superseded by this one

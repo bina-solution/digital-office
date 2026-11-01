@@ -1,0 +1,160 @@
+#!/usr/bin/env bash
+# schema-drift — does `schema.sql` still build the tenant we actually run?
+#
+#   apps/indox/hooks/schema-drift <instance-id>     # default: the first enabled instance
+#   apps/indox/hooks/schema-drift --keep            # leave the scratch schema for inspection
+#
+# THE DRIFT THIS CATCHES, AND WHY THE STATIC CHECK CANNOT
+# ------------------------------------------------------
+# scripts/ops/lint_schema_drift.py compares the fixture against the MIGRATIONS — two files, no
+# database. That catches a migration whose object never reached the fixture. It cannot catch:
+#
+#   * an object that reached production BY HAND and is in neither file (LINK_CONNECTION and
+#     SYNC_CONNECTION got in that way; nobody noticed for weeks),
+#   * a table the fixture never had at all (merge_audit: 10,184 rows, undeclared everywhere,
+#     found only by tracing ownership by REFERENCE instead of by name),
+#   * a column that exists in both but is DEFINED differently — the one that motivated the
+#     column pass below. `indox_sync_stats.payload_light` is
+#     `GENERATED ALWAYS AS (payload - 'items') STORED`; declared as a plain jsonb column it has
+#     the same name, the same type, and passes every name-level diff, while silently shipping
+#     every item of a 1,500-message mailbox to the browser. That reads as a performance mystery
+#     weeks later, not as schema drift.
+#
+# So this gate asks the only question that covers all three: PROVISION A TENANT FROM THE FIXTURE
+# AND DIFF IT AGAINST A REAL ONE, BOTH DIRECTIONS. Missing objects, extra objects and drifted
+# definitions all fall out of the same comparison.
+#
+# It needs a database, so it is a deploy-time gate rather than a CI one. The static lint stays;
+# the two answer different questions.
+#
+# THE RULE THIS GATE DEPENDS ON — read before "fixing" anything it reports
+# -----------------------------------------------------------------------
+# THE FIXTURE SPELLS THINGS THE WAY PRODUCTION SPELLS THEM, INCLUDING MISTAKES.
+#
+# `indox_priority_local.FILTER_REQUES_REASON` is missing a T. The tempting edit is to correct it
+# here. Do not: the fixture would then build a column production does not have, production would
+# keep one the fixture does not build, and THIS GATE WOULD BE GREEN while provisioning something
+# subtly different from the tenant we run — the precise failure it exists to prevent, hidden by
+# the tool meant to expose it.
+#
+# The same rule is why objects are declared because they EXIST rather than because they are
+# wanted. Renaming a live column is a migration plus its callers, sequenced deliberately; it is
+# never a typo fix made in passing. (Ruled 2026-08-28 with the tenancy session.)
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+HOOKS="${ROOT}/apps/indox/hooks"
+SCHEMA_SQL="${ROOT}/apps/indox/blueprint/fixtures/schema.sql"
+# Container name + strip_public_views live in ONE place shared with apply-schema — see
+# _schema-lib.sh for why the hand-rolled .env parse (default `supabase-db-local`) was a defect.
+. "${HOOKS}/_schema-lib.sh"
+PG="${INDOX_PG}"
+SCRATCH="indox_driftcheck"
+
+# KNOWN AND ACCEPTED DIFFERENCES. Each needs a reason and an exit condition, so this list stays a
+# ledger of decisions rather than a place drift goes to be forgotten.
+#
+#   סימון כרטסת עדכנית — a Sheets-era marker, 0 non-null of 25,982 rows. Removed from the fixture
+#   and from indoxApi01's writable-column allowlist, but the LIVE drop is blocked: four functions
+#   take incoming_documents as a composite parameter, so the column drop and a drop/recreate of
+#   both overloads of each must happen in ONE transaction. Expires when that runs.
+ALLOWED_LIVE_ONLY_COLUMNS="סימון כרטסת עדכנית"
+
+die() { echo "schema-drift: $*" >&2; exit 2; }
+# client-min-messages=warning: the fixture is deliberately noisy with "already exists, skipping"
+# NOTICEs, and they would drown the one thing this gate is here to print.
+psqlq() { docker exec -i -e PGOPTIONS='--client-min-messages=warning' "${PG}"             psql -U postgres -d postgres -tA -c "$1"; }
+
+# strip_public_views comes from _schema-lib.sh — one owner, shared with apply-schema, so the
+# drift gate can never validate a schema built by a DIFFERENT stripping than provisioning uses.
+
+KEEP=0; INSTANCE=""
+for a in "$@"; do
+  case "$a" in
+    --keep) KEEP=1 ;;
+    -*)     die "unknown flag: $a" ;;
+    *)      INSTANCE="$a" ;;
+  esac
+done
+
+docker ps --format '{{.Names}}' | grep -Fxq "${PG}" || die "postgres container '${PG}' is not running"
+
+# The live tenant to compare against: the caller's, else the first ENABLED instance in the
+# registry. A disabled tenant is deliberately not the reference — it may be mid-provision.
+if [ -z "${INSTANCE}" ]; then
+  INSTANCE="$(psqlq "select id from public.indox_instances where enabled order by id limit 1" | tr -d ' \r')"
+  [ -n "${INSTANCE}" ] || die "no enabled instance in public.indox_instances; pass one explicitly"
+fi
+LIVE="$(psqlq "select schema_name from public.indox_instances where id = '${INSTANCE}'" | tr -d ' \r')"
+[ -n "${LIVE}" ] || die "instance '${INSTANCE}' is not in public.indox_instances"
+
+echo "schema-drift: fixture -> ${SCRATCH}   vs   live '${INSTANCE}' -> ${LIVE}"
+
+cleanup() { [ "${KEEP}" = "1" ] || psqlq "drop schema if exists ${SCRATCH} cascade" >/dev/null 2>&1 || true; }
+trap cleanup EXIT
+
+# ── build a tenant from the fixture, exactly as provisioning would ────────────────────────────
+psqlq "drop schema if exists ${SCRATCH} cascade" >/dev/null
+{
+  printf 'create schema %s;\n' "${SCRATCH}"
+  printf 'set search_path = %s, public;\n' "${SCRATCH}"
+  cat "${SCHEMA_SQL}" | strip_public_views
+} | docker exec -i -e PGOPTIONS='--client-min-messages=warning' "${PG}"       psql -U postgres -d postgres -v ON_ERROR_STOP=1 -q >/dev/null 2>&1 \
+  || die "the fixture does not apply cleanly — that is the drift, fix it first"
+
+FAIL=0
+report() { FAIL=1; echo; echo "  DRIFT — $1"; echo "$2" | sed 's/^/    /'; }
+
+# ── 1. tables, both directions ────────────────────────────────────────────────────────────────
+only_live="$(psqlq "select coalesce(string_agg(tablename, ', ' order by tablename), '') from (
+  select tablename from pg_tables where schemaname='${LIVE}'
+  except select tablename from pg_tables where schemaname='${SCRATCH}') x")"
+only_fix="$(psqlq "select coalesce(string_agg(tablename, ', ' order by tablename), '') from (
+  select tablename from pg_tables where schemaname='${SCRATCH}'
+  except select tablename from pg_tables where schemaname='${LIVE}') x")"
+[ -z "${only_live}" ] || report "tables the LIVE tenant has and the fixture does not build" "${only_live}"
+[ -z "${only_fix}"  ] || report "tables the FIXTURE builds and the live tenant lacks" "${only_fix}"
+
+# ── 2. columns, both directions, over the tables they share ───────────────────────────────────
+allow_sql="$(printf "'%s'" "${ALLOWED_LIVE_ONLY_COLUMNS}")"
+col_only_live="$(psqlq "select coalesce(string_agg(t||'.'||c, ', ' order by t, c), '') from (
+  select table_name t, column_name c from information_schema.columns where table_schema='${LIVE}'
+  except
+  select table_name, column_name from information_schema.columns where table_schema='${SCRATCH}') x
+  where c not in (${allow_sql})
+    and t in (select tablename from pg_tables where schemaname='${SCRATCH}')")"
+col_only_fix="$(psqlq "select coalesce(string_agg(t||'.'||c, ', ' order by t, c), '') from (
+  select table_name t, column_name c from information_schema.columns where table_schema='${SCRATCH}'
+  except
+  select table_name, column_name from information_schema.columns where table_schema='${LIVE}') x
+  where t in (select tablename from pg_tables where schemaname='${LIVE}')")"
+[ -z "${col_only_live}" ] || report "columns the LIVE tenant has and the fixture does not build" "${col_only_live}"
+[ -z "${col_only_fix}"  ] || report "columns the FIXTURE builds and the live tenant lacks" "${col_only_fix}"
+
+# ── 3. DEFINITIONS of the columns both have ───────────────────────────────────────────────────
+# The pass that name-diffing cannot do. Compares type, generated-ness and the generation
+# expression — a plain column standing in for a GENERATED one is invisible above and expensive
+# in production.
+defs="$(psqlq "
+  with l as (select table_name t, column_name c, data_type d, is_generated g,
+                    coalesce(generation_expression,'') e
+               from information_schema.columns where table_schema='${LIVE}'),
+       f as (select table_name t, column_name c, data_type d, is_generated g,
+                    coalesce(generation_expression,'') e
+               from information_schema.columns where table_schema='${SCRATCH}')
+  select coalesce(string_agg(
+           l.t||'.'||l.c||': live='||l.d||case when l.g='ALWAYS' then ' GENERATED('||l.e||')' else '' end||
+                          '  fixture='||f.d||case when f.g='ALWAYS' then ' GENERATED('||f.e||')' else '' end,
+           E'\n' order by l.t, l.c), '')
+    from l join f on f.t=l.t and f.c=l.c
+   where l.d is distinct from f.d or l.g is distinct from f.g or l.e is distinct from f.e")"
+[ -z "${defs}" ] || report "columns DEFINED differently (type / generated / expression)" "${defs}"
+
+echo
+if [ "${FAIL}" = "0" ]; then
+  echo "schema-drift: OK — the fixture builds exactly the tenant we run"
+  exit 0
+fi
+echo "schema-drift: FAILED — see above. Fix the FIXTURE (or record the difference in"
+echo "              ALLOWED_LIVE_ONLY_COLUMNS with a reason and an exit condition)."
+exit 1

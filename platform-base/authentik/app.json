@@ -1,0 +1,110 @@
+{
+  "id": "authentik",
+  "title": {
+    "he": "משתמשים וכניסה",
+    "en": "Authentik"
+  },
+  "layer": 1,
+  "kind": "service",
+  "version": "1.0.0",
+  "system": true,
+  "summary": {
+    "he": "זהות, כניסה אחודה והרשאות",
+    "en": "Identity, SSO and access control"
+  },
+  "capabilities": [
+    {
+      "name": "identity",
+      "type": "protocol",
+      "endpoint": "http://authentik-server:9000",
+      "required_ops": [
+        "forward-auth",
+        "oidc",
+        "user-info"
+      ]
+    },
+    {
+      "name": "forward-auth",
+      "type": "protocol",
+      "endpoint": "http://authentik-server:9000/outpost.goauthentik.io/auth/traefik"
+    }
+  ],
+  "use": [
+    {
+      "capability": "sql",
+      "strength": "requires",
+      "after": true,
+      "own_instance": true,
+      "reason": "authentik runs its own migrations against a cluster it assumes it owns, and pins a Postgres major it validates against. Moving it onto the shared cluster is scheduled with the identity replacement (packaging/OPTIMISATION.md phase 2), where the component changes anyway."
+    }
+  ],
+  "connections": [
+    {
+      "id": "authentik-secret-key",
+      "required": true
+    },
+    {
+      "id": "authentik-postgres-password",
+      "required": true
+    },
+    {
+      "id": "authentik-bootstrap",
+      "required": true
+    },
+    {
+      "id": "authentik-google-login",
+      "required": false
+    }
+  ],
+  "compose": "docker-compose.yml",
+  "routing": [
+    {
+      "host": "auth",
+      "port": 9000,
+      "auth": "none",
+      "service": "authentik-server",
+      "emit_labels": false,
+      "module": {
+        "name": "Authentik",
+        "icon": "shield",
+        "desc": "זהויות, הרשאות ו-SSO",
+        "group": "תשתית",
+        "order": 240,
+        "embed": false
+      }
+    }
+  ],
+  "health": {
+    "structural": "auto",
+    "probe": {
+      "http": "http://authentik-server:9000/-/health/ready/",
+      "interval": "30s"
+    }
+  },
+  "data": {
+    "volumes": [
+      "authentik_media",
+      "authentik_templates",
+      "authentik_postgres_data"
+    ],
+    "on_uninstall": "keep",
+    "paths": [
+      "platform-base/authentik/blueprints"
+    ],
+    "sql": [
+      {
+        "instance": "authentik-postgres",
+        "database": "authentik",
+        "note": "authentik owns this instance entirely - users, groups, flows, tokens"
+      }
+    ],
+    "kv": [
+      {
+        "instance": "redis",
+        "db": 1,
+        "durable": false,
+        "note": "AUTHENTIK_REDIS__DB pins /1 - cache, sessions and task results; rebuilt on demand, not restored"
+      }
+    ]
+  }
+}

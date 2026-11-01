@@ -1,0 +1,254 @@
+[
+  {
+    "name": "below-table-align-hl-vl",
+    "source_file": "fixtures/below-table-align-hl-vl.png",
+    "ocr_json_query": {
+      "action": "find below",
+      "action_value": "Amount",
+      "is_rtl": false,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80,
+        "max_rotation_delta": 5
+      },
+      "value_validations": [
+        {
+          "validation_type": "length_greater_than",
+          "validation_value": 2
+        },
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": "1,234.56",
+      "aligned_value_equals": "1,234.56",
+      "text_match_equals": "Amount"
+    }
+  },
+  {
+    "name": "below-table-align-hl-vc",
+    "source_file": "fixtures/below-table-align-hl-vc.png",
+    "ocr_json_query": {
+      "action": "find below",
+      "action_value": "Amount",
+      "is_rtl": false,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80,
+        "max_rotation_delta": 5
+      },
+      "value_validations": [
+        {
+          "validation_type": "length_greater_than",
+          "validation_value": 2
+        },
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": "1,234.56",
+      "aligned_value_equals": "1,234.56",
+      "text_match_equals": "Amount"
+    }
+  },
+  {
+    "name": "below-table-align-hl-vr",
+    "source_file": "fixtures/below-table-align-hl-vr.png",
+    "ocr_json_query": {
+      "action": "find below",
+      "action_value": "Amount",
+      "is_rtl": false,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80,
+        "max_rotation_delta": 5
+      },
+      "value_validations": [
+        {
+          "validation_type": "length_greater_than",
+          "validation_value": 2
+        },
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": "1,234.56",
+      "aligned_value_equals": "1,234.56",
+      "text_match_equals": "Amount"
+    }
+  },
+  {
+    "name": "below-table-align-hc-vl",
+    "source_file": "fixtures/below-table-align-hc-vl.png",
+    "ocr_json_query": {
+      "action": "find below",
+      "action_value": "Amount",
+      "is_rtl": false,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80,
+        "max_rotation_delta": 5
+      },
+      "value_validations": [
+        {
+          "validation_type": "length_greater_than",
+          "validation_value": 2
+        },
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": "1,234.56",
+      "aligned_value_equals": "1,234.56",
+      "text_match_equals": "Amount"
+    }
+  },
+  {
+    "name": "below-table-align-hc-vc",
+    "source_file": "fixtures/below-table-align-hc-vc.png",
+    "ocr_json_query": {
+      "action": "find below",
+      "action_value": "Amount",
+      "is_rtl": false,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80,
+        "max_rotation_delta": 5
+      },
+      "value_validations": [
+        {
+          "validation_type": "length_greater_than",
+          "validation_value": 2
+        },
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": "1,234.56",
+      "aligned_value_equals": "1,234.56",
+      "text_match_equals": "Amount"
+    }
+  },
+  {
+    "name": "below-table-align-hc-vr",
+    "source_file": "fixtures/below-table-align-hc-vr.png",
+    "ocr_json_query": {
+      "action": "find below",
+      "action_value": "Amount",
+      "is_rtl": false,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80,
+        "max_rotation_delta": 5
+      },
+      "value_validations": [
+        {
+          "validation_type": "length_greater_than",
+          "validation_value": 2
+        },
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": "1,234.56",
+      "aligned_value_equals": "1,234.56",
+      "text_match_equals": "Amount"
+    }
+  },
+  {
+    "name": "below-table-align-hr-vl",
+    "source_file": "fixtures/below-table-align-hr-vl.png",
+    "ocr_json_query": {
+      "action": "find below",
+      "action_value": "Amount",
+      "is_rtl": false,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80,
+        "max_rotation_delta": 5
+      },
+      "value_validations": [
+        {
+          "validation_type": "length_greater_than",
+          "validation_value": 2
+        },
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": "1,234.56",
+      "aligned_value_equals": "1,234.56",
+      "text_match_equals": "Amount"
+    }
+  },
+  {
+    "name": "below-table-align-hr-vc",
+    "source_file": "fixtures/below-table-align-hr-vc.png",
+    "ocr_json_query": {
+      "action": "find below",
+      "action_value": "Amount",
+      "is_rtl": false,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80,
+        "max_rotation_delta": 5
+      },
+      "value_validations": [
+        {
+          "validation_type": "length_greater_than",
+          "validation_value": 2
+        },
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": "1,234.56",
+      "aligned_value_equals": "1,234.56",
+      "text_match_equals": "Amount"
+    }
+  },
+  {
+    "name": "below-table-align-hr-vr",
+    "source_file": "fixtures/below-table-align-hr-vr.png",
+    "ocr_json_query": {
+      "action": "find below",
+      "action_value": "Amount",
+      "is_rtl": false,
+      "tolerances": {
+        "max_vertical_gap": 120,
+        "max_horizontal_offset": 80,
+        "max_rotation_delta": 5
+      },
+      "value_validations": [
+        {
+          "validation_type": "length_greater_than",
+          "validation_value": 2
+        },
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": "1,234.56",
+      "aligned_value_equals": "1,234.56",
+      "text_match_equals": "Amount"
+    }
+  }
+]

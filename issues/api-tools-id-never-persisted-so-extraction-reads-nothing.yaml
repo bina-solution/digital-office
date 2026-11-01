@@ -1,0 +1,147 @@
+# yaml-language-server: $schema=./schema.json
+title: API_TOOLS_ID is NULL on every document, so every extraction reads nothing and reports success
+opened: '2026-08-21'
+severity: high
+status: open
+summary: API_TOOLS_ID is NULL on every document, so every extraction reads nothing and reports success
+description: |
+  area: INDOX extraction / apitools / silent success
+
+  ## Context
+
+  Measured on portable-ubuntu, 2026-08-21, lean INDOX lane, OCR_ENGINE=local.
+
+  Four E2E suites fail on empty extraction and they all say the same thing:
+
+      proc-gdoc        COMPANY_ID null != 516618881; DOC_ID null != SI9773328;
+                       NAME "unknown-73328.pdf" != "Asif Schar Etz-73328.pdf"
+      proc-gmail-doc   COMPANY_ID null != 516618881; DOC_ID null != SI8553328
+      proc-gmail-link  DOC_ID null != truth SI266924578
+      proc-bs          COMPANY_ID null; TYPE null; STATUS null; SYNC_NAME null; NAME null
+
+  This is NOT a missing API key. The extractor is local and deterministic (apitools
+  /documentJsonQuery driven by the q_v3_* settings), and everything it needs is present:
+
+      public.settings                 50 rows, 16 q_v3_* keys
+      public.extraction_queries       16 rows for instance 'incoming-documents-main'
+      cfg.q_v3_routing                a real jsonb OBJECT, base/invoice/shipment all populated
+      public.companies                6 rows — INCLUDING 'Asif Schar Etz | 516618881',
+                                      the exact company the failing assertions expect
+      storage.objects                 153 files
+      OCR_ENGINE=local, apitools healthy, /documentOcr called 51 times
+
+  ## Root cause
+
+      select count(*) total, count("API_TOOLS_ID") with_atid from public.incoming_documents;
+       65 |  0
+
+  API_TOOLS_ID is NULL on all 65 rows. The extractor picks its file handle like this
+  (JQExV3Base000001 :: 'Fan Fields', and the same line in the other four JQExV3* workflows):
+
+      const fid = j.API_TOOLS_ID || j.file_id || j.HASH || j.file_hash;
+
+  With API_TOOLS_ID null it falls through to HASH — an id apitools has never heard of:
+
+      POST /docExists {"file_id":"695405286f0e2748072f590c1d549519"}
+        -> {"exists": false}
+      POST /documentJsonQuery {file_id: <that>, ocr_json_queries: [...]}
+        -> {"error":"file_not_found","message":"OCR results for file ID ... not found"}
+
+  So every extraction call asks about a document apitools does not have, and returns nothing.
+
+  ## Why it is silent
+
+  Two layers each turn the failure into a success, which is why this presents as "the AI could
+  not read the document" rather than "we asked about the wrong file".
+
+  1. apitools answers file_not_found with **HTTP 200**. The access log shows exactly that:
+
+         "path":"/documentJsonQuery","status":200,"response_bytes":75,"duration_us": ~1000
+
+     0-1 ms and 75 bytes is the whole tell — a real OCR extraction takes seconds. An n8n HTTP
+     node sees 200 and proceeds.
+
+  2. The `A || B || C || D` fallback chain means a missing API_TOOLS_ID is indistinguishable
+     from a present one. There is no branch where the workflow says "I have no apitools handle
+     for this document"; it simply sends something else.
+
+  This is the defect class G48 (noop-success-lint) exists for — "a skip/no-op never reports
+  success; the reply must name its outcome" — arriving from the HTTP side, where G48 does not
+  look.
+
+  ## Narrowed 2026-08-21
+
+  The write-back EXISTS and is correct. BaseDocEx01 stamps it:
+
+      API_TOOLS_ID: "={{ $('Upload+OCR').item.json.file_id }}"
+
+  (and that node carries a long comment about the 2026-08-09 incident where 601 documents were
+  stamped with another file's API_TOOLS_ID, so it is well defended.)
+
+  So the column is null because BaseDocEx01 IS NEVER REACHED, not because it fails to write.
+  The corroborating failure is doc_base:
+
+      died at node 'Assert DOC BASE Coverage':
+        exp figure_document_type got update_status_missing_type
+
+  The DOC BASE decide picks `update_status_missing_type` where the suite expects
+  `figure_document_type` — i.e. the pipeline concludes "no type" instead of running the base
+  extraction that would establish the type AND stamp API_TOOLS_ID. Everything downstream then
+  extracts from a file apitools has never seen.
+
+  That decide lives in indoxV2ActionsGlobal01 :: 'Decide DOC BASE Action', which is under
+  active edit at the time of writing and is also what G41 flags:
+
+      'Decide DOC BASE Action' -> '3a. DOC BASE Actions Switch'
+      unreachable/dropped value(s): ['node(s) not found — DECIDE_SWITCH_PAIRS entry may be stale']
+
+  So the entry point to fix is the decide, not the extractor.
+
+  ## Fix
+
+  1. Fix the DOC BASE decide so a document with no TYPE routes to figure_document_type. Until
+     then API_TOOLS_ID stays null and every JQExV3* call asks apitools about a hash it does not
+     have. (The write-back itself needs no change.)
+
+  2. apitools must not return 200 for file_not_found or missing_ocr_json_queries. 404 and 400
+     respectively. A 200 that means "I did nothing" is the single most expensive shape of bug
+     in this repo's own issue history.
+
+  3. Make the fallback chain assert. If API_TOOLS_ID is absent the workflow should stop and say
+     so, not substitute a hash and ask apitools about a file that cannot exist. The fallbacks
+     were presumably a migration convenience; they now hide the migration never completing.
+
+  ## Update (2026-10-09, hp-dgo)
+
+  Part 2 is DONE and verified: apitools /documentJsonQuery now returns 400 (missing_json_request /
+  missing_file_id / missing_ocr_json_queries / missing_ocr_json_query) and 404 (file_not_found)
+  instead of a swallowed 200, matching /docExists. A Flask test_client regression test proves it
+  (tests/test_api_error_status_codes.py, 5 cases; all returned 200 before, correct 4xx after; OCR
+  query suite unregressed). Commit f9bb96cf. Parts 1 and 3 (the INDOX DOC BASE decide stamping
+  API_TOOLS_ID + the fallback assert) remain — INDOX n8n, blocked by HP's down n8n queue.
+
+  Sibling-endpoint audit (the fix's "one swallowing handler is rarely alone" prescription): /docExists
+  already returns 400, and /documentOcr's upload check returns 400 for "No file part". Two residual
+  swallowed-200s remain in /documentOcr and each needs a LIVE-n8n decision rather than a blind flip,
+  so both are deferred (not fixed here):
+    - ocr_api.py:477 returns `unsupported_file_type` as 200 with `retryable: False`. The 2026-08-10
+      comment just above documents a 657-retry storm from rejected docs, so this 200 may be a
+      DELIBERATE choice to keep n8n's status-based retry from re-firing on an unprocessable file —
+      flipping it to 400/415 could reintroduce that storm. Decide with the live n8n retry config.
+    - ocr_api.py:574 catches a broad `ValueError` that conflates "unsupported file type" (client →
+      400, raised at ocr_processor.py:105) with library processing errors (server → 500). The correct
+      fix splits the handler by exception type; a single status is wrong for one case.
+
+  ## Verification
+
+  Once API_TOOLS_ID is written, this is provable in one call without running a suite:
+
+      POST /documentJsonQuery
+        {"file_id": "<API_TOOLS_ID>",
+         "ocr_json_queries": [{"field":"COMPANY_ID","qkey":"q_v3_company",
+                               "ocr_json_query": <the q_v3_company row from extraction_queries>}]}
+
+  Expect seconds, not milliseconds, and COMPANY_ID=516618881 for the 'Asif Schar Etz' fixtures.
+  Note the payload is an ARRAY; passing the routing dict returns
+  {"error":"missing_ocr_json_queries","message":"ocr_json_queries must be a non-empty array"} —
+  also with HTTP 200.

@@ -1,0 +1,181 @@
+<section class="screen" data-screen="machine-state-storage">
+<style>
+.ms-svcard{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-bottom:20px}
+.ms-t{width:100%;border-collapse:collapse}
+.ms-t td{padding:14px 14px;border-bottom:1px solid #eef1f0;text-align:right;font-size:13.5px;color:#1a1a1a;background:#f7f9f8}
+.ms-t .svc{font-weight:700}
+.ms-t .num{color:#6b7c76}
+.ms-bdg{display:inline-block;padding:3px 12px;border-radius:999px;font-size:12px;font-weight:600}
+.ms-bdg.g{background:#dff5ec;color:#0b7a58}
+.ms-dash{color:#9aa}
+.ms-cpu{display:flex;align-items:center;gap:8px}
+.ms-cbar{flex:1;max-width:80px;height:6px;border-radius:5px;background:#e3e8e5;overflow:hidden}
+.ms-cbar>i{display:block;height:100%;background:var(--green)}
+.ms-tfoot-input{margin:12px 14px 0;height:34px;border:1px solid var(--line);border-radius:9px;background:#fff}
+.ms-tfoot{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;font-size:13.5px}
+.ms-tfoot .r{font-weight:700;color:#1a1a1a}
+.ms-tfoot .l{color:var(--muted)}
+.ms-g2{display:grid;grid-template-columns:3fr 2fr;gap:18px;margin-bottom:22px}
+.ms-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:20px 22px}
+.ms-card .hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+.ms-card h3{margin:0;font-size:17px;font-weight:800;text-align:right}
+.ms-upd{color:var(--muted);font-size:12.5px;direction:ltr;unicode-bidi:plain-text}
+.ms-brow{display:flex;align-items:center;gap:14px;margin-bottom:20px}
+.ms-brow:last-child{margin-bottom:4px}
+.ms-bname{width:120px;flex:0 0 auto;text-align:right}
+.ms-bname b{font-size:14px;font-weight:700;color:#1a1a1a}
+.ms-bname span{display:block;font-size:12px;color:var(--muted);direction:ltr;unicode-bidi:plain-text}
+.ms-btrack{flex:1;height:8px;border-radius:6px;background:#e9edeb;overflow:hidden}
+.ms-bfill{height:100%;border-radius:6px;background:#1f5fbf}
+.ms-bval{width:70px;flex:0 0 auto;text-align:left;font-size:14px;color:#1a1a1a;direction:ltr;unicode-bidi:plain-text}
+.ms-flist .r{display:flex;justify-content:space-between;align-items:center;padding:10px 0;font-size:14px}
+.ms-flist .k{color:var(--muted)}
+.ms-flist .v{color:#1a1a1a;text-align:left;direction:ltr;unicode-bidi:plain-text}
+.ms-prune-hd{display:flex;align-items:center;justify-content:space-between;margin:2px 2px 16px}
+.ms-prune-hd h3{margin:0;font-size:19px;font-weight:800;text-align:right}
+.ms-prune-hd .note{color:var(--muted);font-size:13px}
+.ms-prune{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.ms-pcard{background:#fff;border:1px solid var(--line);border-radius:14px;padding:20px 18px;text-align:center;display:flex;flex-direction:column}
+.ms-pcard .pt{font-size:15px;font-weight:800;color:#1a1a1a;margin-bottom:8px}
+.ms-pcard .risk{font-size:13px;font-weight:700;margin-bottom:12px}
+.ms-pcard .risk.med{color:var(--amber-ink)}
+.ms-pcard .risk.low{color:#0b7a58}
+.ms-pcard .desc{font-size:12.5px;color:#5a6b64;line-height:1.5;margin-bottom:14px;direction:ltr;unicode-bidi:plain-text}
+.ms-pcard .hnote{font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:16px;margin-top:auto}
+.ms-pcard .dbtn{display:block;width:100%;padding:10px;border:1px solid var(--line);border-radius:9px;background:#fafbfb;color:#8a978f;font-weight:700;font-size:13.5px}
+</style>
+<div class="viewport">
+  <aside class="hm-side">
+    <div class="hm-brand"><div class="logo">מ</div><div class="bt"><b>המרכז</b><span>מערכת ניהול העסק</span></div></div>
+    <nav class="hm-nav">
+      <div class="hm-sec">ראשי</div>
+      <a data-nav="dashboard"><span>לוח בקרה</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></a>
+      <div class="hm-sec">עסק</div>
+      <a data-nav="mydocs-dash"><span>מסמכים שלי</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></a>
+      <a data-nav="drive-root"><span>דרייב</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></a>
+      <a data-nav="mail-inbox"><span>מייל</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg></a>
+      <a data-nav="indox-root"><span>מסמכים נכנסים</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5 5h14l3 7v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-6z"/></svg></a>
+      <a data-nav="wadmin-dashboard"><span>בוט ווצאפ</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5.7a8.5 8.5 0 1 1 16.1-3.8z"/></svg></a>
+      <div class="hm-sec">תשתית</div>
+      <a data-nav="kabil"><span>כל‑מקביל</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></a>
+      <a data-nav="notifications"><span>התראות</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></a>
+      <a data-nav="machine" class="on"><span>מכונה</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="6" rx="1"/><rect x="2" y="9" width="20" height="6" rx="1"/><rect x="2" y="15" width="20" height="6" rx="1"/></svg></a>
+      <a data-nav="apps"><span>אפליקציות</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></a>
+      <a data-nav="feature-validation"><span>אימות מערכת</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg></a>
+      <div class="hm-sec">הגדרות</div>
+      <a data-nav="connections-auth"><span>חיבורים ומפתחות</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="15" r="4"/><path d="m10.85 12.15 8.15-8.15 2 2-2 2 2 2-3 3-2-2-2 2"/></svg></a>
+      <a data-nav="console-install"><span>מסך התקנה</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-2.82 1.17V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 8 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 8.6a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9z"/></svg></a>
+    </nav>
+    <div class="hm-foot"><small>מחובר/ת</small><b>authentik Default Admin</b></div>
+  </aside>
+  <main class="hm-main">
+    <div class="hm-top">
+      <div class="grp"><div class="hm-title">מכונה</div><button class="hm-burger">☰</button></div>
+      <div class="grp"><div class="hm-search"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4-4"/></svg><span>חיפוש</span><span class="kbd">Ctrl K</span></div></div>
+      <div class="grp left"><span style="color:var(--muted);font-size:13px">מדדי מארח ו‑Docker</span><div class="pill-amber">⚙ 7 שלבי התקנה</div></div>
+    </div>
+    <div class="hm-scroll"><div class="hm-body">
+
+      <div class="ms-svcard">
+        <table class="ms-t">
+          <tbody>
+            <tr>
+              <td class="svc">redis</td>
+              <td><span class="ms-bdg g">פועל</span></td>
+              <td><span class="ms-bdg g">תקין</span></td>
+              <td><div class="ms-cpu"><span>0.4%</span><div class="ms-cbar"><i style="width:1%"></i></div></div></td>
+              <td>3.4 MB <span class="num">0.7%</span></td>
+              <td>↓2.5 KB ↑528 B</td>
+              <td>6</td>
+              <td></td>
+              <td class="num">9</td>
+            </tr>
+            <tr>
+              <td class="svc">traefik</td>
+              <td><span class="ms-bdg g">פועל</span></td>
+              <td><span class="ms-dash">—</span></td>
+              <td><div class="ms-cpu"><span>0.1%</span><div class="ms-cbar"><i style="width:1%"></i></div></div></td>
+              <td>22 MB <span class="num">4.3%</span></td>
+              <td>↓1.5 KB ↑126 B</td>
+              <td>9</td>
+              <td></td>
+              <td class="num">10</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="ms-tfoot-input"></div>
+        <div class="ms-tfoot"><span class="l">גילוי חופשית — כל הרשומות זמינות</span><span class="r">רשומות 28</span></div>
+      </div>
+
+      <div class="ms-g2">
+        <div class="ms-card">
+          <div class="hd"><h3>סקירת אחסון</h3><span class="ms-upd">עודכן 14:49:32</span></div>
+          <div class="ms-brow">
+            <div class="ms-bval">21 GB</div>
+            <div class="ms-btrack"><div class="ms-bfill" style="width:92%"></div></div>
+            <div class="ms-bname"><b>Docker</b><span>var/lib/docker/</span></div>
+          </div>
+          <div class="ms-brow">
+            <div class="ms-bval">3.5 GB</div>
+            <div class="ms-btrack"><div class="ms-bfill" style="width:70%"></div></div>
+            <div class="ms-bname"><b>OS /usr</b><span>usr/</span></div>
+          </div>
+          <div class="ms-brow">
+            <div class="ms-bval">364 MB</div>
+            <div class="ms-btrack"><div class="ms-bfill" style="width:90%"></div></div>
+            <div class="ms-bname"><b>home</b><span>home/</span></div>
+          </div>
+          <div class="ms-brow">
+            <div class="ms-bval">892 KB</div>
+            <div class="ms-btrack"><div class="ms-bfill" style="width:2%"></div></div>
+            <div class="ms-bname"><b>var logs</b><span>var/log/</span></div>
+          </div>
+        </div>
+        <div class="ms-card">
+          <div class="hd"><h3>אחסון Docker</h3></div>
+          <div class="ms-flist">
+            <div class="r"><span class="k">אימגים</span><span class="v">31 · 23 GB</span></div>
+            <div class="r"><span class="k">כרכים</span><span class="v">14 · 259 MB</span></div>
+            <div class="r"><span class="k">מכולות</span><span class="v">28</span></div>
+            <div class="r"><span class="k">מטמון בנייה</span><span class="v">רשומות 177</span></div>
+            <div class="r"><span class="k">אומדן אימגים לא פעילים</span><span class="v">4.1 GB</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ms-prune-hd"><h3>אפשרויות ניקוי אחסון</h3><span class="note">אין פעולות ניקוי מותרות כרגע</span></div>
+      <div class="ms-prune">
+        <div class="ms-pcard">
+          <div class="pt">Prune inactive images</div>
+          <div class="risk med">סיכון בינוני</div>
+          <div class="desc">Remove images not used by any container. They can be pulled or rebuilt again.</div>
+          <div class="hnote">פעולה זו אינה מאושרת בתצורה הנוכחית</div>
+          <div class="dbtn">מושבת</div>
+        </div>
+        <div class="ms-pcard">
+          <div class="pt">Prune Docker build cache</div>
+          <div class="risk low">סיכון נמוך</div>
+          <div class="desc">Remove rebuild cache. Future builds may take longer.</div>
+          <div class="hnote">פעולה זו אינה מאושרת בתצורה הנוכחית</div>
+          <div class="dbtn">מושבת</div>
+        </div>
+        <div class="ms-pcard">
+          <div class="pt">Prune dangling images</div>
+          <div class="risk low">סיכון נמוך</div>
+          <div class="desc">Remove untagged image layers left by rebuilds.</div>
+          <div class="hnote">פעולה זו אינה מאושרת בתצורה הנוכחית</div>
+          <div class="dbtn">מושבת</div>
+        </div>
+        <div class="ms-pcard">
+          <div class="pt">Prune stopped containers</div>
+          <div class="risk low">סיכון נמוך</div>
+          <div class="desc">Remove containers that are already stopped. Running services are untouched.</div>
+          <div class="hnote">פעולה זו אינה מאושרת בתצורה הנוכחית</div>
+          <div class="dbtn">מושבת</div>
+        </div>
+      </div>
+
+    </div></div>
+  </main>
+</div>
+</section>

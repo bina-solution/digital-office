@@ -1,0 +1,64 @@
+# yaml-language-server: $schema=../schema.json
+title: "n8n Google OAuth re-auth must be done at http://127.0.0.1:5678 (NOT n8n.localhost) — Google forbids *.localhost redirect + cookie-domain must match the callback"
+opened: "2026-06-17"
+category: ops
+severity: low
+status: closed  # 2026-07-30 triage: CONFIRMED — the enabling condition is in place: platform-base/n8n/docker-compose.yml:200 publishes 127.0.0.1:5678:5678 (refs production/compose.override.yml no longer exists).
+summary: "Locally, connecting Google credentials in n8n only works when the n8n UI session is opened at http://127.0.0.1:5678 — Google rejects http://n8n.localhost as a redirect URI, so the OAuth callback lands on 127.0.0.1 and needs the n8n session cookie on that same origin."
+
+description: |
+  ## Symptom
+  After a fresh local stack, connecting (re-authing) a Google credential in n8n from
+  the UI at **http://n8n.localhost** fails. Two failure shapes were seen:
+  - The OAuth popup redirects to `http://127.0.0.1:5678/rest/oauth2-credential/callback`
+    and the browser shows **connection refused** (when n8n isn't published on the host port), or
+  - it reaches n8n but returns **`{"status":"error","message":"Unauthorized"}`** at the callback.
+
+  ## Root cause — two stacked constraints
+  1. **Google forbids `*.localhost` redirect URIs.** Adding
+     `http://n8n.localhost/rest/oauth2-credential/callback` to the OAuth client is rejected
+     with *"Invalid redirect: Must end with a public top-level domain (such as .com or .org)."*
+     Google only accepts `http://localhost` / `http://127.0.0.1` for http redirects. So the
+     registered (and server-side) `redirect_uri` MUST be `http://127.0.0.1:5678/...`.
+  2. **n8n's OAuth callback needs the n8n session cookie**, scoped to the host the user is on.
+     If the UI session is on `n8n.localhost`, the cookie is scoped to `n8n.localhost`; the
+     callback lands on `127.0.0.1:5678` (different origin) → no cookie sent → n8n can't match
+     the OAuth `state` to the session → **Unauthorized**.
+
+  A human's "rewrite the failed callback URL from 127.0.0.1:5678 to n8n.localhost" trick
+  appears to work, but only because n8n's *server-side* `redirect_uri` stays 127.0.0.1:5678
+  (matching the registration) — it is not a real fix and breaks with the cookie check.
+
+  ## Resolution (the supported local procedure)
+  Do the OAuth credential connect with the n8n UI **opened at http://127.0.0.1:5678** so the
+  session cookie and the callback share the `127.0.0.1` origin. For this to work the n8n
+  container is published on host loopback:
+  - `compose.override.yml` → n8n service: `ports: ["127.0.0.1:5678:5678"]` (loopback-only;
+    harmless on the VPS; the `n8n.localhost` Traefik route is untouched).
+  - `.env` → `N8N_OAUTH_BASE=http://127.0.0.1:5678` (local-only opt-in; compose default stays
+    `${N8N_PROTOCOL}://${N8N_BASE_URL}` so prod is unaffected).
+  - OAuth client (project `shlomo-laptop-deployment`) has redirect URIs
+    `http://127.0.0.1:5678/rest/oauth2-credential/callback` + `http://localhost:5678/...`.
+
+  The **browser42-automated** onboarding already does the whole flow on the `127.0.0.1:5678`
+  origin (via an in-container TCP forwarder `127.0.0.1:5678 → n8n`), so it is unaffected and
+  is the primary path. This issue documents the **manual host-browser** procedure.
+
+  ## Not a bug to fix — an inherent local constraint
+  There is no way to make `n8n.localhost` work for Google OAuth locally (Google won't register
+  it). The only alternative to `127.0.0.1` would be giving n8n a real HTTPS hostname
+  (e.g. `*.sslip.io` + local cert, or a tunnel) so the callback can be that https host — then it
+  behaves exactly like the VPS. On the **VPS** (`https://n8n.<domain>`) none of this applies.
+
+tasks:
+  - { text: "Confirm Google rejects http://n8n.localhost redirect (error: must end with public TLD)", done: true }
+  - { text: "Root-cause the Unauthorized callback to session-cookie/origin mismatch", done: true }
+  - { text: "Publish n8n on host loopback (127.0.0.1:5678) so host-browser callback resolves", done: true }
+  - { text: "Document: re-auth Google creds via http://127.0.0.1:5678 only", done: true }
+  - { text: "(optional, deferred) give n8n a real https local hostname so n8n.localhost works too", done: false }
+
+references:
+  - ai/context/setup-google-cloud-login.md
+  - ai/context/incoming-documents-onboarding.md
+  - production/compose.override.yml
+  - data/browser42/fwd.py

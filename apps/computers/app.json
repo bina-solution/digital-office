@@ -1,0 +1,126 @@
+{
+  "id": "computers",
+  "title": {
+    "he": "מחשבים",
+    "en": "Computers"
+  },
+  "layer": 3,
+  "kind": "service",
+  "version": "1.0.0",
+  "summary": {
+    "he": "ניהול המחשבים של הלשכה — המכונה שמריצה אותה ושרתים שמחוברים ב־SSH",
+    "en": "The office's fleet of machines — the host that runs the deployment plus servers attached over SSH"
+  },
+  "capabilities": [
+    {
+      "name": "computers",
+      "type": "service",
+      "interface": "computers.v1",
+      "endpoint": "http://computers:8977",
+      "contract": "platform-service.v1",
+      "required_ops": [
+        "list",
+        "create",
+        "delete",
+        "status",
+        "exec",
+        "stream",
+        "transfer"
+      ]
+    }
+  ],
+  "use": [
+    {
+      "capability": "secrets",
+      "strength": "requires",
+      "after": true
+    },
+    {
+      "capability": "ui-kit",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
+    }
+  ],
+  "connections": [],
+  "compose": "docker-compose.yml",
+  "routing": [
+    {
+      "host": "computers",
+      "port": 8977,
+      "auth": "sso",
+      "module": {
+        "group": "תשתית",
+        "icon": "monitor",
+        "embed": true,
+        "alias": "computers",
+        "id": "computers",
+        "name": "מחשבים",
+        "desc": "המכונה שמריצה את הלשכה ושרתים ב־SSH",
+        "order": 9,
+        "service": "computers",
+        "url_env": "COMPUTERS_URL",
+        "url": "http://computers:8977"
+      },
+      "sso": {
+        "slug": "computers",
+        "display_name": "Computers",
+        "default_host": "computers.localhost",
+        "base_url_env": "COMPUTERS_BASE_URL",
+        "local_twin": true
+      }
+    }
+  ],
+  "health": {
+    "structural": "auto",
+    "probe": {
+      "http": "http://computers:8977/healthz",
+      "interval": "30s"
+    }
+  },
+  "data": {
+    "volumes": [
+      "computers_state"
+    ],
+    "on_uninstall": "prompt"
+  },
+  "resources": {
+    "cpus": "0.3",
+    "memory": "160M"
+  },
+  "observability": {
+    "sentry_platform": "python"
+  },
+  "agent": {
+    "context": "AGENT.md",
+    "order": 20
+  },
+  "contributes": {
+    "connection_probes": {
+      "computer-ssh": {
+        "type": "http",
+        "url": "http://computers:8977/healthz"
+      }
+    },
+    "connection_providers": [
+      {
+        "id": "computer-ssh",
+        "title": "Office SSH key — the machines this deployment connects to",
+        "title_he": "מפתח ה־SSH של הלשכה — המחשבים שהלשכה מתחברת אליהם",
+        "kind": "config",
+        "env": "COMPUTERS_OFFICE_KEY",
+        "optional": true,
+        "platform_protocols": [
+          "computer_ssh"
+        ],
+        "group": "מחשבים",
+        "now": "Nothing to type here, and that is the point: the keypair is minted by the computers app into its OWN volume (computers_state:/data/ssh/office_key) and its private half never leaves it — it is deliberately not an .env value. What this catalog row carries is the PROTOCOL: every connected machine is an INSTANCE of `computer_ssh` (host/port/user in its secret, plus an optional per-machine private key), created and removed from the computers screen at /a/computers/. The probe is the app's own /healthz, so the row is green exactly while the app that serves the fleet is up.",
+        "probe": {
+          "type": "http",
+          "url": "http://computers:8977/healthz"
+        },
+        "wizard": "the computers screen shows the public key and the exact command that approves it on a machine"
+      }
+    ]
+  }
+}

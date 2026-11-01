@@ -1,0 +1,124 @@
+# Facebook through the office browser (browser42). Observed 2026-09-29 in the office browser, which
+# is signed in and acting as the Bina Solutions Page (profile.php?id=61557788151355, English UI):
+#   home: button "What's on your mind, Bina Solutions ?" → dialog "Create post" with an editor that is
+#         a contenteditable named only by aria-placeholder, "Add photos or videos or drag and drop",
+#         and an exact "Post" button (next to "Post audience…", "Boost post…" — hence exact:true);
+#   /me:  "Profile picture actions" → menu "See profile picture" / "Choose profile picture";
+#         "Edit cover photo" → menu "Choose cover photo" / "Upload photo" / "Reposition" / "Remove";
+#         the cover image is img[data-imgperflogname=profileCoverPhoto].
+# Controls are addressed by role + accessible name (Hebrew and English alternatives), resolved by the
+# browser itself; files are handed to the page's own file chooser (choose_file), as a person would.
+# `observed` = read off the live page; `verified` = one watched run passed its read-back. A write
+# that is not `verified` runs only with the owner watching the live view (watch: true).
+platform: facebook
+version: 2
+status: observed
+origin: "https://www.facebook.com"
+session:
+  signed_in: "[aria-label='Your profile'], [aria-label='הפרופיל שלך']"
+  signed_out: "input[name=pass], [data-testid=royal_login_form]"
+ops:
+  profile.get:
+    status: observed
+    steps:
+      - {id: me, action: goto, value: "https://www.facebook.com/me"}
+      - id: read-profile
+        action: extract
+        out: profile
+        function: |
+          async () => {
+            for (let i = 0; i < 80 && !document.querySelector('[role=main]'); i++)
+              await new Promise(r => setTimeout(r, 100));
+            await new Promise(r => setTimeout(r, 2000));
+            const main = document.querySelector('[role=main]');
+            // the page's name is the largest bold line of the header (32px/700 on 2026-09-29);
+            // there is no h1 and the tab title is "(1) Facebook"
+            let name = null, size = 0;
+            for (const e of main ? main.querySelectorAll('span[dir=auto]') : []) {
+              const t = (e.innerText || '').trim(), cs = getComputedStyle(e), fs = parseFloat(cs.fontSize);
+              if (t && t.length < 80 && !t.includes('\n') && fs > size && +cs.fontWeight >= 600) { name = t; size = fs; }
+            }
+            const cover = document.querySelector('img[data-imgperflogname="profileCoverPhoto"]');
+            const avatar = main ? main.querySelector('svg image') : null;
+            const u = new URL(location.href);
+            const links = main ? [...main.querySelectorAll('a[href]')].map(a => a.innerText.trim()).filter(t => /^[a-z0-9.-]+\.[a-z]{2,}(\/\S*)?$/i.test(t)).slice(0, 3) : [];
+            return JSON.stringify({ok: true, value: {
+              name,
+              handle: u.searchParams.get('id') || u.pathname.replace(/\//g, '') || null,
+              bio: null, links,
+              avatar_url: avatar ? (avatar.getAttribute('xlink:href') || avatar.getAttribute('href')) : null,
+              banner_url: cover ? cover.src : null}});
+          }
+
+  post.create.text:
+    status: observed
+    steps:
+      - {id: home, action: goto, value: "https://www.facebook.com/"}
+      - id: open-composer
+        action: click
+        locator: {role: button, name: ["What's on your mind", "על מה את/ה חושב", "על מה אתה חושב", "על מה את חושבת", "מה חדש"]}
+      - {id: dialog, action: wait_for, seconds: 2}
+      - {id: type, action: fill, locator: {css: "div[role=dialog] [role=textbox][contenteditable=true]"}, value: "{text}"}
+      - {id: publish, action: click, locator: {role: button, name: ["Post", "פרסום", "פרסם"], exact: true, pick: last}}
+      - {id: in-feed, action: wait_for, text: "{text_head}", seconds: 25}
+
+  post.create.image:
+    status: observed
+    steps:
+      - {id: home, action: goto, value: "https://www.facebook.com/"}
+      - id: open-composer
+        action: click
+        locator: {role: button, name: ["What's on your mind", "על מה את/ה חושב", "על מה אתה חושב", "על מה את חושבת", "מה חדש"]}
+      - {id: dialog, action: wait_for, seconds: 2}
+      - {id: type, action: fill, locator: {css: "div[role=dialog] [role=textbox][contenteditable=true]"}, value: "{text}"}
+      - id: attach
+        action: choose_file
+        click: {role: button, name: ["Add photos or videos", "Photo/video", "הוספת תמונות", "תמונה/סרטון"]}
+        file: image
+      - {id: preview, action: wait_for, seconds: 5}
+      - {id: publish, action: click, locator: {role: button, name: ["Post", "פרסום", "פרסם"], exact: true, pick: last}}
+      - {id: in-feed, action: wait_for, text: "{text_head}", seconds: 40}
+
+  post.update:
+    status: observed
+    why: "זרימת העריכה נצפתה ב-2026-09-22 (fb-edit-1807) דרך ממשק המשימות של b42"
+    steps:
+      - {id: timeline, action: goto, value: "https://www.facebook.com/me"}
+      - {id: menu, action: click, locator: {role: button, name: ["Actions for this post", "פעולות עבור הפוסט"]}}
+      - {id: edit, action: click, locator: {role: menuitem, name: ["Edit post", "עריכת פוסט"]}}
+      - {id: dialog, action: wait_for, seconds: 2}
+      - {id: type, action: fill, locator: {css: "div[role=dialog] [role=textbox][contenteditable=true]"}, value: "{text}"}
+      - {id: save, action: click, locator: {role: button, name: ["Save", "שמירה", "שמור"], exact: true, pick: last}}
+      - {id: in-feed, action: wait_for, text: "{text_head}", seconds: 20}
+
+  profile.update.avatar:
+    status: draft
+    why: "התפריט נצפה; חלון בחירת התמונה והחיתוך עוד לא"
+    steps:
+      - {id: me, action: goto, value: "https://www.facebook.com/me"}
+      - {id: actions, action: click, locator: {role: button, name: ["Profile picture actions", "פעולות תמונת פרופיל"]}}
+      - {id: choose, action: click, locator: {role: menuitem, name: ["Choose profile picture", "בחירת תמונת פרופיל"]}}
+      - {id: dialog, action: wait_for, seconds: 3}
+      - id: upload
+        action: choose_file
+        click: {role: button, name: ["Upload photo", "Upload Photo", "העלאת תמונה"]}
+        file: avatar
+        spec: avatar
+      - {id: crop, action: wait_for, seconds: 4}
+      - {id: save, action: click, locator: {role: button, name: ["Save", "שמירה"], exact: true, pick: last}}
+      - {id: settle, action: wait_for, seconds: 10}
+
+  profile.update.banner:
+    status: draft
+    why: "התפריט נצפה; מסך המיקום והשמירה עוד לא"
+    steps:
+      - {id: me, action: goto, value: "https://www.facebook.com/me"}
+      - {id: edit, action: click, locator: {role: button, name: ["Edit cover photo", "עריכת תמונת נושא"]}}
+      - id: upload
+        action: choose_file
+        click: {role: menuitem, name: ["Upload photo", "העלאת תמונה"]}
+        file: banner
+        spec: banner
+      - {id: position, action: wait_for, seconds: 5}
+      - {id: save, action: click, locator: {role: button, name: ["Save changes", "שמירת שינויים", "Save"], pick: last}}
+      - {id: settle, action: wait_for, seconds: 10}

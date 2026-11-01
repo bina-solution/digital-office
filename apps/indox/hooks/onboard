@@ -1,0 +1,217 @@
+#!/usr/bin/env bash
+#: first-run: Reset + Setup, then the optional welcome demo
+# onboard — INDOX first-run seeding, after the stack is up and n8n has been restored from blueprint.
+# Invoked generically by `bbox run` (every run) and `bbox onboarding` via run_app_hooks; the platform
+# does not name this app. Safe to call unconditionally — see the schema_present() gate below.
+#
+#   1) Reset + Setup — idempotent: seeds structural config and clears to initial state, all through
+#      the INDOX API layer.
+#   2) optionally inject the 'welcome' demo, so a fresh deployment starts processing immediately.
+#
+# Step 2 now goes through `hooks/demo run welcome` rather than firing the inject workflow bare, which
+# is a deliberate behaviour change: the bare trigger placed documents with no companies and no
+# ai_extraction_cache seeded, so every demo doc took a live AI extraction on a system whose keys are
+# usually still PLACEHOLDER at onboarding time. The blueprint path seeds both first, and the old
+# prompt's "30×5" was stale besides — welcome is 5 documents, one per sync.
+#
+# This was ~35 lines inline in scripts/onboarding, including a THIRD hand-rolled copy of the n8n
+# "log in, fetch workflow, run it from its trigger node" dance (hooks/trigger-wf and demo.py had the
+# other two) and two hardcoded workflow ids. Layer 0 held one app's n8n primary keys; the copies had
+# already drifted — onboarding's used 127.0.0.1 and swallowed stderr, trigger-wf's used localhost and
+# supports a pinned payload. Both steps now delegate to the hooks that own them.
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # colors, say
+
+# `settings` is the witness — apps/indox/blueprint/fixtures/schema.sql creates it alongside the rest
+# of the INDOX model, so its presence means Reset + Setup already ran here at least once.
+schema_present() {
+  # [cutover 2026-08-31] The witness is the REGISTRY + at least one provisioned tenant, no longer
+  # to_regclass('public.settings') — that was a compat VIEW, and the moment the views drop the old
+  # witness reads f on a live months-old deployment and this hook happily re-runs Reset + Setup
+  # over it on every bring-up. A tenant schema holding `settings` is the fact that survives.
+  docker exec "supabase-db-${DN:-$(read_env DEPLOYMENT_NAME)}" \
+    psql -U postgres -d postgres -tAc \
+    "SELECT exists(select 1 from public.indox_instances i
+                    where to_regclass(i.schema_name || '.settings') is not null);" \
+    2>/dev/null | tr -d ' \r'
+}
+
+# ALREADY ONBOARDED, DO NOTHING. This hook now runs unconditionally on every `bbox run` (see
+# `run_app_hooks onboard` in `bbox`'s `run)` case), not just the one-time interactive `bbox
+# onboarding` flow — so it must be safe to call on a deployment that has been live for months.
+# "Reset + Setup" is not merely a seeder: its own name says it CLEARS INDOX to initial state, which
+# would silently wipe a live deployment's documents on every restart if this hook fired every time
+# regardless of prior state. Re-seeding on purpose is `bbox indox reset`, an explicit command; this
+# hook's job is first-run only, and first-run is over the moment the schema it creates exists.
+# CONVERGE THE SYNC REGISTRY — runs on BOTH paths, first-run and every-run.
+#
+# This is deliberately NOT inside the first-run branch. `settings.sync_registry` is
+# the one source of truth for which Drive folders INDOX watches, and until 2026-08-06
+# it had no declarative source at all: a fresh clone + `bbox run` produced a stack
+# with no registry row, so every folder id existed only as live DB state on one
+# machine. Seeding it only on first run would fix the fresh-clone case and leave every
+# existing deployment permanently undeclared — the drift would just never converge.
+#
+# Safe to run on a live deployment, by construction (see the hook's module docstring):
+# it MERGES config over each entry, never writes the engine's runtime keys, and never
+# deletes a pipe the fixture does not mention. Verified idempotent against this
+# deployment: create=0 update=0 unchanged=8.
+converge_sync_registry() {
+  local dn="${DN:-$(read_env DEPLOYMENT_NAME)}"
+  say "[indox] converging sync_registry toward blueprint/fixtures/sync_registry.json…"
+  # npath: on Windows `pwd` yields an MSYS path and python.exe reads it as C:\c\Users\... —
+  # the same conversion apps/indox/hooks/demo and hooks/extract-gate already do. (G10)
+  if python3 "$(npath "${SCRIPT_DIR}")/sync-registry-converge.py" --deployment-name "${dn}"; then
+    say "${cg}[indox] sync_registry converged${c0}"
+  else
+    # LOUD, not fatal: a stack that is otherwise healthy must still come up, and the
+    # hook prints exactly which pipe and which key disagreed.
+    say "${cr}[indox] ⚠ sync_registry convergence reported a problem (see above)${c0}"
+  fi
+}
+
+# ENSURE EVERY TENANT'S SCHEMA - runs on BOTH paths, for exactly the reason
+# converge_sync_registry above runs on both.
+#
+# [cutover 2026-08-31] ONE DOOR: apps/indox/hooks/apply-schema. It owns the instance registry
+# (creates + seeds public.indox_instances), the schema law, and applies blueprint/fixtures/
+# schema.sql INTO EACH TENANT SCHEMA — which now includes the dashboard read model's tables AND
+# its dirty-marking trigger, per tenant. The two mechanisms this replaces were both defects:
+#   * this hook piped schema.sql raw into psql — post-tenancy that file opens with a guard that
+#     REFUSES to apply into `public`, so the raw pipe could only fail;
+#   * scripts/ops/dashboard-stats-schema.sql created a public-only read model wherever someone
+#     once ran it by hand (measured 2026-08-24: present on the laptop, absent on the portable —
+#     and the miss did not look like an outage, because the BFF answers /dashboard/stats with an
+#     HTTP 200 carrying the 404 as payload: the unread-failure class of
+#     apps/indox/issues/unread-failure-defect-class.md). The fixture owning the trigger ends the
+#     class: a tenant exists ⟺ its read model exists.
+# apply-schema is idempotent by construction, so the every-run path is safe — and required: a
+# deployment provisioned before a fixture gained an object must receive it on the next run, not
+# only on fresh installs.
+ensure_tenant_schemas() {
+  say "[indox] ensuring tenant schemas (apply-schema --all, idempotent)..."
+  if "$(npath "${SCRIPT_DIR}")/apply-schema" --all; then
+    say "${cg}[indox] tenant schemas ensured${c0}"
+  else
+    # LOUD, not fatal - same rule as the sync registry above: a stack that is otherwise healthy
+    # must still come up, and the hook above printed exactly which instance failed.
+    say "${cr}[indox] ⚠ apply-schema reported a problem (see above)${c0}"
+  fi
+}
+
+if [ "$(schema_present)" = "t" ]; then
+  say "[indox] already onboarded (public.settings present) — skipping Reset + Setup"
+  converge_sync_registry
+  ensure_tenant_schemas
+  exit 0
+fi
+
+say "[indox] Reset + Setup (seed config + clear to initial state, via the API layer)…"
+
+# TRIGGERED IS NOT DONE. This used to print "Reset + Setup triggered" and move on. A from-zero
+# baseline showed what that hides: the trigger returns as soon as n8n accepts the execution, the
+# workflow then failed, and onboarding declared success on a deployment whose INDOX schema had
+# never been created — supabase held 10 tables, all of them chat_/drive_, and the scheduled INDOX
+# workflows erred every 30s from that moment on (40 errors / 23 successes in the first minutes).
+#
+# So: trigger, then WAIT for the schema the workflow is supposed to create, and say plainly if it
+# never arrives.
+# [2026-08-23] G1.1 -- CREATE THE SCHEMA. This is the step that did not exist.
+#
+# "Reset + Setup" does not create the INDOX model. Its node list goes straight from the trigger
+# to `Kill Main Executions` (postgres) and `Clear Table` (postgres) -- there is no DDL anywhere
+# in it. On a from-zero deployment its first postgres node dies with
+#     NodeOperationError: relation "public.settings" does not exist
+# (measured: execution 79 on a fresh bring-up, status=error), so the wait below could only ever
+# time out and print its warning. That is G1.1 in the release plan: "a from-zero onboarding
+# creates no INDOX schema. The hook now reports it loudly; the workflow still fails."
+#
+# blueprint/fixtures/schema.sql IS the declarative model and app.json already names it as the
+# owner of these tables ("created by blueprint/fixtures/schema.sql") -- nothing applied it.
+#
+# Safe to run unconditionally, checked rather than assumed: 13 CREATE TABLE, all IF NOT EXISTS;
+# 15 CREATE INDEX IF NOT EXISTS; 7 ADD COLUMN IF NOT EXISTS; 11 CREATE OR REPLACE; every DROP is
+# `drop trigger/index if exists` immediately before its recreate; and the only DELETEs are three
+# dedup migrations that remove an un-namespaced ledger row ONLY when its namespaced twin already
+# exists. Nothing here can wipe a deployment that has been live for months -- which matters,
+# because this hook runs on every `bbox run`, not just first install.
+# [cutover 2026-08-31] The raw psql pipe is gone: schema.sql now opens with a guard that refuses
+# to apply into `public` (the tables live in tenant schemas), so the only correct applier is the
+# hook that knows what a tenant is. ensure_tenant_schemas creates the registry, seeds it from
+# platform.state.yaml on a truly fresh database, and applies the fixture into every enabled
+# instance — the G1.1 "a from-zero onboarding creates no INDOX schema" repair, tenancy-shaped.
+ensure_tenant_schemas
+
+# [2026-08-23] REPORT THE OUTCOME, NOT THE MECHANISM.
+#
+# On a FRESH deploy this trigger always fails, and it is not a fault of the id: n8n imports the
+# blueprints AFTER the app onboard hooks run. Measured on a full `down -v` baseline — all 97
+# workflows carry createdAt 12:53:33, one import moment, later than this hook:
+#
+#     [indox] schema applied
+#     workflow not found: IndoxResetFull01
+#
+# The old code printed "could not be triggered — run it from the n8n UI" and stopped there, which
+# reads as a broken deployment. It is not: the schema step above has already created the model,
+# and on a fresh deploy "clear to initial state" has nothing to clear. What matters is whether the
+# INDOX tables exist, so that is what is checked and reported — by both paths, not just one.
+#
+# The genuine ordering defect (hooks before blueprint import) is recorded rather than papered
+# over: a trigger that can never succeed on first run should move after the import, and until it
+# does this hook must not depend on it.
+trigger_rc=0
+bash "${SCRIPT_DIR}/reset" || trigger_rc=$?
+
+ok=0
+for _ in $(seq 1 40); do            # ~2 min, in case the workflow DID run and is still seeding
+  [ "$(schema_present)" = "t" ] && { ok=1; break; }
+  [ "${trigger_rc}" != 0 ] && break # it never started; nothing to wait for
+  sleep 3
+done
+
+if [ "${ok}" = 1 ] && [ "${trigger_rc}" = 0 ]; then
+  say "${cg}[indox] Reset + Setup complete — INDOX schema present${c0}"
+elif [ "${ok}" = 1 ]; then
+  say "${cg}[indox] INDOX schema present${c0} (Reset + Setup was not triggered — n8n imports the"
+  say "${cg}[indox]   blueprints after this hook runs; the schema step above already created it)${c0}"
+else
+  say "${cr}[indox] ⚠ the INDOX schema was NOT created.${c0}"
+  say "${cr}[indox]   This deployment has no INDOX tables; its scheduled workflows will error.${c0}"
+  say "${cr}[indox]   Check blueprint/fixtures/schema.sql applied above, then 'bbox indox reset'.${c0}"
+fi
+
+# Fresh-install path: the schema now exists (Reset + Setup created it), so the registry
+# row can be seeded. This is the call that makes a `git clone` + `bbox run` reproduce a
+# deployment's pipes instead of coming up with none.
+converge_sync_registry
+
+# The dashboard read model (indox_dashboard_stats + its trigger) ships INSIDE the tenant schema
+# since the 2026-08-31 cutover (blueprint/fixtures/schema.sql), so the separate
+# `ensure_dashboard_stats` step that used to `docker cp` scripts/ops/dashboard-stats-schema.sql
+# is gone — but its CALL was left behind, and on every fresh install this hook died here with
+# "ensure_dashboard_stats: command not found" and reported "onboard hook FAILED" (measured
+# 2026-09-17, first run on a new machine). apply-schema above is the one owner now.
+
+# Demo inject: default No. INDOX_DEMO=y|n skips the prompt (CI, unattended installs). run_app_hooks
+# feeds this loop from a process substitution, so stdin is NOT the terminal — read /dev/tty directly
+# and only offer the prompt when there is one to read.
+ans="${INDOX_DEMO:-}"
+if [ -z "${ans}" ] && [ -r /dev/tty ]; then
+  printf "%s" "[indox] Inject the 'welcome' demo now (1 company, 5 docs — one per sync)? [y/N] "
+  read -r ans </dev/tty 2>/dev/null || ans=""
+  echo
+fi
+
+case "${ans}" in
+  [Yy]*)
+    say "[indox] injecting demo company…"
+    if bash "${SCRIPT_DIR}/demo" run welcome; then
+      say "${cg}[indox] demo inject started — watch 'bbox status' / n8n executions${c0}"
+    else
+      say "${cy}[indox] ⚠ demo inject failed${c0}"
+    fi ;;
+  *)
+    say "[indox] skipped demo inject (run later: 'bbox indox demo run <name>', or set INDOX_DEMO=y)" ;;
+esac

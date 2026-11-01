@@ -1,0 +1,45 @@
+# yaml-language-server: $schema=./schema.json
+title: "tmp/bina-ds-restart.sh — an unguarded, untracked restart helper from 09-25 — was run by an agent at 13:43 and took every session down"
+opened: 2026-09-30
+category: bug
+severity: high
+status: resolved
+summary: "A gitignored one-off helper (bare `dc up -d bina-ds`, no quiet-wait, a 30-try health loop that rolls back by re-tagging latest) survived in tmp/ after apps/bina-ds/self-update.sh replaced it. An Azaria session ran it at 13:43 while four other sessions were mid-turn; the recreate applied a new compose definition whose published port 3081 was held by a host forwarder, the start failed, the rollback failed on the same port, and the office agent was down until the port was freed. Retired to tmp/retired/."
+description: |
+  ## What happened
+
+  * 2026-09-25: `tmp/bina-ds-restart.sh` was written as the first attempt at restarting bina-ds
+    from outside itself. It is untracked (tmp/ is gitignored), referenced by no skill or doc, and
+    was superseded on 09-29 by `apps/bina-ds/self-update.sh` (quiet-wait, no-op detection, health
+    gate, rollback, notification).
+  * 2026-09-30 13:43: an Azaria session ran the old helper. It recreated bina-ds onto the working
+    tree's compose (which by then published `${BINA_DS_AGENT_BIND:-127.0.0.1}:${BINA_DS_AGENT_PORT:-3081}:3081`),
+    the start failed — "port is already allocated" (a host-side `python3 /tmp/fwd3081.py` held
+    127.0.0.1:3081) — and the helper's rollback recreated onto the same definition and failed the
+    same way. Four sessions' turns (git, remote-office, timeline, Plane) were cut at 13:37-13:39.
+
+  ## Why it is structural
+
+  Two restart paths existed for one container, and the unguarded one was the easier to find
+  (`ls tmp/`). An agent will always find the shorter path. There must be exactly one, and the
+  skill must name it.
+
+  ## Resolution
+
+  * The helper is moved to `tmp/retired/bina-ds-restart.sh.2026-09-25` (not deleted).
+  * The only restart path is `./scripts/dc up -d [--build] bina-ds`, which lib.sh's
+    bina_ds_self_guard hands to self-update.sh; office-operations SKILL.md documents it.
+  * A published host port is a new failure class for self-update.sh: the pre-flight should check
+    that every host port the new definition publishes is free BEFORE stopping the old container
+    (a `ss -ltn` against the compose render), and refuse with the holder's pid otherwise.
+tasks:
+  - text: "Retire tmp/bina-ds-restart.sh (moved to tmp/retired/)"
+    done: true
+  - text: "self-update.sh: pre-flight — every host port the new render publishes must be free before the old container is stopped; refuse naming the holder (busy_ports: bind probe in the engine's namespace + /proc holder lookup; checked at launch AND again after the quiet wait)"
+    done: true
+  - text: "engine-orphans.sh --clean already reports leftover <hash>_ containers; extend it to flag a Created container whose start error is a port conflict (new section: every non-running container with a State.Error, port conflicts get the ss -ltnp hint)"
+    done: true
+references:
+  - apps/bina-ds/self-update.sh
+  - apps/bina-ds/harness/profile/agent-presets/azaria/skills/office-operations/SKILL.md
+  - scripts/engine-orphans.sh

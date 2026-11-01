@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# `bbox dgo [status]` — what the extension knows and how each declared office is doing.
+#
+# Read from the API when the app is up (the same endpoint the screen uses), and from the state VOLUME
+# when it is not — an app that answers "nothing" because its own container is down is the kind of
+# answer that sends someone looking in the wrong place.
+#
+# This hook runs in two very different places (inside the office's network, and on the machine), so
+# it has three ways in, tried in order: an explicit URL, the compose SERVICE name, and the container
+# itself through docker.
+set -euo pipefail
+VERB="${1:-status}"
+# The container's name carries DEPLOYMENT_NAME, which is NOT exported where this hook may run (the
+# machine, a plain shell): asking for `dgo-extend-bina-deployment` there found nothing and the CLI
+# reported "the app is not answering" for a healthy app. Discovered instead — the only thing that
+# works from every place bbox runs.
+CONTAINER="$(docker ps --filter 'name=^dgo-extend-' --format '{{.Names}}' 2>/dev/null | head -1)"
+
+fetch() {
+  if [ -n "${DGO_EXTEND_URL:-}" ]; then
+    curl -fsS -m 5 "${DGO_EXTEND_URL}/api/office" 2>/dev/null && return 0
+  fi
+  curl -fsS -m 5 "http://dgo-extend:8983/api/office" 2>/dev/null && return 0
+  [ -n "${CONTAINER}" ] || return 1
+  docker exec "${CONTAINER}" python3 -c \
+    "import urllib.request;print(urllib.request.urlopen('http://127.0.0.1:8983/api/office',timeout=5).read().decode())" 2>/dev/null && return 0
+  return 1
+}
+
+case "${VERB}" in
+  status|list|ls|"")
+    if out="$(fetch)"; then
+      printf '%s' "${out}" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+rows = d.get("items") or []
+print("dgo-extend: %d office(s) declared" % len(rows))
+for o in rows:
+    run = o.get("run") or {}
+    placement = ",".join(o.get("placement") or []) or "-"
+    commit = (run.get("commit") or "")[:10]
+    print("  %-10s %-38s run=%-8s %-10s placement=%s" % (
+        o.get("id", ""), o.get("domain", ""), run.get("status", "-"), commit, placement))
+'
+    else
+      echo "dgo-extend: the app is not answering (tried the service name and the container) — reading the state volume"
+      VOL="$(docker volume ls --format '{{.Name}}' 2>/dev/null | grep -E '(^|_)dgo_extend_state$' | head -1 || true)"
+      [ -n "${VOL}" ] || VOL="dgo_extend_state"
+      docker run --rm -v "${VOL}:/data" python:3.12-slim \
+        sh -c 'ls /data/dgo 2>/dev/null || echo "no declarations yet"' 2>/dev/null \
+        || echo "  (the state volume does not exist on this machine)"
+    fi ;;
+  *)
+    echo "usage: bbox dgo [status]" >&2; exit 2 ;;
+esac

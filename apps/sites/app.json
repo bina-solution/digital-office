@@ -1,0 +1,166 @@
+{
+  "id": "sites",
+  "title": {
+    "he": "אתרים",
+    "en": "Sites"
+  },
+  "layer": 3,
+  "kind": "service",
+  "version": "0.2.0",
+  "summary": {
+    "he": "ניהול האתרים של העסק מקצה לקצה — והלשכה גם מגישה אותם בעצמה בנתיב ציבורי: זמינות, ביקורים, אבטחה, SEO, ציון יופי ותוכן שנאסף מהנכסים הדיגיטליים",
+    "en": "The business's websites end to end — and the office serves them itself at a public path: uptime, visits, security, SEO, beauty and content taken from digital assets"
+  },
+  "capabilities": [
+    {
+      "name": "sites",
+      "type": "service",
+      "interface": "sites.v1",
+      "endpoint": "http://sites:8979",
+      "contract": "platform-service.v1",
+      "required_ops": [
+        "listSites",
+        "getSite",
+        "createSite",
+        "deleteSite",
+        "startSite",
+        "stopSite",
+        "checkSite",
+        "uptime",
+        "visits",
+        "scan"
+      ],
+      "optional_ops": [
+        "deploySite",
+        "renderSite",
+        "publishSite",
+        "slots",
+        "applySlots"
+      ]
+    }
+  ],
+  "use": [
+    {
+      "capability": "computers",
+      "strength": "requires",
+      "after": true,
+      "ops": [
+        "list",
+        "status",
+        "exec"
+      ]
+    },
+    {
+      "capability": "domains",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak",
+      "ops": [
+        "listDomains"
+      ]
+    },
+    {
+      "capability": "digital-assets",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak",
+      "ops": [
+        "getBundle"
+      ]
+    },
+    {
+      "capability": "notify",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
+    },
+    {
+      "capability": "ui-kit",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
+    }
+  ],
+  "connections": [],
+  "compose": "docker-compose.yml",
+  "routing": [
+    {
+      "host": "sites",
+      "port": 8979,
+      "auth": "sso",
+      "module": {
+        "group": "עסק",
+        "icon": "browser",
+        "embed": true,
+        "alias": "sites",
+        "id": "sites",
+        "name": "אתרים",
+        "desc": "האתרים של העסק — זמינות, ביקורים, אבטחה ו-SEO",
+        "order": 5,
+        "service": "sites",
+        "url_env": "SITES_URL",
+        "url": "http://sites:8979"
+      },
+      "sso": {
+        "slug": "sites",
+        "display_name": "Sites",
+        "default_host": "sites.localhost",
+        "base_url_env": "SITES_BASE_URL",
+        "local_twin": true
+      }
+    }
+  ],
+  "health": {
+    "structural": "auto",
+    "probe": {
+      "http": "http://sites:8979/healthz",
+      "interval": "30s"
+    }
+  },
+  "data": {
+    "volumes": [
+      "sites_state",
+      "sites_renders"
+    ],
+    "on_uninstall": "prompt"
+  },
+  "resources": {
+    "cpus": "0.5",
+    "memory": "320M"
+  },
+  "observability": {
+    "sentry_platform": "python"
+  },
+  "agent": {
+    "context": "AGENT.md",
+    "order": 25
+  },
+  "contributes": {
+    "connection_probes": {
+      "sites-machines": {
+        "type": "http",
+        "url": "http://sites:8979/healthz"
+      }
+    },
+    "connection_providers": [
+      {
+        "id": "sites-machines",
+        "title": "Site machines — where the business's websites run",
+        "title_he": "מכונות האתרים — איפה האתרים של העסק רצים",
+        "kind": "config",
+        "env": "COMPUTERS_URL",
+        "optional": true,
+        "platform_protocols": [
+          "computer_ssh"
+        ],
+        "group": "אתרים",
+        "now": "Nothing to type here, and that is the point: a machine is an INSTANCE of `computer_ssh` in the credential plane, created and removed from the computers screen at /a/computers/, and the „אתרים” app addresses machines by that instance id only. This row exists so the fleet the sites run on is visible in the same catalog as every other connection. The probe is the sites service's own /healthz — green exactly while the app that watches the sites is up.",
+        "probe": {
+          "type": "http",
+          "url": "http://sites:8979/healthz"
+        },
+        "wizard": "add the machine on the computers screen (approve the office key there), then pick it when creating a site"
+      }
+    ]
+  }
+}

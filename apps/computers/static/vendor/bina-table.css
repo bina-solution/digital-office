@@ -1,0 +1,256 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   bina-table.css — the office's skin for the vanilla bina-table wrapper (RevoGrid).
+   It names the palette's tokens and no colour: every screen that loads it carries
+   the palette block (G27), so a token needs no fallback here. The grid is somebody
+   else's code drawn INSIDE the office's screen, with a sheet of its own that it adds
+   to the page — so it is dressed through ITS variables (every one of them, on
+   `revo-grid` below), and where it writes a colour with no variable (its buttons,
+   its selection, its focus ring) by a rule one step more specific than its own.
+   The simulation's INDOX fork keeps a hand copy of the grid part for its React grid
+   (digital-office/sim/apps/indox/src/index.css): a change here is made there too.
+   Doctrine:
+   enclosed card · soft vertical hairlines · 44/34 rows · em-dash placeholders ·
+   hover-revealed sort/filter · THE RTL STRATEGY (LTR engine, RTL text).
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* enclosed card: toolbar + grid + footer in ONE bordered panel */
+.bt-card{background:var(--surface);border:1px solid var(--line);
+         border-radius:var(--radius,16px);
+         box-shadow:var(--shadow);
+         overflow:hidden}
+.bt-toolbar{display:flex;align-items:center;gap:10px;padding:12px 16px;flex-wrap:wrap;
+            background:var(--surface);border-bottom:1px solid var(--line)}
+.bt-search{border:1px solid var(--line);border-radius:8px;padding:7px 11px;
+           font-family:inherit;font-size:13px;min-width:220px;width:auto;
+           background:var(--surface);color:var(--ink)}
+.bt-count{color:var(--muted);font-size:12.5px;font-weight:600;white-space:nowrap}
+.bt-spacer{margin-inline-start:auto}
+/* A NARROW CARD (`bt-narrow`: the component measures its own width — a phone's frame, a 380px window of the
+   desktop) keeps in sight what is done to ROWS — the search and «הוסף» on one line, the selection under them —
+   and puts what is done to the TABLE behind «עוד». Wide, `.bt-tools` is not a box and the toolbar is as it was. */
+.bt-toolbar > .bt-more{display:none}
+.bt-tools{display:contents}
+.bt-narrow .bt-toolbar{gap:8px;padding:10px 12px}
+.bt-narrow .bt-search{order:-2;flex:1 1 140px;min-width:0}
+.bt-narrow .bt-toolbar > .bt-add{order:-1}
+.bt-narrow .bt-toolbar > .bt-more{display:inline-flex}
+.bt-narrow .bt-tools{display:none}
+.bt-narrow .bt-tools.open{display:flex;flex-wrap:wrap;gap:8px;flex-basis:100%}
+
+/* toolbar buttons — self-contained (apps' .btn variants differ). The buttons of the grid's
+   filter panel ARE these: its confirm is the primary, every other one a ghost (the grid's own
+   are a blue, a green and a red of its own, on a fixed height). */
+.bt-btn,revogr-filter-panel .filter-panel-dialog .revo-button{
+        background:var(--accent);border:1px solid var(--accent);color:var(--accent-ink);
+        border-radius:9px;padding:7px 14px;height:auto;font-family:inherit;font-size:12.5px;font-weight:700;
+        cursor:pointer;line-height:1.2}
+.bt-btn:hover,revogr-filter-panel .filter-panel-dialog .revo-button:hover{background:var(--accent-d);border-color:var(--accent-d)}
+.bt-btn.ghost,revogr-filter-panel .filter-panel-dialog .revo-button:not(.green){background:transparent;border-color:var(--line);color:var(--ink)}
+.bt-btn.ghost:hover,revogr-filter-panel .filter-panel-dialog .revo-button:not(.green):hover{background:var(--surface-2);border-color:var(--line)}
+.bt-btn.ghost.danger{color:var(--red);border-color:var(--plum-line)}
+.bt-btn.ghost.danger:hover{background:var(--danger-soft);color:var(--red)}
+.bt-btn:disabled{opacity:.5;cursor:default}
+
+/* empty state — structurally centered under the header band */
+.bt-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+          padding-top:48px;color:var(--muted);font-size:13px;pointer-events:none}
+
+/* status pills for html: cells (scoped fallback — apps may define their own) */
+.bt-card .pill{padding:2px 10px;border-radius:var(--radius-pill,999px);font-size:11px;
+               font-weight:700;white-space:nowrap;display:inline-block}
+.bt-card .pill.ok{background:var(--accent-soft);color:var(--accent-d)}
+.bt-card .pill.warn{background:var(--warn-soft);color:var(--amber)}
+.bt-card .pill.bad{background:var(--danger-soft);color:var(--red)}
+.bt-card .pill.muted{background:var(--bg);color:var(--muted)}
+
+/* RevoGrid's filter panel, in Hebrew and RTL (the words ride via localization). What is seen is
+   the <dialog> the grid opens INSIDE the host — the host itself is an empty block in the grid, and
+   a skin written on it drew an empty bordered bar over the table's last row. Its colours come
+   through the grid's variables (on `revo-grid`, below); here is what no variable reaches.
+   `right:auto`: a dialog's own `inset-inline` is 0, which on an RTL page pins it to the window's
+   right edge whatever `left` the grid gives it — every panel opened there, not under its column. */
+revogr-filter-panel{direction:rtl}
+revogr-filter-panel dialog.filter-panel-dialog{right:auto;color:var(--ink);border-radius:12px;
+  box-shadow:var(--shadow-lg);font-family:var(--font,"Segoe UI",system-ui,sans-serif);font-size:13px;text-align:start}
+revogr-filter-panel dialog.filter-panel-dialog label{color:var(--muted);font-weight:700;font-size:12px}
+revogr-filter-panel .select-css,revogr-filter-panel dialog.filter-panel-dialog input[type]{
+  border:1px solid var(--line);border-radius:8px;font-family:inherit;font-size:13px;color:var(--ink)}
+/* the arrow is DRAWN (two halves of a triangle), at the reading side's end: the grid's is a picture, in its blue */
+revogr-filter-panel .select-css{padding-inline:.8em 1.8em;
+  background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);
+  background-repeat:no-repeat;background-position:left 9px center,left 14px center;background-size:5px 5px}
+revogr-filter-panel .select-css:focus,revogr-filter-panel dialog.filter-panel-dialog input[type]:focus{
+  border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft);outline:none}
+revogr-filter-panel .multi-filter-list .trash-button:hover{color:var(--red)}
+
+/* RTL text inside the LTR engine */
+.bina-table [class*=rgCell]{direction:rtl;text-align:right}
+.bina-table .header-content{direction:rtl;text-align:right}
+.bina-table [class*=rgHeaderCell]{direction:rtl}
+
+/* headers: muted text; sort ⇅ / filter funnel revealed on hover; active in the accent */
+.bina-table [class*=rgHeaderCell].sortable{cursor:pointer}
+.bina-table [class*=rgHeaderCell] .header-content{color:var(--muted);font-weight:700;font-size:12px}
+.bina-table [class*=rgHeaderCell]:hover .header-content{color:var(--ink)}
+.bina-table .sort-indicator i{font-style:normal;font-size:10px;margin-inline-start:4px}
+.bina-table .sort-indicator i.sort-off::after{content:'⇅';color:var(--muted);opacity:0;transition:opacity .12s}
+.bina-table [class*=rgHeaderCell]:hover .sort-indicator i.sort-off::after{opacity:1}
+.bina-table .sort-indicator i.asc::after{content:'▲';color:var(--accent-d);font-weight:800}
+.bina-table .sort-indicator i.desc::after{content:'▼';color:var(--accent-d);font-weight:800}
+.bina-table [class*=rgHeaderCell].asc .header-content,
+.bina-table [class*=rgHeaderCell].desc .header-content{color:var(--accent-d);font-weight:800}
+.bina-table .rv-filter{opacity:0;transition:opacity .12s}
+.bina-table [class*=rgHeaderCell]:hover .rv-filter,.bina-table .rv-filter.active{opacity:.9}
+.bina-table [class*=rgHeaderCell] .rv-filter .filter-img{color:var(--muted)}
+.bina-table [class*=rgHeaderCell] .rv-filter.active .filter-img{color:var(--accent-d)}
+
+/* footer */
+.bt-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;
+         padding:9px 14px;flex-wrap:wrap;background:var(--surface-2);
+         border-top:1px solid var(--line)}
+.bt-foot .bt-count{color:var(--ink);font-size:12.5px;font-weight:700}
+.bt-foot-hint{color:var(--muted);font-size:11.5px}
+
+/* quick-filter chips */
+.bt-chipsrow{display:flex;gap:8px;flex-wrap:wrap;padding:12px 16px 0;background:var(--surface)}
+.bt-chip{background:var(--surface);border:1px solid var(--line);
+         border-radius:var(--radius-pill,999px);padding:5px 13px;font-family:inherit;
+         font-size:12.5px;font-weight:600;color:var(--muted);cursor:pointer}
+.bt-chip:hover{color:var(--ink);background:var(--surface-2)}
+.bt-chip.active{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}   /* not --side: on the dark ground the tab bar is the surface, and the chosen chip vanished */
+.bt-chip .num{font-weight:800;margin-inline-start:4px}
+
+/* column picker */
+.bt-colpick{position:relative}
+.bt-colpick-menu{position:absolute;inset-inline-end:0;top:calc(100% + 6px);z-index:40;
+                 background:var(--surface);border:1px solid var(--line);
+                 border-radius:10px;box-shadow:var(--shadow-lg);
+                 padding:8px;min-width:200px;max-height:320px;overflow-y:auto;display:block}
+.bt-colpick-item{display:flex;align-items:center;gap:8px;padding:5px 7px;font-size:12.5px;
+                 cursor:pointer;border-radius:6px}
+.bt-colpick-item:hover{background:var(--surface-2)}
+.bt-colpick-item input{width:auto}
+
+/* row-open affordance + link cells */
+.bt-rowclick .bina-table [class*=rgCell]{cursor:pointer}
+.bt-link{color:var(--accent-d);font-weight:600;text-decoration:none}
+[class*=rgCell]:hover .bt-link{text-decoration:underline}
+
+/* rich html cells */
+.bt-htmlcell{display:inline-flex;align-items:center;max-width:100%}
+
+/* per-row actions column */
+.bt-actcell{display:inline-flex;align-items:center;justify-content:center;gap:4px;width:100%}
+.bt-act{background:transparent;border:1px solid var(--line);color:var(--muted);
+        border-radius:7px;width:28px;height:26px;cursor:pointer;font-family:inherit;font-size:13px;
+        line-height:1;display:inline-flex;align-items:center;justify-content:center}
+.bt-act:hover{background:var(--surface-2);color:var(--ink)}
+.bt-act.danger:hover{background:var(--danger-soft);color:var(--red);border-color:var(--plum-line)}
+
+/* client pager */
+.bt-pager{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.bt-pgnav{display:inline-flex;align-items:center;gap:6px}
+.bt-pagesize{color:var(--muted);font-size:12px;display:inline-flex;align-items:center;gap:6px}
+.bt-pagesize select{width:auto;padding:3px 8px;font-size:12.5px;border:1px solid var(--line);
+                    border-radius:7px;background:var(--surface);color:var(--ink)}
+.bt-pgbtn{background:var(--surface);border:1px solid var(--line);border-radius:7px;
+          min-width:28px;height:26px;cursor:pointer;font-family:inherit;color:var(--ink);
+          display:inline-flex;align-items:center;justify-content:center;padding:0}
+/* the grid's drawn marks (`ico_` in bina-table.js); the pager's are turned where the page reads right to left */
+.bt-ico{width:14px;height:14px;flex:none;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+[dir="rtl"] .bt-pgbtn .bt-ico{transform:scaleX(-1)}
+.bt-add{display:inline-flex;align-items:center;gap:5px}
+.bt-pgbtn:hover:not(:disabled){background:var(--surface-2)}
+.bt-pgbtn:disabled{opacity:.4;cursor:default}
+.bt-pageinfo{color:var(--ink);font-size:12.5px;font-weight:600;padding:0 6px;white-space:nowrap}
+
+/* row selection */
+.bt-selbox{width:15px;height:15px;cursor:pointer}
+/* the checkbox/actions CELL: no padding, no ellipsis, dead-center (stray "…" fix) */
+.bina-table .bt-selcell{padding:0!important;display:flex;align-items:center;justify-content:center;
+                        text-overflow:clip;overflow:hidden}
+/* RevoGrid's corner watermark (MIT — attribution preserved in source/licenses) */
+.bina-table revogr-attribution{display:none}
+.bt-selcount{color:var(--accent-d);font-size:12.5px;font-weight:800;white-space:nowrap}
+/* The selection's controls and «בחר הכל» stand in ONE place of one size: both are laid in the same cell and
+   the one that is not said is hidden, not removed. Removed, the three that replace the one took a new line of
+   a toolbar that wraps, and the first tick moved every row 34px down under the finger (390px, 2026-10-10). */
+.bt-selzone{display:inline-grid}
+.bt-selzone > span{grid-area:1/1;display:inline-flex;align-items:center;gap:10px}
+.bt-selzone > .off{visibility:hidden}
+
+/* cell alignment (numeric end-aligned, ERP convention) */
+.bina-table .bt-align-end{text-align:end;font-variant-numeric:tabular-nums}
+.bina-table .bt-align-center{text-align:center}
+
+/* loading overlay */
+.bt-loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:10px;
+            background:color-mix(in srgb,var(--surface) 72%,transparent);color:var(--muted);
+            font-size:13px;font-weight:600;z-index:5}
+.bt-spinner{width:16px;height:16px;border-radius:50%;border:2px solid var(--line);
+            border-top-color:var(--accent);animation:btspin .8s linear infinite}
+@keyframes btspin{to{transform:rotate(360deg)}}
+
+/* (what the table says, it says through the office's notice — `binaTell`, bina-ask.js: no toast of its own) */
+
+/* the grid host — THE RTL STRATEGY + DataGrid feel (enclosed cells, soft
+   vertical hairlines, em-dash placeholders, editable affordance) */
+.bina-table{background:var(--surface)}
+.bina-table [class*=rgCell]{padding-inline:13px;font-size:13px;
+                            border-bottom:1px solid var(--line);
+                            border-inline-end:1px solid var(--line)}
+.bina-table .bt-null{color:var(--muted);opacity:.5}
+.bina-table [class*=rgCell].bt-editable:hover{outline:1px dashed var(--accent);
+                                              outline-offset:-2px;cursor:cell}
+.bina-table revogr-focus .focused-cell,.bina-table .focused-cell{
+  border:1px dashed var(--accent-d)!important}
+/* the grid's own marks have no variable: the focused cell's frame (the dashed one above is the
+   office's), a dragged range and its handle, the range a fill is about to take, the shadow
+   under a column that is being moved */
+.bina-table revo-grid .draggable{box-shadow:var(--shadow-lg)}
+.bina-table revogr-focus.focused-cell{box-shadow:none}
+.bina-table revogr-overlay-selection .selection-border-range{box-shadow:0 0 0 1px var(--accent) inset}
+.bina-table revo-grid revogr-overlay-selection .autofill-handle::before{background:var(--accent);border-color:var(--surface)}
+.bina-table revogr-overlay-selection .selection-border-range .range-handlers>span::after{background-color:var(--muted)}
+.bina-table .temp-bg-range{border-color:var(--blue)}
+/* …and the grid takes the outline OFF two of its keyboard stops (its rows' scroll area, the filter
+   panel's buttons), so the palette's ring is said again for them — the stop showed nothing */
+.bina-table revogr-viewport-scroll .vertical-inner:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+revogr-filter-panel .filter-panel-dialog .revo-button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.bina-table revo-grid{
+  /* engine runs LTR (RevoGrid's rtl mode has hard layout bugs); this overrides
+     the app's global dir=rtl. The wrapper reverses column ORDER and the rules
+     above restore RTL TEXT inside cells/headers. */
+  direction:ltr;
+  display:block;height:100%;
+  font-family:var(--font,"Segoe UI",system-ui,-apple-system,"Noto Sans Hebrew",Arial,sans-serif);
+  font-size:13px;background:var(--surface);
+  /* EVERY colour variable the grid reads (its two shadows aside — they are replaced whole, by
+     the office's). One it is not given falls back to the grid's own: its text is black, its
+     selection blue, its filter panel white — on the dark ground the rows were black on dark
+     and the panel a white card with white writing. */
+  --revo-grid-text:var(--ink);
+  --revo-grid-foreground:var(--ink);
+  --revo-grid-primary:var(--accent);
+  --revo-grid-primary-transparent:var(--accent);
+  --revo-grid-divider:var(--accent);
+  --revo-grid-filter-panel-bg:var(--surface);
+  --revo-grid-filter-panel-border:var(--line);
+  --revo-grid-filter-panel-input-bg:var(--surface);
+  --revo-grid-filter-panel-select-border:var(--line);
+  --revo-grid-filter-panel-select-border-hover:var(--accent);
+  --revo-grid-filter-panel-divider:var(--line);
+  --revo-grid-filter-panel-reorder-accent:var(--accent);
+  --revo-grid-filter-panel-reorder-color:var(--muted);
+  --revo-grid-background:var(--surface);
+  --revo-grid-border:var(--line);
+  --revo-grid-cell-border:transparent;
+  --revo-grid-header-bg:var(--surface-2);
+  --revo-grid-header-border:var(--line);
+  --revo-grid-header-color:var(--muted);
+  --revo-grid-row-hover:var(--surface-2);
+  --revo-grid-focused-bg:var(--accent-soft);
+  --revo-grid-cell-disabled-bg:var(--bg);      /* a cell that is off shows the page's ground through */
+}
+/* a table with no editable column: a cell that cannot be edited is not a cell that is off */
+.bina-table.bt-readonly revo-grid{--revo-grid-cell-disabled-bg:transparent}

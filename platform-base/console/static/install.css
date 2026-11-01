@@ -1,0 +1,73 @@
+/* install.css — the first-run wizard's LAYOUT. Colour comes from /style.css (the shell's copy of the
+   one palette, G27); this file names tokens only and writes no colour of its own (G82).
+   It works in the window it opens in and in the smallest one (380×260, the desktop-mode rule): one
+   column, the step row wraps, the view scrolls, the two actions stay in reach at the bottom. */
+.wiz-body{margin:0;height:100vh;display:flex;justify-content:center;background:var(--bg);color:var(--ink);overflow:hidden}
+/* EXACTLY the viewport's height, never more: the view is the one part that scrolls, so the two
+   actions are on screen at every size (measured 2026-10-09 at 380×260: with min-height they sat
+   below the fold on every step). */
+.wiz{width:min(760px,100%);height:100vh;display:flex;flex-direction:column;gap:12px;padding:16px;box-sizing:border-box}
+.wiz-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px}
+.wiz-head .brand-text b{display:block;font-size:18px}
+.wiz-head .brand-text small{display:block;color:var(--muted);font-size:11px;font-weight:600}
+.wiz-steps{display:flex;flex-wrap:wrap;gap:6px;margin:0;padding:0;list-style:none;counter-reset:s}
+.wiz-steps li{counter-increment:s;font-size:12px;color:var(--muted);padding:3px 9px;border-radius:999px;border:1px solid var(--line);white-space:nowrap}
+.wiz-steps li::before{content:counter(s) " · "}
+.wiz-steps li.on{background:var(--accent-soft);color:var(--accent-d);border-color:transparent;font-weight:700}
+.wiz-steps li.done{color:var(--accent-d)}
+.wiz-view{flex:1 1 auto;min-height:0;overflow:auto;margin:0}
+.wiz-view h2{margin:0 0 6px;font-size:18px}
+.wiz-view p{margin:6px 0;line-height:1.5}
+.wiz-view .sub{color:var(--muted);font-size:12.5px}
+.wiz-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.wiz-actions{display:flex;gap:8px;margin-inline-start:auto}
+.wiz-note{font-size:12px;min-height:1em;color:var(--muted)}
+.wiz-note.bad{color:var(--danger,var(--plum))}
+.btn[disabled]{opacity:.55;cursor:not-allowed}
+/* the terms: a box the person can read to the end, then one checkbox */
+.terms{max-height:38vh;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--bg);font-size:13px;line-height:1.55}
+.terms h3{margin:8px 0 2px;font-size:13.5px}
+.terms p{margin:4px 0}
+.check{display:flex;align-items:center;gap:8px;margin-top:10px;font-weight:600;cursor:pointer}
+/* the office: a name, an animal, a hue — and the mark they make together */
+.field{display:grid;gap:4px;margin:8px 0}
+.field label{font-size:12.5px;color:var(--muted);font-weight:600}
+.field input[type=text]{padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font:inherit;max-width:420px}
+.picks{display:flex;flex-wrap:wrap;gap:8px}
+.pick{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--line);border-radius:10px;background:var(--surface);cursor:pointer;font:inherit;color:var(--ink)}
+.pick[aria-pressed=true]{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft);font-weight:700}
+.pick .ic-svg{width:18px;height:18px}
+.swatch{width:14px;height:14px;border-radius:50%;background:var(--pick-hue);display:inline-block;border:1px solid var(--line)}
+.mark-row{display:flex;align-items:center;gap:12px;margin-top:12px}
+.mark{display:inline-flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:14px;background:var(--pick-hue);color:var(--surface);flex:none}
+.mark .ic-svg{width:28px;height:28px}
+/* the apps: one row per app, the box first (the person reads the name, then decides) */
+.apps{display:grid;gap:8px}
+.app{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:start;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.app input{margin-top:3px}
+.app .name{font-weight:700;display:flex;align-items:center;gap:6px}
+.app .name .ic-svg{width:16px;height:16px;color:var(--muted)}
+.app .sum{color:var(--muted);font-size:12.5px}
+.app .st{font-size:12px}
+.app .st.ok{color:var(--accent-d)}
+.app .st.bad{color:var(--danger,var(--plum))}
+.count{margin-top:10px;font-size:12.5px;color:var(--muted)}
+@media (max-width:420px){.wiz{padding:10px;gap:8px}.wiz-view h2{font-size:16px}.wiz-steps li{font-size:11px;padding:2px 7px}}
+/* a finger, not a pointer: every target is 44px tall (the office's phone rule, DGO-54) */
+@media (pointer:coarse){
+  .wiz-actions .btn,.pick{min-height:44px}
+  .app{min-height:44px;align-items:center}
+  .check{min-height:44px}
+}
+/* the smallest window (380×260): the brand keeps its name only, and a step that is not the current
+   one is its number alone — the row stays ONE line, and the view keeps room to be read in */
+@media (max-height:360px){
+  .wiz{padding:8px 10px;gap:6px}
+  .wiz-head .brand-text small{display:none}
+  .wiz-head .brand .logo{width:24px;height:24px}
+  .wiz-steps li:not(.on){font-size:0;padding:3px 7px}
+  .wiz-steps li:not(.on)::before{font-size:11px;content:counter(s)}
+  .wiz-view{padding:10px 12px}
+  .wiz-view h2{font-size:15px;margin-bottom:4px}
+  .wiz-view p{margin:4px 0;line-height:1.4}
+}

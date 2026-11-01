@@ -1,0 +1,109 @@
+title: "Plane ran with no scheduler: none of its twelve periodic jobs ran, and its API request log grew about 200 MB a day"
+opened: 2026-10-07
+category: ops
+severity: high
+status: resolved
+summary: "apps/project-pln runs four of the AIO's eight programs and `beat` is one of the four it dropped, so nothing was hard-deleted, no automation was applied and no log was pruned. `plane.public.api_activity_logs` reached 504 MB in two and a half days on hp-laptop, with nothing that would ever make it smaller."
+description: |
+  ## What was seen
+
+  The data screen of hp-laptop (2026-10-07 04:00) listed `plane.public.api_activity_logs` at
+  503.9 MB and 26,825 rows — the largest table of the office by an order of magnitude, in an
+  instance that was created on 2026-10-04 and holds 412 work items.
+
+  ## Why
+
+  * Plane writes one row per request made with an API key (`plane/middleware/logger.py`), and the
+    row holds the request's body and the FULL response (`response_body`). The office's own task
+    CLI (`bbox project-pln tasks …`) and the stop hook that asks the hub what is left make such
+    requests all day, and a `tasks list` answers with the whole project: about 19 KB a row.
+  * Upstream prunes that table daily (`plane.bgtasks.cleanup_task.delete_api_logs`, 02:30 UTC,
+    `API_ACTIVITY_LOG_RETENTION_DAYS`, default 14). The job is sent by `beat`.
+  * `apps/project-pln/supervisor.conf` runs migrator, api, worker and proxy. `beat` was dropped
+    with `space` and `live` to fit the engine's memory, with the comment "the worker's own retries
+    still run, scheduled jobs do not". All twelve entries of `plane/celery.py`'s schedule were
+    therefore never sent: hard delete, auto-archive and auto-close of old work items, the email
+    notification stack, and seven clean-ups (API logs, e-mail logs, webhook logs, page versions,
+    description versions, exporter history, unuploaded assets).
+
+  About 200 MB a day, for ever, on a laptop — and a hub whose automations silently did nothing.
+
+  ## The fix (dgo-pair)
+
+  * `apps/project-pln/patches/worker-scheduler.py`: the worker starts with Celery's `-B`, so the
+    scheduler runs inside it. That is the wrong shape for a fleet (every worker would send every
+    job) and the right one here, where the container has ONE worker by construction. No third
+    process: the container went from 556 MiB to 564 MiB. The patch asserts its anchor in upstream's
+    start script, like the other build patches.
+  * `API_ACTIVITY_LOG_RETENTION_DAYS` is set from `PLANE_API_LOG_RETENTION_DAYS` (default 3).
+  * The telemetry job is one of the twelve and stays silent: `patches/no-phone-home.py` gates the
+    task itself on `PLANE_TELEMETRY`.
+  * `apps/project-pln/app.json` declares the whole Postgres instance (`data.sql`), so the data
+    screen attributes these tables to the app instead of listing 110 of them as nobody's.
+
+  ## Measured on hp-laptop after the rebuild (2026-10-07 01:08–01:10 UTC)
+
+      celery -A plane worker -B -l info                       (the worker's command line)
+      [INFO/Beat] beat: Starting...
+      [INFO/ForkPoolWorker-2] Telemetry is off for this deployment (PLANE_TELEMETRY != 1), skipping metrics push
+      [INFO/Beat] Scheduler: Sending due task check-every-five-minutes-to-send-email-notifications
+      [INFO/MainProcess] Task plane.bgtasks.email_notification_task.stack_email_notification[…] received
+
+  The hub answered 409 items straight after. Nothing was pruned by hand: the first prune is the
+  scheduler's own, at 02:30 UTC, and removes what is older than three days — which, for an
+  instance created on 2026-10-04, is nothing until 2026-10-08.
+
+  ## The first scheduled prune (2026-10-07 02:30 UTC), from the worker's log and the database
+
+      02:30:00.014  Scheduler: Sending due task check-every-day-to-delete-api-logs
+      02:30:00.019  Task plane.bgtasks.cleanup_task.delete_api_logs[4cd00cb6-…] received
+      02:30:00.027  API logs cutoff time: 2026-10-04 02:30:00+00:00
+      02:30:06.689  API Activity Log cleanup task completed  total_records_deleted=10518 total_batches=22
+
+  `pg_stat_user_tables` agrees: `n_tup_del` 10,518 and an autovacuum at 02:30:09. No error in the
+  worker's log since it started; two other daily jobs were sent on time (01:30, 02:00). The rows it
+  removed were older than the office: this instance moved in with its history.
+
+  ## What a row keeps (the same day, after the prune)
+
+  The prune bounds the AGE of the log, not its weight. Measured on what was left:
+
+      GET    17,471 rows · 81,450 characters stored per answer on average
+      POST      676 rows ·  4,473
+      PATCH     369 rows ·  1,646
+
+  15,219 rows were written on 2026-10-06 alone, so the table grew by about 300 MB a day and would
+  have settled near 1 GB even with three days of retention. Nothing in Plane reads the column back
+  (`APIActivityLogSerializer` is defined; no view uses it).
+
+  `apps/project-pln/patches/api-log-reads.py` (an asserted build patch): the answer to a GET is not
+  stored. A write's answer is — it is what the request changed. A read's row still says who asked
+  (the token's keyed digest), for what, from where and what code came back.
+
+  Measured after the rebuild, through the office's own CLI:
+
+      one `tasks list`            14 GET rows · stored answer 0 characters · code 200
+      closing a hub item          PATCH 1,729 characters · POST 2,068 characters (201)
+
+  ## Still true
+
+  * Postgres does not give the space back to the disk — it reuses it. The table's file stays at
+    about 540 MB; the large rows already in it leave with the next three daily prunes, and the room
+    they leave serves years of small rows. Nothing was deleted by hand.
+tasks:
+  - text: "Run Plane's scheduled jobs without a third process (worker -B, asserted build patch)"
+    done: true
+  - text: "Bound the API request log (retention from the environment, default 3 days)"
+    done: true
+  - text: "Declare Plane's database so the data screen attributes its tables"
+    done: true
+  - text: "Confirm that the scheduled prune is sent at 02:30 UTC and succeeds (it removed 10,518 rows: the instance had moved in with older history)"
+    done: true
+  - text: "Do not store a read's answer in the request log (asserted build patch; writes keep theirs)"
+    done: true
+references:
+  - apps/project-pln/patches/worker-scheduler.py
+  - apps/project-pln/patches/api-log-reads.py
+  - apps/project-pln/supervisor.conf
+  - apps/project-pln/docker-compose.yml
+  - apps/project-pln/README.md

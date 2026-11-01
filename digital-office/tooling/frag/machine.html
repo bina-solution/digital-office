@@ -1,0 +1,161 @@
+<section class="screen" data-screen="machine">
+<style>
+.mch-actionrow{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+.mch-title{font-size:22px;font-weight:700;margin:0 0 2px}
+.mch-sub{color:var(--muted);font-size:13px;margin-bottom:16px}
+.mch-stats{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:18px}
+.mch-card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+.mch-card .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.mch-card .lab{font-size:12px;color:var(--muted)}
+.mch-card .pill{font-size:11px;border-radius:20px;padding:2px 8px}
+.mch-card .n{font-size:22px;font-weight:700}
+.mch-track{height:6px;border-radius:4px;background:#eee;margin-top:8px;overflow:hidden}
+.mch-fill{height:100%}
+.mch-g2{display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:18px}
+.mch-flist{display:grid;grid-template-columns:1fr 1fr;font-size:13px}
+.mch-flist div{padding:9px 0;border-bottom:1px solid var(--line)}
+.mch-flist .k{color:var(--muted);text-align:right}
+.mch-flist .v{text-align:left;font-weight:400;color:#1a1a1a;direction:ltr;unicode-bidi:plain-text}
+.mch-legend{display:flex;gap:16px;font-size:12px;color:var(--muted);align-items:center}
+.mch-legend b{color:#1a1a1a}
+.mch-legend .ln{display:inline-block;width:16px;height:2px;vertical-align:middle;margin-left:4px}
+.mch-svcrow{display:flex;align-items:center;justify-content:space-between;margin:16px 0 10px}
+.mch-tabs{display:flex;gap:8px}
+.mch-tab{padding:6px 14px;border-radius:8px;font-size:13px;border:1px solid var(--line);background:#fff;color:#333}
+.mch-tab.on{background:var(--sidebar);color:#fff;border-color:var(--sidebar)}
+</style>
+<div class="viewport">
+  <aside class="hm-side">
+    <div class="hm-brand"><div class="logo">מ</div><div class="bt"><b>המרכז</b><span>מערכת ניהול העסק</span></div></div>
+    <nav class="hm-nav">
+      <div class="hm-sec">ראשי</div>
+      <a data-nav="dashboard"><span>לוח בקרה</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></a>
+      <div class="hm-sec">עסק</div>
+      <a data-nav="mydocs-dash"><span>מסמכים שלי</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></a>
+      <a data-nav="drive-root"><span>דרייב</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></a>
+      <a data-nav="mail-inbox"><span>מייל</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg></a>
+      <a data-nav="indox-root"><span>מסמכים נכנסים</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5 5h14l3 7v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-6z"/></svg></a>
+      <a data-nav="wadmin-dashboard"><span>בוט ווצאפ</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5.7a8.5 8.5 0 1 1 16.1-3.8z"/></svg></a>
+      <div class="hm-sec">תשתית</div>
+      <a data-nav="kabil"><span>כל‑מקביל</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></a>
+      <a data-nav="notifications"><span>התראות</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></a>
+      <a data-nav="machine" class="on"><span>מכונה</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="6" rx="1"/><rect x="2" y="9" width="20" height="6" rx="1"/><rect x="2" y="15" width="20" height="6" rx="1"/></svg></a>
+      <a data-nav="apps"><span>אפליקציות</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></a>
+      <a data-nav="feature-validation"><span>אימות מערכת</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg></a>
+      <div class="hm-sec">הגדרות</div>
+      <a data-nav="connections-auth"><span>חיבורים ומפתחות</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="15" r="4"/><path d="m10.85 12.15 8.15-8.15 2 2-2 2 2 2-3 3-2-2-2 2"/></svg></a>
+      <a data-nav="console-install"><span>מסך התקנה</span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-2.82 1.17V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 8 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 8.6a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9z"/></svg></a>
+    </nav>
+    <div class="hm-foot"><small>מחובר/ת</small><b>authentik Default Admin</b></div>
+  </aside>
+  <main class="hm-main">
+    <div class="hm-top">
+      <div class="grp"><div class="hm-title">מכונה</div><button class="hm-burger">☰</button></div>
+      <div class="grp"><div class="hm-search"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4-4"/></svg><span>חיפוש</span><span class="kbd">Ctrl K</span></div></div>
+      <div class="grp left"><span style="color:var(--muted);font-size:13px">מדדי מארח ו‑Docker</span><div class="pill-amber">⚙ 7 שלבי התקנה</div></div>
+    </div>
+    <div class="hm-scroll"><div class="hm-body">
+
+      <div class="mch-actionrow">
+        <span class="badge" style="background:var(--amber-bg);color:var(--amber-ink)">● עודכן לפני 431ש'</span>
+        <button class="btn btn-ghost btn-sm">ניקוי מושבת</button>
+        <button class="btn btn-primary btn-sm">↻ רענן</button>
+      </div>
+
+      <div class="mch-title">מכונה</div>
+      <div class="mch-sub">debuerreotype · Docker Desktop</div>
+
+      <div class="mch-stats">
+        <div class="mch-card">
+          <div class="top"><span class="lab">עומס 12.36</span><span class="lab">מעבד</span></div>
+          <div class="n"><span data-bind="infra.machine.cpu" data-tick>50</span>%</div>
+          <svg width="100%" height="26" viewBox="0 0 220 26" preserveAspectRatio="none" style="margin-top:6px"><polyline fill="none" stroke="var(--blue)" stroke-width="1.5" points="0,20 20,10 40,18 60,6 80,17 100,9 120,19 140,8 160,16 180,10 220,15"/><polygon fill="rgba(37,99,235,.12)" points="0,20 20,10 40,18 60,6 80,17 100,9 120,19 140,8 160,16 180,10 220,15 220,26 0,26"/></svg>
+        </div>
+        <div class="mch-card">
+          <div class="top"><span class="lab">GB / 12 GB 8.1</span><span class="lab">זיכרון</span></div>
+          <div class="n"><span data-bind="infra.machine.mem" data-tick>69</span>%</div>
+          <svg width="100%" height="26" viewBox="0 0 220 26" preserveAspectRatio="none" style="margin-top:6px"><polyline fill="none" stroke="var(--green)" stroke-width="1.5" points="0,15 30,14 60,13 90,15 120,13 150,14 180,12 220,13"/><polygon fill="rgba(14,159,110,.12)" points="0,15 30,14 60,13 90,15 120,13 150,14 180,12 220,13 220,26 0,26"/></svg>
+        </div>
+        <div class="mch-card">
+          <div class="top"><span class="badge" style="background:#eef1ff;color:var(--blue)">GB 5.8 פנוי</span><span class="lab">אחסון</span></div>
+          <div class="n"><span data-bind="infra.machine.disk" data-tick>41</span>%</div>
+          <div class="mch-track"><div class="mch-fill" style="width:2%;background:var(--blue)"></div></div>
+        </div>
+        <div class="mch-card">
+          <div class="top"><span class="badge" style="background:#eef1ff;color:var(--purple)">MB/s 1.9 ↑</span><span class="lab">רשת</span></div>
+          <div class="n">MB 1.9 ↓</div>
+          <svg width="100%" height="26" viewBox="0 0 220 26" preserveAspectRatio="none" style="margin-top:6px"><polyline fill="none" stroke="var(--purple)" stroke-width="1.5" points="0,20 40,21 70,22 95,4 110,22 140,20 170,19 220,19"/><polygon fill="rgba(124,83,201,.12)" points="0,20 40,21 70,22 95,4 110,22 140,20 170,19 220,19 220,26 0,26"/></svg>
+        </div>
+        <div class="mch-card">
+          <div class="top"><span class="badge" style="background:var(--amber-bg);color:var(--amber-ink)">1 לא תקין</span><span class="lab">מכולות</span></div>
+          <div class="n">45/51</div>
+          <div class="mch-track"><div class="mch-fill" style="width:88%;background:var(--gold)"></div></div>
+        </div>
+      </div>
+
+      <div class="mch-g2">
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <h3 style="margin:0">גרף משאבים</h3>
+            <div class="mch-legend">
+              <span><span class="ln" style="background:var(--blue)"></span>1.9MB/s↓ 1.9MB/s רשת</span>
+              <span><span class="ln" style="background:var(--gold);border-top:2px dashed var(--gold)"></span>68% אחסון</span>
+              <span><span class="ln" style="background:var(--green)"></span>22% מעבד</span>
+            </div>
+          </div>
+          <svg width="100%" height="200" viewBox="0 0 620 200" preserveAspectRatio="none" style="margin-top:8px">
+            <line x1="0" y1="150" x2="620" y2="150" stroke="var(--gold)" stroke-width="2"/>
+            <polyline fill="none" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="4 4" points="70,10 120,10 140,60 160,140 180,60 200,10 620,10"/>
+            <polyline fill="none" stroke="var(--green)" stroke-width="2" points="0,95 40,92 80,90 120,88 160,90 200,80 240,78 280,80 320,78 360,80 400,78 440,80 480,78 520,80 560,78 620,80"/>
+            <polyline fill="none" stroke="var(--blue)" stroke-width="1.5" points="0,175 20,170 40,165 60,160 80,110 100,150 120,120 140,180 160,100 180,140 200,60 220,130 240,150 260,110 280,160 300,120 320,150 340,110 360,155 380,130 400,150 420,120 440,160 460,140 480,120 500,150 520,130 540,150 560,140 580,130 600,150 620,140"/>
+          </svg>
+        </div>
+        <div class="card">
+          <h3>פרטי מכונה</h3>
+          <div class="mch-flist">
+            <div class="k">שם מארח</div><div class="v">debuerreotype</div>
+            <div class="k">מערכת הפעלה</div><div class="v">Docker Desktop</div>
+            <div class="k">ליבה</div><div class="v">5.15.146.1-microsoft-standard-WSL2</div>
+            <div class="k">ארכיטקטורה</div><div class="v">x86_64</div>
+            <div class="k">מעבד</div><div class="v">Intel(R) Core(TM) i7-1165G7 @ 2.80GHz · 6 ליבות / 11 תהליכים</div>
+            <div class="k">עומס</div><div class="v">12.36 / 7.87 / 4.84</div>
+            <div class="k">זמן פעילות</div><div class="v">3.8 שעות</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="mch-svcrow">
+        <h3 style="margin:0">שירותים פעילים</h3>
+        <div class="mch-tabs">
+          <div class="mch-tab on">הכל 51</div>
+          <div class="mch-tab">פועל 45</div>
+          <div class="mch-tab">הסתיים 6</div>
+          <div class="mch-tab">לא תקין 1</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input class="searchbox" placeholder="סנן מכולות...">
+          <button class="btn btn-ghost btn-sm">צפוף</button>
+          <button class="btn btn-ghost btn-sm">ייצוא</button>
+        </div>
+      </div>
+
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr><th></th><th style="text-align:right">אימג'</th><th>הפעלות</th><th>ת'</th><th>רשת</th><th>זיכרון</th><th>מעבד</th><th>תקינות</th></tr></thead>
+          <tbody data-list="infra.machine.containers" data-row='<tr>
+              <td>{{i}}</td>
+              <td style="text-align:right;font-family:monospace">{{name}}</td>
+              <td>0</td>
+              <td>—</td>
+              <td>—</td>
+              <td>{{mem}} MB</td>
+              <td>{{cpu}}%</td>
+              <td><span class="badge badge-green">תקין</span></td>
+            </tr>'></tbody>
+        </table>
+      </div>
+
+    </div></div>
+  </main>
+</div>
+</section>

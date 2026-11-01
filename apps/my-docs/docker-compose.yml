@@ -1,0 +1,51 @@
+services:
+  my-docs:
+    # The image CI publishes for this commit (DGO-41). `pull_policy: missing` means it is
+    # fetched only when it is not here already, so a checkout that has built it is untouched;
+    # the `build:` below stays as the fallback. Needs the GHCR package readable — a package made
+    # from a private repo is private, so `docker login ghcr.io` on a machine that must pull.
+    #
+    # It used to be `image: my-docs-local:latest`, a local tag no registry has — so CI published an
+    # image under a name this compose never asked for.
+    image: ghcr.io/solomonboltin/digital-office/my-docs:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    build:
+      context: .
+    container_name: my-docs
+    restart: unless-stopped
+    environment:
+      - SENTRY_DSN=${MY_DOCS_SENTRY_DSN:-}
+      - DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-bina-deployment}
+      - APITOOLS_URL=${MY_DOCS_APITOOLS_URL:-http://apitools:8080}
+    networks:
+      - traefik-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 256M
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik-network
+      # local
+      - traefik.http.routers.my-docs-local.rule=Host(`my-docs.localhost`)
+      - traefik.http.routers.my-docs-local.entrypoints=web
+      - traefik.http.routers.my-docs-local.service=my-docs
+      - traefik.http.routers.my-docs-local.middlewares=authentik@file
+      # http (deployment domain)
+      - traefik.http.routers.my-docs-http.rule=Host(`${MY_DOCS_BASE_URL}`)
+      - traefik.http.routers.my-docs-http.entrypoints=web
+      - traefik.http.routers.my-docs-http.service=my-docs
+      - traefik.http.routers.my-docs-http.middlewares=authentik@file
+      # https
+      - traefik.http.routers.my-docs-https.rule=Host(`${MY_DOCS_BASE_URL}`)
+      - traefik.http.routers.my-docs-https.entrypoints=websecure
+      - traefik.http.routers.my-docs-https.tls=true
+      - traefik.http.routers.my-docs-https.tls.certresolver=myresolver
+      - traefik.http.routers.my-docs-https.service=my-docs
+      - traefik.http.routers.my-docs-https.middlewares=authentik@file
+      - traefik.http.services.my-docs.loadbalancer.server.port=8000
+
+networks:
+  traefik-network:
+    external: true

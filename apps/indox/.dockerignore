@@ -1,0 +1,18 @@
+# The Dockerfile only ever COPYs app/ (and app/webapp/ for the frontend build stage) — everything
+# else here is platform orchestration (hooks/, docker-compose.yml, app.json), runtime-mounted data
+# (blueprint/demo-docs, storage — both bind-mounted, never baked in), or local scratch (ci-artifacts).
+# Without this file `bbox run --build` had to walk all 148M/thousands of files under apps/indox/ on
+# every invocation just to find the ~450K actually relevant to app/ — the dominant cost of adding
+# `--build` to bbox run (see bbox's own comment on that flag).
+*
+!app/
+!app/**
+
+# The REAL cost, found by measuring rather than guessing: not the byte count (441KB, same before
+# and after the excludes above — barely moved the timing) but the FILE count. app/webapp/node_modules
+# is a local host copy the Dockerfile never reads (its own `RUN npm install` builds a fresh one
+# inside the image) and app/**/__pycache__ is never read either — together thousands of small files,
+# and each one costs a syscall round-trip on WSL's /mnt/c. Excluding them is what actually moves the
+# number: a same-context rebuild on this platform.
+app/webapp/node_modules
+**/__pycache__

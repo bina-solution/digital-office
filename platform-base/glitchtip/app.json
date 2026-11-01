@@ -1,0 +1,160 @@
+{
+  "id": "glitchtip",
+  "title": {
+    "he": "מעקב שגיאות",
+    "en": "GlitchTip"
+  },
+  "layer": 2,
+  "kind": "service",
+  "version": "1.0.0",
+  "summary": {
+    "he": "מעקב שגיאות תואם Sentry",
+    "en": "Sentry-compatible error tracking"
+  },
+  "capabilities": [
+    {
+      "name": "error-tracking",
+      "type": "protocol",
+      "endpoint": "http://glitchtip:8000"
+    }
+  ],
+  "use": [
+    {
+      "capability": "sql",
+      "strength": "requires",
+      "after": true,
+      "own_instance": true,
+      "reason": "glitchtip is Django with Docker-only upstream packaging. It is scheduled to move to the gallery rather than be consolidated - nothing `requires` error-tracking, only `wants` it (packaging/OPTIMISATION.md phase 4)."
+    },
+    {
+      "capability": "kv",
+      "strength": "requires",
+      "own_instance": true,
+      "reason": "glitchtip ships its own valkey for its Celery broker. It was running undeclared - the graph did not know this app used a key-value store at all. Declared here so it is visible; removed when glitchtip moves to the gallery."
+    }
+  ],
+  "connections": [
+    {
+      "id": "glitchtip-secret-key",
+      "required": true
+    },
+    {
+      "id": "glitchtip-db-password",
+      "required": true
+    },
+    {
+      "id": "glitchtip-admin",
+      "required": false
+    },
+    {
+      "id": "glitchtip-api-token",
+      "required": false
+    }
+  ],
+  "compose": "docker-compose.yml",
+  "routing": [
+    {
+      "host": "glitchtip",
+      "port": 8000,
+      "auth": "none",
+      "emit_labels": false,
+      "module": {
+        "name": "GlitchTip",
+        "icon": "alert",
+        "desc": "מעקב שגיאות ואירועים",
+        "group": "תשתית",
+        "order": 220,
+        "embed": false
+      }
+    }
+  ],
+  "health": {
+    "structural": "auto",
+    "probe": {
+      "http": "http://glitchtip:8000/_health/",
+      "interval": "30s"
+    }
+  },
+  "data": {
+    "volumes": [
+      "glitchtip_postgres_data",
+      "glitchtip_uploads"
+    ],
+    "on_uninstall": "prompt",
+    "sql": [
+      {
+        "instance": "glitchtip-postgres",
+        "database": "glitchtip",
+        "note": "glitchtip owns this instance entirely - error events and issues"
+      }
+    ],
+    "kv": [
+      {
+        "instance": "glitchtip-valkey",
+        "db": 0,
+        "durable": false,
+        "note": "celery broker and cache - rebuilt on demand, not restored"
+      }
+    ]
+  },
+  "contributes": {
+    "connection_providers": [
+      {
+        "id": "glitchtip-secret-key",
+        "automint": {
+          "type": "hex",
+          "bytes": 32
+        },
+        "title": "GlitchTip Django secret (also the DSN seed)",
+        "kind": "text-secret",
+        "env": "GLITCHTIP_SECRET_KEY",
+        "now": "plain env -> glitchtip; ALSO the deterministic seed for every project DSN (sha256(GLITCHTIP_SECRET_KEY:project)) so DSNs survive down -v",
+        "probe": {
+          "type": "http",
+          "url": "http://glitchtip:8000/_health/"
+        },
+        "wizard": "auto-mint"
+      },
+      {
+        "id": "glitchtip-db-password",
+        "automint": {
+          "type": "password",
+          "chars": 24
+        },
+        "title": "GlitchTip Postgres password",
+        "kind": "password",
+        "env": "GLITCHTIP_DB_PASSWORD",
+        "now": "plain env -> glitchtip-postgres — glitchtip-postgres sits on the isolated glitchtip-internal network, which the plane cannot reach, so the probe asks the glitchtip app: its /_health/ covers the database.",
+        "probe": {
+          "type": "http",
+          "url": "http://glitchtip:8000/_health/"
+        },
+        "wizard": "auto-mint"
+      },
+      {
+        "id": "glitchtip-admin",
+        "automint": {
+          "type": "password",
+          "chars": 24
+        },
+        "title": "GlitchTip admin account",
+        "kind": "password",
+        "pillar": "app-password",
+        "app": {
+          "name": "GlitchTip",
+          "url_env": "GLITCHTIP_BASE_URL",
+          "user_env": "GLITCHTIP_ADMIN_EMAIL"
+        },
+        "env": "GLITCHTIP_ADMIN_PASSWORD",
+        "envs_extra": [
+          "GLITCHTIP_ADMIN_EMAIL"
+        ],
+        "now": "env -> superuser auto-created by scripts/glitchtip-push (idempotent)",
+        "probe": {
+          "type": "present"
+        },
+        "wizard": "human login: wizard form"
+      }
+    ]
+  }
+}

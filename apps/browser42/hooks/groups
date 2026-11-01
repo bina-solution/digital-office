@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+#: list live session groups (slug, created, last-seen, tabs)
+# groups — list every registered group and how many live tabs each owns, newest first.
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # say, die, colors, DOCKER_HOST
+
+BROWSER="$(docker ps --filter name=browser42-browser --format '{{.Names}}' | head -1)"
+[ -n "${BROWSER}" ] || die "browser42-browser not running — run 'bbox run' first"
+docker exec -i "${BROWSER}" python3 /group-manager.py list "$@"

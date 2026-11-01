@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+#: re-drive sync items from OUR rows (RESET op) — no folder moves, no label edits
+# bbox indox sync reset — re-queue sync items by flipping their sync_item rows back to
+# `discovered` (attempts/backoff/error cleared) and dropping the pipe's search cursor, so the
+# next sync pass takes them again FROM THE ROWS. Nothing is moved at the source: where a file or
+# message sits is a user-visible mark, not sync state (owner rule, 2026-09-02).
+#
+#   bbox indox sync reset                    # every pipe of the tenant
+#   bbox indox sync reset --sync-name=X      # one pipe (drive-bs | gmail-doc | ...)
+#   bbox indox sync reset --purge            # DELETE the rows instead of flipping them
+#                                            # (test teardown only — history is lost)
+#   bbox indox sync reset --instance=<id>    # tenant (else the sole production tenant resolves)
+#
+# The op is the Sync Item API's RESET (syncLedgerApi01, the only writer of sync_ledger); this
+# hook never touches the table itself. The workflow is self-contained (no executeWorkflow
+# cascade), so the REST /run + pinned-trigger path used by trigger-wf carries the request whole.
+set -euo pipefail
+export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # REPO_ROOT, N8N_CONTAINER, DN
+. "${SCRIPT_DIR:-$(dirname "$0")}/_schema-lib.sh"   # INDOX_PG + indox_resolve_instance
+_INST_ARG=""
+for _a in "$@"; do case "${_a}" in --instance=*) _INST_ARG="${_a#--instance=}" ;; esac; done
+IFS='|' read -r _IID SCH <<<"$(indox_resolve_instance "${_INST_ARG}")"
+[ -n "${SCH:-}" ] || exit 1
+INST="${SCH#indox_}"
+
+SYNC=""; PURGE=false
+for a in "$@"; do case "$a" in
+  --sync-name=*|-sync-name=*) SYNC="${a#*=}" ;;
+  --purge|-purge) PURGE=true ;;
+  --all|-all|--instance=*) : ;;
+  --last_n=*|-last_n=*) echo "[sync-reset] --last_n is gone: a reset flips rows, it no longer moves items; use --sync-name to scope" >&2 ;;
+  *) echo "[sync-reset] unknown arg: $a" >&2; exit 2 ;;
+esac; done
+
+if [ -n "$SYNC" ]; then
+  PAYLOAD="{\"op\":\"RESET\",\"source\":\"${SYNC}\",\"purge\":${PURGE},\"__instance\":\"${INST}\"}"
+else
+  PAYLOAD="{\"op\":\"RESET\",\"source_like\":\"%\",\"purge\":${PURGE},\"__instance\":\"${INST}\"}"
+fi
+echo "[sync-reset] tenant=${INST} scope=${SYNC:-ALL} purge=${PURGE}"
+bash "${SCRIPT_DIR}/trigger-wf" syncLedgerApi01 "${PAYLOAD}"
+echo "[sync-reset] queued — rows return to 'discovered' (or are purged); the next sync pass takes them. Check 'bbox indox sync state'."

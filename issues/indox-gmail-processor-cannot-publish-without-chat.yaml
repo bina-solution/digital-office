@@ -1,0 +1,55 @@
+# yaml-language-server: $schema=./schema.json
+title: indoxGmailActionProcessor01 cannot publish in the lean INDOX lane — it reaches into the chat app
+opened: '2026-08-21'
+severity: medium
+status: open
+summary: indoxGmailActionProcessor01 cannot publish in the lean INDOX lane — it reaches into the chat app
+description: |
+  area: n8n publish / lane definition / cross-app coupling
+
+  ## Context
+
+  `bbox n8n push indox --all` fails in the lean INDOX lane — the same lane CI's indox-e2e
+  workflow derives and runs:
+
+      [push-app] FAIL update indoxGmailActionProcessor01 HTTP 400
+        {"message":"Cannot publish workflow: Node \"Run Send Document WF\" references workflow
+         whatsappSendDoc01 (\"WhatsApp Send Document\") ..."}
+      [push-app] FAILED — see lines above; cache NOT updated for failed ids.
+
+  n8n refuses to publish a workflow whose executeWorkflow target is not itself importable /
+  published — the publish gate this repo already documents. `whatsappSendDoc01` belongs to
+  apps/chat, and the lean lane deliberately excludes chat: indox-e2e.yml says so in as many
+  words, "chat is not in indox's capability closure (LANE_ROOTS above), so the derived SERVICES
+  never names it".
+
+  So one INDOX workflow has a hard dependency on an app the INDOX lane is defined not to start.
+
+  ## Why it matters
+
+  - The push exits non-zero, which any lane treating `bbox n8n push` as a gate will read as a
+    broken deploy. It is not broken; it is incomplete in a way the lane guarantees.
+  - 66 of 97 workflows are active afterwards, so the estate is MOSTLY published. A partial
+    publish that reports failure is hard to reason about: the next person cannot tell whether
+    the one failure mattered.
+  - G38 (dangling-workflow-ref-lint) passes, correctly — the reference resolves in a full
+    estate. This is not a dangling reference, it is a lane/closure mismatch, and no gate models
+    that today.
+
+  ## Options
+
+  1. Declare the dependency. If sending a document over WhatsApp is genuinely part of the INDOX
+     gmail action path, chat belongs in indox's capability `use` list, and LANE_ROOTS follows
+     from the graph rather than from a hand-written exclusion.
+  2. Break the coupling. Route it through a capability (an app that PROVIDES "send-document")
+     instead of naming another app's workflow id directly — which is the platform's own rule
+     everywhere else.
+  3. Make the lane honest. If neither, the push step in this lane should tolerate exactly this
+     one skip and say so, rather than returning a bare non-zero that reads as total failure.
+     Least good of the three: it encodes the exception in the runner instead of the model.
+
+  ## Note
+
+  Found by an unattended full-checklist sweep on 2026-08-21, not by CI — CI's indox-e2e runs
+  `bbox n8n push all` (whole estate, chat included in the import even though the lane does not
+  START it), which is why the lane has been green on this point and a scoped `push indox` is not.

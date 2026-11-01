@@ -1,0 +1,51 @@
+{
+  "feature": "aligned-value-extraction",
+  "description": "Validate aligned value extraction (find-after, find-below) using Google Vision OCR on synthetic and real documents.",
+  "endpoint": "/documentJsonQuery",
+  "upload_endpoint": "/documentOcr",
+  "upload_query_params": {
+    "cache": "false"
+  },
+  "cases_source": "fixtures/fixtures.json",
+  "query_params": {
+    "draw": "1"
+  },
+  "assertions": [
+    {
+      "name": "match_present",
+      "source": "analysis.result_value",
+      "operator": "truthy"
+    },
+    {
+      "name": "validations_passed",
+      "source": "analysis.error",
+      "operator": "is_none"
+    },
+    {
+      "name": "drawing_path_created",
+      "source": "analysis.drawing_path",
+      "operator": "truthy"
+    },
+    {
+      "name": "result_value_equals",
+      "source": "analysis.result_value",
+      "operator": "equals"
+    },
+    {
+      "name": "aligned_value_equals",
+      "source": "analysis.aligned_value",
+      "operator": "equals"
+    },
+    {
+      "name": "text_match_equals",
+      "source": "analysis.text_match",
+      "operator": "equals"
+    }
+  ],
+  "expected": {
+    "match_present": true,
+    "validations_passed": true,
+    "drawing_path_created": true,
+    "notes": "match_text should equal the certificate/account number immediately below the anchor label"
+  }
+}

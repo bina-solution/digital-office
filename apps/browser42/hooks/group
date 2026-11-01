@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+#: get-or-use the session's direct-site tab group; print the attach snippet
+# group — get-or-create the group's anchor tab (tagged b42g:<slug>) at the requested URL
+# and print a copy-paste Playwright snippet bound to it. With no slug, uses the current
+# session slug (explicit name > $BROWSER42_SESSION > `.current`) and a direct website URL.
+# Same slug => same group/tab, forever. All groups share cookies + /view.
+# Example: bbox b42 group task-abc https://example.com
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # say, die, colors, DOCKER_HOST
+
+BROWSER="$(docker ps --filter name=browser42-browser --format '{{.Names}}' | head -1)"
+[ -n "${BROWSER}" ] || die "browser42-browser not running — run 'bbox run' first"
+docker exec -e BROWSER42_SESSION="${BROWSER42_SESSION:-}" -i "${BROWSER}" python3 /group-manager.py open "$@"

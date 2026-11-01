@@ -1,0 +1,59 @@
+# Instagram through the office browser — the only door for PROFILE edits (Instagram's API has none).
+# Terms: broad "no automated access" clause → few, owner-initiated actions only (platforms.yaml).
+# The display NAME moved to Meta's Accounts Center, so it is not on this page and not scripted here.
+# DRAFT: every write needs a watched first run.
+platform: instagram
+version: 1
+status: draft
+origin: "https://www.instagram.com"
+session:
+  signed_in: "a[href='/direct/inbox/'], svg[aria-label='Home'], svg[aria-label='דף הבית'], a[href='/accounts/edit/']"
+  signed_out: "input[type=password], input[name=email]"
+  wait: 12
+ops:
+  profile.get:
+    status: draft
+    why: "קריאה בלבד — מי מחובר (קישור „פרופיל” בתפריט), ואז תגיות המטא של עמוד הפרופיל"
+    steps:
+      - {id: home, action: goto, value: "https://www.instagram.com/"}
+      - id: me
+        action: extract
+        out: me
+        function: |
+          async () => {
+            const find = () => [...document.querySelectorAll('a[href^="/"]')].find(a =>
+              /^(Profile|פרופיל)$/.test((a.innerText || a.getAttribute('aria-label') || '').trim()));
+            let a = null;
+            for (let i = 0; i < 100 && !(a = find()); i++) await new Promise(r => setTimeout(r, 100));
+            const handle = a ? a.getAttribute('href').replace(/\//g, '') : '';
+            return JSON.stringify(handle ? {ok: true, value: {handle}} : {ok: false, error: 'no_profile_link'});
+          }
+      - {id: profile, action: goto, value: "https://www.instagram.com/{me_handle}/"}
+      - id: read-profile
+        action: extract
+        out: profile
+        function: |
+          async () => {
+            for (let i = 0; i < 40 && !document.querySelector('meta[property="og:title"]'); i++)
+              await new Promise(r => setTimeout(r, 100));
+            const m = (p) => (document.querySelector('meta[property="' + p + '"]') || {}).content || null;
+            const title = m('og:title') || '';
+            return JSON.stringify({ok: true, value: {name: title.split(' (')[0] || null,
+              handle: location.pathname.replace(/\//g, '') || null, bio: m('og:description'),
+              avatar_url: m('og:image')}});
+          }
+  profile.update.bio:
+    status: draft
+    steps:
+      - {id: edit, action: goto, value: "https://www.instagram.com/accounts/edit/"}
+      - {id: type, action: js_fill, css: "textarea#pepBio, textarea[name=biography], textarea", value: "{bio}"}
+      - {id: submit, action: click, locator: {role: button, name: ["Submit", "שליחה", "שמירה"], exact: true}}
+      - {id: saved, action: wait_for, seconds: 4}
+  profile.update.avatar:
+    status: draft
+    why: "חלון החלפת התמונה טרם נצפה"
+    steps:
+      - {id: edit, action: goto, value: "https://www.instagram.com/accounts/edit/"}
+      - {id: open, action: click, locator: {role: button, name: ["Change photo", "שינוי תמונה"]}}
+      - {id: give-file, action: upload, css: "input[type=file][accept*=image]", file: avatar, spec: avatar}
+      - {id: settle, action: wait_for, seconds: 6}

@@ -1,0 +1,88 @@
+# yaml-language-server: $schema=./schema.json
+title: "A direct HP↔vps1 link cannot be paired today: vps1 runs a commit that predates the pairing flow, and the HP's tunnel never completes a handshake"
+opened: 2026-10-07
+category: ops
+severity: high
+status: blocked
+summary: "The owner's request (via the HP office, 2026-10-07): «תשתמש בחיבור שיש לך דרך הלשכה במק כדי לייצר חיבור ישיר בין הלשכה פה והלשכה VPS כדי שאוכל לגשת לניהול משימות מכל מקום». Measured today: the two offices are NOT linked to each other and the link cannot be created from here. (1) vps1 runs `dad40e66` (314 commits behind `origin/dgo-stable`) and that commit has no `apps/dgo-extend/pair_api.py` at all — `GET /api/pair/invite` answers 404 — so it can neither issue nor accept an invite, and only one of the two ends can. (2) The HP's end of the Mac pair is silent: `wg show wg4` reports `0 B received` and no handshake, the link door answers nothing (`Host: plane.hp-laptop` → connection failed) and its catalog pull ends in `ConnectionResetError`, so the HP's own API is unreachable from here and it cannot accept an invite either. Blocked on the owner's decision on (1) and on the HP's WSL on (2)."
+description: |
+  ## What was asked
+
+  The owner wants to reach the office's task management (Plane, which runs on the HP) from
+  anywhere. The link is point-to-point by design — an office publishes only its OWN apps into a
+  peer's catalog, and the Mac's own firewall drops peer→peer traffic
+  (`iifname { "wg2", "wg4" } oifname { "wg2", "wg4" } drop`, forward `policy drop`) — so a chain
+  vps1 → macbook → hp-laptop does not exist and cannot be made to exist. The direct pair is the
+  only shape that answers the request.
+
+  ## Measured (2026-10-07, from the MacBook office)
+
+  ```
+  curl -s http://172.18.0.12:9402/api/context | jq .home.commit   # vps1: dad40e66b4dea1e100a6414779c827fd764ab446
+  curl -s http://172.18.0.12:9402/api/pair/invite                 # 404 {"detail":"Not Found"} — no pair API there
+  git cat-file -e dad40e66:apps/dgo-extend/pair_api.py            # absent; pair_api landed after it (7671167d)
+  git rev-list --count dad40e66..origin/dgo-stable                # 314
+  docker exec dgo-net-local wg show wg4                           # 0 B received, 180.23 KiB sent, no handshake
+  curl -H 'Host: plane.hp-laptop' http://172.18.0.12:9004/        # no answer (000)
+  curl -s http://dgo-extend:8983/api/link | jq '.items[] | {office, verdict}'
+  #   hp-laptop: {"ok":false,"hop":"office"}   vps1: {"ok":true}
+  ```
+
+  ## The two blockers
+
+  1. **vps1 has no pairing code.** `pair_api.py` (invite / accept / redeem) landed after its
+     commit, and a pair needs both ends to hold the record: whichever end invites, the other
+     must accept. So the pair needs vps1 converged to a commit that carries the flow
+     (`origin/dgo-stable` is a clean fast-forward from `dad40e66`, and it is what the vps1
+     declaration would fetch). That is a WHOLE-OFFICE update of a live server — backup, code,
+     engine, env, state, run, health — and the owner's decision, not an agent's. Note the
+     `state` step makes the declaration the office's whole app set, so its own
+     `platform.state.yaml` (which today carries the macbook projection) is discarded and
+     re-derived; the projection rewrites it on the next pass.
+  2. **The HP does not answer.** Its tunnel peer has sent nothing since the pair went down and
+     therefore its dgo-extend cannot be reached to accept an invite — the HP office is alive on
+     its own machine (its agent is working), but the tunnel that carries anything into it is
+     not. The HP's own side says its WSL service is not opening commands.
+
+  ## When both are true, the pair itself is two calls and one DECLARATION
+
+  On vps1 (the end that is dialable — the HP cannot be dialed from the internet, it sits behind
+  the home NAT, so vps1 is the HOST: `tunnel: side 1, role host, dial joiner`): `POST
+  /api/pair/invite {direction: "use", ttl_seconds: …}` → hand the invite text to the HP; on the HP
+  `POST /api/pair/invite/accept {text}` — the HP's tunnel dials out to
+  `staging.digital-office.co.il`, which needs no inbound port on the home network. vps1 then
+  projects the HP's catalog into its own `remote:` block, which puts the `plane.hp-laptop` tile on
+  its console.
+
+  **What must NOT be done, and was the first version of this file: narrowing `serve:` for the new
+  peer.** `serve` is ONE declaration for the whole office (`home.serve`), not per pair — the HP's
+  own `pair_api.giving` says so in as many words, and the HP's record today is the wildcard, all 14
+  apps. `POST /api/link/serve` with `project-pln` alone would therefore take Drive and the other 13
+  away from the MAC as well, and doing nothing would give vps1 all 14 on a public server. The
+  serving side is adding a reserved key beside `exclude` — `only: {"vps1": ["plane"]}` — with the
+  door writing `x-dgo-office`, the catalog built for the asking office and the catalog listener
+  moved off the raw splice, so no peer can present itself as another office. Until the HP declares
+  that, the pairing stops after the invite (measured on the serving side's own commit against
+  sample doors: through vps1's door, `drive` answered 200).
+
+  ## What was NOT done, and why
+
+  * No pair record was hand-written on either machine: forcing a peer into an office whose code
+    cannot render it is exactly what the declaration model exists to prevent.
+  * The hub work item for the owner's request could not be opened: the hub (Plane) runs on the
+    HP, and the HP is unreachable today. This file is the fallback home until it answers.
+
+tasks:
+  - text: "Decide (owner): converge vps1 to a commit that carries the pairing flow — a whole-office update of a live server"
+    done: false
+  - text: "When the HP's tunnel answers (wg handshake without a rotation), invite vps1 from it and accept on vps1"
+    done: false
+  - text: "Give vps1 exactly one app over the new pair — `project-pln` — and confirm the `plane.hp-laptop` tile and its sign-in from vps1's console"
+    done: false
+  - text: "Open the owner's request as a hub work item (Plane, project DGO) the moment the hub answers"
+    done: false
+references:
+  - ai/context/dgo-pairing-contract.md
+  - ai/context/dgo-remote-apps.md
+  - apps/dgo-extend/pair_api.py
+  - apps/dgo-extend/catalog.py

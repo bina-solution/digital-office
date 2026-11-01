@@ -1,0 +1,42 @@
+# YouTube through the office browser — for what the Data API cannot do: the channel NAME, the
+# AVATAR and posts in the Posts/Community tab. YouTube Studio is a heavy single-page app; only the
+# read is written so far, from the channel page's own meta tags. DRAFT.
+platform: youtube
+version: 1
+status: draft
+origin: "https://www.youtube.com"
+session:
+  signed_in: "button#avatar-btn, #avatar-btn"
+  signed_out: "a[aria-label='Sign in'], a[href*='ServiceLogin']"
+  wait: 12
+ops:
+  profile.get:
+    status: draft
+    why: "קריאה בלבד — הערוץ של החשבון המחובר (YouTube Studio מפנה אליו), ואז תגיות המטא של עמוד הערוץ"
+    steps:
+      - {id: home, action: goto, value: "https://www.youtube.com/"}
+      - {id: studio, action: goto, value: "https://studio.youtube.com/"}
+      - id: me
+        action: extract
+        out: me
+        function: |
+          async () => {
+            for (let i = 0; i < 150 && !/\/channel\/UC/.test(location.pathname); i++)
+              await new Promise(r => setTimeout(r, 100));
+            const m = location.pathname.match(/\/channel\/(UC[\w-]+)/);
+            return JSON.stringify(m ? {ok: true, value: {channel: m[1]}} : {ok: false, error: 'no_channel'});
+          }
+      - {id: channel, action: goto, value: "https://www.youtube.com/channel/{me_channel}"}
+      - id: read-profile
+        action: extract
+        out: profile
+        function: |
+          async () => {
+            for (let i = 0; i < 50 && !document.querySelector('meta[property="og:title"]'); i++)
+              await new Promise(r => setTimeout(r, 100));
+            const m = (p) => (document.querySelector('meta[property="' + p + '"]') || {}).content || null;
+            const at = document.querySelector('link[itemprop=url][href*="@"], a[href^="/@"]');
+            const handle = at ? ((at.getAttribute('href') || '').match(/@([^/?]+)/) || [])[1] || null : null;
+            return JSON.stringify({ok: true, value: {name: m('og:title'), bio: m('og:description'),
+              handle: handle || (location.pathname.match(/@([^/]+)/) || [])[1] || null, avatar_url: m('og:image')}});
+          }

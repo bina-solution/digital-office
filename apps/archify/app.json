@@ -1,0 +1,63 @@
+{
+  "id": "archify",
+  "title": {
+    "he": "ארכיטקטורה",
+    "en": "Archify"
+  },
+  "layer": 3,
+  "kind": "service",
+  "version": "0.1.0",
+  "summary": {
+    "he": "התרשימים של הלשכה ושל האפליקציות שלה — נוצרים מקובצי מקור שבמאגר",
+    "en": "The office's diagrams — architecture, sequences and lifecycles rendered from sources kept in the repository"
+  },
+  "capabilities": [],
+  "use": [],
+  "connections": [],
+  "compose": "docker-compose.yml",
+  "routing": [
+    {
+      "host": "archify",
+      "port": 8080,
+      "auth": "sso",
+      "module": {
+        "group": "תשתית",
+        "icon": "layers",
+        "embed": true,
+        "alias": "archify",
+        "id": "archify",
+        "name": "ארכיטקטורה",
+        "desc": "תרשימי הלשכה והאפליקציות",
+        "order": 12,
+        "url": "http://archify:8080",
+        "url_env": "ARCHIFY_URL"
+      },
+      "sso": {
+        "slug": "archify",
+        "display_name": "Archify",
+        "default_host": "archify.localhost",
+        "base_url_env": "ARCHIFY_BASE_URL",
+        "local_twin": true
+      }
+    }
+  ],
+  "health": {
+    "structural": "auto",
+    "probe": {
+      "http": "http://archify:8080/healthz",
+      "interval": "60s"
+    }
+  },
+  "data": {
+    "volumes": [],
+    "on_uninstall": "keep"
+  },
+  "resources": {
+    "cpus": "0.3",
+    "memory": "256M"
+  },
+  "agent": {
+    "context": "AGENT.md",
+    "order": 70
+  }
+}

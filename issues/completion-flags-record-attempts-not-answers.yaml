@@ -1,0 +1,111 @@
+# yaml-language-server: $schema=./schema.json
+title: Stage-completion flags are stamped when a step RUNS, not when it produces an ANSWER — permanently freezing documents behind gates that can never re-fire
+opened: '2026-08-10'
+severity: high
+status: open
+summary: Every stage gate in docBaseDecide and the per-type routers is guarded by a *_COMPLETED boolean. Those booleans are written unconditionally by the action that runs the stage, regardless of whether the stage actually resolved a value. A stage that returns a silent null therefore stamps success, the gate is permanently satisfied, and the document can never be retried. This is not three separate bugs; it is one architectural pattern with at least three instances.
+description: |
+  id: completion-flags-record-attempts-not-answers · area: indox state machine / decide gates
+
+  ## Instances
+
+  ```yaml
+  - flag: FIGURE_TYPE_COMPLETED
+    gate: |
+      unknownTypeAction():
+        if (!doc.FIGURE_TYPE_COMPLETED || doc.STATUS === 'ACTION_RESTART')
+          return 'figure_document_type';
+    evidence_query: |
+      select count(*) from public.incoming_documents
+       where "FIGURE_TYPE_COMPLETED" is not null
+         and upper(coalesce("TYPE",'UNKNOWN')) in ('UNKNOWN','UNKNWON');
+    measured: 544 documents stamped complete with no TYPE — permanently un-typeable.
+  - flag: PER_TYPE_EXTRACTION_COMPLETED
+    gate: |
+      invoiceDecide()/shipmentDecide():
+        if (doc.STATUS !== 'COMPLETED' && doc.API_TOOLS_ID
+            && !doc.PER_TYPE_EXTRACTION_COMPLETED) return 'extract_per_type';
+    written_by: indoxV2ActionsGDoc01 / indoxV2ActionsShip01 -> "Select Per Type Values"
+    evidence: '10 invoices with SELECTION_DEBUG_PERTYPE.DOC_ID = "NONE" and blank LOCAL_DOC_ID / AI_DOC_ID / COMPANY_DOC_ID were re-queried with q_v3_invoice_id against the SAME API_TOOLS_ID: 10/10 HIT. The query works. The document''s OCR state was not usable at per-type time, the field resolved to null, and the flag was stamped anyway. _ERRORS was non-empty on 0 of 1,617 JQ-V3 runs in 3h, so nothing failed loudly.'
+    consequence: 'The hole becomes permanent and the decide gate falls through to the legacy single-value Query* extractors — which then succeed, because they run alone. This is why "single-value extractor runs" cannot reach zero by deleting them: they are compensating for prematurely-stamped per-type extraction.'
+  - flag: COMPANY_NAME_COMPLETED
+    gate: |
+      docBaseDecide():
+        if (isBlank(doc.COMPANY_NAME)) {
+          if (!doc.COMPANY_NAME_COMPLETED || doc.STATUS === 'ACTION_RESTART')
+            return 'get_company_name';
+          return doc.STATUS !== 'UNKNOWN_COMPANY'
+            ? 'update_status_unknwon_company' : 'no_action_awaiting_company_name';
+        }
+    status: suspected — same shape, under investigation
+    why_it_matters: 535 of today's 1,564 documents sit at get_company_name and 193 at figure_company_id. 728 of ~1,564 (47%) are held at the cheapest stage in the pipeline — a lookup, not OCR or AI.
+  ```
+
+  ## Blast radius
+
+  ```yaml
+  measured_2026-08-10:
+    documents_needing_a_type: 7735
+    of_those_decide_actually_reaches_the_type_gate: 226
+    blocked_upstream_at_company_stage: 7509
+    documents_ingested_today: 1564
+    documents_ingested_today_that_COMPLETED: 0
+  note: TYPED was frozen at 9,177 for over an hour while base extraction ran ~176 times per 30 minutes. The work was happening; it could not reach the gates.
+  ```
+
+  ## Recommended fix
+
+  ```yaml
+  principle: A completion flag must record that a stage produced a usable ANSWER, not that it was attempted. Prefer deriving "done" from the presence of the value itself where one exists.
+  minimal_low_risk_form: |-
+    Let a gate re-fire while its target field is still absent, e.g.
+      (!doc.FIGURE_TYPE_COMPLETED || isBlank(doc.TYPE))
+      (!doc.COMPANY_NAME_COMPLETED || isBlank(doc.COMPANY_NAME))
+    rather than rewriting how the flags are written across six workflows.
+  required_guard: 'Pair with bounded retry or the existing NEXT_RETRY_AT backoff — the pickup already honours it (194 rows correctly held at time of writing). A document that genuinely cannot resolve must terminalise, not spin. Note the dead-letter is separately known to be leaky: 319 rows carry RETRY_COUNT > 5 (max 657) and 152 of those have NEXT_RETRY_AT IS NULL, i.e. still dispatchable.'
+  explicitly_not_recommended: Backfilling the affected rows with a bulk UPDATE. The owner has forbidden editing document rows; the state machine must drive them.
+  ```
+
+  ## Measured outcome 2026-08-10t18:00z
+
+  ```yaml
+  method_note: Every figure below is a POPULATION or PER-DOCUMENT-PER-EXECUTION measurement, never a touch count. Touch counts rise when the pipeline is broken, which is how both the Gemini 9-byte fault and a "20x acceleration" claim retracted the same day were hidden.
+  what_the_flags_actually_cost_by_18:00Z:
+    note: The stamped-but-empty rates had already fallen a long way by the time this lane measured them, so the flags were NOT the dominant cost any more.
+    stamped_vs_stamped_but_empty:
+      COMPANY_NAME_COMPLETED: 5,988 / 16   (0.3%)
+      PER_TYPE_EXTRACTION_COMPLETED: 1,787 / 71 (4.0%)
+      SELECTION_COMPLETED: 6,383 / 157  (2.5%)
+      FIGURE_COMPANY_COMPLETED: 4,125 / 451  (10.9%)
+      FIGURE_TYPE_COMPLETED: 4,604 / 557  (12.1%)
+      AI_EXTRACTION_COMPLETED: 4,946 / 769  (15.5%)
+    company_name_is_not_flag-frozen: 'Of TODAY''s 680 documents holding a COMPANY_ID with no COMPANY_NAME, ZERO carry COMPANY_NAME_COMPLETED. The gate is wide open on all 680; corpus-wide only 16 of 5,988 stamped rows are empty. They are dispatch-starved, not frozen. (The name IS resolvable: 881 of 925 match companies."מזהה 1", 23 more "מזהה 2", 0 the PK.)'
+  the_defect_that_was_actually_costing_the_pipeline:
+    finding: 'One action batch carried the SAME document many times, and every copy paid a full BaseDocEx01 (OCR + Gemini). This is a superset of the flag problem: the copies all read the same decide-time snapshot, so they all fire the same gate.'
+    proof:
+    - 12,623 of 14,272 consecutive 'Extract Base Doc' marker pairs on the same document are LESS THAN 10 SECONDS apart.
+    - One execution (886204) wrote 15 identical markers, same millisecond, onto one document.
+    - 'Markers per (document, execution) before the fix: mean 1.91, WORST 55.'
+    - 'Base extractions per distinct document: 24.4 (hour 16), 8.2 (hour 17), 80.4 (hour 12).'
+    - 2,424 markers in 60 minutes from only 92 executions across 188 documents.
+  fix_landed:
+    import: ONE import, 17:53-17:57Z, 3 workflows, activate 200 x3, verified at the live activeVersionId.
+    changes:
+    - indoxV2ActionsGlobal01 / 'Restore Router Payload' — de-duplicate by ID in EXECUTE mode only (decide keeps item-for-item pairing).
+    - indoxV2ActionsGDoc01 + indoxV2ActionsShip01 / new 'Dedupe Docs (execute)' node between Route Mode[execute] and the action switch.
+    - indoxV2ActionsGDoc01 + indoxV2ActionsShip01 / 'Select Per Type Values' — PER_TYPE_EXTRACTION_COMPLETED stamped only on a resolved value; a no-answer pass omits the key and records a bounded retry.
+    - 'indoxV2ActionsGlobal01 / ''Join COMPANY_NAME'' + ''Build: ... - COMPANY_NAME'' — same, and the unconditional `={{ true }}` downstream writer (which was overriding the code node) made conditional.'
+    retry_bound: 'errorHandler01/''Backoff + Dead-letter'' verbatim, expressed in JS and carried out through the existing upsert: RETRY_COUNT+1, NEXT_RETRY_AT = now + 5*3^(old count) minutes, cap 5 -> ''infinity'' + NEEDS_REVIEW, never touches a row whose STATUS is COMPLETED or OLD. Bound is RETRY_COUNT/NEXT_RETRY_AT, never ACTION_LOG.'
+    result:
+      markers_per_doc_per_execution: 1.91 -> 1.00 (worst 55 -> 1). Intra-batch repetition eliminated.
+  flags_deliberately_left_UNCONDITIONAL_and_why:
+    FIGURE_TYPE_COMPLETED: Un-stamping it would TRAP documents, not free them. unknownTypeAction() reads `!FIGURE_TYPE_COMPLETED -> figure_document_type` and only falls through to extract_invoice_google_ai (Gemini, which classifies AND extracts) ONCE the flag is set. The weak resolver is measured at 0 usable types in 77 runs. The stamp here means "the weak resolver has been tried, move to the strong one" — that is correct.
+    FIGURE_COMPANY_COMPLETED: 'Identical shape: the stamp is what releases the document to figure_company_offline (the link-independent filename matcher) and then to MISSING_COMPANY_ID. Un-stamping would block the stronger fallback.'
+    rule_this_establishes: A completion flag is only a lie when NOTHING stronger runs after it. Where the flag is the hand-off token to a stronger resolver, it must stay unconditional.
+  remaining_defect_not_owned_by_this_lane:
+    cross_execution_redispatch: 'After the fix each document is still base-extracted by ~6.6 DIFFERENT executions per 20 minutes. Cause is not this workflow: the 5-minute poll re-picks a row that is still in flight (BASE_EXTRACTION_COMPLETED not yet written — there is no claim/lease), and indoxV2Driver01/If2 spawns ~2.17 driver executions per action. The fix is an in-flight lease (stamp NEXT_RETRY_AT at action start, clear it on the success upsert), which the pickup already honours.'
+  ```
+
+  ## Deploy notes
+
+  These gates live in indoxV2ActionsGlobal01 ("Decide DOC BASE Action") and the per-type routers. Batch any change into ONE import — two imports minutes apart deactivated a shared workflow twice on 2026-08-10 and every caller failed with "Workflow is not active and cannot be executed" (374 errors in 15 minutes). After import: n8n update:workflow --id=<id> --active=true, then force runtime re-registration via POST /rest/workflows/:id/activate (/tmp/reload.js), then verify zero "not active" errors before proceeding.

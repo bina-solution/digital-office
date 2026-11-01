@@ -1,0 +1,342 @@
+import { workflow, node, links } from '@n8n-as-code/transformer';
+
+// <workflow-map>
+// Workflow : Sync Deliver Gmail
+// Nodes   : 10  |  Connections: 12
+//
+// NODE INDEX
+// ──────────────────────────────────────────────────────────────────
+// Property name                    Node type (short)         Flags
+// WhenCalled                         executeWorkflowTrigger
+// GetMessage                         executeWorkflow            [onError→errorOutput]
+// SplitAttachments                   code                       [onError→errorOutput]
+// UploadDoc                          executeWorkflow            [onError→errorOutput]
+// GmailRow                           code                       [onError→errorOutput]
+// CallDeliver                        executeWorkflow            [onError→errorOutput]
+// RecordReq                          code
+// CallRecord                         executeWorkflow            [retry]
+// FailReq                            code
+// CallFail                           executeWorkflow            [retry]
+//
+// ROUTING MAP
+// ──────────────────────────────────────────────────────────────────
+// WhenCalled
+//    → GetMessage
+//      → SplitAttachments
+//        → UploadDoc
+//          → GmailRow
+//            → CallDeliver
+//              → RecordReq
+//                → CallRecord
+//             .out(1) → FailReq
+//                → CallFail
+//           .out(1) → FailReq (↩ loop)
+//         .out(1) → FailReq (↩ loop)
+//       .out(1) → FailReq (↩ loop)
+//     .out(1) → FailReq (↩ loop)
+// </workflow-map>
+
+// =====================================================================
+// METADATA DU WORKFLOW
+// =====================================================================
+
+@workflow({
+    /*__n8n__*/ description: "One MAIL item, thin (owner rule: no document processing — attachments are saved and delivered). Fetch the message by id, one item per attachment, upload each to the pipe's dest_folder, build the row from the uploaded copy plus what the mail knew (subject, sender chain — the real supplier hides in the subject on relay senders — dates), DELIVER through indoxApi01, RECORD. Any error edge -> FAIL with the retry budget; a mail with no attachments is terminal (needs_review), not a retry. No label is written here: the state machine's source_feedback action is the one mark writer.",
+    /*__n8n__*/ isArchived: false,
+    /*__n8n__*/ connections: {"When Called":{"main":[[{"node":"Get Message","type":"main","index":0}]]},"Get Message":{"main":[[{"node":"Split Attachments","type":"main","index":0}],[{"node":"Fail Req","type":"main","index":0}]]},"Split Attachments":{"main":[[{"node":"Upload Doc","type":"main","index":0}],[{"node":"Fail Req","type":"main","index":0}]]},"Upload Doc":{"main":[[{"node":"Gmail Row","type":"main","index":0}],[{"node":"Fail Req","type":"main","index":0}]]},"Gmail Row":{"main":[[{"node":"Call DELIVER","type":"main","index":0}],[{"node":"Fail Req","type":"main","index":0}]]},"Call DELIVER":{"main":[[{"node":"Record Req","type":"main","index":0}],[{"node":"Fail Req","type":"main","index":0}]]},"Record Req":{"main":[[{"node":"Call RECORD","type":"main","index":0}]]},"Fail Req":{"main":[[{"node":"Call FAIL","type":"main","index":0}]]}},
+    /*__n8n__*/ tags: [{"updatedAt":"2026-08-16T14:20:49.737Z","createdAt":"2026-08-16T14:20:49.737Z","id":"93ff3a3f-6b78-5d0a-a4de-2948ea161953","name":"app:indox"},{"updatedAt":"2026-07-30T23:42:19.465Z","createdAt":"2026-07-30T23:42:19.465Z","id":"d84b71a8-a6dd-4cc4-9ec4-44d6af9c8f76","name":"indox"},{"updatedAt":"2026-07-30T23:42:19.465Z","createdAt":"2026-07-30T23:42:19.465Z","id":"a659438c-0898-428d-aebd-72033caaefe4","name":"sync-v3"},{"updatedAt":"2026-08-05T22:56:59.007Z","createdAt":"2026-08-05T22:56:59.007Z","id":"edad0600-cc86-4f33-b016-311b555b8f4e","name":"indox-app"},{"updatedAt":"2026-08-05T22:56:59.007Z","createdAt":"2026-08-05T22:56:59.007Z","id":"c7d4bdbd-9cb8-4595-90d4-b200420c3fd2","name":"role:sync"}],
+    /*__n8n__*/ versionMetadata: {"name":null,"description":null},
+    /*__n8n__*/ meta: {},
+    /*__n8n__*/ pinData: {},
+    /*__n8n__*/ staticData: {},
+    /*__n8n__*/ shared: [{"updatedAt":"2026-09-02T00:00:00.000Z","createdAt":"2026-09-02T00:00:00.000Z","role":"workflow:owner","workflowId":"syncDeliverGmail01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <shlomo@local.dev>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
+    id: 'syncDeliverGmail01',
+    name: 'Sync Deliver Gmail',
+    active: true,
+    isArchived: false,
+    tags: ['app:indox', 'indox', 'sync-v3', 'indox-app', 'role:sync'],
+    settings: {
+        errorWorkflow: 'errorHandler01',
+        executionOrder: 'v1',
+        executionTimeout: 600,
+        callerPolicy: 'workflowsFromSameOwner',
+        binaryMode: 'separate',
+    },
+})
+export class SyncDeliverGmailWorkflow {
+    // =====================================================================
+    // CONFIGURATION DES NOEUDS
+    // =====================================================================
+
+    @node({
+        id: 'sdg-trig',
+        name: 'When Called',
+        type: 'n8n-nodes-base.executeWorkflowTrigger',
+        version: 1.1,
+        position: [0, 0],
+    })
+    WhenCalled = {
+        inputSource: 'passthrough',
+    };
+
+    @node({
+        id: 'sdg-get',
+        name: 'Get Message',
+        type: 'n8n-nodes-base.executeWorkflow',
+        version: 1.2,
+        position: [220, 0],
+        onError: 'continueErrorOutput',
+    })
+    GetMessage = {
+        workflowId: {
+            __rl: true,
+            value: 'gmailApiImap01',
+            mode: 'id',
+        },
+        workflowInputs: {
+            mappingMode: 'defineBelow',
+            value: {
+                op: 'get',
+                params: '={{ ({ id: $json.platform_id, attachments: true, ...(($json.list_ctx||{}).connection_id ? { connection_id: $json.list_ctx.connection_id } : {}) }) }}',
+            },
+            matchingColumns: [],
+            schema: [
+                { id: 'op', displayName: 'op', required: false, display: true, type: 'string', canBeUsedToMatch: true },
+                { id: 'params', displayName: 'params', required: false, display: true, type: 'object', canBeUsedToMatch: true },
+            ],
+            attemptToConvertTypes: false,
+            convertFieldsToString: false,
+        },
+        options: {},
+    };
+
+    @node({
+        id: 'sdg-split',
+        name: 'Split Attachments',
+        /*__n8n__*/ notes: "One item per attachment, binary under 'data' (ported from syncV3Deliver0001). The pipe decides what counts as a document (skip_inline_attachments / att_exts / att_max_bytes), every filter OFF unless set. A message that yields no part is TERMINAL — it is not a document and retrying cannot make it one.",
+        type: 'n8n-nodes-base.code',
+        version: 2,
+        position: [440, 0],
+        onError: 'continueErrorOutput',
+    })
+    SplitAttachments = {
+        jsCode: `const mail=$input.first();
+const lc=($('When Called').first().json||{}).list_ctx||{};
+const skipInline=lc.skip_inline_attachments===true;
+const exts=Array.isArray(lc.att_exts)?lc.att_exts.map(e=>String(e).toLowerCase()):null;
+const maxB=lc.att_max_bytes!=null?Number(lc.att_max_bytes):Infinity;
+const meta=(mail.json&&mail.json.attachmentsMeta)||[];
+const metaOf=k=>{const m=/^attachment_(\\d+)$/.exec(k); return m?(meta[Number(m[1])]||null):null;};
+const out=[], skipped=[];
+for(const [k,fd] of Object.entries(mail.binary||{})){
+  if(!fd||!fd.fileName) continue;
+  const md=metaOf(k)||{};
+  if(skipInline&&md.inline===true){ skipped.push(fd.fileName+' [embedded]'); continue; }
+  const ext=String(fd.fileExtension||fd.fileName.split('.').pop()||'').toLowerCase();
+  if(exts&&!exts.includes(ext)){ skipped.push(fd.fileName+' [ext '+ext+']'); continue; }
+  const size=(md.fileSize!=null)?Number(md.fileSize):null;
+  if(size!=null&&size>maxB){ skipped.push(fd.fileName+' ['+size+'B]'); continue; }
+  out.push({json:{att_name:fd.fileName, att_size:fd.fileSize||''}, binary:{data:fd}});
+}
+if(!out.length) throw new Error('message has no deliverable attachment'+(skipped.length?' (skipped: '+skipped.join(', ')+')':'')+' [terminal]');
+return out;`,
+    };
+
+    @node({
+        id: 'sdg-upload',
+        name: 'Upload Doc',
+        /*__n8n__*/ notes: "Runs once per attachment item. The receiving drive identity is the pipe's (drive_connection_id over drive_profile_id) — the drive service's active pointer is the Google service account, which refuses uploads by design.",
+        type: 'n8n-nodes-base.executeWorkflow',
+        version: 1.2,
+        position: [660, 0],
+        onError: 'continueErrorOutput',
+    })
+    UploadDoc = {
+        workflowId: {
+            __rl: true,
+            value: 'driveApi01',
+            mode: 'id',
+        },
+        mode: 'each',
+        workflowInputs: {
+            mappingMode: 'defineBelow',
+            value: {
+                op: 'upload',
+                params: "={{ ({ name: $json.att_name, folderId: $('When Called').first().json.list_ctx.upload_folder_id, ...((($('When Called').first().json.list_ctx||{}).drive_connection_id) ? { connection_id: ($('When Called').first().json.list_ctx||{}).drive_connection_id } : ((($('When Called').first().json.list_ctx||{}).drive_profile_id) ? { profile_id: ($('When Called').first().json.list_ctx||{}).drive_profile_id } : {})) }) }}",
+            },
+            matchingColumns: [],
+            schema: [
+                { id: 'op', displayName: 'op', required: false, display: true, type: 'string', canBeUsedToMatch: true },
+                { id: 'params', displayName: 'params', required: false, display: true, type: 'object', canBeUsedToMatch: true },
+            ],
+            attemptToConvertTypes: false,
+            convertFieldsToString: false,
+        },
+        options: {},
+    };
+
+    @node({
+        id: 'sdg-row',
+        name: 'Gmail Row',
+        /*__n8n__*/ notes: "Row from the uploaded Drive copy (its durable home) plus the mail's evidence: subject|body as ATTACHMENT_TEXT, an ordered sender chain (display-name address of a system sender first, then body addresses, then raw From — the BS downloader's rule, so the relay-sender supplier is not lost), receipt/sent dates. Evidence only: no TYPE, no COMPANY_ID. Provenance in SOURCE_LIST names the MESSAGE as the feedback handle.",
+        type: 'n8n-nodes-base.code',
+        version: 2,
+        position: [880, 0],
+        onError: 'continueErrorOutput',
+    })
+    GmailRow = {
+        jsCode: `const j=$('When Called').first().json; const up=$input.first().json||{};
+const hash=up.md5Checksum||up.md5;
+if(!hash) throw new Error('upload returned no md5 for '+j.platform_id);
+const lc=j.list_ctx||{};
+const base=(lc.message_link_base!==null&&lc.message_link_base!==undefined)?lc.message_link_base:'https://mail.google.com/mail/u/0/#inbox/';
+const pipe=j.pipe||String(j.source||'').split('/').slice(1).join('/')||String(j.source||'');
+const row={INLINE_ACTION:'DELIVER', NAME:up.name||'attachment', HASH:String(hash), LINK:up.webViewLink||up.link||up.doc_link||null,
+  CONNECTION:j.connection||null, SYNC_CONNECTION:j.connection||null, LINK_CONNECTION:lc.drive_connection_id||null,
+  SOURCE_TYPE:lc.source_type||'GMAIL_ATTACHMENT', SOURCE_ID:j.platform_id, SOURCE_LINK:base+j.platform_id,
+  SIZE:String(up.size||0), STATUS:j.status_override||'IN_PROGRESS', SYNC_NAME:pipe};
+if(lc.type_hint) row.TYPE_BY_SOURCE=lc.type_hint;
+try{
+  const m=$('Get Message').first().json||{};
+  const subj=String(m.subject||'').trim(); const body=String(m.text||'').trim().slice(0,100);
+  row.ATTACHMENT_TEXT=(subj+(body?' | '+body:'')).slice(0,400);
+  const RE=/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+[.][A-Za-z][A-Za-z]+/g;
+  const SYS=['no-reply','noreply','mailer-daemon','donotreply','postmaster'];
+  const f=m.from;
+  const rawFrom=String((f&&f.value&&f.value[0]&&f.value[0].address)||f||'').trim().toLowerCase();
+  const dispName=String((f&&f.value&&f.value[0]&&f.value[0].name)||'');
+  const isSys=a=>SYS.some(x=>a.indexOf(x)>=0);
+  const chain=[]; const push=a=>{ if(a&&!isSys(a)&&chain.indexOf(a)<0) chain.push(a); };
+  if(isSys(rawFrom)){ const dn=(dispName.match(RE)||[])[0]; if(dn) push(dn.toLowerCase()); }
+  (String(m.text||'').match(RE)||[]).forEach(a=>{ const l=a.toLowerCase(); if(l!==rawFrom) push(l); });
+  push(rawFrom);
+  if(chain.length) row.SENDER=chain.join(',');
+  const __dd=(x)=>{const d=new Date(x);return isNaN(d)?null:(('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+'/'+d.getFullYear());};
+  const rd=__dd(m.internalDate||m.date||m.received||null); const sd=__dd(m.date||m.internalDate||null);
+  if(rd) row.RECEIVED_DATE=rd; if(sd) row.SEND_DATE=sd;
+}catch(e){}
+row.SYNC_REGISTRY_ID=pipe;
+const fb=(j.feedback&&j.feedback.mode&&j.feedback.mode!=='off')?j.feedback:null;
+row.SOURCE_LIST=[{origin:'self', doc_row_id:null, first_seen:new Date().toISOString(), dup_cause:null,
+  source_kind:'mail', sync_registry_name:pipe||null, source_folder_id:null,
+  file_id:up.id||null, message_id:j.platform_id||null, mailbox:j.connection||null, link:row.LINK, hash:row.HASH,
+  link_connection:row.LINK_CONNECTION||null, sync_connection:row.SYNC_CONNECTION||null,
+  required_feedback_type:fb?fb.mode:null, feedback_on_success:fb?!!fb.on_success:false, feedback_on_failure:fb?!!fb.on_failure:false,
+  sync_feedback_completed:false, sync_feedback_outcome:null, sync_feedback_dest:null, sync_feedback_error:null, sync_feedback_at:null}];
+row.__instance=String(j.__instance||'');
+if(!row.__instance) throw new Error('delivery without __instance would create the document in the wrong tenant [terminal]');
+return [{json:row}];`,
+    };
+
+    @node({
+        id: 'sdg-deliver',
+        name: 'Call DELIVER',
+        type: 'n8n-nodes-base.executeWorkflow',
+        version: 1.1,
+        position: [1100, 0],
+        onError: 'continueErrorOutput',
+    })
+    CallDeliver = {
+        workflowId: {
+            __rl: true,
+            value: 'indoxApi01',
+            mode: 'id',
+        },
+        options: {},
+    };
+
+    @node({
+        id: 'sdg-record-req',
+        name: 'Record Req',
+        /*__n8n__*/ notes: "Runs once per delivered attachment; the first RECORD flips the item to delivered and later ones are no-ops by the API's WHERE, so a multi-attachment message is one item however many documents it produced.",
+        type: 'n8n-nodes-base.code',
+        version: 2,
+        position: [1320, -80],
+    })
+    RecordReq = {
+        jsCode: `const src=$('When Called').first().json; const d=$input.first().json||{};
+try{ $execution.customData.set('outline', String(src.pipe||src.source||'gmail')+'_x1_delivered'); $execution.customData.set('exection_type','sync_deliver_gmail'); $execution.customData.set('pipe', String(src.pipe||src.source||'')); $execution.customData.set('instance', String(src.__instance||'')); }catch(e){}
+return [{json:{op:'RECORD', source:src.source, platform_id:src.platform_id, doc_id:d.ID||null, content_hash:d.HASH||null, __instance:src.__instance||''}}];`,
+    };
+
+    @node({
+        id: 'sdg-record',
+        name: 'Call RECORD',
+        type: 'n8n-nodes-base.executeWorkflow',
+        version: 1.1,
+        position: [1540, -80],
+        retryOnFail: true,
+        maxTries: 3,
+        waitBetweenTries: 2000,
+    })
+    CallRecord = {
+        workflowId: {
+            __rl: true,
+            value: 'syncLedgerApi01',
+            mode: 'id',
+        },
+        options: {},
+    };
+
+    @node({
+        id: 'sdg-fail-req',
+        name: 'Fail Req',
+        type: 'n8n-nodes-base.code',
+        version: 2,
+        position: [1320, 140],
+    })
+    FailReq = {
+        jsCode: `const src=$('When Called').first().json; const e=$input.first().json||{};
+const raw=e.error&&typeof e.error==='object'?(e.error.message||JSON.stringify(e.error)):(e.error||e.message||'delivery failed');
+let msg=String(raw).slice(0,500);
+// A message the mailbox cannot find by id is not a transient failure: the by-id fetch resolves
+// through All Mail, and a message that a label folder still LISTS but All Mail no longer holds is
+// in Trash or Spam. Retrying it every pass (measured 2026-09-02: one trashed message, 404 on every
+// delivery, five attempts of backoff for nothing) tells the operator nothing; a terminal reason does.
+// n8n's HTTP node words a 404 as "The resource you are requesting could not be found".
+if (/\\b404\\b|not (be )?found/i.test(msg) && !/\\[terminal\\]/.test(msg)) msg = (msg + ' [terminal] the mailbox no longer holds this message (trashed or spam) — restore it or remove the label, then reset the item').slice(0,500);
+try{ $execution.customData.set('outline', String(src.pipe||src.source||'gmail')+'_x1_failed'); $execution.customData.set('exection_type','sync_deliver_gmail'); $execution.customData.set('pipe', String(src.pipe||src.source||'')); $execution.customData.set('instance', String(src.__instance||'')); }catch(e2){}
+return [{json:{op:'FAIL', source:src.source, platform_id:src.platform_id, error:msg, terminal:/\\[terminal\\]|\\.terminal\\.invalid/i.test(msg),
+  max_attempts:Number(src.max_attempts)||5, base_backoff_s:Number(src.base_backoff_s)||60, __instance:src.__instance||''}}];`,
+    };
+
+    @node({
+        id: 'sdg-fail',
+        name: 'Call FAIL',
+        type: 'n8n-nodes-base.executeWorkflow',
+        version: 1.1,
+        position: [1540, 140],
+        retryOnFail: true,
+        maxTries: 3,
+        waitBetweenTries: 2000,
+    })
+    CallFail = {
+        workflowId: {
+            __rl: true,
+            value: 'syncLedgerApi01',
+            mode: 'id',
+        },
+        options: {},
+    };
+
+    // =====================================================================
+    // ROUTAGE ET CONNEXIONS
+    // =====================================================================
+
+    @links()
+    defineRouting() {
+        this.WhenCalled.out(0).to(this.GetMessage.in(0));
+        this.GetMessage.out(0).to(this.SplitAttachments.in(0));
+        this.GetMessage.out(1).to(this.FailReq.in(0));
+        this.SplitAttachments.out(0).to(this.UploadDoc.in(0));
+        this.SplitAttachments.out(1).to(this.FailReq.in(0));
+        this.UploadDoc.out(0).to(this.GmailRow.in(0));
+        this.UploadDoc.out(1).to(this.FailReq.in(0));
+        this.GmailRow.out(0).to(this.CallDeliver.in(0));
+        this.GmailRow.out(1).to(this.FailReq.in(0));
+        this.CallDeliver.out(0).to(this.RecordReq.in(0));
+        this.CallDeliver.out(1).to(this.FailReq.in(0));
+        this.RecordReq.out(0).to(this.CallRecord.in(0));
+        this.FailReq.out(0).to(this.CallFail.in(0));
+    }
+}

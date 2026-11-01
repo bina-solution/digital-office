@@ -1,0 +1,13 @@
+sequenceDiagram
+    autonumber
+    participant U as Owner (SSO)
+    participant G as Gateway
+    participant C as Credential plane
+    participant N as Node
+
+    U->>G: revoke vps1
+    G->>C: delete instance (digital_office_node)
+    G->>G: remove routes + modules.d entry - serve the revoked page on that host
+    G->>G: record byte counters at revocation time
+    N->>G: next keepalive - no peer configured, so it is dropped
+    G-->>U: proof - counters frozen, probe failed, page shown

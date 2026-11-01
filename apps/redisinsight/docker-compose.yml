@@ -1,0 +1,44 @@
+# Extracted from platform-base/redis (layer 1) into a layer-3 gallery app: RedisInsight is an
+# OPTIONAL operator tool, not chassis — nothing declares a dependency on it, and its ~500 MB image
+# has no business being pulled on every install. Enable it when you need to inspect the cache.
+services:
+  redisinsight:
+    image: redis/redisinsight:3.8.0
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+    container_name: redisinsight-${DEPLOYMENT_NAME:-bina-deployment}
+    restart: unless-stopped
+    volumes:
+    - redisinsight_data:/data
+    networks:
+    - traefik-network
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    labels:
+    - traefik.enable=true
+    - traefik.http.routers.redisinsight-local.rule=Host(`redisinsight.localhost`)
+    - traefik.http.routers.redisinsight-local.entrypoints=web
+    - traefik.http.routers.redisinsight-local.service=redisinsight
+    - traefik.http.routers.redisinsight-local.middlewares=authentik@file
+    - traefik.http.routers.redisinsight-http.rule=Host(`${REDISINSIGHT_BASE_URL}`)
+    - traefik.http.routers.redisinsight-http.entrypoints=web
+    - traefik.http.routers.redisinsight-http.service=redisinsight
+    - traefik.http.routers.redisinsight-http.middlewares=authentik@file
+    - traefik.http.routers.redisinsight-https.rule=Host(`${REDISINSIGHT_BASE_URL}`)
+    - traefik.http.routers.redisinsight-https.entrypoints=websecure
+    - traefik.http.routers.redisinsight-https.tls=true
+    - traefik.http.routers.redisinsight-https.tls.certresolver=myresolver
+    - traefik.http.routers.redisinsight-https.service=redisinsight
+    - traefik.http.routers.redisinsight-https.middlewares=authentik@file
+    - traefik.http.services.redisinsight.loadbalancer.server.port=5540
+volumes:
+  redisinsight_data: null
+networks:
+  traefik-network:
+    external: true

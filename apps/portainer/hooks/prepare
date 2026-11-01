@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+#: write the admin password file portainer binds
+# prepare — portainer's own bring-up bootstrap. Invoked generically by `bbox run` for every enabled
+# app that has one (see run_app_hooks in bbox); bbox does not know this app exists.
+#
+# This lived in bbox as `ensure_portainer_password`, which made the CLI carry the bootstrap of one
+# optional gallery app — and portainer ships DISABLED, so every `bbox run` minted a credential for
+# an app that was not going to start. Worse, it was in the WRONG PLACE to be useful: installing
+# portainer from the apps screen never runs bbox, so the file was never created on that path and
+# portainer crash-looped on "could not get the contents of the file '/portainer_password.txt'".
+#
+# The platform already fixed the sibling half of this and wrote down why:
+# platform-base/connections/providers/10-infra.yaml records `portainer-admin` being pulled out of
+# the layer-1 catalog because "a base app naming an installable one" is the last item of gate G9.
+# The DECLARATION moved into this app; this is the MATERIALISATION following it.
+set -euo pipefail
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+f="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/portainer_password.txt"
+
+# A missing bind source makes docker create a DIRECTORY at that path, and portainer then cannot
+# read it as a file. Clear the artefact before anything else.
+[ -d "$f" ] && { echo "[portainer] removing bogus portainer_password.txt directory (docker bind artefact)"; rmdir "$f" 2>/dev/null || rm -rf "$f"; }
+[ -s "$f" ] && exit 0
+
+p="$(sed -n 's/^PORTAINER_ADMIN_PASSWORD=//p' "${REPO_ROOT}/.env" 2>/dev/null | head -1)"
+# No password configured (e.g. a raw `cp .env.ex .env`): generate one rather than leave an empty
+# file, which crash-loops portainer just as surely as a missing one.
+if [ -z "$p" ]; then
+  p="$(openssl rand -hex 16 2>/dev/null || echo "portainer-$$-changeme")"
+  echo "[portainer] no PORTAINER_ADMIN_PASSWORD in .env — generated a random admin password"
+fi
+# printf, NOT echo/base64: a trailing newline lands INSIDE the password and portainer then rejects
+# every login with a password nobody can type. debian-install.sh:166 still has that bug via
+# `openssl rand -base64 24 > file`; keeping the rule with the app is how it stops being re-derived.
+printf '%s' "$p" > "$f"
+echo "[portainer] wrote portainer_password.txt"

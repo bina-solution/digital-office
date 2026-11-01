@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+#: create acme.json at 0600 so the ACME resolver is used
+# prepare — traefik's own bring-up bootstrap. Invoked generically by `bbox run` for every enabled
+# app that has one; bbox does not name this app.
+#
+# Both halves below produce the SAME symptom by different routes — traefik silently serving its
+# self-signed default cert on every https host — and neither reports itself anywhere an operator
+# looks. That is why they are guarded at bring-up rather than documented.
+set -euo pipefail
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+f="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/config/acme.json"
+
+# 1. PERMISSIONS. traefik REFUSES its ACME account if acme.json is group/world readable:
+#      "unable to get ACME account: permissions 644 for /etc/traefik/acme.json are too open"
+#    and the consequence is not a warning — it SKIPS the resolver, so every router naming
+#    `myresolver` falls back to the TRAEFIK DEFAULT CERT. The file is gitignored (it accumulates
+#    the ACME account key and every issued TLS private key) and git could not carry the mode
+#    anyway — it records only the executable bit — so creating it here at 0600 is the only place
+#    the mode can live. Absent entirely, docker would bind-mount a DIRECTORY over it.
+[ -e "$f" ] || { install -m 600 /dev/null "$f" 2>/dev/null || { : > "$f"; chmod 600 "$f"; }; }
+mode="$(stat -c '%a' "$f" 2>/dev/null || echo '')"
+if [ "$mode" != "600" ]; then
+  chmod 600 "$f" && echo "[traefik] tightened acme.json to 600 (was ${mode:-unknown}) — ACME is skipped otherwise"
+fi
+
+# 2. CONTACT ADDRESS. The quieter half of the same regression: an address Let's Encrypt refuses.
+#      400 urn:ietf:params:acme:error:invalidContact
+#      "contact email has forbidden domain \"example.com\""
+#    No account, no certificate, traefik serves its default, every https host warns — and the only
+#    trace is one line per domain per retry in a log nobody reads when the symptom is "the
+#    certificate is wrong". .env.ex shipped `you@example.com` for exactly as long as nobody looked.
+#    Warn rather than fail: a *.localhost box has no business getting a public certificate, and
+#    refusing to start over it would be worse than the warning.
+email="$(sed -n 's/^[[:space:]]*TRAEFIK_ACME_EMAIL=//p' "${REPO_ROOT}/.env" 2>/dev/null | tail -1)"
+case "$email" in
+  ""|*@example.com|*@example.org|*@example.net|*@*.invalid|*@*.test|*@localhost|*@*.localhost|person195@example.com)
+    echo "[traefik] TRAEFIK_ACME_EMAIL=${email:-<unset>} is one Let's Encrypt REFUSES — no certificate"
+    echo "[traefik]   will ever be issued and every https host will warn. Set a real address in .env." ;;
+esac

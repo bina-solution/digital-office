@@ -1,0 +1,29 @@
+# inbox -> connections cutover (compose override).
+# Apply:  docker compose -f apps/inbox/docker-compose.yml \
+#                        -f apps/<id>/inbox.inject.override.yml up -d
+#
+# Original CMD (Dockerfile):
+#   gunicorn -w 1 -k gthread --threads 12 -b 0.0.0.0:8970 --timeout 120 --access-logfile - entry:app
+#
+# Secrets sourced from connections (canonical env name == the name app.py/local_app.py already read,
+# so NO rename export is needed — inject.sh exports them verbatim and the app picks them up):
+#   gmail-app-password  -> GMAIL_IMAP_APP_PW        (default GMAIL_IMAP_MODE=gmail; app.py line 34)
+#   localmail           -> LOCALMAIL_USER / LOCALMAIL_PW  (only when GMAIL_IMAP_MODE=local; local_app.py)
+#
+# NOTE: which secret is actually required depends on GMAIL_IMAP_MODE. The manifest lists
+# gmail-app-password as required (gmail mode, the active backend). In local mode point CONN_SERVICE
+# at a localmail-requiring manifest variant (or add localmail to the inbox manifest entry) so
+# /api/export returns LOCALMAIL_USER/LOCALMAIL_PW instead.
+services:
+  inbox:
+    volumes:
+      - ../../platform-base/connections/inject.sh:/inject.sh:ro
+    environment:
+      - CONN_URL=http://connections:8990
+      - CONN_SERVICE=inbox
+      # blank the secrets so they MUST come from connections (never from .env)
+      - GMAIL_IMAP_APP_PW=
+      - LOCALMAIL_USER=
+      - LOCALMAIL_PW=
+    entrypoint: ["sh","/inject.sh","sh","-c",
+      "exec gunicorn -w 1 -k gthread --threads 12 -b 0.0.0.0:8970 --timeout 120 --access-logfile - entry:app"]

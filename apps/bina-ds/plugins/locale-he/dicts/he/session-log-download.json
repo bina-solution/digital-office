@@ -1,0 +1,11 @@
+{
+ "header.more": "פעולות נוספות",
+ "menu.download": "הורדת יומן השיחה",
+ "dialog.preparingTitle": "מייצא שיחה",
+ "dialog.preparingDescription": "מכין ZIP עם השיחה הזו, שיחות המשנה שלה והקבצים המצורפים.",
+ "dialog.successTitle": "הורדת השיחה התחילה",
+ "dialog.successDescription": "הדפדפן מוריד את ה-ZIP של השיחה.",
+ "dialog.errorTitle": "ייצוא השיחה נכשל",
+ "dialog.close": "סגירה",
+ "dialog.commandFailed": "לא ניתן להתחיל את ייצוא השיחה."
+}

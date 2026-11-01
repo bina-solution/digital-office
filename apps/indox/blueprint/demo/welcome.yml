@@ -1,0 +1,48 @@
+# INDOX demo blueprint — single source for `bbox indox demo run welcome`
+# companies + per-sync docs + ai_cache_file (frozen extractions) + settings. Injected via the indox API.
+name: welcome
+description: 5x1 welcome demo — 1 doc per sync, single company (זלמן סחר)
+per_sync: 1
+company:
+  id: '516009677'
+  name: זלמן סחר
+  email: person22@example.com
+syncs:
+  gmail-doc:
+  - name: zlmn-shr-1.pdf
+    path: demo-docs/invoice/files/zlmn-shr-1.pdf
+    company_id: '516009677'
+    type: INVOICE
+    md5: 1ba289816ff17cda223412aea3149194
+    cache_key: invoice:1ba289816ff17cda223412aea3149194
+  gmail-link:
+  - name: zlmn-shr-2.pdf
+    path: demo-docs/invoice/files/zlmn-shr-2.pdf
+    company_id: '516009677'
+    type: INVOICE
+    md5: 5c00b49e11a788ac749e4f7fbfd4ca97
+    cache_key: invoice:5c00b49e11a788ac749e4f7fbfd4ca97
+  drive-gdoc:
+  - name: zlmn-shr-3.pdf
+    path: demo-docs/invoice/files/zlmn-shr-3.pdf
+    company_id: '516009677'
+    type: INVOICE
+    md5: e32f203165a1843716e4af050-000-0015
+    cache_key: invoice:e32f203165a1843716e4af050-000-0015
+  gmail-bs:
+  - name: zlmn-shr-3.pdf
+    path: demo-docs/balance_sheet/files/zlmn-shr-3.pdf
+    company_id: '516009677'
+    type: BALANCE_SHEET
+    md5: 0e8d381f174bd1488d24801948326220
+    cache_key: bs:0e8d381f174bd1488d24801948326220
+  drive-bs:
+  - name: zlmn-shr-2.pdf
+    path: demo-docs/balance_sheet/files/zlmn-shr-2.pdf
+    company_id: '516009677'
+    type: BALANCE_SHEET
+    md5: 23ffc26fbd9349af19aeb1df307c5b20
+    cache_key: bs:23ffc26fbd9349af19aeb1df307c5b20
+settings:
+  demo_inject_count: 1
+ai_cache_file: files/welcome-ai-cache.json

@@ -1,0 +1,53 @@
+# yaml-language-server: $schema=./schema.json
+title: "project-pln: the API was dead for ~10 hours while Docker reported the container healthy — the probe hits Caddy, not the API"
+opened: 2026-09-30
+category: bug
+severity: high
+status: resolved
+summary: "gunicorn ran with -w 1 and its single uvicorn worker died under load (~23:36 the night before); the arbiter never respawned it, nothing bound :3002/:3004/:3005, and Caddy timed out every request at 20 s — the owner's 'Plane does not really load'. The AIO healthcheck probes Caddy on :80, which answers, so Docker, autoheal and every dashboard said healthy the whole time."
+description: |
+  ## Measured
+
+  * Through the edge: the SPA HTML answered in 0.7 s; `GET /api/instances/` timed out at 20 s,
+    3 of 3 tries.
+  * Inside the container: only caddy listened (:80); Caddyfile proxies to localhost:3002/3004/3005,
+    none bound. `supervisorctl status`: api RUNNING pid 10 for 10 h 51 m, migrator EXITED 23:36,
+    worker RUNNING, proxy RUNNING. pid 10 = the gunicorn MASTER (`-w 1 -k uvicorn.workers.
+    UvicornWorker`), state S in do_select, NO child. cgroup memory.events: oom_kill 0. All four
+    backends (plane-db, plane-mq, plane-redis, plane-minio) reachable.
+  * `supervisorctl restart api` brought :3002 up; `/api/instances/` then 200 in 1.4-2.5 s.
+
+  ## Why the platform could not see it
+
+  The compose healthcheck for project-pln curls `/api/instances/` through :80 — but only checks
+  `code != 000 && code < 500`; Caddy's 502/504 after its upstream timeout is... a 5xx, so this
+  SHOULD have failed. It did not, because the check's own `-m` timeout is shorter than Caddy's
+  20 s upstream timeout: curl gives up first with code 000, and `[ "$code" != "000" ]` is false →
+  exit 1 → ... except that under load the probe exec itself timed out at the Docker level, which
+  Docker counts as a failed probe only after `retries` (8) consecutive failures spaced `interval`
+  apart, and the streak kept resetting whenever one probe managed to return. Net effect: the
+  container flapped between starting/healthy and never reached unhealthy for long enough for
+  autoheal's streak. A probe that races two timeouts is not a probe.
+
+  ## Fix
+
+  * `GUNICORN_WORKERS=2` (a dead worker leaves one), or supervise the worker (gunicorn's
+    `--max-requests` cycling is not supervision).
+  * The healthcheck must be decisive: `curl -m 5 -f http://127.0.0.1:3002/api/instances/`
+    (the API port directly, not through Caddy), timeout ≥ the request budget, no `000` special
+    case.
+  * autoheal label on project-pln so a sustained unhealthy actually restarts it.
+tasks:
+  - text: "supervisorctl restart api (done 2026-09-30 by the Plane session — API back)"
+    done: true
+  - text: "GUNICORN_WORKERS=2 or worker supervision in apps/project-pln/supervisor.conf — done: `GUNICORN_WORKERS=${PLANE_GUNICORN_WORKERS:-2}` in the app's compose file; measured on hp-laptop 2026-10-06: one gunicorn master with two uvicorn workers"
+    done: true
+  - text: "Healthcheck probes the API port directly with a decisive result; timeout profile-owned (HEALTHCHECK_TIMEOUT) — done, through the in-container Caddy on purpose (a dead Caddy is the same outage): the check is `= 200` from `/api/instances/` or unhealthy, so `000` and 5xx both fail and no two timeouts race; `curl -m 8` stays under `HEALTHCHECK_TIMEOUT`, which every profile sets to 10 s or more"
+    done: true
+  - text: "binaos.autoheal=true on project-pln; verify autoheal restarts it on a sustained unhealthy — done 2026-10-06: the label is on the app container only (its database, queue and object store are not enrolled, and autoheal now refuses any `-db` by name even if one were); autoheal's selftest replays this incident (`project-pln` unhealthy and sustained -> RESTART; still booting 20 min after a restart -> SKIP; `plane-db`, `plane-redis` -> REFUSE). Applied on hp-laptop: the container was recreated with the label and was healthy again after 46 s. The restart itself was not provoked on the live hub - the decision is the tested part, and the verb is the one that already restarts the n8n workers"
+    done: true
+references:
+  - apps/project-pln/docker-compose.yml
+  - apps/project-pln/supervisor.conf
+  - apps/project-pln/Caddyfile
+  - platform-base/autoheal/autoheal.py

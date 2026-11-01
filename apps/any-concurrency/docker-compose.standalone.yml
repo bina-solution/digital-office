@@ -1,0 +1,104 @@
+# any-concurrency — standalone docker-compose
+# Works out of the box: no external network, no pre-existing traefik needed.
+# Mounts the Docker socket read-only so container events and log tailing work.
+#
+# Quick start:
+#   docker compose -f docker-compose.standalone.yml up -d
+#   open http://localhost:8080
+#
+# Customise with environment variables (see .env.example) or create a .env file.
+
+services:
+  any-concurrency:
+    build: .
+    image: any-concurrency:latest
+    container_name: any-concurrency
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8080}:8000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      # ── Sources ──────────────────────────────────────────────────────────────
+      # n8n PostgreSQL — omit PG_HOST to disable the n8n source
+      PG_HOST:     "${PG_HOST:-}"
+      PG_PORT:     "${PG_PORT:-5432}"
+      PG_USER:     "${PG_USER:-n8n}"
+      PG_PASS:     "${PG_PASS:-}"
+      PG_DB:       "${PG_DB:-n8n}"
+
+      # Traefik — leave empty for auto-discovery (scan Docker for traefik image)
+      TRAEFIK_CONTAINER: "${TRAEFIK_CONTAINER:-}"
+
+      # Docker events — 1 = enabled (default)
+      ENABLE_DOCKER: "${ENABLE_DOCKER:-1}"
+
+      # Log-span container (any container emitting WA_SPAN JSON log markers)
+      LOGSPAN_CONTAINER: "${LOGSPAN_CONTAINER:-}"
+      ENABLE_LOGSPAN:    "${ENABLE_LOGSPAN:-0}"
+
+      # Custom container (gunicorn/uvicorn JSON access log format)
+      CUSTOM_CONTAINER: "${CUSTOM_CONTAINER:-}"
+      ENABLE_CUSTOM:    "${ENABLE_CUSTOM:-0}"
+      # …and any number of FURTHER such containers, one lane each:
+      #   CUSTOM_SOURCES="svc-a=lane-a,svc-b=lane-b"
+      CUSTOM_SOURCES:      "${CUSTOM_SOURCES:-}"
+      CUSTOM_HEALTH_PATHS: "${CUSTOM_HEALTH_PATHS:-/healthz,/readyz,/health,/livez,/ping,/metrics}"
+
+      # Webhook HTTP ingest — always enabled unless set to 0
+      ENABLE_WEBHOOK:  "${ENABLE_WEBHOOK:-1}"
+      WEBHOOK_BUFFER:  "${WEBHOOK_BUFFER:-10000}"
+
+      # ── Ring-buffer sizes ─────────────────────────────────────────────────
+      TRAEFIK_BUFFER:  "${TRAEFIK_BUFFER:-20000}"
+      DOCKER_BUFFER:   "${DOCKER_BUFFER:-5000}"
+      WA_BUFFER:       "${WA_BUFFER:-10000}"
+      APITOOLS_BUFFER: "${APITOOLS_BUFFER:-20000}"
+      # per-lane default for the extra custom sources (each may override with CUSTOM_BUFFER_<LANE>)
+      CUSTOM_BUFFER_DEFAULT: "${CUSTOM_BUFFER_DEFAULT:-8000}"
+
+      # ── Optional Redis (Bull queue visibility) ────────────────────────────
+      REDIS_URL: "${REDIS_URL:-}"
+
+      # ── n8n deep-link base URL ─────────────────────────────────────────────
+      N8N_URL: "${N8N_URL:-}"
+
+  # ── Optional: n8n + postgres profile ─────────────────────────────────────
+  # Enable with: docker compose -f docker-compose.standalone.yml --profile n8n up -d
+
+  n8n-postgres:
+    image: postgres:16-alpine
+    container_name: any-concurrency-postgres
+    profiles: [n8n]
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER:     n8n
+      POSTGRES_PASSWORD: n8npassword
+      POSTGRES_DB:       n8n
+    volumes:
+      - n8n_postgres_data:/var/lib/postgresql/data
+
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: any-concurrency-n8n
+    profiles: [n8n]
+    restart: unless-stopped
+    depends_on:
+      - n8n-postgres
+    ports:
+      - "5678:5678"
+    environment:
+      DB_TYPE:            postgresdb
+      DB_POSTGRESDB_HOST: n8n-postgres
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_USER: n8n
+      DB_POSTGRESDB_PASSWORD: n8npassword
+      DB_POSTGRESDB_DATABASE: n8n
+      N8N_HOST:       "${N8N_HOST:-localhost}"
+      WEBHOOK_URL:    "${WEBHOOK_URL:-http://localhost:5678}"
+    volumes:
+      - n8n_data:/home/node/.n8n
+
+volumes:
+  n8n_postgres_data:
+  n8n_data:

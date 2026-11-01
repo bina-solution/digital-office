@@ -1,0 +1,1419 @@
+{
+  "updatedAt": "2026-02-16T13:44:42.602Z",
+  "createdAt": "2025-09-27T03:04:40.889Z",
+  "id": "processLock01",
+  "name": "process_lock",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.ACTION }}",
+                    "rightValue": "check",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "091a3383-1c12-4059-85f3-7f9e2d5366fa"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "check"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "50fa3587-9080-486f-a888-6b2650c5e3b5",
+                    "leftValue": "={{ $json.ACTION }}",
+                    "rightValue": "lock",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "lock"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "6fc187c7-e59c-4f53-b7c8-891749e219ed",
+                    "leftValue": "={{ $json.ACTION }}",
+                    "rightValue": "unlock",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "unlock"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "8c38f910-1d4d-4b93-bb44-c129314d641d",
+                    "leftValue": "={{ $json.ACTION }}",
+                    "rightValue": "check_and_lock",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        176,
+        -144
+      ],
+      "id": "6b1ff63a-88ad-43b8-a276-de3a1531207c",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "content": "## ProcessLock workflow for locking asynchronos tasks that need to happen sequentionly \n\naction?\nlock: (process=docStep, key=<doc_id>) \ncheck: (process, key, exec)\nunlock: (process, key)\n\nusage: get all (process=docStep, keys:(list of incoming steps), split locked,\ntrue: sleap and go stepback \nfalse: lock & pass on \n\nend of step: unlock(p, k)\non execution fail: unlock_all(exec=<execution_id>)\n \n",
+        "height": 240,
+        "width": 400
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1040,
+        80
+      ],
+      "typeVersion": 1,
+      "id": "4900e47f-74b1-47f7-94ed-2a1d7c8ebe12",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "operation": "set",
+        "key": "=n8n.{{ $(\"Details\").first().json.name }}.{{ $json.PROCESS }}.{{ $json.KEY }}.{{ $json.EXECUTION }}",
+        "value": "=true",
+        "keyType": "string",
+        "expire": true,
+        "ttl": "={{ 60*60*6 }}"
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        1104,
+        -128
+      ],
+      "id": "cea43f7e-da44-426d-860e-849cb5ef9834",
+      "name": "SET PROCESS KEY",
+      "credentials": {
+        "redis": {
+          "id": "BoJE1odVZ6MBcpax",
+          "name": "Redis Local Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "keys",
+        "keyPattern": "=n8n.{{ $(\"Details\").first().json.name }}.{{ $json.PROCESS }}.*",
+        "getValues": false
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        896,
+        -288
+      ],
+      "id": "805f99b4-ecb5-4f40-b1f8-82509a56f65c",
+      "name": "SCAN PROCESS *",
+      "credentials": {
+        "redis": {
+          "id": "BoJE1odVZ6MBcpax",
+          "name": "Redis Local Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "keys",
+        "keyPattern": "=n8n.{{ $(\"Details\").first().json.name }}.{{ $json.PROCESS }}.{{ $json.KEY }}.*"
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        1168,
+        -464
+      ],
+      "id": "ccd81cbb-ca21-4504-a5db-27771719f0b1",
+      "name": "SCAN PROCESS KEY",
+      "credentials": {
+        "redis": {
+          "id": "BoJE1odVZ6MBcpax",
+          "name": "Redis Local Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "propertyName": "value",
+        "key": "=n8n.{{ $(\"Details\").first().json.name }}.{{ $json.PROCESS }}.{{ $json.KEY }}.{{ $json.EXECUTION }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        1168,
+        -640
+      ],
+      "id": "e94de446-5093-4c78-91a3-fd258251b93a",
+      "name": "GET PROCESS KEY EXECUTION",
+      "credentials": {
+        "redis": {
+          "id": "BoJE1odVZ6MBcpax",
+          "name": "Redis Local Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "PROCESS"
+            },
+            {
+              "name": "KEY"
+            },
+            {
+              "name": "ACTION"
+            },
+            {
+              "name": "EXECUTION"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -1376,
+        -128
+      ],
+      "id": "2e4025a5-9122-4b01-9e62-4c3696e4733e",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "5943ad91-a6eb-471a-9a8e-4164721132b7",
+              "leftValue": "={{ $json.KEY }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        656,
+        -304
+      ],
+      "id": "a0103a4d-3b48-4ec5-9b9d-877c6f57b4f0",
+      "name": "If KEY"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "66cfcfe6-2f26-4b21-87ff-baf689c6955f",
+              "leftValue": "={{ String($json.EXECUTION || \"\") }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        896,
+        -480
+      ],
+      "id": "f556d684-8603-48ba-b3fb-6428d9e3c3c5",
+      "name": "If EXECUTION"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "7615b10e-9c14-485b-aa81-5182c8a31c74",
+              "name": "ACTION",
+              "value": "=check",
+              "type": "string"
+            },
+            {
+              "id": "5adbdced-5084-4af9-93a3-5d96b39966d9",
+              "name": "PROCESS",
+              "value": "=doc_step",
+              "type": "string"
+            },
+            {
+              "id": "4fd3f0ef-c828-4b66-858c-8281268ca78f",
+              "name": "KEY",
+              "value": "=doc_id",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -416,
+        -1616
+      ],
+      "id": "d01f828d-9cab-42a6-a703-b47a24c6dd0d",
+      "name": "Test GET KEY",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "7615b10e-9c14-485b-aa81-5182c8a31c74",
+              "name": "ACTION",
+              "value": "=check",
+              "type": "string"
+            },
+            {
+              "id": "5adbdced-5084-4af9-93a3-5d96b39966d9",
+              "name": "PROCESS",
+              "value": "=doc_step",
+              "type": "string"
+            },
+            {
+              "id": "4fd3f0ef-c828-4b66-858c-8281268ca78f",
+              "name": "KEY",
+              "value": "=doc_id",
+              "type": "string"
+            },
+            {
+              "id": "7432dad4-8d24-4aa2-a3ac-269b250d72ad",
+              "name": "EXECUTION",
+              "value": "=34453",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -416,
+        -1808
+      ],
+      "id": "e4764354-42fc-4086-a783-c9f545b69293",
+      "name": "Test GET KEY EXECUTION",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "7615b10e-9c14-485b-aa81-5182c8a31c74",
+              "name": "ACTION",
+              "value": "=check",
+              "type": "string"
+            },
+            {
+              "id": "5adbdced-5084-4af9-93a3-5d96b39966d9",
+              "name": "PROCESS",
+              "value": "=doc_step",
+              "type": "string"
+            },
+            {
+              "id": "7432dad4-8d24-4aa2-a3ac-269b250d72ad",
+              "name": "EXECUTION",
+              "value": "=34453",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -416,
+        -1424
+      ],
+      "id": "ae05682b-0322-41a1-b654-b97a57c005c1",
+      "name": "Test GET ALL PROCESS KEYS",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "7615b10e-9c14-485b-aa81-5182c8a31c74",
+              "name": "ACTION",
+              "value": "=lock",
+              "type": "string"
+            },
+            {
+              "id": "5adbdced-5084-4af9-93a3-5d96b39966d9",
+              "name": "PROCESS",
+              "value": "=doc_step",
+              "type": "string"
+            },
+            {
+              "id": "24c3714f-fcfe-4782-a68e-528580634d65",
+              "name": "KEY",
+              "value": "=doc_id",
+              "type": "string"
+            },
+            {
+              "id": "7432dad4-8d24-4aa2-a3ac-269b250d72ad",
+              "name": "EXECUTION",
+              "value": "=34453",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -416,
+        -1168
+      ],
+      "id": "2623d1b0-65d7-462a-9a8a-3eb504bda9aa",
+      "name": "Test LOCK",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "7615b10e-9c14-485b-aa81-5182c8a31c74",
+              "name": "ACTION",
+              "value": "=lock",
+              "type": "string"
+            },
+            {
+              "id": "5adbdced-5084-4af9-93a3-5d96b39966d9",
+              "name": "PROCESS",
+              "value": "=doc_step",
+              "type": "string"
+            },
+            {
+              "id": "24c3714f-fcfe-4782-a68e-528580634d65",
+              "name": "KEY",
+              "value": "=doc_id1",
+              "type": "string"
+            },
+            {
+              "id": "7432dad4-8d24-4aa2-a3ac-269b250d72ad",
+              "name": "EXECUTION",
+              "value": "=34453",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -416,
+        -960
+      ],
+      "id": "c995d327-acea-4eed-b6a1-979f1f3d29b0",
+      "name": "Test LOCK1",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "operation": "delete",
+        "key": "=n8n.{{ $(\"Details\").first().json.name }}.{{ $json.PROCESS }}.{{ $json.KEY }}"
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        896,
+        80
+      ],
+      "id": "cf318bf5-fcc2-4e39-bfeb-ad0937d31d48",
+      "name": "UNKLOCK PROCESS KEY EXTRACTION",
+      "credentials": {
+        "redis": {
+          "id": "BoJE1odVZ6MBcpax",
+          "name": "Redis Local Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "7615b10e-9c14-485b-aa81-5182c8a31c74",
+              "name": "ACTION",
+              "value": "=unlock",
+              "type": "string"
+            },
+            {
+              "id": "5adbdced-5084-4af9-93a3-5d96b39966d9",
+              "name": "PROCESS",
+              "value": "=doc_step",
+              "type": "string"
+            },
+            {
+              "id": "24c3714f-fcfe-4782-a68e-528580634d65",
+              "name": "KEY",
+              "value": "=doc_id1",
+              "type": "string"
+            },
+            {
+              "id": "7432dad4-8d24-4aa2-a3ac-269b250d72ad",
+              "name": "EXECUTION",
+              "value": "=34453",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -416,
+        -768
+      ],
+      "id": "86e9868e-9325-4a7a-a605-7dcf821cb27f",
+      "name": "Test UNLOCK KEY EXECUTION",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "7615b10e-9c14-485b-aa81-5182c8a31c74",
+              "name": "ACTION",
+              "value": "=unlock",
+              "type": "string"
+            },
+            {
+              "id": "5adbdced-5084-4af9-93a3-5d96b39966d9",
+              "name": "PROCESS",
+              "value": "=doc_step",
+              "type": "string"
+            },
+            {
+              "id": "7432dad4-8d24-4aa2-a3ac-269b250d72ad",
+              "name": "EXECUTION",
+              "value": "=34453",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -416,
+        -544
+      ],
+      "id": "4d53eaf7-6d8d-4c91-ab0e-8927aab78e0e",
+      "name": "Test UNLOCK EXECUTION",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "8e09a06d-77eb-4bbc-a604-24df02955b83",
+              "leftValue": "={{ $json.KEY }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        656,
+        64
+      ],
+      "id": "b68647a1-03ff-442e-bc1c-3fbf7c31f7be",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "operation": "keys",
+        "keyPattern": "=n8n.{{ $(\"Details\").first().json.name }}.{{ $json.PROCESS }}.*.{{ $json.EXECUTION }}",
+        "getValues": false
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        912,
+        336
+      ],
+      "id": "98565fd4-de5e-406a-98d9-0f3ec1bf88cf",
+      "name": "SCAN PROCESS KEY1",
+      "credentials": {
+        "redis": {
+          "id": "BoJE1odVZ6MBcpax",
+          "name": "Redis Local Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cbb91070-f08e-47d6-b234-44ac7537ced1",
+              "name": "name",
+              "value": "process_lock",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        208,
+        -368
+      ],
+      "id": "3d335447-5e17-4ae2-b240-5ac65d6eafe7",
+      "name": "Details"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "keys",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        336
+      ],
+      "id": "3ee69ce6-6375-4257-9671-d56307f68029",
+      "name": "Split Out"
+    },
+    {
+      "parameters": {
+        "operation": "delete",
+        "key": "={{ $json.keys }}"
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        1312,
+        336
+      ],
+      "id": "fce2fe92-327e-493c-a2ad-d768a6d1b45b",
+      "name": "DELETE RESULTS",
+      "credentials": {
+        "redis": {
+          "id": "BoJE1odVZ6MBcpax",
+          "name": "Redis Local Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Loop over input items and add a new field called 'myNewField' to the JSON of each one\nfor (const item of $input.all()) {\n  for (let i = 0; i < item.json.keys.length; i++) {\n    const props = item.json.keys[i].split(\".\")\n    item.json.keys[i] = props[3]\n  }\n}\n\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1184,
+        -288
+      ],
+      "id": "96e84289-bef2-4e7a-9e06-e7be578169be",
+      "name": "Code"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -16,
+        -128
+      ],
+      "id": "c2c55f3e-e33e-4e64-9302-a4adcf96e13e",
+      "name": "Start"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -800,
+        -320
+      ],
+      "id": "474e3fbb-5eab-4292-8367-e9e835323d0a",
+      "name": "StartTests"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "7615b10e-9c14-485b-aa81-5182c8a31c74",
+              "name": "ACTION",
+              "value": "=check_and_lock",
+              "type": "string"
+            },
+            {
+              "id": "5adbdced-5084-4af9-93a3-5d96b39966d9",
+              "name": "PROCESS",
+              "value": "=doc_step",
+              "type": "string"
+            },
+            {
+              "id": "7432dad4-8d24-4aa2-a3ac-269b250d72ad",
+              "name": "EXECUTION",
+              "value": "=34453",
+              "type": "number"
+            },
+            {
+              "id": "f7a4c4e8-5546-4e0f-a78a-657586d94bfe",
+              "name": "KEY",
+              "value": "001",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -416,
+        -336
+      ],
+      "id": "c4ee40e9-e2c0-4e7b-a0c0-cff86616cf24",
+      "name": "Test CECHK & LOCK",
+      "disabled": true
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "name": "Replace Me",
+      "typeVersion": 1,
+      "position": [
+        128,
+        864
+      ],
+      "id": "8ad9026b-c985-456a-8e7c-f066741d9abf"
+    },
+    {
+      "parameters": {
+        "operation": "delete",
+        "key": "={{ 'n8n.process_lock.doc_step.001' }}"
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        2160,
+        464
+      ],
+      "id": "215b833c-c619-446a-b303-70a60d87a98e",
+      "name": "DELETE RESULTS1",
+      "credentials": {
+        "redis": {
+          "id": "BoJE1odVZ6MBcpax",
+          "name": "Redis Local Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "08f3468c-bf2d-4ed8-bf41-55e6e68ead0e",
+              "name": "=was_locked",
+              "value": "={{ $json.values()[0] > 1}}",
+              "type": "boolean"
+            },
+            {
+              "id": "cbb212af-3dbc-4121-9252-c98e0f782b03",
+              "name": "KEY",
+              "value": "={{ $('Start').item.json.KEY }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1488,
+        560
+      ],
+      "id": "b754a976-a390-4569-b0fd-73ea10e1ad83",
+      "name": "Edit Fields1"
+    },
+    {
+      "parameters": {
+        "operation": "set",
+        "key": "=n8n.{{ $(\"Details\").first().json.name }}.{{ $(\"Start\").item.json.PROCESS }}.{{ $(\"Start\").item.json.KEY }}.{{ $(\"Start\").item.json.EXECUTION }}",
+        "value": "=true",
+        "keyType": "string",
+        "expire": true,
+        "ttl": "={{ 60*60*6 }}"
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        1328,
+        960
+      ],
+      "id": "142ac05a-c1f0-4b07-b0d3-a99a508612dc",
+      "name": "SET PROCESS KEY1",
+      "credentials": {
+        "redis": {
+          "id": "BoJE1odVZ6MBcpax",
+          "name": "Redis Local Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "keys",
+        "keyPattern": "=n8n.{{ $(\"Details\").first().json.name }}.{{ $json.PROCESS }}.{{ $json.KEY }}.*",
+        "getValues": false
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        800,
+        880
+      ],
+      "id": "61e08083-b183-49d8-b7ba-b8744d46c8d6",
+      "name": "GET PROCESS KEY EXECUTION1",
+      "credentials": {
+        "redis": {
+          "id": "BoJE1odVZ6MBcpax",
+          "name": "Redis Local Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "08f3468c-bf2d-4ed8-bf41-55e6e68ead0e",
+              "name": "=was_locked",
+              "value": "={{!!$json.keys}}",
+              "type": "boolean"
+            },
+            {
+              "id": "cbb212af-3dbc-4121-9252-c98e0f782b03",
+              "name": "KEY",
+              "value": "={{ $('Start').item.json.KEY }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1632,
+        864
+      ],
+      "id": "50c18d55-78dc-46d7-9f2a-c0fa3668fb9f",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "4d9bad6d-4657-4f04-9b8d-9ed37f6f6465",
+              "leftValue": "={{ !!$json.keys.length }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        992,
+        880
+      ],
+      "id": "043118d7-b10c-4fe3-923a-fcaf4d151277",
+      "name": "If LOCKED"
+    },
+    {
+      "parameters": {
+        "batchSize": 100000,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        528,
+        928
+      ],
+      "id": "ed059c10-000a-4712-8bec-1fb36c94f72b",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "operation": "incr",
+        "key": "=n8n.{{ $(\"Details\").first().json.name }}.{{ $json.PROCESS }}.{{ $json.KEY }}",
+        "expire": true,
+        "ttl": "={{ 60*60*2.9 }}"
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        896,
+        560
+      ],
+      "id": "b17cd430-cffd-4418-a0e7-ff35395fc997",
+      "name": "GET CHECK PROCESS KEY EXECUTION2",
+      "credentials": {
+        "redis": {
+          "id": "BoJE1odVZ6MBcpax",
+          "name": "Redis Local Account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "If KEY",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "SET PROCESS KEY",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "GET CHECK PROCESS KEY EXECUTION2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If KEY": {
+      "main": [
+        [
+          {
+            "node": "If EXECUTION",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "SCAN PROCESS *",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If EXECUTION": {
+      "main": [
+        [
+          {
+            "node": "GET PROCESS KEY EXECUTION",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "SCAN PROCESS KEY",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test GET KEY EXECUTION": {
+      "main": [
+        [
+          {
+            "node": "Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test GET KEY": {
+      "main": [
+        [
+          {
+            "node": "Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test GET ALL PROCESS KEYS": {
+      "main": [
+        [
+          {
+            "node": "Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test LOCK": {
+      "main": [
+        [
+          {
+            "node": "Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test LOCK1": {
+      "main": [
+        [
+          {
+            "node": "Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test UNLOCK KEY EXECUTION": {
+      "main": [
+        [
+          {
+            "node": "Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test UNLOCK EXECUTION": {
+      "main": [
+        [
+          {
+            "node": "Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "UNKLOCK PROCESS KEY EXTRACTION",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "SCAN PROCESS KEY1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SCAN PROCESS KEY1": {
+      "main": [
+        [
+          {
+            "node": "Split Out",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out": {
+      "main": [
+        [
+          {
+            "node": "DELETE RESULTS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SET PROCESS KEY": {
+      "main": [
+        []
+      ]
+    },
+    "SCAN PROCESS *": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "StartTests": {
+      "main": [
+        [
+          {
+            "node": "Test GET KEY EXECUTION",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Test GET KEY",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Test GET ALL PROCESS KEYS",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Test LOCK",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Test LOCK1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Test UNLOCK KEY EXECUTION",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Test UNLOCK EXECUTION",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Test CECHK & LOCK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Details": {
+      "main": [
+        []
+      ]
+    },
+    "Test CECHK & LOCK": {
+      "main": [
+        [
+          {
+            "node": "Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Replace Me": {
+      "main": [
+        []
+      ]
+    },
+    "SET PROCESS KEY1": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET PROCESS KEY EXECUTION1": {
+      "main": [
+        [
+          {
+            "node": "If LOCKED",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If LOCKED": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "SET PROCESS KEY1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "GET PROCESS KEY EXECUTION1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET CHECK PROCESS KEY EXECUTION2": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timeSavedMode": "fixed",
+    "saveDataSuccessExecution": "none",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false,
+    "errorWorkflow": "errorHandler01"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {},
+  "versionId": "39547630-d846-4c97-a4fe-79d6bac19ddd",
+  "activeVersionId": "39547630-d846-4c97-a4fe-79d6bac19ddd",
+  "versionCounter": 62,
+  "triggerCount": 0,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2025-09-27T03:04:40.889Z",
+      "createdAt": "2025-09-27T03:04:40.889Z",
+      "role": "workflow:owner",
+      "workflowId": "processLock01",
+      "projectId": "EChUnhWXmjrEc3fG",
+      "project": {
+        "updatedAt": "2024-09-26T18:07:08.765Z",
+        "createdAt": "2024-09-26T17:59:24.039Z",
+        "id": "EChUnhWXmjrEc3fG",
+        "name": "Shlomo Bolo <person8@example.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null
+      }
+    }
+  ]
+}

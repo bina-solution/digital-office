@@ -1,0 +1,108 @@
+# Stealth Chromium (headed, on a virtual display) + live web view.
+# CloakBrowser's official image already ships the patched Chromium binary,
+# Playwright system deps, and the emoji/CJK fonts aggressive anti-bot sites need.
+#
+# Pinned by digest (not just :latest) so builds are reproducible AND the cloakserve
+# sed-patch below stays valid — a moving :latest could drift the patched line and
+# hard-fail the build via its grep guard. To update: pull a newer tag, re-check the
+# patch still applies, then bump this digest:
+#   docker buildx imagetools inspect cloakhq/cloakbrowser:latest   # -> new Digest
+FROM cloakhq/cloakbrowser:latest@sha256:440907001735f4e2764e614e1b40c40bc0317d34b83c0315897dea443cbe5fcc
+
+USER root
+
+# Preserve the persistent human profile (__default__) across graceful shutdowns.
+# Upstream cloakserve's _cleanup_process unconditionally rmtree's the seed's
+# user-data-dir on shutdown; for the reserved __default__ seed that is the
+# volume-backed /profile/__default__, so `docker compose down`/`stop`/recreate
+# wipes every cookie and login. Skip the delete for RESERVED_SEEDS so only the
+# throwaway per-connection fingerprint profiles get cleaned up.
+#
+# ⚠️ This only fixes the SHUTDOWN wipe. There is a SECOND, independent wipe on
+# STARTUP: an unclean stop leaves a stale SingletonLock in the profile, the next
+# Chrome refuses the "in-use" profile, CDP never comes up, and cloakserve rmtree's
+# the profile to recover (its other, error-path rmtree — not the one patched here).
+# That path is fixed in start-browser.sh, which clears stale Singleton* locks before
+# launch. BOTH fixes are required for logins to survive a restart.
+RUN sed -i 's|^\(        \)await asyncio.to_thread(self._safe_rmtree, proc.user_data_dir)$|\1if key not in RESERVED_SEEDS:\n\1    await asyncio.to_thread(self._safe_rmtree, proc.user_data_dir)|' /usr/local/bin/cloakserve \
+    && grep -n -A1 "if key not in RESERVED_SEEDS" /usr/local/bin/cloakserve
+
+# ⚠️ …and clearing stale locks only covers ONE of the reasons that path is reached. The error-path
+# rmtree itself was still unguarded, and it is what actually cost the owner his Facebook login
+# (2026-09-27: three wipes in twenty minutes while the guest thrashed at load ~200):
+#
+#     if not await self._wait_for_cdp(port):
+#         process.kill()
+#         await asyncio.to_thread(process.wait, timeout=5)
+#         await asyncio.to_thread(self._safe_rmtree, user_data_dir)   # ← the WHOLE profile
+#         raise web.HTTPBadGateway(text=...("Chrome failed to start"))
+#
+# An OOM-killed, wedged or merely slow Chrome reaches that line, and no amount of lock clearing
+# prevents it. So for the RESERVED seed the profile is QUARANTINED, not deleted: renamed
+# `<dir>.corrupt-<epoch>` inside the same volume. That keeps cloakserve's recovery semantics (the
+# next launch still gets a clean directory — `os.makedirs(user_data_dir, exist_ok=True)` recreates
+# it) and its safety property (the target stays inside data_dir), while never destroying the only
+# copy of a login. The throwaway per-connection fingerprint seeds keep the upstream delete.
+#
+# This also settles a claim in start-browser.sh ("third-party and digest-pinned, so the deletion
+# cannot be patched out"): cloakserve is plain Python, and this file patches it twice already.
+RUN sed -i 's|^\(                \)await asyncio.to_thread(self._safe_rmtree, user_data_dir)$|\1if seed_key not in RESERVED_SEEDS:\n\1    await asyncio.to_thread(self._safe_rmtree, user_data_dir)\n\1else:\n\1    await asyncio.to_thread(shutil.move, user_data_dir, user_data_dir + ".corrupt-" + str(int(time.time())))|' /usr/local/bin/cloakserve \
+    && grep -n -A3 "if seed_key not in RESERVED_SEEDS" /usr/local/bin/cloakserve \
+    && grep -q 'shutil.move, user_data_dir, user_data_dir + ".corrupt-"' /usr/local/bin/cloakserve \
+    && ! grep -qE '^ {16}await asyncio\.to_thread\(self\._safe_rmtree, user_data_dir\)$' /usr/local/bin/cloakserve \
+    && python3 -c "import ast; ast.parse(open('/usr/local/bin/cloakserve').read())"
+# The negative guard is anchored at EXACTLY sixteen spaces on purpose: the guarded call it must
+# leave behind is the same statement, indented twenty. `^ +await …` (any indent) still matches the
+# line INSIDE the new `if`, so it fails the build on a correct patch — which is precisely what the
+# first attempt at this patch did.
+
+# Enable Chrome extensions so browser42 can create native Chrome Tab Groups
+# (colored, labeled, visible in /view) through a minimal bridge extension.
+# Cloakserve hardcodes --disable-extensions for stealth; remove it so the
+# extension loads. The fingerprint patches handle extension footprint detection.
+RUN sed -i '/^    "--disable-extensions",$/d' /usr/local/bin/cloakserve \
+    && ! grep -q 'disable-extensions' /usr/local/bin/cloakserve
+
+# TigerVNC's Xvnc IS the X server AND the VNC server in one process (replaces the
+# old Xvfb + x11vnc pair). Unlike Xvfb it speaks RandR/SetDesktopSize, so noVNC's
+# resize=remote can size the virtual desktop to the viewer's window for crisp 1:1
+# output (no stretch-to-fit blur / "zoom"). websockify+noVNC turn it into a web page;
+# fluxbox gives Chromium a window manager; wmctrl keeps the window maximized; xauth
+# provides the X cookie Chromium needs to open the display.
+# (start-browser.sh writes a tuned noVNC landing page at index.html.)
+#
+# Vanilla Chromium — installed alongside CloakBrowser's patched binary so Browser42
+# can create native Chrome Tab Groups (colored, labeled, visible in /view) through
+# a minimal extension bridge. Cloakserve's CLOAKBROWSER_BINARY_PATH env var redirects
+# it to this binary. Operators can flip BROWSER42_CHROME=stealth to use the patched
+# binary instead (keeps fingerprinting, loses extensions).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        tigervnc-standalone-server tigervnc-common xauth \
+        fluxbox websockify novnc wmctrl ca-certificates \
+        chromium chromium-sandbox \
+    && rm -rf /var/lib/apt/lists/*
+
+# Browser42 is one shared browser. A connected Playwright client may call
+# Browser.close during normal cleanup; acknowledge but never forward that
+# destructive command to Chromium.
+COPY guard-shared-browser.py /usr/local/bin/guard-shared-browser.py
+RUN python3 /usr/local/bin/guard-shared-browser.py /usr/local/bin/cloakserve \
+    && grep -q 'blocked Browser.close on shared browser' /usr/local/bin/cloakserve
+
+# Loopback forwarder for internal *.localhost apps. Chrome pins *.localhost to
+# loopback (RFC 6761), so we serve loopback :80/:443 and forward to Traefik.
+# Pure stdlib python3 (already in the base image) — no extra apt dependency.
+COPY localhost-forward.py /usr/local/bin/localhost-forward.py
+COPY broker.py /usr/local/bin/browser42-broker.py
+COPY browser-navigation.js /usr/local/share/browser42/browser-navigation.js
+# One clipboard instead of two: the viewer-side bridge (KasmVNC's "clipboard seamless").
+COPY browser-clipboard.js /usr/local/share/browser42/browser-clipboard.js
+COPY start-browser.sh /usr/local/bin/start-browser.sh
+COPY extension/ /extension/
+RUN chmod +x /usr/local/bin/start-browser.sh /usr/local/bin/localhost-forward.py /usr/local/bin/browser42-broker.py
+
+# 9222 = CDP (for the MCP/agent side), 6080 = noVNC web view (for the human side).
+# Neither is published to the host directly — Caddy is the only public surface.
+EXPOSE 9222 6080
+
+ENTRYPOINT ["/usr/local/bin/start-browser.sh"]

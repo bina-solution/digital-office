@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+#: per-sync state, reset, and the sync-v3 ledger tools
+#
+# sync — INDOX's sync command tree. `bbox indox sync <verb>` reaches this generically.
+#
+#   sync state | status      per-pipe sync item counts (discovered/claimed/delivered/failed/review)
+#   sync reset [args]        re-drive sync items from our rows (RESET op) — no source moves
+#   sync coverage [args]     sync-v3 100% node-coverage gate (--since-minutes N)
+#
+# [2026-09-02] `engine` (the v1/v3 cutover switch) and `seed-ledger` (seeding the ledger from
+# gmail rows) are gone: every pipe is v3 and discovery seeds the sync item itself.
+#
+# This tree used to live in `bbox` as a nested case, and two of its five verbs ran scripts that sat
+# in scripts/ — seed-ledger and coverage. So "which sync verbs exist" was a fact in layer 0, and
+# two of INDOX's implementations were in layer 0 as well. An app is a folder; deleting it should
+# take its tooling with it.
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # die
+
+verb="${1:-state}"; shift || true
+case "${verb}" in
+  state|status)   exec bash "${SCRIPT_DIR}/sync-state" STATUS ;;
+  reset)          exec bash "${SCRIPT_DIR}/sync-reset" "$@" ;;
+  # cd to the repo root first: a Windows python3 mis-resolves the /c/... absolute form, so this
+  # is invoked by a path relative to the root.
+  coverage)       cd "${REPO_ROOT}" && exec python3 apps/indox/hooks/sync-coverage.py "$@" ;;
+  -h|--help)      sed -n '4,8p' "${BASH_SOURCE[0]}" | sed 's/^# \?//'; exit 0 ;;
+  *) die "unknown: bbox indox sync ${verb}  (state|reset|coverage)" ;;
+esac

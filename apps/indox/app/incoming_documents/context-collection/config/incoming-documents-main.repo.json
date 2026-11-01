@@ -1,0 +1,504 @@
+{
+  "name": "incoming-documents-main",
+  "backend": "gsheet",
+  "primary_key": "ID",
+  "columns": [
+    {
+      "name": "NAME",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "COMPANY_ID",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "SHORT_DOC_ID",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "TYPE",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "STATUS",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "COMPANY_DOC_ID",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "LINK",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "DOC_DATE",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "DOC_TOTAL_AMOUNT",
+      "type": "numeric",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "PURCHASE_ID",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "SHIPMENT_DOC_ID",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "LINKED_BS",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "BS_LINE_DATE",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "BS_LINE_AMOUNT",
+      "type": "numeric",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "SOURCE_TYPE",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "SOURCE_ID",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "SOURCE_LINK",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "SIZE",
+      "type": "numeric",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "HASH",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "TIMESTAMP",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "COMPANY_NAME",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "REQUIRED_ACTION",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "BS_EXTRACTED_LINES",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "TOTAL_AMOUNT",
+      "type": "numeric",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "BS_EXTRACTION_VERIFIED",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "BS_LINE_NOTE",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "FROM_OFFICE",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "FROM_OFFICE_CHECK",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "BS_LINK_DOCUMENTS_COMPLETED",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "SEARCH_IN_DRIVE_COMPLETED",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "DOC_DATE_COMPLETED",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "DOC_TOTAL_AMOUNT_COMPLETED",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "PURCHASE_ID_COMPLETED",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "SHIPMENT_ID_COMPLETED",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "COMPANY_NAME_COMPLETED",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "API_TOOLS_ID_COMPLETED",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "API_TOOLS_ID",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "ID",
+      "type": "string",
+      "nullable": false,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "EMPTY",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "סימון כרטסת עדכנית",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "BS_EXTRACTED_LINES_COMPLETED",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "BS_EXTRACTION_USE_CACHE",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "EX_INVOICE_ID",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "INVOICE_ID_COMPLETED",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "EX_IS_BS",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "EX_IS_BS_COMPLETED",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "FIGURE_TYPE_COMPLETED",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "DOUBLE_LINE_CONTEXT",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "FIGURE_COMPANY_COMPLETED",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "AI_COMPANY_ID",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "AI_TYPE",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "AI_DOC_ID",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "AI_DOC_DATE",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "AI_DOC_AMOUNT",
+      "type": "numeric",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "AI_SHIPMENT_IDS",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "AI_ORDER_IDS",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "AI_EXTRACTION_COMPLETED",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "PRIORITY_SYNC_COMPLETED",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "SELECTED_COMPANY_ID",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "SELECTED_DOC_ID",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "SELECTED_DOC_AMOUNT",
+      "type": "numeric",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "SELECTED_DOC_DATE",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "SELECTED_DOC_SHIPMENT_ID",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "SELECTED_DOC_ORDER_ID",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "SELECTION_CERTAINTY",
+      "type": "numeric",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "SELECTION_SOURCE",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "SELECTION_COMPLETED",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    },
+    {
+      "name": "SELECTION_SCORE_DEBUG",
+      "type": "string",
+      "nullable": true,
+      "unique": false,
+      "default": null
+    }
+  ],
+  "priority_sync_columns": [
+    "STATUS",
+    "REQUIRED_ACTION",
+    "COMPANY_NAME",
+    "API_TOOLS_ID"
+  ],
+  "gsheet": {
+    "spreadsheet_id": "1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo",
+    "spreadsheet_title": null,
+    "sheet_name": "מסמכים נכנסים",
+    "gid": 542119184,
+    "editors": []
+  },
+  "supabase": null,
+  "kafka": {
+    "enabled": true,
+    "partitions": 3,
+    "retention_hours": 168
+  },
+  "created_at": "2026-04-30T21:05:38.131435Z",
+  "updated_at": "2026-04-30T21:05:38.131435Z"
+}

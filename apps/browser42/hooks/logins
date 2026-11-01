@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+#: list | sources | sync | materialize | harvest | export <site>
+# logins — one login, two stores, always the same in both.
+#
+#   logins list            what Chrome holds (origins + username lengths; passwords never read)
+#   logins sources         what the credential plane offers, and which origin each entry maps to
+#   logins sync            BOTH directions: plane -> Chrome (autofill) and Chrome -> plane (a new
+#                          credential in חיבורים ומפתחות). Conflict rules live in logins.py's header.
+#   logins materialize     plane -> Chrome only
+#   logins harvest         Chrome -> plane only
+#   logins export <site>   force one named site's Chrome login into its declared catalog row
+#
+# `bbox b42 <verb>` forwards here unchanged. The verb is a thin host-side wrapper because the profile
+# lives inside the browser container (`cloakprofile:/profile`) and nowhere else: the work itself is
+# `apps/browser42/logins.py`, mounted read-only at /logins.py, and this file only decides WHICH
+# container is running and hands the arguments over. Nothing about Chrome's store is interpreted here.
+#
+# The password is never printed, in either direction: see the module docstring for the encoding (the
+# container's keyring-less 'basic' store) and for what that implies about the profile volume.
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # say, die, colors
+
+APP_DIR="$(dirname "${SCRIPT_DIR}")"
+VOLUME="digital-office_cloakprofile"
+IMAGE="digital-office-browser42-browser"
+BROWSER="$(docker ps --filter name=browser42-browser --format '{{.Names}}' | head -1)"
+
+[ -f "${APP_DIR}/logins.py" ] || die "apps/browser42/logins.py is missing"
+
+run_online() { docker exec "${BROWSER}" python3 /logins.py "$@"; }
+
+# The offline path: no browser container, so no Chrome holding the store, while the profile volume,
+# the state file and the network to the credential plane are all still there. Same work that
+# start-browser.sh does at boot (section 4j) — deliberately one implementation, so what this prints
+# by hand cannot differ from what a restart does.
+run_offline() {
+  docker run --rm \
+    -v "${VOLUME}:/profile" \
+    -v "${REPO_ROOT}/data/browser42:/data" \
+    -v "${APP_DIR}/logins.py:/logins.py:ro" \
+    --network traefik-network \
+    --entrypoint python3 "${IMAGE}" /logins.py "$@"
+}
+
+case "${1:-}" in
+  sync|materialize|harvest)
+    if [ -z "${BROWSER}" ]; then run_offline "$@"; exit $?; fi
+    set +e
+    first="$(run_online "$@")"; rc=$?
+    set -e
+    if [ "${rc}" -ne 3 ]; then
+      printf '%s\n' "${first}"
+      exit "${rc}"
+    fi
+    say "Chrome holds the password store — stopping the browser for the sync, then starting it again"
+    "${REPO_ROOT}/scripts/dc" stop browser42-browser >/dev/null
+    out="$(run_offline "$@")"
+    "${REPO_ROOT}/scripts/dc" up -d browser42-browser >/dev/null
+    printf '%s\n' "${out}"
+    printf '%s\n' "${out}" | grep -q '"ok": true' || die "the sync failed while the browser was stopped (see the output above)"
+    ;;
+  list|sources|export)
+    if [ -z "${BROWSER}" ]; then run_offline "$@"; exit $?; fi
+    run_online "$@"
+    ;;
+  *)
+    die "usage: bbox b42 logins {list|sources|sync|materialize|harvest|export <site>}"
+    ;;
+esac

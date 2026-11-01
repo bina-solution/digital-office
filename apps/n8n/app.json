@@ -1,0 +1,367 @@
+{
+  "id": "n8n",
+  "title": {
+    "he": "אוטומציות",
+    "en": "Automations"
+  },
+  "layer": 3,
+  "kind": "service",
+  "version": "2.17.0",
+  "summary": {
+    "he": "מנוע האוטומציות — תזמון, טריגרים ותהליכים",
+    "en": "The automation engine — schedules, triggers, workflows"
+  },
+  "capabilities": [
+    {
+      "name": "workflow",
+      "type": "protocol",
+      "endpoint": "http://n8n:5678",
+      "required_ops": [
+        "execute",
+        "activate",
+        "import",
+        "publish",
+        "webhook"
+      ]
+    },
+    {
+      "name": "automation-stdlib",
+      "type": "protocol",
+      "required_ops": [
+        "Settings",
+        "Logger",
+        "process_lock",
+        "Batch Upsert"
+      ]
+    }
+  ],
+  "use": [
+    {
+      "capability": "sql",
+      "strength": "requires",
+      "after": true,
+      "own_instance": true,
+      "reason": "n8n's schema is managed by its own migration runner and is pinned to Postgres 17, while the shared cluster is 15.8. Consolidating needs a dump/restore and a row-count gate (packaging/OPTIMISATION.md phase 1)."
+    },
+    {
+      "capability": "kv",
+      "strength": "requires",
+      "after": true
+    },
+    {
+      "capability": "secrets",
+      "strength": "requires",
+      "after": true
+    },
+    {
+      "capability": "error-tracking",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
+    }
+  ],
+  "connections": [
+    {
+      "id": "n8n-encryption-key",
+      "required": true
+    },
+    {
+      "id": "n8n-jwt-secret",
+      "required": true
+    },
+    {
+      "id": "n8n-owner",
+      "required": true
+    },
+    {
+      "id": "n8n-postgres",
+      "required": true
+    },
+    {
+      "id": "n8n-api-key",
+      "required": false
+    },
+    {
+      "id": "n8n-runners-token",
+      "required": true
+    },
+    {
+      "id": "n8n-webhook-cicd",
+      "required": false
+    }
+  ],
+  "compose": "docker-compose.yml",
+  "blueprints": {
+    "n8n": "blueprint/n8n"
+  },
+  "routing": [
+    {
+      "host": "n8n",
+      "port": 5678,
+      "auth": "none",
+      "emit_labels": false,
+      "module": {
+        "group": "תשתית",
+        "icon": "workflow",
+        "embed": false,
+        "name": "n8n",
+        "desc": "מנוע האוטומציה והתהליכים",
+        "order": 210
+      }
+    }
+  ],
+  "health": {
+    "structural": "auto",
+    "probe": {
+      "http": "http://127.0.0.1:5678/healthz",
+      "interval": "30s"
+    }
+  },
+  "data": {
+    "volumes": [
+      "n8n_storage",
+      "postgres_storage"
+    ],
+    "on_uninstall": "keep",
+    "sql": [
+      {
+        "instance": "supabase-db",
+        "database": "postgres",
+        "tables": [
+          "app_logs"
+        ],
+        "note": "created by schema/01_platform.sql"
+      },
+      {
+        "instance": "n8n-postgres",
+        "database": "n8n",
+        "note": "n8n owns this instance entirely - workflows, credentials, execution history"
+      }
+    ]
+  },
+  "resources": {
+    "cpus": "2",
+    "memory": "2g"
+  },
+  "observability": {
+    "sentry_platform": "node"
+  },
+  "progress_deadline_seconds": 900,
+  "contributes": {
+    "connection_providers": [
+      {
+        "id": "n8n-owner",
+        "group": "n8n (automation core)",
+        "title": "n8n owner account (email + password)",
+        "kind": "password",
+        "pillar": "app-password",
+        "app": {
+          "name": "n8n",
+          "url_env": "N8N_BASE_URL",
+          "user_env": "N8N_OWNER_EMAIL"
+        },
+        "env": "N8N_OWNER_PASSWORD",
+        "envs_extra": [
+          "N8N_OWNER_EMAIL",
+          "N8N_OWNER_FIRSTNAME",
+          "N8N_OWNER_LASTNAME"
+        ],
+        "now": "n8n has no native owner env — scripts/n8n-push bootstraps it via REST /rest/owner/setup (idempotent, skipped if an owner exists).",
+        "probe": {
+          "type": "http",
+          "url": "http://n8n:5678/rest/settings"
+        },
+        "wizard": "human login: wizard form (email + password)"
+      },
+      {
+        "id": "n8n-encryption-key",
+        "group": "n8n (automation core)",
+        "automint": {
+          "type": "hex",
+          "bytes": 32
+        },
+        "title": "n8n credential-store encryption key (AES, at rest)",
+        "kind": "text-secret",
+        "env": "N8N_ENCRYPTION_KEY",
+        "impact": [
+          "n8n"
+        ],
+        "rotate_warn": "החלפת מפתח ההצפנה תנתק את כל אישורי ה‑OAuth הקיימים ב‑n8n (יידרש חיבור מחדש), ותדרוש הפעלה מחדש של n8n. אישורים המנוהלים דרך .env יוצפנו מחדש אוטומטית ב‑push.",
+        "now": "plain env -> n8n. Encrypts ALL n8n credentials at rest. Drift breaks OAuth creds (env-managed ones survive because n8n-push re-PATCHes them under the current key).",
+        "probe": {
+          "type": "http",
+          "url": "http://n8n:5678/healthz"
+        },
+        "wizard": "auto-mint; ROTATION = the dangerous one (OAuth grants must re-consent)"
+      },
+      {
+        "id": "n8n-jwt-secret",
+        "group": "n8n (automation core)",
+        "automint": {
+          "type": "hex",
+          "bytes": 32
+        },
+        "title": "n8n user-management JWT secret",
+        "kind": "text-secret",
+        "env": "N8N_USER_MANAGEMENT_JWT_SECRET",
+        "now": "plain env -> n8n (login session signing)",
+        "probe": {
+          "type": "present"
+        },
+        "wizard": "auto-mint"
+      },
+      {
+        "id": "n8n-postgres",
+        "group": "n8n (automation core)",
+        "title": "n8n Postgres credentials",
+        "kind": "password",
+        "env": "POSTGRES_PASSWORD",
+        "envs_extra": [
+          "POSTGRES_USER",
+          "POSTGRES_DB"
+        ],
+        "now": "plain env -> n8n-postgres AND n8n creds 'N8N DB'(tJ195)/'Postgres account'(CPi9) via credential_overrides; apitools gets it assembled as N8N_DB_DSN; any-concurrency tails execution_entity with the same creds.",
+        "probe": {
+          "type": "tcp",
+          "host": "n8n-postgres",
+          "port": 5432
+        },
+        "wizard": "auto-mint"
+      },
+      {
+        "id": "n8n-api-key",
+        "group": "n8n (automation core)",
+        "title": "n8n public REST API key",
+        "kind": "text-secret",
+        "env": "N8N_API_KEY",
+        "now": "MANUALLY minted per-instance in the n8n UI (Settings -> n8n API), pasted into .env, reseeded into cred 'n8n account'(Fxy5) by credential_overrides.",
+        "probe": {
+          "type": "present"
+        },
+        "wizard": "post-install auto-mint via n8n REST (owner login) — removable manual step"
+      },
+      {
+        "id": "n8n-webhook-cicd",
+        "group": "n8n (automation core)",
+        "automint": {
+          "type": "password",
+          "chars": 24
+        },
+        "title": "CI/CD webhook basic-auth",
+        "kind": "password",
+        "env": "N8N_WEBHOOK_PASS",
+        "envs_extra": [
+          "N8N_WEBHOOK_USER"
+        ],
+        "now": "env -> n8n container env (validated via $env in the [CI] probe workflow, no encryption needed) + creds 'CICD AUTH'(gBwY)/'n8n REST Basic Auth'(dSaW) via credential_overrides.",
+        "probe": {
+          "type": "present"
+        },
+        "wizard": "auto-mint"
+      },
+      {
+        "id": "n8n-runners-token",
+        "group": "n8n (automation core)",
+        "automint": {
+          "type": "hex",
+          "bytes": 32
+        },
+        "title": "n8n task-runners auth token",
+        "kind": "text-secret",
+        "env": "N8N_RUNNERS_AUTH_TOKEN",
+        "now": "plain env shared by n8n main/workers and the n8nio/runners sidecars",
+        "probe": {
+          "type": "present"
+        },
+        "wizard": "auto-mint"
+      },
+      {
+        "id": "mcp-auth-token",
+        "group": "n8n (automation core)",
+        "automint": {
+          "type": "hex",
+          "bytes": 24
+        },
+        "title": "n8n MCP server header-auth token",
+        "kind": "text-secret",
+        "env": "MCP_AUTH_TOKEN",
+        "now": "env -> creds 'Header Auth account'(2qKU/77wJ) via credential_overrides; AI agents call the n8n MCP Server Trigger endpoints with this bearer.",
+        "probe": {
+          "type": "present"
+        },
+        "wizard": "auto-mint"
+      },
+      {
+        "id": "bs-webhook",
+        "group": "n8n (automation core)",
+        "automint": {
+          "type": "password",
+          "chars": 24
+        },
+        "title": "Incoming-Documents webhook basic-auth",
+        "kind": "password",
+        "env": "BS_WEBHOOK_PASS",
+        "envs_extra": [
+          "BS_WEBHOOK_USER"
+        ],
+        "now": "env -> cred 'Incoming Documents'(azPh) via credential_overrides; the chat service POSTs document records to this webhook with the same pair.",
+        "probe": {
+          "type": "present"
+        },
+        "wizard": "auto-mint"
+      },
+      {
+        "id": "settings-auth",
+        "group": "n8n (automation core)",
+        "automint": {
+          "type": "password",
+          "chars": 24
+        },
+        "title": "Settings webhook basic-auth",
+        "kind": "password",
+        "pillar": "auth",
+        "protocol": "basic-auth",
+        "env": "SETTINGS_AUTH_PASS",
+        "envs_extra": [
+          "SETTINGS_AUTH_USER"
+        ],
+        "now": "env -> cred 'Settings Auth'(m44S) via credential_overrides",
+        "probe": {
+          "type": "present"
+        },
+        "wizard": "auto-mint"
+      },
+      {
+        "id": "priority-erp",
+        "group": "n8n (automation core)",
+        "title": "Priority ERP basic-auth (prod + test)",
+        "kind": "password",
+        "env": "PRIORITY_PASS",
+        "envs_extra": [
+          "PRIORITY_USER",
+          "PRIORITY_TEST_USER",
+          "PRIORITY_TEST_PASS"
+        ],
+        "optional": true,
+        "now": "env -> creds 'Priority Production'(LKWC)/'priority test'(PKgR) via credential_overrides; blank = priority_sync stays gated off",
+        "probe": {
+          "type": "present"
+        },
+        "wizard": "guided capture (business's ERP account)"
+      },
+      {
+        "id": "telegram-bot",
+        "group": "n8n (automation core)",
+        "title": "Telegram logger bot token",
+        "kind": "text-secret",
+        "env": "TELEGRAM_BOT_TOKEN",
+        "optional": true,
+        "now": "env -> cred 'N8N TG LOGGER'(Emuw) via credential_overrides",
+        "probe": {
+          "type": "present"
+        },
+        "wizard": "guided capture (BotFather)"
+      }
+    ]
+  }
+}

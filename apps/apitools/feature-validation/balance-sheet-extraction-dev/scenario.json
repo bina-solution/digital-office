@@ -1,0 +1,11 @@
+{
+  "feature": "balance-sheet-extraction-dev",
+  "description": "Dev variant of balance-sheet extraction. Uses the 'Balance Sheet Extractor - v2 - shmuel' N8N workflow (indoxV2ExtractBalanceSheet01) instead of the production workflow.",
+  "cases_source": "fixtures/fixtures.json",
+  "workflow_id": "indoxV2ExtractBalanceSheet01",
+  "webhook_path": "bs_ex_2_dev",
+  "requires": [
+    "orchestration"
+  ],
+  "notes": "End-to-end BS extraction via the n8n webhook — runs only with FV_CAPABILITIES including 'orchestration' (live n8n workflow); covered by the indox-e2e lane otherwise."
+}

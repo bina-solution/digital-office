@@ -1,0 +1,32 @@
+# sites-render — headless Chromium + beautiful-score, and nothing else.
+#
+# Why not `mcr.microsoft.com/playwright/python`: that image pins the browser to the playwright
+# version IT was built with, and `beautiful-score[render]` declares its own `playwright>=1.40`. A
+# mismatch there fails at run time with "Executable doesn't exist", the one error this container
+# exists to make impossible. So the base is the same python:3.12-slim as every other first-party
+# image, pip resolves ONE playwright, and `playwright install --with-deps` fetches the browser that
+# exactly that version drives.
+#
+# `--with-deps` is deliberate: Chromium needs ~40 shared libraries (fonts, NSS, ATK, X11 shims) and
+# a slim base has none of them. Installing them here, pinned to the playwright release, is the
+# difference between an image that renders Hebrew text and one that renders boxes.
+FROM python:3.12-slim
+
+ENV PIP_NO_CACHE_DIR=1 \
+    PYTHONUNBUFFERED=1 \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+
+WORKDIR /app
+
+COPY requirements.render.txt ./requirements.txt
+RUN pip install -r requirements.txt \
+ && python -m playwright install --with-deps chromium \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends fonts-dejavu-core fonts-noto-core \
+ && fc-cache -f \
+ && rm -rf /var/lib/apt/lists/*
+
+COPY render_server.py .
+
+EXPOSE 8981
+CMD ["uvicorn", "render_server:app", "--host", "0.0.0.0", "--port", "8981", "--proxy-headers", "--forwarded-allow-ips=*"]

@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://browser42.local/schema/task-result-v1.json",
+  "title": "Browser42 Task Result",
+  "type": "object",
+  "required": [
+    "protocol_version",
+    "ok",
+    "slug",
+    "state",
+    "checks",
+    "final_url",
+    "native_group",
+    "evidence",
+    "records",
+    "stage_timings"
+  ],
+  "properties": {
+    "protocol_version": { "const": 1 },
+    "ok": { "type": "boolean" },
+    "slug": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+    "state": { "enum": ["accepted", "rejected"] },
+    "checks": { "type": "object", "additionalProperties": { "type": "boolean" } },
+    "final_url": { "type": "string", "format": "uri" },
+    "native_group": {
+      "type": "object",
+      "required": ["id", "color", "label"],
+      "properties": {
+        "id": { "type": ["integer", "null"] },
+        "color": { "type": "string" },
+        "label": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "evidence": {
+      "type": "object",
+      "required": ["screenshots", "extractions"],
+      "properties": {
+        "screenshots": { "type": "array" },
+        "extractions": { "type": "array" }
+      },
+      "additionalProperties": true
+    },
+    "records": { "type": "array", "items": { "type": "object" } },
+    "stage_timings": { "type": "object" }
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,21 @@
+-- Drop BS_LINK_ROUND.
+--
+-- It was added by 2026-08-21_bs_relink_rounds.sql to feed the per-round link_documents action
+-- names (link_documents_r1, _r2 ...), which existed only to get a repeat past
+-- 'Dup Guard: Double Action'. The round number routed nothing -- '3b. BS Action Switch1' stripped
+-- it straight back off one node later -- so its only consumer was the guard.
+--
+-- Measured before removal (2026-08-23):
+--   max BS_LINK_ROUND ever reached  1        39,094 rows at 0, 121 at 1
+--   names ever dispatched           link_documents x4, link_documents_r1 x551
+--   no_action_bs_link_exhausted     0        the nine-round bound never fired
+--   551 r1 dispatches -> 121 recorded rounds; the other 430 re-emitted the SAME name and the
+--   guard, being stop-and-error, discarded a whole driver batch each time.
+--
+-- Linking runs once and latches. A document that turns up after its balance sheet was linked is
+-- a duplicate, and duplicates belong to the merge.
+--
+-- Readers removed first (f08a8888 and the follow-up): the decide gate, the switch's
+-- suffix-stripping expression, the upsert assignment, the driver's `relink` CTE and
+-- __bs_relink_due, and indoxApi01's column type map. Nothing reads it at the time of this drop.
+alter table public.incoming_documents drop column if exists "BS_LINK_ROUND";

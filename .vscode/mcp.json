@@ -1,0 +1,40 @@
+{
+	"servers": {
+		"browser42": {
+			"type": "http",
+			"url": "http://127.0.0.1:8931/mcp",
+			"headers": {
+				"Authorization": "Bearer ${input:browser42_mcp_token}"
+			}
+		},
+		"n8n-mcp": {
+			"type": "stdio",
+			"command": "npx",
+			"args": [
+				"@leonardsellem/n8n-mcp-server@0.1.8"
+			],
+			"env": {
+				"N8N_API_URL": "${input:n8n_api_url}",
+				"N8N_API_KEY": "${input:n8n_api_key}"
+			}
+		}
+	},
+	"inputs": [
+		{
+			"id": "browser42_mcp_token",
+			"type": "promptString",
+			"description": "browser42 MCP bearer token (BROWSER42_MCP_TOKEN from .env)",
+			"password": true
+		},
+		{
+			"id": "n8n_api_url",
+			"type": "promptString",
+			"description": "What is the full URL of your n8n API (including /api/v1)?"
+		},
+		{
+			"id": "n8n_api_key",
+			"type": "promptString",
+			"description": "What is your n8n API key?"
+		}
+	]
+}

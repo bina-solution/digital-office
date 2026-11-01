@@ -1,0 +1,19 @@
+sequenceDiagram
+    autonumber
+    participant U as Owner (network screen, SSO)
+    participant G as Gateway - network app
+    participant OF as offices app (owns installation)
+    participant M as Machine (via computers)
+    participant R as New office node
+
+    U->>G: enroll a node (tenant, name, scope)
+    G-->>U: enrollment token + QR
+    U->>OF: offices.create + offices.converge (machine, domain, ref, apps)
+    OF->>M: preflight - dns, docker 28.x, ports, disk, RAM - refusal happens HERE, before any change
+    M-->>OF: evidence per step
+    OF->>M: clone at the pinned commit, engine, env, set-state, ./bbox run (detached)
+    OF-->>U: the per-step convergence log, plus home.pushed
+    G->>R: enroll with the gateway-issued token (over exec, no camera needed)
+    R->>G: first handshake
+    G->>R: verify checklist with evidence
+    G-->>U: node active, routers published

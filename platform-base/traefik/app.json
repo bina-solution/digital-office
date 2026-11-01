@@ -1,0 +1,64 @@
+{
+  "id": "traefik",
+  "title": {
+    "he": "שער הכניסה",
+    "en": "Traefik"
+  },
+  "layer": 1,
+  "kind": "service",
+  "version": "3.3",
+  "system": true,
+  "summary": {
+    "he": "נתב הקצה — ניתוב, TLS ו-forward-auth",
+    "en": "The edge router — routing, TLS and forward-auth"
+  },
+  "capabilities": [
+    {
+      "name": "edge",
+      "type": "protocol",
+      "endpoint": "http://traefik-deployment:8080",
+      "required_ops": [
+        "route",
+        "tls",
+        "forward-auth"
+      ]
+    }
+  ],
+  "use": [
+    {
+      "capability": "identity",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
+    }
+  ],
+  "connections": [
+    {
+      "id": "traefik-acme-email",
+      "required": true
+    }
+  ],
+  "compose": "docker-compose.yml",
+  "routing": [
+    {
+      "host": "traefik",
+      "port": 8080,
+      "auth": "sso",
+      "service": "traefik-deployment",
+      "emit_labels": false
+    }
+  ],
+  "health": {
+    "structural": "auto"
+  },
+  "data": {
+    "volumes": [],
+    "on_uninstall": "keep",
+    "paths": [
+      "platform-base/traefik/config"
+    ]
+  },
+  "observability": {
+    "sentry_platform": "go"
+  }
+}

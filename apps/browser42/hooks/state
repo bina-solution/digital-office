@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+#: dump | load | list | newest | info | verify | reset
+# state — browser42 state-dump management, and the conventions that go with it.
+#
+#   state dump [path]   dump the live profile; with no path, into data/ with a timestamped name
+#   state load [path]   restore; with no path, the NEWEST dump under data/
+#   state list | ls     list dumps newest-first, marking the one `load` would pick
+#   state info|verify|reset   passed straight through to browser42-state.sh
+#
+# `bbox b42 <verb>` forwards here unchanged. The archive naming — `data/browser42-state-*.tar.gz.enc`
+# plus the legacy `data/browser42/*.tar.gz.enc` — used to live in bbox and in scripts/onboarding, so
+# three files had to agree on one app's filename format for "load the latest dump" to mean the same
+# thing in each. It is one app's convention, so it lives with the app (gate G31).
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # say, die, colors
+
+B42="${SCRIPT_DIR}/../browser42-state.sh"
+DUMP_DIR="${REPO_ROOT}/data"
+
+# Newest dump first. Both globs are searched: `browser42-state-<stamp>.tar.gz.enc` is what `dump`
+# writes today, `data/browser42/*.tar.gz.enc` is where older dumps landed.
+list_dumps() { ls -t "${DUMP_DIR}"/browser42-state-*.tar.gz.enc \
+                     "${DUMP_DIR}"/browser42/*.tar.gz.enc 2>/dev/null || true; }
+newest_dump() { list_dumps | head -1; }
+
+verb="${1:-}"; shift || true
+case "${verb}" in
+  dump)
+    if [ "$#" -eq 0 ]; then
+      mkdir -p "${DUMP_DIR}"
+      sh "${B42}" dump "${DUMP_DIR}/browser42-state-$(date +%Y%m%d-%H%M%S).tar.gz.enc"
+    else
+      sh "${B42}" dump "$@"
+    fi ;;
+
+  load)
+    f="${1:-}"
+    if [ -z "${f}" ]; then
+      f="$(newest_dump)"
+      [ -n "${f}" ] || die "no browser42 dump under data/ — run 'bbox b42 dump' first"
+      say "loading latest dump: $(basename "${f}")"
+    fi
+    sh "${B42}" load "${f}" ;;
+
+  list|ls)
+    files="$(list_dumps)"
+    [ -n "${files}" ] || { say "no browser42 dumps under data/ (run 'bbox b42 dump')"; exit 0; }
+    say "browser42 state dumps (newest first; ${cg}★${c0} = default for 'bbox b42 load'):"
+    first=1
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      mark=" "; [ "${first}" = 1 ] && mark="${cg}★${c0}"; first=0
+      printf '  %s %6s  %s  %s\n' "${mark}" \
+        "$(du -h "$f" 2>/dev/null | cut -f1)" \
+        "$(date -r "$f" '+%Y-%m-%d %H:%M' 2>/dev/null || echo '?')" \
+        "$(basename "$f")"
+    done <<EOF
+${files}
+EOF
+    ;;
+
+  # Path of the dump `load` would pick, or nothing. Lets hooks/onboard decide whether there is
+  # anything to restore without re-deriving the filename format — the duplication this file exists
+  # to end.
+  newest) newest_dump ;;
+
+  info|verify|reset) sh "${B42}" "${verb}" "$@" ;;
+  *) die "unknown: bbox b42 ${verb:-<none>}  (dump|load|list|newest|info|verify|reset)" ;;
+esac

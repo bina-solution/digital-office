@@ -1,0 +1,15 @@
+{
+  "office": "hp-laptop",
+  "alias": "bina",
+  "label": "המחשב הנייד",
+  "module": {
+    "id": "bina.hp-laptop",
+    "name": "בינה ודעת",
+    "icon": "bot",
+    "group": "ראשי",
+    "desc": "הסוכן של הלשכה",
+    "order": 1,
+    "embed": "/a/bina/"
+  },
+  "base": "http://dgo-extend:8983/peer/hp-laptop/bina/"
+}

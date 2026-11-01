@@ -1,0 +1,131 @@
+#!/usr/bin/env bash
+#: link — this office's links and their tunnels: what is declared, and how to bring one up or take it
+#: away. The tunnel is applied by the `link` converge step, on BOTH ends, through `computers`.
+#
+#   ./bbox dgo link status            # what is declared, and what is rendered right now
+#   ./bbox dgo link history [n]       # every pair's recorded transitions — did it hold, and who fixed it
+#   ./bbox dgo link up   [<office>]   # converge the `link` step (both ends, then a real ping)
+#   ./bbox dgo link down [<office>]   # `unlink`: takes the tunnel down on both ends and revokes tokens
+set -uo pipefail
+# Every verb here prints Hebrew (the offices' names, the verdict's sentences and the reasons a
+# pairing was refused), and a Windows shell would crash python on the first such line without an
+# explicit io encoding: G10 (portability-lint) asks for this line and the file keeps it.
+export PYTHONIOENCODING=utf-8
+VERB="${1:-status}"
+OFFICE="${2:-}"
+CONTAINER="$(docker ps --filter 'name=^dgo-extend-' --format '{{.Names}}' 2>/dev/null | head -1)"
+
+api() {                    # api <method> <path> [json-body]
+  # The body goes through an ARRAY, never through `${body:+…}`: an expansion like that is word-split
+  # with its quotes kept as literal characters, so curl received a malformed header and an empty body
+  # — and the app, seeing no `steps`, silently ran the DEFAULT converge. Measured 2026-10-01: `link
+  # down` ran `machine` and left `unlink` pending, which reads exactly like a step that does nothing.
+  local method="$1" path="$2" body="${3:-}"
+  local -a args=(-fsS -m 30 -X "${method}")
+  if [ -n "${body}" ]; then args+=(-H 'content-type: application/json' -d "${body}"); fi
+  if [ -n "${DGO_EXTEND_URL:-}" ]; then
+    curl "${args[@]}" "${DGO_EXTEND_URL}${path}" 2>/dev/null && return 0
+  fi
+  curl "${args[@]}" "http://dgo-extend:8983${path}" 2>/dev/null && return 0
+  [ -n "${CONTAINER}" ] || return 1
+  # `-i`: the program arrives on stdin. Without it docker attaches no stdin, python ran an empty
+  # script, and every verb here read an empty answer as JSON — from a host shell (where the app's
+  # name does not resolve, so this is the path taken) `bbox dgo link status` was a traceback.
+  docker exec -i "${CONTAINER}" python3 - "${method}" "${path}" "${body}" <<'PY'
+import json, sys, urllib.request
+method, path, body = sys.argv[1], sys.argv[2], (sys.argv[3] or "")
+data = body.encode() if body else None
+req = urllib.request.Request("http://127.0.0.1:8983" + path, data=data, method=method,
+                             headers={"content-type": "application/json"} if data else {})
+try:
+    print(urllib.request.urlopen(req, timeout=20).read().decode())
+except urllib.error.HTTPError as e:
+    print(e.read().decode() or json.dumps({"error": f"HTTP {e.code}"}))
+PY
+}
+
+case "${VERB}" in
+  status|"")
+    out="$(api GET /api/link)" || { echo "dgo-extend is not answering — is the app up?" >&2; exit 1; }
+    printf '%s' "${out}" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+h = d.get("home") or {}
+print("home: %s  slot=%s  %s  %s" % (h.get("id"), h.get("slot"), h.get("domain"), h.get("fingerprint") or ""))
+at = h.get("listen") or {}
+if at.get("moved_from"):
+    # the address this office declares is no longer where it is reached; the next run re-declares it
+    print("listens: %s:%s - the offices that dial reach it there; it still DECLARES %s" % (at["endpoint"], at["port"], at["moved_from"]))
+files = (d.get("tunnel") or {}).get("tunnel") or {}
+print("rendered: " + ", ".join(k for k, v in files.items() if v.get("present")) or "rendered: none")
+for it in (d.get("items") or []):
+    # …and what is MEASURED, beside what is declared: does she answer, and when did the tunnel last
+    # complete a handshake (the container that holds the interface writes it every 15 s).
+    t = it.get("tunnel")
+    shook = ("not measured" if not t else "never" if t.get("handshake_age_s") is None
+             else "%ds ago%s" % (t["handshake_age_s"], "" if t.get("alive") else " - the tunnel is DEAD"))
+    print("  %-10s %-8s slot=%-4s endpoint=%-32s %s  %s" % (
+        it.get("office"), "link" if it.get("declared") else "-",
+        it.get("peer_slot") or "-", it.get("endpoint") or "-",
+        it.get("direction") or "-", it.get("peer_fingerprint") or ""))
+    print("  %-10s answers: %-8s handshake: %s" % ("", it.get("state") or "-", shook))
+'
+    ;;
+  history)
+    # The other half of `status`: not "is it up now" but "did it hold". One line per CHANGE of a
+    # pair's state (plus a heartbeat), written by the projection pass — with the repair that ran in
+    # the pass the change was seen in, because "who fixed it" is the one question a history answers
+    # and a screenshot cannot (owner, 2026-10-12: «שלא נצטרך לחבר שוב»). `history <n>` shows n lines.
+    api GET "/api/link/history?limit=${OFFICE:-40}" | python3 -c '
+import json, sys, time
+d = json.load(sys.stdin)
+rows = d.get("items") or []
+if not rows:
+    print("no transitions recorded yet — the projection pass writes the first line within a minute")
+    raise SystemExit(0)
+for r in rows:
+    when = time.strftime("%m-%d %H:%M", time.localtime(r.get("at") or 0))
+    state = "up" if r.get("ok") else "down/" + (r.get("hop") or "?")
+    shook = ("handshake %ss" % r["handshake_age_s"]) if r.get("handshake_age_s") is not None else "no handshake ever"
+    tail = (" - fixed by " + r["fixed_by"]) if r.get("fixed_by") else (" - " + str(r.get("why") or ""))
+    print("%s  %-10s %-11s %-18s %s%s" % (when, r.get("office"), state, shook,
+                                          "beat" if r.get("kind") == "beat" else "CHANGE", tail))
+'
+    ;;
+  up)
+    [ -n "${OFFICE}" ] || { echo "usage: bbox dgo link up <office> [use|serve]" >&2; exit 2; }
+    DIRECTION="${3:-use}"
+    # DECLARING IS PART OF CREATING: `link down` is the revoke, and a revoke removes the link ENTRY —
+    # so the way back is a declaration, not a converge. Re-running `up` on a link that is already
+    # declared changes nothing (idempotent), which is also what makes the revoke gate able to put the
+    # link back and measure a round trip.
+    HOME_ID="$(api GET /api/link | python3 -c 'import json,sys;print((json.load(sys.stdin).get("home") or {}).get("id") or "local")' 2>/dev/null)"
+    DECLARED="$(api GET /api/link | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print(next((i.get('declared') for i in (d.get('items') or []) if i.get('office')=='${OFFICE}'), False))" 2>/dev/null)"
+    if [ "${DECLARED}" != "True" ]; then
+      echo "declaring the link ${OFFICE} ↔ ${HOME_ID} (${DIRECTION})"
+      api PUT "/api/office/${OFFICE}" "{\"links\":[{\"office\":\"${HOME_ID}\",\"direction\":\"${DIRECTION}\"}]}" \
+        | python3 -c 'import json,sys;d=json.load(sys.stdin);print("declared" if not d.get("error") else d["error"])'
+    fi
+    api POST "/api/office/${OFFICE}/converge" '{"steps":["link"]}' | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+if d.get("error"): print(d["error"]); raise SystemExit(1)
+r = (d.get("run") or {})
+print("converge %s: %s" % (r.get("office"), r.get("status")))
+print("watch: bbox dgo status   (or GET /api/office/%s/run)" % r.get("office"))
+'
+    ;;
+  down)
+    [ -n "${OFFICE}" ] || { echo "usage: bbox dgo link down <office>" >&2; exit 2; }
+    api POST "/api/office/${OFFICE}/converge" '{"steps":["unlink"]}' | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+if d.get("error"): print(d["error"]); raise SystemExit(1)
+print("unlink started for %s" % ((d.get("run") or {}).get("office")))
+'
+    ;;
+  *) echo "usage: bbox dgo link [status|history|up|down] [office|lines]" >&2; exit 2 ;;
+esac

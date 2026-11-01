@@ -1,0 +1,64 @@
+{
+  "id": "machine",
+  "title": {
+    "he": "מכונה",
+    "en": "Machine"
+  },
+  "layer": 2,
+  "kind": "service",
+  "version": "1.0.0",
+  "summary": {
+    "he": "מדדי מארח ו-Docker — מכולות, אחסון, משאבים",
+    "en": "Host and Docker metrics — containers, storage, resources"
+  },
+  "capabilities": [
+    {
+      "name": "host-metrics",
+      "type": "protocol",
+      "endpoint": "http://machine:8080"
+    }
+  ],
+  "use": [],
+  "connections": [],
+  "compose": "docker-compose.yml",
+  "routing": [
+    {
+      "host": "machine",
+      "port": 8080,
+      "auth": "sso",
+      "module": {
+        "group": "תשתית",
+        "icon": "server",
+        "embed": true,
+        "alias": "machine",
+        "id": "machine",
+        "name": "מכונה",
+        "desc": "מדדי מארח ו-Docker",
+        "order": 8,
+        "url_env": "MACHINE_URL",
+        "url": "http://machine:8080"
+      }
+    }
+  ],
+  "health": {
+    "structural": "auto",
+    "probe": {
+      "http": "http://machine:8080/healthz",
+      "interval": "30s"
+    }
+  },
+  "data": {
+    "volumes": [],
+    "paths": [
+      "data/power"
+    ],
+    "on_uninstall": "keep"
+  },
+  "resources": {
+    "cpus": "0.75",
+    "memory": "384M"
+  },
+  "observability": {
+    "sentry_platform": "python"
+  }
+}

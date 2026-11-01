@@ -1,0 +1,17 @@
+title: "RESOLVED (author error): Execute Workflow 'Workflow does not exist' was a node typeVersion bug, NOT a bbox/push issue"
+status: resolved  # 2026-07-30 triage: unchanged — an author-error record (Execute Workflow typeVersion 1 -> 1.1); nothing in the tree contradicts it. Kept as the lesson.
+created: 2026-06-26
+resolved: 2026-06-26
+priority: low
+resolution: |
+  ROOT CAUSE: the Execute Workflow nodes I authored were typeVersion 1; n8n's working
+  Execute Workflow nodes are typeVersion 1.1. With typeVersion 1, executeWorkflow's
+  getPublishedWorkflowData/fetchWorkflowData throws "Workflow does not exist" for ANY
+  target. Bumping the node to typeVersion 1.1 (params {workflowId:{__rl,value,mode:id},options:{}})
+  resolves it immediately — verified: a freshly bbox-pushed workflow with a tv1.1 Execute
+  Workflow node successfully called gmailApiRouter01 and returned its output.
+  NOT a bbox/push problem, NOT a publish/registry problem. bbox n8n push creates fully
+  executeWorkflow-capable workflows. All the publish:workflow/restart/force-recreate chasing
+  was misdirected — the only fix needed was the node typeVersion.
+  LESSON: when authoring Execute Workflow nodes in JSON, use "typeVersion": 1.1 (match an
+  existing working node, e.g. SyncScanUnit0001 'Call Scan Unit').

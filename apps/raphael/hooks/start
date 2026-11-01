@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# `bbox raphael start` — "Raphael start": ensure the guardian's scheduled scans are present in this
+# office's n8n. Idempotent. It only ensures the automations; the scans then run on their own and
+# trigger Raphael (the bina-ds preset) on an anomaly. It changes nothing in the system itself.
+#
+# The app is a POSITIONAL argument of `bbox n8n push` — `--app raphael` is not a flag it takes, and
+# passing it made this verb print a usage line and do nothing (measured 2026-10-09, the first time
+# "Raphael start" was run for real).
+set -euo pipefail
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+cd "${REPO_ROOT}"
+
+echo "[raphael] ensuring the guardian's n8n automations (app:raphael) are present…"
+# One implementation of import/remove: the n8n blueprint push, scoped to this app. A no-op while no
+# workflow ships yet; it becomes the real ensure the moment blueprint/n8n/ holds a *.workflow.ts.
+if ls apps/raphael/blueprint/n8n/*.workflow.ts >/dev/null 2>&1; then
+  ./bbox n8n push raphael "$@"
+  echo "[raphael] automations ensured. The scans run on their own from here."
+else
+  echo "[raphael] no automations ship yet (apps/raphael/blueprint/n8n is empty) — nothing to push."
+  echo "[raphael] add a *.workflow.ts there (a Schedule Trigger → probe → verdict → notify/trigger),"
+  echo "[raphael] then run this again. The agent (his scan skills) lives in bina-ds's raphael preset."
+fi

@@ -1,0 +1,13 @@
+{
+ "trigger": "הגדרות",
+ "title": "הגדרות",
+ "close": "סגירה",
+ "openDocument": "פתיחת קובץ ההגדרות",
+ "openDocument.error": "לא ניתן לפתוח את קובץ ההגדרות",
+ "general.nav": "כללי",
+ "connection.error": "מנותק",
+ "connection.connecting": "מתחבר מחדש",
+ "connection.connected": "מחובר",
+ "connection.reconnect": "מנותק, התחברות מחדש עכשיו",
+ "connection.restart": "מתחבר מחדש, התחברות מחדש עכשיו"
+}

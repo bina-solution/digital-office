@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<title>מסך מלא בקונסול — הדמייה</title>
+<!--
+  console-fullscreen-mock — the interactive simulation behind the "fullscreen and back" proposal
+  (owner, 2026-10-12: «איך כדאי לאפשר מצב מסך מלא וחזרה»).
+
+  What makes this an HONEST simulation, not a drawing:
+
+    * it stands on the REAL stylesheets — the office palette (bina-ui/theme-tokens.css), the shell's
+      own CSS (console/static/style.css) and desktop.css. There is not one colour literal in this
+      file: every hue is a token of the office palette.
+    * the console chrome is the REAL markup of console/static/index.html (side / topbar / embed /
+      bottomnav), so the heights the demo reports are the heights production has.
+    * «מיקוד» does not paraphrase the production rule, it CALLS it: `document.documentElement`
+      gets the class `bare`, and `desktop.css`'s own line — `html.bare .side, html.bare .topbar,
+      html.bare .bottomnav { display:none !important }` — hides the chrome. What you see here is
+      the same line the console already uses for a console view inside a desktop window; the
+      proposal is only to give it a DOOR on a phone.
+    * the way back is the real one too: entering pushes a history entry, so the phone's own back
+      (or Esc) leaves — the demo listens to `popstate` and does nothing else.
+
+  What the app INSIDE the frame is: the screenshot the owner sent, cropped to the app's own area —
+  the region between the console's top bar and its tab bar (device rows 400…2034 of 2340, measured
+  off the image, not guessed). It is embedded by the builder as `--app-shot`, drawn centred in the
+  slot with the app's own background colour behind it, so a taller slot re-centres it exactly as the
+  real screen would. Build without `--app-shot` and the drawn stand-in below is used instead.
+
+  What is a stand-in (and is labelled as one on screen): the phone's Chrome bar and Android nav bar
+  are drawn by this page — no web page can draw or remove the browser's own chrome. Their heights
+  (87px and 49px at 390px wide) are MEASURED from that same screenshot; the shell's own 58px and
+  60px are its CSS. Removing the browser's bars is what the Fullscreen API does, which this page
+  calls for real when you press «מסך מלא».
+
+  IMPLEMENTED (2026-10-12) — this stopped being a proposal the day it was built: the console now
+  carries it (platform-base/console/static/app.js: focusInit/applyFocus, the #focusBtn in index.html,
+  the chip and the one line that gives the embed its reserved 60px back in style.css). One button
+  does both layers, and the chip keeps its words for five seconds and then folds to a 44px circle —
+  an app's own top corner is where its search lives, and that refinement came from driving the live
+  shell, not from here. This file stays the workbench the next display change starts from.
+
+  …and the SECOND half of the same problem (owner, 2026-10-12, the same day, with three screenshots):
+  «עכשיו תחשוב לעומק איך אפשר לאפשר להעלים גם את הניווט הצדדי בתוך הבינה ודעת». The shell's chrome was
+  the first 118px; the app's OWN navigation is the next: on a phone the agent's rail is a 57px column
+  down the whole frame (15% of the width) and its side panel opens over 45–70% of it. `#app` is that
+  state: the shell's chrome AND the app's own chrome gone, drawn from the centre column's own pixels.
+
+  How it is driven (the hash is the state, so a screenshot and a person deep-link the same way):
+    #demo     «like today» + the simulator's own control bar (what a visitor lands on, no hash too)
+    #now      like today, clean — the simulator's furniture hidden
+    #focus    the shell's chrome is hidden (the production `bare`); the app's rail is still there
+    #app      + the app's own navigation hidden: the rail's 57px are gone and the centre uses them
+    #full     the above + the real Fullscreen API (the browser bar and the nav bar go too)
+
+  Built into a single self-contained file by build-fullscreen-mock.py; the source links the real
+  CSS, the built artifact inlines it. Edit THIS file, run the builder.
+-->
+<link rel="stylesheet" href="../../platform-base/bina-ui/theme-tokens.css"/>
+<link rel="stylesheet" href="../../platform-base/console/static/style.css"/>
+<link rel="stylesheet" href="../../platform-base/console/static/desktop.css"/>
+<style>
+/* ── the simulation's own frame. Everything under «mock frame» is the simulator, not the proposal;
+   everything that is the proposal is `html.bare` (production) and `html.mock-fs` (Fullscreen). ── */
+html.mock,html.mock body{margin:0;height:100%;overflow:hidden}
+/* the shell sizes itself to the VIEWPORT (`100dvh`); inside the mock it lives in a slot between the
+   drawn browser bars, so the same height is restated against the slot. */
+html.mock #app{height:100%}
+/* ── the second line the proposal needs, and it is NOT optional ──────────────────────────────────
+   `style.css`'s phone block reserves the tab bar's height inside the embed —
+   `.embed{inset:0 0 60px 0}` — so hiding `.bottomnav` alone reclaims 58 of the bar's 118px and
+   leaves a 60px hole under the app. This is what the simulation is for: the rule that has to change
+   with it is one line, and it lives beside the rule it pays for. */
+html.bare .embed{inset:0}
+
+/* mock frame: the two bars no web page owns */
+.mock-chrome{position:fixed;inset-block-start:0;inset-inline:0;height:var(--mock-chrome-h);direction:ltr;
+  display:flex;flex-direction:column;padding:0 10px;background:var(--surface);color:var(--muted);
+  border-bottom:1px solid var(--line);font-size:12px;z-index:70}
+.mock-chrome .status{height:32px;display:flex;align-items:center;justify-content:space-between;
+  font-size:11px;opacity:.8;font-variant-numeric:tabular-nums}
+.mock-chrome .sys{letter-spacing:1px}
+.mock-chrome .bar{flex:1;display:flex;align-items:center;gap:8px;padding-bottom:8px}
+.mock-chrome .url{flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;
+  background:var(--surface-2);border:1px solid var(--line);border-radius:var(--radius-pill);padding:5px 12px;direction:ltr;text-align:left;color:var(--ink)}
+.mock-chrome .t{width:18px;height:18px;border-radius:var(--radius-sm);background:var(--surface-2);border:1px solid var(--line)}
+.mock-chrome .badge{min-width:18px;text-align:center;border:1px solid var(--line);border-radius:var(--radius-sm);padding:0 4px;font-variant-numeric:tabular-nums}
+.mock-nav{position:fixed;inset-block-end:0;inset-inline:0;height:var(--mock-nav-h);display:flex;
+  align-items:center;justify-content:space-around;background:var(--bg);color:var(--muted);z-index:70;font-size:11px}
+/* the slot between them — `transform` gives the fixed chrome of the shell (`.bottomnav`) THIS box as
+   its containing block, which is exactly what the phone does with the real browser bars. */
+.mock-slot{position:absolute;inset:var(--mock-chrome-h) 0 var(--mock-nav-h);overflow:hidden;transform:translateZ(0)}
+html.mock-fs .mock-chrome,html.mock-fs .mock-nav{display:none!important}
+html.mock-fs .mock-slot{inset:0}
+
+/* the way back — the ONE thing focus mode must never lose. Shown while `bare` is on, i.e. exactly
+   while the shell has hidden its own chrome, so it is never absent when it is needed. */
+.mock-exit{display:none;position:absolute;inset-block-start:10px;inset-inline-end:10px;z-index:65;
+  align-items:center;justify-content:center;gap:6px;min-height:40px;width:40px;padding:0;cursor:pointer;overflow:hidden;
+  background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:var(--radius-pill);
+  box-shadow:var(--elev-2);font-family:inherit;font-size:13px;font-weight:700}
+html.bare .mock-exit{display:inline-flex}
+.mock-exit::before{content:"▾";font-size:14px;line-height:1}
+.mock-exit .txt{display:none;white-space:nowrap}
+/* folded by default, unfolded while the mode is being entered — the live console's own behaviour
+   (app.js: FOCUS_LABEL_MS 5000, `html.focus-armed`), kept identical so the demo cannot drift from it */
+html.focus-armed .mock-exit,.mock-exit:hover{width:auto;padding:0 15px;gap:6px}
+html.focus-armed .mock-exit .txt,.mock-exit:hover .txt{display:block}
+
+/* the simulator's control bar — its own chrome, never part of the proposal. A floating panel (the
+   ground is the palette's scrim, not `--ink`: ink flips with the theme and a bar written on it turns
+   white in dark mode). */
+.mock-bar{display:none;position:fixed;inset-inline:12px;inset-block-end:calc(var(--mock-nav-h) + 68px);
+  z-index:80;padding:10px;border-radius:var(--radius-lg);
+  background:var(--ink);color:var(--bg);box-shadow:var(--elev-3);opacity:.97}
+html.mock-sim .mock-bar{display:block}
+.mock-bar .row{display:flex;gap:8px}
+.mock-bar button{flex:1;min-height:40px;border:1px solid transparent;border-radius:var(--radius-md);
+  background:color-mix(in srgb,var(--bg) 16%,transparent);color:var(--bg);font-family:inherit;font-size:13px;font-weight:700;cursor:pointer}
+.mock-bar button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.mock-bar .meter{margin-top:8px;font-size:12px;color:color-mix(in srgb,var(--bg) 72%,transparent);
+  display:flex;justify-content:space-between;gap:10px}
+.mock-bar .meter b{color:var(--bg);font-variant-numeric:tabular-nums}
+
+/* the app INSIDE the frame, when the builder was given the owner's screenshot: that image, cropped
+   to the app's own area, centred. A taller slot (chrome gone) therefore shows the same content
+   re-centred — which is what the real screen does, because its content is one centred group. */
+/* the app's own rail, at the inline start (the right, in this RTL screen): the BAND runs the whole
+   slot, because that is what the app's rail does and a static crop of it cannot. Width, colour and
+   the gear at its bottom are all measured off the screenshot (57px, #1a2213, 27×27 sitting 20px
+   above the app area's bottom) — the gear was lifted out of the crop and is drawn here instead, so
+   it stays pinned to the bottom when the slot grows. */
+/* The three layers of the app's own area, in the order the app itself paints them: the page's
+   ground, then the rail band, then the screenshot (whose own rail pixels must stay ON TOP of the
+   band — that is where its icons are), then the gear, which the crop no longer has. */
+html.has-shot .embed{background:var(--app-bg,var(--bg))}
+.apprail{display:none;position:absolute;inset-block:0;inset-inline-start:0;width:var(--rail-w,57px);
+  background:var(--rail-bg,var(--surface));z-index:1}
+html.has-shot .apprail{display:block}
+.appshot{position:absolute;inset:0;z-index:2;display:none;background-color:transparent;
+  background-image:var(--app-shot,none);background-size:100% auto;background-repeat:no-repeat;
+  background-position:center}
+html.has-shot .appshot{display:block}
+html.has-shot .appmock{display:none}
+/* …and the app WITHOUT its own navigation: the centre column's own pixels, at their own scale,
+   re-centred in the wider slot. This is what hiding a column does — the frame's grid loses the
+   track and the centre takes it; nothing is stretched and nothing is invented here. */
+.appcentre{position:absolute;inset:0;z-index:2;display:none;background-color:transparent;
+  /* the centre's own width IS the frame minus the rail that was taken out of it — said as the one
+     subtraction rather than as a number typed twice (the rail's width is measured off the shot). */
+  background-image:var(--app-centre,none);
+  background-size:calc(100% - var(--rail-w,57px)) auto;
+  background-repeat:no-repeat;background-position:center}
+html.appclean .appcentre{display:block}
+html.appclean .appshot,html.appclean .apprail,html.appclean .gear{display:none!important}
+.gear{display:none;position:absolute;z-index:3;inset-block-end:20px;
+  inset-inline-start:calc((var(--rail-w,57px) - 27px) / 2);width:27px;height:27px;
+  background:var(--rail-gear,none) center/contain no-repeat}
+html.has-shot .gear{display:block}
+
+/* ── the app inside the frame: the drawn stand-in (used when no screenshot was given) ──────────────────────────────────────────────────────
+   A copy of the screen in the owner's screenshot (the agent's hero + composer), drawn so the shell
+   around it can be judged. It is NOT the proposal and it is not wired to anything. */
+.appmock{display:flex;height:100%;background:var(--surface);color:var(--ink);font-family:var(--font)}
+.appmock .rail{flex:none;width:52px;display:flex;flex-direction:column;align-items:center;gap:10px;
+  padding:10px 0;border-inline-end:1px solid var(--line);background:var(--surface)}
+.appmock .rail .who{width:26px;height:26px;border-radius:var(--radius-sm);background:var(--accent);color:var(--accent-ink);
+  display:grid;place-items:center;font-weight:700;font-size:13px}
+.appmock .rail .ic{width:26px;height:26px;border-radius:var(--radius-sm);display:grid;place-items:center;color:var(--muted);font-size:15px}
+.appmock .rail .ic.sp{margin-block-start:auto}
+.appmock .body{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:16px}
+.appmock h2{margin:0;font-size:24px;font-weight:700;display:flex;align-items:center;gap:10px}
+.appmock h2 .b{width:34px;height:34px;border-radius:var(--radius-md);background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;font-size:17px}
+.appmock .picks{display:flex;gap:18px;color:var(--muted);font-size:14px}
+.appmock .picks span{display:inline-flex;align-items:center;gap:6px}
+.appmock .box{width:100%;max-width:420px;border:1px solid var(--line);border-radius:var(--radius-lg);
+  background:var(--surface-2);padding:12px;color:var(--muted);font-size:14px;min-height:56px}
+.appmock .tools{width:100%;max-width:420px;display:flex;align-items:center;gap:14px;color:var(--muted)}
+.appmock .tools .send{margin-inline-start:auto;width:40px;height:40px;border-radius:var(--radius-pill);
+  background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;font-size:16px}
+/* The frame's bands, at 390px wide: the browser's own (status + URL bar 87, gesture/3-button nav 49)
+   are measured from the owner's screenshot; the shell's (58 and 60) are its own CSS and are not
+   restated here at all — they come from style.css, which is the point of standing on it. */
+:root{--mock-chrome-h:87px;--mock-nav-h:49px}
+</style>
+</head>
+<body>
+
+<!-- the two bars the browser owns. Drawn here only so the reclaimed height can be SEEN. -->
+<div class="mock-chrome" aria-hidden="true">
+  <div class="status"><span>15:08</span><span class="sys">▮▮ ⌾ ▰</span></div>
+  <div class="bar">
+    <span class="t"></span>
+    <span class="url">ng.digital-office.co.il</span>
+    <span class="t">＋</span>
+    <span class="badge">35</span>
+    <span class="t">⋮</span>
+  </div>
+</div>
+
+<!-- ── the shell, as console/static/index.html writes it (side + topbar + embed), with the phone's
+     bottom tab bar exactly as app.js buildBottomNav() builds it ── -->
+<div class="mock-slot">
+  <div id="app">
+    <aside class="side bnv" id="side" aria-hidden="true">
+      <div class="brand bnv-head"><div class="bnv-head-text"><b>הלשכה הדיגיטלית</b><small>ניהול תהליכים עסקיים</small></div></div>
+      <div id="nav" class="bnv-scroll"></div>
+    </aside>
+    <main class="main">
+      <header class="topbar">
+        <div class="tb-left">
+          <button id="railToggle" class="icon-btn" aria-label="כווץ תפריט">☰</button>
+          <h1 id="viewTitle">בינה ודעת</h1>
+        </div>
+        <div class="tb-right">
+          <button id="paletteBtn" class="search-btn" aria-label="חיפוש"><svg class="ic-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg><span>חיפוש</span></button>
+        </div>
+      </header>
+      <div class="embedwrap" id="embedwrap">
+        <div class="embed"><div class="apprail" aria-hidden="true"></div><div class="appshot" role="img" aria-label="המסך מהצילום"></div><div class="appcentre" role="img" aria-label="אותו מסך בלי הניווט של בינה"></div><div class="gear" aria-hidden="true"></div><div class="appmock">
+          <div class="rail">
+            <span class="who">ב</span>
+            <span class="ic">＋</span>
+            <span class="ic">⌕</span>
+            <span class="ic sp">⚙</span>
+          </div>
+          <div class="body">
+            <h2><span class="b">ב</span> הנני הנני</h2>
+            <div class="picks"><span>▣ הלשכה הדיגיטלית</span><span>◉ עזריה</span></div>
+            <div class="box">תארו מה תרצו לבנות / לפקודות, @ לקבצים או שיחות</div>
+            <div class="tools"><span>＋</span><span>🛡</span><span>▤</span><span class="send">↑</span></div>
+          </div>
+        </div></div>
+      </div>
+    </main>
+  </div>
+
+  <!-- app.js appends this to <body>; inside this slot it is the same bar, fixed to the slot -->
+  <div class="bottomnav">
+    <a class="bn-item active"><span class="bn-ic">⌂</span><span>בית</span></a>
+    <a class="bn-item"><span class="bn-ic">▤</span><span>דרייב</span></a>
+    <a class="bn-item"><span class="bn-ic">✉</span><span>מייל</span></a>
+    <a class="bn-item"><span class="bn-ic">▦</span><span>מסמכים</span></a>
+    <a class="bn-item"><span class="bn-ic">▩</span><span>פתוחים</span></a>
+    <a class="bn-item"><span class="bn-ic">☰</span><span>עוד</span></a>
+  </div>
+
+  <!-- the way back -->
+  <button class="mock-exit" id="mockExit" type="button" title="יציאה ממיקוד" aria-label="יציאה ממיקוד"><span class="txt">יציאה ממיקוד</span></button>
+</div>
+
+<div class="mock-nav" aria-hidden="true"><span>▤</span><span>○</span><span>‹</span></div>
+
+<div class="mock-bar" id="mockBar">
+  <div class="row">
+    <button type="button" data-state="now">היום</button>
+    <button type="button" data-state="focus">מיקוד</button>
+    <button type="button" data-state="app">בינה</button>
+    <button type="button" data-state="full">הכול</button>
+  </div>
+  <div class="meter">
+    <span>גובה: <b id="mReclaimed">0px</b> · רוחב: <b id="mWide">0px</b></span>
+    <span>מסך <b id="mScreen">0px</b> · <b id="mPct">0%</b></span>
+  </div>
+</div>
+
+<script>
+/* The whole behaviour: `bare` on <html> is the production rule; `mock-fs` is the browser's own
+   fullscreen; a history entry is the way back. Nothing else is faked. */
+(function () {
+  "use strict";
+  var H = document.documentElement;
+  H.classList.add("mock");
+  // the builder embeds the owner's screenshot as `--app-shot`; without it the drawn stand-in is used
+  if (getComputedStyle(H).getPropertyValue("--app-shot").trim()) H.classList.add("has-shot");
+  var state = "now", measured = null, pushed = false;
+
+  function measure() {                       // heights of the chrome, while it is still on screen
+    // offsetHeight, not getBoundingClientRect: the rect answers in the VISUAL viewport, so a
+    // mobile emulation (or a scaled frame) can report 0 for a bar that is 58px tall.
+    var px = function (el) { return el ? Math.round(el.offsetHeight) : 0; };
+    var now = {
+      topbar: px(document.querySelector(".topbar")),
+      bottomnav: px(document.querySelector(".bottomnav")),
+      chrome: px(document.querySelector(".mock-chrome")),
+      nav: px(document.querySelector(".mock-nav"))
+    };
+    // the app's rail is a WIDTH, not a height: it is the other axis of the same question, and it is
+    // measured the same way — while it is still drawn (see the keep-the-last-value rule below).
+    var rail = document.querySelector(".apprail");
+    var rw = rail ? Math.round(rail.offsetWidth) : 0;
+    now.railW = rw;
+    // A hidden bar measures 0, and a measurement of the chrome that is not on screen is not a
+    // measurement of it: keep the last height it had while it was up. (The browser can fire
+    // `resize` after the state has already been applied — measured on a phone emulation.)
+    if (!measured) measured = now;
+    else Object.keys(now).forEach(function (k) { if (now[k]) measured[k] = now[k]; });
+    return measured;
+  }
+
+  function report() {
+    var m = measure(), screen = window.innerHeight;
+    var shell = m.topbar + m.bottomnav;
+    var all = shell + (state === "full" ? m.chrome + m.nav : 0);
+    var reclaimed = state === "now" ? 0 : all;
+    var wide = (state === "app" || state === "full") ? (m.railW || 0) : 0;
+    document.getElementById("mReclaimed").textContent = reclaimed + "px";
+    document.getElementById("mScreen").textContent = screen + "px";
+    document.getElementById("mPct").textContent = Math.round(reclaimed / screen * 100) + "%";
+    var w = document.getElementById("mWide");
+    if (w) w.textContent = wide + "px";
+    document.querySelectorAll(".mock-bar button").forEach(function (b) {
+      b.setAttribute("aria-pressed", String(b.dataset.state === state));
+    });
+  }
+
+  function apply(next) {
+    measure();          // BEFORE the classes move: the heights are only real while the chrome is up
+    state = next;
+    H.classList.toggle("bare", next !== "now");        // ← the production rule of desktop.css
+    H.classList.toggle("appclean", next === "app" || next === "full");   // the app's own columns
+    H.classList.toggle("mock-fs", next === "full");     // ← the browser's own fullscreen
+    armLabel(next !== "now");                           // ← the five seconds, as in app.js
+    report();
+  }
+
+  function enter(next, remember) {
+    if (next === "now") { exitFullscreen(); }
+    apply(next);
+    if (remember !== false && next !== "now" && !pushed) {
+      pushed = true;
+      history.pushState({ mockState: next }, "");      // so the phone's back has something to pop
+    }
+  }
+
+  // the same five seconds the console uses: the words are for learning where the way back is
+  var armedT = 0;
+  function armLabel(on) {
+    H.classList.toggle("focus-armed", on);
+    clearTimeout(armedT);
+    if (on) armedT = setTimeout(function () { H.classList.remove("focus-armed"); }, 5000);
+  }
+
+  function exitFullscreen() {
+    if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(function () {});
+  }
+
+  // entering and leaving by hand
+  document.querySelectorAll(".mock-bar button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      enter(b.dataset.state);
+      if (b.dataset.state === "full" && H.requestFullscreen) {
+        H.requestFullscreen().catch(function () { /* a page can be refused one; the demo still shows the state */ });
+      }
+    });
+  });
+  document.getElementById("mockExit").addEventListener("click", function () {
+    if (pushed) history.back(); else enter("now");
+  });
+  window.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && state !== "now") { if (pushed) history.back(); else enter("now"); }
+  });
+  window.addEventListener("popstate", function () {
+    pushed = false;
+    exitFullscreen();
+    apply("now");                                       // back = the way out, and nothing else
+  });
+  window.addEventListener("resize", function () { report(); });   // never re-measure: see measure()
+
+  // The hash is the state, so a screenshot — and a person — can deep-link one. `#demo` is the one a
+  // visitor lands on: the same «like today», plus the simulator's own control bar. The four other
+  // hashes are the STATES, clean — the bar is the simulator's furniture, and a picture of the
+  // proposal must not carry it. `app` and `full` also fold the APP's own navigation (`appclean`).
+  var STATES = ["now", "focus", "app", "full"];
+  var fromHash = function () {
+    var h = (location.hash || "#demo").slice(1);
+    return STATES.indexOf(h) >= 0 || h === "demo" ? h : "demo";
+  };
+  function fromHashApply() {
+    var h = fromHash(), shown = h === "demo";
+    H.classList.toggle("mock-sim", shown);
+    apply(shown ? "now" : h);
+  }
+  fromHashApply();
+  window.addEventListener("hashchange", function () { pushed = false; exitFullscreen(); fromHashApply(); });
+  if (document.fullscreenElement) exitFullscreen();
+})();
+</script>
+</body>
+</html>

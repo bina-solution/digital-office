@@ -1,0 +1,246 @@
+# authentik is layer 1. It must not know its consumers by name — the rule reconcile.py:895-897
+# states for glitchtip ("a LAYER-2 base app: it must not know its consumers by name") and gate G9
+# enforces. An `x-authentik-app-hosts:` block used to sit here enumerating fourteen other apps'
+# base URLs. It was BOTH a layering violation and dead: a compose `x-` extension field with no YAML
+# anchor, referenced by no `<<:` merge anywhere in the file, so nothing ever read it. The hosts it
+# listed are compiled per-app from each manifest's `routing[]` instead — which is why deleting it
+# changes no rendered output.
+services:
+  authentik-server:
+    image: ghcr.io/goauthentik/server:2024.12
+    container_name: authentik-server-${DEPLOYMENT_NAME:-bina-deployment}
+    restart: unless-stopped
+    command: server
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          # 1536M -> 768M, 2026-08-06. Measured high-water 461MiB (~1.7x headroom retained).
+          memory: 768M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    environment:
+      # The `*_BASE_URL` values are NOT listed here: the compiler reads every `!Env` the committed
+      # blueprint resolves and renders those variables onto all three services (server, worker,
+      # bootstrap) in .generated/routing.override.yml, each falling back to the host that is
+      # routed on this machine. An installable app's host needs no variable here at all — the
+      # compiler writes it into the generated blueprint as a literal. The list that used to sit
+      # here is why an app added later had no SSO: hello-bina's provider was registered for its
+      # `default_host` while traefik routed its real host, which then 404'd at the outpost.
+      AUTH_EXTERNAL_URL: ${AUTH_EXTERNAL_URL:-${AUTHENTIK_BASE_URL:-auth.${DEPLOYMENT_DOMAIN:-localhost}}}
+      AUTH_PROTOCOL: ${AUTH_PROTOCOL:-https}
+      # ONE web worker (2026-10-01). The default is two, each a full Django process (~190 MiB) that
+      # gunicorn kills and re-boots whenever it misses its timeout under load — ten
+      # "WORKER TIMEOUT … SIGKILL … Booting worker" cycles in three hours on the 5 GiB engine
+      # (03:35), and every boot is CPU the box did not have, so the churn feeds the load that
+      # causes it. The embedded outpost lives in this process too; a worker restart is the moment
+      # forward-auth answers 502 and "the outpost does not know the host". A single asyncio worker
+      # carries a one-office forward-auth load with room to spare; the second one bought nothing
+      # but a second boot. BBOX_AUTHENTIK_WEB_WORKERS in .env raises it on a bigger machine.
+      AUTHENTIK_WEB__WORKERS: ${BBOX_AUTHENTIK_WEB_WORKERS:-1}
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY}
+      AUTHENTIK_REDIS__HOST: redis
+      AUTHENTIK_REDIS__PASSWORD: ${REDIS_PASSWORD}
+      AUTHENTIK_REDIS__DB: 1
+      AUTHENTIK_POSTGRESQL__HOST: authentik-postgres
+      AUTHENTIK_POSTGRESQL__USER: authentik
+      AUTHENTIK_POSTGRESQL__NAME: authentik
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_POSTGRES_PASSWORD}
+      AUTHENTIK_BOOTSTRAP_PASSWORD: ${AUTHENTIK_BOOTSTRAP_PASSWORD:-}
+      AUTHENTIK_BOOTSTRAP_EMAIL: ${AUTHENTIK_BOOTSTRAP_EMAIL:-}
+      AUTHENTIK_BOOTSTRAP_TOKEN: ${AUTHENTIK_BOOTSTRAP_TOKEN:-}
+    volumes:
+    - authentik_media:/media
+    - authentik_templates:/templates
+    - ./blueprints:/blueprints/custom
+    depends_on:
+      authentik-postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+    - traefik-network
+    - authentik-internal
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    healthcheck:
+      test:
+      - CMD
+      - ak
+      - healthcheck
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 60s
+    labels:
+    - traefik.enable=true
+    - traefik.docker.network=traefik-network
+    # The forwardAuth middleware is NOT defined here any more. Defining it on this container tied its
+    # existence to this container being in traefik's snapshot, and traefik DISCARDS any router whose
+    # middleware it cannot resolve — so every recreate of this service turned all 14 SSO-gated hosts
+    # into a bare 404 while the stack reported healthy. It now lives in traefik's file provider:
+    # platform-base/traefik/config/authentik-forwardauth.yaml, referenced as `authentik@file`.
+    # Keep it there. Re-adding it here would resurrect `authentik@docker` and the bug with it.
+    - traefik.http.routers.authentik-local.rule=Host(`auth.localhost`)
+    - traefik.http.routers.authentik-local.entrypoints=web
+    - traefik.http.routers.authentik-local.service=authentik-server
+    - traefik.http.routers.authentik-http.rule=Host(`${AUTHENTIK_BASE_URL}`)
+    - traefik.http.routers.authentik-http.entrypoints=web
+    - traefik.http.routers.authentik-http.service=authentik-server
+    - traefik.http.routers.authentik-https.rule=Host(`${AUTHENTIK_BASE_URL}`)
+    - traefik.http.routers.authentik-https.entrypoints=websecure
+    - traefik.http.routers.authentik-https.tls=true
+    - traefik.http.routers.authentik-https.tls.certresolver=myresolver
+    - traefik.http.routers.authentik-https.service=authentik-server
+    - traefik.http.services.authentik-server.loadbalancer.server.port=9000
+    - traefik.http.services.authentik-server.loadbalancer.healthcheck.path=/-/health/live/
+    - traefik.http.services.authentik-server.loadbalancer.healthcheck.interval=30s
+    - traefik.http.services.authentik-server.loadbalancer.healthcheck.timeout=10s
+  authentik-worker:
+    image: ghcr.io/goauthentik/server:2024.12
+    container_name: authentik-worker-${DEPLOYMENT_NAME:-bina-deployment}
+    restart: unless-stopped
+    command: worker
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          # 1G -> 768M, 2026-08-06. Measured high-water 557MiB — the highest peak-to-limit ratio of
+          # any authentik container, so this one is cut only lightly (~1.4x headroom retained).
+          memory: 768M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    environment:
+      AUTH_EXTERNAL_URL: ${AUTH_EXTERNAL_URL:-${AUTHENTIK_BASE_URL:-auth.${DEPLOYMENT_DOMAIN:-localhost}}}
+      AUTH_PROTOCOL: ${AUTH_PROTOCOL:-https}
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY}
+      AUTHENTIK_REDIS__HOST: redis
+      AUTHENTIK_REDIS__PASSWORD: ${REDIS_PASSWORD}
+      AUTHENTIK_REDIS__DB: 1
+      AUTHENTIK_POSTGRESQL__HOST: authentik-postgres
+      AUTHENTIK_POSTGRESQL__USER: authentik
+      AUTHENTIK_POSTGRESQL__NAME: authentik
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_POSTGRES_PASSWORD}
+      AUTHENTIK_BOOTSTRAP_PASSWORD: ${AUTHENTIK_BOOTSTRAP_PASSWORD:-}
+      AUTHENTIK_BOOTSTRAP_EMAIL: ${AUTHENTIK_BOOTSTRAP_EMAIL:-}
+      AUTHENTIK_BOOTSTRAP_TOKEN: ${AUTHENTIK_BOOTSTRAP_TOKEN:-}
+    volumes:
+    - authentik_media:/media
+    - authentik_templates:/templates
+    - ./blueprints:/blueprints/custom
+    depends_on:
+      authentik-postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+    - traefik-network
+    - authentik-internal
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+  authentik-bootstrap:
+    image: ghcr.io/goauthentik/server:2024.12
+    container_name: authentik-bootstrap-${DEPLOYMENT_NAME:-bina-deployment}
+    # Capped 2026-08-06 — had no deploy.resources block, so docker reported the host total as its
+    # limit. It runs the full authentik server image, so it is not cheap: measured high-water
+    # 221MiB. 384M is ~1.7x that; it is a short-lived bootstrap, not a steady-state consumer.
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 384M
+        reservations:
+          cpus: '0.1'
+          memory: 96M
+    entrypoint:
+    - dumb-init
+    - --
+    command:
+    - bash
+    - /bootstrap.sh
+    healthcheck:
+      test:
+      - CMD
+      - python3
+      - /outpost-ready.py
+      interval: 10s
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 6
+      start_period: 240s
+    environment:
+      AUTH_EXTERNAL_URL: ${AUTH_EXTERNAL_URL:-${AUTHENTIK_BASE_URL:-auth.${DEPLOYMENT_DOMAIN:-localhost}}}
+      AUTH_PROTOCOL: ${AUTH_PROTOCOL:-https}
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY}
+      AUTHENTIK_REDIS__HOST: redis
+      AUTHENTIK_REDIS__PASSWORD: ${REDIS_PASSWORD}
+      AUTHENTIK_REDIS__DB: 1
+      AUTHENTIK_POSTGRESQL__HOST: authentik-postgres
+      AUTHENTIK_POSTGRESQL__USER: authentik
+      AUTHENTIK_POSTGRESQL__NAME: authentik
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_POSTGRES_PASSWORD}
+      AUTHENTIK_BOOTSTRAP_USER: ${AUTHENTIK_BOOTSTRAP_USER:-akadmin}
+      AUTHENTIK_BOOTSTRAP_PASSWORD: ${AUTHENTIK_BOOTSTRAP_PASSWORD:-}
+    volumes:
+    - ./blueprints:/blueprints/custom
+    - ./bootstrap.sh:/bootstrap.sh:ro
+    - ./outpost-ready.py:/outpost-ready.py:ro
+    depends_on:
+      authentik-server:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+    - traefik-network
+    - authentik-internal
+  authentik-postgres:
+    image: postgres:16-alpine
+    container_name: authentik-postgres-${DEPLOYMENT_NAME:-bina-deployment}
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          # 512M -> 384M, 2026-08-06. Measured high-water 143MiB (~2.7x headroom retained).
+          memory: 384M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    environment:
+      POSTGRES_USER: authentik
+      POSTGRES_PASSWORD: ${AUTHENTIK_POSTGRES_PASSWORD}
+      POSTGRES_DB: authentik
+    volumes:
+    - authentik_postgres_data:/var/lib/postgresql/data
+    networks:
+    - authentik-internal
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - pg_isready -U authentik -d authentik
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-5s}
+      retries: 5
+      start_period: 20s
+volumes:
+  authentik_media: null
+  authentik_templates: null
+  authentik_postgres_data: null
+networks:
+  traefik-network:
+    external: true
+  authentik-internal:
+    driver: bridge

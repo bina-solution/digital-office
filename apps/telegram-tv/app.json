@@ -1,0 +1,119 @@
+{
+  "id": "telegram-tv",
+  "title": {
+    "he": "טלגרם TV",
+    "en": "Telegram TV"
+  },
+  "layer": 3,
+  "kind": "service",
+  "version": "0.1.0",
+  "summary": {
+    "he": "ספריית הסרטים שמסתתרת בערוצי הטלגרם — שורה לכל צ׳אט, כרטיס לכל סרט, נגן שמנגן ישירות מטלגרם",
+    "en": "The film library hiding inside Telegram channels — a row per chat, a card per film, a player that streams straight from Telegram"
+  },
+  "capabilities": [
+    {
+      "name": "tv",
+      "type": "service",
+      "interface": "tv.v1",
+      "endpoint": "http://telegram-tv:8982",
+      "contract": "platform-service.v1",
+      "required_ops": [
+        "status",
+        "listChats",
+        "listMovies",
+        "getMovie",
+        "refresh",
+        "streamUrl"
+      ]
+    }
+  ],
+  "use": [
+    {
+      "capability": "ui-kit",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
+    }
+  ],
+  "connections": [],
+  "compose": "docker-compose.yml",
+  "routing": [
+    {
+      "host": "telegram-tv",
+      "port": 8982,
+      "auth": "sso",
+      "module": {
+        "group": "ראשי",
+        "icon": "monitor",
+        "embed": true,
+        "alias": "telegram-tv",
+        "id": "telegram-tv",
+        "name": "טלגרם TV",
+        "desc": "סרטים מהערוצים בטלגרם — ספרייה ונגן",
+        "order": 2,
+        "service": "telegram-tv",
+        "url_env": "TELEGRAM_TV_URL",
+        "url": "http://telegram-tv:8982"
+      },
+      "sso": {
+        "slug": "telegram-tv",
+        "display_name": "Telegram TV",
+        "default_host": "telegram-tv.localhost",
+        "base_url_env": "TELEGRAM_TV_BASE_URL",
+        "local_twin": true
+      }
+    }
+  ],
+  "health": {
+    "structural": "auto",
+    "probe": {
+      "http": "http://telegram-tv:8982/healthz",
+      "interval": "30s"
+    }
+  },
+  "data": {
+    "volumes": [
+      "telegram_tv_data"
+    ],
+    "on_uninstall": "prompt"
+  },
+  "resources": {
+    "cpus": "0.5",
+    "memory": "512M"
+  },
+  "observability": {
+    "sentry_platform": "python"
+  },
+  "agent": {
+    "context": "AGENT.md",
+    "order": 26
+  },
+  "contributes": {
+    "connection_probes": {
+      "telegram-accounts": {
+        "type": "http",
+        "url": "http://telegram-tv:8982/healthz"
+      }
+    },
+    "connection_providers": [
+      {
+        "id": "telegram-accounts",
+        "title": "Telegram accounts — the office film library",
+        "title_he": "חשבונות טלגרם — ספריית הסרטים של הלשכה",
+        "kind": "config",
+        "optional": true,
+        "platform_protocols": [
+          "telegram_user"
+        ],
+        "group": "טלוויזיה",
+        "now": "Nothing to paste here, and that is the point: a Telegram account is an INSTANCE of protocol `telegram_user` in the credential plane, holding the api_id/api_hash pair and the MTProto session string. The connection is created by the app's own login wizard (scan a QR or type the code) and removed from its settings screen. The session string is a full login, so it lives here and ONLY here — the app holds no copy of it. The probe is the tv app's own /healthz, green exactly while the app that reads the library is up.",
+        "probe": {
+          "type": "http",
+          "url": "http://telegram-tv:8982/healthz"
+        },
+        "wizard": "open טלגרם TV (/a/telegram-tv/) and connect: scan the QR with the phone, or enter the number and the code Telegram sends. The account appears in this catalog as telegram_user-<id>."
+      }
+    ]
+  }
+}

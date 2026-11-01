@@ -1,0 +1,42 @@
+# Force LF for files that are hashed/parsed across OSes. On Windows, core.autocrlf=true would
+# otherwise rewrite line endings on checkout, which (a) breaks n8n-push's sha-based change detection
+# (every workflow shows as "changed"), and (b) muddies diffs. Keep these LF everywhere.
+#
+# After adding/changing this file, run once on the canonical repo:  git add --renormalize .
+
+# Default for the whole repo. Everything here is authored on Windows/macOS/Linux and consumed
+# INSIDE Linux containers, so LF is the only correct storage form. Without this the tree drifts
+# into a mix — HEAD held some app.json/docker-compose.yml as CRLF and some as LF — and every tool
+# that rewrites a file flips its endings, turning a three-line change into a whole-file diff.
+# `text=auto` still leaves genuinely binary files alone (git sniffs them); the explicit binary
+# rules below cover the ones git guesses wrong on.
+* text=auto eol=lf
+
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.pdf   binary
+*.woff  binary
+*.woff2 binary
+*.zip   binary
+*.gz    binary
+
+bbox            text eol=lf
+*.sh            text eol=lf
+*.py            text eol=lf
+scripts/*       text eol=lf
+debian-install.sh text eol=lf
+
+# n8n blueprint artifacts (managed by bbox n8n pull/push)
+production/n8n/blueprint.yml          text eol=lf
+production/n8n/workflows/*.json       text eol=lf
+production/n8n/credentials/*.json     text eol=lf
+
+# App hooks are extension-less executables that run INSIDE Linux containers (app-management shells
+# out to apps/n8n/hooks/*). A CRLF checkout makes bash fail on the shebang line with
+# ": invalid option name" for `set -o pipefail`, so pin them like the other scripts.
+platform-base/*/hooks/*  text eol=lf
+apps/*/hooks/*           text eol=lf
+*.workflow.ts text eol=lf

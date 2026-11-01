@@ -1,0 +1,128 @@
+{
+  "id": "browser42",
+  "title": {
+    "he": "דפדפן",
+    "en": "Browser42"
+  },
+  "layer": 3,
+  "kind": "tool",
+  "version": "2.0.0",
+  "summary": {
+    "he": "דפדפן סטלת' שיתופי לאוטומציה ול-QA, עם לוח משותף למחשב של המשתמש ותצוגה חיה",
+    "en": "Shared stealth browser for automation and QA, with a shared clipboard and a live view"
+  },
+  "capabilities": [
+    {
+      "name": "browser",
+      "type": "protocol",
+      "endpoint": "http://browser42-mcp:8931",
+      "required_ops": [
+        "navigate",
+        "screenshot",
+        "evaluate",
+        "cdp"
+      ]
+    }
+  ],
+  "use": [
+    {
+      "capability": "concurrency-metrics",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
+    }
+  ],
+  "connections": [
+    {
+      "id": "browser42-mcp-token",
+      "required": true
+    },
+    {
+      "id": "browser42-state-passphrase",
+      "required": false
+    },
+    {
+      "id": "browser42-login-facebook",
+      "required": false,
+      "service": [
+        "browser42-task-runner",
+        "browser42-browser"
+      ]
+    }
+  ],
+  "contributes": {
+    "connection_providers": [
+      {
+        "id": "browser42-login-facebook",
+        "title": "Facebook login — the office browser signs in with this",
+        "title_he": "כניסה לפייסבוק — הדפדפן של הלשכה מתחבר עם זה",
+        "kind": "password",
+        "env": "BROWSER42_LOGIN_FACEBOOK_PASSWORD",
+        "envs_extra": [
+          "BROWSER42_LOGIN_FACEBOOK_USER",
+          "BROWSER42_LOGIN_FACEBOOK_URL"
+        ],
+        "probe": {
+          "type": "present"
+        },
+        "now": "Type the account ONCE, here — user + password. `bbox b42 task login <slug> facebook` then leases it from the credential plane under the task runner's own container identity, types it into the page over CDP and never prints, journals or returns it: the agent that drives the browser says which SITE, never which secret. Because it is re-derived at every login, it survives a container recreate, an image rebuild and a profile wipe — the three events that used to cost the owner a re-login. Companion keys: BROWSER42_LOGIN_FACEBOOK_USER (the email/phone) and an optional BROWSER42_LOGIN_FACEBOOK_URL. The lease is granted only to the `browser42-task-runner` service, which is what the `service` field on this app's connections[] entry pins down.",
+        "wizard": "fill שם משתמש + סיסמה once; then sign in from the browser task: bbox b42 task login <slug> facebook"
+      }
+    ]
+  },
+  "compose": "docker-compose.yml",
+  "routing": [
+    {
+      "host": "browser42",
+      "port": 80,
+      "auth": "sso",
+      "auth_exclude": [
+        "/mcp"
+      ],
+      "service": "browser42-caddy",
+      "emit_labels": false,
+      "sso": {
+        "slug": "browser42",
+        "display_name": "Browser42",
+        "default_host": "browser42.localhost",
+        "base_url_env": "BROWSER42_BASE_URL",
+        "local_twin": true
+      },
+      "module": {
+        "name": "דפדפן הלשכה",
+        "icon": "monitor",
+        "desc": "דפדפן ענן חי לאוטומציה ו-QA",
+        "group": "עסק",
+        "order": 260,
+        "embed": true,
+        "alias": "browser42",
+        "url": "http://browser42-caddy:80/view/",
+        "passthrough": [
+          {
+            "path": "/websockify",
+            "transport": "websocket",
+            "strip_mount_prefix": true
+          }
+        ]
+      }
+    }
+  ],
+  "health": {
+    "structural": "auto"
+  },
+  "data": {
+    "volumes": [
+      "cloakprofile",
+      "browser42_caddy_data",
+      "browser42_caddy_config"
+    ],
+    "on_uninstall": "keep",
+    "paths": [
+      "data/browser42"
+    ]
+  },
+  "cli": {
+    "alias": "b42",
+    "fallback": "state"
+  }
+}

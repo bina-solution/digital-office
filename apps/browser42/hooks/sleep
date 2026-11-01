@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+#: now | after <seconds|off> | wake | status — the browser's idle sleep (start-browser.sh §4k)
+# sleep — put the office browser to sleep, set when it sleeps on its own, or wake it.
+#
+#   sleep now             Chrome exits gracefully within ~10 s (profile, logins and tabs kept); the
+#                         next MCP call, `bbox b42` verb or /view visit wakes it
+#   sleep after <secs>    sleep after <secs> without use (data/browser42/settings.json, read live —
+#                         no restart); `off` = never sleep on its own
+#   sleep wake            wake it now and wait until CDP answers
+#   sleep status          asleep or awake, the limit, seconds since the last activity, cloakserve's view
+#
+# WHY (2026-09-30): an idle headed Chromium held ~75% of a core and, under load, crash-restarted
+# itself 37 times in an afternoon — every healthcheck probe of /json/version relaunched it. Asleep,
+# the container costs ~60 MB and no CPU, and a wake is one cold Chromium start (~3-6 s) on the same
+# profile with --restore-last-session.
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # say, die, colors, DOCKER_HOST
+
+DATA="${REPO_ROOT}/data/browser42"
+ACT="${DATA}/.activity"
+
+browser() { docker ps --filter name=browser42-browser --format '{{.Names}}' | head -1; }
+
+case "${1:-status}" in
+  now)
+    mkdir -p "${DATA}"
+    date +%s > "${DATA}/.sleep-request"
+    say "sleep requested — Chrome exits gracefully within ~10 s; the next MCP call, verb or /view visit wakes it"
+    ;;
+  after)
+    v="${2:-}"; [ -n "${v}" ] || die "usage: bbox b42 sleep after <seconds|off>"
+    [ "${v}" = off ] && v=0
+    case "${v}" in ''|*[!0-9]*) die "not a number of seconds: ${v}" ;; esac
+    python3 - "$(npath "${DATA}")/settings.json" "${v}" <<'PY'
+import json, pathlib, sys
+p = pathlib.Path(sys.argv[1]); d = {}
+if p.exists():
+    try: d = json.loads(p.read_text())
+    except Exception: d = {}
+d["idle_sleep_s"] = int(sys.argv[2])
+p.parent.mkdir(parents=True, exist_ok=True)
+p.write_text(json.dumps(d, indent=2) + "\n")
+print("idle_sleep_s =", d["idle_sleep_s"], "(0 = never sleeps on its own)")
+PY
+    ;;
+  wake)
+    b="$(browser)"; [ -n "${b}" ] || die "browser42-browser not running — run 'bbox run' first"
+    # ONE wake path: the /json/version call below IS the launch (cloakserve's get_or_launch), and
+    # the sleeper clears the marker as soon as Chrome answers. Touching the activity marker here as
+    # well made the sleeper launch a SECOND Chrome one second later (measured 2026-09-30 20:07:33).
+    rm -f "${DATA}/.sleep-request"
+    # One call, a long timeout: /json/version IS the launch (cloakserve's get_or_launch runs inside it),
+    # and a cold Chromium with a real profile takes 15-60 s here. A short timeout that gives up
+    # mid-launch and calls again is how the relaunch storms of 2026-09-30 started.
+    for _ in $(seq 1 2); do
+      if docker exec "${b}" python3 -c "import urllib.request as u; u.urlopen('http://127.0.0.1:9222/json/version/', timeout=200)" >/dev/null 2>&1; then
+        say "awake — CDP answers"; exit 0
+      fi
+      sleep 2
+    done
+    die "the browser did not answer within 60 s — see: ./scripts/dc logs --tail 50 browser42-browser"
+    ;;
+  status)
+    limit="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("idle_sleep_s", "-"))' "$(npath "${DATA}")/settings.json" 2>/dev/null || echo "-")"
+    [ "${limit}" = "-" ] && limit="${BROWSER42_IDLE_SLEEP_S:-$(read_env BROWSER42_IDLE_SLEEP_S 2>/dev/null || true)}"
+    # GNU stat first: on Linux `stat -f` is the FILESYSTEM status and succeeds with a block of text
+    # (run 11, 2026-09-30: "integer expression expected" and "last activity: none recorded" on the
+    # engine, where this hook actually runs); BSD stat has no -c, so macOS falls through to -f %m.
+    last=0; for f in "${ACT}"/*; do [ -e "${f}" ] || continue; m="$(stat -c %Y "${f}" 2>/dev/null || stat -f %m "${f}" 2>/dev/null || echo 0)"; [ "${m}" -gt "${last}" ] 2>/dev/null && last="${m}"; done
+    if [ -f "${DATA}/.sleeping" ]; then
+      say "asleep since $(( $(date +%s) - $(cat "${DATA}/.sleeping") ))s"
+    else
+      say "awake"
+    fi
+    say "limit: ${limit:-120}s idle (0 = never)   last activity: $([ "${last}" -gt 0 ] && echo "$(( $(date +%s) - last ))s ago" || echo "none recorded")"
+    b="$(browser)"
+    if [ -n "${b}" ]; then
+      docker exec "${b}" python3 -c "import json,urllib.request; d=json.load(urllib.request.urlopen('http://127.0.0.1:9222/', timeout=5)); p=d.get('processes',{}).get('__default__') or {}; print('cloakserve: chrome processes', d.get('active',0), '| CDP clients', p.get('connections',0))" 2>/dev/null || say "cloakserve: not answering"
+    else
+      say "browser42-browser: not running"
+    fi
+    ;;
+  *) die "usage: bbox b42 sleep now | after <seconds|off> | wake | status" ;;
+esac

@@ -1,0 +1,87 @@
+# yaml-language-server: $schema=./schema.json
+title: "On a phone the composer of an embedded app sits at the bottom of the LAYOUT viewport, so the on-screen keyboard covers it — the owner types into בינה and sees nothing"
+opened: 2026-10-12
+category: bug
+severity: high
+status: open
+summary: "In Chrome/Android the console shell neither asks the browser to resize the layout viewport with the keyboard (`interactive-widget=resizes-content`) nor compensates with the VisualViewport API. The keyboard therefore only shrinks the visual viewport, `#app{height:100dvh}` and the embedded iframe keep their full height, and every bottom-docked composer ends up behind the keyboard — the app cannot see it from inside the iframe (an iframe's `visualViewport` equals its layout viewport). Measured on the live console at the phone profile: the conversation composer sits at page-y 703–831 with a 304 px keyboard covering page-y 587–891."
+description: |
+  ## What the owner saw (2026-10-12 16:22, his phone, `console.staging.digital-office.co.il` → the בינה tile)
+
+  He typed into the chat composer and the text never appeared: the screen above the keyboard shows
+  only the conversation, and neither the input, nor the send button, nor the model/context row is
+  visible. A screenshot is on the work item (`DGO agt-006`); the row of round icons just above the
+  keys (`✨ 😊 translate device ⚙️ ⋯`) is Android's own keyboard toolbar, not the app.
+
+  ## Measured (live, through the real edge, this office, 411×891 CSS px, DSF 2, colour-scheme dark)
+
+  Reproduced with the ui-capture image (Playwright + Chromium) against
+  `https://console.staging.digital-office.co.il/#/m/bina`, signed in through authentik's own
+  flow-executor API, reading the DOM inside `iframe#frame`:
+
+  * **Keyboard closed** (`window.innerHeight = 891`): `#frame` = 411×773 at y=58. The composer
+    (`[class*="composerStack"]`, `data-phase=active`) = 345×128 at frame-y 645 → **page-y 703–831**,
+    i.e. docked at the very bottom of the iframe. The editable (`uV2eYG_input`) = 309×36 at
+    **page-y 711–747**, holding the typed text.
+  * **Keyboard open, Chrome's default** (`resizes-visual`: only the visual viewport shrinks — the
+    layout viewport stays 891). His keyboard covers page-y **587–891** (measured off his screenshot:
+    the keys start at 66 % of the screen height). The visible band is the page's top **587 px**.
+    The composer (703–831) and the input (711–747) are **entirely inside that covered band**: 116 px
+    of the composer's top is already behind the keyboard. `92/B1` in `ci-artifacts/keyboard-mobile/`
+    is that band, photographed from the live page: the conversation, and no composer at all.
+  * **Keyboard open, layout viewport resized** (exactly what `interactive-widget=resizes-content`
+    makes Chrome do): viewport 587 → `#frame` = 411×469 → the composer re-docks at
+    **page-y 399–527** and the input at **407–443**, i.e. 60 px clear of the keyboard. C1.
+
+  So the app is not broken: it lays itself out in the height it is given. It is given the wrong
+  height for the whole time the keyboard is up.
+
+  ## Why nothing inside the app can fix it
+
+  * `platform-base/console/static/index.html` carries a plain viewport meta
+    (`width=device-width, initial-scale=1`) — no `interactive-widget`, so Chrome/Android keeps the
+    pre-108 layout behaviour: `resizes-visual` (the default) resizes only the visual viewport —
+    <https://developer.chrome.com/blog/viewport-resize-behavior>, and `100dvh` does **not** track the
+    keyboard (<https://web.dev/blog/viewport-units>).
+  * `platform-base/console/static/style.css` sizes the shell with `#app{height:100dvh;overflow:hidden}`
+    and the embed area with `.embed{position:absolute;inset:0}` (`.embedwrap{flex:1;min-height:0}`),
+    so the iframe keeps the full layout height. The phone tab bar is another casualty:
+    `position:fixed;bottom:0` is behind the keyboard for as long as it is up.
+  * An app inside an iframe cannot measure the keyboard at all: "for an `<iframe>`, visual viewport
+    metrics like `VisualViewport.width` always correspond to layout viewport metrics like
+    `document.documentElement.clientWidth`" — <https://developer.mozilla.org/en-US/docs/Web/API/VisualViewport>.
+    Grepping the harness for `visualViewport` finds only Lexical's scroll-into-view helper
+    (`@deepseek-ai/dsh-client-ui-conversation`, `dsh-client-ui-sidebar-terminal`); there is no
+    keyboard handling anywhere in the app, and none of it would help.
+
+  ## Fix (the shell owns it, because only the top-level document has a viewport)
+
+  1. `interactive-widget=resizes-content` in the console's viewport meta — one line, no JS; measured
+     above to move the composer 60 px clear of the keyboard on Chrome/Android.
+  2. A VisualViewport fallback in the shell for browsers that do not implement it (WebKit has not —
+     <https://bugs.webkit.org/show_bug.cgi?id=259770>): `--kb: max(0, innerHeight - vv.height - vv.offsetTop)`
+     written on `visualViewport.resize|scroll`, and the embed area sized
+     `height: calc(100dvh - var(--kb))`. The iframe shrinks, so **no app needs a line of its own** —
+     and it must be the shell's number, never the iframe's.
+  3. Traps: keep one measurement path (with `resizes-content` active, `innerHeight` already changed
+     and the fallback would double-subtract — `Math.max(0, …)` and one owner); the phone tab bar
+     stays hidden while the keyboard is up; and `html.bare` (full screen) changes the reservation
+     arithmetic.
+tasks:
+  - text: "Add `interactive-widget=resizes-content` to `platform-base/console/static/index.html`"
+    done: false
+  - text: "Add the shell-owned VisualViewport `--kb` fallback and size the embed area with it (never inside an app)"
+    done: false
+  - text: "Hide the phone tab bar while `--kb` > 0 (it is behind the keyboard anyway)"
+    done: false
+  - text: "Re-measure on the phone profile: composer and input inside the visible band, in the console and in full screen"
+    done: false
+references:
+  - platform-base/console/static/index.html
+  - platform-base/console/static/style.css
+  - apps/bina-ds/docker-compose.yml
+  - https://developer.chrome.com/blog/viewport-resize-behavior
+  - https://developer.mozilla.org/en-US/docs/Web/API/VisualViewport
+  - https://web.dev/blog/viewport-units
+  - https://developer.mozilla.org/en-US/docs/Web/API/VirtualKeyboard_API
+  - https://bugs.webkit.org/show_bug.cgi?id=259770

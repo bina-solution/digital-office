@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# present --app <id> — does the INSTANCE hold the workflows this app's blueprint declares?
+#
+# Exists because nothing could answer that honestly. `bbox status` prints "blueprint clean", but
+# that is a pure GIT statement — it compares the committed blueprint against the working tree and
+# never looks at n8n at all. So it reported "blueprint clean" against an n8n holding ZERO
+# workflows, right after a `bbox reset` wiped the volumes. Desired state said enabled; actual state
+# was empty; nothing in the platform noticed.
+#
+# n8n owns this knowledge because n8n owns its database. app-management asks; it does not reach
+# into the DB itself.
+#
+# Exit 0 = every declared workflow id is in the instance. Exit 1 = some or all are missing (with a
+# count on stdout). Exit 2 = cannot tell (n8n down, app declares no blueprint) — a caller must NOT
+# treat "cannot tell" as "missing" and start importing.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # read_env, DN, PG_CONTAINER, pgq, running
+
+APP=""
+while [ $# -gt 0 ]; do
+  case "$1" in --app) APP="${2:-}"; shift 2 ;; *) shift ;; esac
+done
+[ -n "${APP}" ] || { echo "usage: present --app <id>" >&2; exit 2; }
+
+# Which directory holds this app's workflows — from the manifest, via the compiler. Never globbed.
+REL="$( cd "${REPO_ROOT}" && python3 platform/manager/reconcile.py blueprints --for "${APP}" 2>/dev/null | tr -d '\r' | cut -f2 )"
+[ -n "${REL}" ] || { echo "no blueprints.n8n for '${APP}'" >&2; exit 2; }
+DIR="${REPO_ROOT}/${REL}"
+[ -d "${DIR}" ] || { echo "blueprint dir missing: ${REL}" >&2; exit 2; }
+
+# Workflow files are named <workflow-id>.json (legacy) or <workflow-id>.workflow.ts (code
+# blueprints — ai/context/n8n-as-code-migration.md). Both carry the id in the filename, the
+# same identity import:workflow / the API upsert on.
+ids="$( (cd "${DIR}" && { ls *.json 2>/dev/null | sed 's/\.json$//'; ls *.workflow.ts 2>/dev/null | sed 's/\.workflow\.ts$//'; }) | sort -u )"
+[ -n "${ids}" ] || { echo "0 declared"; exit 0; }          # declares nothing -> nothing can be missing
+declared="$(printf '%s\n' "${ids}" | wc -l | tr -d ' ')"
+
+running "${PG_CONTAINER}" || { echo "n8n postgres not running" >&2; exit 2; }
+inlist="$(printf '%s\n' "${ids}" | sed "s/.*/'&'/" | paste -sd, -)"
+have="$(pgq "select count(*) from workflow_entity where id in (${inlist});" | tr -d ' ')"
+[ -n "${have}" ] || { echo "query failed" >&2; exit 2; }
+
+echo "${have}/${declared}"
+[ "${have}" = "${declared}" ] && exit 0 || exit 1

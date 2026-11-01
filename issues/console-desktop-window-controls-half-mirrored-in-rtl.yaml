@@ -1,0 +1,122 @@
+# yaml-language-server: $schema=./schema.json
+title: "The desktop's window controls are only HALF mirrored in RTL: `.dk-lights` pins `direction:ltr`, so the cluster is anchored at the right corner (which RTL requires) while its contents keep LTR order — the green zoom dot sits in the corner where the red close belongs"
+opened: "2026-10-05"
+category: bug
+severity: low
+status: resolved
+summary: "In desktop mode every app window draws its three Macintosh controls in the wrong order: `platform-base/console/static/desktop.css:91` carries `direction:ltr` on `.dk-lights`, the only layout-level LTR override in the file. The bar itself is RTL (`.dk{direction:rtl}`), so the cluster is placed at the title bar's start — the right corner, the mirror of a Mac window — but the override keeps the cluster's own contents in LTR order, so reading outward from the corner the dots are green(zoom) → yellow(min) → red(close). A Mac window's cluster is ordered close-outermost; the fix is to delete the one declaration and let the cluster mirror with the bar, which leaves `zoom → min → close` inward-out, i.e. red on the corner. Measured, A/B'd and screenshotted against the live console; the console image was rebuilt and the container recreated."
+
+description: |
+  ## Symptom (owner, 2026-10-05)
+
+  In desktop mode the window's three controls are in the wrong order. Screenshot: the window
+  `MacBook · בינה ודעת` — a linked office's `bina` opened as an external window — at 1023x747:
+  the cluster sits at the title bar's RIGHT corner (correct for an RTL bar, the mirror of a Mac
+  window) and reads, left to right, **red, yellow, green**, i.e. the green ZOOM dot is the one in
+  the corner and the red CLOSE dot is the one furthest from it.
+
+  ## Measured — live console, headless Chromium, desktop mode forced on (2026-10-05)
+
+  Probe: `tmp/rr/titlebar/probe.py` then `tmp/rr/titlebar/probe_ab.py`, run as `ui-capture:latest`
+  on `traefik-network` (the same image `bbox ui-map` uses), against `http://console:8000/`,
+  viewport 1440x900 deviceScaleFactor 2, `window.BinaDesktop.enable()`, then the `bina` dock tile.
+  Numbers are CSS px; the window was the only one open (`BinaDesktop.wm.wins()` closed first) and
+  carried `focused`, so each dot paints its real colour.
+
+  | | `.dk-lights` box | left→right inside it | corner dot |
+  |---|---|---|---|
+  | **before** (live, pre-rebuild) | 867.5 → 922.5 (55px) | `close`@867.5 red, `min`@888.5 amber, `zoom`@909.5 green | **green (zoom)** |
+  | **as shipped now** | 867.5 → 922.5 (55px) | `zoom`@867.5 green, `min`@888.5 amber, `close`@909.5 red | **red (close)** |
+
+  Restoring the old behaviour inline in the SAME page load (`lights.style.direction = 'ltr'`)
+  reproduces the pre-fix numbers exactly — 867.5 / 888.5 / 909.5, close first — then removing it
+  returns to red-on-the-corner. Nothing else in the bar moves: `.dk-tb` 289.5→934.5 (645px),
+  `.dk-title` 368.5→857.5 (489px) and `.dk-end` 301.5→358.5 (57px, the «פתיחה בלשונית נפרדת»
+  button at the LEFT edge) are byte-identical in both states.
+
+  Evidence: `ci-artifacts/titlebar-controls/before/titlebar.json` (the true pre-fix live reading),
+  `before/titlebar.png`, and the A/B pair `before/before-150dpi.png` vs `after/after.png` — the
+  same frame, differing only in the dot order.
+
+  ## Mechanism — one declaration, and it is the wrong one
+
+  * `platform-base/console/static/desktop.js:130-134` emits the bar as `.dk-lights` → `.dk-title` →
+    `.dk-end`, and the dots inside `.dk-lights` in the order `close, min, zoom`
+    (`:131-133` — the Macintosh order).
+  * `platform-base/console/static/desktop.css:20` — `.dk{…direction:rtl}`. In an RTL flex row the
+    first item goes to the RIGHT edge, so `.dk-lights` is anchored at the bar's start and
+    `.dk-end{justify-content:flex-end}` (`:99`) puts the tab button at the left: **the bar is
+    mirrored end to end, on purpose.**
+  * `platform-base/console/static/desktop.css:91` — `.dk-lights{display:flex;gap:8px;
+    direction:ltr;flex:none}`. That override re-reverses ONLY the cluster's contents, so the
+    mirror stops halfway: the group is right-anchored while its inner order stays LTR. Net effect
+    is a cluster whose outward reading is zoom→min→close instead of close→min→zoom.
+
+  It is the only layout-level `direction:ltr` in the file; the other two (`desktop.css:48` on
+  `kbd`, `:220` on a captured URL) are content-level and correct.
+
+  ## Why this is a defect and not a preference
+
+  1. **The cluster is an ordered cluster.** Color says which action, order says which one is under
+     the hand: close outermost, then minimize, then zoom. Mirroring the bar without mirroring the
+     cluster breaks the half that color cannot carry — the green zoom now sits exactly where the
+     muscle memory for red close is, and close is one dot inward.
+  2. **It contradicts the rest of the same bar.** `.dk-end` IS mirrored (the auxiliary button moved
+     to the left edge). So the bar is half mirrored and half not, and the two halves disagree.
+  3. **The pinned version is the one that cannot be right in every case.** `.dk` is hard-coded RTL
+     today, but with the override the cluster's order is a function of an override fighting its
+     parent rather than of the ambient direction: rendered LTR (an English locale, a standalone
+     window, or the desktop hosted outside `.dk`), the override happens to be a no-op while the
+     inherited version is also correct. Only the override can ever be wrong.
+
+  ## Fix — what was landed
+
+  ```diff
+  -.dk-lights{display:flex;gap:8px;direction:ltr;flex:none}
+  +/* comment: why it must mirror with the bar, and what breaks if it is pinned again */
+  +.dk-lights{display:flex;gap:8px;flex:none}
+  ```
+
+  One declaration removed, plus the comment that records the trap so the next reader does not
+  "restore the Macintosh order" as a fix. Verified live: console image rebuilt
+  (`./scripts/dc build console`), container recreated (`./scripts/dc up -d --no-deps console`,
+  `Up (healthy)`), re-probed — red on the corner.
+
+  Rejected alternatives, and why the minimal one wins:
+
+  * `flex-direction:row-reverse` — reverses a second time under LTR: wrong in exactly the case
+    where the class is generic, and it hides the intent rather than expressing it.
+  * Moving the whole cluster to the visual LEFT to look like macOS verbatim — would un-mirror the
+    bar against every other affordance in it (`.dk-end` at the left, the menu bar), and RTL's
+    convention is a mirror, not a transplant.
+  * `order:` per dot, or reordering the DOM to `zoom, min, close` — three declarations (or a DOM
+    change) to re-state what the direction already says, and it would then be wrong when inherited
+    LTR. DOM order also carries keyboard order: with `direction` the tab order is close → min →
+    zoom, which walking right-to-left is exactly the visual order.
+
+  ## Why it could not be caught by anything in the repo
+
+  Same hole the dock overflow fell through (`issues/console-desktop-dock-overflows-its-pill-and-hides-17-apps.yaml`):
+  no gate reads `desktop.css` (G27's target list excludes it, layering-lint skips `/static/`),
+  `bbox ui-map` never captures desktop mode (`dk-on` appears nowhere under `scripts/`), and the
+  sim contains no window chrome at all. Its open task "a headless desktop probe wired into
+  `run-gates.py`" would have caught this one too — the assertion is one line: in RTL, the dots'
+  visual order must be the mirror of their DOM order, and no `direction:ltr` may appear inside
+  `.dk`.
+
+tasks:
+  - { text: "Remove `direction:ltr` from `.dk-lights` (`platform-base/console/static/desktop.css`) so the cluster mirrors with the bar, and record why in a comment above it", done: true }
+  - { text: "Prove it against the live console rather than by reading CSS: headless probe (A/B in one page load, before/after screenshots, `.dk-lights`/`.dk-title`/`.dk-end` boxes unchanged), then rebuild the console image and recreate the container", done: true }
+  - { text: "Commit it - b655220f (2026-10-05)", done: true }
+  - { text: "Add the missing measurement as a gate: a headless probe asserting that the three dots' visual order is the mirror of their DOM order under `direction:rtl`, and that no `direction:ltr`/`dir=\"ltr\"` sits inside `.dk` (share the probe with the desktop-dock issue's task, since both need desktop mode under headless Chromium). DONE 2026-10-07 in the dock gate (G79): measured - a window the run opens itself, at 1294/1440/1920, three controls, x falling along the DOM order, the group at the bar's start; with the old rule injected the measurement reads dir ltr, not mirrored. Static - the stylesheet gives `.dk-lights` no direction of its own, on every gate run. Narrowed on purpose: a TOKEN inside `.dk` may be ltr (a shortcut key, a URL); the group may not", done: true }
+  - { text: "Cover desktop mode in the UI map (`scripts/ui-coverage/capture.py` never sets desktop mode), so window chrome is captured at every view profile", done: false }
+
+references:
+  - platform-base/console/static/desktop.css
+  - platform-base/console/static/desktop.js
+  - platform-base/console/static/index.html
+  - ai/context/console-desktop-working-memory.md
+  - issues/console-desktop-dock-overflows-its-pill-and-hides-17-apps.yaml
+  - scripts/ui-coverage/capture.py
+  - scripts/refactor/theme-token-lint.py
+  - scripts/refactor/layering-lint.py

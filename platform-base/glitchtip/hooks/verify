@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+#: assert glitchtip provisioning completed — the poller token is present in .env
+#
+# verify — glitchtip's own post-bring-up assertion. Invoked generically by `run_app_hooks verify`
+# (scripts/lib.sh); nothing outside this folder has to know that glitchtip mints a token.
+#
+# This lived in scripts/baseline.sh as "P3 glitchtip-token" — one of ~28 app names hard-coded into
+# layer 0. The fact it asserts belongs to the app that produces it: hooks/prepare writes
+# GLITCHTIP_API_TOKEN into .env, so hooks/verify is the only place that can honestly say whether
+# that worked. Moved verbatim; the condition and the wording are unchanged.
+#
+# WHY IT MATTERS: the notifications poller authenticates with this token. Empty means provisioning
+# never completed, and the symptom a human then sees is `notifications` sitting unhealthy on a 401
+# with nothing in the bring-up saying why.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # read_env, ok/bad, colors
+
+if [ -n "$(read_env GLITCHTIP_API_TOKEN)" ]; then
+  ok "glitchtip-token — notifications poller token present in .env"
+  exit 0
+fi
+bad "glitchtip-token — GLITCHTIP_API_TOKEN empty — glitchtip provisioning did not complete"
+exit 1

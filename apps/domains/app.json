@@ -1,0 +1,156 @@
+{
+  "id": "domains",
+  "title": {
+    "he": "דומיינים",
+    "en": "Domains"
+  },
+  "layer": 3,
+  "kind": "service",
+  "version": "0.1.0",
+  "summary": {
+    "he": "הדומיינים של העסק — תוקף מול הרישום, ספקי DNS ורשמים מאחורי ממשק אחד, ורשומות שהעולם באמת רואה",
+    "en": "The business's domains — registry expiry, DNS hosts and registrars behind one interface, and the records the world actually resolves"
+  },
+  "capabilities": [
+    {
+      "name": "domains",
+      "type": "service",
+      "interface": "domains.v1",
+      "endpoint": "http://domains:8980",
+      "contract": "platform-service.v1",
+      "required_ops": [
+        "listDomains",
+        "getDomain",
+        "whois",
+        "listRecords",
+        "writeRecord",
+        "checkAvailability"
+      ],
+      "optional_ops": [
+        "domains"
+      ]
+    }
+  ],
+  "use": [
+    {
+      "capability": "browser",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
+    },
+    {
+      "capability": "secrets",
+      "strength": "requires",
+      "after": true
+    },
+    {
+      "capability": "sites",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak",
+      "ops": [
+        "listSites"
+      ]
+    },
+    {
+      "capability": "notify",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
+    },
+    {
+      "capability": "ui-kit",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
+    }
+  ],
+  "connections": [
+    {
+      "id": "browser42-mcp-token",
+      "required": false
+    }
+  ],
+  "compose": "docker-compose.yml",
+  "routing": [
+    {
+      "host": "domains",
+      "port": 8980,
+      "auth": "sso",
+      "module": {
+        "group": "עסק",
+        "icon": "link",
+        "embed": true,
+        "alias": "domains",
+        "id": "domains",
+        "name": "דומיינים",
+        "desc": "תוקף דומיינים, ספקי DNS ורשומות",
+        "order": 6,
+        "service": "domains",
+        "url_env": "DOMAINS_URL",
+        "url": "http://domains:8980"
+      },
+      "sso": {
+        "slug": "domains",
+        "display_name": "Domains",
+        "default_host": "domains.localhost",
+        "base_url_env": "DOMAINS_BASE_URL",
+        "local_twin": true
+      }
+    }
+  ],
+  "health": {
+    "structural": "auto",
+    "probe": {
+      "http": "http://domains:8980/healthz",
+      "interval": "30s"
+    }
+  },
+  "data": {
+    "volumes": [
+      "domains_state"
+    ],
+    "on_uninstall": "keep"
+  },
+  "resources": {
+    "cpus": "0.2",
+    "memory": "160M"
+  },
+  "observability": {
+    "sentry_platform": "python"
+  },
+  "agent": {
+    "context": "AGENT.md",
+    "order": 26
+  },
+  "contributes": {
+    "connection_probes": {
+      "domain-providers": {
+        "type": "http",
+        "url": "http://domains:8980/healthz"
+      }
+    },
+    "connection_providers": [
+      {
+        "id": "domain-providers",
+        "title": "Domain providers — registrars and DNS hosts this deployment manages",
+        "title_he": "ספקי דומיינים — רשמים ומארחי DNS שהלשכה מנהלת",
+        "kind": "config",
+        "optional": true,
+        "platform_protocols": [
+          "domain_cloudflare_token",
+          "domain_godaddy_key",
+          "domain_godaddy_pat",
+          "domain_registry_whois"
+        ],
+        "group": "דומיינים",
+        "now": "Nothing to type here, and that is the point: a provider account is an INSTANCE in the credential plane, created and removed from the domains screen at /a/domains/ (connect wizard), and its token never leaves that vault. This row carries the PROTOCOLS so the accounts are visible in this catalog. Note the fourth one: `domain_registry_whois` needs NO credentials at all — the office's own registrar publishes no API, so the registry itself (WHOIS on port 43) is the supported way to watch expiry.",
+        "probe": {
+          "type": "http",
+          "url": "http://domains:8980/healthz"
+        },
+        "wizard": "the domains screen connects a provider in three steps: provider → how to connect → paste the token and verify"
+      }
+    ]
+  }
+}

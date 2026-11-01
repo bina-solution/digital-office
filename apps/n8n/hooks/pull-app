@@ -1,0 +1,145 @@
+#!/usr/bin/env bash
+set -euo pipefail
+export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
+
+# pull-app — the RAPID pull verb behind `bbox n8n pull <app> [wfId ...]`.
+#
+# THE CONTRACT (owner, 2026-08-16 — OSS Platform OS semantics): LIVE IS THE SOURCE OF TRUTH.
+# Humans develop workflows in the n8n UI; agents work only through code. So an agent's loop is
+# ALWAYS: pull the workflow(s) it is about to touch → edit the .workflow.ts → push immediately.
+# This hook is that first step, made cheap: named workflows land in ~seconds; no credentials
+# export, no manifest rewrite, no instance-wide sweep (that is `bbox n8n pull all`).
+#
+#   pull-app <app>                whole app: every live workflow tagged app:<app> → code files
+#                                 (stale local .ts whose id no longer lives are DELETED — the
+#                                 dir mirrors live)
+#   pull-app <app> <wfId> [...]   just those workflows (other local files untouched)
+#
+# After rendering, the push sha-cache is updated for the pulled ids (compiled sha + live
+# versionId), so a follow-up `push <app>` is a clean no-op until the agent actually edits.
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+N8N_DIR="${REPO_ROOT}/apps/n8n"
+WRAP="${N8N_DIR}/tooling/wrap.mjs"
+log() { echo "[pull-app] $*"; }
+
+APP=""; WFS=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --all) shift ;;   # accepted for symmetry; whole-app is already the no-ids default
+    -*)    echo "usage: pull-app <app> [wfId ...]" >&2; exit 2 ;;
+    *)     if [ -z "${APP}" ]; then APP="$1"; else WFS="${WFS} $1"; fi; shift ;;
+  esac
+done
+[ -n "${APP}" ] || { echo "usage: pull-app <app> [wfId ...]" >&2; exit 2; }
+
+docker ps --format '{{.Names}}' | grep -Fxq "${N8N_CONTAINER}" || { echo "Error: '${N8N_CONTAINER}' not running." >&2; exit 1; }
+
+_rel="$( cd "${REPO_ROOT}" && python3 platform/manager/reconcile.py blueprints --for "${APP}" | tr -d '\r' | cut -f2 )" \
+  || { echo "Error: unknown app '${APP}'." >&2; exit 1; }
+[ -n "${_rel}" ] || { echo "Error: app '${APP}' declares no n8n blueprint." >&2; exit 1; }
+DIR="${REPO_ROOT}/${_rel}"; mkdir -p "${DIR}"
+
+_pg() { docker exec -e PGPASSWORD="$(read_env POSTGRES_PASSWORD)" "${PG_CONTAINER}" \
+        psql -U "$(read_env POSTGRES_USER)" -d "$(read_env POSTGRES_DB)" -tAc "$1" 2>/dev/null | tr -d '\r'; }
+
+# Target set: named ids, or every live workflow carrying this app's tag ((`app:`+id)[:24]).
+TAG="$(printf '%.24s' "app:${APP}")"
+if [ -n "${WFS}" ]; then
+  IDS="${WFS}"
+else
+  IDS="$(_pg "select w.id from workflow_entity w
+              join workflows_tags wt on wt.\"workflowId\"=w.id
+              join tag_entity t on t.id=wt.\"tagId\"
+             where t.name='${TAG}' order by w.id" | tr '\n' ' ')"
+  [ -n "${IDS// /}" ] || { echo "Error: no live workflows carry tag '${TAG}'." >&2; exit 1; }
+  LIVE_IDS="${IDS}"   # the FULL live set — stale-cleanup compares against THIS, never the
+                      # post-skip pull list (a skipped-for-unpushed-edits id is still live!)
+  # ── UNPUSHED-EDIT GUARD (mirror of push's conflict check) ─────────────────────────────────
+  # A whole-app pull overwrites local files. If the agent holds an UNPUSHED code edit (compiled
+  # sha ≠ cache sha), overwriting it would destroy the agent's own work — so those ids are
+  # SKIPPED, loudly, with the fix. Pulling one BY NAME is the explicit "discard my local copy".
+  CACHE="${N8N_DIR}/.push-cache/${APP}.tsv"
+  if [ -f "${CACHE}" ] && ls "${DIR}"/*.workflow.ts >/dev/null 2>&1; then
+    _chk="$(mktemp -d)"
+    "$(bbox_node)" "${WRAP}" compile "${DIR}" "${_chk}" >/dev/null 2>&1 || true
+    _sha() { command -v sha256sum >/dev/null 2>&1 && sha256sum "$1" | awk '{print $1}' || shasum -a 256 "$1" | awk '{print $1}'; }
+    _kept=""
+    for _id in ${IDS}; do
+      if [ -f "${_chk}/${_id}.json" ]; then
+        _s="$(_sha "${_chk}/${_id}.json")"
+        _c="$(awk -F'\t' -v id="${_id}" '$2==id{print $1}' "${CACHE}")"
+        if [ -n "${_c}" ] && [ "${_c}" != "-" ] && [ "${_s}" != "${_c}" ]; then
+          echo "[pull-app] SKIP ${_id} — you have UNPUSHED local edits. Push them ('bbox n8n push ${APP} ${_id}') or pull it BY NAME to discard your copy." >&2
+          continue
+        fi
+      fi
+      _kept="${_kept} ${_id}"
+    done
+    rm -rf "${_chk}"
+    IDS="${_kept}"
+    [ -n "${IDS// /}" ] || { echo "[pull-app] every workflow was skipped (unpushed local edits) — nothing pulled."; exit 4; }
+  fi
+fi
+
+# Export the targets in ONE in-container CLI call (export:workflow --backup dumps all; we take
+# only the ids asked for), then normalize the volatile fields exactly like `pull all` does.
+C_TMP="/tmp/pull-app.$$"
+docker exec "${N8N_CONTAINER}" sh -c "rm -rf ${C_TMP} && mkdir -p ${C_TMP} && n8n export:workflow --backup --output ${C_TMP}" \
+  2>&1 | grep -viE '"event"|error tracking|deprecat|dockerenv' | grep -iE 'exported|error' | tail -1 || true
+docker exec -e IDS="${IDS}" "${N8N_CONTAINER}" node -e '
+  const fs=require("fs"),d="'"${C_TMP}"'",VOL=["updatedAt","createdAt","versionId","activeVersionId","versionCounter","triggerCount"];
+  const want=new Set(process.env.IDS.trim().split(/\s+/));
+  let kept=0, missing=[...want];
+  for(const f of fs.readdirSync(d)){ if(!f.endsWith(".json")) continue; const p=d+"/"+f;
+    const id=f.replace(/\.json$/,"");
+    if(!want.has(id)){ fs.unlinkSync(p); continue; }
+    missing=missing.filter(x=>x!==id); kept++;
+    try{const w=JSON.parse(fs.readFileSync(p,"utf8")); for(const k of VOL) delete w[k];
+      fs.writeFileSync(p,JSON.stringify(w,null,2)+"\n"); }catch(e){}
+  }
+  if(missing.length){ console.error("MISSING live: "+missing.join(", ")); process.exit(3); }
+  console.log("exported "+kept);' || { echo "Error: some requested workflow(s) do not exist live." >&2; exit 1; }
+
+H_TMP="$(mktemp -d)"
+docker exec "${N8N_CONTAINER}" tar -C "${C_TMP}" -cf - . | tar -C "${H_TMP}" -xf -
+docker exec "${N8N_CONTAINER}" rm -rf "${C_TMP}"
+
+"$(bbox_node)" "${WRAP}" render "${H_TMP}" "${DIR}" >/dev/null
+
+# Whole-app pull mirrors live: delete local .ts whose id is not in the FULL live set
+# (LIVE_IDS — not the post-skip pull list, or a guarded unpushed-edit file would be deleted
+# by the very pull that skipped it to protect it; that exact bug shipped and was caught by
+# the two-writer proof run on 2026-08-16).
+if [ -z "${WFS}" ]; then
+  for _ts in "${DIR}"/*.workflow.ts; do
+    [ -e "${_ts}" ] || continue
+    _id="$(basename "${_ts}" .workflow.ts)"
+    case " ${LIVE_IDS} " in *" ${_id} "*) ;; *) rm -f "${_ts}"; log "  removed stale ${_id}.workflow.ts (no longer live)";; esac
+  done
+fi
+
+# Sync the push cache for the pulled ids: compiled sha + live versionId → `push` stays no-op
+# until a real edit. (compile of the freshly rendered files, one batch.)
+G_TMP="$(mktemp -d)"
+_pulled_ts=""
+for _id in ${IDS}; do _pulled_ts="${_pulled_ts} ${DIR}/${_id}.workflow.ts"; done
+# shellcheck disable=SC2086
+mkdir -p "${G_TMP}/in" && cp ${_pulled_ts} "${G_TMP}/in/" && "$(bbox_node)" "${WRAP}" compile "${G_TMP}/in" "${G_TMP}/out" >/dev/null
+sha() { command -v sha256sum >/dev/null 2>&1 && sha256sum "$1" | awk '{print $1}' || shasum -a 256 "$1" | awk '{print $1}'; }
+CACHE_DIR="${N8N_DIR}/.push-cache"; mkdir -p "${CACHE_DIR}"; CACHE="${CACHE_DIR}/${APP}.tsv"
+_vids="$(_pg 'select id||chr(9)||coalesce(((extract(epoch from "updatedAt")*1000)::bigint)::text,'"'"''"'"') from workflow_entity')"
+touch "${CACHE}"
+for _id in ${IDS}; do
+  _s="$(sha "${G_TMP}/out/${_id}.json")"
+  _v="$(printf '%s\n' "${_vids}" | awk -F'\t' -v id="${_id}" '$1==id{print $2}')"
+  grep -v "	${_id}	\|	${_id}\$" "${CACHE}" 2>/dev/null > "${CACHE}.new" || true
+  printf '%s\t%s\t%s\n' "${_s}" "${_id}" "${_v}" >> "${CACHE}.new"
+  mv "${CACHE}.new" "${CACHE}"
+done
+rm -rf "${H_TMP}" "${G_TMP}"
+
+_n="$(printf '%s\n' "${IDS}" | wc -w | tr -d ' ')"
+log "${APP}: ${_n} workflow(s) pulled live → code ($(basename "${_rel}") dir). Edit the .workflow.ts, then 'bbox n8n push ${APP} <wfId>'."

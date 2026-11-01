@@ -1,0 +1,23 @@
+Flask>=2.2.2
+flask-cors>=4.0.0
+flask-compress>=1.14
+gunicorn>=21.2.0
+python-dotenv>=1.0.0
+sentry-sdk[flask]>=1.0.0
+
+# Core deps
+pydantic>=2.7.0
+httpx>=0.27.0
+confluent-kafka>=2.5.0
+google-api-python-client>=2.150.0
+google-auth>=2.35.0
+google-auth-httplib2>=0.2.0
+
+# n8n credential lookup (read-only postgres + AES decrypt)
+psycopg[binary]>=3.2.0
+
+# Live action-log (יומן פעולות): reads the Action Router's pre/post dispatch keys
+redis>=5.0.0
+
+# THUMBNAIL state-machine step: png->jpg conversion (POST /documents/thumbnail)
+Pillow>=10.0.0

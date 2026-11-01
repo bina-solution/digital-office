@@ -1,0 +1,79 @@
+{
+  "id": "connections",
+  "title": {
+    "he": "חיבורים ומפתחות",
+    "en": "Connections"
+  },
+  "layer": 1,
+  "kind": "service",
+  "version": "1.0.0",
+  "system": true,
+  "summary": {
+    "he": "מישור האישורים — מפתחות, חיבורים ו-OAuth",
+    "en": "The credential plane — keys, connections, OAuth broker"
+  },
+  "capabilities": [
+    {
+      "name": "secrets",
+      "type": "protocol",
+      "endpoint": "http://connections:8990",
+      "required_ops": [
+        "resolve",
+        "export",
+        "set",
+        "regenerate",
+        "disconnect"
+      ]
+    },
+    {
+      "name": "connection-instances",
+      "type": "service",
+      "interface": "instances.v1",
+      "endpoint": "http://connections:8990",
+      "required_ops": [
+        "list",
+        "create",
+        "delete",
+        "get_secret",
+        "put_secret"
+      ]
+    }
+  ],
+  "use": [],
+  "connections": [],
+  "compose": "docker-compose.yml",
+  "routing": [
+    {
+      "host": "connections",
+      "port": 8990,
+      "auth": "sso",
+      "emit_labels": false,
+      "module": {
+        "group": "הגדרות",
+        "icon": "key",
+        "embed": true,
+        "alias": "connections",
+        "id": "connections",
+        "name": "חיבורים ומפתחות",
+        "desc": "ניהול מפתחות גישה וחיבורים",
+        "order": 10
+      }
+    }
+  ],
+  "health": {
+    "structural": "auto",
+    "probe": {
+      "http": "http://connections:8990/healthz",
+      "interval": "30s"
+    }
+  },
+  "data": {
+    "volumes": [
+      "connections_vault"
+    ],
+    "on_uninstall": "keep"
+  },
+  "observability": {
+    "sentry_platform": "python"
+  }
+}

@@ -1,0 +1,128 @@
+<section class="screen" data-screen="supabase">
+<div style="height:100vh;overflow:auto" dir="ltr">
+<style>
+.sbst-root{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:#ffffff;color:#1f1f1f;min-height:100vh;display:flex;}
+.sbst-rail{width:52px;flex:none;background:#fbfbfb;border-right:1px solid #ececec;display:flex;flex-direction:column;align-items:center;padding:12px 0;gap:14px;min-height:100vh;box-sizing:border-box;}
+.sbst-rail svg{width:17px;height:17px;color:#6a6a6a;}
+.sbst-rail .sbst-active{background:#ededed;border-radius:6px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;}
+.sbst-rail .sbst-btn{width:32px;height:32px;display:flex;align-items:center;justify-content:center;}
+.sbst-rail .sbst-active svg{color:#1f1f1f;}
+.sbst-rail .sbst-sep{width:24px;height:1px;background:#e6e6e6;margin:2px 0;}
+.sbst-rail .sbst-bottom{margin-top:auto;display:flex;flex-direction:column;gap:14px;align-items:center;}
+.sbst-main{flex:1;min-width:0;}
+.sbst-topbar{display:flex;align-items:center;justify-content:space-between;padding:0 20px;height:48px;border-bottom:1px solid #ececec;}
+.sbst-brand{display:flex;align-items:center;gap:10px;font-size:14px;font-weight:600;color:#1f1f1f;}
+.sbst-brand svg{width:18px;height:18px;color:#3ecf8e;}
+.sbst-connect{border:1px solid #dcdcdc;border-radius:6px;padding:5px 12px;font-size:12.5px;color:#4a4a4a;display:flex;align-items:center;gap:6px;margin-left:14px;}
+.sbst-topright{display:flex;align-items:center;gap:16px;color:#6a6a6a;}
+.sbst-topsearch{border:1px solid #dcdcdc;border-radius:6px;padding:6px 10px;font-size:12.5px;color:#8a8a8a;display:flex;align-items:center;gap:20px;}
+.sbst-avatar{width:26px;height:26px;border-radius:50%;background:#111;border:1px solid #ddd;}
+.sbst-body{padding:36px 40px;}
+.sbst-headrow{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:22px;margin-bottom:22px;border-bottom:1px solid #ececec;}
+.sbst-h1{font-size:30px;font-weight:700;color:#171717;margin:0;}
+.sbst-stats{display:flex;gap:36px;}
+.sbst-statlbl{font-size:12.5px;color:#6a6a6a;margin-bottom:6px;}
+.sbst-statval{font-size:20px;font-weight:700;color:#171717;}
+.sbst-statval.loading{width:24px;height:18px;background:#ececec;border-radius:4px;}
+.sbst-attn{font-size:14.5px;color:#3a3a3a;margin-bottom:18px;}
+.sbst-attn a{color:#e0603a;text-decoration:underline;}
+.sbst-panels{display:flex;gap:20px;margin-bottom:36px;}
+.sbst-panel{flex:1;border:1px solid #e6e6e6;border-radius:8px;background:#fff;min-width:0;}
+.sbst-panelhead{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid #eee;}
+.sbst-tabs{display:flex;gap:20px;font-size:11.5px;letter-spacing:.04em;font-weight:600;color:#7a7a7a;}
+.sbst-tabs .sbst-active2{color:#171717;border-bottom:2px solid #3ecf8e;padding-bottom:10px;margin-bottom:-11px;}
+.sbst-badge{background:#ffe6e2;color:#d9422b;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:5px;}
+.sbst-plisthead{font-size:11.5px;letter-spacing:.04em;font-weight:600;color:#1f1f1f;}
+.sbst-prow{display:flex;align-items:center;gap:10px;padding:11px 16px;border-bottom:1px solid #f0f0f0;font-size:12.5px;color:#3a3a3a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.sbst-prow:last-child{border-bottom:none;}
+.sbst-prow svg{width:13px;height:13px;color:#9a9a9a;flex:none;}
+.sbst-qhead{display:flex;padding:10px 16px;font-size:11px;color:#7a7a7a;font-weight:600;letter-spacing:.03em;border-bottom:1px solid #eee;}
+.sbst-qrow{display:flex;padding:11px 16px;font-size:12px;color:#3a3a3a;border-bottom:1px solid #f0f0f0;font-family:ui-monospace,Menlo,monospace;align-items:center;}
+.sbst-qrow:last-child{border-bottom:none;}
+.sbst-qcol1{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:10px;}
+.sbst-qcol2{width:80px;flex:none;}
+.sbst-qcol3{width:60px;flex:none;}
+.sbst-libh{font-size:20px;font-weight:700;color:#171717;margin:0 0 18px;}
+.sbst-libs{display:flex;gap:24px;}
+.sbst-libcard{display:flex;align-items:center;gap:10px;font-size:14px;color:#1f1f1f;}
+</style>
+<div class="sbst-root">
+  <div class="sbst-rail">
+    <div class="sbst-active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12l9-9 9 9M5 10v10h14V10"/></svg></div>
+    <div class="sbst-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 10v10"/></svg></div>
+    <div class="sbst-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4,17 10,11 4,5"/><line x1="12" y1="19" x2="20" y2="19"/></svg></div>
+    <div class="sbst-sep"></div>
+    <div class="sbst-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4zM4 9h16M9 4v16"/></svg></div>
+    <div class="sbst-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div>
+    <div class="sbst-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16.5V7.5L12 3 3 7.5v9L12 21z"/></svg></div>
+    <div class="sbst-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l1.5 4.5L18 8l-4.5 1.5L12 14l-1.5-4.5L6 8l4.5-1.5z"/></svg></div>
+    <div class="sbst-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4l-6 6 2 2 6-6a4 4 0 0 0 5.4-5.4l-2.6 2.6-2-2z"/></svg></div>
+    <div class="sbst-sep"></div>
+    <div class="sbst-btn" style="position:relative"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><span style="position:absolute;top:5px;right:5px;width:6px;height:6px;border-radius:50%;background:#ff6b5c"></span></div>
+    <div class="sbst-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg></div>
+    <div class="sbst-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></div>
+    <div class="sbst-bottom">
+      <div class="sbst-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9"/></svg></div>
+    </div>
+  </div>
+  <div class="sbst-main">
+    <div class="sbst-topbar">
+      <div style="display:flex;align-items:center">
+        <div class="sbst-brand"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L3 14h7l-1 8 11-14h-7z"/></svg>INDOX</div>
+        <div class="sbst-connect"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#c8c8c8" stroke-width="2"><circle cx="12" cy="12" r="9"/></svg>Connect</div>
+      </div>
+      <div class="sbst-topright">
+        <div class="sbst-topsearch"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8a8a8a" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>Search... ⌘K</div>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.9.5-1.5 1-1.5 2.2M12 17h.01"/></svg>
+        <span style="position:relative"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/></svg><span style="position:absolute;top:-2px;right:-2px;width:6px;height:6px;border-radius:50%;background:#ff6b5c"></span></span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/></svg>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+        <div class="sbst-avatar"></div>
+      </div>
+    </div>
+    <div class="sbst-body">
+      <div class="sbst-headrow">
+        <h1 class="sbst-h1">INDOX</h1>
+        <div class="sbst-stats">
+          <div><div class="sbst-statlbl">Tables</div><div class="sbst-statval">19</div></div>
+          <div><div class="sbst-statlbl">Functions</div><div class="sbst-statval loading"></div></div>
+        </div>
+      </div>
+      <div class="sbst-attn">21 issues need <a href="#">attention</a></div>
+      <div class="sbst-panels">
+        <div class="sbst-panel">
+          <div class="sbst-panelhead">
+            <div class="sbst-tabs"><span class="sbst-active2">SECURITY<span class="sbst-badge">21</span></span><span>PERFORMANCE</span></div>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7a7a7a" stroke-width="2"><path d="M14 3h7v7M21 3l-9 9M5 5h6M5 5v14h14v-6"/></svg>
+          </div>
+          <div class="sbst-prow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11"/></svg>Table `public.business_settings` is exposed via API without RLS and con...</div>
+          <div class="sbst-prow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11"/></svg>Table `public.ocr_cache` is public, but RLS has not been enabled.</div>
+          <div class="sbst-prow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11"/></svg>Table `public.sync_attempt` is public, but RLS has not been enabled.</div>
+          <div class="sbst-prow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11"/></svg>Table `public.sync_ledger` is public, but RLS has not been enabled.</div>
+          <div class="sbst-prow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11"/></svg>Table `public.ai_extraction_cache` is public, but RLS has not been enab...</div>
+          <div class="sbst-prow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11"/></svg>Table `public.companies` is public, but RLS has not been enabled.</div>
+        </div>
+        <div class="sbst-panel">
+          <div class="sbst-panelhead">
+            <div class="sbst-plisthead">SLOW QUERIES</div>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7a7a7a" stroke-width="2"><path d="M14 3h7v7M21 3l-9 9M5 5h6M5 5v14h14v-6"/></svg>
+          </div>
+          <div class="sbst-qhead"><div class="sbst-qcol1">QUERY</div><div class="sbst-qcol2">AVG TIME</div><div class="sbst-qcol3">CALLS</div></div>
+          <div class="sbst-qrow"><div class="sbst-qcol1">SELECT name FROM pg_timezone_names</div><div class="sbst-qcol2">0.45s</div><div class="sbst-qcol3">10</div></div>
+          <div class="sbst-qrow"><div class="sbst-qcol1">WITH -- Recursively get the base types of domains ba...</div><div class="sbst-qcol2">0.10s</div><div class="sbst-qcol3">10</div></div>
+          <div class="sbst-qrow"><div class="sbst-qcol1">WITH -- Recursively get the base types of domains ba...</div><div class="sbst-qcol2">0.10s</div><div class="sbst-qcol3">10</div></div>
+          <div class="sbst-qrow"><div class="sbst-qcol1">INSERT INTO ocr_cache (file_hash, ocr_json, ocr_engi...</div><div class="sbst-qcol2">0.03s</div><div class="sbst-qcol3">4</div></div>
+          <div class="sbst-qrow"><div class="sbst-qcol1">SELECT c.castsource::regtype::text, c.casttarget::re...</div><div class="sbst-qcol2">0.01s</div><div class="sbst-qcol3">10</div></div>
+        </div>
+      </div>
+      <h2 class="sbst-libh">Client libraries</h2>
+      <div class="sbst-libs">
+        <div class="sbst-libcard"><svg width="22" height="22" viewBox="0 0 24 24"><rect width="24" height="24" fill="#F0DB4F"/><text x="12" y="17" font-size="10" font-weight="700" text-anchor="middle" fill="#323330">JS</text></svg>JavaScript</div>
+        <div class="sbst-libcard"><svg width="22" height="22" viewBox="0 0 24 24"><path fill="#42A5F5" d="M14 2L4 12l4 4L22 2z"/><path fill="#0D47A1" d="M14 22l-6-6 4-4 6 6z"/></svg>Flutter</div>
+        <div class="sbst-libcard"><svg width="22" height="22" viewBox="0 0 24 24"><path fill="#3776AB" d="M12 2c-4 0-4 2-4 2v2h4v1H6s-3 0-3 5 3 5 3 5h2v-3s0-2 2-2h4s2 0 2-2V4s0-2-4-2z"/><path fill="#FFD43B" d="M12 22c4 0 4-2 4-2v-2h-4v-1h6s3 0 3-5-3-5-3-5h-2v3s0 2-2 2H10s-2 0-2 2v5s0 2 4 2z"/></svg>Python</div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+</section>

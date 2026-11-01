@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "An app's bring-up",
+    "subtitle": "What 'enable' does in app-management - the order bbox run gives every app, as a job",
+    "output": "app-bring-up.html",
+    "viewBox": [1080, 860],
+    "column_fit": "spread",
+    "animation": "trace",
+    "quality_profile": "showcase"
+  },
+  "participants": [
+    { "id": "caller", "type": "external", "label": "Caller", "sublabel": "screen, agent, office" },
+    { "id": "apps", "type": "backend", "label": "app-management", "sublabel": "control plane" },
+    { "id": "compiler", "type": "security", "label": "Compiler", "sublabel": "reconcile.py" },
+    { "id": "hooks", "type": "frontend", "label": "App hooks", "sublabel": "prepare, onboard" },
+    { "id": "engine", "type": "cloud", "label": "Engine", "sublabel": "scripts/dc" },
+    { "id": "signin", "type": "security", "label": "Sign-in app", "sublabel": "hooks/refresh" },
+    { "id": "data", "type": "database", "label": "data-management", "sublabel": "only with restore" }
+  ],
+  "segments": [
+    { "from": 162, "to": 332, "label": "Declared and compiled (under the lifecycle lock)" },
+    { "from": 344, "to": 560, "label": "Running and answering" },
+    { "from": 572, "to": 760, "label": "Usable" }
+  ],
+  "messages": [
+    { "id": "ask", "from": "caller", "to": "apps", "y": 186, "label": "POST /apps/<id>/enable", "variant": "emphasis" },
+    { "id": "set-state", "from": "apps", "to": "compiler", "y": 228, "label": "set-state, render", "variant": "default" },
+    { "id": "prepare", "from": "apps", "to": "hooks", "y": 270, "label": "hooks/prepare", "variant": "default" },
+    { "id": "answer-202", "from": "apps", "to": "caller", "y": 312, "label": "202 + step (after 20 s)", "variant": "return" },
+    { "id": "up", "from": "apps", "to": "engine", "y": 368, "label": "create or start, build if missing", "variant": "emphasis" },
+    { "id": "healthy", "from": "engine", "to": "apps", "y": 410, "label": "running and healthy", "variant": "return" },
+    { "id": "pull", "from": "apps", "to": "data", "y": 452, "label": "pull + import --app", "variant": "dashed" },
+    { "id": "facts", "from": "data", "to": "apps", "y": 494, "label": "facts equal", "variant": "return" },
+    { "id": "healthy-again", "from": "engine", "to": "apps", "y": 536, "label": "healthy on the restored data", "variant": "return" },
+    { "id": "refresh", "from": "apps", "to": "signin", "y": 596, "label": "serve the new host", "variant": "security" },
+    { "id": "onboard", "from": "apps", "to": "hooks", "y": 638, "label": "hooks/onboard", "variant": "default" },
+    { "id": "follow", "from": "caller", "to": "apps", "y": 694, "label": "GET /apps/<id>/job", "variant": "default" },
+    { "id": "done", "from": "apps", "to": "caller", "y": 736, "label": "200: running, hooks, restored", "variant": "return" }
+  ],
+  "activations": [
+    { "participant": "apps", "from": 180, "to": 744, "type": "backend" },
+    { "participant": "compiler", "from": 222, "to": 250, "type": "security" },
+    { "participant": "engine", "from": 362, "to": 542, "type": "cloud" },
+    { "participant": "data", "from": 446, "to": 500, "type": "database" },
+    { "participant": "signin", "from": 590, "to": 620, "type": "security" }
+  ],
+  "cards": [
+    { "dot": "emerald", "title": "One implementation", "items": ["The hooks are the same files bbox run runs", "Containers come from scripts/dc, the one compose call", "Sign-in is the sign-in app's own verb, reached by capability"] },
+    { "dot": "cyan", "title": "A job, not a request", "items": ["Answers within 20 s, or 202 with the step it is at", "/job then answers exactly what the call would have", "A second enable joins the one in flight"] },
+    { "dot": "rose", "title": "What it refuses", "items": ["Core platform apps (403)", "Another change while this one runs (409)", "Arriving with data onto an office that already holds some (409)"] }
+  ]
+}

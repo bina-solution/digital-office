@@ -1,0 +1,197 @@
+[
+  {
+    "name": "goldman",
+    "display_name": "גולדמן",
+    "gdrive_link": "https://drive.google.com/file/d/1REybNDLY2j25TE3qx8hBzKyI4uqo4GfH",
+    "source_file": "fixtures/documents/goldman.pdf",
+    "mime_type": "pdf",
+    "first_line_index": 0,
+    "expected": {
+      "balance": 258974,
+      "document_date": "2025-11-10",
+      "first_line_id": "110146070",
+      "first_line_amount": 1968,
+      "first_line_date": "2025-03-20"
+    }
+  },
+  {
+    "name": "mitzparles",
+    "display_name": "מצפרלס",
+    "gdrive_link": "https://drive.google.com/file/d/1CHHBYg2EZhYWDF9qt17f0TTN-wCng9ST",
+    "source_file": "fixtures/documents/mitzparles.pdf",
+    "mime_type": "pdf",
+    "first_line_index": 0,
+    "expected": {
+      "balance": 513282,
+      "document_date": "2025-11-11",
+      "first_line_id": "SI2511006336",
+      "first_line_amount": 68330,
+      "first_line_date": "2025-05-21"
+    }
+  },
+  {
+    "name": "tsinometal",
+    "display_name": "צינומטל",
+    "gdrive_link": "https://drive.google.com/file/d/1ZlIv1Dd0UDM4RH1gIRg8YF5gWpoCr4UK/view",
+    "source_file": "fixtures/documents/tsinometal.pdf",
+    "mime_type": "pdf",
+    "first_line_index": 0,
+    "expected": {
+      "balance": 494017,
+      "document_date": "2025-08-10",
+      "first_line_id": "SI256001975",
+      "first_line_amount": 87078,
+      "first_line_date": "2025-03-31"
+    }
+  },
+  {
+    "name": "promat",
+    "display_name": "פרומט",
+    "gdrive_link": "https://drive.google.com/file/d/1BIvh5cJ7s4EbhLyFbB1iTAdFAXwKRHXr/view",
+    "source_file": "fixtures/documents/promat.pdf",
+    "mime_type": "pdf",
+    "first_line_index": 0,
+    "expected": {
+      "balance": 55428,
+      "document_date": "",
+      "first_line_id": "12500004458",
+      "first_line_amount": 4871,
+      "first_line_date": "2025-04-01"
+    }
+  },
+  {
+    "name": "cohen-pur",
+    "display_name": "כהן פור",
+    "gdrive_link": "https://drive.google.com/file/d/1p-F7XldKPucEpmxSZHLXQyfZxGvgKN7L/edit",
+    "source_file": "fixtures/documents/cohen-pur.pdf",
+    "mime_type": "pdf",
+    "first_line_index": 0,
+    "expected": {
+      "balance": 12614,
+      "document_date": "2025-04-06",
+      "first_line_id": "113299",
+      "first_line_amount": 4007,
+      "first_line_date": "2025-01-05"
+    }
+  },
+  {
+    "name": "ytong-excel",
+    "display_name": "איטונג - אקסל",
+    "gdrive_link": "https://drive.google.com/file/d/1zIBKQwTW4qnqKZN5E2Npwl6vFoaYs_Qc/edit",
+    "source_file": "fixtures/documents/ytong-excel.xlsx",
+    "mime_type": "xlsx",
+    "first_line_index": -1,
+    "expected": {
+      "balance": 522623.33,
+      "document_date": "",
+      "first_line_id": "242506455",
+      "first_line_amount": 12340,
+      "first_line_date": "2025-06-19"
+    }
+  },
+  {
+    "name": "zagman",
+    "display_name": "זגמן",
+    "gdrive_link": "https://drive.google.com/file/d/1sbuPISF4UUWZhiIQzL1bKcC-ghCbiSAD/edit",
+    "source_file": "fixtures/documents/zagman.jpg",
+    "mime_type": "jpeg",
+    "first_line_index": 0,
+    "expected": {
+      "balance": 21609,
+      "document_date": "",
+      "first_line_id": "340972",
+      "first_line_amount": 3206,
+      "first_line_date": "2025-01-24"
+    }
+  },
+  {
+    "name": "zagman-text",
+    "display_name": "זגמן - טקסט",
+    "gdrive_link": "https://drive.google.com/file/d/1MaLIw1Yly2KSeoFBU-kul8JvqVbVU2vBRAn5FVbDDLQ/edit",
+    "source_file": "fixtures/documents/zagman-text.pdf",
+    "mime_type": "docs",
+    "first_line_index": 0,
+    "expected": {
+      "balance": 21609,
+      "document_date": "",
+      "first_line_id": "340972",
+      "first_line_amount": 3206,
+      "first_line_date": "2024-01-25"
+    }
+  },
+  {
+    "name": "pro-desk",
+    "display_name": "פרו דסק",
+    "gdrive_link": "https://drive.google.com/file/d/1MZa8q6er17B5CA_aWU0BIubCzZ9cbpwY",
+    "source_file": "fixtures/documents/pro-desk.pdf",
+    "mime_type": "pdf",
+    "first_line_index": -1,
+    "expected": {
+      "balance": -27617.4,
+      "document_date": "2025-09-30",
+      "first_line_id": "254000195",
+      "first_line_amount": 7434,
+      "first_line_date": "2025-08-24"
+    }
+  },
+  {
+    "name": "plasson",
+    "display_name": "פלאסון",
+    "gdrive_link": "https://docs.google.com/spreadsheets/d/1T9LKwsssPUVKJze_X5CO0rRohps1vVSD",
+    "source_file": "fixtures/documents/plasson.xlsx",
+    "mime_type": "xlsx",
+    "first_line_index": -1,
+    "expected": {
+      "balance": 187082.93,
+      "document_date": "2025-10-26",
+      "first_line_id": "256049808",
+      "first_line_amount": 1390.46,
+      "first_line_date": "2025-09-15"
+    }
+  },
+  {
+    "name": "yehezkiel-aharon",
+    "display_name": "יחזקאל אהרון",
+    "gdrive_link": "https://drive.google.com/file/d/16X2aBmyqkzMuwo1kJhpgJkh7RgbmgKHE",
+    "source_file": "fixtures/documents/yehezkiel-aharon.pdf",
+    "mime_type": "pdf",
+    "first_line_index": 0,
+    "expected": {
+      "balance": 96117,
+      "document_date": "2025-11-04",
+      "first_line_id": "708547",
+      "first_line_amount": 11328,
+      "first_line_date": "2025-09-01"
+    }
+  },
+  {
+    "name": "hamat-itzuv",
+    "display_name": "חמת עיצוב",
+    "gdrive_link": "https://drive.google.com/file/d/1u1kb6DeXhztw1jVVTuj33d3KA-Zhjlak",
+    "source_file": "fixtures/documents/hamat-itzuv.pdf",
+    "mime_type": "pdf",
+    "first_line_index": -1,
+    "expected": {
+      "balance": 115891.35,
+      "document_date": "",
+      "first_line_id": "1143348549",
+      "first_line_amount": 4130,
+      "first_line_date": "2025-08-03"
+    }
+  },
+  {
+    "name": "kalkal",
+    "display_name": "קלקל",
+    "gdrive_link": "https://drive.google.com/file/d/1AjXsk_QASOUG8_X45bo9yAVltGzRumbY/view",
+    "source_file": "fixtures/documents/kalkal.pdf",
+    "mime_type": "pdf",
+    "first_line_index": -1,
+    "expected": {
+      "balance": 165083,
+      "document_date": "2025-10-22",
+      "first_line_id": "1256007177",
+      "first_line_amount": 1950,
+      "first_line_date": "2025-10-16"
+    }
+  }
+]

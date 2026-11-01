@@ -1,0 +1,17 @@
+{
+ "nav": "Archived sessions",
+ "search": "Search archived sessions",
+ "loading": "Reading sessions…",
+ "empty": "No archived sessions.",
+ "unavailable": "No archived session here can be restored.",
+ "emptySearch": "No matching sessions.",
+ "unarchive": "Unarchive",
+ "unarchiveNamed": "Unarchive {title}",
+ "ungrouped": "Ungrouped",
+ "time.now": "now",
+ "time.minutes": "{n}min",
+ "time.hours": "{n}h",
+ "time.days": "{n}d",
+ "time.months": "{n}mo",
+ "time.years": "{n}y"
+}

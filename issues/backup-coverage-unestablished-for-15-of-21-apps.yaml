@@ -1,0 +1,48 @@
+# yaml-language-server: $schema=./schema.json
+title: 15 of 21 enabled apps declare no backup hook, and nobody has established what covers them
+opened: '2026-08-24'
+severity: high
+status: closed
+summary: 15 of 21 enabled apps declare no backup hook, and nobody has established what covers them
+description: |
+  area: data-management / backup completeness
+  As first recorded — status: SUPERSEDED 2026-08-24 -- the coverage IS now established; the headline count was the wrong question.
+
+  ## Context
+
+  From the data-management inventory on shlomo-laptop, 2026-08-24:
+
+      apps_total        29
+      apps_enabled      21
+      apps_with_hooks    6
+
+  Six enabled apps declare a backup hook. The other fifteen own data whose presence in an
+  archive depends entirely on whether some volume rule happens to catch it. No per-app
+  determination exists either way.
+
+  This matters most in the context it was found: the release goal is a full instance move, and
+  "the export is complete" is currently an assumption rather than a measurement. An export that
+  silently omits fifteen apps' data still produces a target that starts, which is the failure
+  mode hardest to notice.
+
+  A related and narrower finding is already resolved in the same sweep and should not be
+  confused with this one: of twelve *undeclared stores*, eleven turned out to be covered anyway
+  by the whole-database dump. Reading "unclaimed" as "not backed up" produces eleven false
+  alarms. The single genuinely uncovered store is network-state (571 B), tracked separately.
+
+  ## Impact
+
+  A clone can be declared good while missing the data of fifteen apps. Nothing in the current
+  pipeline would report it.
+
+  ## Resolution
+
+  Produce the per-app table: for each enabled app without a hook, name the volume rule that
+  covers its data, or record that nothing does. Then gate it - an enabled app whose data is
+  covered by neither a hook nor a named rule should fail the pre-export check rather than be
+  omitted quietly.
+
+  ## Evidence
+
+  - /a/data-management/api/inventory summary, shlomo-laptop, 2026-08-24
+  - portable equivalent: 21 volumes / 2.79 GB, 8 databases / 1.30 GB, 16 apps with data, 6 with hooks

@@ -1,0 +1,87 @@
+# yaml-language-server: $schema=./schema.json
+title: Remaining red gates on platform-os-indox-final (G26 volumes, G30 memory, G34 legacy, G23 gallery, G10 portability)
+opened: '2026-08-21'
+severity: medium
+status: closed
+summary: Remaining red gates on platform-os-indox-final (G26 volumes, G30 memory, G34 legacy, G23 gallery, G10 portability)
+description: |
+  area: CI gates
+
+  ## Context
+
+  Full gate run on portable-ubuntu, 2026-08-21: 44 gates, 32 PASS, 12 FAIL. Six of the failures
+  are gates that no longer inspect anything (gates-dead-after-workflow-ts-migration.yaml) and
+  one is the hook exec-bit finding (hooks-committed-non-executable.yaml). These are the other
+  five - all real, all small, none of them blocking a test run.
+
+  G26 data-volumes-lint
+      "1 volume(s) hold state no app.json declares (a backup built from data.volumes would
+       skip them): any-concurrency  named volume  n8n_storage"
+      data.volumes is described in the gate as "the only machine-readable inventory of state
+      this platform has". It is also what bbox export walks. Pairs badly with
+      hooks-committed-non-executable.yaml: one says the inventory is incomplete, the other says
+      the hooks that would act on it never run.
+      Fix: declare it in any-concurrency's app.json, or waive it with a reason in
+      platform/data-volumes-waivers.yaml.
+
+  G30 memory-budget-lint
+      "G30b FAIL - the stack's worst-case envelope (148%) exceeds physical memory."
+      Named offenders: incoming-documents 512/512 MiB (100%), mailapi 500/512 (97%),
+      supabase-rest 255/256 (99%), console 247/256 (96%).
+      Two things here. The envelope genuinely has no margin. But the service names it printed
+      are all suffixed `-shlomo-laptop`, i.e. the gate measured a DIFFERENT deployment's
+      profile than the one under test (DEPLOYMENT_NAME=posnet here). Worth checking whether
+      G30 resolves the profile from the environment or from a hardcoded name - a memory gate
+      reading the wrong machine's numbers is a gate that will be wrong in both directions.
+
+  G34 legacy-ref-lint
+      undeclared read of "legacy/n8n/indox-sheets-era/indoxDocUploader01.json" by "indox-app".
+      legacy/ is the parked tree; reading from it is allowed but must be DECLARED so whoever
+      deletes it next can see who breaks. The gate's own note recalls attic/ being deleted on
+      the word of a README while CI was booting a compose file out of it.
+      Fix: point at the live tree, or add it to ALLOWED in legacy-ref-lint.py with a reason and
+      to the consumer table at the top of legacy/README.md.
+
+  G23 gallery-default-lint
+      "supabase: { state: enabled, by: user }" - twice over: a gallery default must be
+      `{ enabled: false }`, and the `by:` provenance names a user who does not exist on a fresh
+      install. "A fresh install starts the platform and nothing else."
+      Fix: commit supabase as `{ enabled: false }` and enable it at runtime.
+
+  G10 portability-lint
+      Seven scripts do not get PYTHONIOENCODING=utf-8:
+        scripts/refresh-corpus-dates.py
+        scripts/ui-coverage/e2e/cleanup.py
+        scripts/ui-coverage/e2e/test_drive.py
+        scripts/ui-coverage/e2e/test_indox.py
+        scripts/ui-coverage/e2e/test_indox_regressions.py
+        scripts/ui-coverage/e2e/test_indox_ui.py
+        scripts/ui-coverage/e2e/test_mail.py
+      Six of the seven are the INDOX/drive/mail E2E suites - i.e. the code that prints Hebrew
+      test output. On a host whose stdout is not already UTF-8 these die on the first Hebrew
+      character, and the failure looks like a test failure rather than an encoding one.
+      Fix: source lib.sh (it exports PYTHONIOENCODING=utf-8), or export it in the runner.
+
+  ## Note
+
+  All 21 gates that ship a --self-test passed their self-test in this run, so the gate
+  machinery itself is sound - the failures above are findings, not tooling faults.
+
+  ## Where it stands (2026-10-07, hp-laptop, branch dgo-pair, 53 gates)
+
+      G26 data-volumes-lint     PASS
+      G30 memory-budget-lint    PASS
+      G34 legacy-ref-lint       PASS
+      G10 portability-lint      PASS
+      G23 gallery-default-lint  FAIL
+
+  Four of the five are green. G23 is red for the reason it gave then, grown: the tracked
+  `platform.state.yaml` is one office's runtime (`{ state: ..., by: user }` entries), and what a
+  fresh install starts from is the owner's decision. That is
+  issues/one-offices-desired-state-is-what-every-clone-starts-from.yaml (hub eng-040), so this
+  record is closed and the red is followed there.
+tasks:
+- text: "G26, G30, G34 and G10 pass (gate run of 2026-10-07)"
+  done: true
+- text: "G23 is the state-file question - followed in issues/one-offices-desired-state-is-what-every-clone-starts-from.yaml, not here"
+  done: true

@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# Clear INDOX to its initial state and (re)seed structural config — entirely through the API layer,
+# by running the canonical "INDOX Reset + Setup" workflow. Supersedes the old host-side
+# reset-company-state, which wrote the database directly and drifted from what the API believed.
+#
+#   bbox indox reset --instance <id>             full reset + setup of instance <id> (REQUIRED; schema indox_<id>)
+#   bbox indox reset --instance <id> --count N   partial: at most N items per gmail label / drive folder (fast)
+#   bbox indox reset --instance <id> --ids a,b   targeted: only these message/file ids (from `bbox indox sync state`)
+#
+# The workflow id lives HERE, with the app, not in the CLI. bbox used to carry it inline — layer 0
+# holding one layer-3 app's n8n primary key, so renaming or re-importing the workflow broke a
+# command in a file that has nothing to do with INDOX. Gate G31 now forbids that shape.
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+#: "INDOX Reset + Setup". Same constant as demo.py's RESET_WF — one app, one place per fact.
+# [2026-08-23] Was the opaque n8n-generated id hCaUzRUGx3nmLFNI. The blueprint moved this
+# workflow to a stable id (IndoxResetFull01.workflow.ts) and this reader was not moved with it,
+# so on any FRESH deploy the trigger answered "workflow not found" and the INDOX schema was
+# never created -- see the header of trigger-wf.
+WF_RESET="IndoxResetFull01"
+
+count=""; ids=""; instance=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --instance) instance="${2:?--instance needs an id}"; shift 2 ;;
+    --count) count="${2:?--count needs a number}"; shift 2 ;;
+    --ids)   ids="${2:?--ids needs a comma-separated list}"; shift 2 ;;
+    -h|--help) sed -n '2,9p' "${BASH_SOURCE[0]}" | sed 's/^# \?//'; exit 0 ;;
+    *) shift ;;
+  esac
+done
+
+# [tenancy cutover 2026-08-31] REQUIRED: the workflow's Reset Scope empties ONE instance's schema
+# (indox_<id>) and refuses to run without { instance, confirm: "RESET-INSTANCE:<id>" }. The confirm
+# token is derived from the SAME operator-typed id — naming the instance IS the confirmation here;
+# the token exists so no caller can reset without stating which instance it means.
+if [ -z "${instance}" ]; then
+  echo "ERROR: --instance <id> is required (which INDOX instance to reset, e.g. --instance test)." >&2
+  echo "       usage: bbox indox reset --instance <id> [--count N | --ids a,b]" >&2
+  exit 2
+fi
+if ! [[ "${instance}" =~ ^[a-z][a-z0-9_]*$ ]]; then
+  echo "ERROR: --instance must match ^[a-z][a-z0-9_]*\$ (got: ${instance})" >&2
+  exit 2
+fi
+scope="\"instance\":\"${instance}\",\"confirm\":\"RESET-INSTANCE:${instance}\""
+
+# setup:false on a scoped reset — reseeding structural config is only meaningful for a full one.
+payload="{${scope}}"
+if [ -n "${count}" ]; then
+  payload="{${scope},\"limit\":${count},\"setup\":false}"
+elif [ -n "${ids}" ]; then
+  payload="{${scope},\"ids\":[\"$(printf '%s' "${ids}" | sed 's/,/","/g')\"],\"setup\":false}"
+fi
+
+exec bash "${SCRIPT_DIR}/trigger-wf" "${WF_RESET}" "${payload}"

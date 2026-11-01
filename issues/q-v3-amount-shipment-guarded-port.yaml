@@ -1,0 +1,129 @@
+title: q_v3_amount_shipment — port the is_money-guarded `find near` on bare `סה` (approved, pending freeze); 4 of 21 newly-covered documents get a questionable figure
+opened: 2026-08-06
+category: chore
+severity: medium
+status: blocked
+summary: >-
+  Measured, approved, NOT yet applied — held by the push freeze. Adds one fallback step to
+  q_v3_amount_shipment: 20/72 → 41/72 of the extractable set, strictly additive (0 changed,
+  0 lost). Known accepted risk: of the 21 values it newly produces, 4 sit in the bottom half
+  of their page's money values and are probably line-item or VAT figures, on a field that
+  feeds ledger matching.
+description: |
+  ## The change
+
+  `q_v3_amount_shipment` is today `q_v3_amount_invoice` minus the invoice query's two
+  `find near` / `scope: row` steps anchored on the bare token `סה`. Those are the robust
+  ones: the strong anchors are multi-word exact phrases (`סה"כ לתשלום`), while
+  `_anchor_points` matches `סה` as a *substring* of any token, so it survives OCR mangling
+  the `"` in `סה"כ`.
+
+  Insert this as **fallback 2** of `q_v3_amount_shipment` (after the existing strong-anchor
+  fallback, before the loose `מחיר` find-near, which is the most false-positive-prone step
+  in the chain):
+
+      {"action": "find near",
+       "action_value": ["סה"],
+       "scope": "row", "select": "bottom", "is_rtl": true,
+       "value_regex": "-?\\d{1,3}(?:[ .,]\\d{3})*[.,]\\d{2}-?|-?\\d+[.,]\\d{2}-?",
+       "value_validations": [{"validation_type": "is_money"},
+                             {"validation_type": "not_equals", "validation_value": "0.00"},
+                             {"validation_type": "not_contains", "validation_value": "ק\"ג"}]}
+
+  ## What is deliberately NOT ported
+
+  The invoice query's **unvalidated twin** — the same `find near` on `סה` with
+  `value_validations: []`, which sits at its fallback 1, *ahead* of the guarded one. It
+  returns any token sharing a row with a `סה` token. On an invoice the neighbouring cells
+  are amounts; on a delivery note the common row is `סה"כ יחידות` / `סה"כ כמות` (total
+  UNITS), so porting it would write a **quantity** into `DOC_TOTAL_AMOUNT`. A wrong amount
+  on a financial document is worse than a missing one.
+
+  Note for anyone tempted by the invoice query's higher number: **its returned values were
+  never tested.** 45/72 is neither a validated target nor a demonstrated artefact — do not
+  cite it as either.
+
+  ## Measurement (150 live SHIPMENT documents with cached OCR, run against the apitools engine)
+
+  Ceiling — properties of the documents themselves, not of any query:
+
+      contains >=1 money-shaped token      81/150  (54.0%)
+      contains a total-ish label          126/150  (84.0%)
+      contains BOTH  ("extractable")       72/150  (48.0%)
+      NO money anywhere on the page        53/150  (35.3%)   unreachable by ANY query
+
+  A second, independent pass over `ocr_cache` full-text on the host gave 56.7% for the
+  comparable pair (its money regex spans token boundaries, so it counts 97 rather than 81).
+  Both methods say **roughly half**, and 35–50% of delivery notes carry no price at all.
+  Keep both numbers with their methods attached; do not quote the friendlier one.
+
+  Paired, within-document, over every document where the candidate produced a value:
+
+      unchanged (live already had it, same value)  20
+      NEW       (live returned nothing)            21    <- what the port buys
+      CHANGED   (live had a different value)        0    <- it never overrides
+      LOST      (live had one, candidate does not)  0    <- it never removes
+
+      coverage of the extractable set: 20/72 (27.8%)  ->  41/72 (56.9%)
+
+  Predicted before measuring: "moves toward ~57% and stops". Measured 56.9%.
+
+  ## THE ACCEPTED RISK — 4 in 21
+
+  Rank of each newly-produced value among the money values printed on its own page
+  (rank 1 = largest; a document total is normally the largest or joint-largest):
+
+      largest       6  (29%)
+      top quarter  10  (48%)      -> 76% plausible as a document total
+      middle        1  (5%)
+      BOTTOM HALF   4  (19%)      <- the risk
+
+  The four: `64.80` (rank 6 of 6 — the smallest figure on its page), `10.00` (3 of 3,
+  smallest), `12.00` (3 of 4), `6.00` (3 of 4). Small figures on sparse pages, consistent
+  with a line-item price or a VAT line rather than a total.
+
+  `DOC_TOTAL_AMOUNT` on a shipment feeds ledger matching, so this is not cosmetic. The
+  judgement made when approving: a 4-in-21 questionable rate on documents that previously
+  produced *nothing* is worth taking, because the step is strictly additive — it cannot
+  degrade a value the pipeline already gets right. That trade should be revisited if
+  shipment amounts ever start driving an automatic match rather than a reviewed one.
+
+  ## Do NOT retarget this at invoice parity
+
+  The original brief compared shipment amount coverage against invoices at 108/119. That
+  comparison is invalid twice over: invoice amount success is overwhelmingly the AI path
+  (live: `AI_DOC_AMOUNT` 3345 vs `LOCAL_DOC_AMOUNT` 120 across 3939 invoices), and the
+  Gemini path is out of scope for the local-query lane; and ~35–50% of delivery notes have
+  no amount printed at all, so parity is not reachable by any query. The correct acceptance
+  criterion is **coverage of the extractable set**, not coverage of all shipments.
+
+  ## Apply procedure (when the freeze lifts)
+
+  Same backup-and-re-read procedure used for the q_v3_date_* guards, which was clean:
+
+  1. `pg_dump` `public.settings` + the affected row to `data/_registry_backup/`, sha256 both
+     and verify with `sha256sum -c`.
+  2. Edit `apps/indox/blueprint/fixtures/settings.json` (one line — the
+     `q_v3_amount_shipment` value), asserting in code that only that one key's parsed value
+     differs and the file's line count is unchanged.
+  3. Apply to `public.settings` as a **name-scoped UPDATE** inside a transaction that
+     `RAISE`s unless exactly 1 row changed. `scripts/ui-coverage/seed.sh` cannot do this —
+     it is deliberately insert-only (`on conflict do nothing`) after the 2026-08-05 incident
+     where an upsert destroyed a client's live `sync_registry`.
+  4. **Re-read the row from the DB** and compare byte-for-byte against the fixture. Do not
+     trust the write response.
+tasks:
+  - text: Apply the guarded find-near step to q_v3_amount_shipment (fixture + name-scoped DB UPDATE), backup first, verify by re-reading
+    done: false
+  - text: Record the 4-in-21 questionable-value rate wherever shipment DOC_TOTAL_AMOUNT coverage is reported
+    done: false
+  - text: Re-check the 4 bottom-half documents by eye to confirm they are line-item/VAT figures rather than a systematic anchor error
+    done: false
+  - text: If shipment amounts ever gate an automatic ledger match, revisit whether 4-in-21 is still acceptable
+    done: false
+references:
+  - apps/indox/blueprint/fixtures/settings.json
+  - apps/apitools/src/ocr_core/ocr_json_query.py
+  - apps/indox/blueprint/demo-docs/shipment/dataset.csv
+  - scripts/ui-coverage/seed.sh
+  - issues/settings-table-has-no-audit-trail.yaml

@@ -1,0 +1,86 @@
+{
+  "id": "my-docs",
+  "title": {
+    "he": "מסמכים שלי",
+    "en": "My Docs"
+  },
+  "layer": 3,
+  "kind": "service",
+  "version": "1.0.0",
+  "summary": {
+    "he": "המסמכים העסקיים שלך — חשבוניות ומסמכים",
+    "en": "Business document ledger — invoices and documents"
+  },
+  "capabilities": [],
+  "use": [
+    {
+      "capability": "sql",
+      "strength": "requires",
+      "after": true
+    },
+    {
+      "capability": "identity",
+      "strength": "requires",
+      "after": true
+    },
+    {
+      "capability": "ledger",
+      "strength": "requires",
+      "after": true
+    },
+    {
+      "capability": "ui-kit",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
+    }
+  ],
+  "connections": [
+    {
+      "id": "supabase-service-key",
+      "required": true
+    }
+  ],
+  "compose": "docker-compose.yml",
+  "routing": [
+    {
+      "host": "my-docs",
+      "port": 8000,
+      "auth": "sso",
+      "emit_labels": false,
+      "module": {
+        "group": "עסק",
+        "icon": "file-text",
+        "embed": true,
+        "alias": "my-docs",
+        "id": "my-docs",
+        "name": "מסמכים שלי",
+        "desc": "ניהול מסמכים עסקיים",
+        "order": 1,
+        "url_env": "MY_DOCS_URL",
+        "url": "http://my-docs:8000"
+      },
+      "sso": {
+        "slug": "my-docs",
+        "base_url_env": "MY_DOCS_BASE_URL",
+        "default_host": "my-docs.localhost",
+        "display_name": "My Docs",
+        "local_twin": true
+      }
+    }
+  ],
+  "health": {
+    "structural": "auto",
+    "probe": {
+      "http": "http://my-docs:8000/healthz",
+      "interval": "30s"
+    }
+  },
+  "data": {
+    "volumes": [],
+    "on_uninstall": "prompt"
+  },
+  "observability": {
+    "sentry_platform": "python"
+  }
+}

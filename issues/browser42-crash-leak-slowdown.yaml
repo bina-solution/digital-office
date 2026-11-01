@@ -1,0 +1,61 @@
+# yaml-language-server: $schema=./schema.json
+title: browser42 gets slow over time — Chrome-crash / crashpad zombie leak (no self-heal)
+opened: '2026-06-22'
+severity: medium
+status: open
+summary: browser42 gets slow over time — Chrome-crash / crashpad zombie leak (no self-heal)
+description: |
+  ## Context
+
+  browser42 progressively slows down and eventually wedges (CDP connect_over_cdp
+  hangs; /json and /json/list stop responding while cloakserve PID 1 stays "up").
+  Root cause is a leak driven by Chrome crashes:
+
+  1. Concurrent / overlapping `connect_over_cdp` sessions crash the shared stealth
+     Chromium (browser42-cli gotcha #6). This is easy to trigger when an agent
+     reconnects per-step or runs several CDP clients at once instead of the
+     one-connect-many-actions rule.
+  2. Every Chrome crash leaves a `crashpad_handler` zombie behind. They accumulate
+     with NOTHING to reap them — observed 11 live crashpad processes in one
+     container before recreate; 0 immediately after `--force-recreate`. Each adds
+     CPU/RAM pressure, so the container gets slower the longer it runs.
+  3. cloakserve (the custom CDP proxy, PID 1) can wedge after a crash cascade: the
+     browser WS connects (HTTP 101) then drops ~1s later and subsequent CDP
+     commands hang. The container reports healthy (PID 1 alive) the whole time.
+  4. There is NO healthcheck on browser42-browser and Docker's restart policy does
+     not act on "slow"/"wedged" — only on process exit. So the degraded state never
+     self-heals; only a manual `docker restart` / `--force-recreate` clears it.
+
+  Aggravating factor: host CPU contention (see any-concurrency-resource-intensive.yaml)
+  overloaded the Docker engine (502 on /exec), compounding the apparent slowness.
+  NOTE: part of the perceived "hang" while debugging was also a test-harness artifact
+  — calling os._exit(0) in the CDP probe scripts dropped buffered stdout, so a
+  successful connect looked like a hang. Real connect time on a clean container is ~0.6s.
+
+  ## Action
+
+  PERMANENT FIXES (prevent recurrence):
+  - DISCIPLINE (primary): one `connect_over_cdp` per task, many actions, then exit.
+    Never reconnect per step, never run concurrent CDP clients. Already in
+    ai/context/browser42-cli.md gotcha #6 — keep enforcing it; it is the trigger.
+  - VISIBILITY (done in this change): added a CDP healthcheck to browser42-browser
+    (wget http://localhost:9222/json/version/ — trailing slash required by cloakserve)
+    so a wedge shows as "unhealthy" in `docker ps` instead of silently degrading.
+  - SELF-HEAL (recommended follow-up): add an autoheal mechanism so "unhealthy"
+    actually triggers a restart (restart:unless-stopped alone does NOT). Options:
+      a) a small willfarrell/autoheal sidecar watching the health label, or
+      b) extend browser42-reaper (it already holds a CDP connection + loops every
+         30s) to also detect a wedged endpoint / crashpad zombie count and restart
+         the browser container. Restart clears the crashpad leak automatically.
+  - REAP CRASHPAD: optionally have the reaper `pkill` orphaned crashpad_handler
+    processes, or run Chrome with --disable-crashpad / crash-dumps disabled in
+    Dockerfile.browser so crashes don't leave zombies in the first place.
+  - REDUCE CRASH SURFACE: lower BROWSER42_MAX_TABS (fewer targets = faster /json
+    enumeration, smaller crash blast radius) and keep shm_size at 2gb.
+
+  ## Why deferred
+
+  The immediate slowness was resolved by stopping any-concurrency + force-recreating
+  the browser (crashpad 11 -> 0). The healthcheck makes future wedges visible now;
+  wiring true self-heal (autoheal sidecar or reaper extension) is the durable fix and
+  is tracked here so it is done deliberately rather than adding a new container ad hoc.

@@ -1,0 +1,182 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   bina-page.css — THE page. One header, one card, one action row, everywhere.
+
+   Five apps in this office are a single scrolling page with no router and no sections:
+   computers, machine, notifications, any-concurrency, data-management. They cannot take the
+   side menu (a menu whose rows go nowhere is an ornament), so what makes them look like a
+   different product is not their navigation — it is their CHROME. Measured 2026-09-29, before
+   this file existed, they used three different header classes and four different scales:
+
+     · computers, machine   `.app-header`  h1 22px/800, `.sub` 13px, border-bottom
+     · notifications        `.head` + `.brand` + `.htext`, h1 20px/700, no rule
+     · any-concurrency      no header class at all
+     · data-management      `<h2>` sections, h1 24px
+
+   So: one set of names, one scale, one card. An app keeps its own content and its own
+   behaviour — what it no longer owns is the size of its title.
+
+   USE:
+     <div class="pg">                                  the page column (width + padding)
+       <header class="pg-head">
+         <div><h1>מחשבים</h1><div class="pg-sub">…</div></div>
+         <div class="pg-actions"><span class="pg-live">…</span><button class="btn">…</button></div>
+       </header>                                       `data-view` on it when the title names a VIEW of
+                                                       the app (a script rewrites it), not the app
+       <section class="pg-card">…</section>
+     </div>
+
+   COPIED, NOT LINKED. An app has to stay independently installable, so every app carries this
+   block verbatim and `scripts/refactor/theme-token-lint.py` (gate G27) fails the build when a
+   copy stops matching. Edit HERE, then:
+
+       python3 scripts/refactor/theme-token-lint.py --fix
+   ═══════════════════════════════════════════════════════════════════════════ */
+/* @bina-page:start */
+.pg{
+  --pg-max:1180px;
+  width:100%;
+  max-width:var(--pg-max);
+  margin:0 auto;
+  padding:20px 24px 48px;
+  box-sizing:border-box;
+}
+/* the header: title block at the start, actions at the end. It wraps rather than shrinking,
+   which is what keeps a long action row off the title on a narrow screen. */
+.pg-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:16px;
+  flex-wrap:wrap;
+  margin-bottom:18px;
+  padding-bottom:14px;
+  border-bottom:1px solid var(--line);
+}
+.pg-head h1{
+  margin:0;
+  font-size:22px;
+  line-height:30px;
+  font-weight:700;
+  letter-spacing:-.01em;
+  color:var(--ink);
+}
+.pg-sub{margin-top:3px;color:var(--muted);font-size:13px;line-height:20px;max-width:70ch}
+.pg-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-inline-start:auto}
+
+/* the live chip. One chip, everywhere: a dot that beats while the number is fresh, and that
+   stops dead when it is not — a still dot is the whole signal that the figure is old. */
+.pg-live{
+  display:inline-flex;align-items:center;gap:7px;
+  font-size:12.5px;line-height:18px;font-weight:700;white-space:nowrap;
+  color:var(--accent-d);
+  background:var(--accent-soft);
+  border-radius:999px;
+  padding:4px 11px;
+  border:0;font-family:inherit;          /* the chip is a <button> where it pauses the refresh */
+}
+button.pg-live{cursor:pointer}
+.pg-live[data-stale="1"]{color:var(--amber);background:var(--warn-soft)}
+.pg-live .beat{width:9px;height:9px;border-radius:50%;background:currentColor;flex:none;animation:pg-beat 1.6s infinite}
+.pg-live[data-stale="1"] .beat{animation:none}
+@keyframes pg-beat{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 45%,transparent)}70%{box-shadow:0 0 0 9px transparent}100%{box-shadow:0 0 0 0 transparent}}
+
+/* the card. `> h2/h3` is the card's own title; an app that puts a toolbar in it uses .pg-cardhead */
+.pg-card{
+  box-sizing:border-box;
+  background:var(--surface);
+  border:1px solid var(--line);
+  border-radius:14px;
+  padding:16px 18px;
+  box-shadow:var(--shadow);
+  margin-bottom:16px;
+}
+.pg-card>h2,.pg-card>h3{margin:0 0 10px;font-size:15px;line-height:22px;font-weight:700;color:var(--ink)}
+.pg-cardhead{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.pg-cardhead>h2,.pg-cardhead>h3{margin:0;font-size:15px;line-height:22px;font-weight:700}
+.pg-cardhead .pg-actions{margin-inline-start:auto}
+.pg-hint{color:var(--muted);font-size:12px;line-height:18px;font-weight:400}
+.pg-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pg-note{color:var(--muted);font-size:12.5px;line-height:19px}
+.pg-empty{padding:18px 4px;color:var(--muted);font-size:13px}
+
+/* ── the KPI tile: the one number a screen leads with ─────────────────────────────
+   Four of these screens drew it four ways — 26, 28 and 30px numbers, three paddings, with and
+   without a shadow (measured 2026-10-06). One tile: a 12.5px label over a 26px tabular number.
+   A state is said twice — the number's colour and a 3px bar on the reading edge — through
+   `data-state`, in the product's legend; a zero is not a state, so a screen leaves the attribute
+   off and adds `is-zero`. The legend is the palette's: what waits is lime, what is in motion is
+   sky, what is done is olive, what failed is plum, what needs a person is plum lifted. What a
+   screen adds of its own (a chip, a sparkline, a sub-line) goes inside the tile; how many tiles
+   share a row is the screen's (`--pg-kpi-cols`), so that no row ends in a lone one. */
+.pg-kpis{display:grid;grid-template-columns:repeat(var(--pg-kpi-cols,4),minmax(0,1fr));gap:12px}
+.pg-kpi{position:relative;min-width:0;overflow:hidden;background:var(--surface);
+  border:1px solid var(--line);border-radius:14px;padding:14px 16px;
+  box-shadow:var(--shadow)}
+.pg-kpi-k{display:block;color:var(--muted);font-size:12.5px;line-height:18px;font-weight:600}
+/* `fit-content`: the number sits under its label at the page's reading edge even when it is an
+   LTR token (`.num`) — as a full-width block its own direction sent it to the far side. */
+.pg-kpi-v{display:block;width:fit-content;max-width:100%;margin-top:4px;font-size:26px;line-height:30px;
+  font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums;white-space:nowrap}
+.pg-kpi-v small{font-size:13px;font-weight:700;letter-spacing:0;margin-inline-start:4px;color:var(--muted)}
+.pg-kpi.is-zero .pg-kpi-v{color:var(--muted)}
+.pg-kpi[data-state]::after{content:"";position:absolute;inset-block:0;inset-inline-start:0;width:3px;background:var(--pg-kpi-c)}
+.pg-kpi[data-state] .pg-kpi-v{color:var(--pg-kpi-c)}
+.pg-kpi[data-state=todo]{--pg-kpi-c:var(--amber)}
+.pg-kpi[data-state=running]{--pg-kpi-c:var(--blue)}
+.pg-kpi[data-state=done]{--pg-kpi-c:var(--accent-d)}
+.pg-kpi[data-state=failed]{--pg-kpi-c:var(--red)}
+.pg-kpi[data-state=person]{--pg-kpi-c:var(--violet)}
+
+/* touch: the header's controls are the ones a phone reaches for first */
+@media (pointer:coarse){
+  .pg-actions .btn,.pg-actions button,.pg-actions a.btn{min-height:44px}
+}
+@media (max-width:640px){
+  .pg{padding:14px 12px 40px}
+  .pg-head{gap:10px;margin-bottom:14px}
+  .pg-head h1{font-size:19px;line-height:26px}
+  .pg-card{padding:14px;border-radius:12px}
+  .pg-actions{margin-inline-start:0;width:100%}
+}
+/* ── a SHORT frame: a window in desktop mode ─────────────────────────────────────
+   Desktop mode opens an app in a window of about 580 × 530, and a person halves and quarters it.
+   A page laid out for a tall frame spent that whole window on its own heading: at 640 × 330 five
+   of the office's screens showed their title, their sentence, their buttons and four tiles — and
+   none of what they are for (photographed 2026-10-07). In a short frame the heading is ONE line:
+   the window's bar already names the app, so the sentence under the title steps aside (a line
+   that reports something — `data-live` — stays), and the room is the content's. */
+@media (max-height:699px){
+  .pg{padding-block-start:10px}
+  .pg-head{gap:8px;margin-bottom:10px;padding-bottom:8px;align-items:center}
+  .pg-head h1{font-size:17px;line-height:24px}
+  .pg-sub:not([data-live]){display:none}
+  .pg-actions{width:auto;margin-inline-start:auto;gap:6px}
+  .pg-actions .btn,.pg-actions button,.pg-actions a.btn{padding:4px 9px;font-size:12px}
+}
+/* …and in the SMALLEST window — its corner dragged in as far as it goes, 380 × 224 of page — a
+   title over a row of buttons was 88px of it. The window's bar already says the screen's name,
+   so where the heading has actions the title steps aside and they are its one line. A title
+   that names a VIEW (`data-view`) stays: the bar says the app, not where in it. */
+@media (max-height:699px) and (max-width:430px){
+  .pg-head:not([data-view]):has(.pg-actions) h1{display:none}
+  .pg-actions{margin-inline-start:0}
+  /* …and a line that reports (`data-live`) shares that line with them, as far as it fits */
+  .pg-head:has(.pg-sub[data-live]){flex-wrap:nowrap}
+  .pg-head>:first-child:has(.pg-sub[data-live]){flex:1 1 0;min-width:0}
+  .pg-sub[data-live]{margin-top:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pg-head:has(.pg-sub[data-live]) .pg-actions{flex:none;flex-wrap:nowrap}
+}
+/* …and there, and at a phone's width, the leading numbers are one STRIP rather than tiles: a
+   hairline grid, key over value, in the columns the screen declares (`--pg-kpi-cols`). Four tiles
+   were 184px of a 530px window, before the first row of what they count. */
+@media (max-height:699px),(max-width:700px){
+  .pg-kpis{gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .pg-kpis>.pg-kpi{border:0;border-radius:0;box-shadow:none;padding:5px 8px}
+  .pg-kpis .pg-kpi-k{font-size:10.5px;line-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pg-kpis .pg-kpi-v{margin-top:0;font-size:17px;line-height:22px}
+  .pg-kpis .pg-kpi-v small{font-size:10.5px;margin-inline-start:3px}
+}
+@media (prefers-reduced-motion:reduce){
+  .pg-live .beat{animation:none}
+}
+/* @bina-page:end */

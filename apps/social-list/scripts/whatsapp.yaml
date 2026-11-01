@@ -1,0 +1,48 @@
+# WhatsApp through WhatsApp Web in the office browser (browser42). The owner links it ONCE: the live
+# view shows WhatsApp's QR code, the phone scans it (WhatsApp → Linked devices). WhatsApp's terms
+# forbid automating the app and WhatsApp Web: the office acts at a person's pace, only on actions the
+# owner started, and every WRITE is `draft` until one watched run passes.
+# Written 2026-09-29 from WhatsApp Web's known structure (the chat list is #pane-side; the profile
+# drawer opens from the "Profile" button); not yet observed — the office browser was not linked yet.
+platform: whatsapp
+version: 1
+status: draft
+origin: "https://web.whatsapp.com"
+session:
+  signed_in: "#pane-side, [aria-label='Chat list'], [aria-label='רשימת צ׳אטים'], [aria-label=\"רשימת צ'אטים\"]"
+  signed_out: "canvas[aria-label], [data-ref], [data-testid=qrcode]"
+  wait: 30
+ops:
+  profile.get:
+    status: draft
+    why: "קריאה בלבד — שם, אודות ותמונה מחלונית הפרופיל"
+    steps:
+      - {id: web, action: goto, value: "https://web.whatsapp.com/"}
+      - {id: open-profile, action: click, locator: {role: button, name: ["Profile", "פרופיל"], exact: true}}
+      - id: read-profile
+        action: extract
+        out: profile
+        function: |
+          async () => {
+            await new Promise(r => setTimeout(r, 2500));
+            const drawer = document.querySelector('[data-animate-drawer-title], div[role=dialog], #app');
+            const boxes = [...document.querySelectorAll('div[contenteditable], span[dir=auto][title], div[role=textbox]')];
+            const texts = [...document.querySelectorAll('span[dir=auto]')].map(e => e.innerText.trim()).filter(Boolean);
+            const img = document.querySelector('img[src*="pps.whatsapp.net"]');
+            const after = (label) => { const i = texts.findIndex(t => t === label); return i >= 0 ? texts[i + 1] || null : null; };
+            return JSON.stringify({ok: true, value: {
+              name: after('Name') || after('Your name') || after('שם') || after('השם שלך'),
+              bio: after('About') || after('אודות'), handle: null,
+              avatar_url: img ? img.src : null}});
+          }
+
+  profile.update.bio:
+    status: draft
+    why: "חלונית העריכה של „אודות” טרם נצפתה"
+    steps:
+      - {id: web, action: goto, value: "https://web.whatsapp.com/"}
+      - {id: open-profile, action: click, locator: {role: button, name: ["Profile", "פרופיל"], exact: true}}
+      - {id: edit-about, action: click, locator: {role: button, name: ["Click to edit About", "עריכת אודות", "Edit about"]}}
+      - {id: type, action: fill, locator: {css: "div[role=textbox][contenteditable=true]"}, value: "{bio}"}
+      - {id: save, action: press, value: "Enter"}
+      - {id: saved, action: wait_for, seconds: 3}

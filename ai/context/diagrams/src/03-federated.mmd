@@ -1,0 +1,19 @@
+sequenceDiagram
+    autonumber
+    participant B as Browser
+    participant LC as Local console
+    participant A as Fleet authentik (edge)
+    participant G as Gateway
+    participant N as Remote node
+
+    B->>LC: GET /a/vps1-console/
+    LC->>A: forwardAuth via authentik-fleet@file (outpost over the overlay)
+    A-->>LC: identity (user, groups)
+    LC->>G: proxy request + gateway-relative path
+    G->>G: route lookup (tenant, node, service) from the live table
+    G->>G: mint peer JWT (aud=node, scope, TTL minutes), signed by the gateway node key
+    G->>N: HTTP/WS over dow0 + JWT
+    N->>N: verify JWT against the peer public key from the credential plane
+    N-->>G: response (WebSocket upgrade carried by the gateway)
+    G-->>LC: response, X-Forwarded-Prefix preserved
+    LC-->>B: same-origin render, no second login

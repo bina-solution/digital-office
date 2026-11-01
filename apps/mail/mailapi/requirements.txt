@@ -1,0 +1,10 @@
+Flask==3.0.3
+imapclient==3.0.1
+gunicorn==23.0.0
+# Only for the private-mail setup checker, which has to ask public DNS whether the operator's MX,
+# SPF, DKIM and DMARC records are actually published. The stdlib cannot do this: socket only
+# resolves A/AAAA, and there is no TXT/MX lookup anywhere in it. The alternative was shelling out to
+# dig, which is not in the slim python image, or hand-rolling a DNS client — both worse than one
+# small, pure-python dependency. mailsetup.py degrades to "could not check" if the import fails, so
+# a build without it loses the checker rather than the mail API.
+dnspython==2.7.0

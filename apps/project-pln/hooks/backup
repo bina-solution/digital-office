@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+#: snapshot the Plane database and its object store — the projects, the work items and every file
+#
+# backup <outdir> <mode>   — invoked by scripts/deployment-archive.py, never by hand.
+#
+# WHY THIS APP NEEDS ITS OWN HOOK, and what would happen without one.
+#
+# Plane runs its own PostgreSQL (`plane-db`), so without this hook the archiver covers
+# `project_pln_db` with its generic volume tar: a copy taken WHILE postgres is writing, from a
+# directory that is only consistent at a checkpoint. Postgres usually recovers a crash-consistent
+# copy — which is precisely the property that makes the failure appear once, on the restore that
+# matters, as a database that starts and then reports corruption in one table. A logical dump has
+# no such window. The same reasoning is why `platform-base/postgres/hooks/backup` exists.
+#
+# WHAT IS NOT CLAIMED, on purpose: `project_pln_minio` is a plain file tree of uploaded attachments,
+# avatars and cover images — the generic volume tar is the right tool for it (same call supabase
+# makes for `supabase_storage_data`), and it is portable: the pinned MinIO serves a volume written
+# under another office's root credentials (measured 2026-10-05 — written under one key pair, listed,
+# read and written under another). What this app adds for it are FACTS (hooks/facts): the index rows
+# and the number of objects the store itself lists, so a restore that lands the database and loses
+# the volume is detectable instead of silently producing a workspace full of broken images.
+#
+# BOTH MODES DUMP THE WHOLE DATABASE. `config` mode exists to drop what is not deployment state —
+# the platform's postgres hook drops the `_supabase` analytics database and n8n's drops execution
+# history. Plane has no such half: its "logs" are `issue_activities` rows that belong to the work
+# items, and a workspace whose issue history is missing is not a smaller archive, it is a damaged
+# one. Measured: the entire dump is a few MB.
+#
+# THE DUMP IS THE DATABASE, AND THE ONLY COPY OF IT IN THE ARCHIVE. `project_pln_db` is claimed
+# below (SKIPVOL), so the archiver does not also tar the data directory, and `hooks/restore` loads
+# `plane.dump` into the cluster of the office it lands on. One way back, for every restore — and the
+# only one that works when the archive is opened on ANOTHER office, which is what moving this app
+# between two linked offices is: a data directory carries the password it was initialised with
+# (`PLANE_DB_PASSWORD` of the office it came from), while the office it arrives on dials it with its
+# own. A restored directory there is a database nobody can sign in to; a dump loaded into the
+# office's own cluster has no such question. It also ends the two-writers arrangement the first
+# version of this hook warned about: a tar of the directory and a dump of the same rows, restored by
+# two different steps.
+#
+# `project_pln_redis` is claimed too, and deliberately NOT carried: it is the cache, the sessions and
+# the Celery broker of the instance the archive was taken from. Restored under a running valkey it
+# would be overwritten by that process's own memory on its next save; restored at all it would hand
+# the new instance a queue of tasks addressed to the old one. The office it lands on starts empty,
+# which costs one sign-in.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+. "${REPO_ROOT}/scripts/archive-lib.sh"   # archive_require
+
+OUT="${1:?usage: backup <outdir> <mode>}"
+MODE="${2:-full}"
+
+DB="$(archive_require plane-db)" || { echo "[project-pln/backup] no plane-db container running — cannot dump" >&2; exit 1; }
+[ -n "${DB}" ] || { echo "[project-pln/backup] no plane-db container running — cannot dump" >&2; exit 1; }
+U=plane
+D=plane
+
+echo "[project-pln/backup] mode=${MODE} db=${DB}"
+
+# -Fc (custom format) rather than plain SQL: it is compressed, and a restore can list and select
+# from it, which is what makes "did this archive actually carry the workspace?" answerable without
+# restoring into a scratch instance first.
+docker exec "${DB}" pg_dump -U "${U}" -d "${D}" -Fc > "${OUT}/plane.dump.part" \
+  || { echo "[project-pln/backup] pg_dump failed" >&2; rm -f "${OUT}/plane.dump.part"; exit 1; }
+mv "${OUT}/plane.dump.part" "${OUT}/plane.dump"
+echo "ARTIFACT plane.dump"
+echo "SKIPVOL project_pln_db"       # the dump above IS the database (see the header)
+echo "SKIPVOL project_pln_redis"    # cache, sessions and broker of THIS instance — never carried
+
+# The FACTS a restore is checked against — hooks/facts, the one list (restore prints the same one).
+bash "${SCRIPT_DIR}/facts" || { echo "[project-pln/backup] the facts could not be read" >&2; exit 1; }
+exit 0

@@ -1,0 +1,173 @@
+{
+  "id": "social-list",
+  "title": {
+    "he": "רשתות חברתיות",
+    "en": "Social networks"
+  },
+  "layer": 3,
+  "kind": "service",
+  "version": "0.1.0",
+  "summary": {
+    "he": "כל רשת חברתית שהעסק נמצא בה מאחורי ממשק אחד — פרופיל, פוסטים, תגובות ולייקים, דרך הדפדפן של הלשכה (browser42) או דרך ה-API של הרשת",
+    "en": "Every social network the business is on behind one API — profile, posts, comments and reactions, through the office browser (browser42) or the network's own API"
+  },
+  "capabilities": [
+    {
+      "name": "social",
+      "type": "service",
+      "interface": "social.v1",
+      "endpoint": "http://social-list:8986",
+      "contract": "platform-service.v1",
+      "required_ops": [
+        "listAccounts",
+        "getProfile",
+        "updateProfile",
+        "listPosts",
+        "createPost",
+        "capabilities"
+      ],
+      "optional_ops": [
+        "updatePost",
+        "deletePost",
+        "listComments",
+        "createComment",
+        "deleteComment",
+        "react",
+        "insights"
+      ]
+    }
+  ],
+  "use": [
+    {
+      "capability": "identity",
+      "strength": "requires",
+      "after": true
+    },
+    {
+      "capability": "secrets",
+      "strength": "requires",
+      "after": true
+    },
+    {
+      "capability": "browser",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
+    },
+    {
+      "capability": "notify",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
+    },
+    {
+      "capability": "ui-kit",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
+    }
+  ],
+  "connections": [
+    {
+      "id": "browser42-mcp-token",
+      "required": false
+    }
+  ],
+  "compose": "docker-compose.yml",
+  "routing": [
+    {
+      "host": "social-list",
+      "port": 8986,
+      "auth": "sso",
+      "auth_exclude": [
+        "/public/"
+      ],
+      "module": {
+        "group": "עסק",
+        "icon": "message",
+        "embed": true,
+        "alias": "social-list",
+        "id": "social-list",
+        "name": "רשתות חברתיות",
+        "desc": "החשבונות ברשתות — פרופיל, פוסטים ותגובות ממקום אחד",
+        "order": 8,
+        "service": "social-list",
+        "url_env": "SOCIAL_LIST_URL",
+        "url": "http://social-list:8986"
+      },
+      "sso": {
+        "slug": "social-list",
+        "display_name": "Social networks",
+        "default_host": "social-list.localhost",
+        "base_url_env": "SOCIAL_LIST_BASE_URL",
+        "local_twin": true
+      }
+    }
+  ],
+  "health": {
+    "structural": "auto",
+    "probe": {
+      "http": "http://social-list:8986/healthz",
+      "interval": "30s"
+    }
+  },
+  "data": {
+    "volumes": [
+      "social_list_state"
+    ],
+    "on_uninstall": "keep"
+  },
+  "resources": {
+    "cpus": "0.3",
+    "memory": "192M"
+  },
+  "observability": {
+    "sentry_platform": "python"
+  },
+  "agent": {
+    "context": "AGENT.md",
+    "order": 28
+  },
+  "contributes": {
+    "connection_probes": {
+      "social-accounts": {
+        "type": "http",
+        "url": "http://social-list:8986/healthz"
+      }
+    },
+    "connection_providers": [
+      {
+        "id": "social-accounts",
+        "title": "Social accounts — every network this deployment speaks for",
+        "title_he": "חשבונות ברשתות חברתיות — כל רשת שהלשכה מדברת בשמה",
+        "kind": "config",
+        "optional": true,
+        "platform_protocols": [
+          "social_discord_bot",
+          "social_discord_browser",
+          "social_facebook_browser",
+          "social_facebook_page_token",
+          "social_fixture_api",
+          "social_fixture_browser",
+          "social_github_browser",
+          "social_github_token",
+          "social_instagram_browser",
+          "social_instagram_graph",
+          "social_whatsapp_browser",
+          "social_whatsapp_cloud",
+          "social_x_browser",
+          "social_x_oauth",
+          "social_youtube_browser",
+          "social_youtube_oauth"
+        ],
+        "group": "רשתות חברתיות",
+        "now": "Nothing to type here: every social account is an INSTANCE in the credential plane, created and removed from the social-list screen at /a/social-list/ (connect wizard: network → how → details → verified). An `api` account holds the network's token; a `browser` account holds only a POINTER to the office browser session (never a cookie, never a password). This row carries the PROTOCOLS so those accounts are visible in this catalog.",
+        "probe": {
+          "type": "http",
+          "url": "http://social-list:8986/healthz"
+        },
+        "wizard": "the social-list screen connects an account in three steps: network → how to connect (office browser — the default — or the network's API) → details and verify"
+      }
+    ]
+  }
+}

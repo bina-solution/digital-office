@@ -1,0 +1,150 @@
+# pixel-diff config — the two things the comparator cannot work out for itself.
+#
+# Read by scripts/ui-coverage/pixel-diff.py. Everything here is OPTIONAL: with no config the tool
+# still diffs any two directories, it just has no way to excuse a region or to bridge two different
+# naming schemes.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# ignore_regions — the pixels that differ forever and are not port work
+# ─────────────────────────────────────────────────────────────────────────────
+# The simulation renders fixtures; live renders seeded data with real timestamps and generated ids
+# (`ite_62382341445f48`). Those pixels can never match, and left in they put a 5-6% floor under every
+# text-dense panel — which is larger than most of the real layout bugs, so the signal drowns.
+#
+# Rects are FRACTIONS of the panel: [x0, y0, x1, y1] with 0,0 top-left and 1,1 bottom-right. Written
+# that way on purpose — a fraction is the same region at 1440x900, at 2880x1800 and on the phone
+# profile, so one declaration survives every profile and every deviceScaleFactor. (A value above 1.0
+# is read as a raw pixel coordinate, for the occasional one-off measured in a screenshot tool.)
+#
+# The key is matched with fnmatch against the pair key, BOTH sides' filenames, and `panel:<NN>` — so
+# a rule can be written against whichever naming the run happens to use.
+#
+# EVERY ENTRY NEEDS A `why`. An ignore list is a list of things this tool has agreed to stop
+# looking at; one that grows without justification is just a way of making the number go down. The
+# report prints the reasons and the total ignored area for the same reason.
+#
+# Start empty and add only what you have SEEN drown a real finding. The entries below are commented
+# out rather than guessed: the exact clock/id positions depend on the live layout, and a wrongly
+# placed ignore rect hides real breakage. Uncomment and adjust against a real sheet.
+
+ignore_regions:
+
+  # MEASURED, not guessed. In the desktop run the console home panel came back 3.13% / 49 regions,
+  # and the largest cluster band was y 0.231-0.311 across x 0.29-0.82 — the five KPI counters
+  # ("295 · 26 · 2 · 27/51 · 7" in the sim against "23 · 45 · 7 · 30/51 · 7" live). Those are the
+  # seeded totals of a real install versus the fixture totals; they are different by definition and
+  # will never converge. The CARDS around them are NOT ignored — only the number band — so a card
+  # that moves or loses its border is still caught.
+  "console__dashboard":
+    - rect: [0.28, 0.22, 0.84, 0.32]
+      why: KPI counter row — live seeded totals vs the sim's fixture totals, permanently different
+
+  # Templates for the two other known churn sources. Left commented because the exact bands depend
+  # on the live layout and a wrongly placed rect hides real breakage — derive them the same way the
+  # entry above was derived: run once, read the `boxes` for that panel out of summary.json, and
+  # convert to fractions by dividing by the panel size printed alongside them.
+  # "*":
+  #   - rect: [0.0, 0.0, 1.0, 0.045]
+  #     why: console top bar carries the live clock and the signed-in account name
+  # "mailview__*":
+  #   - rect: [0.72, 0.10, 1.00, 0.95]
+  #     why: message list shows seeded mail with fresh ids/timestamps, not the sim's fixtures
+  # "my-docs__*":
+  #   - rect: [0.05, 0.18, 0.95, 0.92]
+  #     why: my-docs rows render created_at and generated item ids (ite_...), new on every seed
+
+# ─────────────────────────────────────────────────────────────────────────────
+# pair_maps — which live view is the same screen as which sim panel
+# ─────────────────────────────────────────────────────────────────────────────
+# Only needed when the two sides were produced by different renderers and therefore name their
+# output differently. When both sides come from the SAME panel list (both `NN.png`), no map is
+# needed — the default --pair index is exact and cannot drift.
+#
+# Keys are the SIM side (panel index, as `digital-office/sim/ui-map.py` numbers PANELS); values are
+# the LIVE side's filename stem. Anything not listed is reported as UNPAIRED rather than guessed.
+
+pair_maps:
+
+  sim-panels-to-capture-views:
+    note: >-
+      sim ui-map panel index  ->  the capture.py view of the same screen
+      (ci-artifacts/screenshots-ui / .ci-cd/ui-map/screenshots).
+    warning: >-
+      CROSS-HARNESS: the two sides were produced by different renderers, so which live view is the
+      same SCREEN as which sim panel is a curated judgement, not a fact. Both do render the console
+      shell around the app (capture.py navigates the embedded app without leaving it — see the
+      comment at scripts/ui-coverage/capture.py:589), so the pairs are genuinely comparable and the
+      percentages mean something. What they are NOT is a port-progress metric: the two harnesses
+      open each screen by different recipes and against different data, several sim panels have no
+      live counterpart at all, and a mapping that is one row off produces a confident-looking
+      number about the wrong screen. Read the pictures; treat the numbers as a ranking.
+    pairs:
+      0:  console__dashboard
+      1:  console__apps
+      2:  console__install
+      3:  my-docs__docs
+      4:  my-docs__state-doc-drawer
+      5:  localdrive__root
+      6:  localdrive__root
+      7:  localdrive__folder
+      9:  localdrive__file
+      14: localdrive__state-trash
+      16: localdrive__state-menus
+      18: localdrive__state-preview
+      19: mailview__inbox
+      20: mailview__message
+      23: mailview__state-toast
+      26: mailview__state-attention
+      27: mailview__label
+      28: incoming-documents__root
+      29: incoming-documents__repos--repo-documents
+      31: incoming-documents__repos--repo
+      32: incoming-documents__repos-new
+      33: incoming-documents__settings
+      34: incoming-documents__sync
+      37: any-concurrency__main
+      38: notifications__main
+      39: machine__main
+      40: feature-validation__main
+      41: connections__auth
+      42: chat__dashboard
+      # Deliberately UNMAPPED, and they should stay that way until a live view exists that is
+      # actually the same screen:
+      #   8, 10-13, 15, 17  drive grid view, filter chips, recent/starred/shared, bulk bar,
+      #                     share dialog — capture.py has no view that opens these states
+      #   21, 22, 24, 25    mail select-all menu, bulk bar, starred, sent
+      #   30, 35, 36        INDOX instance switcher, sync items, sync source editor
+      # An unmapped panel is reported UNPAIRED, which is the correct finding: nothing live was
+      # captured in that state. Inventing a nearest-neighbour pair would turn "we never looked at
+      # this screen" into "this screen is 40% wrong", which is worse than no row at all.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# THE PAIR MAP ABOVE IS NOW THE FALLBACK, NOT THE ROUTE
+# ─────────────────────────────────────────────────────────────────────────────
+# It was written when the live side had no equivalent of the sim's panel list: `./bbox ui-map` drives
+# scripts/ui-coverage/capture.py off manifest.yaml, which visits each app on its own host — a
+# different set of screens, differently named, without the console shell. Hence a curated map, and
+# hence 14 sim panels with no live counterpart at all.
+#
+# scripts/ui-coverage/live-ui-map.py closes that gap: it renders the LIVE stack by walking the SAME
+# PANELS list (read out of digital-office/sim/ui-map.py by ast.parse, never imported — Playwright
+# stays uninvolved), through the same recipe the sim uses (load the console, set location.hash, run
+# the panel's action), driving a real Chrome over CDP, and writes ci-artifacts/ui-map/<profile>/NN.png
+# with the sim's own indices. So:
+#
+#     python3 scripts/ui-coverage/live-ui-map.py --profile desktop
+#     python3 scripts/ui-coverage/pixel-diff.py \
+#         --sim  digital-office/sim/ui-map/desktop \
+#         --live ci-artifacts/ui-map/desktop
+#
+# pairs exactly by index with no map, no judgement, and no way for the two sides to drift — which is
+# why that run needs neither --pair-map nor anything in this file except the ignore regions.
+#
+# Keep `sim-panels-to-capture-views` for what it is still the only way to do: diffing against a
+# capture.py artifact (a CI download, last week's run, a machine where only `./bbox ui-map` ran).
+#
+# ONE THING THE INDEX PAIRING DOES NOT REMOVE. live-ui-map.py reports every panel whose ACTION could
+# not be performed live, and writes the fallback screen for it anyway (run it with
+# --skip-failed-actions to get UNPAIRED instead). Read ci-artifacts/ui-map/<profile>/render-log.json
+# alongside the diff: a panel listed there is a real finding, but its percentage describes the screen
+# live fell back to, not the panel.

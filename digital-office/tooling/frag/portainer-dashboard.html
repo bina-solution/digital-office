@@ -1,0 +1,137 @@
+<section class="screen" data-screen="portainer-dashboard"><div style="height:100vh;overflow:auto" dir="ltr">
+<style>
+.pt-wrap{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;min-height:100vh;background:#f6f7f8;color:#1c1c1c;font-size:14px;}
+.pt-upgrade{background:#0e2a4a;color:#fff;padding:9px 16px;font-size:12.5px;display:flex;align-items:center;gap:6px;}
+.pt-upgrade svg{width:13px;height:13px;}
+.pt-body-flex{display:flex;}
+.pt-side{width:300px;flex:none;background:#1b2733;color:#c4ccd4;min-height:100vh;display:flex;flex-direction:column;}
+.pt-logo{padding:16px 16px 4px;display:flex;align-items:center;gap:8px;}
+.pt-logo .sq{width:16px;height:16px;background:#d63384;display:inline-block;border-radius:2px;}
+.pt-logo-text{font-weight:800;font-size:26px;color:#fff;letter-spacing:.3px;}
+.pt-logo-text b{color:#fff;}
+.pt-ce{font-size:11px;color:#8b98a5;letter-spacing:.5px;padding:0 16px 12px;display:flex;align-items:center;gap:5px;border-bottom:1px solid #2b3946;margin-bottom:2px;}
+.pt-ce .dot{width:8px;height:8px;background:#d63384;display:inline-block;}
+.pt-env-row{padding:14px 16px;font-size:13px;color:#8b98a5;border-bottom:1px solid #2b3946;margin-bottom:4px;}
+.pt-env-row b{color:#dfe4e8;font-weight:400;}
+.pt-nav-sec{font-size:11px;color:#6d7a86;text-transform:uppercase;padding:14px 16px 6px;letter-spacing:.4px;}
+.pt-nav-item{display:flex;align-items:center;gap:12px;padding:8px 16px;margin:0 8px;border-radius:5px;width:calc(100% - 16px);box-sizing:border-box;color:#c4ccd4;text-decoration:none;font-size:14px;}
+.pt-nav-item.on{background:#39434e;color:#fff;}
+.pt-nav-item svg{width:16px;height:16px;flex:none;}
+.pt-foot{margin-top:auto;padding:16px 16px;font-size:11px;color:#5d6a76;}
+.pt-main{flex:1;min-width:0;}
+.pt-crumb{display:flex;align-items:center;justify-content:space-between;padding:10px 24px;border-bottom:1px solid #e1e4e7;background:#fff;font-size:13px;color:#6a7178;box-sizing:border-box;min-height:37px;}
+.pt-crumb .left{display:flex;align-items:center;gap:6px;}
+.pt-crumb .right{display:flex;align-items:center;gap:10px;color:#4a5158;}
+.pt-crumb .user{display:flex;align-items:center;gap:6px;}
+.pt-icopill{width:32px;height:32px;border-radius:50%;background:#eef0f1;display:flex;align-items:center;justify-content:center;}
+.pt-content{padding:34px 28px 20px;}
+.pt-h1row{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;}
+.pt-h1row h1{font-size:22px;font-weight:400;margin:0;color:#1c1c1c;}
+.pt-tabs{display:flex;border:1px solid #d6dadd;border-radius:3px;overflow:hidden;width:fit-content;margin-bottom:18px;background:#fff;}
+.pt-tab{padding:14px 26px;text-align:center;border-right:1px solid #d6dadd;}
+.pt-tab:last-child{border-right:none;}
+.pt-tab.on{border-bottom:3px solid #2d7ff9;}
+.pt-tab .n{font-size:22px;font-weight:700;color:#1c1c1c;}
+.pt-tab .l{font-size:11px;color:#8a9199;letter-spacing:.4px;}
+.pt-tab .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;}
+.pt-tab.up .n{color:#1c1c1c}
+.pt-sortbar{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;}
+.pt-sortbar .lab{font-size:12px;font-weight:700;color:#4a5158;letter-spacing:.4px;margin-right:4px;}
+.pt-btnghost{border:1px solid #d6dadd;background:#fff;border-radius:3px;padding:7px 12px;font-size:13px;color:#2d3238;display:flex;align-items:center;gap:6px;}
+.pt-btnghost.active{border-color:#2d7ff9;}
+.pt-badge-blue{background:#2d7ff9;color:#fff;font-size:10px;padding:2px 6px;border-radius:3px;margin-left:4px;}
+.pt-spacer{flex:1;}
+.pt-search{border:1px solid #d6dadd;border-radius:3px;padding:7px 10px;font-size:13px;color:#8a9199;display:flex;align-items:center;gap:6px;width:230px;}
+.pt-kube{border:1px solid #e1e4e7;background:#f3f4f5;border-radius:3px;padding:7px 12px;font-size:13px;color:#aab0b6;display:flex;align-items:center;gap:6px;}
+.pt-card{background:#fff;border:1px solid #e1e4e7;border-radius:3px;}
+.pt-envrow{display:flex;align-items:center;padding:18px 20px;gap:16px;}
+.pt-envicon{width:44px;height:44px;border-radius:6px;background:#e7f0fe;display:flex;align-items:center;justify-content:center;flex:none;}
+.pt-envname{display:flex;align-items:center;gap:10px;}
+.pt-envname b{font-size:15px;font-weight:600;}
+.pt-up-badge{background:#e3f6e9;color:#1e8e3e;font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px;display:flex;align-items:center;gap:4px;}
+.pt-up-badge .dot{width:6px;height:6px;border-radius:50%;background:#1e8e3e;}
+.pt-envsub{color:#8a9199;font-size:12.5px;margin-top:4px;}
+.pt-envsub .tag{border:1px solid #d6dadd;border-radius:3px;padding:1px 6px;margin-left:6px;font-size:11px;}
+.pt-stat-boxes{display:flex;gap:0;margin-left:auto;}
+.pt-statbox{padding:0 20px;border-left:1px solid #e1e4e7;min-width:100px;}
+.pt-statbox .l{font-size:11px;color:#8a9199;letter-spacing:.3px;display:flex;align-items:center;gap:5px;}
+.pt-statbox .n{font-size:19px;font-weight:700;margin-top:4px;}
+.pt-statbox .n small{font-size:12px;font-weight:400;color:#8a9199;}
+.pt-bar{height:4px;background:#e1e4e7;border-radius:2px;margin-top:6px;overflow:hidden;}
+.pt-bar i{display:block;height:100%;background:#1e8e3e;width:88%;}
+.pt-envactions{display:flex;flex-direction:column;gap:14px;padding-left:14px;color:#8a9199;}
+.pt-showing{padding:12px 20px;font-size:12.5px;color:#8a9199;display:flex;align-items:center;gap:8px;border-top:1px solid #eef0f1;}
+.pt-showing select{border:1px solid #d6dadd;border-radius:3px;padding:3px 6px;font-size:12.5px;}
+</style>
+<div class="pt-wrap">
+  <div class="pt-body-flex">
+    <aside class="pt-side">
+      <div class="pt-upgrade"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M12 19V5M5 12l7-7 7 7"/></svg> Upgrade to Business Edition</div>
+      <div class="pt-logo"><span class="pt-logo-text">PORTAINER<span style="color:#d63384">.io</span></span></div>
+      <div class="pt-ce"><span class="dot"></span>COMMUNITY EDITION</div>
+      <div class="pt-env-row">Environment: <b>None selected</b></div>
+      <a class="pt-nav-item on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Home</a>
+      <div class="pt-nav-sec">App Delivery</div>
+      <a class="pt-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>Workflows</a>
+      <a class="pt-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>Sources</a>
+      <div class="pt-nav-sec">Administration</div>
+      <a class="pt-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="7" r="4"/><path d="M2 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2"/></svg>User-related <svg style="margin-left:auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></a>
+      <a class="pt-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>Environment-related <svg style="margin-left:auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></a>
+      <a class="pt-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M2 12h4m12 0h4M12 2v4m0 12v4"/></svg>Registries</a>
+      <a class="pt-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>Logs <svg style="margin-left:auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></a>
+      <a class="pt-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/></svg>Notifications</a>
+      <a class="pt-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82"/></svg>Settings <svg style="margin-left:auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></a>
+      <div class="pt-foot">© Portainer Community Edition 2.43.0 STS</div>
+    </aside>
+    <main class="pt-main">
+      <div class="pt-crumb">
+        <div class="left"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg> <span>›</span> Environments</div>
+        <div class="right">
+          <div class="pt-icopill"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/></svg></div>
+          <div class="pt-icopill"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 2-3 4"/></svg></div>
+          <div class="user"><div class="pt-icopill"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg></div> admin <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
+        </div>
+      </div>
+      <div class="pt-content">
+        <div class="pt-h1row"><h1>Home</h1><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4a5158" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></div>
+        <div class="pt-tabs">
+          <div class="pt-tab on"><div class="n">1</div><div class="l">TOTAL</div></div>
+          <div class="pt-tab up"><div class="n"><span class="dot" style="background:#1e8e3e"></span>1</div><div class="l">UP</div></div>
+          <div class="pt-tab"><div class="n"><span class="dot" style="background:#8a9199"></span>1</div><div class="l">UNASSIGNED</div></div>
+        </div>
+        <div class="pt-sortbar">
+          <span class="lab">SORT BY:</span>
+          <div class="pt-btnghost active">Age <span class="pt-badge-blue">Oldest</span></div>
+          <div class="pt-btnghost">Group <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
+          <div class="pt-btnghost">Platform <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
+          <div class="pt-btnghost">Health <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
+          <div class="pt-spacer"></div>
+          <div class="pt-kube">⬇ Kubeconfig</div>
+          <div class="pt-search">🔍 Search environments... ✕</div>
+        </div>
+        <div class="pt-card">
+          <div class="pt-envrow">
+            <div class="pt-envicon"><svg width="24" height="24" viewBox="0 0 24 24" fill="#2d7ff9"><path d="M12 2C6 2 2 6 2 12s4 10 10 10 10-4 10-10S18 2 12 2z"/></svg></div>
+            <div style="flex:1">
+              <div class="pt-envname"><b>primary</b><span class="pt-up-badge"><span class="dot"></span>Up</span></div>
+              <div class="pt-envsub">🕐 2026-07-18 22:57:23 &nbsp;•&nbsp; Standalone 28.0.4 &nbsp;•&nbsp; unix:///var/run/docker.sock</div>
+              <div class="pt-envsub">🏷 Group: Unassigned <span class="tag">Local</span></div>
+            </div>
+            <div class="pt-stat-boxes">
+              <div class="pt-statbox"><div class="l">⬡ CONTAINERS</div><div class="n">45 <small>/ 51</small></div><div class="pt-bar"><i></i></div></div>
+              <div class="pt-statbox"><div class="l">▭ NODES</div><div class="n">1</div></div>
+              <div class="pt-statbox"><div class="l">▢ CPUS</div><div class="n">6 <small>cores</small></div></div>
+              <div class="pt-statbox"><div class="l">▤ MEMORY</div><div class="n">12.5 <small>GB</small></div></div>
+            </div>
+            <div class="pt-envactions">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8a9199" stroke-width="2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8a9199" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82"/></svg>
+            </div>
+          </div>
+          <div class="pt-showing">Showing <b>1–1</b> of 1 <select><option>10</option></select></div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+</div></section>

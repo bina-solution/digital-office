@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+#: restore n8n's database + .n8n volume from a `bbox export` archive
+#
+# restore <indir> <mode>   — invoked by scripts/deployment-archive.py, never by hand.
+#
+# Prints the SAME `FACT` keys hooks/backup printed, read back from the RESTORED instance, so the
+# driver can diff them. That diff is the deliverable: "an export ran" is not evidence, and this repo
+# has a documented habit of operations that report success while doing nothing.
+#
+# ORDER MATTERS AND IS NOT NEGOTIABLE. The .n8n volume goes back BEFORE the database, and the n8n
+# processes must be down for both: n8n holds open connections and would re-create rows underneath
+# the restore. The driver has already put `.env` in place, so N8N_ENCRYPTION_KEY is the source
+# machine's before a single credential row lands.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+. "${REPO_ROOT}/scripts/archive-lib.sh"   # archive_require / archive_stop / archive_project
+
+IN="${1:?usage: restore <indir> <mode>}"
+PGU="$(read_env POSTGRES_USER)"; PGD="$(read_env POSTGRES_DB)"; PGP="$(read_env POSTGRES_PASSWORD)"
+PROJ="$(archive_project)"
+
+[ -f "${IN}/n8n.dump" ] || { echo "[n8n/restore] ${IN}/n8n.dump missing" >&2; exit 1; }
+
+# ── 1. stop the writers ─────────────────────────────────────────────────────────────────────────
+# Not `dcx down`: the postgres container must stay up to receive the dump.
+archive_stop n8n n8n-worker-1 n8n-worker-2 n8n-task-runners n8n-worker-1-runners n8n-worker-2-runners
+
+# ── 2. the .n8n volume ──────────────────────────────────────────────────────────────────────────
+if [ -f "${IN}/n8n_storage.tar.gz" ]; then
+  docker volume create "${PROJ}_n8n_storage" >/dev/null
+  docker run --rm -v "${PROJ}_n8n_storage:/v" -v "${IN}:/in:ro" alpine sh -c \
+    'rm -rf /v/* /v/.[!.]* 2>/dev/null; tar xzf /in/n8n_storage.tar.gz -C /v' \
+    || { echo "[n8n/restore] volume restore failed" >&2; exit 1; }
+fi
+
+# ── 3. the database ─────────────────────────────────────────────────────────────────────────────
+# DROP + CREATE, not `pg_restore --clean`: --clean drops objects one at a time and leaves behind
+# anything the dump does not name, so a restore onto a NEWER n8n schema silently keeps orphan tables
+# and the next migration fails on them. hooks/load-dump already does it this way for the same reason.
+running "${PG_CONTAINER}" || { echo "[n8n/restore] ${PG_CONTAINER} is not running" >&2; exit 1; }
+PX() { docker exec -e PGPASSWORD="${PGP}" "${PG_CONTAINER}" psql -U "${PGU}" -d postgres -tAc "$1"; }
+PX "select pg_terminate_backend(pid) from pg_stat_activity where datname='${PGD}' and pid<>pg_backend_pid();" >/dev/null 2>&1 || true
+PX "drop database if exists \"${PGD}\";" >/dev/null || { echo "[n8n/restore] drop database failed" >&2; exit 1; }
+PX "create database \"${PGD}\" owner \"${PGU}\";" >/dev/null || { echo "[n8n/restore] create database failed" >&2; exit 1; }
+
+# pg_restore's exit code is not a clean pass/fail: it warns about roles and extensions it cannot
+# recreate and returns non-zero for those alone. So capture the log, let it finish, and judge on the
+# facts below — but SHOW the errors rather than swallowing them, which is how load-dump's
+# `ON_ERROR_STOP=0 || true` manages to report success over a failed restore.
+docker exec -i -e PGPASSWORD="${PGP}" "${PG_CONTAINER}" \
+  pg_restore -U "${PGU}" -d "${PGD}" --no-owner --no-acl < "${IN}/n8n.dump" \
+  2> "${BBOX_TMP}/n8n-restore.err" || true
+if [ -s "${BBOX_TMP}/n8n-restore.err" ]; then
+  echo "[n8n/restore] pg_restore diagnostics ($(grep -c . "${BBOX_TMP}/n8n-restore.err") lines, last 5):" >&2
+  tail -5 "${BBOX_TMP}/n8n-restore.err" >&2
+fi
+
+# ── 4. read the facts back ──────────────────────────────────────────────────────────────────────
+q() { docker exec -e PGPASSWORD="${PGP}" "${PG_CONTAINER}" psql -U "${PGU}" -d "${PGD}" -tAc "$1" 2>/dev/null | tr -d '\r' | tr -d ' '; }
+echo "FACT workflows $(q 'select count(*) from workflow_entity;')"
+echo "FACT workflows_active $(q 'select count(*) from workflow_entity where active;')"
+echo "FACT credentials $(q 'select count(*) from credentials_entity;')"
+echo "FACT webhooks $(q 'select count(*) from webhook_entity;')"
+echo "FACT tags $(q 'select count(*) from tag_entity;')"
+echo "FACT users $(q "select count(*) from \"user\";")"
+echo "FACT settings $(q 'select count(*) from settings;')"
+[ "${2:-full}" = "full" ] && echo "FACT executions $(q 'select count(*) from execution_entity;')"
+echo "FACT credential_blob_sha $(q "select md5(string_agg(data, '' order by id)) from credentials_entity;")"
+KEY="$(read_env N8N_ENCRYPTION_KEY)"
+[ -n "${KEY}" ] && echo "FACT encryption_key_fp $(printf '%s' "${KEY}" | sha256sum | cut -c1-16)"
+exit 0

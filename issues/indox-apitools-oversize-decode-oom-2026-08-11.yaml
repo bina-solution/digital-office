@@ -1,0 +1,122 @@
+# yaml-language-server: $schema=./schema.json
+title: 'Oversize scans stall the whole pipeline: the size guard caps BYTES but the cost is PIXELS. 151MP pages exhaust host memory, OOM-kill services, and their completed work is discarded.'
+opened: '2026-08-11'
+severity: high
+status: in-progress
+summary: 'A cohort of very large scans entered the upload queue. apitools decodes each page locally (OCR itself is remote -- OCR_ENGINE=google), so a 10330x14609 page costs ~453MB of RAM regardless of how small the file is. At APITOOLS_MAX_CONCURRENT_OCR=8 that is ~3.6GB, on a host with 9.95GB total. The host reached 100% swap, three containers were OOM-killed, n8n execution throughput collapsed from 359/min to 9/min, and the document pipeline stalled completely: base extraction 0/hr, typed flat, COMPLETED flat for four consecutive watchdog ticks.'
+description: |
+  id: indox-apitools-oversize-decode-oom-2026-08-11
+  As first recorded — opened: 2026-08-11T03:30Z · status: mitigated-root-fix-outstanding
+
+  ## The defect in one line
+
+  The oversize policy caps FILE SIZE at 10MB and is enforced at download; the resource cost is PIXEL COUNT. A 10330x14609 TIFF compresses to well under 10MB and decodes to ~453MB, so the very largest pages sail straight past the guard built to stop them.
+
+  ## Evidence
+
+  ```yaml
+  apitools_log_distinct_images_in_12min:
+  - dimensions: 10330 x 14609
+    megapixels: 151
+    times_processed: 4
+  - dimensions: 6888 x 9742
+    megapixels: 67
+    times_processed: 6
+  - dimensions: 4110 x 5813
+    megapixels: 24
+    times_processed: 6
+  note: The repeat counts are the retry treadmill, not distinct documents. apitools COMPLETED each decode; n8n had already timed out and discarded the result, then retried (maxTries=5).
+  existing_policy_text_on_373_documents: Skipping.. File too big, 10mb max (16.5mb) - not downloaded, not extracted
+  upload_queue_size_profile:
+    awaiting: 7007
+    avg_mb: 1.42
+    max_mb: 84.4
+    over_5mb: 343
+    over_10mb: 302
+    note: 6,664 of 7,007 are small and were completing in ~25s each before the large cohort arrived.
+  upload_collapse_and_recovery:
+  - bucket: 02:10
+    attempts: 27
+    ok: 27
+    avg_s: 10.5
+  - bucket: 02:25
+    attempts: 33
+    ok: 29
+    avg_s: 97.4
+  - bucket: 02:30
+    attempts: 10
+    ok: 0
+    avg_s: 215.0
+    note: jam
+  - bucket: 02:35
+    attempts: 12
+    ok: 0
+    avg_s: 372.9
+  - bucket: 02:45
+    attempts: 13
+    ok: 6
+    avg_s: 188.4
+    note: timeout fix deployed ~02:47
+  - bucket: 03:00
+    attempts: 45
+    ok: 43
+    avg_s: 31.9
+    note: 540/hr, best of the night
+  host_at_worst:
+    free_ram_mb: 131
+    swap: 6144 of 6144 MB = 100%
+    vmstat_si_so: 9544/7090 then 7472/31802 -- severe sustained thrashing
+    load: 33.06
+    oom_killed:
+    - drive-shlomo-laptop
+    - incoming-documents-shlomo-laptop
+    - apitools
+    n8n_throughput: 359/min -> 9/min
+  ```
+
+  ## Fixes applied
+
+  ```yaml
+  - id: n8n-timeout
+    where: indoxV2UploadApiTools01
+    change: Document OCR2 timeout 120000 -> 600000; Check HASH timeout 30000 -> 120000
+    why: Both timeouts were SHORTER than the work, so every large document failed maxTries=5 times while apitools completed the decode each time. We paid for ~453MB of decode five times and discarded every result. Upload went 0/22 success to 43/45.
+    tradeoff_that_was_missed_at_the_time: The 120s timeout had been KILLING those decodes early and thereby freeing the memory. At 600s they run to completion and hold ~453MB five times longer. This change is correct for throughput but it INCREASED memory pressure, and that was not foreseen when it was made. It should not be reverted -- reverting returns to discarding completed work -- but it must be paired with a bound on concurrency or on decode size.
+  - id: apitools-concurrency
+    change: APITOOLS_MAX_CONCURRENT_OCR 8 -> 4 (plus APITOOLS_OCR_WEIGHT_LARGE_MP=25, MEDIUM_MP=10)
+    result: apitools resident memory 3.86GiB -> 589MiB (-85%), still at ~100% CPU. Host load 33 -> 7.65, swap began draining.
+    principle: Under swap pressure the machine goes FASTER by doing LESS at once. Raising concurrency here is the wrong direction and was proposed twice before being disproven.
+  ```
+
+  ## Root fix still outstanding
+
+  ```yaml
+  - id: downsample-before-decode
+    priority: highest
+    rationale: OCR does not need 151MP; Document AI has its own input limits and ~300 DPI is ample for text. Capping the working resolution (long edge ~4000px, or a 16-24MP ceiling) cuts the per-decode footprint roughly 6-10x. It is the ONLY lever that makes the host less loaded rather than rationing what is left, and it fixes latency and memory together.
+  - id: guard-on-pixels-not-bytes
+    rationale: Move the existing 10MB rule to a pixel/megapixel ceiling, read from the file header before decoding (cheap). The rule is right in spirit and wrong in unit.
+  - id: segregate-large-documents
+    rationale: 343 documents over 5MB should not be able to block 6,664 at 1.42MB average. A separate low-concurrency lane with long timeouts keeps the bulk flowing.
+  ```
+
+  ## Why raising apitools max concurrent ocr cannot help
+
+  ```yaml
+  detail: 'Weight is per-document: <=6MP -> 1, <=16MP -> 2, >16MP -> max(1, max_slots). For oversized pages THE WEIGHT IS DEFINED AS THE POOL SIZE, so raising the pool raises the weight and the contention is scale-invariant. Confirmed twice. The owner''s note that "there is no ocr work we use google engine" does NOT rescue the argument, because the cost being incurred is LOCAL IMAGE DECODE, not the remote OCR call.'
+  ```
+
+  ## Operational lesson about parallel agents
+
+  ```yaml
+  what_happened: Four investigation subagents were run concurrently on a host already 4GB into swap. That pushed it to 100% swap, cost ~40 minutes of degraded throughput (COMPLETED flat for four ticks), and at the worst point a plain `docker inspect` timed out. Stopping three lanes freed ~3.5GB and restored both memory and observability -- the agents were a LARGER share of the pressure than apitools.
+  rule: On this 6-core / 9.95GB host, more than ~2 concurrent investigation lanes produces LESS work, not more. Check free memory and swap before fanning out, not after.
+  ```
+
+  ## Measurement traps hit while diagnosing this
+
+  - getent hosts <service> returns UNRESOLVED from inside the n8n containers even when that service is being called hundreds of times a minute. Do NOT use it as a DNS test; make an actual HTTP call.
+  - LIKE '%"timeout": 600000%' on workflow JSON returns false because the stored JSON has no space after the colon. PARSE the nodes, do not pattern-match them. Four false readings tonight came from string-matching JSON.
+  - execution_entity rows, Bull active entries, and ACTION_LOG document-touches are THREE DIFFERENT UNITS and do not convert into each other. A 'collapse' from 300/hr to 92/hr was purely a units error between executions and document-touches.
+  - Bull's active list holds only ENTRY-POINT jobs. Nested executeWorkflow calls run integrated inside the parent's slot, so a workflow can appear to hold 12 of 16 slots for 17 minutes while hundreds of nested executions complete underneath. That is the architecture, not a blockage.
+  - A workflow that is starved looks identical to one that is failing if you only count starts. Always break down by status.

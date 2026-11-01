@@ -1,0 +1,86 @@
+# yaml-language-server: $schema=./schema.json
+title: 'browser42: a Chrome that misses its CDP handshake deletes the whole profile — the owner''s Facebook login was lost three times in twenty minutes'
+opened: '2026-09-27'
+category: bug
+severity: high
+status: resolved
+summary: 'cloakserve''s startup path rmtree''d /profile/__default__ on ANY failed CDP handshake, and the guard meant to survive that treated a logged-OUT profile as a good one — so the snapshot was overwritten with a state that held no login and every restore restored it. Both are fixed: the delete is quarantined in Dockerfile.browser, and promotion to the snapshot is now monotone in cookie count.'
+description: |
+  ## What the owner saw
+  "למה זה כל הזמן מתנתק?" — the office browser kept coming back to the Facebook login screen. The
+  profile volume was intact the whole time (70M, 11 container restarts), and the container was
+  healthy. Nothing pointed at the profile.
+
+  ## Two independent defects, and neither is environmental
+
+  ### 1. The delete is cloakserve's, and it is unconditional on the startup path
+  `apps/browser42/Dockerfile.browser` had patched the SHUTDOWN rmtree for `RESERVED_SEEDS` since the
+  2026-09-22 incident, and `start-browser.sh` clears stale `Singleton*` locks to keep Chrome from
+  failing to open the profile — but that covers exactly ONE reason Chrome can fail to answer CDP. The
+  error path itself was untouched (cloakserve:337):
+
+  ```python
+  if not await self._wait_for_cdp(port):
+      process.kill()
+      await asyncio.to_thread(process.wait, timeout=5)
+      await asyncio.to_thread(self._safe_rmtree, user_data_dir)   # ← the WHOLE profile
+      raise web.HTTPBadGateway(text=...("Chrome failed to start"))
+  ```
+
+  An OOM-killed (measured: the kernel killed `chromium` at 806 MB RSS on 2026-09-27 00:04), wedged or
+  merely slow Chrome reaches that line, and no amount of lock clearing prevents it. The measurement
+  that ties it together: three `[profile-guard] WIPE DETECTED at runtime` lines at 12:51, 13:06 and
+  13:11 UTC while the guest thrashed at load ~200.
+
+  ### 2. The guard could not tell "logged out" from "wiped"
+  `profile_is_real()` required `Local State` + `Cookies` + ≥3 cookie rows. A profile signed out of
+  everything carries ~25 tracking cookies (facebook: `datr`/`fr`/`sb`/`wd`) and passed. Consequence:
+  the periodic snapshot **overwrote the last good copy with the logged-out state within five
+  minutes**, and every later restore restored a logged-out profile. Proven by reading the snapshot's
+  own cookie store: no `c_user`/`xs` — the backup had never held a login. So the guard's premise
+  ("a wipe can never overwrite the last good copy") was true and irrelevant: the loss was not a wipe.
+
+  ## The fix
+  - `Dockerfile.browser`: guard the startup rmtree for `RESERVED_SEEDS` — the profile is renamed
+    `<dir>.corrupt-<epoch>` (cloakserve's recovery semantics kept, the only copy of a login never
+    destroyed; `os.makedirs` recreates the directory). The patch carries a positive guard, a
+    quarantine guard, an exactly-16-space negative guard and an `ast.parse`.
+  - `start-browser.sh`: promotion is monotone — a snapshot is only replaced by a live profile with
+    MORE cookies than it already holds (logging in only adds cookies, logging out removes them). The
+    copy being replaced is kept as `profile-snapshot.prev` instead of deleted, and the restore falls
+    back to it when the primary snapshot is unreadable.
+  - `ai/context/browser42-cli.md`: the section that opened with "a third-party, digest-pinned binary,
+    so the deletion cannot be patched out" is corrected — that sentence was wrong, and building on it
+    is what left the destructive path open for five days.
+
+  ## Evidence
+  - Unit tests of the guard functions (real sqlite `Cookies` stores): logged-out live vs signed-in
+    snapshot → REFUSED; 45 vs 40 → REPLACED (and `.prev` = 40); first-ever → REPLACED; equal →
+    REFUSED; wipe → restore 40; unreadable primary → restore from `.prev`; healthy live → untouched.
+  - The rebuilt image: `grep -A3 'if seed_key not in RESERVED_SEEDS' cloakserve` shows the quarantine
+    branch; `start-browser.sh` carries `snapshot_dir_is_real`/`cookie_count_in`.
+  - Live, after the recreate (2026-09-27 21:35): the guard's own log —
+    `[profile-guard] live profile has no more cookies than the snapshot (26 <= 30) — snapshot NOT replaced`.
+    Under the old code that line would have been "snapshot updated", and the signed-in state would be
+    gone by the next tick.
+
+  ## What still can lose a login
+  - A wipe is still possible from a path nobody patched (kill -9 mid-write, a torn volume, a future
+    digest bump that drifts the sed) — hence the snapshot stack staying in place.
+  - The profile is only as good as its last snapshot: sign in, then confirm the snapshot holds the
+    session (`bbox b42 state dump` is the independent, encrypted copy — see the sibling issue about the
+    three overlapping backup designs).
+tasks:
+- text: Guard cloakserve's startup rmtree in Dockerfile.browser (quarantine, not delete) — DONE, verified in the built image.
+  done: true
+- text: Make snapshot promotion monotone in cookie count + keep a `.prev` generation + restore fallback — DONE, unit-tested.
+  done: true
+- text: Correct the `cannot be patched out` claim in ai/context/browser42-cli.md — DONE.
+  done: true
+- text: After the owner's next sign-in, verify the snapshot actually contains `c_user`/`xs` and take a `bbox b42 state dump` as the second copy.
+  done: true
+references:
+- apps/browser42/Dockerfile.browser
+- apps/browser42/start-browser.sh (§4f/4g) — PROFILE GUARD
+- ai/context/browser42-cli.md — 'The profile can no longer be lost'
+- issues/browser42-crash-leak-slowdown.yaml — the crash/slowdown side of the same browser

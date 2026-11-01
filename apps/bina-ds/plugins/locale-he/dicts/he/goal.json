@@ -1,0 +1,14 @@
+{
+ "phase.active": "יעד פעיל",
+ "phase.active.disarmed": "יעד לא פעיל",
+ "phase.paused": "יעד מושהה",
+ "phase.blocked": "יעד חסום",
+ "objective.aria": "מטרת היעד",
+ "commandInput.aria": "שדה פקודה",
+ "action.save": "שמירת היעד",
+ "action.cancel": "ביטול העריכה",
+ "action.pause": "השהיית היעד",
+ "action.resume": "המשך היעד",
+ "action.edit": "עריכת היעד",
+ "action.clear": "ניקוי היעד"
+}

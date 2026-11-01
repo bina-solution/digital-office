@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "A new host behind sign-in",
+    "subtitle": "How an app that was just switched on comes to be served - and what the sign-in app's hook does when it is not",
+    "output": "sign-in-new-host.html",
+    "viewBox": [1080, 900],
+    "column_fit": "spread",
+    "animation": "trace",
+    "quality_profile": "showcase"
+  },
+  "participants": [
+    { "id": "compiler", "type": "security", "label": "Compiler", "sublabel": "reconcile.py" },
+    { "id": "blueprint", "type": "database", "label": "Blueprint", "sublabel": "compiled file" },
+    { "id": "worker", "type": "backend", "label": "Worker", "sublabel": "authentik-worker" },
+    { "id": "outpost", "type": "cloud", "label": "Outpost", "sublabel": "in authentik-server" },
+    { "id": "edge", "type": "external", "label": "Edge", "sublabel": "forward-auth" },
+    { "id": "hook", "type": "frontend", "label": "Hook", "sublabel": "hooks/refresh" },
+    { "id": "sentinel", "type": "security", "label": "Sentinel", "sublabel": "probe, bootstrap" }
+  ],
+  "segments": [
+    { "from": 162, "to": 500, "label": "The usual path: seconds, and nothing of sign-in is touched" },
+    { "from": 512, "to": 640, "label": "Only if a host is still not served after 90 s" },
+    { "from": 652, "to": 740, "label": "Only if applied and still not served" }
+  ],
+  "messages": [
+    { "id": "write", "from": "compiler", "to": "blueprint", "y": 186, "label": "one provider per host + gated_hosts", "variant": "emphasis" },
+    { "id": "changed", "from": "blueprint", "to": "worker", "y": 228, "label": "the file changed", "variant": "default" },
+    { "id": "apply", "from": "worker", "to": "outpost", "y": 270, "label": "applied: refresh", "variant": "security" },
+    { "id": "ask-edge", "from": "edge", "to": "outpost", "y": 312, "label": "may this host pass?", "variant": "default" },
+    { "id": "answer-edge", "from": "outpost", "to": "edge", "y": 354, "label": "302: sign in", "variant": "return" },
+    { "id": "probe", "from": "hook", "to": "sentinel", "y": 396, "label": "are this render's hosts served?", "variant": "emphasis" },
+    { "id": "ask-outpost", "from": "sentinel", "to": "outpost", "y": 438, "label": "each gated host", "variant": "default" },
+    { "id": "served", "from": "sentinel", "to": "hook", "y": 480, "label": "0: all served - done", "variant": "return" },
+    { "id": "reapply", "from": "hook", "to": "sentinel", "y": 536, "label": "restart: apply every blueprint", "variant": "dashed" },
+    { "id": "applied", "from": "sentinel", "to": "hook", "y": 578, "label": "/tmp/applied", "variant": "return" },
+    { "id": "probe-again", "from": "hook", "to": "sentinel", "y": 620, "label": "served now?", "variant": "default" },
+    { "id": "restart", "from": "hook", "to": "outpost", "y": 676, "label": "restart authentik-server", "variant": "dashed" },
+    { "id": "probe-last", "from": "hook", "to": "sentinel", "y": 718, "label": "served? or say which host is not", "variant": "default" }
+  ],
+  "activations": [
+    { "participant": "worker", "from": 222, "to": 278, "type": "backend" },
+    { "participant": "outpost", "from": 264, "to": 362, "type": "cloud" },
+    { "participant": "hook", "from": 390, "to": 726, "type": "frontend" },
+    { "participant": "sentinel", "from": 432, "to": 486, "type": "security" }
+  ],
+  "cards": [
+    { "dot": "emerald", "title": "Measured on hp-laptop, 2026-10-06", "items": ["The new host answers 302 at the edge 28 s after the install was asked", "The install's whole job: 30 s (the day before: 6 min 15 s and a restart)", "No sign-in container restarted or re-created"] },
+    { "dot": "cyan", "title": "One provider for a host", "items": ["The outpost files providers by host; a second one for a host froze its refresh for ever", "So the compiler binds the first, and writes a -local twin only where it is another host", "The probe reads the gated hosts from the blueprint itself: no token, no API"] },
+    { "dot": "rose", "title": "The remedies, in the order of their cost", "items": ["Wait 90 s: nothing is touched", "The sentinel applies again: minutes, no outage", "Restart the server: a minute of 404 on every gated host - last"] }
+  ]
+}

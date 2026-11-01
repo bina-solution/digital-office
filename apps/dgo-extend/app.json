@@ -1,0 +1,114 @@
+{
+  "id": "dgo-extend",
+  "title": {
+    "he": "הרחבת הלשכה",
+    "en": "Office extension"
+  },
+  "layer": 3,
+  "kind": "service",
+  "version": "0.1.0",
+  "summary": {
+    "he": "יצירה, חיבור והרצה של לשכות דיגיטליות נוספות — הכל מוצהר מכאן: לשכה היא הצהרה, קישור הוא אמון חד־כיווני, ואפליקציה שמונחת בלשכה אחרת מופיעה כאן כחיבור נוסף של אותה יכולת",
+    "en": "Create, link and run further digital office instances from here — an office is a declaration, a link is a one-way trust, and an app placed on another office appears here as one more connection of the same capability"
+  },
+  "capabilities": [
+    {
+      "name": "dgo-extend",
+      "type": "service",
+      "interface": "dgo-extend.v1",
+      "endpoint": "http://dgo-extend:8983",
+      "contract": "platform-service.v1",
+      "required_ops": [
+        "list",
+        "create",
+        "delete",
+        "converge",
+        "status"
+      ]
+    }
+  ],
+  "use": [
+    {
+      "capability": "computers",
+      "strength": "requires",
+      "after": true
+    },
+    {
+      "capability": "secrets",
+      "strength": "requires",
+      "after": true
+    },
+    {
+      "capability": "ui-kit",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
+    }
+  ],
+  "connections": [],
+  "compose": "docker-compose.yml",
+  "routing": [
+    {
+      "host": "dgo-extend",
+      "port": 8983,
+      "auth": "sso",
+      "module": {
+        "group": "תשתית",
+        "icon": "building",
+        "embed": true,
+        "alias": "dgo-extend",
+        "id": "dgo-extend",
+        "name": "הרחבת הלשכה",
+        "desc": "לשכות נוספות, קישורים ואפליקציות שמונחות עליהן",
+        "order": 10,
+        "url_env": "DGO_EXTEND_URL",
+        "url": "http://dgo-extend:8983"
+      },
+      "sso": {
+        "slug": "dgo-extend",
+        "display_name": "DGO Extend",
+        "default_host": "dgo-extend.localhost",
+        "base_url_env": "DGO_EXTEND_BASE_URL",
+        "local_twin": true
+      }
+    }
+  ],
+  "health": {
+    "structural": "auto",
+    "probe": {
+      "http": "http://dgo-extend:8983/healthz",
+      "interval": "30s"
+    }
+  },
+  "data": {
+    "volumes": [
+      "dgo_extend_state",
+      "dgo_extend_peers",
+      "dgo_identity",
+      "dgo_tunnel"
+    ],
+    "on_uninstall": "prompt"
+  },
+  "resources": {
+    "cpus": "0.3",
+    "memory": "160M"
+  },
+  "observability": {
+    "sentry_platform": "python"
+  },
+  "agent": {
+    "context": "AGENT.md",
+    "order": 21
+  },
+  "contributes": {
+    "volumes": {
+      "console": [
+        "dgo_extend_peers:/app/peers.d"
+      ]
+    }
+  },
+  "cli": {
+    "alias": "dgo",
+    "fallback": "state"
+  }
+}

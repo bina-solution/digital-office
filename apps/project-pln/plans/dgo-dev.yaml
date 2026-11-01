@@ -1,0 +1,643 @@
+# apps/project-pln/plans/dgo-dev.yaml — the DGO Extend roadmap as data, rendered into Plane by
+# `./bbox project-pln plan dgo-dev` (hooks/plan → plan.py; upsert, never delete).
+#
+# This file also DECLARES the project (name, description, lead): it is the hub of all development —
+# «הלשכה הדיגיטלית» — and plans/office.yaml adds everything that is not this roadmap to the same
+# project (`project: { identifier: DGO }`). Apply this one first.
+#
+# The design it breaks down: ai/context/dgo-extend-plan.md (sections 11 "Decisions" and 12
+# "Implementation plan"; the owner accepted the two open decisions on 2026-09-30: rename to
+# dgo-extend, CI-built images) plus the owner's additions of the same day: the work is ASSIGNED to
+# the office agent (עזריה, a Plane account of his own), moves to בוצע when he completes it, and shows
+# on כל מקביל (any-concurrency) next to his session timeline. Every phase is a module; every gate is
+# a work item labeled שער. Keys (p1-3, …) are stable identities — rename freely, never re-key.
+#
+# 2026-09-30 22:45 — the owner delegated the open decisions to the coordinator ("you can do everything,
+# you don't need me"): DGO-58 Forgejo SSO → enable (two steps, as documented); DGO-64 INDOX → supabase +
+# indox placed on vps1 in phase 2 (no five containers on the 5 GB engine); DGO-15 → document god-mode;
+# DGO-69 → pruned (15.1 → 2.3 GB, newest 5 kept); the בעלים label stays only where a physical act or an
+# external account is needed (DGO-35 the portable machine on the network).
+
+project:
+  identifier: DGO
+  name: הלשכה הדיגיטלית    # THE HUB since 2026-10-06 (the owner: "הפרוייקט בפליין הופך להיות מרכז הניהול של המשך הפיתוח");
+                           # it was "dgo dev". Plane refuses a hyphen in a project name; the key stays DGO.
+  description: "מרכז הפיתוח של הלשכה הדיגיטלית — כל משימה פתוחה, מכל הלשכות ומכל הסוכנים. המודולים «שלב N» הם תוכנית הרחבת הלשכה (DGO Extend: לשכות מרוחקות, קישורים, הצבת אפליקציות, העברות וקנה-מידה; המפרט: ai/context/dgo-extend-plan.md). כל השאר — מנוע, כניסה, קונסול, Plane, INDOX, n8n, אפליקציות, QA ומה שמחכה לבעלים — מוצהר ב-apps/project-pln/plans/office.yaml."
+  network: 0
+  lead: azaria            # project lead: the office agent's Plane account
+  default_assignee: ""    # NOBODY. Plane gives the project's default assignee to every item created with
+                          # none, and the hub holds items of three lanes — an item is its taker's.
+                          # (This roadmap's own items are עזריה's by `defaults.assignee` below.)
+
+defaults:
+  assignee: azaria        # every item below is his unless it says otherwise (בעלים items stay his too:
+                          # he prepares, the owner decides)
+
+# Who the names above are. Each maps to an account the credential plane holds (bootstrap.py creates
+# it): the vault instance's secret carries the user's token, and plan.py resolves the user id with it.
+people:
+  azaria: { vault: plane_local_api_token-azaria }
+
+states:
+  backlog: מלאי
+  unstarted: לביצוע
+  started: בתהליך
+  completed: בוצע
+  cancelled: בוטל
+
+labels:
+  - { name: שער,     color: "#8b5cf6" }   # a phase gate: `bbox dgo test N` — the proof, not the code
+  - { name: בעלים,   color: "#ef4444" }   # needs the owner (a decision, a login, a machine on the network)
+  - { name: כבד,     color: "#f59e0b" }   # heavy for the 5 GB engine — alone, quiet box, or on a remote office
+  - { name: אבטחה,   color: "#0ea5e9" }
+  - { name: ממשק,    color: "#16a34a" }   # UI, Hebrew, RTL, mobile
+  - { name: cli,     color: "#64748b" }
+  - { name: תשתית,   color: "#a16207" }   # engine, images, CI, hygiene
+  - { name: plane,   color: "#1d4ed8" }   # the project tool itself
+
+modules:
+  # ──────────────────────────────────────────────────────────────────────────────────────────────
+  - key: p0
+    name: "שלב 0 · יסודות"
+    status: in-progress
+    description: "מה שחייב לקרות לפני שלב 1: השם הנכון לאפליקציה, סוכן עם CLI חי, Plane שלא מת בשקט ושמשימותיו הן של עזריה, עץ נקי, ומסגרת בדיקות לשערים."
+    items:
+      - key: p0-1
+        name: "שינוי שם: apps/offices → apps/dgo-extend (הרחבת הלשכה, alias `dgo`) + hook מיגרציה"
+        priority: urgent
+        labels: [תשתית]
+        description: |
+          החלטה 1 במסמך, אושרה ע"י הבעלים 2026-09-30. מזהה האפליקציה `dgo-extend`, כותרת "הרחבת הלשכה", ופועל `bbox dgo …` כקיצור.
+          - כל מופע של `offices` בקוד, ב-app.json, ב-compose, ב-platform.state.yaml, בקונסול ובוואלט — עובר; מיגרציה למשרד שכבר מכיר `offices` (המצב, מזהי חיבורים, vps1 שכבר פרוס) ב-hook אחד, אידמפוטנטי.
+          - קבלה: `bbox dgo` עובד; `reconcile.py` נקי; converge חוזר על vps1 ירוק; `grep -r offices` מוצא רק את המיגרציה והיסטוריה.
+      - key: p0-2
+        name: "bina-ds: אימג' חדש (adapter v2, client-hmr 60s, שכבות Dockerfile) ו-relaunch דרך self-update"
+        priority: urgent
+        labels: [cli, תשתית, כבד]
+        description: |
+          ה-CLI (`bbox agent`) נולד, אבל המתאם שרץ הוא v1. הבנייה כבדה (pnpm install של ה-harness) — רק כשהמנוע שקט: ttrpc מתחת ל-20 ב-5 דקות, load מתחת ל-20, ובאישור סשן המנוע.
+          - הבנייה דרך `scripts/dc build bina-ds` (heavy_admit); ה-relaunch רק דרך `apps/bina-ds/self-update.sh launch up` (שער בריאות, rollback, בדיקת פורטים תפוסים).
+          - קבלה: `bbox agent doctor` ירוק, כל hop מתחת ל-2 שניות במנוחה; `bbox agent follow <sid>` מזרים תור חי; `bbox agent send` עובד; אין קובץ cordis.patch.yml על ה-volume.
+      - key: p0-3
+        name: "Plane: ה-worker של ה-API לא מת בשקט — autorestart, healthcheck דרך Caddy, שני workers"
+        priority: high
+        labels: [plane, תשתית]
+        description: |
+          2026-09-30: gunicorn master בלי אף child, הקונטיינר "בריא", Caddy מחכה 20 שניות על כל בקשה, "לא נטען" בקונסול. סיבת השורש נמצאה בסשן ה-Plane של עזריה.
+          - supervisor: autorestart ל-api, ו-gunicorn עם `--workers 2 --max-requests` כדי שמות של worker יחיד לא ישבית את המוצר (GUNICORN_WORKERS=1 היום).
+          - healthcheck של הקונטיינר בודק `/api/instances/` דרך Caddy עם timeout קצר מ-20 השניות של Caddy — לא `[ "$code" != "000" ]`.
+          - קבלה: הריגת ה-worker → חוזר תוך 30 שניות; API מת → הקונטיינר unhealthy; הבעלים רואה את ה-Plane בקונסול מתחת ל-2 שניות.
+      - key: p0-4
+        name: "היגיינת קומיטים: העבודה הלא-מחויבת של 5 הסשנים נכנסת בקומיטים לפי אפליקציה"
+        priority: high
+        labels: [תשתית]
+        description: |
+          ~2000 שורות לא מחויבות בעץ אחד (apps/git, apps/project-pln, scripts/ui-coverage, הקונסול, הסכימה, ci-env.sh) מ-5 סשנים שנקטעו ב-13:39.
+          - `git fetch` + `merge --ff-only` לפני (לא stash על העץ המשותף), קומיט hunk-selective לפי אפליקציה.
+          - קבלה: `git status` נקי חוץ מ-`data/`; כל קומיט עובר את שערי ה-lint (G7/G12/G32).
+      - key: p0-5
+        name: "מסגרת השערים: `bbox dgo test N` — מריץ את בדיקות הקבלה של שלב N מול הלשכות המוצהרות"
+        priority: high
+        labels: [שער, תשתית]
+        description: |
+          כל שלב במסמך מסתיים בשער. השער הוא קוד, לא רשימה: `apps/dgo-extend/tests/phaseN.py` שמריץ את הבדיקות מול הלשכות המוצהרות (offices/*.yaml) ומדפיס PASS/FAIL עם המדידה.
+          - קבלה: `bbox dgo test 0` מריץ את בדיקות שלב 0 (שם, CLI, Plane, עץ) ונכשל כשאחת נכשלת.
+      - key: p0-6
+        name: "vps1: לסיים את השדרוג — converge ירוק מקצה לקצה על הקוד העדכני, גיבוי לפני"
+        priority: high
+        labels: [כבד]
+        description: |
+          vps1 עודכן חלקית (הקוד חדש, חלק מהקונטיינרים ישנים; צעד `state` נכשל בעבר; tar של volume ה-postgres נכשל).
+          - קבלה: `offices/vps1.yaml` (בשם החדש) → converge machine→…→publish ירוק; console.staging עולה; הגיבוי נמצא ומאומת ב-`bbox export`.
+      - key: p0-7
+        name: "חשבון Plane לעזריה: משתמש, חברות בסביבת העבודה, טוקן API בוואלט (plane_local_api_token-azaria), והעבודה מוקצית לו"
+        priority: urgent
+        labels: [plane]
+        description: |
+          הבעלים: "give azaria a profile and assign the work to him". bootstrap.py (ORM, כמו הבעלים והטוקן של הלשכה) יוצר משתמש `azaria@<domain>` בשם התצוגה עזריה, מוסיף אותו לסביבת העבודה (member), טובע לו APIToken ושומר בוואלט מופע `plane_local_api_token-azaria` עם `token` ו-`user_id`.
+          - plan.py כבר מבין `lead: azaria` ו-`defaults.assignee: azaria` (מופע הוואלט → user_id); הרצה חוזרת של `bbox project-pln plan dgo-dev` מקצה את כל הפריטים.
+          - קבלה: ב-Plane כל פריט DGO מוקצה לעזריה; פעולה שהוא עושה עם הטוקן שלו נרשמת בשמו (activity "עזריה שינה מצב").
+      - key: p0-8
+        name: "פועל `tasks` ב-project-pln: list/show/start/done/comment/take, `--as azaria`, `--json` — הכלי של הסוכן מול המשימות שלו"
+        priority: urgent
+        labels: [plane, cli]
+        description: |
+          apps/project-pln/tasks.py + hooks/tasks, באותה תבנית של plan.py (רץ בתוך הקונטיינר, הטוקן מהוואלט, אף סוד לא חוצה שורת shell). זה המימוש היחיד של "משימות" — גם הסוכן וגם `bbox agent tasks` צורכים אותו.
+          - `./bbox project-pln tasks list [--project DGO] [--mine|--assignee <שם>] [--state unstarted|started|completed] [--json]`
+          - `tasks show DGO-12`, `tasks start DGO-12`, `tasks done DGO-12 [--comment "…"]`, `tasks comment DGO-12 "…"`, `tasks take DGO-12`
+          - `--as azaria` משתמש בטוקן של עזריה (הפעילות נרשמת בשמו); ברירת המחדל הטוקן של הלשכה.
+          - חוזה ה-JSON: {"tasks":[{"ref":"DGO-12","id":"…","project":"DGO","name":"…","state":"לביצוע","group":"unstarted","priority":"high","labels":["שער"],"assignees":["עזריה"],"module":"שלב 1 · …","url":"…","updated_at":"…"}]}
+          - קבלה: `tasks done DGO-12 --as azaria` → הפריט ב-בוצע, תגובה בעברית, הפעילות בשם עזריה; `--json` יציב ומתועד ב-README.
+      - key: p0-9
+        name: "bina-ds: מיומנות `plane-tasks` לעזריה + `bbox agent [azaria] tasks …` + `bbox agent do DGO-12`"
+        priority: high
+        labels: [cli]
+        description: |
+          הצד של הסוכן: מיומנות (office skill) שמלמדת את עזריה ש-`@project-pln/DGO-12` הוא פריט עבודה ב-Plane — לקרוא אותו (`./bbox project-pln tasks show`), לעבור ל-בתהליך כשמתחילים, לסיים עם `tasks done … --as azaria --comment` שמסכם מה נעשה, ולעולם לא לסמן בוצע בלי שער ירוק.
+          - המתאם (agent.v1): `/v1/tasks`, `/v1/tasks/{ref}`, `/v1/tasks/{ref}/start|done|comment` — מפעיל את `bbox project-pln tasks … --json` (מימוש אחד).
+          - CLI: `bbox agent tasks list|show|start|done|comment`, וגם `bbox agent azaria tasks list` (שם הסוכן כבורר אופציונלי); `bbox agent do DGO-12 [sid]` שולח "complete task @project-pln/DGO-12" לסשן.
+          - קבלה: `bbox agent do DGO-12` → עזריה פותח את הפריט, עובד, ומסיים; הפריט ב-בוצע; `bbox agent tasks list --state completed` מציג אותו.
+      - key: p0-10
+        name: "כל מקביל: נתיב Plane (משימות כ-spans) לצד נתיב בינה — התמונה המלאה של הסוכן והמשימות"
+        priority: high
+        labels: [plane, ממשק]
+        description: |
+          הבעלים: "make sure they're showing up perfectly in any-concurrency so we can see the timeline of the agent and tasks". בינה כבר מוצהרת כמקור spans (apps/bina-ds/app.json → /timeline/spans, plugins/timeline-lanes) — הנתיב חי רק אחרי ה-relaunch (p0-2). Plane צריך את שלו:
+          - project-pln מצהיר מקור spans ב-app.json ומגיש `GET /timeline/spans?since=` (תהליך קטן תחת supervisor, Caddy מנתב): לכל פריט עבודה span מיצירה/תחילת בתהליך עד בוצע, בשם `DGO-12 · הכותרת`, עם המקצה (עזריה) כשחקן, המודול כנתיב-משנה, ומעברי מצב כ-instants; `since` אינקרמנטלי.
+          - קבלה: בכל מקביל שני נתיבים — "בינה" (סשנים, תורים, כלים) ו-"משימות" (DGO-n) — מיושרים על אותו ציר זמן; פריט שעזריה סיים נראה נסגר באותו רגע שבו התור שלו מסתיים.
+      - key: p0-11
+        name: "Plane נטען בתוך הלשכה (לא בכרטיסייה חדשה): הצפה במסגרת + עוגיות same-site"
+        priority: urgent
+        labels: [plane, ממשק, בעלים]
+        description: |
+          הבעלים דחה את הכרטיס "האפליקציה הזו פועלת במארח משלה ואינה נטענת בתוך המסוף". הממצא (סשן המנוע): אין X-Frame-Options על ה-SPA, החוסם האמיתי הוא העוגייה — SameSite=Lax בין `console.localhost` ל-`plane.localhost` (אתרים שונים כש-TLD לא ברשימה); ב-VPS (`*.<slug>.digital-office.co.il`) הם same-site והצפה עובדת כפי שהיא.
+          - (א) הקונסול: `module.external` נטען ב-showEmbed(externalUrl) במסגרת התוכן (ובחלון בשולחן העבודה כמו היום); הכרטיס נשאר רק כ-fallback כשהמסגרת לא עולה.
+          - (ב) edge ב-Mac: DEV_DOMAIN=bina.localhost כדי שכל אפליקציה תהיה `<app>.bina.localhost:8080` (same-site; Chrome פותר *.localhost בכל עומק) — שינוי רוחבי, החלטת בעלים.
+          - קבלה: אריח בקונסול → Plane נטען בתוך המסגרת, התחברות, רענון הקונסול — עדיין מחובר; גם בשולחן העבודה; גם ב-390px.
+      - key: p0-12
+        name: "Plane 100% עברית גם לפרויקט חדש: מצבי ברירת המחדל (DEFAULT_STATES) בעברית ב-patch בנייה"
+        priority: high
+        labels: [plane, ממשק]
+        description: |
+          פרויקט חדש מהממשק או מה-API מקבל Backlog/Todo/In Progress/Done/Cancelled מרשימה אחת: plane/db/models/state.py DEFAULT_STATES. patch בנייה ליד patches/hebrew-defaults.py (אותו חוזה של anchor) שמשנה את השמות ושומר group/צבע/סדר.
+          - קבלה: פרויקט חדש מהממשק → מצבים בעברית; POST /api/v1/…/projects → אותו דבר; plan.py כבר לא צריך לשנות שמות.
+      - key: p0-13
+        name: "זהות הבעלים ב-Plane: onboard מסרב לבעלים placeholder (ci@local.dev), הבעלים האמיתי הוא מנהל 'המשרד'"
+        priority: high
+        labels: [plane, בעלים]
+        description: |
+          ב-DB: סביבת העבודה העברית 'המשרד' שייכת ל-ci@local.dev (placeholder של scripts/ci-env.sh ב-.env), וסביבת bbb (אנגלית) היא של הבעלים שנרשם בעצמו.
+          - hooks/onboard מסרב לזהות placeholder (`*@local.dev`, `your-*`) כמו שentrypoint.sh מסרב למפתחות placeholder, ואומר איזה מפתח .env לקבוע.
+          - PLANE_OWNER_EMAIL = כתובת הבעלים, onboard חוזר (אידמפוטנטי) → הבעלים מנהל 'המשרד'. bbb ומחיקת ci@local.dev — החלטת בעלים.
+          - קבלה: כניסה של הבעלים → 'המשרד' עם DGO; `bbox project-pln verify` ירוק.
+      - key: p0-14
+        name: "Plane לא ציבורי: ENABLE_SIGNUP=0 אחרי שהבעלים קיים, והמארח מאחורי SSO של ה-edge"
+        priority: high
+        labels: [plane, אבטחה]
+        description: |
+          היום ENABLE_SIGNUP=1 והנתיב auth:none — ב-VPS כל מי שמגיע ל-plane.<slug>.digital-office.co.il יכול להירשם.
+          - bootstrap.py קובע ENABLE_SIGNUP=0 כשהבעלים קיים (IS_WORKSPACE_CREATION_DISABLED נשאר לבעלים); הנתיב עובר ל-auth:sso (ל-CE אין OIDC — הכניסה של Plane נשארת, המארח מפסיק להיות ציבורי).
+          - קבלה: /sign-up עונה disabled; המארח מחזיר 302 ל-authentik כשלא מחוברים; הצפה בקונסול (p0-11) ממשיכה לעבוד.
+      - key: p0-15
+        name: "god-mode / admin של Plane — build סטטי באנגלית: לנתב הרחק או לתעד"
+        priority: low
+        labels: [plane, בעלים]
+        description: |
+          החלטת בעלים קטנה: /god-mode/ נשאר באנגלית (build של הספק). או לנתב אותו הרחק מה-edge, או לקבל ולתעד ב-README.
+      - key: p0-16
+        name: "authentik: ה-outpost מתעדכן כשרשימת המארחים המוגנים משתנה, ו-unhealthy לא נשאר בשקט 15 שעות"
+        priority: high
+        labels: [אבטחה, תשתית]
+        description: |
+          ממצא 2026-09-30 (סשן המנוע): authentik-bootstrap-local היה `running unhealthy` 4851 בדיקות רצופות (~15 שעות), restarts 0: "outpost not serving: digital-assets.localhost, social-list.localhost" — שתי אפליקציות auth:sso שנוספו אחרי הסנכרון האחרון של ה-outpost (21 מארחים) ולא נדחפו אליו, כלומר ה-SSO שלהן לא נאכף, ואף אחד לא צפה בזה. תוקן זמנית ב-restart של ה-bootstrap (15:35).
+          - הסנכרון של ה-outpost רץ מחדש כשרשימת המארחים המוגנים (הרישום שה-compiler מרנדר) משתנה — צעד ה-reconcile שמוסיף נתיב auth:sso מפעיל אותו.
+          - **ועוד שכבה (20:35):** גם כשה-bootstrap רשם את הספק (Plane Provider, plane.console.localhost, forward_single, בתוך רשימת הספקים של ה-outpost המשובץ), ה-outpost שבתוך authentik-server לא טען את השינוי במשך 20 דקות — אות העדכון לא הגיע; restart ל-authentik-server הוא המנוף (30–60 שניות של 5xx במארחים המוגנים). הכלל: שינוי ספק → רענון outpost מאומת (הבדיקה של outpost-ready.py), ואם האות לא מגיע — restart מסודר עם הודעה.
+          - **המנגנון המדויק (19:58):** ה-bootstrap חייב להיות **recreated** (`./scripts/dc up -d authentik-bootstrap` — סביבה טרייה מהשירות המקומפל, שכולל `<APP>_BASE_URL` לכל אפליקציה) בכל שינוי בסט המארחים; `docker start`/`restart` תמיד מריצים את הקונטיינר הישן עם הסביבה הישנה (נמדד: `start` של קונטיינר מ-09-22 רשם 31 מארחים בלי plane/forge/git — ולכן ה-outpost החזיר 404 ל-plane.console.localhost).
+          - `binaos.autoheal` על הקונטיינר, או בדיקה שמגיעה לכרטיס הבריאות בקונסול — כך ש-15 שעות לא חוזרות.
+          - קבלה: הוספת אפליקציית auth:sso חדשה → ה-outpost מגיש אותה בלי יד; bootstrap unhealthy → נראה בקונסול תוך דקה ומתאושש לבד.
+      - key: p0-17
+        name: "Plane: המתווך (RabbitMQ) לא שורף 31% ליבה במנוחה — תוסף הניהול כבוי או מתווך קל"
+        priority: medium
+        labels: [plane, תשתית]
+        description: |
+          נמדד 2026-09-30 15:30 במנוחה: plane-mq-local 31% מליבה כשהוא לא נושא דבר (RabbitMQ עם management plugin), plane-minio 12%. במנוע של 4 vCPU ו-5GB זה מחיר קבוע של הלשכה כולה.
+          - management plugin כבוי (או המתווך בזיכרון שה-compose כבר מזכיר בהערה); minio — לבדוק מה עובד במנוחה.
+          - קבלה: `docker stats` במנוחה: plane-mq מתחת ל-3%, minio מתחת ל-3%; Plane ממשיך לעבוד (celery, ייבוא, התראות).
+      - key: p0-18
+        name: "עזריה יכול לדחוף (git push) מתוך bina-ds: credential helper שקורא את חשבון GitHub מהוואלט"
+        priority: high
+        labels: [תשתית, אבטחה]
+        description: |
+          נמצא 2026-09-30 16:20 (סשן ה-git): `git fetch origin dgo` בתוך bina-ds נכשל — "could not read Username for 'https://github.com'" — אין credentials ל-remote בקונטיינר, ולכן כל הקומיטים של עזריה מקומיים בלבד ומישהו במחשב של הבעלים צריך לדחוף בשבילו.
+          - **המנגנון כבר קיים** (סשן ציר-הזמן דחף איתו ב-16:40): אפליקציית git מגישה proxy ל-remote עם ה-credential מוזרק בצד השרת מהוואלט — `git push http://git:8978/git/<gh|gl|lc>/<account-id>/<owner>/<repo>.git dgo:dgo`, ה-`<account-id>` הוא מזהה המופע בכספת (למשל `git_github_token-1d2d52f4`, מ-`GET http://git:8978/api/overview`). אף טוקן לא על שורת הפקודה, לא בקובץ ולא בלוג.
+          - הפריט: להפוך את זה לברירת המחדל בתוך bina-ds — entrypoint/skill קובע `url.<proxy>.insteadOf https://github.com/<owner>/` ב-git config של הקונטיינר (מהוואלט, בזמן ריצה), כך ש-`git fetch origin dgo && git push origin dgo` פשוט עובדים; זהות בקומיט (user.name עזריה, user.email azaria@<domain>); הענף הנוכחי בלבד, לעולם לא force; המנגנון מתועד ב-office-operations.
+          - קבלה: מתוך סשן של עזריה `git fetch origin dgo && git push origin dgo` מצליח בלי URL מיוחד; `grep -r ghp_ /workspace/office` ריק; הפעולה מופיעה ביומן ה-grant של הוואלט.
+      - key: p0-19
+        name: "incoming-documents (INDOX) לא שורף 40–50% ליבה במנוחה — poller שלא קורא לאף אחד"
+        priority: medium
+        labels: [תשתית]
+        description: |
+          נמדד 2026-09-30 בשלוש דגימות (15:41, 15:48, 17:03): incoming-documents-local 42–53% מליבה כשאף אחד לא קורא לו (0 הרצות ב-n8n, supabase כבוי) — לולאת polling פנימית. ב-4 vCPU זה כמעט חצי ליבה של הלשכה כולה, כל היום.
+          - למצוא את הלולאה (poll של supabase/n8n/דואר?), להעביר ל-event/interval ארוך או לשינה כשהתור ריק; אם האפליקציה מכובה מבחינת הבעלים (indox עדיין לא עובד מאז 09-17) — לעצור את הקונטיינר עד שיחזור לשימוש.
+          - קבלה: `docker stats` במנוחה: incoming-documents מתחת ל-3%; זרימת מסמך נכנס עדיין נקלטת תוך דקה.
+      - key: p0-20
+        name: "browser42: 285 פרופילים בהסגר (13GB מתוך 14GB של cloakprofile) — לגזום, ושההסגר לא יחזור"
+        priority: medium
+        labels: [בעלים, תשתית]
+        description: |
+          ממצא 2026-09-30 (סשן המנוע): cloakserve נותן ל-Chrome שמתחיל 10 שניות לקשור CDP; תחת עומס Chrome צריך 15–40; החמצה → הריגה, **הסגר של הפרופיל החי** (`.corrupt-*`), 502, והמגרד מתחבר שוב → עוד הסגר. כך נוצרו 242+ תיקיות הסגר (2.8GB) וכל אתחול "משחזר מ-snapshot".
+          - תוקן בקוד (סשן המנוע): המתנה ל-CDP 60 שניות בזמן ריצה; backoff למגרד 3→60 שניות; שינה-במנוחה; סריקת אתחול מוגבלת ל-3 ההסגרים החדשים.
+          - החלטת בעלים: לגזום את ההסגרים (לשמור את 3 החדשים) — 2.8GB חוזרים; קבלה: `du` של cloakprofile מתחת ל-1GB, אתחול הדפדפן מתחת ל-30 שניות במנוחה, אפס הסגרים חדשים אחרי שעה של שימוש.
+      - key: p0-21
+        name: "הדיסק של המנוע לא מתמלא בשקט: שמירת אימג'ים (נוכחי+קודם), גיזום אחרי כל build, רוטציית לוגים, והתראה בקונסול"
+        priority: high
+        labels: [תשתית]
+        description: |
+          2026-09-30 18:05: הדיסק של המנוע (58GB) התמלא ל-100% — `docker exec` נכשל ב-"no space left on device", כל בדיקות הבריאות (exec) נכשלו, 25 קונטיינרים סומנו unhealthy כולל bina-ds, ואף אחד לא ידע למה. הסיבה: יום של rebuilds (bina-ds ×3, browser42 ×4, dgo-extend ×3) — 362 אימג'ים, 31GB, 23GB מהם לא בשימוש; לוגי json-file בלי גבול.
+          - מדיניות: אחרי כל build `scripts/dc` (או heavy_admit) מסיר אימג'ים תלויים ושומר לכל שירות רק את הנוכחי ואת `previous`; `docker builder prune` שבועי; `log-driver` עם `max-size`/`max-file` לכל שירות (או ברירת מחדל ב-daemon.json של המנוע); `bbox engine doctor` מדפיס `df` ו-`docker system df`.
+          - התראה: כרטיס הבריאות בקונסול מציג דיסק > 85% בצהוב ו-> 95% באדום, ומתריע לבעלים (notifications).
+          - קבלה: אחרי rebuild של bina-ds הדיסק חוזר לרמה של לפני; `df` מתחת ל-80% במנוחה; סימולציית מילוי → התראה תוך דקה.
+
+  # ──────────────────────────────────────────────────────────────────────────────────────────────
+  - key: left
+    name: "פתוחים מסשנים קודמים"
+    status: planned
+    description: "מה שנשאר פתוח משבעת הסשנים של עזריה לפני הפרויקט הזה (ניתוח 2026-09-29/30) — כדי שלא ייעלם: INDOX, טלגרם-TV, פוסט הפייסבוק, ותחזוקה שוטפת."
+    items:
+      - key: left-1
+        name: "INDOX (מסמכים נכנסים) לא עובד מאז 09-17 — החלטה: supabase על vps1 (הצבה, שלב 2) או indox ישירות על Postgres"
+        priority: high
+        labels: [בעלים, כבד]
+        description: |
+          המצב: `supabase` מכובה (state: disabled, by: user) → supabase-kong לא קיים, `/instances` ריק; ב-n8n 0 מתוך 92 workflows; drift במפתח ההצפנה (N8N_ENCRYPTION_KEY לא תואם ב-env-consistency). זהו תהליך העסק המרכזי.
+          - הצעת המתאם: **לא** להפעיל 5 קונטיינרים של supabase על מנוע של 5GB — זה בדיוק המקרה של שלב 2: להציב את supabase (ואת indox) על vps1 (DGO-24…28) ולהשאיר בבית רק את הקונסול. עד אז: להכין את ייבוא 92 ה-workflows בלי לאבד credentials (מפתח ההצפנה), ולתעד את שתי הדרכים עם העלות בזיכרון.
+          - קבלה: מסמך נכנס לדואר → נקלט, מסווג ומופיע ב-indox תוך דקה; 92 workflows פעילים; `env-consistency` ירוק.
+      - key: left-2
+        name: "n8n: ה-workers למטה ו-N8N_ENCRYPTION_KEY לא תואם — לתקן לפני ייבוא ה-workflows"
+        priority: high
+        labels: [תשתית]
+        description: |
+          ממצאי הניתוח: n8n workers down; `env-consistency` מדווח אי-התאמה במפתח ההצפנה. בלי מפתח תואם הייבוא של ה-credentials נכשל בשקט.
+          - קבלה: workers פעילים; env-consistency ירוק; workflow מבחן רץ מקצה לקצה.
+      - key: left-3
+        name: "טלגרם-TV: עונה 10 של Friends — לסיים את ההורדה, לאמת את מסך הסדרה, לשלוח את הדו\"ח שהתעכב"
+        priority: medium
+        labels: []
+        description: |
+          סשן 72d5027e נקטע. קבלה: העונה מלאה במסך הסדרה; הדו\"ח לבעלים נשלח.
+      - key: left-4
+        name: "פוסט הפייסבוק (פתוח מ-09-25): להחזיר את הטיוטה ולפרסם דרך browser42 כשהדפדפן חוזר עם שינה-במנוחה"
+        priority: medium
+        labels: [בעלים, כבד]
+        description: |
+          סשן bbc65907. דורש דפדפן חי (browser42 עם idle-sleep, סשן המנוע) ומנוע שקט. כלל הבעלים: כל רשת דרך b42, בלי hand-off. הבעלים לוחץ/בודק autofill של Chrome.
+          - קבלה: הפוסט פורסם; צילום מסך של הפוסט החי.
+      - key: left-5
+        name: "תחזוקה: sites-render exited; authentik-bootstrap (DGO-60); self-update.log באזור זמן אחד; שני אימותים שלא נמסרו"
+        priority: low
+        labels: [תשתית]
+        description: |
+          - `sites-render` יצא ולא חזר — לבדוק למה ולהחזיר (או להסיר מה-compose אם מיותר).
+          - אימות "verify everything works" של סשן 168be66a לא נמסר; ניקוי סרגל-העליון של סשן 37242478 לא אומת — לסגור את שניהם עם צילום.
+          - קבלה: `docker ps` בלי exited לא מכוונים; שני הדו\"חות נמסרו.
+
+  # ──────────────────────────────────────────────────────────────────────────────────────────────
+  - key: ui
+    name: "ממשק אחיד · הנווט של בינה בכל אפליקציה"
+    status: in-progress
+    description: "הבעלים (2026-09-30, צילום מסך של bina-ds לצד מייל בשולחן העבודה): אף אפליקציה לא בונה נווט משלה. נווט אחד, מוגדר בהצהרה לכל אפליקציה כמו bina-table, יציב בכל גודל חלון; ציון יופי משווה לפני ואחרי."
+    items:
+      - key: ui-1
+        name: "נווט אחד: bina-nav הוא הסייד-בר של bina-ds בדיוק, מוגדר לכל אפליקציה בהצהרה (כמו bina-table)"
+        priority: urgent
+        labels: [ממשק]
+        description: |
+          הבעלים, מילה במילה: «deeply investigate screenshot and compare all apps see how bina-ds still much nicer stabler, things in right place, i dont want everybody recreating the navigatore in diffrent wayies and then some like the mail here fail and also in apps app and much other … see how everything folded into the perfect nav and everything keeps staying stable also at very small screen … i want the navigator as reusable custemnisable ui feature like the bina table, exactly like its in bina-ds custemised for each app … using space much better putting the search in the side nav».
+          - platform-base/bina-ui/bina-nav.{css,js} = האנטומיה של bina-ds: שורת מותג (אווטאר ריבועי + שם + כפתור קיפול) · פעולה ראשית (שטוחה, מלוא הרוחב, אייקון+תווית, ≈44px) · מקטעים עם כותרת שנושאת אייקון חיפוש ועד שתי פעולות · פריטים עם אייקון, תווית, עמודת meta/badge, מצב נבחר · "הצג N נוספים" · תחתית מוצמדת (הגדרות).
+          - מונע מהצהרה לכל אפליקציה: {brand, primary, sections:[{title, search, actions, items:[{icon,label,meta,badge,href}], showMore}], footer}. מקופל = רכבת אייקונים עם tooltips; קומפקטי = אותה הצהרה כמגירה.
+          - אף אפליקציה לא שומרת markup של סייד-בר משלה: לבדוק כל אפליקציה שמפנה ל-bina-nav ולמחוק וריאציות (apps/git/static/index.html עדיין מביא סייד-בר משלו).
+      - key: ui-2
+        name: "אימוץ: mailview קודם (הדוגמה של הבעלים), אחר כך app-management, אחר כך כל אפליקציה"
+        priority: urgent
+        labels: [ממשק]
+        description: |
+          מה שהצילום מראה במייל מול bina-ds (נמדד): (1) שורת מותג — עיגול ירוק בלי כפתור קיפול מול ריבוע כחול עם קיפול; (2) פעולה ראשית — pill ירוק ≈56px מול כפתור שטוח ≈44px; (3) רשימת ניווט — 9 פריטים שטוחים ≈54px בלי meta ואזור ריק מול ≈46px עם עמודת meta ו-"הצגת 19 שיחות נוספות"; (4) חיפוש — שדה מלוא הרוחב כשורה ראשונה של התוכן עם הרצאת תחביר באנגלית מול אייקון בכותרת המקטע; (5) סרגל כלים — שתי שורות בקרה, הספירה "162 מתוך 168" פעמיים; (6) שורות — נושא נשבר לשתי שורות, אמוג'י גולש לשלישית, גובה משתנה ≈78/≈108px מול שורה אחת ו-pitch קבוע; (7) תחתית — הגדרות צפות מול מוצמדות.
+          - mailview: החיפוש עובר לכותרת מקטע הנווט; השורה הראשונה של התוכן היא תוכן; משפחת בקרה אחת לשורה; הספירה פעם אחת; שורות של שורה אחת עם ellipsis ועמודת meta טבלאית.
+          - אחר כך app-management (בורר המלאי #tabs .tab → .bnv-item; inventory.py:512), indox (.tabstrip שהוסר אך עדיין בשימוש ב-e2e/test_indox.py:101, test_indox_regressions.py:82, live-ui-map.py:221), data-management (pg-head), notifications (🔔 glyphs), git.
+      - key: ui-3
+        name: "הגודל הקטן ביותר: container queries, מחלקות גודל compact/medium/expanded, Priority+ בסרגלי כלים, 44px, שורה אחת"
+        priority: high
+        labels: [ממשק]
+        description: |
+          הבעלים: «make sure also bina-ds and also mail keep appering nice even at smallest size (alwase choose whats possible to display at any given size (deep investigate best practices and aword winning aproches))».
+          - האפליקציה מוצגת בחלון שולחן-עבודה ברוחב שרירותי (בצילום: חלונות של 940px בתוך viewport של 2000px) — הפריסה מגיבה למכולה (CSS container queries על שורש האפליקציה), לא ל-viewport.
+          - מחלקות גודל לפי Material 3 window-size classes ו-canonical layouts (list-detail, supporting pane) ו-Apple HIG (סייד-בר → tab bar בקומפקטי, split view מתקפל): compact <600px → נווט כמגירה (או bottom bar עד 5 יעדים), פאנל אחד (רשימה או פרטים), חיפוש כאייקון שנפתח במקום, סרגלים לפי Priority+ (ראשי + שניים גלויים, השאר תחת ⋯); medium 600–840 → רכבת אייקונים + פאנל אחד; expanded ≥840 → נווט מלא + list-detail.
+          - תמיד: מטרות מגע 44px, כותרות של שורה אחת (ellipsis, לעולם לא wrap), pitch קבוע לשורה, חשיפה הדרגתית לרשימות ארוכות. מדדי השוואה: Linear, Superhuman, Apple Mail — חיפוש ברכבת, עמודת meta אחת, שורות של שורה אחת.
+      - key: ui-4
+        name: "ציון יופי משווה: bina מול mail, desktop מול 390 — טבלה אחת של שבעת הממדים, לפני ואחרי; ה-auth של bina ב-ui-map נפתר"
+        priority: high
+        labels: [ממשק, כבד]
+        description: |
+          הבעלים: «i want beauty score on both of thees windows (bina-ds and mail) all compared».
+          - לצלם `bina` ו-`mailview` ב-desktop וב-390px עם scripts/ui-coverage/capture → score.py; טבלה אחת: פריסה 25, חיתוך 15, מגע 10, טיפוגרפיה 15, ניגודיות 15, עקביות 10, מצבים 10 — bina מול mail, desktop מול 390; ואז אותה טבלה לכל אפליקציה אחרי האימוץ.
+          - ה-auth של תצוגת `bina` ב-ui-map (הפער מ-A2) נפתר, לא נדחה: ה-edge חותם X-authentik-username ו-bina-ds סומך עליו — הצילום נושא את סשן ה-SSO.
+          - יעדים (ai/context/ui-program-plan.md §1): כל אפליקציה ≥85, הלשכה ≥90, אף תצוגה <70. סריקה אחת בכל פעם, UI_MAP_SHARDS=1, רק כשהמנוע שקט (heavy_admit).
+      - key: ui-5
+        name: "קבלה (פרוטוקול ההוכחה — צילומים, לא תארים): מייל זהה-משפחה ל-bina-ds בשבע הנקודות; 390px נקי; ציונים ≥85 ואף ממד <70"
+        priority: high
+        labels: [ממשק, שער]
+        description: |
+          - הסייד-בר של המייל זהה-משפחה לזה של bina-ds בכל שבע הנקודות של ui-2.
+          - מייל ו-bina-ds ב-390px: נווט במגירה, פאנל אחד, שורות של שורה אחת, בלי גלילה אופקית, בלי טקסט חתוך (flow-qa --mobile ירוק).
+          - ציוני שני החלונות ≥85 ואף ממד מתחת ל-70; זוג צילומים desktop + 390 לכל חלון בדוח.
+
+  # ──────────────────────────────────────────────────────────────────────────────────────────────
+  - key: git
+    name: "git · Forgejo הוא האריח"
+    status: in-progress
+    description: "כלל הבעלים: «לקחת 99 אחוז מהתצוגה של הקוד פתוח… רק חיבורים נוספים והתאמות ללשכה, לא לבנות מחדש את המסכים!». היום הקונסול מציג את ההפך: ה-UI שנבנה מחדש הוא האריח, ו-Forgejo מוסתר."
+    items:
+      - key: git-1
+        name: "Forgejo הוא האריח (host-embed במסגרת הקונסול); ה-UI של הלשכה מצטמצם לחשבונות/חיבורים והצהרות mirrors"
+        priority: urgent
+        labels: [ממשק]
+        description: |
+          apps/git/app.json: המודול `git` (embed:true, order 4) הוא המסכים שנבנו בלשכה (index.html 506 שורות + app.js 913 + app.py 952 — "אוסף של שברי פיצ'רים" במילות הבעלים); המודול `forge` (Forgejo 16.0.5, host forge, port 3000) הוא embed:false בלי external:true, ו-reconcile.py:1654-1656 מדלג עליו — בלי אריח, לא בסרגל, לא בבית, לא ב-⌘K.
+          - `forge` הופך לאריח (host-embed בתוך המסגרת: `curl -I forge.localhost:8080/` → 200 בלי X-Frame-Options ובלי CSP — ההצפה עובדת; עוגיית Lax → אותה תלות same-site של DGO-11 ב-Mac, ב-VPS תקין).
+          - המסכים של הלשכה מצטמצמים למה שרק הלשכה יודעת — חשבונות/חיבורים והצהרות mirrors — כאריח משני או מגירה; mirrors רצוי כ-pull-mirrors של Forgejo עצמו (הפריט "native mirrors" ברשימת הבעלים), כך שיש מקום אחד שמציג מאגרים.
+      - key: git-2
+        name: "כניסה אחת: auth:sso ב-edge + Forgejo reverse-proxy auth (X-authentik-username, auto-registration, trusted proxies)"
+        priority: high
+        labels: [אבטחה, בעלים]
+        description: |
+          היום: הטופס של Forgejo (REQUIRE_SIGNIN_VIEW=true, DISABLE_REGISTRATION=true) על host עם auth:none = כניסה שנייה ומארח ציבורי.
+          - הנתיב auth:sso ב-edge + `FORGEJO__service__ENABLE_REVERSE_PROXY_AUTHENTICATION=true`, `REVERSE_PROXY_AUTHENTICATION_USER=X-authentik-username`, `ENABLE_REVERSE_PROXY_AUTO_REGISTRATION=true`, `REVERSE_PROXY_TRUSTED_PROXIES=<CIDR של רשת traefik>` — כניסה אחת, הזהות של ה-edge. הפריט הפתוח של הבעלים "approve Forgejo SSO" הופך למתג שהוא אומר לו כן.
+      - key: git-3
+        name: "קבלה: אריח → רשימת המאגרים של Forgejo במסגרת, מחובר כמשתמש ה-edge (בלי טופס שני); mirrors של Forgejo; אין דפדוף מאגרים בממשק הלשכה; 390px"
+        priority: high
+        labels: [שער, ממשק]
+        description: |
+          - אריח בקונסול → רשימת המאגרים של Forgejo נטענת בפאנל התוכן, כבר מחובר כמשתמש ה-edge.
+          - mirrors מוצגים על ידי Forgejo עצמו; לממשק הלשכה אין דפדוף מאגרים משלו.
+          - עובד ב-390px; 1.3k השורות הלא-מחויבות של apps/git נכנסות בקומיט לפי DGO-4 לפני שממשיכים.
+
+  # ──────────────────────────────────────────────────────────────────────────────────────────────
+  - key: p1
+    name: "שלב 1 · מנהרה וקישור"
+    status: planned
+    description: "זהות לכל לשכה, WireGuard אחד לכל זוג, קישור = קשת מכוונת. השער: פינג לשני הכיוונים MacBook↔vps1, חבילה מזויפת נופלת, ביטול מסיר משני הצדדים ב-converge אחד."
+    items:
+      - key: p1-1
+        name: "זהות לשכה: identity.py — מפתח Ed25519 ומפתח WireGuard לכל לשכה, שמורים כ-`kind: secret`"
+        priority: high
+        labels: [אבטחה]
+        description: |
+          החלטה 8. נטבע ב-converge הראשון, נשמר בוואלט כמופע `dgo-identity` מסוג secret, נכלל ב-`bbox export`.
+          - קבלה: `bbox dgo identity` מדפיס חומר ציבורי בלבד; export→import מחזיר את אותה זהות; אין מפתח פרטי בלוג או ב-.env.
+      - key: p1-2
+        name: "רשת `dgo-net` ושירות `dgo-wg` מה-compiler — ממשק WireGuard אחד, 10.79.x.0/24 לכל זוג"
+        priority: high
+        labels: [תשתית]
+        description: |
+          החלטה 2. reconcile.py פולט את הרשת והשירות רק כשמוצהר קישור; אף שירות קיים לא משתנה כשאין.
+          - קבלה: `wg show` בשתי הלשכות; פינג לשני הכיוונים MacBook (מאחורי NAT) ↔ vps1.
+      - key: p1-3
+        name: "צעד converge `link` דרך computers: החלפת מפתחות ונקודות קצה, peers בשני הצדדים, מחייג מי שיכול"
+        priority: high
+        labels: []
+        description: |
+          החלטה 3: הקישור חד-כיווני, המנהרה משותפת; שני קישורים = שני הכיוונים.
+          - קבלה: קישור ל-vps1 מהממשק המקומי בפחות מ-2 דקות; `revoke` מסיר את ה-peer משני הצדדים ב-converge אחד.
+      - key: p1-4
+        name: "ההצהרה: `links[]` ו-`tunnel` ב-offices/<name>.yaml + JSON schema + שגיאות בעברית בממשק"
+        priority: medium
+        labels: [ממשק]
+        description: |
+          סעיף 10 במסמך (הסכימה המוצהרת). קובץ לא תקין נדחה עם הודעה בעברית שאומרת איזה שדה ולמה.
+      - key: p1-5
+        name: "פרוטוקול `dgo_link` ב-connections/providers/40-apps.yaml — הקישור כחיבור בוואלט עם probe"
+        priority: medium
+        labels: []
+        description: |
+          מסך החיבורים מציג את הקישור עם מצב חי (up / down / handshake age).
+      - key: p1-6
+        name: "אכיפת כיוון בצד המקבל: nftables בקונטיינר ה-wg + כללי traefik"
+        priority: high
+        labels: [אבטחה]
+        description: |
+          החלטה 9: לא אמון על טוקן בלבד. חבילה שלא תואמת לכיוון הקישור נופלת.
+          - קבלה: חבילה מזויפת מ-vps1 לפורט שלא מוגש ב-MacBook נופלת (נבדק בשער).
+      - key: p1-7
+        name: "platform/data-volumes-waivers.yaml: volume הזהות מכוסה בגיבוי וב-`bbox export`"
+        priority: medium
+        labels: [תשתית]
+        description: |
+          קבלה: `bbox export` מחזיק את volume הזהות; שערי ה-lint של הנפחים עוברים.
+      - key: p1-8
+        name: "שער שלב 1: `bbox dgo test 1`"
+        priority: high
+        labels: [שער]
+        description: |
+          - פינג 10.79.x.1 לשני הכיוונים MacBook↔vps1 (MacBook מאחורי NAT)
+          - חבילה מזויפת נופלת
+          - revoke מסיר את ה-peer משני הצדדים ב-converge אחד
+          - `bbox export` מחזיק את volume הזהות
+
+  # ──────────────────────────────────────────────────────────────────────────────────────────────
+  - key: p2
+    name: "שלב 2 · הצבה"
+    status: backlog
+    description: "אפליקציה רצה בלשכה מרוחקת ומופיעה כאן בשם שלה. השער: browser42 מוצב על vps1 נפתח מהקונסול של ה-MacBook; worker של n8n בבית מגיע אליו בשם; ≥3GB משתחררים."
+    items:
+      - key: p2-1
+        name: "link-proxy מה-compiler: פרוקסי אחד לכל קישור, עם docker network aliases לכל אפליקציה מוצבת"
+        priority: high
+        labels: [תשתית]
+        description: |
+          החלטה 4 (נדחו: sidecar לכל אפליקציה, שינוי DNS במארח, שינוי משתני URL).
+          - קבלה: `getent hosts browser42` בקונטיינר ביתי מחזיר את הפרוקסי; התעבורה מגיעה לאפליקציה ב-vps1.
+      - key: p2-2
+        name: "הצבה = חיבור בוואלט עם `office:` — הצבה כותבת מופע, ביטול מסיר אותו"
+        priority: high
+        labels: []
+        description: |
+          החלטה 5. אפליקציות אחרות ממשיכות לפתור את השם ללא שינוי; מסך החיבורים מציג את ההצבה.
+      - key: p2-3
+        name: "תג בקונסול + שלושה מצבי בריאות (מוצב / הלשכה המרוחקת לא נגישה / פגום)"
+        priority: medium
+        labels: [ממשק]
+        description: |
+          קבלה: MacBook ישן → האריח אומר זאת בעברית, לא 404.
+      - key: p2-4
+        name: "קבלה לפני הצבה: בדיקת זיכרון/CPU/דיסק ביעד דרך computers, סירוב עם המספרים"
+        priority: high
+        labels: []
+        description: |
+          החלטה 10: קבלה לפני הצבה, בלי scheduler אוטומטי בגרסה זו.
+          - קבלה: הצבה נדחית על מכונה בזיכרון נמוך עם הודעה שאומרת כמה יש וכמה צריך.
+      - key: p2-5
+        name: "peers.py + proxy/ + צעד converge `place`: browser42 מוצב על vps1 ונפתח מהקונסול הביתי"
+        priority: high
+        labels: [כבד]
+        description: |
+          קבלה: browser42 מוצב על vps1 נפתח מהקונסול של ה-MacBook; worker של n8n בבית מגיע אליו בשם.
+      - key: p2-6
+        name: "שער שלב 2: `bbox dgo test 2`"
+        priority: high
+        labels: [שער]
+        description: |
+          - browser42 מוצב על vps1 נפתח מהקונסול של ה-MacBook
+          - worker של n8n בבית מגיע אליו בשם
+          - ≥ 3 GB משוחררים ב-MacBook
+          - הצבה נדחית בזיכרון נמוך
+          - ביטול הצבה מחזיר את האפליקציה הביתה
+
+  # ──────────────────────────────────────────────────────────────────────────────────────────────
+  - key: p3
+    name: "שלב 3 · כיוון הפוך ו-QR"
+    status: planned
+    description: "הלשכה המרוחקת מגישה אריחים של הבית תחת ה-SSO שלה; שלושה מסלולי צימוד עם תוצאה אחת. השער: אריח בינה ב-console.staging פותח את הסוכן של ה-MacBook; צימוד QR מתחת ל-2 דקות. **סדר לפי הבעלים (2026-09-30 19:20): DGO-30/31/32 מיד אחרי שלב 1 ולפני שלב 2 — השימוש הראשון הוא לדבר מכל מקום עם עזריה של ה-Mac דרך console.staging.digital-office.co.il.**"
+    items:
+      - key: p3-1
+        name: "`serve:` וקישור הפוך — הקונסול המרוחק מגיש אריחים של הבית תחת ה-SSO של הלשכה המרוחקת"
+        priority: medium
+        labels: []
+        description: |
+          החלטה 6 (נדחה לעת עתה: SNI pass-through בסגנון snitun).
+          - קבלה: אריח בינה ב-console.staging פותח את הסוכן של ה-MacBook.
+      - key: p3-2
+        name: "אמון כותרת לכל קישור: זהות forward-auth של הלשכה המרוחקת מתקבלת רק דרך הקישור ורק לאפליקציות `serve:`"
+        priority: high
+        labels: [אבטחה]
+        description: |
+          קבלה: בקשה שלא הגיעה ממקור הקישור → 401.
+      - key: p3-3
+        name: "`bbox agent` בין לשכות: גילוי הספק עוקב אחרי הצבות וקישורים"
+        priority: medium
+        labels: [cli]
+        description: |
+          קבלה: `bbox agent list` על vps1 מציג את הסשנים של ה-MacBook.
+      - key: p3-4
+        name: "pairing.py — שלושה מסלולי צימוד: computers, סריקת QR (המצלמה בדפדפן של המארח), הדבקת קוד"
+        priority: high
+        labels: [אבטחה]
+        description: |
+          החלטה 7: הצעות ל-10 דקות, חד-פעמיות, חומר ציבורי בלבד ב-QR, grant מוצפן, קוד אישור בן 6 ספרות (SAS).
+          - המצטרף מציג QR; המארח סורק בדפדפן; שני הצדדים מציגים את אותו קוד ומאשרים.
+          - קבלה: צימוד MacBook→נייד מתחת ל-2 דקות; QR מצולם לא מממש כלום; קוד שגוי מבטל.
+      - key: p3-5
+        name: "מסכי החיבור: static/connect.* (עברית, RTL, נייד) + vendor/qr-scanner"
+        priority: medium
+        labels: [ממשק]
+        description: |
+          קבלה: flow-qa עובר על מסכי החיבור בפרופיל mobile; אין טקסט באנגלית.
+      - key: p3-6
+        name: "המכונה הניידת: רישום ב-computers, החלפת Docker 29→28, converge עד `health`"
+        priority: medium
+        labels: [בעלים]
+        description: |
+          דורש שהמכונה הניידת (192.168.16.103) תהיה ברשת.
+          - קבלה: מופיעה ב-computers; `offices/portable.yaml` מגיע ל-health.
+      - key: p3-7
+        name: "שער שלב 3: `bbox dgo test 3`"
+        priority: medium
+        labels: [שער]
+        description: |
+          - אריח בינה ב-console.staging פותח את הסוכן של ה-MacBook
+          - `bbox agent list` על vps1 מציג את הסשנים של ה-MacBook
+          - MacBook ישן → האריח אומר זאת
+          - צימוד QR MacBook→נייד מתחת ל-2 דקות; QR מצולם לא מממש כלום; קוד שגוי מבטל
+
+  # ──────────────────────────────────────────────────────────────────────────────────────────────
+  - key: p4
+    name: "שלב 4 · העברות וקנה-מידה"
+    status: backlog
+    description: "אפליקציה עוברת עם הנתונים שלה וחוזרת אם משהו נכשל; workers מרוחקים מרוקנים תור ביתי; אימג'ים נבנים ב-CI. השער: Plane עובר ל-vps1 עם הנתונים; כישלון באמצע מתגלגל אחורה."
+    items:
+      - key: p4-1
+        name: "move.py — `move: with-data` עם rollback: עצירה → העברת נפחים → הפעלה ביעד → בריאות → החלפת הצבה"
+        priority: high
+        labels: [כבד]
+        description: |
+          קבלה: Plane עובר ל-vps1 עם הנתונים שלו; כישלון מאולץ באמצע ההעברה מתגלגל אחורה והבית ממשיך לעבוד.
+      - key: p4-2
+        name: "computers.v1 `stream` — העברת נפחים בזרימה (tar over SSH) עם התקדמות והמשך"
+        priority: high
+        labels: []
+        description: |
+          ההעברה הנוכחית (`/transfer`) מוגבלת ל-600 שניות ובלי התקדמות.
+          - קבלה: נפח של 2 GB עובר עם התקדמות בממשק; ניתוק באמצע → המשך, לא התחלה מחדש.
+      - key: p4-3
+        name: "`replicas` ותבניות קנה-מידה (סעיף 7): workers של n8n בלשכה מרוחקת מרוקנים את התור הביתי"
+        priority: high
+        labels: []
+        description: |
+          קבלה: שני workers של n8n על vps1 מרוקנים את התור הביתי; הבית ממשיך לעבוד כשהם נופלים.
+      - key: p4-4
+        name: "בדיקת אותו קומיט (החלטה 11): הצבה נדחית כשהלשכות בקומיטים שונים; צעד `code` משווה"
+        priority: medium
+        labels: []
+        description: |
+          קבלה: אי-התאמה נדחית עם שני ה-SHA; `code` מביא את הלשכה המרוחקת לאותו קומיט.
+      - key: p4-5
+        name: "אימג'ים נבנים ב-CI (החלטה 12): .github/workflows/images.yml → GHCR; compose עם `image:` ו-build כגיבוי"
+        priority: high
+        labels: [תשתית, בעלים]
+        description: |
+          pnpm install של שעה במנוע של 5GB תקע את ה-daemon והפיל את ה-edge (2026-09-30). האימג'ים הראשוניים (bina-ds, console, dgo-extend, …) נבנים ב-CI ונמשכים.
+          - קבלה: לשכה טרייה מושכת אימג'ים ולא בונה דבר; `bbox run` על vps1 ללא build.
+      - key: p4-6
+        name: "שער שלב 4: `bbox dgo test 4`"
+        priority: medium
+        labels: [שער]
+        description: |
+          - Plane עובר ל-vps1 עם הנתונים שלו
+          - כישלון מאולץ באמצע ההעברה מתגלגל אחורה
+          - שני workers של n8n על vps1 מרוקנים את התור הביתי
+          - לשכה טרייה מושכת אימג'ים ולא בונה דבר
+
+  # ──────────────────────────────────────────────────────────────────────────────────────────────
+  - key: p5
+    name: "שלב 5 · ממסר וליטוש"
+    status: backlog
+    description: "לשכה שמעבירה תעבורה בין שתי אחרות; תשובה לשאלת הסוכן מה-CLI; מסך ביקורת."
+    items:
+      - key: p5-1
+        name: "`relay_for` — לשכה מתווכת בין שתי לשכות שלא רואות זו את זו"
+        priority: low
+        labels: []
+        description: |
+          החלטה 13. קבלה: נייד↔MacBook מחליפים תעבורה הרחק מהבית (דרך vps1).
+      - key: p5-2
+        name: "`bbox agent answer` — תשובה מה-CLI מגיעה לשאלת הסוכן (אירועי approval/question דרך $events)"
+        priority: medium
+        labels: [cli]
+        description: |
+          החלטה 14: בגרסה זו השאלות נענות בממשק; `bbox agent` מציג אותן. כאן — גם עונה.
+          - קבלה: approval שנשאל בתור נענה מה-CLI והתור ממשיך.
+      - key: p5-3
+        name: "מסך ביקורת: מי קישר / הציב / העביר מה ומתי"
+        priority: low
+        labels: [ממשק, אבטחה]
+        description: |
+          קבלה: לכל קישור, הצבה והעברה שורת ביקורת עם זהות, זמן ותוצאה.
+      - key: p5-4
+        name: "שער שלב 5: `bbox dgo test 5`"
+        priority: low
+        labels: [שער]
+        description: |
+          - נייד↔MacBook מחליפים תעבורה הרחק מהבית
+          - תשובה מה-CLI מגיעה לשאלת הסוכן
+
+  # ──────────────────────────────────────────────────────────────────────────────────────────────
+  - key: rel
+    name: "שחרור"
+    status: backlog
+    description: "ההוכחה מעבר לשערים: baseline ירוק בשתי הלשכות, flow-qa מול vps1 עם אפליקציה מוצבת, בדיקות האבטחה של סעיף 9, ו-clone טרי על מכונה רביעית שמגיע לשלב 3 בלי צעד ידני."
+    items:
+      - key: rel-1
+        name: "`bbox baseline` ירוק בשתי הלשכות (MacBook, vps1)"
+        priority: medium
+        labels: [שער, כבד]
+        description: ""
+      - key: rel-2
+        name: "`flow-qa.py --url` מול vps1 עם אפליקציה מוצבת"
+        priority: medium
+        labels: [שער, ממשק]
+        description: ""
+      - key: rel-3
+        name: "בדיקות סעיף 9 (מודל האבטחה) כטסטים אוטומטיים"
+        priority: medium
+        labels: [שער, אבטחה]
+        description: |
+          כיוון, אמון כותרת, הצעות חד-פעמיות, QR ציבורי בלבד, מפתחות בוואלט — כל טענה בסעיף 9 היא בדיקה.
+      - key: rel-4
+        name: "clone טרי על מכונה רביעית מגיע לשלב 3 בלי אף צעד ידני"
+        priority: medium
+        labels: [שער, בעלים]
+        description: ""
+      - key: rel-5
+        name: "תיעוד: README + AGENT.md של dgo-extend, המסמך ai/context/dgo-extend-plan.md מעודכן בתוצאות, הפרויקט הזה סגור"
+        priority: low
+        labels: []
+        description: ""

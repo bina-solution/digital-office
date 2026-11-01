@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+#: provision the error-reporting backend (org + projects + DSNs + poller token → .env)
+#
+# prepare — glitchtip's own bring-up bootstrap. Invoked generically by `bbox run` via
+# run_app_hooks; the CLI does not know this app exists.
+#
+# This was `ensure_glitchtip_provisioned()` in bbox — a 19-line function, plus a dedicated
+# four-service `dc up --wait` phase, plus a fallback call later in the same command. Three places
+# in layer 0 that only made sense if you knew what glitchtip is. It survived gate G31 because that
+# gate's token set was layer-3 only and glitchtip is layer 2: the layering rule was being enforced
+# for installable apps and not for core ones, which is the same blind spot G9 had before G31.
+#
+# WHY IT MUST RUN BEFORE consumers start: provisioning writes <APP>_SENTRY_DSN and
+# GLITCHTIP_API_TOKEN into .env, and `notifications` cannot become healthy without an org that
+# exists. `prepare` runs before `dc up`, which is exactly the right moment — earlier than the old
+# in-line phase managed, and without bbox orchestrating one app's services by name.
+#
+# LOUD, and deliberately non-fatal: a failure here means the deployment cannot report OR see
+# errors, so it must never pass silently for green — but the rest of the stack is still worth
+# having.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # say, colors, running, dcx, BBOX_TMP
+
+# Nothing to provision if this app is not part of the current bring-up.
+running "glitchtip-${DN}" || {
+  # First bring-up: our containers do not exist yet, so start OUR OWN services and wait for them.
+  # An app may start what it owns; what it may not do is have the CLI start them on its behalf.
+  say "[glitchtip] starting error-reporting services…"
+  dcx up -d --wait --wait-timeout 240 \
+      glitchtip-postgres glitchtip-valkey glitchtip glitchtip-worker >/dev/null 2>&1 \
+    || say "${cy}[glitchtip] not healthy within 240s — provisioning may fail; continuing${c0}"
+}
+
+say "[glitchtip] provisioning (org + projects + DSNs + poller token → .env)…"
+# BBOX_TMP, never a fixed /tmp path: a leftover owned by another user makes this read as a failed
+# provision while the log a human opens is that other user's stale success.
+log="${BBOX_TMP:-/tmp}/glitchtip-push.log"
+mkdir -p "$(dirname "${log}")" 2>/dev/null || true
+
+if bash "${SCRIPT_DIR}/push" >"${log}" 2>&1; then
+  # Only the summary; DSN/token lines are secrets and push keeps them out of stdout.
+  grep -E 'projects configured|wrote ' "${log}" | sed 's/^/  /' || true
+else
+  say "${cr}[glitchtip] provisioning FAILED — the alert path is DEAD (apps cannot report)${c0}"
+  say "${cr}[glitchtip]   see ${log}; re-run: bbox app glitchtip push${c0}"
+  tail -5 "${log}" | sed 's/^/  /' || true
+fi

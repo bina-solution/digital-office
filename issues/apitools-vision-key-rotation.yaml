@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=./schema.json
+title: rotate the Google Vision API key hardcoded in apitools git history
+opened: '2026-07-07'
+severity: high
+status: open
+summary: rotate the Google Vision API key hardcoded in apitools git history
+description: |
+  ## Context
+
+  Pre-commit secret gate (release-v2-lockin, 2026-07-07) found a real Google Vision
+  API key hardcoded as the env fallback in production/apitools
+  src/ocr_core/ocr_processor.py:19 (AIzaSy...Yc5g). The fallback is now removed
+  (env-only: GOOGLE_VISION_API_KEY, already set in .env and passed by compose),
+  but the key remains in the apitools submodule's git HISTORY (private repo).
+  Removal from code is containment, not the fix — rotation is the real fix.
+
+  ## Action
+
+  1. In GCP console (the project owning the Vision key): create a new API key,
+     restrict it to the Vision API, update GOOGLE_VISION_API_KEY in .env (local +
+     VPS), restart apitools.
+  2. Delete/disable the old key AIzaSy...Yc5g.
+  3. Optional hardening: history rewrite of the private apitools repo is NOT
+     required once the key is dead — prefer rotation over rewrite.

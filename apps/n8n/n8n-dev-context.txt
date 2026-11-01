@@ -1,0 +1,25 @@
+
+
+
+Task:  Rfactore IncomingDocuments structure to be clean reorgenize and optimised for readability without changing the actual workflolw behavor or cofiguration.
+
+First - 
+- deep research about dealing with n8n workflow json structure documentations best practices and instructions for specific used nodes.
+- idenify the latest incoming document workflow and put the id in the data section below.
+- idenify all the actions happening in the workflow and add list under "incoming document actions" section below, figure how many it currently batches and if it uses the execute workflow or not 
+- idenify the actions that need to be modefied 
+- cleanup suggestions
+
+before starting changes you shuld create a copy of the workflow we work on, into a new workflow (with new id) in the "workflows" directory and call it the name of the original workflow with "- Test" after the original name.
+All the changes should be made to the copied workflow.
+
+
+
+
+
+Data Section --- 
+
+Original Workflow ID: 
+Copied Workflow ID: 
+
+Data Section End ---

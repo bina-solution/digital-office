@@ -1,0 +1,13 @@
+{
+ "trigger": "Settings",
+ "title": "Settings",
+ "close": "Close",
+ "openDocument": "Open configuration file",
+ "openDocument.error": "Could not open configuration file",
+ "general.nav": "General",
+ "connection.error": "Disconnected",
+ "connection.connecting": "Reconnecting",
+ "connection.connected": "Connected",
+ "connection.reconnect": "Disconnected, reconnect now",
+ "connection.restart": "Reconnecting, reconnect now"
+}

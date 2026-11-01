@@ -1,0 +1,163 @@
+{
+  "id": "mail",
+  "title": {
+    "he": "מייל",
+    "en": "Mail"
+  },
+  "layer": 3,
+  "kind": "service",
+  "version": "1.0.0",
+  "summary": {
+    "he": "שירות המייל המלא — תיבה מקומית, מתאמי ספקים חיצוניים, API אחיד וממשק",
+    "en": "The whole mail capability — local mailbox, external-provider adapters, one abstraction API, and a UI"
+  },
+  "capabilities": [
+    {
+      "name": "mail",
+      "type": "service",
+      "interface": "mail.v1",
+      "endpoint": "http://mailapi:8970",
+      "required_ops": [
+        "search",
+        "get",
+        "addLabels",
+        "removeLabels",
+        "listLabels",
+        "createLabel",
+        "append",
+        "send"
+      ],
+      "optional_ops": [],
+      "contract": "platform-service.v1"
+    },
+    {
+      "name": "mail-backend-local",
+      "type": "protocol",
+      "endpoint": "http://mailserver:143"
+    },
+    {
+      "name": "mail-organizer",
+      "type": "service",
+      "interface": "mail-organizer.v1",
+      "endpoint": "http://mailapi:8970",
+      "required_ops": [
+        "organizerDefaults",
+        "organizerSettings"
+      ],
+      "optional_ops": [],
+      "contract": "mail-organizer.v1"
+    }
+  ],
+  "use": [
+    {
+      "capability": "workflow",
+      "strength": "requires",
+      "after": true
+    },
+    {
+      "capability": "secrets",
+      "strength": "requires",
+      "after": true
+    }
+  ],
+  "connections": [
+    {
+      "id": "gmail-app-password",
+      "required": false
+    },
+    {
+      "id": "localmail",
+      "required": false
+    }
+  ],
+  "engine": {
+    "id": "mail_imap_local",
+    "profiles": [
+      {
+        "id": "admin",
+        "display_name": "מנהל",
+        "admin": true
+      },
+      {
+        "id": "user2",
+        "display_name": "משתמש 2"
+      }
+    ]
+  },
+  "blueprints": {
+    "n8n": "blueprint/n8n"
+  },
+  "compose": "docker-compose.yml",
+  "routing": [
+    {
+      "host": "mailapi",
+      "port": 8970,
+      "service": "mailapi",
+      "auth": "sso",
+      "emit_labels": false
+    },
+    {
+      "host": "mail",
+      "port": 8976,
+      "service": "mailview",
+      "auth": "sso",
+      "emit_labels": false,
+      "module": {
+        "group": "עסק",
+        "icon": "mail",
+        "embed": true,
+        "alias": "mailview",
+        "id": "mail",
+        "name": "מייל",
+        "desc": "תיבת דואר עסקית",
+        "order": 3,
+        "service": "mail",
+        "url_env": "MAILVIEW_URL",
+        "url": "http://mailview:8976"
+      },
+      "sso": {
+        "slug": "mail",
+        "default_host": "mail.localhost",
+        "display_name": "Mail",
+        "local_twin": true,
+        "base_url_env": "MAIL_BASE_URL"
+      }
+    }
+  ],
+  "health": {
+    "structural": "auto",
+    "probe": {
+      "http": "http://mailapi:8970/readyz",
+      "interval": "30s"
+    }
+  },
+  "data": {
+    "volumes": [
+      "gmail_imap_data",
+      "mail_data",
+      "mail_state",
+      "mail_config",
+      "mail_logs"
+    ],
+    "on_uninstall": "prompt"
+  },
+  "observability": {
+    "sentry_platform": "python"
+  },
+  "contributes": {
+    "env": {
+      "any-concurrency": {
+        "CUSTOM_SOURCE_MAILAPI": "mailapi-${DEPLOYMENT_NAME:-bina-deployment}=mailapi",
+        "CUSTOM_BUFFER_MAILAPI": "8000"
+      }
+    },
+    "connection_probes": {
+      "gmail-app-password": "http://mailapi:8970/healthz",
+      "localmail": {
+        "type": "tcp",
+        "host": "mailserver",
+        "port": 143
+      }
+    }
+  }
+}

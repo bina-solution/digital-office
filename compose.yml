@@ -1,0 +1,6 @@
+# The root compose is now ONLY the shared external network. Every service — including the
+# edge itself — lives in apps/<id>/ and is composed by platform/manager/reconcile.py.
+# Bring the platform up with: bbox reconcile up   (or bbox run)
+networks:
+  traefik-network:
+    external: true

@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+#: whole Hebrew corpus → apitools OCR, assert 527/527 exact values
+# extract-gate.sh — the full document-extraction proof: run the whole Hebrew-doc corpus
+# through apitools OCR + field figuring and assert 527/527 exact values (bbox indox extract-gate).
+#
+# Self-contained by design (mirrors .github/workflows/local-hebrew-doc-ex.yml — "THE EXTRACTION
+# LOCK"): ONE cold apitools container + scripts/extraction-corpus-check.py. No n8n, db, traefik,
+# supabase or BFF container; no Gemini, no keys — deterministic local Tesseract + the product's own
+# scoring module. Exit 0 ONLY on docs=138/138, values=527/527, zero errors, inside the speed budget.
+#
+# Env: EXPECTED_DOCS (138) · EXPECTED_VALUES (527) · EXTRACTION_GATE_BUDGET_S (4800) ·
+#      APITOOLS_IMAGE (default: the built stack image) · CHECK_CONCURRENCY (docs in parallel) ·
+#      EXTRACT_GATE_KEEP=1 (leave the apitools-gate container running for debugging).
+set -uo pipefail
+LOG_TAG=extract-gate
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# lib.sh is the platform's, at scripts/ — not a sibling. This read `${SELF_DIR}/lib.sh` while the
+# file lived in scripts/, so moving it into the app broke it instantly and loudly, which is the
+# good case. Resolve from the repo root instead of from wherever this file happens to sit.
+. "$(cd "${SELF_DIR}/../../.." && pwd)/scripts/lib.sh"   # REPO_ROOT, read_env, DN, colors, ok/warn/bad/log
+cd "${REPO_ROOT}"
+
+need_docker() { docker info >/dev/null 2>&1 || { echo "${cr}[extract-gate] docker daemon not reachable${c0}" >&2; exit 2; }; }
+need_docker
+
+EXPECTED_DOCS="${EXPECTED_DOCS:-138}"
+EXPECTED_VALUES="${EXPECTED_VALUES:-527}"
+BUDGET="${EXTRACTION_GATE_BUDGET_S:-4800}"
+NAME="apitools-gate-${DN}"
+# Prefer the image the stack built; fall back to building apitools from source if absent.
+IMAGE="${APITOOLS_IMAGE:-}"
+if [ -z "${IMAGE}" ]; then
+  IMAGE="$(docker images --format '{{.Repository}}:{{.Tag}}' | grep -iE 'apitools' | head -1)"
+fi
+if [ -z "${IMAGE}" ]; then
+  log "no apitools image found — building from source"
+  dcx build apitools >/tmp/extract-gate-build.log 2>&1 || { bad "apitools build failed (see /tmp/extract-gate-build.log)"; exit 1; }
+  IMAGE="$(docker images --format '{{.Repository}}:{{.Tag}}' | grep -iE 'apitools' | head -1)"
+fi
+log "apitools image: ${IMAGE}"
+
+cleanup() { [ "${EXTRACT_GATE_KEEP:-0}" = 1 ] || docker rm -f "${NAME}" >/dev/null 2>&1 || true; }
+trap cleanup EXIT
+docker rm -f "${NAME}" >/dev/null 2>&1 || true
+
+# Cold container (no ocr_cache volume → every OCR computed fresh, deterministic). Timeouts mirror
+# the CI gate + production compose. autoscale sizes OCR slots to the host.
+log "starting cold apitools gate container (${NAME}) on :8080…"
+# OMP_THREAD_LIMIT is OPT-IN and unset by default — on a normal host Tesseract's internal OpenMP is
+# fine and full multithreading is fastest, so we don't touch it. ONLY constrained/cgroup-limited
+# environments (e.g. a CI sandbox with "No cpuset support") where concurrent OCR slots deadlock
+# Tesseract's OpenMP should export OMP_THREAD_LIMIT=1 to serialise each call. Passed through only
+# when the caller set it, so a real machine behaves exactly as before.
+omp_env=(); [ -n "${OMP_THREAD_LIMIT:-}" ] && omp_env=(-e "OMP_THREAD_LIMIT=${OMP_THREAD_LIMIT}")
+docker run -d --name "${NAME}" -p 8080:8080 \
+  -e OCR_ENGINE=local \
+  "${omp_env[@]}" \
+  -e APITOOLS_QUERY_SOFT_TIMEOUT=180 \
+  -e GUNICORN_TIMEOUT=900 \
+  -e APITOOLS_SLOT_WAIT_TIMEOUT=600 \
+  "${IMAGE}" >/dev/null || { bad "could not start apitools gate container"; exit 1; }
+
+up=0
+for i in $(seq 1 90); do
+  curl -sf "http://127.0.0.1:8080/health" >/dev/null 2>&1 && { up=1; break; }
+  curl -sf "http://127.0.0.1:8080/"       >/dev/null 2>&1 && { up=1; break; }
+  sleep 2
+done
+# silence is not success: a gate that can't reach its engine must FAIL loudly here, not 138 docs later.
+[ "${up}" = 1 ] || { bad "apitools not reachable at 127.0.0.1:8080"; docker logs --tail 80 "${NAME}" 2>&1 | sed 's/^/  /'; exit 1; }
+docker logs "${NAME}" 2>&1 | grep -m1 "autoscale:" | sed 's/^/  /' || true
+
+# host deps for the harness (it imports the BFF module, which imports flask; httpx is the client).
+# --ignore-installed blinker: flask pulls a newer blinker but the debian-managed one has no RECORD
+# so a plain upgrade errors. PIP_CERT points pip at the proxy CA on a MITM-proxied host.
+if ! python3 -c "import flask, httpx" 2>/dev/null; then
+  # Plain install FIRST. Only the --break-system-packages form was tried, which is a Debian/PEP-668
+  # concern; on Windows and macOS it is not needed and the attempt failed, so the gate ran on a host
+  # with no flask and died importing the product module 138 docs later.
+  PIP_CERT="${BASELINE_PROXY_CA:-/root/.ccr/ca-bundle.crt}" python3 -m pip install --quiet \
+      flask httpx 2>/dev/null \
+    || PIP_CERT="${BASELINE_PROXY_CA:-/root/.ccr/ca-bundle.crt}" python3 -m pip install --quiet \
+      --break-system-packages --ignore-installed blinker flask httpx 2>/dev/null || true
+fi
+# Silence is not success — the same rule the apitools reachability check above states outright. A
+# `|| warn` here let a failed install look like a warning, and the real failure surfaced as
+# "extraction gate FAILED" with a ModuleNotFoundError buried in the log, blaming extraction.
+python3 -c "import flask, httpx" 2>/dev/null \
+  || die "extraction harness deps missing (flask, httpx) and could not be installed — the gate imports the product's own BFF module, so it cannot run without them"
+
+log "running extraction corpus check (expect ${EXPECTED_VALUES}/${EXPECTED_VALUES})…"
+GATE_LOG="${REPO_ROOT}/ci-artifacts/extract-gate.log"; mkdir -p "${REPO_ROOT}/ci-artifacts"
+APITOOLS_BASE="http://127.0.0.1:8080" \
+  EXPECTED_DOCS="${EXPECTED_DOCS}" EXPECTED_VALUES="${EXPECTED_VALUES}" EXTRACTION_GATE_BUDGET_S="${BUDGET}" \
+  python3 "$(npath "${REPO_ROOT}")/scripts/extraction-corpus-check.py" | tee "${GATE_LOG}"
+rc="${PIPESTATUS[0]}"
+
+echo
+if [ "${rc}" = 0 ]; then ok "extraction gate PASSED — $(grep -oE 'values=[0-9]+/[0-9]+' "${GATE_LOG}" | tail -1)"
+else bad "extraction gate FAILED — $(grep -oE 'values=[0-9]+/[0-9]+' "${GATE_LOG}" | tail -1); see ${GATE_LOG}"; fi
+exit "${rc}"

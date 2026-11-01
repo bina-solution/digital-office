@@ -1,0 +1,2193 @@
+{
+ "generator": "apitools doc-gen",
+ "count": 90,
+ "documents": [
+  {
+   "folder": "invoice",
+   "file": "invoice/files/inv-01.pdf",
+   "doc_type": "INVOICE",
+   "doc_id": "SI266619256",
+   "short_doc_id": "19256",
+   "company_id": "510605959",
+   "company_name": "בניאס סחר בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "510605959",
+    "AI_DOC_ID": "SI266619256",
+    "AI_DOC_DATE": "25/08/2025",
+    "AI_DOC_AMOUNT": "5075.89",
+    "AI_SHIPMENT_IDS": [
+     "SH25288522",
+     "SH25342979",
+     "SH25572377",
+     "SH26121681",
+     "SH26166182"
+    ],
+    "AI_ORDER_IDS": "SO25347739,SO25976766,SO26285710,SO26305673,SO26499798",
+    "AI_TYPE": "INVOICE"
+   }
+  },
+  {
+   "folder": "invoice",
+   "file": "invoice/files/inv-02.pdf",
+   "doc_type": "INVOICE",
+   "doc_id": "57997911603",
+   "short_doc_id": "11603",
+   "company_id": "513105494",
+   "company_name": "דיאור יבוא ושיווק בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "513105494",
+    "AI_DOC_ID": "57997911603",
+    "AI_DOC_DATE": "24/08/2026",
+    "AI_DOC_AMOUNT": "6198.28",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "INVOICE"
+   }
+  },
+  {
+   "folder": "invoice",
+   "file": "invoice/files/inv-03.pdf",
+   "doc_type": "INVOICE",
+   "doc_id": "SI266855816",
+   "short_doc_id": "55816",
+   "company_id": "511301129",
+   "company_name": "אגן מפעלי הנדסה (1988) בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "511301129",
+    "AI_DOC_ID": "SI266855816",
+    "AI_DOC_DATE": "21/01/2025",
+    "AI_DOC_AMOUNT": "2943.79",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "INVOICE"
+   }
+  },
+  {
+   "folder": "invoice",
+   "file": "invoice/files/inv-04.pdf",
+   "doc_type": "INVOICE",
+   "doc_id": "SI256245759",
+   "short_doc_id": "45759",
+   "company_id": "510605959",
+   "company_name": "בניאס סחר בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "510605959",
+    "AI_DOC_ID": "SI256245759",
+    "AI_DOC_DATE": "04/06/2026",
+    "AI_DOC_AMOUNT": "14670.34",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "INVOICE"
+   }
+  },
+  {
+   "folder": "invoice",
+   "file": "invoice/files/inv-05.pdf",
+   "doc_type": "INVOICE",
+   "doc_id": "SI256441763",
+   "short_doc_id": "41763",
+   "company_id": "513498345",
+   "company_name": "פולירון תעשיות בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "513498345",
+    "AI_DOC_ID": "SI256441763",
+    "AI_DOC_DATE": "12/11/2025",
+    "AI_DOC_AMOUNT": "4961.68",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "INVOICE"
+   }
+  },
+  {
+   "folder": "invoice",
+   "file": "invoice/files/inv-06.pdf",
+   "doc_type": "INVOICE",
+   "doc_id": "SI266640344",
+   "short_doc_id": "40344",
+   "company_id": "513498345",
+   "company_name": "פולירון תעשיות בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "513498345",
+    "AI_DOC_ID": "SI266640344",
+    "AI_DOC_DATE": "01/07/2025",
+    "AI_DOC_AMOUNT": "6734.80",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "INVOICE"
+   }
+  },
+  {
+   "folder": "invoice",
+   "file": "invoice/files/inv-07.pdf",
+   "doc_type": "INVOICE",
+   "doc_id": "27062011826",
+   "short_doc_id": "11826",
+   "company_id": "511301129",
+   "company_name": "אגן מפעלי הנדסה (1988) בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "511301129",
+    "AI_DOC_ID": "27062011826",
+    "AI_DOC_DATE": "03/02/2026",
+    "AI_DOC_AMOUNT": "27623.20",
+    "AI_SHIPMENT_IDS": [
+     "SH25417805",
+     "SH25445919",
+     "SH25754876",
+     "SH25825754",
+     "SH25835214",
+     "SH26202031",
+     "SH26544667",
+     "SH26741821"
+    ],
+    "AI_ORDER_IDS": "SO25101280,SO25104333,SO25172146,SO25302219,SO25550086,SO25823685,SO25845761,SO25869681,SO25947022,SO26207163",
+    "AI_TYPE": "INVOICE"
+   }
+  },
+  {
+   "folder": "invoice",
+   "file": "invoice/files/inv-08.pdf",
+   "doc_type": "INVOICE",
+   "doc_id": "50811850335",
+   "short_doc_id": "50335",
+   "company_id": "513105494",
+   "company_name": "דיאור יבוא ושיווק בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "513105494",
+    "AI_DOC_ID": "50811850335",
+    "AI_DOC_DATE": "04/06/2025",
+    "AI_DOC_AMOUNT": "3083.65",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "INVOICE"
+   }
+  },
+  {
+   "folder": "invoice",
+   "file": "invoice/files/inv-09.pdf",
+   "doc_type": "INVOICE",
+   "doc_id": "33477924104",
+   "short_doc_id": "24104",
+   "company_id": "513105494",
+   "company_name": "דיאור יבוא ושיווק בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "513105494",
+    "AI_DOC_ID": "33477924104",
+    "AI_DOC_DATE": "26/09/2025",
+    "AI_DOC_AMOUNT": "10866.16",
+    "AI_SHIPMENT_IDS": [
+     "SH25019047",
+     "SH25192371",
+     "SH25846683",
+     "SH25977662",
+     "SH26131775",
+     "SH26261114",
+     "SH26336684"
+    ],
+    "AI_ORDER_IDS": "SO25168850,SO25326558,SO25363325,SO25657634,SO25666856,SO25801709,SO25860310,SO26609785,SO26692283,SO26771636",
+    "AI_TYPE": "INVOICE"
+   }
+  },
+  {
+   "folder": "invoice",
+   "file": "invoice/files/inv-10.pdf",
+   "doc_type": "INVOICE",
+   "doc_id": "51345701919",
+   "short_doc_id": "01919",
+   "company_id": "510605959",
+   "company_name": "בניאס סחר בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "510605959",
+    "AI_DOC_ID": "51345701919",
+    "AI_DOC_DATE": "24/07/2026",
+    "AI_DOC_AMOUNT": "7516.14",
+    "AI_SHIPMENT_IDS": [
+     "SH25364160",
+     "SH25392316",
+     "SH25599805",
+     "SH26034665",
+     "SH26754425"
+    ],
+    "AI_ORDER_IDS": "SO25064092,SO26244205,SO26398685,SO26478349,SO26582469",
+    "AI_TYPE": "INVOICE"
+   }
+  },
+  {
+   "folder": "invoice",
+   "file": "invoice/files/inv-11.pdf",
+   "doc_type": "INVOICE",
+   "doc_id": "SI256922754",
+   "short_doc_id": "22754",
+   "company_id": "513105494",
+   "company_name": "דיאור יבוא ושיווק בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "513105494",
+    "AI_DOC_ID": "SI256922754",
+    "AI_DOC_DATE": "12/03/2026",
+    "AI_DOC_AMOUNT": "25959.74",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "INVOICE"
+   }
+  },
+  {
+   "folder": "invoice",
+   "file": "invoice/files/inv-12.pdf",
+   "doc_type": "INVOICE",
+   "doc_id": "SI256315549",
+   "short_doc_id": "15549",
+   "company_id": "570043745",
+   "company_name": "מפעל מתכת כפר מנחם בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "570043745",
+    "AI_DOC_ID": "SI256315549",
+    "AI_DOC_DATE": "14/08/2025",
+    "AI_DOC_AMOUNT": "3139.15",
+    "AI_SHIPMENT_IDS": [
+     "SH25155764",
+     "SH25877623"
+    ],
+    "AI_ORDER_IDS": "SO25442217,SO26733793,SO26997126",
+    "AI_TYPE": "INVOICE"
+   }
+  },
+  {
+   "folder": "invoice",
+   "file": "invoice/files/inv-13.pdf",
+   "doc_type": "INVOICE",
+   "doc_id": "SI256351695",
+   "short_doc_id": "51695",
+   "company_id": "570043745",
+   "company_name": "מפעל מתכת כפר מנחם בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "570043745",
+    "AI_DOC_ID": "SI256351695",
+    "AI_DOC_DATE": "21/10/2026",
+    "AI_DOC_AMOUNT": "2262.99",
+    "AI_SHIPMENT_IDS": [
+     "SH26474683"
+    ],
+    "AI_ORDER_IDS": "SO25621549,SO26111566,SO26960723",
+    "AI_TYPE": "INVOICE"
+   }
+  },
+  {
+   "folder": "invoice",
+   "file": "invoice/files/inv-14.pdf",
+   "doc_type": "INVOICE",
+   "doc_id": "SI266982480",
+   "short_doc_id": "82480",
+   "company_id": "511301129",
+   "company_name": "אגן מפעלי הנדסה (1988) בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "511301129",
+    "AI_DOC_ID": "SI266982480",
+    "AI_DOC_DATE": "17/01/2025",
+    "AI_DOC_AMOUNT": "12482.39",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "INVOICE"
+   }
+  },
+  {
+   "folder": "invoice",
+   "file": "invoice/files/inv-15.pdf",
+   "doc_type": "INVOICE",
+   "doc_id": "SI266253428",
+   "short_doc_id": "53428",
+   "company_id": "510605959",
+   "company_name": "בניאס סחר בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "510605959",
+    "AI_DOC_ID": "SI266253428",
+    "AI_DOC_DATE": "20/03/2026",
+    "AI_DOC_AMOUNT": "12222.82",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "INVOICE"
+   }
+  },
+  {
+   "folder": "invoice",
+   "file": "invoice/files/inv-16.pdf",
+   "doc_type": "INVOICE",
+   "doc_id": "85015717709",
+   "short_doc_id": "17709",
+   "company_id": "513498345",
+   "company_name": "פולירון תעשיות בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "513498345",
+    "AI_DOC_ID": "85015717709",
+    "AI_DOC_DATE": "21/03/2026",
+    "AI_DOC_AMOUNT": "1740.74",
+    "AI_SHIPMENT_IDS": [
+     "SH25600597",
+     "SH26266837",
+     "SH26700387"
+    ],
+    "AI_ORDER_IDS": "SO25303900,SO26251275,SO26712906,SO26957328",
+    "AI_TYPE": "INVOICE"
+   }
+  },
+  {
+   "folder": "invoice",
+   "file": "invoice/files/inv-17.pdf",
+   "doc_type": "INVOICE",
+   "doc_id": "SI266702936",
+   "short_doc_id": "02936",
+   "company_id": "511022493",
+   "company_name": "כהן פור ש.א. בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "511022493",
+    "AI_DOC_ID": "SI266702936",
+    "AI_DOC_DATE": "03/10/2026",
+    "AI_DOC_AMOUNT": "16920.82",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "INVOICE"
+   }
+  },
+  {
+   "folder": "invoice",
+   "file": "invoice/files/inv-18.pdf",
+   "doc_type": "INVOICE",
+   "doc_id": "2542069264",
+   "short_doc_id": "69264",
+   "company_id": "511234567",
+   "company_name": "אלקטרה מוצרי בנייה בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "511234567",
+    "AI_DOC_ID": "2542069264",
+    "AI_DOC_DATE": "01/01/2026",
+    "AI_DOC_AMOUNT": "16985.73",
+    "AI_SHIPMENT_IDS": [
+     "SH26131552",
+     "SH26151385",
+     "SH26260712",
+     "SH26500754"
+    ],
+    "AI_ORDER_IDS": "SO25343737,SO25618423,SO25690627,SO25865763,SO26032664,SO26536875,SO26856429",
+    "AI_TYPE": "INVOICE"
+   }
+  },
+  {
+   "folder": "invoice",
+   "file": "invoice/files/inv-19.pdf",
+   "doc_type": "INVOICE",
+   "doc_id": "5213893525",
+   "short_doc_id": "93525",
+   "company_id": "570043745",
+   "company_name": "מפעל מתכת כפר מנחם בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "570043745",
+    "AI_DOC_ID": "5213893525",
+    "AI_DOC_DATE": "13/09/2025",
+    "AI_DOC_AMOUNT": "7194.37",
+    "AI_SHIPMENT_IDS": [
+     "SH26671850",
+     "SH26762198"
+    ],
+    "AI_ORDER_IDS": "SO25537946,SO25660101,SO26325360,SO26465850",
+    "AI_TYPE": "INVOICE"
+   }
+  },
+  {
+   "folder": "invoice",
+   "file": "invoice/files/inv-20.pdf",
+   "doc_type": "INVOICE",
+   "doc_id": "52857026669",
+   "short_doc_id": "26669",
+   "company_id": "511301129",
+   "company_name": "אגן מפעלי הנדסה (1988) בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "511301129",
+    "AI_DOC_ID": "52857026669",
+    "AI_DOC_DATE": "24/09/2026",
+    "AI_DOC_AMOUNT": "9597.52",
+    "AI_SHIPMENT_IDS": [
+     "SH25714848",
+     "SH25752071",
+     "SH25782045",
+     "SH26025496",
+     "SH26267418",
+     "SH26958840"
+    ],
+    "AI_ORDER_IDS": "SO25322594,SO25408438,SO25515104,SO25931727,SO26029945,SO26126185,SO26346391,SO26422097,SO26898096,SO26955340",
+    "AI_TYPE": "INVOICE"
+   }
+  },
+  {
+   "folder": "invoice",
+   "file": "invoice/files/inv-21.pdf",
+   "doc_type": "INVOICE",
+   "doc_id": "SI266954503",
+   "short_doc_id": "54503",
+   "company_id": "510605959",
+   "company_name": "בניאס סחר בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "510605959",
+    "AI_DOC_ID": "SI266954503",
+    "AI_DOC_DATE": "09/05/2026",
+    "AI_DOC_AMOUNT": "20102.17",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "INVOICE"
+   }
+  },
+  {
+   "folder": "invoice",
+   "file": "invoice/files/inv-22.pdf",
+   "doc_type": "INVOICE",
+   "doc_id": "50393735805",
+   "short_doc_id": "35805",
+   "company_id": "511634388",
+   "company_name": "דלתות תייר בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "511634388",
+    "AI_DOC_ID": "50393735805",
+    "AI_DOC_DATE": "03/06/2025",
+    "AI_DOC_AMOUNT": "10523.36",
+    "AI_SHIPMENT_IDS": [
+     "SH25048906",
+     "SH25132127",
+     "SH25176971",
+     "SH25177227",
+     "SH26012388",
+     "SH26152650",
+     "SH26888441"
+    ],
+    "AI_ORDER_IDS": "SO25245776,SO25444412,SO25737089,SO25897065,SO26063701,SO26283583,SO26420240,SO26457463",
+    "AI_TYPE": "INVOICE"
+   }
+  },
+  {
+   "folder": "invoice",
+   "file": "invoice/files/inv-23.pdf",
+   "doc_type": "INVOICE",
+   "doc_id": "11569406320",
+   "short_doc_id": "06320",
+   "company_id": "511301129",
+   "company_name": "אגן מפעלי הנדסה (1988) בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "511301129",
+    "AI_DOC_ID": "11569406320",
+    "AI_DOC_DATE": "28/10/2025",
+    "AI_DOC_AMOUNT": "14164.37",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "INVOICE"
+   }
+  },
+  {
+   "folder": "invoice",
+   "file": "invoice/files/inv-24.pdf",
+   "doc_type": "INVOICE",
+   "doc_id": "SI266408714",
+   "short_doc_id": "08714",
+   "company_id": "511234567",
+   "company_name": "אלקטרה מוצרי בנייה בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "511234567",
+    "AI_DOC_ID": "SI266408714",
+    "AI_DOC_DATE": "17/12/2025",
+    "AI_DOC_AMOUNT": "19328.79",
+    "AI_SHIPMENT_IDS": [
+     "SH25342565",
+     "SH25788667",
+     "SH26241944",
+     "SH26550694",
+     "SH26714202",
+     "SH26912045",
+     "SH26972010",
+     "SH26972303"
+    ],
+    "AI_ORDER_IDS": "SO25029384,SO25191290,SO25311416,SO25661405,SO25723000,SO25908805,SO25985006,SO26320021,SO26460879,SO26804700",
+    "AI_TYPE": "INVOICE"
+   }
+  },
+  {
+   "folder": "invoice_receipt",
+   "file": "invoice_receipt/files/ir-01.pdf",
+   "doc_type": "INVOICE_RECEIPT",
+   "doc_id": "IR26644051",
+   "short_doc_id": "44051",
+   "company_id": "510605959",
+   "company_name": "בניאס סחר בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "510605959",
+    "AI_DOC_ID": "IR26644051",
+    "AI_DOC_DATE": "15/09/2026",
+    "AI_DOC_AMOUNT": "10045.39",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "INVOICE"
+   }
+  },
+  {
+   "folder": "invoice_receipt",
+   "file": "invoice_receipt/files/ir-02.pdf",
+   "doc_type": "INVOICE_RECEIPT",
+   "doc_id": "IR25018825",
+   "short_doc_id": "18825",
+   "company_id": "511022493",
+   "company_name": "כהן פור ש.א. בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "511022493",
+    "AI_DOC_ID": "IR25018825",
+    "AI_DOC_DATE": "10/02/2025",
+    "AI_DOC_AMOUNT": "246.29",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "INVOICE"
+   }
+  },
+  {
+   "folder": "invoice_receipt",
+   "file": "invoice_receipt/files/ir-03.pdf",
+   "doc_type": "INVOICE_RECEIPT",
+   "doc_id": "IR26805688",
+   "short_doc_id": "05688",
+   "company_id": "513498345",
+   "company_name": "פולירון תעשיות בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "513498345",
+    "AI_DOC_ID": "IR26805688",
+    "AI_DOC_DATE": "04/03/2026",
+    "AI_DOC_AMOUNT": "2365.82",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "INVOICE"
+   }
+  },
+  {
+   "folder": "invoice_receipt",
+   "file": "invoice_receipt/files/ir-04.pdf",
+   "doc_type": "INVOICE_RECEIPT",
+   "doc_id": "IR26919089",
+   "short_doc_id": "19089",
+   "company_id": "510605959",
+   "company_name": "בניאס סחר בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "510605959",
+    "AI_DOC_ID": "IR26919089",
+    "AI_DOC_DATE": "16/05/2026",
+    "AI_DOC_AMOUNT": "22953.14",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "INVOICE"
+   }
+  },
+  {
+   "folder": "invoice_receipt",
+   "file": "invoice_receipt/files/ir-05.pdf",
+   "doc_type": "INVOICE_RECEIPT",
+   "doc_id": "IR25693349",
+   "short_doc_id": "93349",
+   "company_id": "511234567",
+   "company_name": "אלקטרה מוצרי בנייה בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "511234567",
+    "AI_DOC_ID": "IR25693349",
+    "AI_DOC_DATE": "26/09/2026",
+    "AI_DOC_AMOUNT": "255.19",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "INVOICE"
+   }
+  },
+  {
+   "folder": "invoice_receipt",
+   "file": "invoice_receipt/files/ir-06.pdf",
+   "doc_type": "INVOICE_RECEIPT",
+   "doc_id": "IR26637195",
+   "short_doc_id": "37195",
+   "company_id": "511301129",
+   "company_name": "אגן מפעלי הנדסה (1988) בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "511301129",
+    "AI_DOC_ID": "IR26637195",
+    "AI_DOC_DATE": "15/08/2026",
+    "AI_DOC_AMOUNT": "3554.83",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "INVOICE"
+   }
+  },
+  {
+   "folder": "invoice_receipt",
+   "file": "invoice_receipt/files/ir-07.pdf",
+   "doc_type": "INVOICE_RECEIPT",
+   "doc_id": "IR26640700",
+   "short_doc_id": "40700",
+   "company_id": "511301129",
+   "company_name": "אגן מפעלי הנדסה (1988) בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "511301129",
+    "AI_DOC_ID": "IR26640700",
+    "AI_DOC_DATE": "02/01/2025",
+    "AI_DOC_AMOUNT": "519.67",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "INVOICE"
+   }
+  },
+  {
+   "folder": "invoice_receipt",
+   "file": "invoice_receipt/files/ir-08.pdf",
+   "doc_type": "INVOICE_RECEIPT",
+   "doc_id": "IR25728227",
+   "short_doc_id": "28227",
+   "company_id": "511022493",
+   "company_name": "כהן פור ש.א. בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "511022493",
+    "AI_DOC_ID": "IR25728227",
+    "AI_DOC_DATE": "17/09/2026",
+    "AI_DOC_AMOUNT": "1311.26",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "INVOICE"
+   }
+  },
+  {
+   "folder": "invoice_receipt",
+   "file": "invoice_receipt/files/ir-09.pdf",
+   "doc_type": "INVOICE_RECEIPT",
+   "doc_id": "IR25125886",
+   "short_doc_id": "25886",
+   "company_id": "510605959",
+   "company_name": "בניאס סחר בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "510605959",
+    "AI_DOC_ID": "IR25125886",
+    "AI_DOC_DATE": "07/01/2025",
+    "AI_DOC_AMOUNT": "23535.90",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "INVOICE"
+   }
+  },
+  {
+   "folder": "invoice_receipt",
+   "file": "invoice_receipt/files/ir-10.pdf",
+   "doc_type": "INVOICE_RECEIPT",
+   "doc_id": "IR26820017",
+   "short_doc_id": "20017",
+   "company_id": "513498345",
+   "company_name": "פולירון תעשיות בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "513498345",
+    "AI_DOC_ID": "IR26820017",
+    "AI_DOC_DATE": "20/02/2025",
+    "AI_DOC_AMOUNT": "1673.78",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "INVOICE"
+   }
+  },
+  {
+   "folder": "invoice_receipt",
+   "file": "invoice_receipt/files/ir-11.pdf",
+   "doc_type": "INVOICE_RECEIPT",
+   "doc_id": "IR26426595",
+   "short_doc_id": "26595",
+   "company_id": "513498345",
+   "company_name": "פולירון תעשיות בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "513498345",
+    "AI_DOC_ID": "IR26426595",
+    "AI_DOC_DATE": "27/11/2026",
+    "AI_DOC_AMOUNT": "12920.82",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "INVOICE"
+   }
+  },
+  {
+   "folder": "invoice_receipt",
+   "file": "invoice_receipt/files/ir-12.pdf",
+   "doc_type": "INVOICE_RECEIPT",
+   "doc_id": "IR25212845",
+   "short_doc_id": "12845",
+   "company_id": "511301129",
+   "company_name": "אגן מפעלי הנדסה (1988) בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "511301129",
+    "AI_DOC_ID": "IR25212845",
+    "AI_DOC_DATE": "26/05/2025",
+    "AI_DOC_AMOUNT": "3665.61",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "INVOICE"
+   }
+  },
+  {
+   "folder": "order",
+   "file": "order/files/ord-01.pdf",
+   "doc_type": "ORDER",
+   "doc_id": "PO26196805",
+   "short_doc_id": "96805",
+   "company_id": "511234567",
+   "company_name": "אלקטרה מוצרי בנייה בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "511234567",
+    "AI_DOC_ID": "PO26196805",
+    "AI_DOC_DATE": "12/05/2025",
+    "AI_DOC_AMOUNT": "1882.37",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "ORDER"
+   }
+  },
+  {
+   "folder": "order",
+   "file": "order/files/ord-02.pdf",
+   "doc_type": "ORDER",
+   "doc_id": "PO26969260",
+   "short_doc_id": "69260",
+   "company_id": "511234567",
+   "company_name": "אלקטרה מוצרי בנייה בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "511234567",
+    "AI_DOC_ID": "PO26969260",
+    "AI_DOC_DATE": "01/07/2025",
+    "AI_DOC_AMOUNT": "16228.83",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "ORDER"
+   }
+  },
+  {
+   "folder": "order",
+   "file": "order/files/ord-03.pdf",
+   "doc_type": "ORDER",
+   "doc_id": "PO25789136",
+   "short_doc_id": "89136",
+   "company_id": "513105494",
+   "company_name": "דיאור יבוא ושיווק בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "513105494",
+    "AI_DOC_ID": "PO25789136",
+    "AI_DOC_DATE": "13/10/2025",
+    "AI_DOC_AMOUNT": "5173.11",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "ORDER"
+   }
+  },
+  {
+   "folder": "order",
+   "file": "order/files/ord-04.pdf",
+   "doc_type": "ORDER",
+   "doc_id": "PO26704364",
+   "short_doc_id": "04364",
+   "company_id": "510605959",
+   "company_name": "בניאס סחר בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "510605959",
+    "AI_DOC_ID": "PO26704364",
+    "AI_DOC_DATE": "15/01/2026",
+    "AI_DOC_AMOUNT": "5600.52",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "ORDER"
+   }
+  },
+  {
+   "folder": "order",
+   "file": "order/files/ord-05.pdf",
+   "doc_type": "ORDER",
+   "doc_id": "PO26697572",
+   "short_doc_id": "97572",
+   "company_id": "511234567",
+   "company_name": "אלקטרה מוצרי בנייה בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "511234567",
+    "AI_DOC_ID": "PO26697572",
+    "AI_DOC_DATE": "12/09/2026",
+    "AI_DOC_AMOUNT": "5351.75",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "ORDER"
+   }
+  },
+  {
+   "folder": "order",
+   "file": "order/files/ord-06.pdf",
+   "doc_type": "ORDER",
+   "doc_id": "PO25083212",
+   "short_doc_id": "83212",
+   "company_id": "513105494",
+   "company_name": "דיאור יבוא ושיווק בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "513105494",
+    "AI_DOC_ID": "PO25083212",
+    "AI_DOC_DATE": "11/02/2025",
+    "AI_DOC_AMOUNT": "5286.18",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "ORDER"
+   }
+  },
+  {
+   "folder": "order",
+   "file": "order/files/ord-07.pdf",
+   "doc_type": "ORDER",
+   "doc_id": "PO26610296",
+   "short_doc_id": "10296",
+   "company_id": "511301129",
+   "company_name": "אגן מפעלי הנדסה (1988) בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "511301129",
+    "AI_DOC_ID": "PO26610296",
+    "AI_DOC_DATE": "10/06/2025",
+    "AI_DOC_AMOUNT": "63.92",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "ORDER"
+   }
+  },
+  {
+   "folder": "order",
+   "file": "order/files/ord-08.pdf",
+   "doc_type": "ORDER",
+   "doc_id": "PO25470710",
+   "short_doc_id": "70710",
+   "company_id": "511301129",
+   "company_name": "אגן מפעלי הנדסה (1988) בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "511301129",
+    "AI_DOC_ID": "PO25470710",
+    "AI_DOC_DATE": "18/10/2026",
+    "AI_DOC_AMOUNT": "2590.60",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "ORDER"
+   }
+  },
+  {
+   "folder": "order",
+   "file": "order/files/ord-09.pdf",
+   "doc_type": "ORDER",
+   "doc_id": "PO25157792",
+   "short_doc_id": "57792",
+   "company_id": "511634388",
+   "company_name": "דלתות תייר בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "511634388",
+    "AI_DOC_ID": "PO25157792",
+    "AI_DOC_DATE": "09/01/2026",
+    "AI_DOC_AMOUNT": "5309.99",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "ORDER"
+   }
+  },
+  {
+   "folder": "order",
+   "file": "order/files/ord-10.pdf",
+   "doc_type": "ORDER",
+   "doc_id": "PO26260063",
+   "short_doc_id": "60063",
+   "company_id": "511634388",
+   "company_name": "דלתות תייר בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "511634388",
+    "AI_DOC_ID": "PO26260063",
+    "AI_DOC_DATE": "09/11/2026",
+    "AI_DOC_AMOUNT": "12976.15",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "ORDER"
+   }
+  },
+  {
+   "folder": "quote",
+   "file": "quote/files/qt-01.pdf",
+   "doc_type": "QUOTE",
+   "doc_id": "QT25523595",
+   "short_doc_id": "23595",
+   "company_id": "511234567",
+   "company_name": "אלקטרה מוצרי בנייה בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "511234567",
+    "AI_DOC_ID": "QT25523595",
+    "AI_DOC_DATE": "23/10/2025",
+    "AI_DOC_AMOUNT": "15958.15",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "QUOTE"
+   }
+  },
+  {
+   "folder": "quote",
+   "file": "quote/files/qt-02.pdf",
+   "doc_type": "QUOTE",
+   "doc_id": "QT25566702",
+   "short_doc_id": "66702",
+   "company_id": "513105494",
+   "company_name": "דיאור יבוא ושיווק בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "513105494",
+    "AI_DOC_ID": "QT25566702",
+    "AI_DOC_DATE": "12/12/2025",
+    "AI_DOC_AMOUNT": "3618.90",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "QUOTE"
+   }
+  },
+  {
+   "folder": "quote",
+   "file": "quote/files/qt-03.pdf",
+   "doc_type": "QUOTE",
+   "doc_id": "QT25451331",
+   "short_doc_id": "51331",
+   "company_id": "570043745",
+   "company_name": "מפעל מתכת כפר מנחם בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "570043745",
+    "AI_DOC_ID": "QT25451331",
+    "AI_DOC_DATE": "12/05/2025",
+    "AI_DOC_AMOUNT": "18673.26",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "QUOTE"
+   }
+  },
+  {
+   "folder": "quote",
+   "file": "quote/files/qt-04.pdf",
+   "doc_type": "QUOTE",
+   "doc_id": "QT26602069",
+   "short_doc_id": "02069",
+   "company_id": "511301129",
+   "company_name": "אגן מפעלי הנדסה (1988) בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "511301129",
+    "AI_DOC_ID": "QT26602069",
+    "AI_DOC_DATE": "12/10/2025",
+    "AI_DOC_AMOUNT": "2394.79",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "QUOTE"
+   }
+  },
+  {
+   "folder": "quote",
+   "file": "quote/files/qt-05.pdf",
+   "doc_type": "QUOTE",
+   "doc_id": "QT26145169",
+   "short_doc_id": "45169",
+   "company_id": "513498345",
+   "company_name": "פולירון תעשיות בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "513498345",
+    "AI_DOC_ID": "QT26145169",
+    "AI_DOC_DATE": "10/12/2026",
+    "AI_DOC_AMOUNT": "7472.20",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "QUOTE"
+   }
+  },
+  {
+   "folder": "quote",
+   "file": "quote/files/qt-06.pdf",
+   "doc_type": "QUOTE",
+   "doc_id": "QT26507688",
+   "short_doc_id": "07688",
+   "company_id": "511301129",
+   "company_name": "אגן מפעלי הנדסה (1988) בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "511301129",
+    "AI_DOC_ID": "QT26507688",
+    "AI_DOC_DATE": "18/09/2025",
+    "AI_DOC_AMOUNT": "8192.80",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "QUOTE"
+   }
+  },
+  {
+   "folder": "quote",
+   "file": "quote/files/qt-07.pdf",
+   "doc_type": "QUOTE",
+   "doc_id": "QT25959193",
+   "short_doc_id": "59193",
+   "company_id": "511022493",
+   "company_name": "כהן פור ש.א. בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "511022493",
+    "AI_DOC_ID": "QT25959193",
+    "AI_DOC_DATE": "22/03/2025",
+    "AI_DOC_AMOUNT": "1851.80",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "QUOTE"
+   }
+  },
+  {
+   "folder": "quote",
+   "file": "quote/files/qt-08.pdf",
+   "doc_type": "QUOTE",
+   "doc_id": "QT26620549",
+   "short_doc_id": "20549",
+   "company_id": "570043745",
+   "company_name": "מפעל מתכת כפר מנחם בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "570043745",
+    "AI_DOC_ID": "QT26620549",
+    "AI_DOC_DATE": "20/12/2025",
+    "AI_DOC_AMOUNT": "6279.46",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "QUOTE"
+   }
+  },
+  {
+   "folder": "shipment",
+   "file": "shipment/files/shp-01.pdf",
+   "doc_type": "SHIPMENT",
+   "doc_id": "SH25057636",
+   "short_doc_id": "57636",
+   "company_id": "511301129",
+   "company_name": "אגן מפעלי הנדסה (1988) בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "511301129",
+    "AI_DOC_ID": "SH25057636",
+    "AI_DOC_DATE": "02/03/2026",
+    "AI_DOC_AMOUNT": "",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "SO25426032,SO26826570",
+    "AI_TYPE": "SHIPMENT"
+   }
+  },
+  {
+   "folder": "shipment",
+   "file": "shipment/files/shp-02.pdf",
+   "doc_type": "SHIPMENT",
+   "doc_id": "SHM26054890",
+   "short_doc_id": "54890",
+   "company_id": "510605959",
+   "company_name": "בניאס סחר בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "510605959",
+    "AI_DOC_ID": "SHM26054890",
+    "AI_DOC_DATE": "21/07/2026",
+    "AI_DOC_AMOUNT": "",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "SO25197609,SO26865970",
+    "AI_TYPE": "SHIPMENT"
+   }
+  },
+  {
+   "folder": "shipment",
+   "file": "shipment/files/shp-03.pdf",
+   "doc_type": "SHIPMENT",
+   "doc_id": "S01260051521",
+   "short_doc_id": "51521",
+   "company_id": "511301129",
+   "company_name": "אגן מפעלי הנדסה (1988) בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "511301129",
+    "AI_DOC_ID": "S01260051521",
+    "AI_DOC_DATE": "25/01/2026",
+    "AI_DOC_AMOUNT": "",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "SO25751406,SO25814323,SO26119903",
+    "AI_TYPE": "SHIPMENT"
+   }
+  },
+  {
+   "folder": "shipment",
+   "file": "shipment/files/shp-04.pdf",
+   "doc_type": "SHIPMENT",
+   "doc_id": "S0125002276",
+   "short_doc_id": "02276",
+   "company_id": "511234567",
+   "company_name": "אלקטרה מוצרי בנייה בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "511234567",
+    "AI_DOC_ID": "S0125002276",
+    "AI_DOC_DATE": "13/02/2026",
+    "AI_DOC_AMOUNT": "",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "SO25213602,SO26394447,SO26430426,SO26550420",
+    "AI_TYPE": "SHIPMENT"
+   }
+  },
+  {
+   "folder": "shipment",
+   "file": "shipment/files/shp-05.pdf",
+   "doc_type": "SHIPMENT",
+   "doc_id": "02TSH25049266",
+   "short_doc_id": "49266",
+   "company_id": "513498345",
+   "company_name": "פולירון תעשיות בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "513498345",
+    "AI_DOC_ID": "02TSH25049266",
+    "AI_DOC_DATE": "21/12/2026",
+    "AI_DOC_AMOUNT": "",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "SO25165559,SO25746378,SO26640684,SO26667182",
+    "AI_TYPE": "SHIPMENT"
+   }
+  },
+  {
+   "folder": "shipment",
+   "file": "shipment/files/shp-06.pdf",
+   "doc_type": "SHIPMENT",
+   "doc_id": "SH26088835",
+   "short_doc_id": "88835",
+   "company_id": "511234567",
+   "company_name": "אלקטרה מוצרי בנייה בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "511234567",
+    "AI_DOC_ID": "SH26088835",
+    "AI_DOC_DATE": "14/02/2025",
+    "AI_DOC_AMOUNT": "",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "SO25105128,SO25299752,SO25627071,SO25935254",
+    "AI_TYPE": "SHIPMENT"
+   }
+  },
+  {
+   "folder": "shipment",
+   "file": "shipment/files/shp-07.pdf",
+   "doc_type": "SHIPMENT",
+   "doc_id": "S0126000205",
+   "short_doc_id": "00205",
+   "company_id": "513105494",
+   "company_name": "דיאור יבוא ושיווק בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "513105494",
+    "AI_DOC_ID": "S0126000205",
+    "AI_DOC_DATE": "26/07/2025",
+    "AI_DOC_AMOUNT": "",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "SO26080263,SO26112653",
+    "AI_TYPE": "SHIPMENT"
+   }
+  },
+  {
+   "folder": "shipment",
+   "file": "shipment/files/shp-08.pdf",
+   "doc_type": "SHIPMENT",
+   "doc_id": "SHM25056410",
+   "short_doc_id": "56410",
+   "company_id": "570043745",
+   "company_name": "מפעל מתכת כפר מנחם בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "570043745",
+    "AI_DOC_ID": "SHM25056410",
+    "AI_DOC_DATE": "06/11/2025",
+    "AI_DOC_AMOUNT": "",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "SO26911958",
+    "AI_TYPE": "SHIPMENT"
+   }
+  },
+  {
+   "folder": "shipment",
+   "file": "shipment/files/shp-09.pdf",
+   "doc_type": "SHIPMENT",
+   "doc_id": "S01250071140",
+   "short_doc_id": "71140",
+   "company_id": "510605959",
+   "company_name": "בניאס סחר בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "510605959",
+    "AI_DOC_ID": "S01250071140",
+    "AI_DOC_DATE": "07/08/2025",
+    "AI_DOC_AMOUNT": "",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "SO25448977,SO25572400,SO25583018,SO25821753",
+    "AI_TYPE": "SHIPMENT"
+   }
+  },
+  {
+   "folder": "shipment",
+   "file": "shipment/files/shp-10.pdf",
+   "doc_type": "SHIPMENT",
+   "doc_id": "02TSH25023525",
+   "short_doc_id": "23525",
+   "company_id": "513105494",
+   "company_name": "דיאור יבוא ושיווק בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "513105494",
+    "AI_DOC_ID": "02TSH25023525",
+    "AI_DOC_DATE": "12/05/2026",
+    "AI_DOC_AMOUNT": "",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "SO26575486,SO26871815",
+    "AI_TYPE": "SHIPMENT"
+   }
+  },
+  {
+   "folder": "shipment",
+   "file": "shipment/files/shp-11.pdf",
+   "doc_type": "SHIPMENT",
+   "doc_id": "S0126006951",
+   "short_doc_id": "06951",
+   "company_id": "513105494",
+   "company_name": "דיאור יבוא ושיווק בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "513105494",
+    "AI_DOC_ID": "S0126006951",
+    "AI_DOC_DATE": "20/05/2025",
+    "AI_DOC_AMOUNT": "",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "SO25880218,SO26571225,SO26668850",
+    "AI_TYPE": "SHIPMENT"
+   }
+  },
+  {
+   "folder": "shipment",
+   "file": "shipment/files/shp-12.pdf",
+   "doc_type": "SHIPMENT",
+   "doc_id": "SH26012560",
+   "short_doc_id": "12560",
+   "company_id": "511234567",
+   "company_name": "אלקטרה מוצרי בנייה בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "511234567",
+    "AI_DOC_ID": "SH26012560",
+    "AI_DOC_DATE": "20/02/2026",
+    "AI_DOC_AMOUNT": "",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "SO25562971,SO25922752,SO26607140",
+    "AI_TYPE": "SHIPMENT"
+   }
+  },
+  {
+   "folder": "shipment",
+   "file": "shipment/files/shp-13.pdf",
+   "doc_type": "SHIPMENT",
+   "doc_id": "SHM2604103",
+   "short_doc_id": "04103",
+   "company_id": "511234567",
+   "company_name": "אלקטרה מוצרי בנייה בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "511234567",
+    "AI_DOC_ID": "SHM2604103",
+    "AI_DOC_DATE": "05/05/2026",
+    "AI_DOC_AMOUNT": "",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "SO25314993,SO25606198,SO25993302,SO26570596",
+    "AI_TYPE": "SHIPMENT"
+   }
+  },
+  {
+   "folder": "shipment",
+   "file": "shipment/files/shp-14.pdf",
+   "doc_type": "SHIPMENT",
+   "doc_id": "SH26013676",
+   "short_doc_id": "13676",
+   "company_id": "513498345",
+   "company_name": "פולירון תעשיות בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "513498345",
+    "AI_DOC_ID": "SH26013676",
+    "AI_DOC_DATE": "21/08/2025",
+    "AI_DOC_AMOUNT": "",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "SO26473274",
+    "AI_TYPE": "SHIPMENT"
+   }
+  },
+  {
+   "folder": "shipment",
+   "file": "shipment/files/shp-15.pdf",
+   "doc_type": "SHIPMENT",
+   "doc_id": "SHM26049702",
+   "short_doc_id": "49702",
+   "company_id": "513105494",
+   "company_name": "דיאור יבוא ושיווק בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "513105494",
+    "AI_DOC_ID": "SHM26049702",
+    "AI_DOC_DATE": "14/06/2026",
+    "AI_DOC_AMOUNT": "",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "SO26311330",
+    "AI_TYPE": "SHIPMENT"
+   }
+  },
+  {
+   "folder": "shipment",
+   "file": "shipment/files/shp-16.pdf",
+   "doc_type": "SHIPMENT",
+   "doc_id": "S01250076916",
+   "short_doc_id": "76916",
+   "company_id": "511301129",
+   "company_name": "אגן מפעלי הנדסה (1988) בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "511301129",
+    "AI_DOC_ID": "S01250076916",
+    "AI_DOC_DATE": "08/09/2026",
+    "AI_DOC_AMOUNT": "",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "SO25247419",
+    "AI_TYPE": "SHIPMENT"
+   }
+  },
+  {
+   "folder": "balance_sheet",
+   "file": "balance_sheet/files/bs-01.pdf",
+   "doc_type": "BALANCE_SHEET",
+   "doc_id": "1946",
+   "short_doc_id": "",
+   "company_id": "570043745",
+   "company_name": "מפעל מתכת כפר מנחם בע\"מ",
+   "truth": {
+    "documentDate": "2025-09-22",
+    "lines": [
+     {
+      "id": "104903",
+      "date": "2025-04-12",
+      "amount": 3959.21,
+      "balanceAmount": 0,
+      "notes": "זיכוי"
+     },
+     {
+      "id": "107384",
+      "date": "2025-03-24",
+      "amount": 1824.06,
+      "balanceAmount": 0,
+      "notes": "העברה בנקאית"
+     },
+     {
+      "id": "114442",
+      "date": "2026-11-24",
+      "amount": 2382.12,
+      "balanceAmount": 0,
+      "notes": "העברה בנקאית"
+     },
+     {
+      "id": "100746",
+      "date": "2025-04-02",
+      "amount": 4207.68,
+      "balanceAmount": 0,
+      "notes": "חשבונית מס"
+     },
+     {
+      "id": "106125",
+      "date": "2025-04-20",
+      "amount": 6453.83,
+      "balanceAmount": 0,
+      "notes": ""
+     },
+     {
+      "id": "111389",
+      "date": "2026-06-11",
+      "amount": -3664.94,
+      "balanceAmount": 0,
+      "notes": "זיכוי"
+     },
+     {
+      "id": "110985",
+      "date": "2026-06-20",
+      "amount": 840.52,
+      "balanceAmount": 0,
+      "notes": ""
+     }
+    ],
+    "summary": {
+     "totalLines": 7,
+     "documentTotal": 16002.48,
+     "calculatedAmountSum": 16002.48,
+     "calculatedBalanceSum": 0,
+     "totalsMatch": true,
+     "matchType": "amount",
+     "difference": 0,
+     "amountDifference": 0,
+     "balanceDifference": -16002.48
+    }
+   }
+  },
+  {
+   "folder": "balance_sheet",
+   "file": "balance_sheet/files/bs-02.pdf",
+   "doc_type": "BALANCE_SHEET",
+   "doc_id": "1946",
+   "short_doc_id": "",
+   "company_id": "570043745",
+   "company_name": "מפעל מתכת כפר מנחם בע\"מ",
+   "truth": {
+    "documentDate": "2025-04-24",
+    "lines": [
+     {
+      "id": "101121",
+      "date": "2026-03-28",
+      "amount": 677.95,
+      "balanceAmount": 0,
+      "notes": "זיכוי"
+     },
+     {
+      "id": "109494",
+      "date": "2025-08-21",
+      "amount": 2419.8,
+      "balanceAmount": 0,
+      "notes": "העברה בנקאית"
+     },
+     {
+      "id": "112601",
+      "date": "2026-04-07",
+      "amount": 2090.29,
+      "balanceAmount": 0,
+      "notes": "זיכוי"
+     },
+     {
+      "id": "100478",
+      "date": "2026-06-10",
+      "amount": 5466.61,
+      "balanceAmount": 0,
+      "notes": ""
+     },
+     {
+      "id": "101247",
+      "date": "2026-02-03",
+      "amount": -324.29,
+      "balanceAmount": 0,
+      "notes": "זיכוי"
+     },
+     {
+      "id": "101032",
+      "date": "2025-05-18",
+      "amount": 8036.83,
+      "balanceAmount": 0,
+      "notes": "העברה בנקאית"
+     },
+     {
+      "id": "103403",
+      "date": "2025-05-24",
+      "amount": 7549.22,
+      "balanceAmount": 0,
+      "notes": ""
+     }
+    ],
+    "summary": {
+     "totalLines": 7,
+     "documentTotal": 25916.41,
+     "calculatedAmountSum": 25916.41,
+     "calculatedBalanceSum": 0,
+     "totalsMatch": true,
+     "matchType": "amount",
+     "difference": 0,
+     "amountDifference": 0,
+     "balanceDifference": -25916.41
+    }
+   }
+  },
+  {
+   "folder": "balance_sheet",
+   "file": "balance_sheet/files/bs-03.pdf",
+   "doc_type": "BALANCE_SHEET",
+   "doc_id": "1946",
+   "short_doc_id": "",
+   "company_id": "513498345",
+   "company_name": "פולירון תעשיות בע\"מ",
+   "truth": {
+    "documentDate": "2026-04-27",
+    "lines": [
+     {
+      "id": "104149",
+      "date": "2026-11-10",
+      "amount": -1513.01,
+      "balanceAmount": 0,
+      "notes": "הנחת מזומן"
+     },
+     {
+      "id": "109017",
+      "date": "2025-04-21",
+      "amount": 1587.63,
+      "balanceAmount": 0,
+      "notes": "חשבונית מס"
+     },
+     {
+      "id": "101265",
+      "date": "2025-11-25",
+      "amount": 6385.88,
+      "balanceAmount": 0,
+      "notes": "העברה בנקאית"
+     }
+    ],
+    "summary": {
+     "totalLines": 3,
+     "documentTotal": 6460.5,
+     "calculatedAmountSum": 6460.5,
+     "calculatedBalanceSum": 0,
+     "totalsMatch": true,
+     "matchType": "amount",
+     "difference": 0,
+     "amountDifference": 0,
+     "balanceDifference": -6460.5
+    }
+   }
+  },
+  {
+   "folder": "balance_sheet",
+   "file": "balance_sheet/files/bs-04.pdf",
+   "doc_type": "BALANCE_SHEET",
+   "doc_id": "1946",
+   "short_doc_id": "",
+   "company_id": "570043745",
+   "company_name": "מפעל מתכת כפר מנחם בע\"מ",
+   "truth": {
+    "documentDate": "2025-12-24",
+    "lines": [
+     {
+      "id": "101678",
+      "date": "2025-12-15",
+      "amount": 8988.51,
+      "balanceAmount": 0,
+      "notes": "הנחת מזומן"
+     },
+     {
+      "id": "117324",
+      "date": "2026-09-13",
+      "amount": 3743.84,
+      "balanceAmount": 0,
+      "notes": "תשלום שוטף"
+     },
+     {
+      "id": "102148",
+      "date": "2026-09-09",
+      "amount": 4584.73,
+      "balanceAmount": 0,
+      "notes": "זיכוי"
+     },
+     {
+      "id": "114597",
+      "date": "2025-02-19",
+      "amount": 6682.7,
+      "balanceAmount": 0,
+      "notes": "זיכוי"
+     },
+     {
+      "id": "102368",
+      "date": "2026-11-21",
+      "amount": -1540.67,
+      "balanceAmount": 0,
+      "notes": "חשבונית מס"
+     },
+     {
+      "id": "107734",
+      "date": "2026-04-25",
+      "amount": 8158.87,
+      "balanceAmount": 0,
+      "notes": ""
+     }
+    ],
+    "summary": {
+     "totalLines": 6,
+     "documentTotal": 30617.98,
+     "calculatedAmountSum": 30617.98,
+     "calculatedBalanceSum": 0,
+     "totalsMatch": true,
+     "matchType": "amount",
+     "difference": 0,
+     "amountDifference": 0,
+     "balanceDifference": -30617.98
+    }
+   }
+  },
+  {
+   "folder": "balance_sheet",
+   "file": "balance_sheet/files/bs-05.pdf",
+   "doc_type": "BALANCE_SHEET",
+   "doc_id": "1946",
+   "short_doc_id": "",
+   "company_id": "511234567",
+   "company_name": "אלקטרה מוצרי בנייה בע\"מ",
+   "truth": {
+    "documentDate": "2026-10-04",
+    "lines": [
+     {
+      "id": "113992",
+      "date": "2025-09-27",
+      "amount": 8577.43,
+      "balanceAmount": 0,
+      "notes": "העברה בנקאית"
+     },
+     {
+      "id": "112364",
+      "date": "2025-07-04",
+      "amount": 7691.09,
+      "balanceAmount": 0,
+      "notes": ""
+     },
+     {
+      "id": "105284",
+      "date": "2025-02-17",
+      "amount": 6632.01,
+      "balanceAmount": 0,
+      "notes": ""
+     },
+     {
+      "id": "116897",
+      "date": "2026-11-15",
+      "amount": 1369.52,
+      "balanceAmount": 0,
+      "notes": "העברה בנקאית"
+     },
+     {
+      "id": "108637",
+      "date": "2026-06-19",
+      "amount": 4157.83,
+      "balanceAmount": 0,
+      "notes": "תשלום שוטף"
+     },
+     {
+      "id": "107680",
+      "date": "2025-10-27",
+      "amount": 3613.31,
+      "balanceAmount": 0,
+      "notes": "חשבונית מס"
+     },
+     {
+      "id": "110892",
+      "date": "2025-10-23",
+      "amount": -1171.41,
+      "balanceAmount": 0,
+      "notes": "זיכוי"
+     }
+    ],
+    "summary": {
+     "totalLines": 7,
+     "documentTotal": 30869.78,
+     "calculatedAmountSum": 30869.78,
+     "calculatedBalanceSum": 0,
+     "totalsMatch": true,
+     "matchType": "amount",
+     "difference": 0,
+     "amountDifference": 0,
+     "balanceDifference": -30869.78
+    }
+   }
+  },
+  {
+   "folder": "balance_sheet",
+   "file": "balance_sheet/files/bs-06.pdf",
+   "doc_type": "BALANCE_SHEET",
+   "doc_id": "1946",
+   "short_doc_id": "",
+   "company_id": "510605959",
+   "company_name": "בניאס סחר בע\"מ",
+   "truth": {
+    "documentDate": "2026-02-17",
+    "lines": [
+     {
+      "id": "109177",
+      "date": "2026-02-11",
+      "amount": 971.66,
+      "balanceAmount": 0,
+      "notes": "חשבונית מס"
+     },
+     {
+      "id": "119441",
+      "date": "2025-11-03",
+      "amount": 3757.67,
+      "balanceAmount": 0,
+      "notes": "הנחת מזומן"
+     },
+     {
+      "id": "117200",
+      "date": "2026-05-25",
+      "amount": 6659.61,
+      "balanceAmount": 0,
+      "notes": "העברה בנקאית"
+     },
+     {
+      "id": "100752",
+      "date": "2025-06-06",
+      "amount": -2660.66,
+      "balanceAmount": 0,
+      "notes": "זיכוי"
+     },
+     {
+      "id": "109537",
+      "date": "2025-01-04",
+      "amount": 5602.29,
+      "balanceAmount": 0,
+      "notes": "העברה בנקאית"
+     },
+     {
+      "id": "105052",
+      "date": "2026-05-10",
+      "amount": 2447.31,
+      "balanceAmount": 0,
+      "notes": "חשבונית מס"
+     }
+    ],
+    "summary": {
+     "totalLines": 6,
+     "documentTotal": 16777.88,
+     "calculatedAmountSum": 16777.88,
+     "calculatedBalanceSum": 0,
+     "totalsMatch": true,
+     "matchType": "amount",
+     "difference": 0,
+     "amountDifference": 0,
+     "balanceDifference": -16777.88
+    }
+   }
+  },
+  {
+   "folder": "balance_sheet",
+   "file": "balance_sheet/files/bs-07.pdf",
+   "doc_type": "BALANCE_SHEET",
+   "doc_id": "1946",
+   "short_doc_id": "",
+   "company_id": "511022493",
+   "company_name": "כהן פור ש.א. בע\"מ",
+   "truth": {
+    "documentDate": "2025-03-03",
+    "lines": [
+     {
+      "id": "100307",
+      "date": "2025-12-09",
+      "amount": 4633.51,
+      "balanceAmount": 0,
+      "notes": "העברה בנקאית"
+     },
+     {
+      "id": "103326",
+      "date": "2025-09-08",
+      "amount": -3820.79,
+      "balanceAmount": 0,
+      "notes": "חשבונית מס"
+     },
+     {
+      "id": "116536",
+      "date": "2025-04-26",
+      "amount": 108.86,
+      "balanceAmount": 0,
+      "notes": "חשבונית מס"
+     }
+    ],
+    "summary": {
+     "totalLines": 3,
+     "documentTotal": 921.58,
+     "calculatedAmountSum": 921.58,
+     "calculatedBalanceSum": 0,
+     "totalsMatch": true,
+     "matchType": "amount",
+     "difference": 0,
+     "amountDifference": 0,
+     "balanceDifference": -921.58
+    }
+   }
+  },
+  {
+   "folder": "balance_sheet",
+   "file": "balance_sheet/files/bs-08.pdf",
+   "doc_type": "BALANCE_SHEET",
+   "doc_id": "1946",
+   "short_doc_id": "",
+   "company_id": "511301129",
+   "company_name": "אגן מפעלי הנדסה (1988) בע\"מ",
+   "truth": {
+    "documentDate": "2026-10-13",
+    "lines": [
+     {
+      "id": "113250",
+      "date": "2026-07-10",
+      "amount": -3169.11,
+      "balanceAmount": 0,
+      "notes": "חשבונית מס"
+     },
+     {
+      "id": "117509",
+      "date": "2026-12-21",
+      "amount": 7902.18,
+      "balanceAmount": 0,
+      "notes": "תשלום שוטף"
+     },
+     {
+      "id": "105310",
+      "date": "2025-01-06",
+      "amount": -1991.17,
+      "balanceAmount": 0,
+      "notes": ""
+     },
+     {
+      "id": "101688",
+      "date": "2026-04-19",
+      "amount": 221.56,
+      "balanceAmount": 0,
+      "notes": "תשלום שוטף"
+     },
+     {
+      "id": "100369",
+      "date": "2025-04-25",
+      "amount": 5025.56,
+      "balanceAmount": 0,
+      "notes": "חשבונית מס"
+     }
+    ],
+    "summary": {
+     "totalLines": 5,
+     "documentTotal": 7989.02,
+     "calculatedAmountSum": 7989.02,
+     "calculatedBalanceSum": 0,
+     "totalsMatch": true,
+     "matchType": "amount",
+     "difference": 0,
+     "amountDifference": 0,
+     "balanceDifference": -7989.02
+    }
+   }
+  },
+  {
+   "folder": "balance_sheet",
+   "file": "balance_sheet/files/bs-09.pdf",
+   "doc_type": "BALANCE_SHEET",
+   "doc_id": "1946",
+   "short_doc_id": "",
+   "company_id": "511234567",
+   "company_name": "אלקטרה מוצרי בנייה בע\"מ",
+   "truth": {
+    "documentDate": "2026-08-20",
+    "lines": [
+     {
+      "id": "105099",
+      "date": "2026-04-17",
+      "amount": -751.83,
+      "balanceAmount": 0,
+      "notes": "הנחת מזומן"
+     },
+     {
+      "id": "109900",
+      "date": "2026-12-23",
+      "amount": -1343.46,
+      "balanceAmount": 0,
+      "notes": "הנחת מזומן"
+     }
+    ],
+    "summary": {
+     "totalLines": 2,
+     "documentTotal": -2095.29,
+     "calculatedAmountSum": -2095.29,
+     "calculatedBalanceSum": 0,
+     "totalsMatch": true,
+     "matchType": "amount",
+     "difference": 0,
+     "amountDifference": 0,
+     "balanceDifference": 2095.29
+    }
+   }
+  },
+  {
+   "folder": "balance_sheet",
+   "file": "balance_sheet/files/bs-10.pdf",
+   "doc_type": "BALANCE_SHEET",
+   "doc_id": "1946",
+   "short_doc_id": "",
+   "company_id": "510605959",
+   "company_name": "בניאס סחר בע\"מ",
+   "truth": {
+    "documentDate": "2025-01-02",
+    "lines": [
+     {
+      "id": "107963",
+      "date": "2025-02-18",
+      "amount": 6536.72,
+      "balanceAmount": 0,
+      "notes": "העברה בנקאית"
+     },
+     {
+      "id": "114716",
+      "date": "2026-08-17",
+      "amount": 3207.29,
+      "balanceAmount": 0,
+      "notes": "הנחת מזומן"
+     },
+     {
+      "id": "118985",
+      "date": "2026-09-17",
+      "amount": 6973.51,
+      "balanceAmount": 0,
+      "notes": "זיכוי"
+     },
+     {
+      "id": "111510",
+      "date": "2026-06-07",
+      "amount": 6252.55,
+      "balanceAmount": 0,
+      "notes": "הנחת מזומן"
+     }
+    ],
+    "summary": {
+     "totalLines": 4,
+     "documentTotal": 22970.07,
+     "calculatedAmountSum": 22970.07,
+     "calculatedBalanceSum": 0,
+     "totalsMatch": true,
+     "matchType": "amount",
+     "difference": 0,
+     "amountDifference": 0,
+     "balanceDifference": -22970.07
+    }
+   }
+  },
+  {
+   "folder": "balance_sheet",
+   "file": "balance_sheet/files/bs-11.pdf",
+   "doc_type": "BALANCE_SHEET",
+   "doc_id": "1946",
+   "short_doc_id": "",
+   "company_id": "511234567",
+   "company_name": "אלקטרה מוצרי בנייה בע\"מ",
+   "truth": {
+    "documentDate": "2025-08-13",
+    "lines": [
+     {
+      "id": "116022",
+      "date": "2025-09-24",
+      "amount": 8360.38,
+      "balanceAmount": 0,
+      "notes": "הנחת מזומן"
+     },
+     {
+      "id": "115670",
+      "date": "2026-05-14",
+      "amount": 7335.38,
+      "balanceAmount": 0,
+      "notes": ""
+     },
+     {
+      "id": "100738",
+      "date": "2026-03-21",
+      "amount": 7147.82,
+      "balanceAmount": 0,
+      "notes": "חשבונית מס"
+     },
+     {
+      "id": "116121",
+      "date": "2025-01-15",
+      "amount": 3108.25,
+      "balanceAmount": 0,
+      "notes": "זיכוי"
+     },
+     {
+      "id": "119095",
+      "date": "2026-02-26",
+      "amount": 8645.19,
+      "balanceAmount": 0,
+      "notes": ""
+     },
+     {
+      "id": "100969",
+      "date": "2025-02-24",
+      "amount": 2221.01,
+      "balanceAmount": 0,
+      "notes": "העברה בנקאית"
+     },
+     {
+      "id": "111045",
+      "date": "2025-12-23",
+      "amount": -3863.45,
+      "balanceAmount": 0,
+      "notes": "הנחת מזומן"
+     }
+    ],
+    "summary": {
+     "totalLines": 7,
+     "documentTotal": 32954.58,
+     "calculatedAmountSum": 32954.58,
+     "calculatedBalanceSum": 0,
+     "totalsMatch": true,
+     "matchType": "amount",
+     "difference": 0,
+     "amountDifference": 0,
+     "balanceDifference": -32954.58
+    }
+   }
+  },
+  {
+   "folder": "balance_sheet",
+   "file": "balance_sheet/files/bs-12.pdf",
+   "doc_type": "BALANCE_SHEET",
+   "doc_id": "1946",
+   "short_doc_id": "",
+   "company_id": "511634388",
+   "company_name": "דלתות תייר בע\"מ",
+   "truth": {
+    "documentDate": "2026-04-08",
+    "lines": [
+     {
+      "id": "107737",
+      "date": "2025-01-02",
+      "amount": 7515.42,
+      "balanceAmount": 0,
+      "notes": ""
+     },
+     {
+      "id": "105476",
+      "date": "2026-07-11",
+      "amount": 2954.95,
+      "balanceAmount": 0,
+      "notes": "זיכוי"
+     }
+    ],
+    "summary": {
+     "totalLines": 2,
+     "documentTotal": 10470.37,
+     "calculatedAmountSum": 10470.37,
+     "calculatedBalanceSum": 0,
+     "totalsMatch": true,
+     "matchType": "amount",
+     "difference": 0,
+     "amountDifference": 0,
+     "balanceDifference": -10470.37
+    }
+   }
+  },
+  {
+   "folder": "receipt",
+   "file": "receipt/files/rcp-01.pdf",
+   "doc_type": "RECEIPT",
+   "doc_id": "",
+   "short_doc_id": "",
+   "company_id": "511022493",
+   "company_name": "כהן פור ש.א. בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "511022493",
+    "AI_DOC_ID": "",
+    "AI_DOC_DATE": "16/12/2025",
+    "AI_DOC_AMOUNT": "14385.08",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "RECEIPT"
+   }
+  },
+  {
+   "folder": "receipt",
+   "file": "receipt/files/rcp-02.pdf",
+   "doc_type": "RECEIPT",
+   "doc_id": "",
+   "short_doc_id": "",
+   "company_id": "511234567",
+   "company_name": "אלקטרה מוצרי בנייה בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "511234567",
+    "AI_DOC_ID": "",
+    "AI_DOC_DATE": "14/06/2026",
+    "AI_DOC_AMOUNT": "17996.18",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "RECEIPT"
+   }
+  },
+  {
+   "folder": "receipt",
+   "file": "receipt/files/rcp-03.pdf",
+   "doc_type": "RECEIPT",
+   "doc_id": "",
+   "short_doc_id": "",
+   "company_id": "510605959",
+   "company_name": "בניאס סחר בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "510605959",
+    "AI_DOC_ID": "",
+    "AI_DOC_DATE": "25/08/2025",
+    "AI_DOC_AMOUNT": "10673.57",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "RECEIPT"
+   }
+  },
+  {
+   "folder": "receipt",
+   "file": "receipt/files/rcp-04.pdf",
+   "doc_type": "RECEIPT",
+   "doc_id": "",
+   "short_doc_id": "",
+   "company_id": "511022493",
+   "company_name": "כהן פור ש.א. בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "511022493",
+    "AI_DOC_ID": "",
+    "AI_DOC_DATE": "13/05/2026",
+    "AI_DOC_AMOUNT": "4732.77",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "RECEIPT"
+   }
+  },
+  {
+   "folder": "receipt",
+   "file": "receipt/files/rcp-05.pdf",
+   "doc_type": "RECEIPT",
+   "doc_id": "",
+   "short_doc_id": "",
+   "company_id": "511301129",
+   "company_name": "אגן מפעלי הנדסה (1988) בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "511301129",
+    "AI_DOC_ID": "",
+    "AI_DOC_DATE": "22/10/2025",
+    "AI_DOC_AMOUNT": "13294.41",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "RECEIPT"
+   }
+  },
+  {
+   "folder": "receipt",
+   "file": "receipt/files/rcp-06.pdf",
+   "doc_type": "RECEIPT",
+   "doc_id": "",
+   "short_doc_id": "",
+   "company_id": "570043745",
+   "company_name": "מפעל מתכת כפר מנחם בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "570043745",
+    "AI_DOC_ID": "",
+    "AI_DOC_DATE": "03/05/2026",
+    "AI_DOC_AMOUNT": "10417.60",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "RECEIPT"
+   }
+  },
+  {
+   "folder": "receipt",
+   "file": "receipt/files/rcp-07.pdf",
+   "doc_type": "RECEIPT",
+   "doc_id": "",
+   "short_doc_id": "",
+   "company_id": "513498345",
+   "company_name": "פולירון תעשיות בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "513498345",
+    "AI_DOC_ID": "",
+    "AI_DOC_DATE": "23/04/2025",
+    "AI_DOC_AMOUNT": "5119.38",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "RECEIPT"
+   }
+  },
+  {
+   "folder": "receipt",
+   "file": "receipt/files/rcp-08.pdf",
+   "doc_type": "RECEIPT",
+   "doc_id": "",
+   "short_doc_id": "",
+   "company_id": "511634388",
+   "company_name": "דלתות תייר בע\"מ",
+   "truth": {
+    "AI_COMPANY_ID": "511634388",
+    "AI_DOC_ID": "",
+    "AI_DOC_DATE": "14/05/2025",
+    "AI_DOC_AMOUNT": "5657.15",
+    "AI_SHIPMENT_IDS": [],
+    "AI_ORDER_IDS": "",
+    "AI_TYPE": "RECEIPT"
+   }
+  }
+ ]
+}

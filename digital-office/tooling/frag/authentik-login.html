@@ -1,0 +1,75 @@
+<section class="screen" data-screen="authentik-login"><div style="height:100vh;overflow:auto" dir="ltr">
+<style>
+.ak-login-wrap{position:relative;min-height:100vh;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  background:
+    radial-gradient(ellipse 900px 500px at 50% 0%, rgba(120,130,145,.55), transparent 60%),
+    linear-gradient(180deg,#3a4048 0%,#4a525c 18%,#6b7580 34%,#8b939c 46%,#aab0b7 58%,#c4c9cd 68%,#9aa2ab 78%,#6f7882 100%);
+  overflow:hidden;
+}
+.ak-login-wrap::before{content:"";position:absolute;inset:0;
+  background-image:
+    linear-gradient(75deg, transparent 40%, rgba(255,255,255,.10) 41%, rgba(255,255,255,.10) 42%, transparent 43%),
+    linear-gradient(105deg, transparent 55%, rgba(255,255,255,.08) 56%, rgba(255,255,255,.08) 57%, transparent 58%),
+    linear-gradient(200deg, #2b2f35 0 30%, transparent 30%),
+    linear-gradient(160deg, #454c53 0 22%, transparent 22%);
+  opacity:.9;
+}
+.ak-road{position:absolute;left:50%;bottom:0;top:44%;width:1px;transform:translateX(-50%);
+  background:linear-gradient(180deg, rgba(60,64,68,.4), rgba(30,32,34,.85));
+  box-shadow:0 0 0 1px transparent;
+}
+.ak-road-shape{position:absolute;left:50%;bottom:0;top:42%;width:46%;transform:translateX(-50%);
+  clip-path:polygon(46% 0, 54% 0, 100% 100%, 0% 100%);
+  background:linear-gradient(180deg,#5a6169 0%,#3f454b 40%,#2b2f33 100%);
+}
+.ak-road-line{position:absolute;left:50%;bottom:0;top:42%;width:6px;transform:translateX(-50%);
+  background:repeating-linear-gradient(180deg,#e8e8e8 0 18px, transparent 18px 34px);
+  opacity:.55;clip-path:polygon(48% 0,52% 0,100% 100%,0 100%);
+}
+.ak-rail{position:absolute;bottom:0;top:44%;width:30%;background:repeating-linear-gradient(90deg, rgba(20,22,24,.5) 0 2px, transparent 2px 26px);}
+.ak-rail-l{left:0;clip-path:polygon(100% 0,100% 100%,0 100%,60% 0);}
+.ak-rail-r{right:0;clip-path:polygon(0 0,0 100%,100% 100%,40% 0);}
+.ak-snowbank-l{position:absolute;left:0;bottom:0;top:60%;width:34%;background:linear-gradient(160deg,#e9edf0,#c9d0d5 60%,#aab2b8);clip-path:polygon(0 25%,100% 0,100% 100%,0 100%);}
+.ak-snowbank-r{position:absolute;right:0;bottom:0;top:60%;width:34%;background:linear-gradient(200deg,#e9edf0,#c9d0d5 60%,#aab2b8);clip-path:polygon(0 0,100% 25%,100% 100%,0 100%);}
+.ak-sky{position:absolute;left:0;right:0;top:0;height:44%;background:
+    radial-gradient(ellipse 700px 300px at 30% 10%, rgba(200,190,190,.35), transparent 65%),
+    linear-gradient(180deg,#2e3238 0%,#454b53 55%,#5b636c 100%);}
+.ak-tree-row{position:absolute;left:0;right:0;height:22%;background-repeat:repeat-x;background-size:34px 100%;opacity:.9;}
+.ak-tree-l{top:38%;left:0;width:26%;background:linear-gradient(160deg,#3d454a,#2a3034);clip-path:polygon(0 100%,8% 40%,16% 65%,24% 20%,32% 55%,40% 10%,48% 50%,56% 5%,64% 45%,72% 15%,80% 55%,88% 25%,100% 60%,100% 100%);}
+.ak-tree-r{top:38%;right:0;width:26%;background:linear-gradient(200deg,#3d454a,#2a3034);clip-path:polygon(100% 100%,92% 40%,84% 65%,76% 20%,68% 55%,60% 10%,52% 50%,44% 5%,36% 45%,28% 15%,20% 55%,12% 25%,0 60%,0 100%);}
+.ak-card{position:relative;z-index:5;width:560px;max-width:92vw;margin:64px auto 0;background:#fff;border-radius:2px;box-shadow:0 12px 40px rgba(0,0,0,.35);padding:40px 40px 32px;box-sizing:border-box;}
+.ak-logo{display:flex;align-items:center;gap:10px;margin-bottom:28px;}
+.ak-logo-mark{width:44px;height:40px;border-radius:9px;background:#fd4b2d;position:relative;flex:none;}
+.ak-logo-mark::before{content:"";position:absolute;left:9px;top:9px;width:16px;height:16px;border-radius:50%;border:3px solid #fff;}
+.ak-logo-mark::after{content:"";position:absolute;right:8px;top:8px;width:16px;height:22px;background:#fff;clip-path:polygon(0 0,60% 0,100% 30%,100% 100%,0 100%);}
+.ak-logo-word{font-size:32px;font-weight:600;color:#fd4b2d;letter-spacing:.5px;}
+.ak-welcome{font-size:22px;font-weight:400;color:#232629;margin:0 0 22px;}
+.ak-label{font-size:14px;font-weight:600;color:#232629;margin-bottom:6px;}
+.ak-req{color:#c9190b;margin-left:4px;}
+.ak-input{width:100%;box-sizing:border-box;padding:10px 12px;font-size:14px;border:1px solid #232629;border-radius:2px;color:#8a8d90;margin-bottom:26px;}
+.ak-btn{width:100%;padding:12px;background:#2b70e4;color:#fff;border:none;border-radius:3px;font-size:15px;font-weight:600;cursor:pointer;}
+.ak-footer{position:relative;z-index:5;text-align:center;color:#f2f2f2;font-size:13px;margin-top:28px;text-shadow:0 1px 3px rgba(0,0,0,.6);}
+</style>
+<div class="ak-login-wrap">
+  <div class="ak-sky"></div>
+  <div class="ak-tree-row ak-tree-l"></div>
+  <div class="ak-tree-row ak-tree-r"></div>
+  <div class="ak-snowbank-l"></div>
+  <div class="ak-snowbank-r"></div>
+  <div class="ak-rail ak-rail-l"></div>
+  <div class="ak-rail ak-rail-r"></div>
+  <div class="ak-road-shape"></div>
+  <div class="ak-road-line"></div>
+  <div class="ak-card">
+    <div class="ak-logo">
+      <div class="ak-logo-mark"></div>
+      <div class="ak-logo-word">authentik</div>
+    </div>
+    <h1 class="ak-welcome">Welcome to authentik!</h1>
+    <div class="ak-label">Email or Username <span class="ak-req">*</span></div>
+    <input class="ak-input" placeholder="Email or Username" readonly>
+    <button class="ak-btn">Log in</button>
+  </div>
+  <div class="ak-footer">Powered by authentik</div>
+</div>
+</div></section>

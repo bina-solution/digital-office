@@ -1,0 +1,78 @@
+# autoheal — acts on the health signal Docker already computes and otherwise throws away.
+#
+# `restart: unless-stopped`, which every service here declares, restarts a container when its
+# PROCESS EXITS. It does nothing at all when a container is alive but has stopped working — the
+# 2026-08-10 n8n-worker-1 wedge (2h+ at 95.5% CPU consuming zero Bull jobs, Docker reporting
+# `unhealthy` the entire time, nothing reacting). This service is the missing consumer of that
+# signal. See autoheal.py's header for the four gates between `unhealthy` and a restart.
+#
+# NO ROUTE, NO PORT, NO UI. It is reachable from nothing; it only reads the docker socket and
+# posts to the notifications app. That is why it carries no traefik labels.
+services:
+  autoheal:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: autoheal-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: autoheal
+    restart: unless-stopped
+    environment:
+      - DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-bina-deployment}
+      # Opt-in label. A container is eligible ONLY if it sets this to true in its own compose file.
+      - AUTOHEAL_LABEL=${AUTOHEAL_LABEL:-binaos.autoheal}
+      - AUTOHEAL_INTERVAL=${AUTOHEAL_INTERVAL:-30}
+      # 3 consecutive self-observations at 30s, on top of Docker's own healthcheck retries and on
+      # top of worker-liveness.sh's own 240s grace. A blip cannot reach a restart.
+      - AUTOHEAL_STREAK=${AUTOHEAL_STREAK:-3}
+      # Comfortably above the workers' `start_period: 180s`.
+      - AUTOHEAL_COOLDOWN=${AUTOHEAL_COOLDOWN:-900}
+      # The circuit breaker. After this many restarts in AUTOHEAL_WINDOW seconds with the container
+      # STILL unhealthy, stop and escalate: restarting is clearly not the fix, and an unbounded
+      # restart loop driven by a faulty probe is a worse outage than the fault it is chasing.
+      - AUTOHEAL_MAX_RESTARTS=${AUTOHEAL_MAX_RESTARTS:-3}
+      - AUTOHEAL_WINDOW=${AUTOHEAL_WINDOW:-21600}
+      # A container this service may NOT restart (it never opted in), held unhealthy this long, is
+      # reported once per episode and left alone. 20 minutes outlasts a cold start.
+      - AUTOHEAL_WATCH_AFTER=${AUTOHEAL_WATCH_AFTER:-1200}
+      - AUTOHEAL_DRY_RUN=${AUTOHEAL_DRY_RUN:-0}
+      - NOTIFY_URL=${AUTOHEAL_NOTIFY_URL:-http://notifications:8977/api/notifications}
+    volumes:
+      # ⚠ Residual risk, stated plainly (same wording as platform-base/connections, which makes the
+      # same trade): a docker socket in a container is root on the host. It is mounted READ-WRITE
+      # here — unlike connections/machine/any-concurrency, which mount it :ro — because this service
+      # must be able to POST /containers/<id>/restart, and there is no narrower Docker permission
+      # than "the socket". Note that :ro on a socket would not actually prevent API writes anyway;
+      # it constrains the file node, not the protocol spoken over it. Where a filtering socket proxy
+      # exists, point BBOX_DOCKER_SOCK at one.
+      - ${BBOX_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock
+    networks:
+      - traefik-network
+    healthcheck:
+      # The heartbeat is written only after a full cycle completes, so this detects the failure mode
+      # this service exists to catch, happening to this service: alive but no longer working.
+      # 150s = 5 cycles at the default 30s interval.
+      test: ["CMD-SHELL", "python -c \"import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/autoheal.heartbeat') < 150 else 1)\""]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 45s
+    deploy:
+      resources:
+        limits:
+          # Measured shape, not a guess: one python process, stdlib only, holding two small dicts
+          # keyed by container name. The host has ~132 MiB free and 4.2 of 6 GiB of swap consumed,
+          # so this is deliberately the smallest limit in the estate.
+          cpus: '0.10'
+          memory: 96M
+        reservations:
+          cpus: '0.01'
+          memory: 32M
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+
+networks:
+  traefik-network:
+    external: true

@@ -1,0 +1,14 @@
+const fs=require('fs'),p=require('path');
+const dir=__dirname+'/frag';
+const ORDER=['dashboard','apps','console-state-apps','console-install','console-state-install-adv','console-palette','console-rail','console-wizard','notifications','notifications-state-empty','notifications-state-toast','connections-auth','connections-infra','connections-apppw','connections-state-expanded-all','connections-state-audit-drawer','connections-state-add-secret','connections-state-qr','connections-state-rotate','homepage','mydocs-dash','mydocs-docs','mydocs-customers','mydocs-items','mydocs-settings','mydocs-new-doc-modal','mydocs-customer-modal','mydocs-item-modal','mydocs-state-doc-drawer','mydocs-state-customer-drawer','mydocs-state-item-drawer','mydocs-state-grid-menu','mydocs-state-onboarding','mydocs-state-toast','indox-root','indox-extraction','indox-extraction-doc','indox-extraction-type-name','indox-extraction-draw','indox-extraction-tokens','indox-repos','indox-repos-new','indox-repo','indox-repo-docs','indox-repo-doc','indox-repo-tail','indox-sync','indox-settings','indox-tests','indox-state-grid-menu','mail-inbox','mail-label','mail-message','mail-attention','mail-search','mail-state-reader','mail-state-reader-doc','mail-state-tagpicker','mail-state-toast','drive-root','drive-search','drive-trash','drive-state-menus','drive-state-new-folder','drive-state-upload','drive-state-move','drive-state-preview','drive-state-nopreview','drive-state-connect-method','drive-state-connect-verify','wadmin-login','wadmin-dashboard','wadmin-connect','wadmin-actions','wadmin-users','wadmin-settings','machine','machine-state-storage','machine-state-grid-menu','machine-state-chart-tip','kabil','kabil-state-drawer','kabil-state-tip','browser42','feature-validation','authentik-login','authentik-admin','portainer-dashboard','portainer-containers','n8n-workflows','n8n-executions','n8n-credentials','supabase','redis','glitchtip'];
+let parts=[],missing=[];
+for(const id of ORDER){const f=dir+'/'+id+'.html';if(fs.existsSync(f))parts.push(fs.readFileSync(f,'utf8').trim());else missing.push(id);}
+// include any extra frag files not in ORDER
+for(const f of fs.readdirSync(dir)){const id=f.replace('.html','');if(!ORDER.includes(id))parts.push(fs.readFileSync(dir+'/'+f,'utf8').trim());}
+let base=fs.readFileSync(__dirname+'/index.html','utf8');
+// strip previously injected templates block to allow re-runs
+base=base.replace(/<div id="stage">[\s\S]*?<\/div>\s*\n\n<button id="navBtn"/,'<div id="stage"><!--TEMPLATES--></div>\n\n<button id="navBtn"');
+const out=base.replace('<!--TEMPLATES-->','\n'+parts.join('\n')+'\n');
+const outPath=process.argv[2]||(__dirname+'/dist.html');
+fs.writeFileSync(outPath,out);
+console.log('assembled',parts.length,'screens ->',outPath,'; missing:',missing.length?missing.join(', '):'none');

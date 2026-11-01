@@ -1,0 +1,10 @@
+fastapi>=0.115,<1
+uvicorn[standard]>=0.30,<1
+python-multipart>=0.0.9
+faster-whisper>=1.1.1,<2
+# PyAV >=16 removed the `metadata_errors` kwarg that faster-whisper's decoder passes
+# (av/container/core.py: TypeError: open() got an unexpected keyword argument 'metadata_errors').
+# Measured on this host 2026-10-07 with plain `pip install faster-whisper`.
+av>=11,<16
+numpy>=1.26
+huggingface_hub>=0.30

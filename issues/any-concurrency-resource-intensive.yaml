@@ -1,0 +1,117 @@
+# yaml-language-server: $schema=./schema.json
+title: any-concurrency is resource intensive (top host CPU consumer)
+opened: '2026-06-22'
+severity: medium
+status: open
+summary: any-concurrency is resource intensive (top host CPU consumer)
+description: |
+  ## Context
+
+  While diagnosing slow browser42 / Docker-engine 502s on the shlomo-laptop local
+  stack, `docker stats` consistently showed any-concurrency as the #1 CPU consumer:
+
+      any-concurrency        41.93%   <-- top
+      browser42-browser      23.74%
+      authentik-worker        7.30%
+      n8n-postgres            4.90%
+
+  On an 8-vCPU / 8GB Docker Desktop dev box this much steady CPU from a single
+  service starves everything else. Concretely it pushed the Docker Desktop Linux
+  engine into overload: `/containers/<id>/exec` API calls started returning
+  502 Bad Gateway, which made EVERY `docker exec` (and therefore every browser42
+  CDP action, every n8n debug call) slow or fail. Stopping any-concurrency
+  immediately dropped browser42 CDP connect time from many seconds (often wedged)
+  back to ~0.6s.
+
+  ─────────────────────────────────────────────────────────────────────────────────────────────
+  2026-08-24 - THE CAP HAS A USER-VISIBLE SYMPTOM, and it does not look like a resource problem.
+
+  A console sweep reported `any-concurrency` `api/spans` as INTERMITTENT: 200 then 503 on
+  consecutive calls. Measured against the container directly, the app never fails:
+
+      15 serial calls to /api/spans      15/15 HTTP 200, 0.48-0.80s each
+      8 CONCURRENT calls to /api/spans    8/8  HTTP 200, but 0.86s -> 4.56s
+      container                           healthy, restarts=0, no errors
+
+  So the 503 is not the app erroring - it is a TIMEOUT somewhere in front of it, produced by the
+  latency the cpus:'0.75' cap creates under concurrency. Eight in flight is enough to take a 0.55s
+  request to 4.56s, and a page that fires several at once will cross whatever gateway timeout sits
+  in the path.
+
+  WHY THIS MATTERS FOR TRIAGE: every direct signal says healthy. The container is healthy, the
+  restart count is 0, the logs are clean, and a serial probe is 15/15. Only concurrency reproduces
+  it, so anyone checking the obvious way concludes there is no problem and moves on. That is what
+  "MITIGATED not fixed" costs in practice - the cap converted a CPU-starvation problem into an
+  intermittent-503 problem, and the second one is much harder to recognise as the same bug.
+
+  ## Action
+
+  - SHORT TERM (done): any-concurrency stopped on shlomo-laptop
+    (`docker stop any-concurrency-...`) to free the host. It is NOT in the n8n/INDOX
+    critical path, so local dev is unaffected.
+  - INVESTIGATE: why any-concurrency burns ~40% CPU at idle. Is it a busy-poll loop?
+    A misconfigured worker/concurrency count? A tight retry/backoff with no sleep?
+    Profile the process inside the container (py-spy / top -H) to find the hot loop.
+  - MITIGATE declaratively: add `deploy.resources.limits.cpus` (e.g. '1') to the
+    any-concurrency service in its compose so it can never again monopolize the host,
+    and/or make its poll interval / worker count configurable via env with a sane
+    default. Solution must be configurable from the codebase (no manual host tuning).
+  - DECIDE: is any-concurrency needed on the local dev stack at all? If it is a
+    prod-only / optional component, gate it behind a compose profile so `./bbox run`
+    locally does not start it by default.
+
+  ## Why deferred
+
+  Stopping it unblocked the immediate browser42 slowness. Root-causing the 40% idle
+  CPU and adding a permanent cpus limit / profile gate is a follow-up so it cannot
+  recur and silently degrade the whole local stack again.
+
+  ## Measured again, 2026-10-06 (hp-laptop, branch dgo-pair)
+
+  The same two measurements, from inside the container, on an office whose n8n is nearly idle (INDOX
+  is not enabled here, so the execution tables this service polls every 2 s are small):
+
+      cpu over 60 s with nobody asking          0.6 % of one core      (2026-06-22: ~42 %)
+      cap as the budget scales it here          0.46 cpus, 59 MiB of 384 MiB in use
+      15 calls to /api/spans in a row           15/15 HTTP 200, 0.02-0.17 s   (2026-08-24: 0.48-0.80 s)
+      8 at once                                 8/8 HTTP 200,   0.27-0.40 s   (2026-08-24: 0.86-4.56 s)
+      16 at once                                16/16 HTTP 200, 0.20-1.39 s
+
+  What this does and does not say. With little to poll the service costs nothing, so the idle cost
+  measured in June was not a busy loop that spins regardless — it was the cost of the poll itself over
+  a large execution history. The question that is still open is the one this office cannot ask: what
+  the 2-second poll costs on an office where INDOX is processing (the June and August machines).
+  That is where the next measurement has to be taken, with the row counts of the tables it reads
+  beside the CPU figure.
+
+  ## Measured again, 2026-10-09 (hp-laptop, branch hp-dgo) - the answer grew three apps' lanes
+
+  Since 2026-10-06 the timeline also shows the lanes three apps serve themselves (`plane`, `bina`,
+  `drive`): every /api/spans answer now asks each of them for the window over a new HTTP session,
+  and carries their spans. Same measurements, from inside the container, nobody else asking:
+
+      cpu with nobody asking (6 samples)        0.37 % of one core, 17th of 48 containers
+      10 calls in a row, window 15 min           10/10 HTTP 200, 0.05-0.24 s (median 0.06), 249 kB each
+      8 at once, window 15 min                   8/8 HTTP 200,   0.79-2.29 s      (2026-10-06: 0.27-0.40 s)
+      10 calls in a row, window 24 h             10/10 HTTP 200, 0.19-0.42 s (median 0.23), 1.5 MB each
+      8 at once, window 24 h                     8/8 HTTP 200,   0.32-1.71 s
+      cpu the container spent on those 36 calls  3.8 s (about 0.1 s a call; its cap is 0.75 of a core)
+
+  One page asks every 3.5 s for 15 minutes: about 2 % of a core a viewer. The idle cost is still
+  nothing. What moved is the answer under several viewers at once - 0.40 s became 2.29 s for eight -
+  because each of the eight computes the same answer and asks the same three apps again. It is under
+  any gateway's timeout here; it is also the same shape as the 2026-08-24 symptom, on its way back.
+  Eight viewers is no longer far-fetched: every linked office shows this tile, and desktop mode keeps
+  several windows open.
+
+  Done the same day: one answer is shared by the viewers of the same moment (`SPANS_SHARE_S`, 2 s;
+  the first asker makes it, the others wait for that one; a write through /ingest is part of the
+  question, so a writer still reads what it wrote). Measured on the rebuilt service:
+
+      8 at once, window 15 min                   8/8 HTTP 200, 0.48-0.51 s, one answer among the eight
+      two in a row, then one after 2.3 s         0.075 s, 0.004 s (the same bytes), 0.090 s (made again)
+      a span written, then asked for at once     it is there; closed, asked at once: it reads closed
+      cpu the container spent on the 36 calls    0.6 s                              (before: 3.8 s)
+
+  Still open, as on 2026-10-06: what the 2-second poll of n8n's tables costs on an office where
+  INDOX is processing. This office cannot ask that.

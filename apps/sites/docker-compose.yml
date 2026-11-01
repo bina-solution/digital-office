@@ -1,0 +1,135 @@
+# sites — the office's websites, as one platform service (see app.py's docstring).
+#
+# Two containers, and the split is a memory decision with an operational consequence:
+#
+#  * `sites` is the API, the UI, the scheduler and the store. Small (320M) and always answering,
+#    because it owns the uptime watch — the app that tells you a site is down must not share a
+#    memory cgroup with a browser.
+#
+#  * `sites-render` owns headless Chromium and `beautiful-score`. A render costs 400–700 MB, so it
+#    would OOM the API if it lived there, and it is pointless to run when nothing is being scored —
+#    it sits at ~70 MB idle and spawns a browser per request, one at a time.
+#
+# Neither container mounts the docker socket, holds an SSH key or knows a machine's address: every
+# machine action goes out over HTTP to the `computers` service, which owns the office key and the
+# only copy of the fleet (see machines.py).
+services:
+  sites:
+    # The image CI publishes for this commit (DGO-41). `pull_policy: missing` means it is
+    # fetched only when it is not here already, so a checkout that has built it is untouched;
+    # the `build:` below stays as the fallback. Needs the GHCR package readable — a package made
+    # from a private repo is private, so `docker login ghcr.io` on a machine that must pull.
+    image: ghcr.io/solomonboltin/digital-office/sites:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sites-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: sites
+    restart: unless-stopped
+    environment:
+      - SENTRY_DSN=${SITES_SENTRY_DSN:-}
+      - DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-bina-deployment}
+      # the fleet — every site action is a call to this service, never a direct ssh
+      - COMPUTERS_URL=${COMPUTERS_URL:-http://computers:8977}
+      - NOTIFICATIONS_URL=${NOTIFICATIONS_URL:-http://notifications:8977}
+      - SITES_RENDER_URL=${SITES_RENDER_URL:-http://sites-render:8981}
+      - SITES_STATE_DIR=/data
+      - SITES_RENDER_DIR=/renders
+      # the default directory a managed site gets on its machine, and how often the watches run
+      - SITES_ROOT=${SITES_ROOT:-/opt/bina-sites}
+      - SITES_UPTIME_SECONDS=${SITES_UPTIME_SECONDS:-60}
+      - SITES_COLLECT_SECONDS=${SITES_COLLECT_SECONDS:-300}
+      - SITES_SCAN_HOUR=${SITES_SCAN_HOUR:-3}
+      - SITES_SAMPLE_RETENTION_DAYS=${SITES_SAMPLE_RETENTION_DAYS:-30}
+      - SITES_BEAUTY_MIN=${SITES_BEAUTY_MIN:-70}
+      # ── the public path (public.py) ────────────────────────────────────────────────────────────
+      # The office's own copy of every site it serves, the domains a public path chooses from, and
+      # the `digital-assets` service every text and picture comes from. The last two point at a
+      # peer office when that is where the service runs — hence the optional Host header, because
+      # the link's door picks the app by it.
+      - SITES_PUBLIC_DIR=${SITES_PUBLIC_DIR:-/data/public}
+      - SITES_PUBLIC_SYNC_SECONDS=${SITES_PUBLIC_SYNC_SECONDS:-300}
+      - SITES_PUBLIC_MAX_BYTES=${SITES_PUBLIC_MAX_BYTES:-268435456}
+      - DOMAINS_URL=${DOMAINS_URL:-http://domains:8980}
+      - DIGITAL_ASSETS_URL=${DIGITAL_ASSETS_URL:-http://digital-assets:8985}
+      - DIGITAL_ASSETS_HOST=${DIGITAL_ASSETS_HOST:-}
+    volumes:
+      # the sites registry, the uptime samples, the visits and the findings. Losing it loses the
+      # history, not the sites: everything it says about a machine can be re-read from the machine.
+      - sites_state:/data
+      # the rendered screenshots, shared read-only with the renderer that writes them
+      - sites_renders:/renders:ro
+    networks:
+      - traefik-network
+    healthcheck:
+      # python, never curl: python:3.12-slim has no curl (gate G18).
+      test: ["CMD", "python", "-c", "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://localhost:8979/healthz',timeout=8).status==200 else 1)"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          # The scheduler probes N sites a minute over the public internet and folds log deltas;
+          # it is I/O-bound, and 0.5 CPU is generous for it.
+          cpus: '0.5'
+          memory: 320M
+        reservations:
+          cpus: '0.02'
+          memory: 48M
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+
+  sites-render:
+    build:
+      context: .
+      dockerfile: Dockerfile.render
+    container_name: sites-render-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: sites-render
+    restart: unless-stopped
+    environment:
+      - SITES_RENDER_DIR=/renders
+      - SITES_RENDER_KEEP=${SITES_RENDER_KEEP:-5}
+      # ONE Chromium at a time: two concurrent renders are how a 768M container gets OOM-killed by
+      # its own good intentions, and a beauty scan has no deadline that justifies it.
+      - SITES_RENDER_CONCURRENCY=${SITES_RENDER_CONCURRENCY:-1}
+    volumes:
+      - sites_renders:/renders
+    networks:
+      - traefik-network
+    shm_size: 512m          # Chromium's own requirement; the default 64M crashes tabs
+    healthcheck:
+      # /healthz answers 200 even when no browser is installed (it reports `degraded`), so a broken
+      # renderer never puts the container into an unhealthy/autoheal restart loop — the SITES app
+      # reports it as a check that could not run, in the place the owner is already looking.
+      test: ["CMD", "python", "-c", "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://localhost:8981/healthz',timeout=8).status==200 else 1)"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 768M
+        reservations:
+          cpus: '0.02'
+          memory: 64M
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+
+volumes:
+  sites_state:
+  sites_renders:
+
+networks:
+  traefik-network:
+    external: true

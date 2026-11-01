@@ -1,0 +1,23 @@
+{
+ "chrome.expand": "פתיחת סרגל הצד",
+ "chrome.expandAria": "פתיחת סרגל הצד הימני",
+ "chrome.collapse": "כיווץ סרגל הצד",
+ "chrome.collapseAria": "כיווץ סרגל הצד הימני",
+ "chrome.toFullscreen": "מסך מלא",
+ "chrome.exitFullscreen": "יציאה ממסך מלא",
+ "dock.emptyPane": "חלונית ריקה",
+ "dock.splitPane": "פיצול",
+ "dock.splitPaneDisabled": "המקסימום הוא שתי חלוניות",
+ "dock.splitPaneNarrow": "אין מספיק רוחב לפיצול, יש להרחיב את סרגל הצד",
+ "dock.closeTab": "סגירה",
+ "dock.addTab": "לשונית חדשה",
+ "dock.dockFloat": "החזרה לסרגל הצד",
+ "dock.closeFloat": "סגירה",
+ "dock.drop.center": "העברה לכאן",
+ "dock.drop.left": "פיצול משמאל",
+ "dock.drop.right": "פיצול מימין",
+ "dock.drop.top": "פיצול למעלה",
+ "dock.drop.bottom": "פיצול למטה",
+ "tab.guide.title": "התחלה",
+ "tab.unavailable": "אין כאן עדיין תצוגה שמתאימה לסוג התוכן הזה."
+}

@@ -1,0 +1,15 @@
+{
+ "type.label": "Files",
+ "guide.title": "Workspace files",
+ "guide.description": "Browse files in this session's workspace",
+ "loading": "Reading…",
+ "empty": "Empty directory",
+ "truncated": "Too many entries, showing only some of them.",
+ "noWorkspace": "This session has no workspace directory.",
+ "reload": "Reload",
+ "entry.other": "Not a file or a directory, so it cannot be opened.",
+ "error.notFound": "That directory is gone. It may have been moved or deleted.",
+ "error.outsideWorkspace": "That directory is outside the workspace, so the sidebar will not read it.",
+ "error.notDirectory": "That is not a directory.",
+ "error.unavailable": "Read failed: {message}"
+}

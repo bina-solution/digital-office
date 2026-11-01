@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+#: warn when this app cannot build on a proxied sandbox
+# prepare — browser42's own bring-up check. Invoked generically by `bbox run`; bbox does not name
+# this app.
+#
+# This was `ccr_warn_browser42` in scripts/lib.sh — an entire named function in the SHARED library
+# whose whole body was keyed to one layer-3 app id, called unconditionally from the bring-up. The
+# library that every entry point sources should not know which apps exist.
+#
+# The condition it guards is real and specific to this app: its base image is DIGEST-PINNED, so on
+# a MITM-proxied sandbox it cannot be CA-shadowed the way ccr_shadow_bases rewrites every other
+# base, and the build fails. Nothing else in the estate has that property, which is exactly why the
+# knowledge belongs here rather than in a shared list of exceptions.
+set -euo pipefail
+[ -n "${CCR_PROXY_CA:-}" ] || [ -f "${HOME:-/root}/.ccr/ca-bundle.crt" ] || exit 0   # not a proxied sandbox
+[ "${BBOX_WITH_BROWSER42:-0}" = 1 ] && exit 0                                        # operator forced it
+echo "[browser42] enabled on a proxied sandbox — this app's base image is digest-pinned, so it"
+echo "[browser42]   cannot be CA-shadowed and the build will fail. Disable it, or set"
+echo "[browser42]   BBOX_WITH_BROWSER42=1 to try anyway."

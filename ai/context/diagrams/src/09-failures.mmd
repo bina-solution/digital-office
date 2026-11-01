@@ -1,0 +1,10 @@
+flowchart TD
+    Q{"What failed?"} -->|"laptop closed / tunnel down"| A["Node = offline. The public path shows an explained page (an explicit router, never a 404). Sites: UNAFFECTED - Class B is edge-direct"]
+    Q -->|"tunnel up, catalog silent"| B["Node = degraded. Routers NOT published. The screen says: handshake fine, service silent"]
+    Q -->|"gateway restarting"| C["Short outage for federation only. Routers re-read from network_dynamic. Sites: unaffected"]
+    Q -->|"fleet authentik unreachable"| D["Node-local authentik takes over; the owner keeps admin access to his own office"]
+    Q -->|"UDP blocked"| E["TCP fallback, marked degraded in the UI with the measured rtt"]
+    Q -->|"install job lost"| F["Re-attach and read the remote log; never a blind re-run"]
+    Q -->|"node revoked"| G["The gateway serves the revoked page; counters frozen as proof"]
+    Q -->|"host does not resolve or is reserved"| H["The router is REFUSED at publish time, with the reason - instead of a certificate that never issues"]
+    Q -->|"bad router file written"| I["Validated before write, previous generation kept, traefik ignores the bad file and keeps serving the last good config"]

@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Two linked offices",
+    "subtitle": "The three ways across a link, and what each one can reach",
+    "output": "office-link.html",
+    "viewBox": [1080, 640],
+    "quality_profile": "showcase"
+  },
+  "components": [
+    { "id": "console", "type": "frontend", "label": "Console", "sublabel": "tile <alias>.<office>", "pos": [30, 110], "size": [150, 60] },
+    { "id": "projection", "type": "backend", "label": "Projection", "sublabel": "every 60 s", "pos": [30, 280], "size": [150, 60] },
+    { "id": "control", "type": "backend", "label": "app-management", "sublabel": "writes the block", "pos": [30, 450], "size": [150, 60] },
+    { "id": "cli", "type": "external", "label": "Agent / CLI", "sublabel": "bbox agent --office", "pos": [245, 450], "size": [150, 60] },
+
+    { "id": "door", "type": "security", "label": "Door", "sublabel": "9000 + slot", "pos": [465, 110], "size": [150, 60], "tag": "Host routed" },
+    { "id": "catalog", "type": "security", "label": "Catalog door", "sublabel": "8983", "pos": [465, 280], "size": [150, 60] },
+    { "id": "agent", "type": "security", "label": "Agent port", "sublabel": "only when named", "pos": [465, 450], "size": [150, 60] },
+
+    { "id": "identity", "type": "security", "label": "Identity", "sublabel": "replaced, never forwarded", "pos": [685, 110], "size": [150, 60] },
+    { "id": "app", "type": "backend", "label": "A given app", "sublabel": "sees a local user", "pos": [900, 110], "size": [150, 60] },
+    { "id": "listener", "type": "backend", "label": "Link listener", "sublabel": "catalog, nothing else", "pos": [685, 280], "size": [150, 60] },
+    { "id": "serve", "type": "database", "label": "serve:", "sublabel": "what this office gives", "pos": [900, 280], "size": [150, 60] },
+    { "id": "adapter", "type": "backend", "label": "Agent API", "sublabel": "bearer token", "pos": [685, 450], "size": [150, 60] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "The office that uses", "wraps": ["console", "projection", "control", "cli"] },
+    { "kind": "security-group", "label": "WireGuard pair: 10.79.<slot>.0/24", "wraps": ["door", "catalog", "agent"] },
+    { "kind": "region", "label": "The office that gives", "wraps": ["identity", "app", "listener", "serve", "adapter"] }
+  ],
+  "connections": [
+    { "id": "open-tile", "from": "console", "to": "door", "label": "Host: the app", "variant": "emphasis" },
+    { "id": "who", "from": "door", "to": "identity", "variant": "security" },
+    { "id": "as-local", "from": "identity", "to": "app", "variant": "emphasis" },
+
+    { "id": "pull-catalog", "from": "projection", "to": "catalog", "label": "GET catalog" },
+    { "id": "to-listener", "from": "catalog", "to": "listener" },
+    { "id": "what-is-given", "from": "listener", "to": "serve", "variant": "dashed" },
+    { "id": "declare", "from": "projection", "to": "control", "label": "PUT /api/remote", "fromSide": "bottom", "toSide": "top" },
+
+    { "id": "agent-call", "from": "cli", "to": "agent", "label": "token" },
+    { "id": "to-adapter", "from": "agent", "to": "adapter" }
+  ],
+  "cards": [
+    { "dot": "emerald", "title": "The door", "items": ["One listener per link; the Host header picks the app", "Every X-authentik-* header is removed and the mapped user written", "It stamps X-DGO-Office: the link's own word for who is asking"] },
+    { "dot": "cyan", "title": "The catalog", "items": ["Leads to a listener that serves the catalog and nothing else", "The projection turns it into the remote block, through the control plane", "The compiler validates the block before it is written"] },
+    { "dot": "rose", "title": "What a link is not", "items": ["Not SSH, and not a shell on either machine", "Not a way to an app the other office did not give", "Not an agent API unless serve: names the app with its port", "serve: {\"*\": {}} includes the apps that operate the office"] }
+  ]
+}

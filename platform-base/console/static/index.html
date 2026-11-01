@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>הלשכה הדיגיטלית · ניהול תהליכים עסקיים</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg"/>
+<link rel="stylesheet" href="/style.css"/>
+<link rel="stylesheet" href="/desktop.css"/>
+</head>
+<body>
+<!-- B6 a11y — the first tab stop, invisible until it has focus. Without it, reaching the content by
+     keyboard means tabbing through the entire side nav on every single page load. -->
+<a class="skiplink" href="#content">דלג לתוכן</a>
+<div id="app">
+  <aside class="side bnv" id="side">
+    <!-- The brand line names the BUSINESS, not this one client: the generic form shipped here is
+         what a not-yet-onboarded install (and the frame before /api/business answers) must read, and
+         app.js's applyBrand() appends " של <business name>" the moment the identity is filled in.
+         The <title> above carries the same generic form for the same reason — it is the string a
+         browser tab shows before any JS has run, and a wrong company name there is worse than none. -->
+    <!-- the mark is a copy of platform-base/bina-ui/brand/mark.html, kept identical by gate G27 -->
+    <div class="brand bnv-head"><span class="logo"><!-- @bina-brand:start --><svg viewBox="53.57 53.57 892.86 892.86" aria-hidden="true" focusable="false"><rect class="t" x="53.57" y="53.57" width="892.86" height="892.86" rx="196.43"/><rect x="267.32" y="276.79" width="71.25" height="71.25" rx="19.24" class="a"/><rect x="267.32" y="419.29" width="71.25" height="285" rx="19.24" class="m"/><path d="M429.06 276.79H675.59A19.24 19.24 0 0 1 694.82 296.02V685.05A19.24 19.24 0 0 1 675.59 704.29H429.06A19.24 19.24 0 0 1 409.82 685.05V296.02A19.24 19.24 0 0 1 429.06 276.79ZM500.31 348.04A19.24 19.24 0 0 0 481.07 367.27V613.8A19.24 19.24 0 0 0 500.31 633.04H604.34A19.24 19.24 0 0 0 623.57 613.8V367.27A19.24 19.24 0 0 0 604.34 348.04Z" class="m"/><rect x="516.7" y="419.29" width="71.25" height="142.5" rx="19.24" class="a"/></svg><!-- @bina-brand:end --></span><div class="bnv-head-text"><b>הלשכה הדיגיטלית</b><small id="brandSub">ניהול תהליכים עסקיים</small></div></div>
+    <!-- the component's scroll region; buildNav() fills it with .bnv-group + .bnv-list -->
+    <div id="nav" class="bnv-scroll"></div>
+    <div class="bnv-foot">
+      <div class="bnv-foot-text">
+        <div class="user" id="userBox">…</div>
+      <!-- C1 — the build, visible. Without it "is this the version with the fix?" is answered by
+           guessing, and a stale cached shell is indistinguishable from a broken deploy. -->
+        <div class="build" id="buildVer">digital-office</div>
+      </div>
+    </div>
+  </aside>
+  <main class="main">
+    <header class="topbar">
+      <div class="tb-left">
+        <button id="railToggle" class="icon-btn" title="כווץ/הרחב תפריט" aria-label="כווץ תפריט" aria-expanded="true"><svg class="ic-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M3 12h18"/><path d="M3 18h18"/></svg></button>
+        <!-- empty on purpose: route() fills it, and the shell has no home screen to name here -->
+        <h1 id="viewTitle"></h1>
+      </div>
+      <div class="tb-right">
+        <button id="paletteBtn" class="search-btn" title="חיפוש מסך (Ctrl+K)"><svg class="ic-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg><span>חיפוש</span><span class="kbd">Ctrl K</span></button>
+        <!-- The one control that gives an app the whole screen and takes it back (owner, 2026-10-12:
+             «איך כדאי לאפשר מצב מסך מלא וחזרה כדי לאפשר את ייעול השימוש במסך»). On a phone the shell's
+             own chrome costs 118px — 15% of the screen — before the app has drawn anything. Two icons
+             in one button; the sheet shows the one that matches the state. -->
+        <button id="focusBtn" class="icon-btn" title="מסך מלא" aria-label="מסך מלא" aria-pressed="false">
+          <svg class="ic-svg ic-in" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5"/><path d="M20 9V4h-5"/><path d="M4 15v5h5"/><path d="M20 15v5h-5"/></svg>
+          <svg class="ic-svg ic-out" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4v5H4"/><path d="M15 4v5h5"/><path d="M9 20v-5H4"/><path d="M15 20v-5h5"/></svg>
+        </button>
+        <!-- Two elements were removed from this line (owner, 2026-09-25): #hint, the module's
+             `desc` ("הסוכן של הלשכה" over the agent), and #installPill, the install-status chip
+             ("✓ מוכן" / "N שלבי התקנה"). Neither named a screen the rail did not already carry,
+             and the chip's own target — the install screen — is the last tile in the rail, where
+             boot() still lands a not-yet-onboarded first run. The theme switcher went with them;
+             a theme already saved in localStorage is still applied on boot (app.js). -->
+        <!-- C3/C15 — the account switcher lives HERE, at the far end of the top bar (screen-left in
+             RTL), which is where every product a person has used keeps it. It replaces #acctBar: a
+             full-width band whose entire job was to hold one chip, costing every embedded app ~56px
+             of vertical space forever so that ~15% of one row could be used. -->
+        <div id="acctChip" class="tb-acct hidden"></div>
+      </div>
+    </header>
+    <!-- The way back. Full screen hides every other door — the rail, the top bar, the tab bar, the
+         search — so the control that ENDS it has to live outside all of them, where the chrome it
+         replaces cannot hide it with itself. It is shown by `html.focus` (app.js) and never by
+         `bare` alone: a console view inside a desktop window is `bare` too, and a whole-window view
+         does not want a floating exit button inside it (desktop.css).
+         It says its name when it appears and then folds to a 44px circle: an app's OWN top corner is
+         where its search or its menu lives (the Drive's search sits exactly under this button), so the
+         one control that must never be missing must also stop costing that corner five seconds after
+         it has been read. It unfolds again on hover, on focus, and on the next entry. -->
+    <button id="focusExit" class="focus-exit" type="button" title="יציאה ממסך מלא"
+            aria-label="יציאה ממסך מלא"><span class="txt">יציאה ממסך מלא</span></button>
+    <!-- tabindex="-1" so the skip link can actually move focus here; without it the browser scrolls
+         to the anchor and leaves focus in the nav, which is the failure mode that makes skip links
+         look present and do nothing. -->
+    <div class="content" id="content" tabindex="-1"><div class="spin">טוען…</div></div>
+    <div class="embedwrap hidden" id="embedwrap">
+      <div class="embed"><iframe id="frame" src="about:blank"></iframe></div>
+    </div>
+  </main>
+</div>
+<!-- desktop.js first: it only defines window.BinaDesktop; app.js boot() decides whether to mount it -->
+<!-- …and before it the dock's capacity arithmetic, which the dock asks how many tiles fit; nothing
+     else uses it (platform-base/console/test_dock_budget.mjs runs it without a browser) -->
+<script src="/dock-budget.js"></script>
+<script src="/ext-route.js"></script>
+<!-- which tile a link names, when the name is the app's alias or another office's module id
+     (platform-base/console/test_module_ref.mjs runs it without a browser) -->
+<script src="/module-ref.js"></script>
+<script src="/desktop.js"></script>
+<script src="/desktop-memory.js"></script>
+<!-- the power & sleep card of the settings view (reads/writes the machine service) -->
+<script src="/power-settings.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>

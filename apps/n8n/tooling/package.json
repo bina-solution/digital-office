@@ -1,0 +1,10 @@
+{
+  "name": "bbox-n8n-tooling",
+  "private": true,
+  "description": "Pinned n8n-as-code toolchain wrapped by bbox (see ai/context/n8n-as-code-migration.md). Never call n8nac directly — every consumer goes through wrap.mjs.",
+  "type": "module",
+  "dependencies": {
+    "@n8n-as-code/transformer": "2.0.0",
+    "n8nac": "2.5.0"
+  }
+}

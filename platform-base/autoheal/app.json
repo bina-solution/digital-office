@@ -1,0 +1,34 @@
+{
+  "id": "autoheal",
+  "title": {
+    "he": "ריפוי עצמי",
+    "en": "Autoheal"
+  },
+  "layer": 1,
+  "kind": "service",
+  "version": "1.0.0",
+  "system": true,
+  "summary": {
+    "he": "מפעיל מחדש שירותים שדוקר סימן כלא תקינים",
+    "en": "Restarts containers Docker has marked unhealthy"
+  },
+  "capabilities": [],
+  "use": [
+    {
+      "capability": "notify",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
+    }
+  ],
+  "connections": [],
+  "compose": "docker-compose.yml",
+  "routing": [],
+  "health": {
+    "structural": "auto"
+  },
+  "data": {
+    "volumes": [],
+    "on_uninstall": "keep"
+  }
+}

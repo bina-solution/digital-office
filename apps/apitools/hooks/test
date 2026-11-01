@@ -1,0 +1,177 @@
+#!/usr/bin/env bash
+#: run the feature-validation OCR/extraction suites against the live apitools engine
+# apps/apitools/hooks/test — `bbox test apitools` / `bbox apitools test`.
+#
+# These are apitools' OWN suites: they drive the engine's OCR, aligned-value, column and
+# balance-sheet extraction over real fixtures (apps/apitools/feature-validation/) and emit
+# LAYERED, NAMED CI observability:
+#   feature-<name>   — every locally-runnable fixture in that suite passed
+#
+# It was `legacy/feature-validation/run-suites.sh` (and `scripts/ci-feature-validation.sh` before
+# that): a live CI lane reading out of the PARKED tree, which is exactly the defect that kept
+# `attic/` alive for 293 files. It validates apitools, so it belongs to apitools.
+#
+# Cases that need an external service (Google Vision / Gemini) or full orchestration
+# (n8n + WhatsApp) are SKIPPED via the capability gate (see feature-validation/lib/
+# validate_feature_base.py), not failed — so a local/CI run is deterministic and green on
+# everything it can actually run.
+# Grant more with FV_CAPABILITIES=local,google_vision,gemini,orchestration.
+#
+# Needs the apitools engine itself running (the suites POST to http://apitools:8080). The
+# feature-validation-api sidecar that drives them is this hook's own business: it is brought up
+# from apps/apitools/feature-validation/docker-compose.yml unless --no-up is passed.
+#
+# Outputs (merged into the same CI report dir as ci-verify.sh):
+#   $CI_JUNIT_FV   (default ci-artifacts/feature-validation.junit.xml)
+#   $CI_SUMMARY_FV (default ci-artifacts/feature-validation.md -> $GITHUB_STEP_SUMMARY)
+# Exit 0 = all runnable suites passed; non-zero = number of failed suites (CI gate).
+set -uo pipefail
+export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# ../../.. — this file sits at apps/apitools/hooks/, THREE levels down. It read `${SCRIPT_DIR}/../..`
+# while it lived at legacy/feature-validation/, and `${SCRIPT_DIR}/..` before that, in scripts/.
+# Each move silently re-pointed REPO_ROOT one directory too high and nothing errored: `.env` was
+# simply not found, DEPLOYMENT_NAME fell back to the default, and `cn` matched no container — so the
+# suites reported "no feature-validation-api" rather than a path error. Depth is part of a script's
+# contract with its location, and moving a file changes it. The assertion below is the guard: a
+# fourth move fails LOUDLY here instead of reporting a missing container.
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+APP_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+FV_DIR="${APP_DIR}/feature-validation"
+[ -f "${REPO_ROOT}/bbox" ] && [ -d "${FV_DIR}" ] || {
+  echo "apitools test: REPO_ROOT does not look like the repo root (${REPO_ROOT})." >&2
+  echo "  This hook resolves it as \${SCRIPT_DIR}/../../.. — if the file moved, fix the depth." >&2
+  exit 2
+}
+read_env() { grep -E "^$1=" "${REPO_ROOT}/.env" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r'; }
+DN="$(read_env DEPLOYMENT_NAME)"; DN="${DN:-bina-deployment}"
+cn() { docker ps --format '{{.Names}}' | grep -E "^$1(-${DN})?$" | head -1; }
+
+DO_UP=1
+for a in "$@"; do case "$a" in
+  --no-up) DO_UP=0 ;;
+  -h|--help) sed -n '2,27p' "${BASH_SOURCE[0]}"; exit 0 ;;
+esac; done
+
+CI_JUNIT_FV="${CI_JUNIT_FV:-${REPO_ROOT}/ci-artifacts/feature-validation.junit.xml}"
+CI_SUMMARY_FV="${CI_SUMMARY_FV:-${REPO_ROOT}/ci-artifacts/feature-validation.md}"
+mkdir -p "$(dirname "$CI_JUNIT_FV")" 2>/dev/null || true
+# per-suite timeout (balance-sheet cases are slow) and the capability set to grant.
+FV_TIMEOUT="${FV_TIMEOUT:-3000}"
+export FV_CAPABILITIES="${FV_CAPABILITIES:-local}"
+
+FV="$(cn feature-validation-api)"
+if [ -z "$FV" ] && [ "$DO_UP" = 1 ]; then
+  # Bring up the driver sidecar ourselves — an app's test entrypoint that only works when someone
+  # else has already started its harness is not an entrypoint. `${BBOX_COMPOSE}`, not `docker
+  # compose`: the latter is a plugin SEARCH that resolves to Docker Desktop's binary (and daemon)
+  # wherever Desktop is installed — gate G32. scripts/dc is the wrong wrapper here: this is a
+  # standalone, single-service stack, not part of the compiled one, so an explicit -f is correct.
+  echo "### bringing up feature-validation-api (${FV_DIR#"${REPO_ROOT}/"}/docker-compose.yml)"
+  . "${REPO_ROOT}/scripts/lib.sh"
+  ensure_network
+  "${BBOX_COMPOSE}" -f "${FV_DIR}/docker-compose.yml" up -d --build feature-validation-api || true
+  for _ in $(seq 1 40); do
+    FV="$(cn feature-validation-api)"
+    [ -n "$FV" ] && docker exec "$FV" python -c \
+      "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8100/api/health')" \
+      >/dev/null 2>&1 && { echo "feature-validation-api healthy"; break; }
+    sleep 3
+  done
+  FV="$(cn feature-validation-api)"
+fi
+
+if [ -z "$FV" ]; then
+  echo "feature-validation-api not running — cannot run feature validation."
+  echo "  start it with:  bbox test apitools   (or drop --no-up)"
+  echo '<?xml version="1.0" encoding="UTF-8"?><testsuites><testsuite name="feature-validation" tests="1" failures="1"><testcase classname="feature-validation" name="feature-validation-api-up"><failure message="feature-validation-api container not found"/></testcase></testsuite></testsuites>' > "$CI_JUNIT_FV"
+  exit 1
+fi
+
+echo "### apitools feature-validation — via ${FV}  (FV_CAPABILITIES=${FV_CAPABILITIES})"
+
+# Drive the API in-container: it runs each suite's validate-feature.py against apitools and
+# returns the benchmark (all_passed / cases_passed / skipped). Emits one JSON line per suite.
+RESULTS="$(mktemp)"
+docker exec -e FV_CAPABILITIES="$FV_CAPABILITIES" -e FV_TIMEOUT="$FV_TIMEOUT" -e FV_FEATURES="${FV_FEATURES:-}" -i "$FV" python3 - > "$RESULTS" <<'PY'
+import os, json, urllib.request
+BASE = "http://localhost:8100"
+timeout = int(os.getenv("FV_TIMEOUT", "3000"))
+only = {x.strip() for x in os.getenv("FV_FEATURES", "").split(",") if x.strip()}
+include_dev = os.getenv("FV_INCLUDE_DEV", "") == "1"
+feats = json.load(urllib.request.urlopen(BASE + "/api/features"))["features"]
+for f in feats:
+    name = f["name"]
+    if only and name not in only:
+        continue
+    # dev/experimental suites (e.g. *-dev) are not part of the CI gate unless FV_INCLUDE_DEV=1
+    if name.endswith("-dev") and not include_dev:
+        continue
+    try:
+        req = urllib.request.Request(BASE + "/api/run/" + name, method="POST")
+        d = json.load(urllib.request.urlopen(req, timeout=timeout))
+        b = d.get("benchmark") or {}
+        row = {"feature": name, "all_passed": bool(b.get("all_passed")),
+               "passed": b.get("cases_passed"), "total": b.get("case_count"),
+               "skipped": b.get("skipped_count") or 0,
+               "feature_skipped": bool(b.get("feature_skipped")),
+               "failures": (b.get("failures") or [])[:5], "error": d.get("error")}
+    except Exception as e:
+        row = {"feature": name, "all_passed": False, "error": str(e)[:200]}
+    print(json.dumps(row, ensure_ascii=False), flush=True)
+PY
+
+FAILS=0; TOTAL=0
+xesc() { sed -e 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g'; }
+TESTCASES=""; SUMROWS=""
+while IFS= read -r line; do
+  [ -z "$line" ] && continue
+  TOTAL=$((TOTAL+1))
+  name=$(printf '%s' "$line" | python3 -c "import sys,json;print(json.load(sys.stdin)['feature'])" 2>/dev/null)
+  ok=$(printf '%s'   "$line" | python3 -c "import sys,json;print('1' if json.load(sys.stdin).get('all_passed') else '0')" 2>/dev/null)
+  msg=$(printf '%s'  "$line" | python3 -c "
+import sys,json
+d=json.load(sys.stdin)
+if d.get('feature_skipped'): print(f\"feature skipped ({d.get('skipped',0)} cases need external caps)\")
+elif d.get('error'):       print('error: '+str(d['error']))
+else:
+    s=f\"{d.get('passed')}/{d.get('total')} passed\"
+    if d.get('skipped'): s+=f\", {d['skipped']} skipped\"
+    if not d.get('all_passed') and d.get('failures'): s+=' | '+' ; '.join(x[:80] for x in d['failures'][:2])
+    print(s)
+" 2>/dev/null)
+  if [ "$ok" = 1 ]; then
+    echo "  PASS  feature-$name — $msg"
+    TESTCASES="${TESTCASES}  <testcase classname=\"feature-validation\" name=\"feature-${name}\"/>
+"
+    SUMROWS="${SUMROWS}| \`feature-${name}\` | ✅ | ${msg} |
+"
+  else
+    echo "  FAIL  feature-$name — $msg"; FAILS=$((FAILS+1))
+    [ -n "${GITHUB_ACTIONS:-}" ] && echo "::error title=feature-${name}::${msg}"
+    em=$(printf '%s' "$msg" | xesc)
+    TESTCASES="${TESTCASES}  <testcase classname=\"feature-validation\" name=\"feature-${name}\"><failure message=\"${em}\"/></testcase>
+"
+    SUMROWS="${SUMROWS}| \`feature-${name}\` | ❌ | ${msg} |
+"
+  fi
+done < "$RESULTS"
+
+{
+  echo '<?xml version="1.0" encoding="UTF-8"?>'
+  echo "<testsuites><testsuite name=\"feature-validation\" tests=\"${TOTAL}\" failures=\"${FAILS}\">"
+  printf '%s' "$TESTCASES"
+  echo "</testsuite></testsuites>"
+} > "$CI_JUNIT_FV"
+{
+  echo "## Feature validation — $([ "$FAILS" -eq 0 ] && echo '✅ all runnable suites passed' || echo "❌ ${FAILS} failed") (${TOTAL} suites, caps=${FV_CAPABILITIES})"
+  echo; echo "| Suite | Result | Detail |"; echo "|---|---|---|"
+  printf '%s' "$SUMROWS"
+} > "$CI_SUMMARY_FV"
+[ -n "${GITHUB_STEP_SUMMARY:-}" ] && cat "$CI_SUMMARY_FV" >> "$GITHUB_STEP_SUMMARY" || true
+
+echo
+if [ "$FAILS" -eq 0 ]; then echo "### apitools feature-validation: ALL ${TOTAL} RUNNABLE SUITES PASSED"; else echo "### apitools feature-validation: ${FAILS}/${TOTAL} SUITE(S) FAILED"; fi
+echo "  JUnit:   $CI_JUNIT_FV"; echo "  Summary: $CI_SUMMARY_FV"
+exit "$FAILS"

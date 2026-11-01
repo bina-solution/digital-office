@@ -1,0 +1,136 @@
+# bina-ds — "בינה": the office agent. A customized DeepSeek Harness (MIT) served as one container.
+#
+# What is customized, and where: apps/bina-ds/harness/ — the profile (which plugins run and how the
+# web surface is composed), one node-side change in customize.sh (accept the identity Traefik already
+# established, like every other embedded app), and the Hebrew language pack + Bina brand under
+# apps/bina-ds/plugins/. The harness itself is installed pinned from npm at image build.
+#
+# Reachability: ONLY through the edge. The index is embedded by the console at /a/bina/ (stripped),
+# and because the harness's browser code addresses /api and /plugins at the origin ROOT, those two
+# prefixes are root-mounted passthroughs on the console host (app.json module.passthrough, mount:
+# root — owner-approved 2026-09-17), websockets included, with the console's own /api/* carved out
+# by its reserved_paths.
+services:
+  bina-ds:
+    # The image CI publishes for this commit (DGO-41). `pull_policy: missing` means it is
+    # fetched only when it is not here already, so a checkout that has built it is untouched;
+    # the `build:` below stays as the fallback. Needs the GHCR package readable — a package made
+    # from a private repo is private, so `docker login ghcr.io` on a machine that must pull.
+    image: ghcr.io/solomonboltin/digital-office/bina-ds:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # The compose in this image is the HOST's — app-management's compose file says why.
+        COMPOSE_VERSION: ${BBOX_COMPOSE_VERSION:-2.40.3}
+    container_name: bina-ds-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: bina-ds
+    restart: unless-stopped
+    # The harness is PID 1 (entrypoint.sh execs it) and node never reaps children it did not spawn,
+    # so every background job the agent left behind (`cmd &`, a pipeline whose shell returned first)
+    # stayed a zombie until the next recreate — 79 by noon on 2026-09-30, 0 after the relaunch, 8 an
+    # hour later. docker-init as PID 1 reaps them; it costs nothing and changes nothing else.
+    init: true
+    environment:
+      - DSH_HOME=/data/dsh
+      - DSH_PROFILE=bina
+      - DSH_PORT=3080
+      # agent.v1 adapter (ai/context/agent-contract.md): its port, and where its action token lives —
+      # `bbox agent` reads the token from this file through the engine; it is never an .env value.
+      - BINA_DS_ADAPTER_PORT=3081
+      - AGENT_TOKEN_FILE=/data/dsh/api-token
+      - DSH_PROFILE_DIR=/opt/bina/harness/profile
+      # The identity header authentik's forward-auth adds to every request Traefik lets through —
+      # the same trust every embedded first-party app already places in it (owner-approved).
+      - DSH_TRUST_PROXY_AUTH_HEADER=X-authentik-username
+      # The permission preset new sessions start in (read-only | workspace-write | danger-full-access).
+      # The office agent operates the deployment, so the sandbox and the approval prompt are off by
+      # default; the owner can still switch a session with /permission. Owner decision 2026-09-17.
+      - DSH_PERMISSION_MODE=${BINA_DS_PERMISSION_MODE:-danger-full-access}
+      # Every authority a browser reaches this app by, port-less (any port): the console host
+      # (embedded) and the app's own host (standalone). The harness refuses any other Host.
+      #
+      # The last term is how a REMOTE office's console may frame this agent (DGO-30/32): the tile on
+      # the other office is served on a NESTED host — `<alias>.console.<that office's domain>` — which
+      # this harness was never told about, and it refuses every authority it does not know (measured
+      # 2026-10-01: the nested host answers nothing at all, `bina.localhost` answers 200). It is a
+      # DECLARATION in `.env`, per office, because which offices may show this agent is this office's
+      # decision — never a container edited by hand, and never a wildcard.
+      - DSH_TRUSTED_HOSTS=${CONSOLE_BASE_URL:-console.${DEPLOYMENT_DOMAIN:-localhost}} console.localhost ${BINA_DS_BASE_URL:-bina.${DEPLOYMENT_DOMAIN:-localhost}} bina.localhost ${BINA_DS_TRUSTED_HOSTS:-}
+      # Provider keys: the platform's connection cards (deepseek-key, openai-key, anthropic-key) and
+      # .env feed these; the entrypoint drops template placeholders so the Models page stays
+      # editable for a key the operator types in (stored by the harness on the volume).
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      # DEEPSEEK_BASE_URL is deliberately NOT forwarded. The harness picks the official root per
+      # protocol (Messages → https://api.deepseek.com/anthropic, Chat → https://api.deepseek.com),
+      # and .env.ex carries the bare Chat root for other apps; forwarded, it made every Messages
+      # request hit /v1/messages on the Chat host → HTTP 404 on the first "hi" (2026-09-17).
+      # A gateway override belongs in the Models page (per provider), not in a shared variable.
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - TZ=${TZ:-Asia/Jerusalem}
+      # Where the checkout is mounted (see volumes) and which socket bbox should use in here.
+      - BBOX_REPO_HOST=${BBOX_REPO_HOST:-/workspace/office}
+      - BBOX_DOCKER_SOCK=/var/run/docker.sock
+      # …and the host's own socket path and zone, for what the agent's `./bbox` compiles into other
+      # containers (the two lines every service that brings containers up carries —
+      # app-management's compose file says why).
+      - BBOX_HOST_DOCKER_SOCK=${BBOX_DOCKER_SOCK:-/var/run/docker.sock}
+      - BBOX_HOST_TZ=${TZ:-UTC}
+      # A compose command run in here that would recreate THIS container is not run in-process: it
+      # is handed to this app's own `hooks/self-update` (the contract `compose_self_guard` in
+      # scripts/lib.sh), which does it from OUTSIDE — health-gated, with rollback — instead of
+      # killing the shell that issued it. The guard identifies the container through the engine, so
+      # there is no marker variable here to keep in step with this file.
+      # The office timeline (כל מקביל). plugins/timeline-lanes projects every harness session
+      # event into spans and appends them here; the adapter serves that store at /timeline/spans,
+      # the lane this app declares in app.json (SPAN_SOURCE_BINA). On the volume, so history
+      # survives the container; rotated daily and pruned by age.
+      - BINA_TIMELINE_DIR=/data/dsh/timeline
+      - BINA_TIMELINE_KEEP_DAYS=${BINA_TIMELINE_KEEP_DAYS:-14}
+      - DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-bina-deployment}
+      - DEPLOYMENT_DOMAIN=${DEPLOYMENT_DOMAIN:-localhost}
+    volumes:
+      - bina_ds_home:/data/dsh
+      # The deployment checkout, read-write, at its HOST path — the same absolute path the engine
+      # sees, because every compose file bind-mounts host paths and dockerd resolves them from the
+      # engine's side. That is what lets `./bbox` and `./scripts/dc` run from inside this container
+      # exactly as they run in the engine (the Lima guest / the WSL distro / the VPS shell).
+      # /workspace/office is kept as a symlink to it (entrypoint.sh) for a short, ASCII spelling.
+      - type: bind
+        source: ${BBOX_REPO_HOST:-../../}
+        target: ${BBOX_REPO_HOST:-/workspace/office}
+      # The engine's socket: the agent operates the deployment (build, up, down, logs, exec) through
+      # it. Root on the engine, by design — owner decision 2026-09-17 ("full access to the office").
+      - ${BBOX_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock
+    # The agent.v1 adapter, published on the docker HOST's loopback only — the one door `bbox agent`
+    # uses from any host: on Linux directly, on the macOS engine through Lima's loopback forward
+    # (measured 2026-09-30: a guest 127.0.0.1 port answers on the Mac's 127.0.0.1 with no config).
+    # Never 0.0.0.0: the token is the only gate, and a VPS must not offer it to the internet.
+    ports:
+      - "${BINA_DS_AGENT_BIND:-127.0.0.1}:${BINA_DS_AGENT_PORT:-3081}:3081"
+    networks:
+      - traefik-network
+    healthcheck:
+      # A public static asset: index itself is authenticated, so it cannot be the probe.
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3080/favicon.svg').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-8s}
+      retries: 5
+      start_period: 40s
+    # One process hosts every conversation AND every agent's shell commands (gates, builds' CLI,
+    # python), all inside this limit. At 1 CPU / 1 GiB, with 4-5 agents and 7 subagents at once,
+    # a plain `sed -n` took 3-17 s and model requests stalled 30-245 s (measured 2026-09-29), and
+    # the harness alone sat at 466 MiB idle. Limits, not reservations: an idle harness costs nothing.
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2g
+volumes:
+  bina_ds_home:
+networks:
+  traefik-network:
+    external: true

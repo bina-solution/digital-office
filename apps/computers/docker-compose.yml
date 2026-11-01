@@ -1,0 +1,77 @@
+# computers — the office's fleet of machines, as a platform service (see app.py's docstring).
+#
+# Two things about this compose are load-bearing and easy to get wrong:
+#
+#  * `docker` CLI + the read-only engine socket. The address of the machine this deployment runs on
+#    is the GATEWAY of traefik-network, and that is read from the engine rather than hardcoded
+#    (172.18.0.1 here, not everywhere). Read-only by convention only — a socket is root-equivalent
+#    whatever the mount says — so this app issues GET requests and nothing else. Same mount, same
+#    caveat, as platform-base/machine.
+#
+#  * openssh-client. `python:3.12-slim` has no ssh at all, and this app executes through the real
+#    OpenSSH client on purpose: the key it mints is a plain OpenSSH key the owner pastes into a
+#    machine, ssh's own exit code is the remote command's exit code (which /exec hands back), and
+#    the failure vocabulary (Permission denied (publickey) / Host key verification failed /
+#    Connection refused) is the vocabulary the owner will meet on the machine itself.
+#    python:3.12-slim ships curl but NOT ssh — the healthcheck below uses python's urllib for the
+#    same reason (gate G18).
+services:
+  computers:
+    # The image CI publishes for this commit (DGO-41). `pull_policy: missing` means it is
+    # fetched only when it is not here already, so a checkout that has built it is untouched;
+    # the `build:` below stays as the fallback. Needs the GHCR package readable — a package made
+    # from a private repo is private, so `docker login ghcr.io` on a machine that must pull.
+    image: ghcr.io/solomonboltin/digital-office/computers:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: computers-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: computers
+    restart: unless-stopped
+    environment:
+      - SENTRY_DSN=${COMPUTERS_SENTRY_DSN:-}
+      - DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-bina-deployment}
+      # the credential plane: every machine is an instance there, nothing is stored here
+      - CONNECTIONS_URL=${CONNECTIONS_URL:-http://connections:8990}
+      # the machine we run on, as seen from inside this container
+      - COMPUTERS_NETWORK=${COMPUTERS_NETWORK:-traefik-network}
+      - COMPUTERS_LOCAL_USER=${COMPUTERS_LOCAL_USER:-root}
+      - COMPUTERS_LOCAL_PORT=${COMPUTERS_LOCAL_PORT:-22}
+      - COMPUTERS_PROBE_TTL=${COMPUTERS_PROBE_TTL:-20}
+      - COMPUTERS_STATE_DIR=/data
+    volumes:
+      # the office keypair, known_hosts and the probe cache — losing this volume means re-approving
+      # the key on every machine, so it is kept (data.on_uninstall: prompt)
+      - computers_state:/data
+    networks:
+      - traefik-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://localhost:8977/healthz',timeout=8).status==200 else 1)"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          # One SSH round trip per machine per 20s (the probe cache), and a command run only when
+          # the owner asks for one. The ceiling is set by the slowest remote, not by concurrency:
+          # `ssh` waits on the network, which is why 0.3 CPU is generous rather than tight.
+          cpus: '0.3'
+          memory: 160M
+        reservations:
+          cpus: '0.02'
+          memory: 32M
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+
+volumes:
+  computers_state:
+
+networks:
+  traefik-network:
+    external: true

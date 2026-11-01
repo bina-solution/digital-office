@@ -1,0 +1,50 @@
+# n8n declarative blueprint — './bbox n8n push all' restores the instance from the files below.
+# Fully human-readable. The OWNER account is NOT stored here — it is created from .env (N8N_OWNER_*).
+schema: n8n-blueprint/v2
+n8n_version: "2.17.0"
+encryption_key_fingerprint: "77aee1e843d268cd"
+owner:
+  source: env            # N8N_OWNER_EMAIL/PASSWORD/FIRSTNAME/LASTNAME — bootstrapped by n8n-push
+parts:
+  workflows:
+    path: ./blueprint/n8n
+    format: workflow.ts     # code files (wrap.mjs render); compiled back to import JSON on push
+    count: 19
+  credentials:
+    path: ./credentials
+    format: json            # export:credentials — id/name/type readable; secret AES-encrypted
+    count: 24
+community_nodes:            # npm packages reinstalled on push (N8N_REINSTALL_MISSING_PACKAGES)
+  []
+active_workflows:           # SNAPSHOT of what was active when pulled — read by nothing
+  - "[CI] Active-state webhook probe"
+  - "Error Handler"
+  - "GlitchTip Error Reporter"
+  - "process_lock"
+credential_overrides:       # local/owned creds RE-SEEDED from .env on push (n8n-push PATCHes each, re-encrypting
+                            # under the CURRENT key) → fully .env-driven, survive N8N_ENCRYPTION_KEY drift.
+                            # Format: <cred-id>: {"name","type","data":{field: "${ENV}" | literal}}. Preserved across pulls.
+                            # Workflows reference these by id (unchanged); only the data is sourced from .env.
+  BoJE1odVZ6MBcpax: {"name":"Redis Local Account [env-managed]","type":"redis","data":{"host":"redis","port":6379,"password":"${REDIS_PASSWORD}"}}
+  tJ195ajNq1kQveRG: {"name":"N8N DB [env-managed]","type":"postgres","data":{"host":"n8n-postgres","port":5432,"database":"${POSTGRES_DB}","user":"${POSTGRES_USER}","password":"${POSTGRES_PASSWORD}","ssl":"disable"}}
+  yY8FYvp6Kz86pt2t: {"name":"INDOX Supabase Postgres","type":"postgres","data":{"host":"supabase-db","port":5432,"database":"${SUPABASE_DB_NAME}","user":"${SUPABASE_DB_USER}","password":"${SUPABASE_DB_PASSWORD}","ssl":"disable"}}
+  supabaseStorage001: {"name":"Supabase Storage [env-managed]","type":"httpHeaderAuth","data":{"name":"Authorization","value":"Bearer ${SUPABASE_SERVICE_KEY}"}}
+  gBwYpBdw7cyJvg5v: {"name":"CICD AUTH [env-managed]","type":"httpBasicAuth","data":{"user":"${N8N_WEBHOOK_USER}","password":"${N8N_WEBHOOK_PASS}"}}
+  azPhHBvOWaf9IsEA: {"name":"Incoming Documents [env-managed]","type":"httpBasicAuth","data":{"user":"${BS_WEBHOOK_USER}","password":"${BS_WEBHOOK_PASS}"}}
+  m44SrEHRVzHZlXiw: {"name":"Settings Auth [env-managed]","type":"httpBasicAuth","data":{"user":"${SETTINGS_AUTH_USER}","password":"${SETTINGS_AUTH_PASS}"}}
+  6mfcsdRaqQ4IdQ8Y: {"name":"ai-studio-bs-extraction [env-managed]","type":"googlePalmApi","data":{"host":"https://generativelanguage.googleapis.com","apiKey":"${GEMINI_API_KEY}"}}
+  # --- local-routed (autoconfigured to in-network services) ---
+  CPi9QUZFTi78EWKP: {"name":"Postgres account [env-managed]","type":"postgres","data":{"host":"n8n-postgres","port":5432,"database":"${POSTGRES_DB}","user":"${POSTGRES_USER}","password":"${POSTGRES_PASSWORD}","ssl":"disable"}}
+  dSaWRYz5uzby4fQJ: {"name":"n8n REST Basic Auth [env-managed]","type":"httpBasicAuth","data":{"user":"${N8N_WEBHOOK_USER}","password":"${N8N_WEBHOOK_PASS}"}}
+  Fxy5bfoku05d4F8W: {"name":"n8n account [env-managed]","type":"n8nApi","data":{"apiKey":"${N8N_API_KEY}","baseUrl":"http://n8n:5678/api/v1"}}
+  7EtGaV94DlDDrs7q: {"name":"Ollama account [env-managed]","type":"ollamaApi","data":{"baseUrl":"${OLLAMA_INTERNAL_URL}"}}
+  # --- remote keys (real value lives in .env / .env.ex; routed into the cred) ---
+  xu8Y1cko7L6LmqMd: {"name":"OpenAi account [env-managed]","type":"openAiApi","data":{"apiKey":"${OPENAI_API_KEY}"}}
+  EmuwriU7cnK5nZTM: {"name":"N8N TG LOGGER [env-managed]","type":"telegramApi","data":{"accessToken":"${TELEGRAM_BOT_TOKEN}"}}
+  BmKlKWiEeZAxNWyi: {"name":"Chat Auth [env-managed]","type":"httpBasicAuth","data":{"user":"${CHAT_AUTH_USER}","password":"${CHAT_AUTH_PASS}"}}
+  # --- adjacent automations (MCP servers / ERP / Document AI) ---
+  2qKUrcv37UXZbz7u: {"name":"Header Auth account [env-managed]","type":"httpHeaderAuth","data":{"name":"Authorization","value":"${MCP_AUTH_TOKEN}"}}
+  77wJNJ6sYrGsfH9B: {"name":"Header Auth account 2 [env-managed]","type":"httpHeaderAuth","data":{"name":"Authorization","value":"${MCP_AUTH_TOKEN}"}}
+  LKWC9RKUhNHQWvoM: {"name":"Priority Production [env-managed]","type":"httpBasicAuth","data":{"user":"${PRIORITY_USER}","password":"${PRIORITY_PASS}"}}
+  PKgRNVHKkqGPlNjT: {"name":"priority test [env-managed]","type":"httpBasicAuth","data":{"user":"${PRIORITY_TEST_USER}","password":"${PRIORITY_TEST_PASS}"}}
+  wxbv5yj5lnKDuvmN: {"name":"Document AI Connection [env-managed]","type":"googleApi","data":{"region":"us","email":"${DOCUMENT_AI_SA_EMAIL}","privateKey":"${DOCUMENT_AI_SA_PRIVATE_KEY}"}}

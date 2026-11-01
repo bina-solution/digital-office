@@ -1,0 +1,172 @@
+#!/usr/bin/env bash
+#: make sign-in serve every host this office declares NOW — not the set it loaded at boot
+#
+#   ./bbox authentik refresh
+#
+# Run by `bbox run` after the stack is up, and by the control plane after it compiles a host that
+# was not there before (an app switched on from the apps screen, an app a linked office started to
+# give). It is THIS app's verb because the condition and the cures are all this app's: which hosts
+# are gated is in its blueprint, whether they are served is its outpost's answer, and the remedies
+# are its own containers. It lived in `bbox` as `ensure_sso_current`, where the control plane could
+# not reach it — so a host compiled from anywhere but the CLI answered 404 at the sign-in layer
+# until somebody ran `bbox run` on the machine.
+#
+# WHAT NORMALLY HAPPENS NEEDS NOTHING FROM THIS HOOK. The compiler rewrites the generated
+# blueprint; authentik's worker applies that file within seconds of the change; the worker tells the
+# embedded outpost (which lives in the authentik-server process), and the outpost loads the new
+# host. Measured on hp-laptop, 2026-10-06: the edge answered 302 for a newly installed app's host
+# 21 s after the install was asked for — with this hook still in its first minute. So the hook
+# ASKS first (is every host of this render served?) and is done, in seconds, when the answer is yes.
+#
+# THREE THINGS CAN STAND BETWEEN A RENDER AND A SERVED HOST, and the remedies are tried in the
+# order of what they cost:
+#   1. it has not arrived yet                      -> wait (LEARN): nothing is touched;
+#   2. nobody applied the render (the worker was   -> the sentinel applies every blueprint again:
+#      down, or missed the change of the file)        minutes of one small container, no outage;
+#   3. the outpost will not learn what was applied -> restart authentik-server: a minute in which
+#                                                     every gated host of the office is down.
+# For a long time (3) was the only thing that ever worked, on every app switched on — measured on
+# the 2026-07-29 staging domain move (`console.staging…` 404 from the outpost for 20+ minutes;
+# re-saving every provider, re-saving the outpost and waiting all changed nothing; a restart cured
+# it at once) and on every install since. The cause was ours, found here 2026-10-06: the blueprint
+# gave the outpost TWO providers for one host, and its refresh stops for ever on the second (the
+# compiler's render_authentik has the mechanism, and now compiles one provider for a host). It stays
+# as the last remedy because an outpost that froze under an older blueprint stays frozen until it
+# is restarted once, and a cure that is known to work is worth keeping behind the ones that cost
+# nothing.
+#
+# And (2) used to be the ROUTINE: the sentinel was re-created on every change of the generated
+# blueprint and re-applied all of them before this hook could even look — four of the 4 min 22 s
+# of that same install, spent after its host was already being served.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # say, ok, colors, DN, running, dcx
+
+bs="authentik-bootstrap-${DN}"
+srv="authentik-server-${DN}"
+running "${srv}" || exit 0
+
+# The WORKER and the SENTINEL are made sure of first — a no-op when both run on their current
+# configuration, which is the normal case: an app switched on changes neither.
+#
+# The worker, because it is what carries the news: it applies the changed blueprint, and when the
+# blueprint binds a provider to the outpost it is a task on the worker that grants the outpost's
+# account that provider and tells the outpost to refresh. A worker that is not running means no
+# host declared after start-up is ever served, restart or no restart. The sentinel, because the
+# probe runs in it and its own configuration follows what only it applies (bootstrap.sh, the probe,
+# the committed blueprints, `.env`): when those moved, this is where it starts again and applies.
+# The server applies nothing, so it is left for `bbox run`.
+#
+# `--no-deps`, and that is measured: without it compose also recreated the database and the server
+# these two depend on, and the worker was left holding connections to a database that had just
+# been replaced. Its heartbeat stopped, and with it every task the blueprint publishes for the
+# outpost (hp-laptop, 2026-10-05).
+dcx up -d --no-deps authentik-worker authentik-bootstrap >/dev/null 2>&1 || true
+running "${bs}" || exit 0
+
+# The probe: 0 = every host the compiled blueprint gates is served · 1 = one is not · 2 = there is
+# no list to ask about (platform-base/authentik/outpost-ready.py). It reads the hosts of THIS render
+# from the blueprint itself, so it can look at any moment — it does not wait for anybody to have
+# applied anything, which is the whole point of asking it first.
+probe() { rc=0; docker exec "${bs}" python3 /outpost-ready.py >/dev/null 2>&1 || rc=$?; }
+started() { docker inspect -f '{{.State.StartedAt}}' "$1" 2>/dev/null; }
+
+# A SERVER THAT HAS ONLY JUST STARTED IS LOADING, NOT DEAF. For about a minute and a half after
+# authentik-server starts it refuses connections, then answers 502 for every host, then 404 for the
+# hosts it has not loaded yet — the very answer an outpost that will not learn gives. Two refreshes
+# that met therefore restarted it twice: an app's bring-up restarted it, and the link plane's own
+# apply, arriving forty seconds later, found that restart still warming up and "cured" it again.
+# Measured on hp-laptop, 2026-10-05: started 20:09:11 and again 20:10:19, and the edge answered
+# 500/502/404 for every gated host until 20:11:24. So a server younger than WARMUP is waited for
+# whatever it answers. The start time is the engine's own, so every caller sees the same clock — no
+# lock file, which a checkout on a Windows or macOS mount could not be trusted to honour.
+WARMUP=180
+age() {   # seconds since the server started; a start time that cannot be read is "long ago"
+  local at; at="$(started "${srv}")"
+  at="$([ -n "${at}" ] && date -u -d "${at}" +%s 2>/dev/null)" || at=0
+  echo $(( $(date +%s) - ${at:-0} ))
+}
+# AND A HOST THAT IS NOT SERVED YET (1) MAY SIMPLY NOT HAVE ARRIVED. Measured here 2026-10-06:
+# 7 s from a render to the first 302 for its new host, and 60 s when the worker was still working
+# through the tasks of the render before it. LEARN is that minute and a half over again — and it is
+# spent only while a host is in fact not served.
+LEARN=90
+learn() {   # ask until every declared host is served, or the outpost has had its time to come to it
+  local by=$(( $(date +%s) + LEARN ))
+  probe
+  while [ "${rc}" != 0 ] && { [ "$(age)" -lt "${WARMUP}" ] \
+        || { [ "${rc}" = 1 ] && [ "$(date +%s)" -lt "${by}" ]; }; }; do
+    sleep 5
+    probe
+  done
+}
+
+learn
+[ "${rc}" = 0 ] && exit 0
+# EXIT 2 IS "THERE IS NOTHING TO ASK ABOUT", NOT "A HOST IS REFUSED". The compiled blueprint states
+# no gated hosts — this office was never compiled, or by a compiler older than the probe — so
+# nothing about sign-in has been observed either way, and acting on that is how a Mac printed
+# "EVERY gated surface is down" over a working SSO on every run for hours (2026-10-05). Say what
+# the probe said and change nothing.
+if [ "${rc}" = 2 ]; then
+  out="$(docker exec "${bs}" python3 /outpost-ready.py 2>&1 >/dev/null || true)"
+  say "${cy}SSO: could not verify the outpost — ${out:-the readiness probe had no gated-host list}${c0}"
+  say "${cy}     (touching nothing: nothing has been observed to act on)${c0}"
+  exit 0
+fi
+
+# 2 — NOBODY MAY HAVE APPLIED THIS RENDER. The sentinel applies every blueprint when it starts and
+# says so in a file when it has (/tmp/applied); restarting it is asking for exactly that. It is
+# slow — each blueprint is a full authentik boot inside a tenth of a core, more than five minutes on
+# a loaded laptop — and it takes nothing down, so it is tried before the server is touched.
+#
+# A sentinel that has NOT said so yet is applying right now — a first boot, or the `up` above has
+# just re-created it — and that is the apply: it is waited for, not started over.
+#
+# AND BLUEPRINTS THAT ARE NOT APPLIED ARE NOT THE OUTPOST'S FAULT. bootstrap.sh exits when authentik
+# refuses a blueprint and docker starts it again, for ever (MacBook, 2026-10-05: 262 restarts on one
+# duplicate provider name), and on a cold start it does the same a few times while authentik's own
+# flows do not exist yet — so how often it restarted says nothing, and whether it ARRIVED says
+# everything. When it has not after fifteen minutes there is nothing for the server to load:
+# restarting it is the minute of outage that was once printed as "EVERY gated surface is down" over
+# an office whose sign-in was working. The sentinel's last word is said instead, loudly, and the
+# server is left alone.
+#
+# The waits here end at a TIME, not after a count: a probe is one request per gated host and takes
+# seconds itself on a loaded machine. The control plane runs this hook inside an app's bring-up and
+# has to give it a bound that is longer than the sum of these (app-management `_signin_refresh`).
+if docker exec "${bs}" test -f /tmp/applied >/dev/null 2>&1; then
+  say "SSO: a declared host is still not served after ${LEARN}s — having the sentinel apply the blueprints again…"
+  docker exec "${bs}" rm -f /tmp/applied >/dev/null 2>&1 || true   # only THIS restart's word counts
+  docker restart "${bs}" >/dev/null 2>&1 || true
+else
+  say "SSO: a declared host is not served yet and the sentinel is still applying the blueprints — waiting for it…"
+fi
+deadline=$(( $(date +%s) + 900 ))
+until docker exec "${bs}" test -f /tmp/applied >/dev/null 2>&1; do
+  if [ "$(date +%s)" -ge "${deadline}" ]; then
+    last="$(docker logs --tail 60 "${bs}" 2>&1 | grep -v '^{' | grep -v '^[[:space:]]*$' | tail -1 | cut -c1-220)"
+    say "${cr}SSO: the blueprints are still not applied after 15 minutes, so the hosts they declare are not served.${c0}"
+    say "${cr}  the sentinel's last word: ${last:-nothing}${c0}"
+    say "${cr}  check: docker logs ${bs}${c0}"
+    exit 1
+  fi
+  sleep 5
+done
+learn
+[ "${rc}" = 0 ] && { ok "SSO: every gated host is served (the blueprints had to be applied again)"; exit 0; }
+
+# 3 — APPLIED, WAITED FOR, AND STILL NOT SERVED: the outpost is not learning. Restart the server.
+say "SSO: the blueprints are applied and the embedded outpost has not learned every gated host — restarting authentik-server…"
+docker restart "${srv}" >/dev/null 2>&1 || { say "${cy}could not restart ${srv} — the hosts it has not learned will keep answering 404${c0}"; exit 0; }
+deadline=$(( $(date +%s) + 240 ))
+while [ "$(date +%s)" -lt "${deadline}" ]; do
+  sleep 5
+  docker exec "${bs}" python3 /outpost-ready.py >/dev/null 2>&1 && { ok "SSO: outpost now serves every gated host"; exit 0; }
+done
+# LOUD. Sign-in for the hosts named below answers 404 — after the wait, the re-apply and the restart
+# — and nothing else in the bring-up reports it.
+say "${cr}SSO: still not served after restarting authentik-server — $(docker exec "${bs}" python3 /outpost-ready.py 2>&1 >/dev/null | cut -c1-200)${c0}"
+say "${cr}  check: docker logs ${bs}   /   docker exec ${bs} python3 /outpost-ready.py${c0}"
+exit 1

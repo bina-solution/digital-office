@@ -1,0 +1,193 @@
+# git — the office's version control: an abstraction over the VCS APIs, plus the local forge that
+# hosts AND displays the repositories (see app.py's docstring).
+#
+# Three facts about this compose are load-bearing:
+#
+#  * NO SECRET IS MOUNTED HERE. Every account is an INSTANCE in the credential plane
+#    (protocols git_github_token / git_gitlab_token / git_forge_local), read at call time from
+#    `connections`; neither container's environment carries a token, a .env entry or a key file.
+#    That is why the `git` volume below holds only the active-account pointer.
+#
+#  * it is on `traefik-network` under the name `git`, because the smart-HTTP git proxy it serves is
+#    a REMOTE for real `git` clients: the office agent clones and pushes with
+#    `git clone http://git:8978/git/gh/<account>/<owner>/<repo>.git` and never holds a credential.
+#    The local forge is a remote through that SAME door (`…/git/lc/<account>/…`), so a mirror is
+#    moved by the proxy too and no third-party token is ever written into Forgejo's database.
+#
+#  * `forge` is Forgejo — ONE container on sqlite, ~150MiB idle. It is the office's own code
+#    library and the single DISPLAY provider for every repository (local + mirrored). It is NOT a
+#    GitLab: GitLab's own requirements (8 vCPU / 16 GB baseline, 8 GB floor, 40 GB disk) do not fit
+#    this engine, and Forgejo gives the same browse/issues/PR/release surface for a fraction of it.
+#    Its configuration is ENV-ONLY (FORGEJO__<section>__<KEY>): there is no app.ini in this repo to
+#    drift from what the manifest declares.
+services:
+  git:
+    # The image CI publishes for this commit (DGO-41). `pull_policy: missing` means it is
+    # fetched only when it is not here already, so a checkout that has built it is untouched;
+    # the `build:` below stays as the fallback. Needs the GHCR package readable — a package made
+    # from a private repo is private, so `docker login ghcr.io` on a machine that must pull.
+    image: ghcr.io/solomonboltin/digital-office/git:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: git-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: git
+    restart: unless-stopped
+    environment:
+      - SENTRY_DSN=${GIT_SENTRY_DSN:-}
+      - DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-bina-deployment}
+      # the credential plane: every git account is an instance there, nothing is stored here
+      - CONNECTIONS_URL=${CONNECTIONS_URL:-http://connections:8990}
+      - GIT_STATE_DIR=/data
+      # how long a token probe (whoami) is trusted before the account row is re-checked
+      - GIT_PROBE_TTL=${GIT_PROBE_TTL:-60}
+      # the local forge, as a provider like any other: in-network for API/proxy calls…
+      - FORGE_URL=${FORGE_URL:-http://forge:3000}
+      # The origin a BROWSER is handed (`mirrors.public_base()`), which is NOT the same string as
+      # FORGE_BASE_URL and must not be: BASE_URL is traefik's Host() rule and carries no port
+      # (a rule with one never matches), while THIS is what the app prints into links — scheme and
+      # port included. Without it here the service falls back to the port-less rule value and the
+      # forge the owner is sent to is `http://forge.console.localhost` instead of :8080.
+      - FORGE_ROOT_URL=${FORGE_ROOT_URL:-}
+      # …and the browser-facing origin, which is what a clone URL inside Forgejo must read.
+      - FORGE_BASE_URL=${FORGE_BASE_URL:-}
+      # How often the mirror engine wakes up, and the guard rails that stop one oversized repository
+      # from filling the engine's disk. MEASURED (2026-09-29): the office's own repository is a
+      # 1263 MB mirror clone, so a 1 GiB default refused the one repository most likely to be
+      # mirrored — the cap is 2 GiB, and the check runs BEFORE the push (worst case: a clone that is
+      # deleted, never a permanent byte). 15 GB free on the 58 GB guest, ~40 containers on it.
+      - GIT_MIRROR_INTERVAL=${GIT_MIRROR_INTERVAL:-3600}
+      - GIT_MIRROR_MAX_BYTES=${GIT_MIRROR_MAX_BYTES:-2147483648}
+      - GIT_MIRROR_MIN_FREE_MB=${GIT_MIRROR_MIN_FREE_MB:-2048}
+      # Keep the scratch copy between runs so a sync FETCHES instead of re-cloning 1.26 GB. The cost
+      # is a second copy of every mirror on disk; set 0 to trade that for bandwidth.
+      - GIT_MIRROR_KEEP_SCRATCH=${GIT_MIRROR_KEEP_SCRATCH:-1}
+    volumes:
+      # the active-account pointer, the probe cache and the mirror registry. All reconstructible:
+      # the accounts themselves are in the vault, and a mirror is a copy of something that lives
+      # somewhere else, which is why losing this volume costs a re-pick and a re-sync.
+      - git_state:/data
+    networks:
+      - traefik-network
+    healthcheck:
+      # python, never curl: python:3.12-slim has no curl (gate G18).
+      test: ["CMD", "python", "-c", "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://localhost:8978/healthz',timeout=8).status==200 else 1)"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          # NOT just an API proxy any more. The ceiling is set by the MIRROR ENGINE, which packs and
+          # pushes a whole repository from inside this container: measured 2026-09-29, pushing the
+          # office's own 1.3 GB mirror at 0.3 CPU spent >20 minutes inside `git pack-objects` alone,
+          # while the box sat at 4 cores mostly idle. 1.0 CPU is still a third of the machine and it
+          # is only used while a sync runs; the account screens cost nothing.
+          cpus: '1.0'
+          # 192M is the API's footprint; packing a large repository on top of it is not. An OOM kill
+          # in the middle of a push leaves a half-written project in the forge, which is the one
+          # outcome this engine exists to avoid (the push is the mutation).
+          memory: 512M
+        reservations:
+          cpus: '0.02'
+          memory: 32M
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+
+  # ── the local forge: this deployment's own git hosting, and the DISPLAY for every repository ────
+  forge:
+    image: codeberg.org/forgejo/forgejo:16.0.5
+    container_name: forge-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: forge
+    restart: unless-stopped
+    environment:
+      # sqlite, deliberately: one user, a handful of repositories. A second database container would
+      # cost more memory than the forge itself (measured idle: 143.8 MiB).
+      - FORGEJO__database__DB_TYPE=sqlite3
+      - FORGEJO__server__PROTOCOL=http
+      - FORGEJO__server__HTTP_PORT=3000
+      # ROOT_URL is what Forgejo prints as the clone URL and what its own redirects use, so it must
+      # be the origin the BROWSER sees — on this engine that includes the :8080 edge port.
+      - FORGEJO__server__ROOT_URL=${FORGE_ROOT_URL:-http://forge.localhost:8080}
+      - FORGEJO__server__DOMAIN=${FORGE_HOST:-forge.localhost}
+      # No SSH: the platform's remotes are HTTP through the git app's proxy, which is the only place
+      # a credential may be injected. An SSH endpoint here would be a second, unguarded door.
+      - FORGEJO__server__DISABLE_SSH=true
+      - FORGEJO__server__START_SSH_SERVER=false
+      - FORGEJO__security__INSTALL_LOCK=true
+      # A private office forge: no self-registration, and no page served to a stranger.
+      - FORGEJO__service__DISABLE_REGISTRATION=true
+      - FORGEJO__service__REQUIRE_SIGNIN_VIEW=true
+      # ── single sign-on (DGO-58): the edge is the identity, Forgejo believes its header ──────────
+      # The forge host is `auth: sso` in app.json, so traefik's forward-auth has ALREADY authenticated
+      # the caller and sets X-authentik-username. Forgejo's own login form is then never needed: the
+      # first request auto-creates the account from that header (which is why registration stays off —
+      # the door is the office SSO, not a form), and every repository is attributed to the edge user.
+      # `ENABLE_REVERSE_PROXY_*` are [service] settings; the HEADER NAME and the TRUSTED-PROXY LIST are
+      # [security] settings (forgejo docs, admin/reverse-proxy). Addressed to the wrong section they are
+      # accepted, written into app.ini, and silently inert: the default header is X-WEBAUTH-USER and the
+      # default trusted range is 127.0.0.0/8,::1/128 — so traefik's header is ignored and the tile shows
+      # Forgejo's own login form (a second form) while everything reports healthy. Measured 2026-10-01:
+      # with the two keys under [service], app.ini showed them there and a request carrying
+      # X-authentik-username was still "Sign in".
+      - FORGEJO__service__ENABLE_REVERSE_PROXY_AUTHENTICATION=true
+      - FORGEJO__service__ENABLE_REVERSE_PROXY_AUTO_REGISTRATION=true
+      - FORGEJO__security__REVERSE_PROXY_AUTHENTICATION_USER=X-authentik-username
+      # NOT optional, and the one that fails silently: reverse-proxy auth is an ASSERTION that the
+      # request came from a proxy we trust, and Forgejo ignores the header from anywhere else. The
+      # default is docker's own address pool, because the engine assigns the subnet (172.18.0.0/16
+      # here, 172.19/172.20 on a fresh machine) and a too-narrow value looks exactly like "SSO did
+      # nothing". Pin it to one network with `docker network inspect traefik-network` if you want it
+      # narrower — never to a single IP, which breaks on the next recreate.
+      - FORGEJO__security__REVERSE_PROXY_TRUSTED_PROXIES=${FORGEJO_TRUSTED_PROXIES:-172.16.0.0/12}
+      - FORGEJO__repository__DEFAULT_PRIVATE=private
+      - FORGEJO__repository__DEFAULT_BRANCH=main
+      # Features this office does not use, off so they cost nothing and cannot mislead: Actions has
+      # no runner here, and the package registry is not a product surface.
+      - FORGEJO__actions__ENABLED=false
+      - FORGEJO__packages__ENABLED=false
+      - FORGEJO__mailer__ENABLED=false
+      - FORGEJO__ui__DEFAULT_THEME=forgejo-auto
+      - FORGEJO__log__LEVEL=${FORGE_LOG_LEVEL:-Info}
+      - USER_UID=1000
+      - USER_GID=1000
+    volumes:
+      - forge_data:/data
+    networks:
+      - traefik-network
+    healthcheck:
+      # curl IS in this image (verified in codeberg.org/forgejo/forgejo:16.0.5, Alpine 3.23) —
+      # gate G18 only checks first-party builds, so the binary was confirmed by hand.
+      test: ["CMD", "curl", "-fsS", "http://localhost:3000/api/healthz"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      # First boot creates the database and the repository tree; measured ~20s on this engine.
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          # measured idle 143.8 MiB; the ceiling is for a large clone being browsed, not for idle.
+          memory: 512M
+        reservations:
+          cpus: '0.02'
+          memory: 64M
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+
+volumes:
+  git_state:
+  forge_data:
+
+networks:
+  traefik-network:
+    external: true

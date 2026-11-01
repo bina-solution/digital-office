@@ -1,0 +1,53 @@
+# any-concurrency + Traefik example
+# Usage:
+#   docker compose -f examples/docker-compose.traefik.yml up -d
+#   Dashboard:  http://localhost:8080
+#   Traefik:    http://localhost:8081 (dashboard)
+
+services:
+  traefik:
+    image: traefik:v3
+    container_name: traefik
+    restart: unless-stopped
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      # Write CLF access logs to stdout for any-concurrency to tail
+      - "--accesslog=true"
+      - "--accesslog.format=common"
+    ports:
+      - "80:80"
+      - "8081:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  any-concurrency:
+    image: any-concurrency:latest
+    build:
+      context: ..
+    container_name: any-concurrency
+    restart: unless-stopped
+    depends_on:
+      - traefik
+    ports:
+      - "8080:8000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      # Traefik container — auto-discovered when empty
+      TRAEFIK_CONTAINER: ""
+      ENABLE_TRAEFIK:    "1"
+      ENABLE_DOCKER:     "1"
+      ENABLE_WEBHOOK:    "1"
+
+  # Example app behind Traefik — generates access log traffic
+  whoami:
+    image: traefik/whoami
+    container_name: whoami
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.whoami.rule=PathPrefix(`/whoami`)"
+      - "traefik.http.routers.whoami.entrypoints=web"

@@ -1,0 +1,17 @@
+{
+ "error.incomplete": "יש להשלים קודם את השאלה הזו.",
+ "error.unanswered": "יש לבחור אפשרות או להקליד תשובה משלך.",
+ "nav.prev": "השאלה הקודמת",
+ "nav.next": "השאלה הבאה",
+ "nav.minimize": "כיווץ כרטיס השאלה",
+ "nav.maximize": "הרחבת כרטיס השאלה",
+ "nav.cancel": "סגירת כל השאלות",
+ "option.recommended": "מומלץ",
+ "custom.placeholder": "הקלדת תשובה",
+ "action.skip": "דילוג",
+ "action.next": "הבא",
+ "plan.header": "סקירת התוכנית",
+ "plan.approve": "אישור",
+ "plan.decline": "דחייה",
+ "plan.discuss": "לדבר על זה"
+}

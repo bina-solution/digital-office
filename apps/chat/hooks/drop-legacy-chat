@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+#
+# Retire the seven tables the POSTGRES chat engine used, after the move to the buzz relay.
+#
+# This is a SEPARATE, OPERATOR-RUN step and not part of chatapi/db/schema.sql, for one reason:
+# schema.sql runs unattended on every boot of the chat service, so a DROP in it would destroy a live
+# deployment's chat history the moment it deployed — silently, with no backup, and on every machine
+# at once. Destruction gets its own command, a backup first, and a human typing the confirmation.
+#
+#   apps/chat/hooks/drop-legacy-chat            # dry run: show what exists and what would go
+#   apps/chat/hooks/drop-legacy-chat --apply    # dump to ci-artifacts/, then drop
+#
+# What goes:  chat_users, chat_conversations, chat_members, chat_messages, chat_attachments,
+#             chat_mentions, chat_reads + the chat_notify_message() trigger function.
+# What STAYS: chat_profiles — the identity plane. Which identities exist, which are admin and the
+#             hash of each api key are facts about THIS deployment; the relay only knows pubkeys.
+#
+# Safe to run twice: every statement is IF EXISTS, and a second run finds nothing to do.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+cd "${ROOT}"
+
+DEPLOYMENT="$(grep -E '^DEPLOYMENT_NAME=' .env 2>/dev/null | cut -d= -f2- || true)"
+DEPLOYMENT="${DEPLOYMENT:-bina-deployment}"
+DB="supabase-db-${DEPLOYMENT}"
+SCHEMA="$(grep -E '^CHAT_DB_SCHEMA=' .env 2>/dev/null | cut -d= -f2- || true)"
+SCHEMA="${SCHEMA:-public}"
+
+LEGACY=(chat_reads chat_mentions chat_attachments chat_messages chat_members chat_conversations chat_users)
+
+psql() { docker exec -i "${DB}" psql -U postgres -d postgres "$@"; }
+
+if ! docker ps --format '{{.Names}}' | grep -qx "${DB}"; then
+  echo "drop-legacy-chat: ${DB} is not running — start the stack first (./bbox run)" >&2
+  exit 1
+fi
+
+echo "drop-legacy-chat: schema ${SCHEMA} on ${DB}"
+echo
+found=()
+for t in "${LEGACY[@]}"; do
+  n="$(psql -tAc "select coalesce((select count(*)::text from ${SCHEMA}.${t}), '0')" 2>/dev/null || echo "-")"
+  if [ "${n}" = "-" ]; then
+    printf '  %-22s absent\n' "${t}"
+  else
+    printf '  %-22s %s row(s)\n' "${t}" "${n}"
+    found+=("${t}")
+  fi
+done
+echo
+printf '  %-22s KEPT — the identity plane\n' "chat_profiles"
+echo
+
+if [ "${#found[@]}" -eq 0 ]; then
+  echo "drop-legacy-chat: nothing to retire."
+  exit 0
+fi
+
+if [ "${1:-}" != "--apply" ]; then
+  echo "drop-legacy-chat: DRY RUN. Re-run with --apply to dump and drop the ${#found[@]} table(s) above."
+  exit 0
+fi
+
+# BACK UP BEFORE DESTRUCTION. A dump that fails must stop the drop, which is why it is not piped.
+OUT="ci-artifacts/chat-legacy-$(date +%Y%m%d-%H%M%S).sql"
+mkdir -p ci-artifacts
+echo "drop-legacy-chat: dumping to ${OUT} …"
+args=()
+for t in "${found[@]}"; do args+=(-t "${SCHEMA}.${t}"); done
+docker exec -i "${DB}" pg_dump -U postgres -d postgres "${args[@]}" > "${OUT}"
+if [ ! -s "${OUT}" ]; then
+  echo "drop-legacy-chat: the dump is empty — REFUSING to drop." >&2
+  exit 1
+fi
+echo "drop-legacy-chat: dump is $(wc -c < "${OUT}") bytes."
+
+# CASCADE is deliberate and bounded: these seven reference each other (messages -> conversations,
+# attachments -> messages), so a plain DROP would fail on order alone. Nothing outside this list
+# references them — verified 2026-09-02, the only hit for `chat_messages` anywhere else in the repo
+# is a pre-cutover backup dump.
+{
+  echo "BEGIN;"
+  echo "DROP TRIGGER IF EXISTS trg_chat_notify_message ON ${SCHEMA}.chat_messages;"
+  echo "DROP FUNCTION IF EXISTS ${SCHEMA}.chat_notify_message();"
+  for t in "${found[@]}"; do echo "DROP TABLE IF EXISTS ${SCHEMA}.${t} CASCADE;"; done
+  echo "COMMIT;"
+} | psql -v ON_ERROR_STOP=1
+
+echo "drop-legacy-chat: done. chat_profiles kept; ${#found[@]} table(s) retired; backup at ${OUT}"

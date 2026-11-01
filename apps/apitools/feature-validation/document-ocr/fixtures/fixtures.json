@@ -1,0 +1,86 @@
+[
+  {
+    "name": "good-png-default",
+    "notes": "Upload a valid PNG with default OCR engine",
+    "source_file": "fixtures/real-doc-1.png",
+    "upload_params": {},
+    "assertions": {
+      "has_file_hash": true,
+      "no_error": true,
+      "has_annotations": true
+    }
+  },
+  {
+    "name": "good-png-default-2",
+    "notes": "Upload a second valid PNG with default OCR engine",
+    "source_file": "fixtures/real-doc-2.png",
+    "upload_params": {},
+    "assertions": {
+      "has_file_hash": true,
+      "no_error": true,
+      "has_annotations": true
+    }
+  },
+  {
+    "name": "good-png-google",
+    "notes": "Upload with explicit Google Vision engine",
+    "source_file": "fixtures/real-doc-1.png",
+    "upload_params": {
+      "cache": "false",
+      "ocr_engine": "google"
+    },
+    "assertions": {
+      "has_file_hash": true,
+      "no_error": true,
+      "has_annotations": true,
+      "engine_is": "google"
+    },
+    "requires": "google_vision"
+  },
+  {
+    "name": "good-png-local",
+    "notes": "Upload with explicit local Tesseract engine",
+    "source_file": "fixtures/real-doc-1.png",
+    "upload_params": {
+      "cache": "false",
+      "ocr_engine": "local"
+    },
+    "assertions": {
+      "has_file_hash": true,
+      "no_error": true,
+      "has_annotations": true,
+      "engine_is": "local"
+    }
+  },
+  {
+    "name": "cache-disabled-with-engine",
+    "notes": "Verify cache is bypassed when engine is explicitly set",
+    "source_file": "fixtures/real-doc-2.png",
+    "upload_params": {
+      "ocr_engine": "local"
+    },
+    "assertions": {
+      "has_file_hash": true,
+      "no_error": true,
+      "has_annotations": true
+    }
+  },
+  {
+    "name": "unsupported-txt",
+    "notes": "Upload a .txt file — should handle gracefully",
+    "source_file": "fixtures/unsupported.txt",
+    "upload_params": {},
+    "assertions": {
+      "expect_error": true
+    }
+  },
+  {
+    "name": "corrupted-png",
+    "notes": "Upload an undecodable/corrupt PNG (header only, no image data) — apitools must reject it with a structured error, not crash.",
+    "source_file": "fixtures/corrupted.png",
+    "upload_params": {},
+    "assertions": {
+      "expect_error": true
+    }
+  }
+]

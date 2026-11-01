@@ -1,0 +1,379 @@
+/* ── Desktop mode (desktop.js) ─────────────────────────────────────────────────────
+   The console's optional multi-window desktop, after Scott Jenson's Akademy 2026 spatial prototype
+   (ai/context/console-desktop-working-memory.md §3.S). Everything here is scoped under html.dk-on /
+   .dk / html.bare, so with the mode off the classic shell renders exactly as before.
+   Colours: nothing here writes one. The stage is the palette's sky (`--desk`, and `--desk-ink` for
+   what stands straight on it — bina-ui/theme-tokens.css); its bar, dock and panels are the surface,
+   ink and hairline every screen uses, so they turn with the theme exactly as the windows do. */
+
+/* a console view shown INSIDE a desktop window: the same shell, without its own rail and top bar */
+html.bare #app{grid-template-columns:1fr}
+html.bare .side,html.bare .topbar,html.bare .bottomnav,html.bare .skiplink{display:none!important}
+
+html.dk-on,html.dk-on body{overflow:hidden;height:100%}
+html.dk-on #app,html.dk-on .bottomnav,html.dk-on .skiplink{display:none!important}
+
+.dk{
+  --dk-glass:color-mix(in srgb,var(--surface) 86%,transparent);   /* a bar over the sky: with the sky behind it, muted text still reads 4.56 */
+  --dk-tint:color-mix(in srgb,var(--ink) 9%,transparent);         /* a key under the pointer */
+  position:fixed;inset:0;z-index:100;overflow:hidden;background:var(--desk);color:var(--ink);
+  font-family:var(--font);direction:rtl;user-select:none;-webkit-user-select:none;outline:none
+}
+.dk.wall{background:linear-gradient(135deg,var(--sky-line),var(--desk))}
+.dk canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.dk-layer{position:absolute;inset:0}
+
+/* ── menu bar: full width, or pulled in to the focus zone as a pill (S4) ── */
+.dk-bar{position:absolute;top:0;left:0;right:0;height:28px;display:flex;align-items:center;gap:2px;padding:0 10px;
+  background:var(--dk-glass);backdrop-filter:blur(14px) saturate(1.3);-webkit-backdrop-filter:blur(14px) saturate(1.3);
+  border-bottom:1px solid var(--line);font-size:13px;z-index:9000;white-space:nowrap;
+  transition:left .55s var(--ease-standard),right .55s var(--ease-standard),top .55s var(--ease-standard),border-radius .55s,height .55s}
+.dk-bar.pill{top:6px;height:30px;border-radius:var(--radius-pill);border:1px solid var(--line)}
+.dk-bar button{background:none;border:0;color:inherit;font:inherit;padding:3px 9px;border-radius:7px;cursor:default;line-height:1.4}
+.dk-bar button:hover,.dk-bar button.open{background:var(--dk-tint)}
+.dk-bar .dk-logo{width:22px;height:22px;padding:0;margin-inline-end:4px;border-radius:0;background:none}
+.dk-bar .dk-logo:hover,.dk-bar .dk-logo.open{background:none;filter:brightness(1.15)}
+.dk-bar .dk-appname{font-weight:700}
+/* The office the focused window belongs to, in the bar (flt-004): its animal beside its name and its
+   own hue on the name. The name of the app stays in the bar's ink — the bar already says "this is the
+   thing you are looking at", and this says WHOSE copy of it, in the same colour the rail, the launcher
+   and the dock use. `--office-hue` comes from the palette's `[data-office-hue="…"]` rules. */
+.dk-bar .dk-office[data-office-hue]{color:var(--office-hue)}
+.dk-bar .office-animal{width:14px;height:14px;vertical-align:-2px}
+.dk-bar .office-animal svg{width:14px;height:14px}
+.dk-bar .dk-grow{flex:1}
+.dk-bar .dk-clock{color:var(--muted);font-variant-numeric:tabular-nums}
+.dk-bar .dk-srch{display:flex;align-items:center;gap:6px;color:var(--muted)}
+.dk-bar .dk-srch svg{width:14px;height:14px}
+
+.dk-menu{position:absolute;min-width:250px;background:var(--surface);
+  border:1px solid var(--line);border-radius:11px;padding:5px;box-shadow:var(--shadow-lg);z-index:9500;font-size:13px}
+.dk-menu button{display:flex;width:100%;align-items:center;gap:18px;justify-content:space-between;background:none;border:0;color:inherit;
+  font:inherit;padding:6px 10px;border-radius:7px;text-align:start;cursor:default}
+.dk-menu button:hover{background:var(--accent);color:var(--accent-ink)}
+.dk-menu button[disabled]{opacity:.45}
+.dk-menu kbd{font:12px/1 var(--font);color:var(--muted);direction:ltr}
+.dk-menu button:hover kbd{color:var(--accent-ink)}
+.dk-menu hr{border:0;border-top:1px solid var(--line);margin:4px 3px}
+.dk-menu .chk{width:14px;height:14px;flex:none;position:relative}
+.dk-menu .chk.on::after{content:"";position:absolute;inset:1px 4px 4px;border:solid currentColor;border-width:0 2px 2px 0;transform:rotate(45deg)}
+.dk-menu .lbl{display:flex;align-items:center;gap:8px;flex:1}
+
+/* ── dock ──
+   The dock's dimensions are custom properties written by `desktop.js` from `static/dock-budget.js`
+   (`--dock-tile` 46, `--dock-gap` 8, `--dock-pad` 10) — one source, consumed here. So is the NUMBER
+   of tiles the dock draws: a function of the viewport, never of how many apps exist
+   (ai/context/console-dock-capacity-design.md, `issues/console-desktop-dock-overflows-its-pill-and-
+   hides-17-apps.yaml`). What does not fit is behind the «עוד» door in the last slot.
+   NO `overflow:hidden` here, on purpose: a tile's hover tooltip (`.tip`, 58px above the tile) and its
+   hover lift are painted outside the pill by design, so clipping would trade a bug the budget already
+   makes impossible for a visible regression. The guarantee is MEASURED instead —
+   `scripts/ui-coverage/dock-fit.py` at 1294/1440/1920 asserts nothing paints outside the pill. */
+.dk-dock{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);display:flex;align-items:flex-end;
+  gap:var(--dock-gap,8px);padding:8px var(--dock-pad,10px);
+  background:var(--dk-glass);backdrop-filter:blur(16px) saturate(1.3);-webkit-backdrop-filter:blur(16px) saturate(1.3);
+  border:1px solid var(--line);border-radius:18px;z-index:9000;max-width:calc(100vw - 40px)}
+.dk-dock .sep{width:1px;align-self:stretch;background:var(--line);margin:4px 2px}
+.dk-ic{width:var(--dock-tile,46px);height:var(--dock-tile,46px);border-radius:12px;display:grid;place-items:center;position:relative;border:0;padding:0;
+  cursor:default;transition:transform var(--dur-base) var(--ease-standard);flex:none;box-shadow:inset 0 0 0 1px var(--dk-tint)}
+.dk-ic svg{width:24px;height:24px}
+/* An app that runs on a LINKED office (ai/context/dgo-remote-apps.md §4) carries the same corner
+   bracket the rail and the launcher give it. The dock's icons are coloured tiles, so the mark is
+   drawn in the tile's own ink — readable on whichever key the app got. One icon per registry
+   entry: an app installed here AND on a linked office is two icons, one of them marked. */
+.dk-ic.is-remote::before{content:"";position:absolute;inset-block-start:3px;inset-inline-start:3px;
+  width:8px;height:8px;pointer-events:none;
+  border-block-start:2px solid;
+  border-inline-start:2px solid;
+  border-start-start-radius:3px}
+.dk-ic.is-remote.is-offline::before{opacity:.5}
+/* …and WHICH other machine (flt-004): the office's own colour, the one it publishes as a NAME and the
+   palette's `[data-office-hue="…"]` rules turn into `--office-hue` — so nothing here names a colour,
+   and an office that publishes none keeps the ink bracket it always had. */
+.dk-ic.is-remote[data-office-hue]::before{border-color:var(--office-hue)}
+.dk-ic:hover{transform:translateY(-7px) scale(1.14)}
+.dk-ic.run::after{content:"";position:absolute;bottom:-6px;left:50%;margin-left:-2px;width:4px;height:4px;border-radius:50%;background:var(--ink)}
+.dk-ic .tip{position:absolute;bottom:58px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--surface);font-size:12px;
+  padding:3px 9px;border-radius:7px;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity var(--dur-fast)}
+.dk-ic:hover .tip{opacity:1}
+/* An app's colour is one of the kit's keys: a hue (`--dk-c`) and the ink written on it (`--dk-ci`).
+   Said once here; a dock tile, a window put aside as an icon, a chip and a block of the memory
+   window all read the pair. The four hues stand in every theme and carry their own ink; a step that
+   turns with the theme is written in the surface's colour, which turns with it. */
+.dk-c0{--dk-c:var(--olive);--dk-ci:var(--olive-ink)} .dk-c1{--dk-c:var(--sky);--dk-ci:var(--sky-ink)}
+.dk-c2{--dk-c:var(--plum);--dk-ci:var(--plum-ink)} .dk-c3{--dk-c:var(--lime);--dk-ci:var(--lime-ink)}
+.dk-c4{--dk-c:var(--violet)} .dk-c5{--dk-c:var(--olive-d)} .dk-c6{--dk-c:var(--muted)}
+.dk-ic,.dk-wg-btn,.dk-mem .chip{background-color:var(--dk-c);color:var(--dk-ci,var(--surface))}
+
+/* ── the «עוד» door, and the launcher it opens ─────────────────────────────────────────────
+   ONE tile in the dock's last slot, carrying the count of the apps behind it, opens the existing
+   grouped launcher: the same registry, the same `group` order, the same `.home-grid`/`.htile` grid
+   and the same filter-in-place idiom as the shell's home screen (and as BinaNav in the rail). The
+   panel is a surface like the home screen's own, so the launcher's tiles are drawn here exactly as
+   they are there: nothing of theirs is restyled, and the panel cannot drift from what it reuses. */
+.dk-more-ic .dk-more-n{position:absolute;inset-block-start:-5px;inset-inline-start:-5px;min-width:17px;height:17px;padding:0 4px;
+  border-radius:9px;background:var(--ink);color:var(--surface);font-size:11px;font-weight:700;line-height:17px;text-align:center}
+.dk-more{position:absolute;inset:0;z-index:9500;display:flex;align-items:flex-end;justify-content:center;
+  padding:0 16px 86px;background:var(--scrim);backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px)}
+.dk-more-box{width:min(880px,100%);max-height:min(64vh,540px);display:flex;flex-direction:column;gap:10px;padding:14px;
+  background:var(--bg);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow-lg)}
+.dk-more-head{display:flex;align-items:baseline;gap:8px;font-size:14px;font-weight:700}
+.dk-more-head small{color:var(--muted);font-size:12px;font-weight:400}
+.dk-more-q{width:100%;box-sizing:border-box;background:var(--surface);border:1px solid var(--line);
+  border-radius:12px;color:inherit;font:inherit;font-size:14px;padding:8px 12px}
+.dk-more-q::placeholder{color:var(--muted)}
+.dk-more-list{overflow:auto;padding:2px;overscroll-behavior:contain}
+.dk-more-grp{margin:10px 2px 0;font-size:12.5px;font-weight:700;color:var(--muted)}
+.dk-more .htile{cursor:default}
+.dk-more .htile:hover{background:var(--accent-soft)}
+/* The launcher's tile is 84px wide with ONE line for a name — right for a phone's home screen, and
+   here it cut three of 24 names ("נכסים דיגיט…", "ניהול פרויק…", "דפדפן הל…") while half of every
+   row stood empty (hp-laptop, 2026-10-06). In this panel a tile is a little wider and a name may
+   take a second line; only a name longer than two lines is shortened, and then with its ellipsis. */
+.dk-more .home-grid{grid-template-columns:repeat(auto-fill,minmax(104px,1fr))}
+.dk-more .htile-nm{white-space:normal;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2}
+.dk-more-none{padding:22px 8px;text-align:center;color:var(--muted);font-size:13px}
+
+/* ── windows ── (overflow stays visible so a window's collection panel can sit beside it and move
+   with it; the rounded corners are clipped by the title bar and the body instead) */
+.dk-win{position:absolute;transform-origin:50% 50%;border-radius:12px;background:var(--surface);color:var(--ink);overflow:visible;
+  display:flex;flex-direction:column;box-shadow:var(--shadow-lg),0 0 0 1px var(--dk-tint);will-change:transform}
+.dk-win>.dk-tb{border-radius:12px 12px 0 0}
+.dk-win>.dk-body{border-radius:0 0 12px 12px}
+.dk-win.anim{transition:left .45s var(--ease-standard),top .45s var(--ease-standard),transform .45s var(--ease-standard),width .45s var(--ease-standard),height .45s var(--ease-standard)}
+/* the window in front stands nearer: the same shadow, and a second one that falls close under it */
+.dk-win.focused{box-shadow:var(--shadow-lg),0 10px 30px var(--scrim),0 0 0 1px var(--sky-d)}
+.dk-tb{height:36px;flex:none;display:flex;align-items:center;gap:10px;padding:0 12px;background:var(--surface-2);border-bottom:1px solid var(--line);touch-action:none}
+/* The three Macintosh window controls. They mirror WITH the bar: `.dk` is `direction:rtl`, so the
+   cluster is anchored at the title bar's start — the right corner, as a Mac window's cluster sits
+   in its left one — and the dots run close, min, zoom OUTWARD from that corner (red outermost).
+   Do NOT pin this to `direction:ltr`: that mirrors the group but not its contents, so the green
+   zoom dot ends up in the corner and close lands innermost, which is the bug the owner reported
+   on 2026-10-05. Inheriting the direction is also the only version that stays correct if the
+   desktop is ever rendered LTR, where the cluster goes left with red outermost. */
+.dk-lights{display:flex;gap:8px;flex:none}
+.dk-l{width:13px;height:13px;border-radius:50%;border:0;padding:0;background:var(--line);cursor:default}
+.dk-win.focused .dk-l.close,.dk-win:hover .dk-l.close{background:var(--plum)}
+.dk-win.focused .dk-l.min,.dk-win:hover .dk-l.min{background:var(--lime)}
+.dk-win.focused .dk-l.zoom,.dk-win:hover .dk-l.zoom{background:var(--olive)}
+.dk-title{flex:1;min-width:0;display:flex;align-items:center;justify-content:center;gap:7px;font-size:13px;font-weight:600;color:var(--muted);white-space:nowrap;overflow:hidden}
+.dk-win.focused .dk-title{color:var(--ink)}
+/* A remote window's title wears the office's own colour (flt-004) — the title already names the office
+   beside the app's name, and this is the half that is recognised without reading: the same hue the
+   dock icon, the rail row and the launcher tile of that office carry. The `data-office-hue` is written
+   by setTitle() from the window's module, and the palette turns the name into `--office-hue`. */
+.dk-title .dk-t[data-office-hue]{color:var(--office-hue)}
+.dk-title svg{width:15px;height:15px;flex:none}
+.dk-tb .dk-end{width:57px;flex:none;display:flex;justify-content:flex-end;align-items:center;gap:4px}
+.dk-tbtn{position:relative;display:flex;align-items:center;gap:3px;height:24px;padding:0 6px;border:0;border-radius:7px;background:none;color:var(--muted);cursor:default;font:600 11px var(--font)}
+.dk-tbtn svg{width:15px;height:15px}
+.dk-tbtn:hover{background:var(--accent-soft);color:var(--accent-d)}
+.dk-tbtn.has{color:var(--accent-d)}
+.dk-win.with-col .dk-tbtn{background:var(--accent);color:var(--accent-ink)}
+.dk-win.dk-origin{box-shadow:0 0 0 3px var(--lime),var(--shadow-lg)!important}
+.dk-native{position:absolute;inset:0;overflow:auto;background:var(--bg);color:var(--ink);user-select:text;-webkit-user-select:text}
+.dk-body{position:relative;flex:1;overflow:hidden;background:var(--bg)}
+.dk-body iframe{position:absolute;top:0;left:0;width:100%;height:100%;border:0;transform-origin:0 0;background:var(--bg)}
+.dk.dragging iframe,.dk.expose iframe{pointer-events:none}
+.dk.dragging,.dk.dragging *{cursor:grabbing!important}
+.dk-sleep{position:absolute;inset:0;display:none;place-items:center;align-content:center;gap:10px;background:var(--surface-2);color:var(--muted);text-align:center;font-size:14px}
+.dk-sleep svg{width:42px;height:42px;opacity:.6}
+.dk-win.sleeping .dk-sleep{display:grid}
+/* the sign-in card of an app on its own host (desktop.js askOwnHost) — over the frame, never beside it */
+.dk-ask{position:absolute;inset:0;overflow:auto;padding:0 18px;background:var(--bg)}
+.dk-ask:empty{display:none}
+.dk-rz{position:absolute;z-index:3}
+.dk-rz.n{top:-3px;left:10px;right:10px;height:8px;cursor:ns-resize}.dk-rz.s{bottom:-3px;left:10px;right:10px;height:8px;cursor:ns-resize}
+.dk-rz.e{right:-3px;top:10px;bottom:10px;width:8px;cursor:ew-resize}.dk-rz.w{left:-3px;top:10px;bottom:10px;width:8px;cursor:ew-resize}
+.dk-rz.ne{top:-3px;right:-3px;width:14px;height:14px;cursor:nesw-resize}.dk-rz.sw{bottom:-3px;left:-3px;width:14px;height:14px;cursor:nesw-resize}
+.dk-rz.nw{top:-3px;left:-3px;width:14px;height:14px;cursor:nwse-resize}.dk-rz.se{bottom:-3px;right:-3px;width:14px;height:14px;cursor:nwse-resize}
+.dk-win.stashed .dk-rz,.dk-win.maxed .dk-rz{display:none}
+.dk-win.maxed{border-radius:10px}
+
+/* a window that became a widget (S10) or, far out in a flank, an icon */
+.dk-wg{display:none;position:absolute;inset:0;flex-direction:column;align-items:center;justify-content:flex-start;gap:6px;touch-action:none}
+.dk-win.m-widget,.dk-win.m-icon{background:transparent;box-shadow:none;overflow:visible}
+.dk-win.m-widget>:not(.dk-wg),.dk-win.m-icon>:not(.dk-wg){display:none}
+.dk-win.m-widget .dk-wg,.dk-win.m-icon .dk-wg{display:flex}
+.dk-wg-btn{width:62px;height:62px;border-radius:50%;border:0;padding:0;display:grid;place-items:center;
+  box-shadow:var(--shadow),0 0 0 3px var(--dk-glass);cursor:default}
+.dk-wg-btn svg{width:26px;height:26px}
+.dk-win.m-widget .dk-wg-btn{background:var(--accent);color:var(--accent-ink)}
+.dk-win.m-icon .dk-wg-btn{border-radius:16px;width:58px;height:58px}
+.dk-wg-lbl{font-size:12px;color:var(--desk-ink);max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dk-win.focused .dk-wg-btn{box-shadow:var(--shadow),0 0 0 3px var(--sky-d)}
+
+/* shift-drag snap target */
+.dk-snap{position:absolute;display:none;pointer-events:none;z-index:8000;border-radius:14px;border:2px solid var(--sky-d);background:var(--dk-tint);
+  transition:left var(--dur-base),top var(--dur-base),width var(--dur-base),height var(--dur-base)}
+
+/* Exposé, kept for contrast with the stash (S2): modal, and the thumbnails cannot be worked in */
+.dk-dim{position:absolute;inset:0;background:var(--scrim);opacity:0;pointer-events:none;transition:opacity .35s}
+.dk.expose .dk-dim{opacity:1}
+.dk.expose .dk-win{cursor:pointer}
+.dk.expose .dk-win:hover{box-shadow:0 0 0 4px var(--lime),var(--shadow-lg)}
+/* a thumbnail's name is a label of its own — a surface with its ink — so it reads on the dimmed sky in either theme */
+.dk-xl{position:absolute;transform:translate(-50%,0);padding:1px 10px;border-radius:var(--radius-pill);background:var(--surface);
+  font-size:13px;font-weight:600;pointer-events:none;white-space:nowrap}
+
+/* help card + toast */
+.dk-help{position:absolute;top:56px;left:50%;transform:translateX(-50%);width:min(600px,92vw);background:var(--surface);
+  border:1px solid var(--line);border-radius:16px;padding:18px 22px;
+  box-shadow:var(--shadow-lg);z-index:9600;display:none;font-size:13.5px}
+.dk-help.show{display:block}
+.dk-help h3{margin:0 0 10px;font-size:15px}
+.dk-help dl{display:grid;grid-template-columns:auto 1fr;gap:7px 16px;margin:0}
+.dk-help dt{text-align:center}
+.dk-help kbd,.dk-toast kbd{display:inline-block;min-width:22px;padding:2px 7px;border-radius:6px;background:var(--surface-2);border:1px solid var(--line);font:12px/1.4 var(--font);direction:ltr}
+.dk-help dd{margin:0;color:var(--muted)}
+.dk-toast{position:absolute;bottom:92px;left:50%;transform:translateX(-50%) translateY(10px);background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow);
+  border-radius:12px;padding:8px 16px;font-size:13px;opacity:0;transition:opacity var(--dur-base),transform var(--dur-base);pointer-events:none;z-index:9600}
+.dk-toast.show{opacity:1;transform:translateX(-50%)}
+
+@media (prefers-reduced-motion:reduce){
+  .dk-win.anim,.dk-bar,.dk-ic,.dk-snap{transition:none!important}
+}
+
+/* ── the settings view (classic #content, and inside a bare desktop window) ── */
+.dk-set .dk-row{display:flex;align-items:center;gap:10px;padding:11px 0;border-top:1px solid var(--line);font-size:14px}
+/* the help text starts where the label ends, on one edge for every row (pushed to the far side it
+   was a ragged column of its own), and under the label where a row is too narrow for both */
+.dk-set .dk-row{flex-wrap:wrap}
+.dk-set .dk-row .sub{margin:0;flex:1 1 220px;min-width:0;text-align:start}
+.dk-set .dk-row label,.dk-set .dk-row b{flex:none}
+@media (max-width:640px){.dk-set .dk-row .sub{flex-basis:100%;padding-inline-start:44px}}
+/* a setting is a SWITCH — the control the rest of the office uses for on/off — not a ticked box.
+   The input stays an input (keyboard, label, the change event); only its drawing changes. */
+.dk-set .dk-row input[type=checkbox]{appearance:none;-webkit-appearance:none;flex:none;width:34px;height:20px;margin:0;
+  border-radius:999px;background:var(--line);position:relative;cursor:pointer;transition:background .15s}
+.dk-set .dk-row input[type=checkbox]::after{content:"";position:absolute;top:2px;inset-inline-start:2px;width:16px;height:16px;
+  border-radius:50%;background:var(--surface);box-shadow:var(--elev-1);transition:inset-inline-start .15s}
+.dk-set .dk-row input[type=checkbox]:checked{background:var(--accent)}
+.dk-set .dk-row input[type=checkbox]:checked::after{inset-inline-start:16px}
+.dk-set .dk-row input[type=checkbox]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.dk-set .dk-row select{font:inherit;padding:4px 8px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+.dk-set .dk-note{color:var(--muted);font-size:12.5px;margin-top:10px}
+
+/* ── the account chip, carried from the classic top bar into the menu bar ── */
+.dk-bar .dk-acct{display:flex;align-items:center;margin-inline-end:4px}
+.dk-bar .dk-acct.hidden{display:none}
+.dk-bar .dk-acct .acct-btn{height:24px;padding:0 8px;border-radius:var(--radius-pill);background:none;border:1px solid var(--line);font-size:12px}
+.dk-bar .dk-acct .acct-btn:hover{background:var(--dk-tint)}
+.dk-bar .dk-acct .acct-hint{display:none}
+.dk-bar .dk-acct .acct-lbl{font-weight:600}
+.dk-bar .dk-acct .acct-menu{top:calc(100% + 8px)}
+
+/* ── a window's collection (associative memory, desktop-memory.js) ── */
+.dk-col{position:absolute;top:0;height:100%;width:300px;display:none;flex-direction:column;background:var(--surface);color:var(--ink);
+  border-radius:12px;box-shadow:var(--shadow-lg),0 0 0 1px var(--dk-tint);overflow:hidden;font-size:13px;user-select:none;-webkit-user-select:none}
+.dk-col.open{display:flex}
+.dk-col.side-l{right:calc(100% + 10px)}
+.dk-col.side-r{left:calc(100% + 10px)}
+.dk-col.two-up{width:620px}
+.dk-col.over{box-shadow:0 0 0 3px var(--accent),var(--shadow-lg)}
+.dk-col>header{display:flex;align-items:center;gap:6px;padding:8px 10px;background:var(--surface-2);border-bottom:1px solid var(--line);flex:none}
+.dk-col>header .place{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:110px}
+.dk-col .grow{flex:1}
+.dk-col header button{border:0;background:none;color:var(--muted);font:600 12px var(--font);padding:4px 7px;border-radius:7px;cursor:default;display:flex;align-items:center}
+.dk-col header button svg{width:15px;height:15px}
+.dk-col header button:hover,.dk-col header button.on{background:var(--accent-soft);color:var(--accent-d)}
+.dk-col .crumbs{display:flex;align-items:center;gap:8px;padding:0 10px;flex:none}
+.dk-col .crumbs:not(:empty){padding:6px 10px;border-bottom:1px solid var(--line)}
+.dk-col .crumbs button{border:0;background:none;color:var(--blue);font:inherit;display:flex;align-items:center;gap:4px;cursor:default}
+.dk-col .crumbs svg{width:13px;height:13px}
+.dk-col .list{flex:1;overflow:auto;outline:none;padding:4px}
+.dk-col.two-up .list,.dk-col.two-up .hint,.dk-col.two-up .crumbs{width:300px}
+.dk-col .it{display:flex;gap:8px;align-items:flex-start;padding:7px 8px;border-radius:8px;cursor:default}
+.dk-col .it:hover{background:var(--surface-2)}
+.dk-col .it.sel{background:var(--accent-soft)}
+.dk-col .it .ic{color:var(--muted);flex:none;padding-top:1px}
+.dk-col .it .ic svg{width:16px;height:16px}
+.dk-col .it .tx{min-width:0;flex:1}
+.dk-col .it b{display:block;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dk-col .it small{color:var(--muted);font-size:11.5px;display:flex;gap:4px;align-items:center;flex-wrap:wrap}
+.dk-col .it .src{display:inline-flex;align-items:center;gap:3px;border:0;background:none;padding:0;color:var(--blue);font:inherit;cursor:default}
+.dk-col .it .src svg{width:12px;height:12px}
+.dk-col .empty{color:var(--muted);text-align:center;padding:30px 16px;line-height:1.6}
+.dk-col .hint{flex:none;padding:8px 10px;border-top:1px dashed var(--line);color:var(--muted);font-size:11.5px;text-align:center}
+.dk-col .view{display:none}
+.dk-col.two-up .view{display:flex;flex-direction:column;position:absolute;top:0;bottom:0;left:0;width:320px;border-inline-end:1px solid var(--line);background:var(--surface)}
+.dk-col.side-r.two-up .view{left:auto;right:0}
+.dk-col.two-up.side-r .list,.dk-col.two-up.side-r .hint,.dk-col.two-up.side-r .crumbs{margin-inline-start:0}
+.dk-col .view header{display:flex;align-items:center;gap:6px;padding:8px 10px;border-bottom:1px solid var(--line)}
+.dk-col .view header b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dk-col .view .vb{flex:1;overflow:auto;padding:10px;user-select:text;-webkit-user-select:text}
+.dk-col .view textarea{width:100%;height:100%;min-height:200px;box-sizing:border-box;border:1px solid var(--line);border-radius:8px;padding:8px;font:13px/1.6 var(--font);background:var(--bg);color:var(--ink);resize:none}
+.dk-col .view img{max-width:100%;border-radius:8px}
+.dk-col .view .url{direction:ltr;text-align:left;word-break:break-all;color:var(--blue)}
+.dk-col .view table{border-collapse:collapse;width:100%;font-size:12px}
+.dk-col .view th,.dk-col .view td{border:1px solid var(--line);padding:4px 6px;text-align:start}
+.dk-col .view th{background:var(--surface-2)}
+.dk-col .acts{position:absolute;inset-inline-start:10px;z-index:5;min-width:190px;background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:var(--elev-3);padding:4px;display:flex;flex-direction:column}
+.dk-col .acts button{border:0;background:none;text-align:start;padding:7px 10px;border-radius:7px;font:inherit;color:var(--ink);cursor:default}
+.dk-col .acts button:hover:not([disabled]){background:var(--accent-soft)}
+.dk-col .acts button[disabled]{opacity:.4}
+
+/* ── the memory window (episodic memory, desktop-memory.js) ── */
+.dk-mem{display:flex;flex-direction:column;height:100%;font-size:13.5px}
+.dk-mem .mh{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--surface);position:sticky;top:0;z-index:2}
+.dk-mem .grow{flex:1}
+.dk-mem .tabs,.dk-mem .range{display:flex;gap:2px;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:3px}
+.dk-mem .tabs button,.dk-mem .range button{border:0;background:none;padding:5px 12px;border-radius:7px;font:600 13px var(--font);color:var(--muted);cursor:default}
+.dk-mem .tabs button.on,.dk-mem .range button.on{background:var(--surface);color:var(--ink);box-shadow:var(--elev-1)}
+.dk-mem .mb{flex:1;overflow:auto;padding:14px 16px}
+.dk-mem .lead{color:var(--muted);margin:0 0 12px;max-width:900px;line-height:1.6}
+.dk-mem .empty{color:var(--muted);text-align:center;padding:40px 12px}
+.dk-mem .story{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:12px;box-shadow:var(--elev-1)}
+.dk-mem .story header{display:flex;gap:10px;align-items:baseline;margin-bottom:10px}
+.dk-mem .story header small{color:var(--muted)}
+.dk-mem .chain{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.dk-mem .chain .arrow{color:var(--muted);font-weight:700}
+.dk-mem .chip{display:flex;align-items:center;gap:6px;border:0;border-radius:10px;padding:6px 10px;cursor:default;font:inherit;text-align:start}
+.dk-mem .chip svg{width:16px;height:16px}
+.dk-mem .chip small{opacity:.85;font-size:11.5px;max-width:260px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dk-mem .flows{color:var(--muted);margin:10px 0 0;font-size:12.5px}
+.dk-mem svg.anchors{display:block;background:var(--surface);border:1px solid var(--line);border-radius:14px}
+.dk-mem svg.anchors .edge{stroke:var(--line);stroke-linecap:round}
+.dk-mem svg.anchors .tether{stroke:var(--line);stroke-dasharray:2 3}
+.dk-mem svg.anchors .flow{fill:none;stroke:var(--accent);stroke-width:2;stroke-dasharray:6 5}
+.dk-mem svg.anchors .sat{fill:var(--surface-2);stroke:var(--muted);cursor:pointer}
+.dk-mem svg.anchors .anchor{cursor:pointer}
+.dk-mem svg.anchors .anchor rect{fill:var(--surface-2);stroke:var(--line);stroke-width:1.5}
+.dk-mem svg.anchors .anchor.t3 rect{fill:var(--accent-soft);stroke:var(--accent)}
+.dk-mem svg.anchors .anchor.t2 rect{stroke:var(--blue)}
+.dk-mem svg.anchors text{font:600 13px var(--font);fill:var(--ink)}
+.dk-mem svg.anchors text.sub{font-size:11px;fill:var(--muted);font-weight:400}
+.dk-mem .tlbar{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.dk-mem .tlbar .at{color:var(--muted)}
+.dk-mem svg.tl{display:block;background:var(--surface);border:1px solid var(--line);border-radius:14px;cursor:crosshair}
+.dk-mem svg.tl .tick{stroke:var(--line)}
+.dk-mem svg.tl .tickl{font:11px var(--font);fill:var(--muted)}
+.dk-mem svg.tl .grp{font:700 12px var(--font);fill:var(--ink)}
+.dk-mem svg.tl .lane{font:12px var(--font);fill:var(--muted)}
+.dk-mem svg.tl .lanel{stroke:var(--line);stroke-dasharray:1 3}
+.dk-mem svg.tl .blk{cursor:pointer;opacity:.9;fill:var(--dk-c)}
+.dk-mem svg.tl .blk:hover{opacity:1;stroke:var(--ink)}
+.dk-mem svg.tl .bin{fill:var(--muted);opacity:.55}
+.dk-mem svg.tl .bin.err{fill:var(--danger);opacity:.8}
+.dk-mem svg.tl .cursor{stroke:var(--accent);stroke-width:2}
+.dk-mem .rec-h{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.dk-mem .rec-h .sw{display:flex;align-items:center;gap:6px;font-weight:600}
+.dk-mem .rec-h input{width:17px;height:17px}
+.dk-mem table.rec{border-collapse:collapse;width:100%;font-size:12.5px;background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.dk-mem table.rec th,.dk-mem table.rec td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:start;white-space:nowrap}
+.dk-mem table.rec td:nth-child(2){white-space:normal;max-width:360px}
+.dk-mem table.rec th{background:var(--surface-2);color:var(--muted);font-weight:600}
+
+/* compact: a desktop that got narrower keeps every window alive; the focused one fills the screen
+   above the dock and the rest wait behind it, loaded (desktop.js setCompact) */
+.dk.compact canvas,.dk.compact .dk-bar,.dk.compact .dk-dim,.dk.compact .dk-col,.dk.compact .dk-rz,.dk.compact .dk-snap{display:none!important}
+.dk.compact{background:var(--bg)}
+.dk.compact .dk-win{left:0!important;top:0!important;width:100%!important;height:calc(100% - 78px)!important;transform:none!important;border-radius:0!important;transition:none!important;box-shadow:none!important}
+.dk.compact .dk-win:not(.focused){visibility:hidden}
+.dk.compact .dk-win>.dk-tb,.dk.compact .dk-win>.dk-body{border-radius:0}
+.dk.compact .dk-dock{max-width:calc(100vw - 16px);overflow-x:auto;bottom:8px}
+
+/* an external app's window (its own host, framed as is): a passing hint about the way out */
+.dk-exthint{position:absolute;inset-inline:12px;bottom:12px;padding:8px 12px;border-radius:10px;background:var(--ink);color:var(--surface);
+  font-size:12.5px;box-shadow:var(--elev-3);transition:opacity .6s;pointer-events:none;z-index:2}
+.dk-exthint.gone{opacity:0}

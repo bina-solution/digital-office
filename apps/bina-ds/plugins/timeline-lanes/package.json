@@ -1,0 +1,15 @@
+{
+  "name": "@bina/dsh-timeline-lanes",
+  "description": "The office agent's own session log, projected as timeline spans for כל מקביל (any-concurrency): every turn, step, tool call and event, live, with the history kept in the app's store",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./ledger": "./lib/ledger.js",
+    "./mapping": "./lib/mapping.js",
+    "./package.json": "./package.json"
+  },
+  "license": "MIT"
+}

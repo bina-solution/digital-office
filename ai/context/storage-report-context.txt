@@ -1,0 +1,83 @@
+# Storage Report — disk / volumes / DB usage (target: ~3–5 minutes)
+
+You are auditing storage for the bina-deployment Docker Compose stack.
+Goal: tell the operator **where the bytes are going and what is safe to clean
+up**. WhatsApp-friendly output (no code fences, ≤80 lines, terse).
+
+## What to check
+
+1. **Host disk**
+   - `df -h /` and `df -h /var/lib/docker` — % used, free GB.
+   - Top consumers: `du -sh /var/lib/docker/* 2>/dev/null | sort -hr | head -10`
+     (overlay2, volumes, containers, images).
+   - Any partition > 85% — flag 🔴.
+
+2. **Docker objects**
+   - `docker system df -v` — total images / containers / volumes / build cache,
+     and reclaimable.
+   - List top 10 volumes by size (`docker system df -v | awk` or
+     `du -sh /var/lib/docker/volumes/*/_data 2>/dev/null | sort -hr | head -10`).
+   - Dangling images and stopped containers — count + reclaimable size.
+   - Build cache size.
+
+3. **Postgres / Supabase**
+   - For each Postgres-like container (n8n-postgres, supabase-db, etc.):
+     - DB size: `docker exec <c> psql -U <user> -d <db> -c "SELECT pg_size_pretty(pg_database_size(current_database()));"`
+     - Top 10 tables by size:
+       `SELECT schemaname, relname, pg_size_pretty(pg_total_relation_size(relid)) FROM pg_catalog.pg_statio_user_tables ORDER BY pg_total_relation_size(relid) DESC LIMIT 10;`
+   - n8n: count of `execution_entity` rows + size; check if pruning is enabled
+     (`EXECUTIONS_DATA_PRUNE` env vars).
+
+4. **Application storage**
+   - `apitools/storage/`, `incoming-documents/storage/`, any per-service
+     `storage/` or `data/` dirs — total size and oldest/newest file.
+   - `system-logs/`, `reports/`, `db-dumps/`, `data/` at the repo root.
+   - Look for >1 GB dumps that could be moved off-host.
+
+5. **Logs**
+   - Per-container log size:
+     `docker ps -q | xargs -I{} sh -c 'docker inspect -f "{{.Name}} {{.LogPath}}" {} | awk "{print \$1}" "$(docker inspect -f {{.LogPath}} {})"'`
+     (or simpler: `du -sh $(docker inspect --format='{{.LogPath}}' $(docker ps -q)) 2>/dev/null | sort -hr | head -10`)
+   - Are containers using log rotation (`max-size`, `max-file`)?
+
+## Output format
+
+```
+💾 Storage Report — <UTC timestamp>
+
+Host disk: <used>/<total> (<pct>%) — 🟢/🟡/🔴
+
+Docker: images=<n>/<size> volumes=<n>/<size> reclaimable=<size> build_cache=<size>
+
+Top 5 volumes:
+  1. <name>  <size>
+  ...
+
+Top 5 DB tables (across all Postgres):
+  1. <db>.<schema>.<table>  <size>
+  ...
+
+Top 5 app storage dirs:
+  1. <path>  <size>  (oldest: <date>, newest: <date>)
+  ...
+
+Top 5 container logs:
+  1. <container>  <size>
+  ...
+
+Recommended cleanup (safe, ordered by impact):
+1. <action>  ~<reclaim>  (risk: low/med/high, requires downtime: y/n)
+2. ...
+(max 6 items)
+
+Watchlist:
+- ...
+```
+
+Rules:
+- Every number must come from a real command you ran — no estimates.
+- Never recommend `docker system prune --volumes` without naming which volumes
+  would be touched.
+- Flag any DB or volume growing > 1 GB/week if a baseline file exists in
+  `context/storage-report*.txt`.
+- If a Postgres container needs creds you don't have, skip and note it.

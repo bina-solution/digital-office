@@ -1,0 +1,111 @@
+# yaml-language-server: $schema=./schema.json
+title: 20 hooks are committed non-executable - including EVERY backup and restore hook in the platform
+opened: '2026-08-21'
+severity: high
+status: resolved
+summary: 20 hooks are committed non-executable - including EVERY backup and restore hook in the platform
+description: |
+  area: layer 0 / app hooks / bbox export
+
+  ## Context
+
+  G31 (layer0-lint) is red on platform-os-indox-final. `run_app_hooks` selects hooks with
+  `[ -x ]`, so a hook committed 100644 is skipped SILENTLY - it does not warn, it does not
+  fail, the bootstrap simply never runs. The full list, from `git ls-files -s`:
+
+      100644 apps/indox/hooks/fixture-sweep.py
+      100644 apps/indox/hooks/sync-registry-converge.py
+      100644 apps/indox/hooks/ui-qa
+      100644 apps/mail/hooks/test.py
+      100644 apps/supabase/hooks/backup
+      100644 apps/supabase/hooks/restore
+      100644 platform-base/authentik/hooks/backup
+      100644 platform-base/authentik/hooks/restore
+      100644 platform-base/data-management/hooks/_client.py
+      100644 platform-base/data-management/hooks/export.py
+      100644 platform-base/data-management/hooks/import.py
+      100644 platform-base/data-management/hooks/view.py
+      100644 platform-base/glitchtip/hooks/backup
+      100644 platform-base/glitchtip/hooks/restore
+      100644 platform-base/n8n/hooks/backup
+      100644 platform-base/n8n/hooks/restore
+      100644 platform-base/postgres/hooks/backup
+      100644 platform-base/postgres/hooks/restore
+      100644 platform-base/redis/hooks/backup
+      100644 platform-base/redis/hooks/restore
+
+  EVERY backup and restore hook in the platform is in that list: postgres, redis, n8n,
+  authentik, glitchtip, supabase. bbox's own help calls `bbox export` the way to "snapshot
+  EVERYTHING a zip of this folder would miss - the databases, n8n workflows+credentials,
+  documents, auth users, sync cursors", and bbox:636 says "the store-specific work comes from
+  each app's own hooks/backup + hooks/restore". None of them run.
+
+  This is not a repo-wide convention gap. 51 of the 71 hooks DO carry the bit, and the
+  counter-example sits in the same directory as two of the failures:
+
+      100755 platform-base/postgres/hooks/keygen.py
+      100644 platform-base/postgres/hooks/backup
+
+  ## Impact
+
+  `bbox export` produces an archive that looks successful and is missing every database. The
+  restore side is equally dead, so the failure is only discovered when someone tries to bring
+  the deployment up on the new machine. This is the "move this deployment to another machine"
+  feature failing silently in the direction that loses data.
+
+  G31 has been catching it - it is red - but the gate's failure is one line among 12 failing
+  gates, and the four entries it printed first were the postgres/redis pair, which reads like
+  a narrow problem rather than "no app can be backed up".
+
+  ## Why it hides
+
+  layer0-lint.py's own docstring already explains it: on WSL over /mnt/c every file stats 755,
+  so `[ -x ]` is true on the dev machine and false on the Debian VPS that checks out git's
+  mode. Ask git, not the filesystem. The gate does; the humans reading a green local run do not.
+
+  ## Fix
+
+      git update-index --add --chmod=+x apps/indox/hooks/fixture-sweep.py \
+        apps/indox/hooks/sync-registry-converge.py apps/indox/hooks/ui-qa \
+        apps/mail/hooks/test.py apps/supabase/hooks/backup apps/supabase/hooks/restore \
+        platform-base/authentik/hooks/backup platform-base/authentik/hooks/restore \
+        platform-base/glitchtip/hooks/backup platform-base/glitchtip/hooks/restore \
+        platform-base/n8n/hooks/backup platform-base/n8n/hooks/restore \
+        platform-base/postgres/hooks/backup platform-base/postgres/hooks/restore \
+        platform-base/redis/hooks/backup platform-base/redis/hooks/restore
+
+  The four platform-base/data-management/hooks/*.py are invoked as `python3 <path>` rather than
+  through run_app_hooks, so the bit is not load-bearing for them - but G31 does not model that
+  distinction, so either give them the bit too or teach the gate the difference. Leaving a gate
+  permanently red over files that are fine is how a list stops being read.
+
+  Separately: run_app_hooks should SAY something when it skips a hook that exists but is not
+  executable. A silent skip is the whole defect class this repo keeps re-finding.
+
+  ## Where it stands (2026-10-07, hp-laptop, branch dgo-pair)
+
+  All sixteen files in the command above are 100755 in git, and so is every other hook: 97 files
+  under `apps/*/hooks` and `platform-base/*/hooks`, 95 with the bit. The two without it are not
+  hooks - `apps/indox/hooks/_schema-lib.sh` is sourced and
+  `platform-base/data-management/hooks/_client.py` is imported - and G31
+  (`layer0-lint.py::unexecutable_hooks`) asks git, not the file system, on every gate run.
+
+  The "separately" above was still true until today: `run_app_hooks` skipped a hook that is there
+  and cannot run without a word, and the control plane's `_run_hook` copied that rule. Both say it
+  now, and count it: `<app>: <verb> hook is not executable - NOT run (chmod +x ...)` and one more in
+  the number `run_app_hooks` returns; `{"ran": false, "rc": 126, ...}` in the lifecycle answer. G31
+  keeps the committed mode right; this is for the checkout that lost its modes on the way.
+
+  Measured over a made-up office on a Linux file system (on /mnt/c every file reads as executable,
+  so nothing about a missing bit can be seen there): four apps - a hook without the bit, one that
+  runs, one that fails, none.
+
+      as committed   the first skipped in silence        returned 1 (the hook that failed)
+      now            the first named, with the chmod     returned 2
+
+  `platform-base/app-management/test_bringup.py` holds the control plane's half (65 pass).
+tasks:
+- text: "Every hook is 100755 in git (97 files; the two exceptions are a sourced library and an imported module), and G31 asks git on every gate run"
+  done: true
+- text: "run_app_hooks and the control plane's _run_hook SAY a hook that is there and not executable, and count it"
+  done: true

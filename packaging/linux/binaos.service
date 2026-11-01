@@ -1,0 +1,51 @@
+[Unit]
+# The platform stack. Installed by BinaOS.run into /etc/systemd/system/.
+#
+# This file existing at all is the fix for a real gap: build-run.sh copied it with
+# `cp ... || true`, and it did not exist, so the installer silently shipped without a unit. The
+# install reported success and `systemctl start binaos` then answered "Unit could not be found".
+Description=BinaOS platform stack
+# Requires= rather than Wants=: every service in the stack is a container, so without an engine
+# there is nothing to start and failing loudly beats a half-started platform.
+Requires=binaos-docker.service
+After=binaos-docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+# oneshot + RemainAfterExit: `docker compose up -d` returns as soon as the containers are created.
+# systemd supervises the ACTION; Docker supervises the containers (compose carries
+# `restart: unless-stopped`). Modelling it as Type=simple would have systemd think the stack died
+# the moment compose exits.
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/binaos
+EnvironmentFile=-/etc/binaos/binaos.env
+# Written by the installer when it lands its own engine, so the stack always talks to the SAME
+# daemon after a reboot rather than whichever socket happens to exist.
+EnvironmentFile=-/etc/binaos/engine.env
+
+# The compiled files, not a bare `docker compose`. The root compose.yml holds only the shared
+# network — a bare invocation resolves ZERO services and exits 0, a silent no-op. This is the same
+# guarantee scripts/dc gives, and gate G7 enforces in the repo.
+# ONE file, and it is the build-free one. compose.runtime.yml has every service's `image:` written
+# out and every `build:` removed, because a customer's machine has no source trees: the first real
+# install loaded all 26 images and then died with
+#   unable to prepare context: path "/opt/binaos/apps/mail/mailapi" not found
+# 12 of 16 first-party services declare only `build:`, so compose tried to compile them.
+#
+# --project-directory is also load-bearing: compose resolves `include:` relative to the first -f
+# file's directory, so .generated/compose.yml including the root compose.yml resolved to ITSELF and
+# aborted with "include cycle detected". scripts/dc passes the same flag for the same reason.
+ExecStart=/usr/local/bin/docker compose --project-directory /opt/binaos \
+  -f /opt/binaos/.generated/compose.runtime.yml up -d --remove-orphans
+ExecStop=/usr/local/bin/docker compose --project-directory /opt/binaos \
+  -f /opt/binaos/.generated/compose.runtime.yml down
+
+# A ~34-service first bring-up (authentik migrations, n8n, supabase init) far exceeds systemd's
+# 90s default, and being killed mid-start leaves half a platform.
+TimeoutStartSec=0
+TimeoutStopSec=300
+Restart=no
+
+[Install]
+WantedBy=multi-user.target

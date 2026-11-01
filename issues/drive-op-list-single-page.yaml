@@ -1,0 +1,141 @@
+# yaml-language-server: $schema=./schema.json
+title: op_list returns only the first page — the canonical Drive op every workflow uses silently truncates
+opened: '2026-08-06'
+severity: medium
+status: resolved
+summary: op_list returns only the first page — the canonical Drive op every workflow uses silently truncates
+description: |
+  component: apps/drive/adapters/google.py
+
+  ## Context
+
+  `op_list` is the canonical list operation — it sits behind `POST /list` on apps/drive,
+  behind `driveApi01`, and therefore behind every n8n caller including
+  `indoxV2SearchFile01`, `indoxV2SearchWarehouse01`, and the syncV3 discovery units.
+
+  It issues ONE request and returns the files from it. It never follows `nextPageToken`:
+
+      apps/drive/adapters/google.py:335-364
+
+      def op_list(self, folder_id="", limit=100, what_to_search="files", ...):
+          qs = {"fields": "nextPageToken, files(*)", "q": " and ".join(q),
+                "pageSize": int(limit or 100), ...}
+          return self._json("GET", f"{API}/files", params=qs).get("files", [])
+
+  Note it explicitly ASKS for `nextPageToken` in the projection and then discards it.
+
+  Its sibling `_list()` (:201-215) does paginate, and that method's own docstring
+  already names this exact failure:
+
+      "Drive returns at most ~460-1000 per page regardless of pageSize, so a single
+       request silently truncates any folder bigger than that — which for a real
+       accounting archive (folders of 5k+ documents) means the sync would only ever
+       see the first page and report the rest as absent."
+
+  The warning is written down, in the same file, on the method that got it right. The
+  canonical op is the one that did not.
+
+  ## Evidence
+
+  Measured 2026-08-06 against the live stack (drive-shlomo-laptop, service-account
+  connection drive_google_service_account-ea660043).
+
+  Three unrelated folders each returned EXACTLY 100 items at BOTH limit=100 and
+  limit=1000 — a cap signature, not three coincidental totals:
+
+      1stuMSjbnyUTCtbq6KIzooHCGXpEey_7P  'סרוקות- לפני שמות'   -> 100 at limit=100 and 1000
+      1YpapJ3vJDYo_idP3aZiFJR_1WoEaCNhu  'סרוקות הצליח'        -> 100 at limit=100 and 1000
+      (an unscoped folder listing)                             -> 100 at limit=1000
+
+  limit=100000 does not work around it — Google rejects it outright:
+      "Invalid value '100000'. Values must be within the range: [1, 1000]"
+
+  GROUND TRUTH for one of them, measured independently against the Google API directly
+  with corpora=allDrives and full pagination (86 pages walked to completion):
+
+      1YpapJ3vJDYo_idP3aZiFJR_1WoEaCNhu  =  17,067 files   (prior run 17,066, +1 new)
+
+  So op_list reports 100 for a folder that holds 17,067. It is wrong by a factor of 170
+  and reports no error, no truncation flag, and no partial-result indicator.
+
+  Control that rules out "the folder really has 100": 1Lmhka14VGQMVGr4VQFRpF1YDEdOUnUhM
+  returns 0 from op_list AND 0 from the direct walk — below any cap, both paths agree.
+  So op_list is accurate when the answer is small and silently wrong when it is not,
+  which is the worst shape for a bug like this.
+
+  ## Risk
+
+  NOT currently breaking sync. syncV3 discovery claims `take: 50` per pass, well under
+  the first page, so the claiming path never notices. That is luck, not design — the
+  bound that saves it is a throughput setting, not a correctness guarantee.
+
+  What IS wrong today: any caller that asks "how many files are here" or "enumerate this
+  folder" through the canonical op gets 100 and believes it. That includes ad-hoc
+  operational checks, capacity questions, coverage reconciliation, and any future feature
+  that lists a folder rather than claiming a bounded batch from it. During this session it
+  produced a >=100 floor that could easily have been reported to the owner as a folder
+  total, contradicting a correct 17,067 measurement — the two only reconciled because the
+  direct-API walk existed to check against.
+
+  This is the same defect class the repo already treats as its most common
+  ("a bounded read is the whole table" — cf. drive `_list`, `shared_folders`, the
+  43,326-hidden-file incident, `_get_cached_row_count`). This instance is in the op every
+  workflow goes through.
+
+  ## Fix
+
+  Make op_list follow nextPageToken up to `limit`, the way `_list()` already does —
+  the loop exists a hundred lines above it and can be reused rather than rewritten.
+
+  Care needed on two points:
+    1. `limit` currently doubles as Drive's pageSize. Once paginating, pageSize must be
+       clamped to <= 1000 independently of the caller's limit, or a large limit 400s
+       (exactly the "Invalid value '100000'" failure above).
+    2. `limit=100` is the DEFAULT in the signature, so today most callers silently get a
+       100-item cap they never asked for. Decide deliberately whether the default becomes
+       unbounded (matching `_list(limit=None)`) or stays 100; either is defensible, but it
+       should be a decision rather than an inherited accident.
+
+  Verify with the folder above: op_list on 1YpapJ3v… must return 17,067, not 100.
+
+  ## Related
+
+  Found while resolving the drive-gdoc-warehouse source/destination collision —
+  scripts/ops/registry-fix-drive-gdoc-warehouse.sql §3 records both measurements and
+  why they do not conflict.
+
+  Same file, separate and still-open issue: the HASH gap on the 183
+  SOURCE_TYPE='GOOGLE_DRIVE_FILE' rows is UNEXPLAINED. An earlier attribution to the
+  `FIELDS` constant was wrong and has been retracted — op_list sets its own
+  `fields=nextPageToken, files(*)` projection and never reads FIELDS.
+
+  ## Where it stands (2026-10-07, hp-laptop, branch dgo-pair)
+
+  Fixed in f7281299 (2026-08-11): `op_list` follows `nextPageToken`, with `limit` as the caller's
+  bound (still 100 by default - it is the op a sync pass calls) and `pageSize` clamped to what
+  Drive accepts. The code records the live measurement of 2026-08-09; it was not repeated from
+  this office, which has no connection to that Drive.
+
+  What was missing was anything that holds the loop. `apps/drive/adapters/test_op_list_pages.py`
+  does, without a network - the adapter's one HTTP door is replaced by a Drive that serves a folder
+  in pages of its own size, smaller than asked:
+
+      the working tree                                      5 passed
+      the adapter as it was before the fix                  4 failed, 1 passed
+      the working tree with the loop cut to one request     4 failed, 1 passed
+
+  (the one that passes everywhere is "the default limit is still a hundred and costs one request").
+  G72 finds it beside the adapter and runs it with the other planes' tests.
+
+  The adapter as it was before the fix was itself in the tree until today:
+  `apps/drive/adapters/google.py.bak-oplist-20260809-125227`, tracked since the same commit and
+  copied into the drive image with the rest of `adapters/`. It is removed; git has it.
+
+  The HASH gap named under "Related" is another question and is not answered here.
+tasks:
+- text: "op_list follows nextPageToken up to the caller's limit, pageSize clamped to Drive's range (f7281299)"
+  done: true
+- text: "A test holds the loop without a network - apps/drive/adapters/test_op_list_pages.py: 5 pass, 4 of them fail on the adapter as it was"
+  done: true
+- text: "The tracked backup of the old adapter leaves the tree and the drive image"
+  done: true

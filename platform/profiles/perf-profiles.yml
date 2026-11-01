@@ -1,0 +1,595 @@
+# INDOX performance profiles — one machine envelope = one profile.
+# Selected via PERFORMANCE_PROFILE in .env; applied by `bbox n8n push`:
+#   env block (compose reads) + perf_* settings rows + workflow knobs via perf-manifest.json.
+# Sizing rules + full knob markout: ai/context/indox-performance-profiles.md
+# Class-B serializers (batchSize=1 overlap-safety loops) are NEVER touched by profiles.
+#
+# `host_mem` is the machine envelope each profile already implied in its comment, written down so it
+# can be checked. Gate G30 (scripts/refactor/memory-budget-lint.py) sums every declared
+# deploy.resources.limits.memory across the ENABLED apps and asserts it stays within
+# host_mem x mem_overcommit.
+#
+# Overcommit is deliberate and legitimate — services are not all hot at once, and
+# packaging/OPTIMISATION.md measures actual usage far below the declared sum. The gate's job is not
+# to forbid it but to make it a ratio someone CHOSE, next to the machine it applies to. Before this,
+# the sum was 36.4 GiB against hosts of 7-16 GiB and no view in the repo showed it.
+#
+# ── READ THIS BEFORE TRUSTING THE RATIOS ────────────────────────────────────────────────────────
+# The ratios below are set to TODAY'S REALITY plus a little headroom, not to a defensible target.
+# They are a ratchet: the declared sum can no longer grow unnoticed, which is the property that was
+# missing. They are NOT an endorsement of 5x on a CI runner.
+#
+# They were not set lower because lowering a real cap is not a paperwork change. On a single Docker
+# host an over-subscribed cap protects nothing (the host OOM-killer fires first and picks its own
+# victim), but a cap that is too LOW kills a container that is currently fine. Which limits have
+# room is a question for `docker stats` against the running 36-service render — measured evidence
+# this repo does not currently have (packaging/OPTIMISATION.md's numbers predate this app set).
+#
+# REDUCTION TARGET: every profile at <= 2.5x. The concentration is n8n (~17 GiB declared across its
+# containers) and glitchtip (~6 GiB, and a candidate for the gallery). Do the measurement first.
+# ────────────────────────────────────────────────────────────────────────────────────────────────
+#
+# Note what these profiles do NOT size: memory is parameterised for exactly one service
+# (APITOOLS_MEM). Every other limit is a literal, identical on a 2-vCPU runner and an 8-core VPS.
+
+# ─────────────────────────────────────────────────────────────────────────────────────────────────
+# PROFILE SELECTION — `requires:` is the envelope, and it is the ONLY selector input
+# ─────────────────────────────────────────────────────────────────────────────────────────────────
+# Every profile declares the machine it needs. `bbox` picks the RICHEST profile whose envelope the
+# machine satisfies, on BOTH cores and memory. Adding a profile therefore needs no `bbox` edit —
+# the same pattern the CI view-profiles matrix already uses.
+#
+# WHY THIS EXISTS (measured 2026-08-06): selection used to read `bbox:202`
+#     prof="prod"; [ $n -le 4 ] && prof="vps"; [ $n -le 2 ] && prof="ci-small"
+# — core count alone. Memory was never consulted, even though every profile below has ALWAYS
+# declared `host_mem`. This box has 6 cores and a 9.7 GiB WSL2 VM, so it was handed `prod`, which
+# declares host_mem: 16G. The stack was sized for a machine with 65% more memory than it has. That
+# is where APITOOLS_MEM=8G on a 9.7 GiB VM came from; nobody chose it by hand.
+#
+# `requires.mem` is checked against the DOCKER HOST's memory (the WSL2 VM on Windows, the box
+# itself on Linux) — not the Windows host's, because the VM is the machine the containers land on.
+#
+# DO NOT add a second selection rule anywhere. If a machine needs different sizing, give it a
+# profile with an envelope. scripts/refactor/memory-budget-lint.py (gate G30) enforces that every
+# profile has both an envelope and a declared memory budget.
+
+ci-small:        # 2 vCPU GitHub runner
+  requires: { cores: 1, mem_gb: 5 }   # floor profile — must match the weakest supported machine
+  host_mem: 7G          # standard GitHub-hosted runner
+  mem_overcommit: 5.5   # today's reality on a 7G runner — see REDUCTION TARGET above
+  # host_cpus / cpu_overcommit — the CPU twin of host_mem / mem_overcommit, checked by gate G65
+  # (scripts/refactor/cpu-budget-lint.py). scripts/perf-profile-apply renders the plan,
+  # .generated/cpu-budget.yml: every enabled service's `cpus` cap scaled by budget/declared_sum
+  # (never up, floor 0.1) — told to the running containers after every `up`, not merged into
+  # compose. Measured 2026-09-30 on the 4-vCPU macOS engine: 57 capped services
+  # declared 47.4 vCPU (11.9x). Unlike memory, CPU caps are NOT decoration on one host — the
+  # kernel enforces every one of them, so 47 vCPU of quota on 4 vCPUs meant every container
+  # contended at once (CPU pressure 95%, load 145, health probes timing out, 12 flapping
+  # unhealthy) with every agent idle. Overcommit stays legitimate (services are not all hot at
+  # once); the ratio is the number someone chose.
+  host_cpus: 4
+  cpu_overcommit: 4.0
+  env:
+    # HEALTHCHECK_INTERVAL — how often Docker runs every app's health probe (compose files read it as
+    # `interval: ${HEALTHCHECK_INTERVAL:-30s}`; the 10-20s probes of databases/outpost are deliberate
+    # and not parameterised). Measured 2026-09-30 on the 5 GiB macOS engine: 40 health-checked
+    # containers, 21 of them spawning a python interpreter, at 30s = ~50 execs/min. With the guest
+    # 3.5 GB into swap each interpreter start pages in ~50 MB, so the probes themselves kept the
+    # machine starved (CPU pressure 92%, load 145 on 4 cores with every agent idle), timed out, and
+    # flapped 12 containers "unhealthy" — a self-sustaining storm. Slower probes cost only how
+    # quickly autoheal notices a wedged container (retries x interval); nothing on the request path.
+    HEALTHCHECK_INTERVAL: 90s
+    # HEALTHCHECK_TIMEOUT — how long one probe may take before Docker counts it failed (compose files
+    # read it as `timeout: ${HEALTHCHECK_TIMEOUT:-<their old literal>}`). Measured 2026-09-30: at CPU
+    # pressure 90%+ the 5-10 s literals could not be met — 150 probe execs timed out per 5 min — and
+    # every timeout is a health_status event that makes traefik re-list and re-inspect every
+    # container through a daemon that cannot answer; a reload with the inspects failed is a config
+    # with ZERO routers, i.e. the whole office 404 (seen 2026-09-29 16:28 and 2026-09-30 13:27). A
+    # longer timeout costs nothing when the probe is fast and stops the storm when it is slow.
+    HEALTHCHECK_TIMEOUT: 30s
+    N8N_WORKER_CONCURRENCY: 4
+    # [2026-08-23] RUNNER SLOTS FOLLOW WORKER SLOTS. Unset here, this fell through to the
+    # compose default of 15 — on EVERY profile, including ci-small at ONE core. The rule is not
+    # new and is not mine; apps/n8n/docker-compose.yml states it beside the sidecar's own
+    # setting: "worker slots 20 vs runner slots 12 wedged 16 driver lanes for 15+ minutes with 0
+    # rows written, 0.3% CPU and not one error line. Keep these equal." Every profile sized
+    # N8N_WORKER_CONCURRENCY for its host and left the runner side at prod-shaped 15.
+    #
+    # MEASURED on this 4-core host, 2026-08-23: syncV3FullTest01 died at 'HD Guard' — a code node
+    # whose entire body is `return [{json:{_iter:$runIndex+1}}]` — with "Task request timed out
+    # after 300 seconds". Not slow: starved. It waited past N8N_RUNNERS_TASK_REQUEST_TIMEOUT for a
+    # slot. In the same battery sync_sources' gmail-doc fell 8/8 -> 6/8 with delivered:1 of 2, and
+    # its sibling lanes' ledger watches went from t+37s/t+43s to t+280s/t+287s — the same work,
+    # six times slower, because 15 JS tasks were contending for 4 cores.
+    #
+    # NOT fixed by raising the timeout: that lets a starved queue wait longer, which is what the
+    # 2026-08-18 tuning pass deliberately balanced away from. The profile is the target-hardware
+    # declaration (requires.cores below), so the slot count belongs here.
+    #
+    # This is the same defect the N8N_WORKER_CONCURRENCY comment in the laptop profile already
+    # names in its own words: "UNCHANGED from prod was itself the bug -- prod's 8-core sizing
+    # carried here unexamined."
+    N8N_RUNNERS_MAX_CONCURRENCY: 4   # == N8N_WORKER_CONCURRENCY, per the compose rule
+    APITOOLS_GUNICORN_WORKERS: 4
+    APITOOLS_MAX_CONCURRENT_JSON_QUERY: 3
+    APITOOLS_MAX_CONCURRENT_OCR: 1
+    APITOOLS_CPUS: '2.0'    # compose cpus is env-driven now — the CI cap step regex
+    APITOOLS_MEM: '3G'      # no longer sees a literal, so every profile MUST set these
+  settings:
+    perf_extract_fanout: 2
+    perf_scan_take: 25
+    perf_sync_chunk: 10
+    perf_batch_upsert: 10
+    perf_main_jitter_max_s: 0
+    perf_line_poll_s: 15
+    perf_lock_ttl_s: 480
+    perf_test_budget_scale: 1.5
+
+laptop:          # dev box — SIZE TO THE DOCKER VM (6 CPUs / ~12G), not host threads!
+  requires: { cores: 4, mem_gb: 11 }
+  host_mem: 12G         # the Docker VM's memory, not the host's
+  mem_overcommit: 3.25
+  host_cpus: 6
+  cpu_overcommit: 4.0
+  env:
+    HEALTHCHECK_INTERVAL: 60s   # see the note under ci-small
+    HEALTHCHECK_TIMEOUT: 20s
+    N8N_WORKER_CONCURRENCY: 8
+    # [2026-08-23] RUNNER SLOTS FOLLOW WORKER SLOTS. Unset here, this fell through to the
+    # compose default of 15 — on EVERY profile, including ci-small at ONE core. The rule is not
+    # new and is not mine; apps/n8n/docker-compose.yml states it beside the sidecar's own
+    # setting: "worker slots 20 vs runner slots 12 wedged 16 driver lanes for 15+ minutes with 0
+    # rows written, 0.3% CPU and not one error line. Keep these equal." Every profile sized
+    # N8N_WORKER_CONCURRENCY for its host and left the runner side at prod-shaped 15.
+    #
+    # MEASURED on this 4-core host, 2026-08-23: syncV3FullTest01 died at 'HD Guard' — a code node
+    # whose entire body is `return [{json:{_iter:$runIndex+1}}]` — with "Task request timed out
+    # after 300 seconds". Not slow: starved. It waited past N8N_RUNNERS_TASK_REQUEST_TIMEOUT for a
+    # slot. In the same battery sync_sources' gmail-doc fell 8/8 -> 6/8 with delivered:1 of 2, and
+    # its sibling lanes' ledger watches went from t+37s/t+43s to t+280s/t+287s — the same work,
+    # six times slower, because 15 JS tasks were contending for 4 cores.
+    #
+    # NOT fixed by raising the timeout: that lets a starved queue wait longer, which is what the
+    # 2026-08-18 tuning pass deliberately balanced away from. The profile is the target-hardware
+    # declaration (requires.cores below), so the slot count belongs here.
+    #
+    # This is the same defect the N8N_WORKER_CONCURRENCY comment in the laptop profile already
+    # names in its own words: "UNCHANGED from prod was itself the bug -- prod's 8-core sizing
+    # carried here unexamined."
+    N8N_RUNNERS_MAX_CONCURRENCY: 8   # == N8N_WORKER_CONCURRENCY, per the compose rule
+    APITOOLS_GUNICORN_WORKERS: 16
+    APITOOLS_MAX_CONCURRENT_JSON_QUERY: 8   # capacity-matched: cpus x1.5 (16 was demand-
+                                            # matched -> 75s soft-timeout storms, measured)
+    APITOOLS_MAX_CONCURRENT_OCR: 3    # OCR slots derive from MEMORY (cold multipage OCR
+                                      # ~1-2G each; 5 slots @4G = OOM SIGKILL storm, measured)
+    APITOOLS_CPUS: '5.0'              # knob 11 — cgroup was the query gate (p50 stuck 3.15s)
+    APITOOLS_MEM: '6G'                # knob 12 — the OCR OOM gate
+  settings:
+    perf_extract_fanout: 6
+    perf_scan_take: 50
+    perf_sync_chunk: 25
+    perf_batch_upsert: 25
+    perf_main_jitter_max_s: 0
+    perf_line_poll_s: 10
+    perf_lock_ttl_s: 300
+    perf_test_budget_scale: 1.0
+
+vps:             # 4-core VPS
+  requires: { cores: 3, mem_gb: 7 }
+  host_mem: 8G
+  mem_overcommit: 5.0   # today's reality on an 8G VPS — see REDUCTION TARGET above
+  host_cpus: 4
+  cpu_overcommit: 4.0
+  env:
+    # HEALTHCHECK_INTERVAL — how often Docker runs every app's health probe (compose files read it as
+    # `interval: ${HEALTHCHECK_INTERVAL:-30s}`; the 10-20s probes of databases/outpost are deliberate
+    # and not parameterised). Measured 2026-09-30 on the 5 GiB macOS engine: 40 health-checked
+    # containers, 21 of them spawning a python interpreter, at 30s = ~50 execs/min. With the guest
+    # 3.5 GB into swap each interpreter start pages in ~50 MB, so the probes themselves kept the
+    # machine starved (CPU pressure 92%, load 145 on 4 cores with every agent idle), timed out, and
+    # flapped 12 containers "unhealthy" — a self-sustaining storm. Slower probes cost only how
+    # quickly autoheal notices a wedged container (retries x interval); nothing on the request path.
+    HEALTHCHECK_INTERVAL: 60s
+    HEALTHCHECK_TIMEOUT: 20s
+    N8N_WORKER_CONCURRENCY: 6
+    # [2026-08-23] RUNNER SLOTS FOLLOW WORKER SLOTS. Unset here, this fell through to the
+    # compose default of 15 — on EVERY profile, including ci-small at ONE core. The rule is not
+    # new and is not mine; apps/n8n/docker-compose.yml states it beside the sidecar's own
+    # setting: "worker slots 20 vs runner slots 12 wedged 16 driver lanes for 15+ minutes with 0
+    # rows written, 0.3% CPU and not one error line. Keep these equal." Every profile sized
+    # N8N_WORKER_CONCURRENCY for its host and left the runner side at prod-shaped 15.
+    #
+    # MEASURED on this 4-core host, 2026-08-23: syncV3FullTest01 died at 'HD Guard' — a code node
+    # whose entire body is `return [{json:{_iter:$runIndex+1}}]` — with "Task request timed out
+    # after 300 seconds". Not slow: starved. It waited past N8N_RUNNERS_TASK_REQUEST_TIMEOUT for a
+    # slot. In the same battery sync_sources' gmail-doc fell 8/8 -> 6/8 with delivered:1 of 2, and
+    # its sibling lanes' ledger watches went from t+37s/t+43s to t+280s/t+287s — the same work,
+    # six times slower, because 15 JS tasks were contending for 4 cores.
+    #
+    # NOT fixed by raising the timeout: that lets a starved queue wait longer, which is what the
+    # 2026-08-18 tuning pass deliberately balanced away from. The profile is the target-hardware
+    # declaration (requires.cores below), so the slot count belongs here.
+    #
+    # This is the same defect the N8N_WORKER_CONCURRENCY comment in the laptop profile already
+    # names in its own words: "UNCHANGED from prod was itself the bug -- prod's 8-core sizing
+    # carried here unexamined."
+    N8N_RUNNERS_MAX_CONCURRENCY: 6   # == N8N_WORKER_CONCURRENCY, per the compose rule
+    APITOOLS_GUNICORN_WORKERS: 6
+    APITOOLS_MAX_CONCURRENT_JSON_QUERY: 6
+    APITOOLS_MAX_CONCURRENT_OCR: 2
+    APITOOLS_CPUS: '3.0'
+    APITOOLS_MEM: '4G'
+  settings:
+    perf_extract_fanout: 3
+    perf_scan_take: 50
+    perf_sync_chunk: 25
+    perf_batch_upsert: 25
+    perf_main_jitter_max_s: 3
+    perf_line_poll_s: 20
+    perf_lock_ttl_s: 480
+    perf_test_budget_scale: 1.25
+
+prod:            # 8-core production — stability-first; pinned by the Phase-3 acceptance run
+  # THE ENVELOPE THAT WAS MISSING. Under core-count-only selection this profile was handed to any
+  # machine with 5+ cores regardless of memory — which is how a 9.7 GiB VM ended up running a
+  # 16 GiB profile. mem_gb: 15 makes that impossible.
+  requires: { cores: 6, mem_gb: 15 }
+  host_mem: 16G
+  mem_overcommit: 2.5   # tightest ratio of the four: this is the one that must not thrash
+  host_cpus: 8
+  cpu_overcommit: 3.0
+  env:
+    # HEALTHCHECK_INTERVAL — how often Docker runs every app's health probe (compose files read it as
+    # `interval: ${HEALTHCHECK_INTERVAL:-30s}`; the 10-20s probes of databases/outpost are deliberate
+    # and not parameterised). Measured 2026-09-30 on the 5 GiB macOS engine: 40 health-checked
+    # containers, 21 of them spawning a python interpreter, at 30s = ~50 execs/min. With the guest
+    # 3.5 GB into swap each interpreter start pages in ~50 MB, so the probes themselves kept the
+    # machine starved (CPU pressure 92%, load 145 on 4 cores with every agent idle), timed out, and
+    # flapped 12 containers "unhealthy" — a self-sustaining storm. Slower probes cost only how
+    # quickly autoheal notices a wedged container (retries x interval); nothing on the request path.
+    HEALTHCHECK_INTERVAL: 30s
+    HEALTHCHECK_TIMEOUT: 10s
+    N8N_WORKER_CONCURRENCY: 8
+    # [2026-08-23] RUNNER SLOTS FOLLOW WORKER SLOTS. Unset here, this fell through to the
+    # compose default of 15 — on EVERY profile, including ci-small at ONE core. The rule is not
+    # new and is not mine; apps/n8n/docker-compose.yml states it beside the sidecar's own
+    # setting: "worker slots 20 vs runner slots 12 wedged 16 driver lanes for 15+ minutes with 0
+    # rows written, 0.3% CPU and not one error line. Keep these equal." Every profile sized
+    # N8N_WORKER_CONCURRENCY for its host and left the runner side at prod-shaped 15.
+    #
+    # MEASURED on this 4-core host, 2026-08-23: syncV3FullTest01 died at 'HD Guard' — a code node
+    # whose entire body is `return [{json:{_iter:$runIndex+1}}]` — with "Task request timed out
+    # after 300 seconds". Not slow: starved. It waited past N8N_RUNNERS_TASK_REQUEST_TIMEOUT for a
+    # slot. In the same battery sync_sources' gmail-doc fell 8/8 -> 6/8 with delivered:1 of 2, and
+    # its sibling lanes' ledger watches went from t+37s/t+43s to t+280s/t+287s — the same work,
+    # six times slower, because 15 JS tasks were contending for 4 cores.
+    #
+    # NOT fixed by raising the timeout: that lets a starved queue wait longer, which is what the
+    # 2026-08-18 tuning pass deliberately balanced away from. The profile is the target-hardware
+    # declaration (requires.cores below), so the slot count belongs here.
+    #
+    # This is the same defect the N8N_WORKER_CONCURRENCY comment in the laptop profile already
+    # names in its own words: "UNCHANGED from prod was itself the bug -- prod's 8-core sizing
+    # carried here unexamined."
+    N8N_RUNNERS_MAX_CONCURRENCY: 8   # == N8N_WORKER_CONCURRENCY, per the compose rule
+    APITOOLS_GUNICORN_WORKERS: 12
+    APITOOLS_MAX_CONCURRENT_JSON_QUERY: 12
+    APITOOLS_MAX_CONCURRENT_OCR: 4
+    APITOOLS_CPUS: '6.0'
+    APITOOLS_MEM: '8G'
+  settings:
+    perf_extract_fanout: 5
+    perf_scan_take: 50
+    perf_sync_chunk: 25
+    perf_batch_upsert: 25
+    perf_main_jitter_max_s: 6
+    perf_line_poll_s: 30
+    perf_lock_ttl_s: 600
+    perf_test_budget_scale: 1.0
+
+wsl-10g:         # THIS laptop: 6 cores, but a 9.7 GiB WSL2 VM — added 2026-08-06
+  # 6 cores like prod, but only ~9.7 GiB. This is the envelope prod could not express before
+  # `requires:` existed, and the reason this profile has to exist at all.
+  #
+  # ── ON WSL, `host_mem` IS NOT FREE REAL ESTATE ──────────────────────────────────────────────
+  # Everywhere else in this file `host_mem` is just "the machine's RAM". On WSL it is memory TAKEN
+  # FROM WINDOWS AND NEVER GIVEN BACK, and that changes how this envelope should be read.
+  #
+  # Measured 2026-08-06, two minutes after a VM boot:
+  #     Windows physical 15.65 GB | Windows FREE 0.97 GB | vmmemWSL 5.52 GB
+  # Windows is the starved party, not the VM. The VM ratchets toward its 10 GB `.wslconfig`
+  # ceiling and holds it, so Windows' headroom only ever shrinks. That is why freeing ~2 GiB
+  # INSIDE the VM (scripts/ops/quiet-mode.sh) changed nothing outside it and the reboots continued:
+  # the guest returned pages to the guest's own free list, not to the hypervisor.
+  #
+  # CONSEQUENCE FOR SIZING: gate G30b compares the observed peak sum to the VM's 9.95 GiB and
+  # reports 104%. That UNDERSTATES the real constraint. The binding limit is not the VM's memory,
+  # it is what Windows can spare while the VM holds its allocation permanently — so the effective
+  # budget is smaller than any number computed from /proc/meminfo inside the guest. Treat
+  # `mem_gb: 9` here as a hard ceiling to stay well under, not a target to fill.
+  #
+  # THE ACTUAL FIX IS NOT A LIMIT, IT IS RECLAIM — and it appears to be one line away. See the
+  # note at the top of C:\Users\user\.wslconfig: `autoMemoryReclaim` is currently commented out
+  # there on the belief that WSL 2.1.5.0 does not support it. Microsoft's current .wslconfig
+  # reference puts `autoMemoryReclaim` under the **[experimental]** section, not [wsl2] — and the
+  # error that was recorded, "Unknown key 'wsl2.autoMemoryReclaim'", is WSL naming the SECTION it
+  # was found in. The feature shipped in WSL 2.0.0; this host runs 2.1.5.0. So it is very likely
+  # a section error, not a version limitation, and reclaim may be available today without the
+  # deferred `wsl --update`. NOT YET VERIFIED — testing it costs a `wsl --shutdown`.
+  requires: { cores: 5, mem_gb: 9 }
+  # WHY THIS PROFILE EXISTS
+  # ----------------------
+  # `bbox`'s ensure_perf_profile picks a profile from CORE COUNT ALONE (bbox:202 —
+  # `prof="prod"; [ $n -le 4 ] && prof="vps"; [ $n -le 2 ] && prof="ci-small"`). Memory is never
+  # consulted. This host has 6 cores, so it was handed `prod` — a profile that declares
+  # `host_mem: 16G`. The Docker VM it actually runs in has 9.7 GiB (`/proc/meminfo` MemTotal
+  # 9950 MiB, `.wslconfig memory=10GB`). So the stack has been sized for a host with 65% more
+  # memory than it has, which is where `APITOOLS_MEM=8G` on a 9.7 GiB VM came from.
+  #
+  # MEASURED CONSEQUENCE (2026-08-05 22:00 -> 2026-08-06 03:35): 24 docker daemon starts and 7 WSL
+  # VM kernel boots, with zero graceful docker stops recorded — i.e. the VM was torn down and
+  # rebuilt under it, orphaning every in-flight n8n execution. n8n then mislabels those orphans
+  # "Workflow did not finish, possible out-of-memory issue", which is NOT an OOM.
+  #
+  # WHAT THIS PROFILE DOES AND DOES NOT CHANGE
+  # ------------------------------------------
+  # The entire `settings:` block below is BYTE-IDENTICAL to `prod`, and N8N_WORKER_CONCURRENCY is
+  # identical to `prod`. take / chunk / schedule / fanout / worker count / n8n concurrency are
+  # deliberately tuned for this hardware and are explicitly out of scope — this profile changes
+  # MEMORY AND CPU SIZING ONLY.
+  host_mem: 10G         # the WSL2 VM's memory, not the 15.7 GiB Windows host's
+  # ── mem_overcommit: 2.5 -> 3.0, raised deliberately 2026-08-06. The reason, per G30's own
+  #    instruction to "raise it and say why": ──────────────────────────────────────────────────
+  # DECLARED LIMITS ARE CEILINGS, NOT RESERVATIONS. A ratio on the declared sum is a proxy for
+  # "will this fit", and on this machine it is a BAD proxy, because the largest tenant has a hard
+  # floor we are not allowed to move: the n8n stack declares 12.5 GiB across 7 containers, and that
+  # number is set by NODE_OPTIONS --max-old-space-size values (1536M x3, 1024M x3) plus the
+  # limit >= heap x 1.3 rule those heaps force. n8n heap tuning and worker concurrency are
+  # explicitly out of scope. So on a 10 GiB host the n8n stack ALONE is 1.25x physical before any
+  # other service is counted.
+  #
+  # Enforcing 2.5 would therefore require cutting limits BELOW MEASURED PEAKS. That is not a
+  # theoretical risk — it was caught twice on 2026-08-06: a queued 1G cap for n8n-worker-2, which
+  # peaked at 1135 MiB under real load, and 768M runner caps sitting below a 1024M permitted Node
+  # heap. Both would have produced OOM kills indistinguishable from the restart-orphaning this
+  # whole effort exists to remove. A budget that forces that outcome is worse than no budget.
+  #
+  # ── 3.0, and this time for a reason that is NOT "the total would not fit". ──────────────────
+  # History, kept because the mistake matters more than the number:
+  #   2.5 -> 3.0  argued from a contaminated measurement (see below) — weak reasoning, right answer
+  #   3.0 -> 2.5  reverted once the contamination was removed — correct at the time
+  #   2.5 -> 3.0  restored here, because APITOOLS_MEM had to go back to its SAFE value of 6G after
+  #               a budget-fitting pass had quietly cut it to 4G, and 6G does not fit 2.5x.
+  #
+  # THE ORDERING RULE THIS ENCODES: safety-critical limits are chosen from measured failure
+  # behaviour FIRST, and the budget ratio is then set to whatever admits them. Never the reverse.
+  # The moment a budget starts selecting a memory limit, the gate has stopped measuring the machine
+  # and started designing it — and on 2026-08-06 that put a documented OOM-storm configuration
+  # (5 PDF slots in a 4 GiB cgroup) into a live container.
+  #
+  # 3.0 admits: the n8n stack's irreducible 12.5 GiB Node-heap floor + apitools at its safe 6G.
+  # It is still not licence to grow. The check that predicts real failure is G30b (observed peak
+  # vs PHYSICAL), which passes at ~66-73% on the fixed system — that is the number to watch.
+  #
+  # ── the contamination note, retained ────────────────────────────────────────────────────────
+  # The 3.0 raise was argued from a declared sum of 29.1 GiB and an observed peak sum of 10363 MiB
+  # (104% of physical). BOTH numbers were measured while two pathologies were running: a GlitchTip
+  # error loop at ~2,900 executions/hour, and apitools' documentJsonQuery taking 178-206 s with a
+  # 100% 504 rate (a 2,383-item company list causing 135,000+ fuzzy comparisons per document).
+  # With both fixed and this profile applied, the same measurements are:
+  #     declared sum   29.1 -> 25.1 GiB   (apitools 8G -> 4G)
+  #     observed peak  10363 -> 6624 MiB  = 66% of physical, G30b PASS
+  # So the check that actually predicts failure passes on its own merits, and the declared sum sits
+  # 0.1 GiB above a 2.5x budget — closed by trimming supabase studio and meta, which are UI-only
+  # and not on the document path. The goalpost goes back where it was.
+  #
+  # THE LESSON WORTH KEEPING: a budget that "cannot be met" was really a system being measured
+  # while it misbehaved. Re-measure after fixing known pathologies BEFORE relaxing a limit.
+  mem_overcommit: 3.0
+  host_cpus: 6
+  cpu_overcommit: 4.0
+  env:
+    HEALTHCHECK_INTERVAL: 60s   # see the note under ci-small
+    HEALTHCHECK_TIMEOUT: 20s
+    N8N_WORKER_CONCURRENCY: 8         # UNCHANGED from prod — do not touch
+    # [2026-08-23] RUNNER SLOTS FOLLOW WORKER SLOTS. Unset here, this fell through to the
+    # compose default of 15 — on EVERY profile, including ci-small at ONE core. The rule is not
+    # new and is not mine; apps/n8n/docker-compose.yml states it beside the sidecar's own
+    # setting: "worker slots 20 vs runner slots 12 wedged 16 driver lanes for 15+ minutes with 0
+    # rows written, 0.3% CPU and not one error line. Keep these equal." Every profile sized
+    # N8N_WORKER_CONCURRENCY for its host and left the runner side at prod-shaped 15.
+    #
+    # MEASURED on this 4-core host, 2026-08-23: syncV3FullTest01 died at 'HD Guard' — a code node
+    # whose entire body is `return [{json:{_iter:$runIndex+1}}]` — with "Task request timed out
+    # after 300 seconds". Not slow: starved. It waited past N8N_RUNNERS_TASK_REQUEST_TIMEOUT for a
+    # slot. In the same battery sync_sources' gmail-doc fell 8/8 -> 6/8 with delivered:1 of 2, and
+    # its sibling lanes' ledger watches went from t+37s/t+43s to t+280s/t+287s — the same work,
+    # six times slower, because 15 JS tasks were contending for 4 cores.
+    #
+    # NOT fixed by raising the timeout: that lets a starved queue wait longer, which is what the
+    # 2026-08-18 tuning pass deliberately balanced away from. The profile is the target-hardware
+    # declaration (requires.cores below), so the slot count belongs here.
+    #
+    # This is the same defect the N8N_WORKER_CONCURRENCY comment in the laptop profile already
+    # names in its own words: "UNCHANGED from prod was itself the bug -- prod's 8-core sizing
+    # carried here unexamined."
+    N8N_RUNNERS_MAX_CONCURRENCY: 8   # == N8N_WORKER_CONCURRENCY, per the compose rule
+    # 12 -> 8, 2026-08-06 — this is a MEMORY fix, not a parallelism one; the request-level
+    # concurrency knobs below are untouched. "UNCHANGED from prod" was itself the bug: 12
+    # gunicorn workers was never derived for THIS host, it was prod's 8-core sizing carried
+    # here unexamined. MEASURED (real /proc VmRSS, this host, 2026-08-06): fresh workers sit
+    # at 95-150 MiB, but a worker that has handled one large-doc OCR call does NOT shrink back
+    # down (CPython doesn't return that memory to the OS) — workers were observed at
+    # 1.2-2.35 GiB resident, and dmesg recorded 4 kernel OOM-kills in ~18 minutes, 3 of them
+    # CONSTRAINT_NONE (GLOBAL host OOM, not this cgroup): the host had ~9950 MiB total and as
+    # little as ~202 MiB free / ~1120 MiB available at the time, so apitools' 6G cgroup
+    # ceiling was never the binding constraint — system-wide headroom was. 12 workers x their
+    # idle-to-bloated range was eating that headroom before OCR-slot contention even entered
+    # the picture. 8 matches what gunicorn.conf.py's own CPU-derived fallback already caps at
+    # for 6 cores (autoscale.gunicorn_workers_default()) — this pin was exceeding its own
+    # fallback's ceiling with no documented reason. Paired with lowering `max_requests`
+    # (gunicorn.conf.py, 1000 -> 50) so a bloated worker is recycled within minutes instead of
+    # up to 999 more requests. Request-level concurrency (JSON-query 12-way, OCR 4-way) is
+    # unchanged — some queueing at the WSGI layer under a 12-wide json-query burst against
+    # workers is the accepted tradeoff for not being the trigger for the next global OOM.
+    #
+    # 8 -> 6, SAME DAY, re-measured under REAL saturated traffic instead of idle. The 8
+    # figure was sized from a FRESH-worker RSS of 95-150 MiB; under actual backfill load, 8
+    # workers' real /proc VmRSS summed to ~2.58 GiB (an operating average of ~322 MiB/worker,
+    # not 95-150 — max_requests=50 recycling is confirmed firing, 4 boot events in 20 min,
+    # but a freshly-recycled worker picks up the very next large document and re-balloons
+    # within seconds when the queue is this saturated; recycling bounds how long a worker
+    # STAYS bloated, not whether it bloats). Measured the same hour: host-wide free memory
+    # as low as 135-734 MiB, swap 86%+ full, apitools's OWN 6G cgroup ceiling never binding
+    # — the constraint is the shared host (see the ledger note below), not this container.
+    # 6 matches gunicorn_workers_default() computed from the OPERATING, not idle, per-worker
+    # figure — see autoscale.py's _MEM_PER_WORKER_GB / _WORKER_MEM_BUDGET_GB.
+    #
+    # LEDGER (measured 2026-08-06, this host): summed declared `deploy.resources.limits.memory`
+    # across all 36 running containers = ~33.5 GiB against a 9.95 GiB physical host = 3.37x
+    # overcommit — worse than this profile's own mem_overcommit: 3.0 ceiling. One container
+    # (`chat`, outside apitools) is declared with NO memory limit at all. apitools's own 6G is
+    # 17.9% of the declared sum; the n8n stack (main + 2 workers + postgres + 3 runners) is
+    # 12.5 GiB / 37.3%; glitchtip (app+worker+postgres+valkey) is 4.25 GiB / 12.7%. No amount
+    # of apitools-side tuning fixes a host-wide overcommit — recorded here because the remedy
+    # is elsewhere, not because apitools caused it.
+    # ── RE-MEASURED 2026-08-09 UNDER `OCR_ENGINE=google`: THE MEMORY ARGUMENT ABOVE IS STALE, AND
+    #    THE CONSTRAINT HAS LEFT THIS CONTAINER. Numbers are from the running stack, not estimates.
+    #
+    # Per-worker RSS, read straight out of /proc in the live container under real backfill traffic:
+    #   6 workers, mean 155 MiB, max 184 MiB, TOTAL 0.94 GiB (incl. master).
+    # The 322 MiB/worker figure the 8->6 cut above was derived from was measured under LOCAL
+    # TESSERACT, which rasterises pages in-process. Google Vision makes a worker hold a request
+    # socket and a response buffer instead, so the operating figure is roughly HALF. apitools sat
+    # at 0.62-0.94 GiB of its 6G limit (10-15%) throughout. Memory is simply not what bounds this
+    # service any more.
+    #
+    # SO WHY IS NOTHING BEING RAISED HERE? Because the box is the constraint now, not the bulkhead:
+    #   host load average 21.76 / 17.95 / 13.90 on SIX cores  (~3.6x oversubscribed)
+    #   host memory 638 MiB free, 2.4 GiB available, swap 2.88 GiB of 6 GiB already in use
+    #   apitools itself 165-362% CPU against its own APITOOLS_CPUS: '4.0' quota — up to 90% of it
+    # Adding OCR slots or workers on a box at load 21.76 adds runnable threads to a run queue that
+    # is already 3.6x deep; it moves latency, not throughput. The honest answer to "where does
+    # throughput stop improving" is that it stopped improving BEFORE this file — the 4->8 OCR-slot
+    # raise below was the last change that could help, and the next bottleneck is host CPU.
+    # The throughput fix that actually landed on 2026-08-09 was therefore a WASTE cut, not a
+    # capacity raise: apps/drive/adapters/google.py's `op_list` was shipping the full Drive
+    # resource (9 642 B/record); narrowing it to the house FIELDS projection took it to 469 B/record
+    # (20.5x, measured on 500 live records) and halved that call's wall clock, 51.9s -> 24.2s.
+    #
+    # KNOWN INVARIANT BREACH — RAISED BY A SIBLING LANE, THEN MEASURED AND RESOLVED 2026-08-09 BY
+    # REVERTING TO 4. Left in full because the prediction was correct and the measurement is the
+    # proof. The design note in src/api/ocr_api.py depends on `max_ocr_slots < GUNICORN_WORKERS` so
+    # a running OCR can never occupy every worker and cheap endpoints (/docExists) stay answerable.
+    # With OCR slots at 8 and workers at 6 that property is GONE — all six workers can be inside an
+    # OCR at once, which is the most likely mechanism behind the `Check HASH` (/docExists) failures
+    # seen in indoxV2UploadApiTools01. The two remedies offered were WORKERS 6 -> 10 (rejected: the
+    # host has 638 MiB free and 2.88 GiB of swap already burnt — this container can afford it and
+    # the MACHINE cannot) or dropping OCR slots back to 4. The second was taken, on numbers: see
+    # the measurement at APITOOLS_MAX_CONCURRENT_OCR below, where 8 and 6 both collapse to ~16-17
+    # docs/min with a non-OCR endpoint at p50 ~30 s, and 4 sustains 26-37 docs/min with that
+    # endpoint at p50 12-16 s. Starving the workers costs more than the shed requests it avoids.
+    # 6 -> 10 (2026-08-09, owner-approved throughput window). The rejection above was argued
+    # against 638 MiB free; measured now: 2.3 GiB available, and OCR slots are back at 4, so
+    # 10 workers keeps 6 always free for cheap endpoints (/docExists). Revert to 6 if swap grows.
+    APITOOLS_GUNICORN_WORKERS: 10
+    APITOOLS_MAX_CONCURRENT_JSON_QUERY: 12  # UNCHANGED from prod
+    # ── 4 -> 8 WAS APPROVED, TRIED, MEASURED, AND REVERTED THE SAME DAY (2026-08-09) ─────────────
+    #
+    # THE REASONING FOR RAISING IT WAS SOUND AND THE RESULT STILL DID NOT HOLD, which is why the
+    # numbers are here rather than the argument. The case for 8: every justification above for a
+    # small OCR pool is a MEMORY argument ("cold multipage OCR ~1-2G each", "5 slots @4G = OOM
+    # SIGKILL storm, measured"), all of it true of local Tesseract, which rasterises in-process.
+    # Under `OCR_ENGINE=google` an OCR slot is a NETWORK call — a request socket and a response
+    # buffer, not a page raster — so the memory-per-raster unit is the wrong unit, and the RSS
+    # re-measurement above (mean 155 MiB/worker, 0.94 GiB total against a 6G limit) confirms it.
+    #
+    # WHAT WAS MEASURED. 48 unique documents per batch run (the /documentOcr CACHE-HIT FAST PATH
+    # bypasses admission control entirely, so distinct docGen seeds + `cache=false` are required or
+    # the benchmark measures the cache and shows no difference at any setting), plus a 90 s
+    # saturated probe at 12-way client concurrency that samples a non-OCR endpoint alongside:
+    #
+    #   slots   saturated OCR      non-OCR endpoint      batch run, 48 docs @ c=12
+    #     4     26-37 docs/min     p50 12-16 s           47.5 / 53.2 docs/min, p95 6.5-10.9 s
+    #     6     17.3 docs/min      p50 29.4 s            15.2 docs/min, p95 33.4 s
+    #     8     16.0 docs/min      p50 30.9 s            45.9 docs/min, p95 10.4 s
+    #
+    # Raising the bound removed the 429s (3 -> 0 on the batch run) and made everything else worse:
+    # throughput roughly HALVED under saturation and the non-OCR endpoint went from ~12 s to ~31 s.
+    # The mechanism is the invariant note above — with slots >= GUNICORN_WORKERS every worker can be
+    # inside an OCR, so admission stops SHEDDING and starts QUEUEING on the WSGI layer, and a queued
+    # request holds a worker. 6 behaves like 8, not like 4, which is the confirmation: the cliff is
+    # at slots == workers, exactly where the design note says it is.
+    #
+    # THE 429s ARE THE BULKHEAD WORKING, NOT THE COST. `server_busy` sheds in milliseconds and the
+    # caller retries; starving the workers makes every OTHER request pay 30 s instead. Do not read
+    # a 429 count as the metric to minimise.
+    #
+    # HIGH VARIANCE, STATED. The batch column swings (a second 4-slot run gave 11.2 docs/min) —
+    # this is a shared 6-core WSL VM at load ~21 with other lanes running. The saturated column is
+    # the comparable one (fixed 90 s window) and it separates cleanly, ~2x, in both directions.
+    #
+    # RAISE THIS ONLY TOGETHER WITH GUNICORN_WORKERS, keeping the ~2-worker headroom the 6/4 pairing
+    # has (8 slots wants ~10 workers, ~+0.9 GiB). Not done here: the host has 638 MiB free.
+    # 4 -> 8 (2026-08-09 throughput window). THE PRECONDITION THIS FILE SET IS NOW MET, which is the
+    # only reason this is not a repeat of the reverted experiment above. That revert was measured at
+    # GUNICORN_WORKERS=6, where 8 slots >= 6 workers destroyed the bulkhead and admission switched
+    # from shedding to queueing (throughput halved, non-OCR p50 12s -> 31s). The note ends: "RAISE
+    # THIS ONLY TOGETHER WITH GUNICORN_WORKERS ... 8 slots wants ~10 workers". Workers are now 10,
+    # so the ~2-worker headroom is restored (8 < 10) and the cliff at slots == workers is not
+    # crossed. HONEST CAVEAT, MEASURED 2026-08-09T17:40Z: apitools is currently IDLE — 12 requests
+    # in 15 min, p95 2.5s, 0 429s, 0.04% CPU, 0.9 of 6 GiB — so this raise CANNOT move completion
+    # today. The completion bottleneck is upstream (the state-machine driver loop, see the window
+    # report). This is headroom for when the feeder is fixed, not the fix.
+    APITOOLS_MAX_CONCURRENT_OCR: 8    # pinned by env, so it does NOT silently track
+                                      # APITOOLS_MEM — see autoscale.py:87
+    # 6.0 -> 4.0. apitools alone was allotted every core of a 6-core VM, against a measured load
+    # average of 14.42. This is the only CPU change in the profile.
+    APITOOLS_CPUS: '4.0'
+    # 8G -> 6G. This value is SAFETY-CRITICAL and is not negotiable against a lint budget.
+    #
+    # ── HOW THIS WENT WRONG ONCE, SO IT DOES NOT AGAIN ──────────────────────────────────────────
+    # This was set to 6G on 2026-08-06 for the reason below, then changed to 4G LATER THE SAME DAY
+    # during a pass whose only goal was making the declared sum fit gate G30's budget. Nothing new
+    # was measured; the number was moved because a total needed to come down. That is backwards:
+    # a budget check exists to reveal that a machine is over-committed, not to select the memory
+    # limit of a service whose floor is set by measured OOM behaviour. The 4G value then shipped
+    # to a live container.
+    #
+    # ── WHY 6G AND NOT 4G ───────────────────────────────────────────────────────────────────────
+    # The `laptop` profile above carries a measured note: "cold multipage OCR ~1-2G each;
+    # 5 slots @4G = OOM SIGKILL storm, measured". This profile pins APITOOLS_MAX_CONCURRENT_PDF=5
+    # below. 4G + 5 slots IS that storm configuration, reconstructed deliberately.
+    #
+    # The counter-argument — that observed peaks are ~0.8-0.9 GiB, so 4G looks like 5x headroom —
+    # is not sound for this service. An observed peak is what the workload HAPPENED to reach; the
+    # storm note is about what 5 concurrent cold multipage rasterisations are ENTITLED to reach.
+    # Sizing a slot-based worker pool from average observation rather than from per-slot worst case
+    # is the same mistake as sizing a Node container below its --max-old-space-size.
+    #
+    # If this ever needs to be 4G, the way there is to pin APITOOLS_MAX_CONCURRENT_PDF to 3 — an
+    # explicit, reviewable throughput decision — NOT to leave 5 slots in a 4G cgroup.
+    APITOOLS_MEM: '6G'
+    # PIN THIS EXPLICITLY — and pin it at 5, its CURRENT EFFECTIVE VALUE, so this profile carries
+    # no throughput change at all.
+    #
+    # APITOOLS_MAX_CONCURRENT_PDF is the ONE apitools slot count not already pinned by env, so it
+    # falls through to autoscale.ocr_slots_default() (pdf_to_jpeg.py:92), which is MEMORY-DERIVED:
+    #     min(cores-1, int((MEM_GB - 0.7) / 0.9))
+    # At the running 8G/6-core config that evaluates to 5. At 6G it would evaluate to 5; at 4G it
+    # would silently become 3. Writing it down means the value no longer moves as a side effect of
+    # a memory edit that says nothing about concurrency — which is how it would have changed
+    # unnoticed. UNCHANGED from the running config: 5.
+    # 5 -> 8 (2026-08-09, owner-approved throughput window, together with WORKERS 6 -> 10 above).
+    APITOOLS_MAX_CONCURRENT_PDF: 8
+  settings:                           # VALUES BELOW WERE IDENTICAL TO `prod` BY DESIGN until the
+                                      # 2026-08-09 throughput window (extract_fanout 5 -> 10 to
+                                      # feed 10 gunicorn workers; revert with the window if needed)
+    perf_extract_fanout: 10
+    perf_scan_take: 50
+    perf_sync_chunk: 25
+    perf_batch_upsert: 25
+    perf_main_jitter_max_s: 6
+    perf_line_poll_s: 30
+    perf_lock_ttl_s: 600
+    perf_test_budget_scale: 1.0

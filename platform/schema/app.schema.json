@@ -1,0 +1,820 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://bina.local/schema/app.schema.json",
+  "title": "Platform app manifest (app.json)",
+  "description": "One manifest per app. THE source of truth for an app's identity, dependencies, secrets, routing, lifecycle and health. Everything else (compose include chain, traefik labels, authentik providers, console modules, console APP_BASES, connections consumers) is COMPILED from this by `bbox reconcile` and must never be hand-edited. Design corrections encoded here come from Fuchsia CFv2 (capabilities/use, weak deps), systemd (dependency strength decoupled from ordering), OSGi (persistent disposition vs runtime state), Home Assistant (multi-instance lives in state, not the manifest), Runtipi (manifest-declared ingress + guaranteed template vars) and Cloudron (declared platform addons).",
+  "type": "object",
+  "required": [
+    "id",
+    "title",
+    "layer",
+    "kind"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{1,30}$",
+      "description": "Stable app id. Also the ${APP_ID} template var and the compose/traefik/authentik naming root."
+    },
+    "title": {
+      "type": "object",
+      "description": "Display names. he is required — the product is Hebrew-native RTL.",
+      "required": [
+        "he"
+      ],
+      "properties": {
+        "he": {
+          "type": "string"
+        },
+        "en": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "layer": {
+      "type": "integer",
+      "enum": [
+        1,
+        2,
+        3
+      ],
+      "description": "1=headless platform base (not uninstallable), 2=base app, 3=installable app."
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "service",
+        "domain",
+        "adapter",
+        "blueprint",
+        "library",
+        "tool"
+      ],
+      "description": "service=owns containers; domain=multi-instance capability front (drive/mail/chat); adapter=one provider implementation of a domain; blueprint=owns no container, ships automation workflows (INDOX); library=build-time assets only (bina-ui); tool=dev/CI tooling, not user-facing."
+    },
+    "version": {
+      "type": "string",
+      "description": "SemVer of the app package."
+    },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "he": {
+          "type": "string"
+        },
+        "en": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "system": {
+      "type": "boolean",
+      "default": false,
+      "description": "true = cannot be disabled or uninstalled (the platform itself). Layer 1 is normally system:true."
+    },
+    "engine": {
+      "type": "object",
+      "description": "The PRIVATE engine this app runs, and the profiles (identities) declared on it. app.json is the ONLY place profiles are declared: the app's bootstrap reconciler creates each one on start, mints its credential, and creates its connection instance in the same operation. Adding an entry here is how a deployment gets another working account; see ai/context/app-engine-pattern.md.",
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "The private engine's protocol id, e.g. drive_local / mail_imap_local / chat_local."
+        },
+        "profiles": {
+          "type": "array",
+          "description": "Declared identities on that engine. The first with admin:true is the one a fresh deployment comes up bound to. Nothing may branch on 'is default' - only on admin.",
+          "items": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9_-]*$",
+                "description": "Profile slug. Lands in a WHERE clause, an account_hint and a URL path segment, so it is kept inert."
+              },
+              "display_name": {
+                "type": "string",
+                "description": "What the connection bar shows."
+              },
+              "admin": {
+                "type": "boolean",
+                "default": false,
+                "description": "Grants the admin ring: create/edit/suspend/delete OTHER profiles. The last admin cannot be removed or demoted."
+              }
+            }
+          }
+        }
+      }
+    },
+    "capabilities": {
+      "type": "array",
+      "description": "What this app PROVIDES to others (Fuchsia CFv2 `capabilities`). Anything another app can `use` must be declared here. type protocol=single endpoint; service=MULTI-INSTANCE (a directory of named instances) — domains use service.",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "type"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Capability name others `use`, e.g. sql, workflow, ocr, drive, mail, chat, secrets, identity."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "protocol",
+              "service"
+            ],
+            "description": "protocol=one instance; service=many named instances (Fuchsia Protocol vs Service)."
+          },
+          "interface": {
+            "type": "string",
+            "description": "Versioned contract id, e.g. drive.v1 — adapters must implement it."
+          },
+          "endpoint": {
+            "type": "string",
+            "description": "In-network base URL, e.g. http://drive:8975."
+          },
+          "required_ops": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Ops EVERY adapter must implement."
+          },
+          "optional_ops": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Ops adapters MAY implement; consumers must negotiate (unequal-feature-set problem)."
+          }
+        }
+      }
+    },
+    "use": {
+      "type": "array",
+      "description": "What this app NEEDS at runtime. Dependency STRENGTH and ORDERING are separate declarations (systemd: 'requirement dependencies do not influence the order in which services are started').",
+      "items": {
+        "type": "object",
+        "required": [
+          "capability"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "capability": {
+            "type": "string"
+          },
+          "strength": {
+            "type": "string",
+            "enum": [
+              "requires",
+              "wants",
+              "requisite",
+              "binds_to",
+              "conflicts"
+            ],
+            "default": "requires",
+            "description": "systemd spectrum. requires=hard (activation propagates); wants=weak, failure does not invalidate; requisite=must ALREADY be up, else fail immediately; binds_to=stronger than requires (stops with the dep); conflicts=mutually exclusive."
+          },
+          "after": {
+            "type": "boolean",
+            "default": true,
+            "description": "Ordering: start after this dep is ready. Orthogonal to strength."
+          },
+          "dependency": {
+            "type": "string",
+            "enum": [
+              "strong",
+              "weak"
+            ],
+            "default": "strong",
+            "description": "weak = excluded from cycle detection AND shutdown ordering (Fuchsia). The consumer MUST be written to work if the capability is absent or vanishes. This is the ONLY sanctioned way to resolve a layer-2 cycle."
+          },
+          "ops": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Ops this consumer actually needs. The resolver REFUSES to bind an adapter missing any of them — this is how unequal provider feature sets are made safe."
+          },
+          "instances": {
+            "type": "string",
+            "enum": [
+              "any",
+              "active",
+              "all"
+            ],
+            "default": "active",
+            "description": "For multi-instance (service) capabilities: which instance(s) to bind."
+          },
+          "own_instance": {
+            "type": "boolean",
+            "default": false,
+            "description": "This app runs its OWN instance of the capability rather than using the provider. Declaring it does not make it good - it makes it VISIBLE, in `bbox plan` and in review, instead of being a silent divergence between the graph and reality (gate G25). Requires `reason`."
+          },
+          "reason": {
+            "type": "string",
+            "description": "Why this app cannot use the shared provider. Required alongside own_instance; G25 --strict fails without it."
+          }
+        }
+      }
+    },
+    "connections": {
+      "type": "array",
+      "description": "Secrets/keys this app registers with the connections plane (secret-base). Feeds the install wizard, the fail-fast boot gate and the injector. The app receives narrow, revocable, per-app handles — never ambient access to the vault.",
+      "items": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Catalog id in connections/providers/*.yaml."
+          },
+          "required": {
+            "type": "boolean",
+            "default": true
+          },
+          "as": {
+            "type": "object",
+            "description": "Env aliasing: {CANONICAL_ENV: SERVICE_ENV} when the app reads a different name.",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "service": {
+            "description": "The compose service(s) that CONSUME this connection. The broker grants a connection by identifying the CALLER's own container, so a secret read by a service that is not the app's routed one has to say so here — and when two services legitimately read the same secret (browser42's profile holder and the runner that types into it), they are both named, because the alternative is the same connection declared twice and two rows that can drift. Omit for the app's first routing service (the default every app had before this field existed).",
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1
+              }
+            ]
+          }
+        }
+      }
+    },
+    "compose": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Path to this app's docker-compose.yml, relative to the app dir. null for kind=blueprint|library (owns no container)."
+    },
+    "broker": {
+      "type": "object",
+      "description": "Opt this app OUT of standing plaintext credentials. Declaring this makes the compiler wrap the app's command in the connections injector and blank the named env vars, so the secrets exist only for the life of the process and only after the broker has identified the container and checked this manifest's connections[]. An app WITHOUT this block keeps reading .env exactly as before — the migration is per-app and reversible.",
+      "required": [
+        "entrypoint"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "service": {
+          "type": "string",
+          "description": "Compose service to cut over. Defaults to routing[0].service, else the app id. Must be the service name the broker sees on the container's com.docker.compose.service label."
+        },
+        "entrypoint": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The app's ORIGINAL command, wrapped: [\"sh\",\"/inject.sh\",\"sh\",\"-c\",\"exec <original CMD>\"]. Written out rather than derived because a compose entrypoint REPLACES the image's ENTRYPOINT+CMD, so getting it wrong is a boot failure, not a fallback."
+        },
+        "blank_env": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Env vars to blank in the app's environment. These are the standing plaintext credentials being retired: blanked here, supplied by the broker at boot. Anything left off this list is still a standing secret."
+        },
+        "url_env": {
+          "type": "string",
+          "default": "CONN_URL",
+          "description": "Env var carrying the broker URL, for an app that already reads a different name."
+        }
+      }
+    },
+    "routing": {
+      "type": "array",
+      "description": "Ingress declared in the manifest (Runtipi model): the compiler emits ALL traefik labels, the authentik proxy provider + outpost binding, the console module tile and the console APP_BASES entry from this. Never hand-write those.",
+      "items": {
+        "type": "object",
+        "required": [
+          "host",
+          "port"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "host": {
+            "type": "string",
+            "description": "Subdomain root: emits <host>.localhost and <host>.${DEPLOYMENT_DOMAIN}."
+          },
+          "port": {
+            "type": "integer",
+            "description": "Internal container port (Runtipi internal_port)."
+          },
+          "service": {
+            "type": "string",
+            "description": "Which compose service receives traffic when the app has several (Runtipi is_main)."
+          },
+          "url_env": {
+            "type": "string",
+            "description": "The env var holding THIS host's public origin (e.g. FORGE_BASE_URL). It feeds the <name>-http router rule and, with an `sso` block, the authentik provider's external host. Defaults to <APP>_BASE_URL, which is what every single-host app wants — and why this is optional. It exists for an app that publishes MORE THAN ONE host (its own UI plus a whole product it runs, e.g. git's forge): without it the second entry renders a router using the FIRST host's rule, so two routers match one Host and traefik resolves that by priority — the app that worked before 404s or serves the wrong container."
+          },
+          "auth": {
+            "type": "string",
+            "enum": [
+              "sso",
+              "none"
+            ],
+            "default": "sso",
+            "description": "sso = authentik forwardAuth + the higher-priority /outpost.goauthentik.io callback router. MUTABLE — never frozen at install time (Cloudron's documented failure mode). 'basic' was listed here and implemented NOWHERE: no basic-auth middleware exists, so it fell through the emitter's `auth == 'sso'` test and published the app with no authentication at all. A value the schema permits but the emitter does not implement resolves to OPEN, so it must not be permitted. Re-add it only together with the middleware."
+          },
+          "auth_exclude": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Path prefixes exempt from auth (e.g. /webhook, /healthz) — Cloudron proxyAuth '!' semantics."
+          },
+          "emit_labels": {
+            "type": "boolean",
+            "default": true,
+            "description": "true = the compiler generates this app's traefik labels (use when the labels were trapped in the central compose.override.yml). false = the app already carries self-contained labels in its OWN docker-compose.yml, which is equally decentralised; the manifest still declares host/port/auth as documentation and for the console module + dependency graph, but emits nothing. Set false only when the app's own compose already routes it."
+          },
+          "module": {
+            "type": "object",
+            "description": "Presence = surface this app in the console shell. Absence = routed but not surfaced. `embed: true` (default) needs `alias` and gives a same-origin tile under /a/<alias>/; `embed: false` gives an admin-tool tile that opens the app's own host in a new tab. Either way the name, icon and description come from HERE — the console must never carry a list of the apps it displays.",
+            "additionalProperties": false,
+            "properties": {
+              "group": {
+                "type": "string",
+                "enum": [
+                  "ראשי",
+                  "עסק",
+                  "תשתית",
+                  "הגדרות"
+                ]
+              },
+              "icon": {
+                "type": "string"
+              },
+              "embed": {
+                "type": "boolean",
+                "default": true,
+                "description": "true = same-origin embed under /a/<id>/ (adds the APP_BASES entry)."
+              },
+              "external": {
+                "type": "boolean",
+                "default": false,
+                "description": "true = this app's UI is ALSO reachable on its own host, nested under the console's (`plane.console.localhost` for a console at `console.localhost`), and the shell may FRAME that URL directly instead of proxying it. The console derives the origin at click time from its own hostname, so nothing host-specific is baked into the rendered registry; a card that opens a new tab is the fallback when the frame does not come up."
+              },
+              "order": {
+                "type": "integer"
+              },
+              "id": {
+                "type": "string",
+                "description": "Stable tile id; defaults to the app id."
+              },
+              "alias": {
+                "type": "string",
+                "description": "Path segment for the same-origin embed (/a/<alias>/). Required when embed is true."
+              },
+              "name": {
+                "type": "string",
+                "description": "Display name, in the operator's language."
+              },
+              "desc": {
+                "type": "string",
+                "description": "One line describing what the app is for."
+              },
+              "service": {
+                "type": "string",
+                "description": "Compose service backing the tile, when the app has several."
+              },
+              "url": {
+                "type": "string",
+                "description": "Internal base URL the console proxies to for an embedded tile."
+              },
+              "url_env": {
+                "type": "string",
+                "description": "Env var that overrides `url` at runtime."
+              },
+              "passthrough": {
+                "type": "array",
+                "description": "App-owned paths that cannot traverse the console's HTTP proxy and must be routed directly by Traefik under /a/<alias>. The platform preserves the console origin and SSO boundary, then optionally strips the mount prefix before forwarding. Intended for websocket endpoints; ordinary HTTP stays on the generic console proxy.",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "path",
+                    "transport"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                      "pattern": "^/[A-Za-z0-9._~!$&'()*+,;=:@%/-]+$",
+                      "description": "App-relative path to expose below /a/<alias>, for example /websockify."
+                    },
+                    "transport": {
+                      "type": "string",
+                      "enum": [
+                        "websocket",
+                        "http"
+                      ],
+                      "description": "Transport that requires direct edge passthrough. Traefik upgrades websocket connections automatically; `http` is for an app whose browser code addresses ABSOLUTE paths (a SPA that fetches /api and /plugins from the origin root) and therefore cannot live behind the console's /a/<alias> rewriting proxy at all."
+                    },
+                    "match": {
+                      "type": "string",
+                      "enum": [
+                        "exact",
+                        "prefix"
+                      ],
+                      "default": "exact"
+                    },
+                    "strip_mount_prefix": {
+                      "type": "boolean",
+                      "default": true
+                    },
+                    "mount": {
+                      "type": "string",
+                      "enum": [
+                        "alias",
+                        "root"
+                      ],
+                      "default": "alias",
+                      "description": "Where the path is exposed on the console origin. `alias` (default): below /a/<alias>, optionally stripped. `root`: at the console origin root, verbatim and never stripped — for an embedded app whose client hardcodes absolute paths. A root mount is a claim on the console's own URL space, so the compiler excludes every path the console declares in its `reserved_paths`, and two apps may not root-mount the same path."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "sso": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Everything authentik needs to publish this app behind forwardAuth. Declared here so the authentik blueprint (layer 1) never names a layer-3 app.",
+            "properties": {
+              "slug": {
+                "type": "string"
+              },
+              "base_url_env": {
+                "type": "string"
+              },
+              "default_host": {
+                "type": "string"
+              },
+              "display_name": {
+                "type": "string"
+              },
+              "local_twin": {
+                "type": "boolean",
+                "description": "Also publish an http://<default_host> provider/application pair (the -local flavour)."
+              }
+            },
+            "required": [
+              "slug",
+              "default_host",
+              "display_name"
+            ]
+          }
+        }
+      }
+    },
+    "blueprints": {
+      "type": "object",
+      "description": "Automation assets this app installs. n8n workflows are imported on enable and removed on disable.",
+      "additionalProperties": false,
+      "properties": {
+        "n8n": {
+          "type": "string",
+          "description": "Dir of workflow JSONs owned by this app."
+        },
+        "requires_stdlib": {
+          "type": "string",
+          "description": "SemVer range of the automations stdlib (Settings/Logger/process_lock/Batch Upsert/API routers) this blueprint calls."
+        }
+      }
+    },
+    "lifecycle": {
+      "type": "object",
+      "description": "Hooks, each repo-relative and idempotent. enable/disable are the PERSISTENT disposition (OSGi autostart setting); start/stop of containers is transient runtime state and is NOT an app.json concern.",
+      "additionalProperties": false,
+      "properties": {
+        "install": {
+          "type": "string"
+        },
+        "uninstall": {
+          "type": "string"
+        },
+        "enable": {
+          "type": "string"
+        },
+        "disable": {
+          "type": "string"
+        },
+        "upgrade": {
+          "type": "string",
+          "description": "Run on version change; receives PREV_VERSION."
+        }
+      }
+    },
+    "health": {
+      "type": "object",
+      "description": "TWO gates. Structural resolution runs first (deps satisfied + required connections resolve); only then is the probe consulted. A probe must never be the only gate.",
+      "additionalProperties": false,
+      "properties": {
+        "structural": {
+          "type": "string",
+          "enum": [
+            "auto"
+          ],
+          "default": "auto"
+        },
+        "probe": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "http": {
+              "type": "string",
+              "description": "URL expected to return 2xx."
+            },
+            "exec": {
+              "type": "string",
+              "description": "Command; exit 0 = operative. Bespoke deep check (e.g. INDOX extract-gate)."
+            },
+            "interval": {
+              "type": "string",
+              "default": "30s"
+            },
+            "timeout": {
+              "type": "string",
+              "default": "60s"
+            },
+            "gates_dependents": {
+              "type": "boolean",
+              "default": false,
+              "description": "true = a failing probe blocks apps that hard-`use` this one. Default false: annotate, don't cascade."
+            }
+          }
+        }
+      }
+    },
+    "data": {
+      "type": "object",
+      "description": "Everything this app owns that must survive a move to another machine, and its lifecycle. disable ALWAYS keeps data (that is what makes the toggle stateful); only uninstall may purge. Declaring a store here is what makes PER-APP export and restore possible: a store nobody claims can only ever be carried by a whole-host backup, and can never be restored into a different deployment on its own.",
+      "additionalProperties": false,
+      "properties": {
+        "volumes": {
+          "type": "array",
+          "description": "Docker volumes, unprefixed (the compose project name is added).",
+          "items": {
+            "type": "string"
+          }
+        },
+        "paths": {
+          "type": "array",
+          "description": "Repo-relative directories this app writes state into (bind mounts). Discovered from compose either way; declaring them is what attributes the bytes to THIS app instead of to the host at large.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "sql": {
+          "type": "array",
+          "description": "What this app owns inside a database. The platform's `sql` capability hands every app the same postgres and the same `public` schema, so without this the tables of apitools, indox, drive and my-docs are one undifferentiated commons: backup-able as a lump, impossible to export or restore per app. Omitting BOTH `schemas` and `tables` claims the whole database — the right declaration for an app with its own instance (n8n, authentik, glitchtip). Tables may use a trailing '*' prefix pattern.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "database"
+            ],
+            "properties": {
+              "instance": {
+                "type": "string",
+                "description": "Container name prefix, e.g. 'supabase-db' or 'n8n-postgres'. Required whenever the database name is not unique across instances — and `postgres` is a database in EVERY instance, so a bare {database:'postgres'} would otherwise claim four different databases on four different servers."
+              },
+              "database": {
+                "type": "string"
+              },
+              "schemas": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "tables": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "note": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "kv": {
+          "type": "array",
+          "description": "Logical redis databases this app owns on a shared instance.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "instance"
+            ],
+            "properties": {
+              "instance": {
+                "type": "string"
+              },
+              "db": {
+                "type": "integer"
+              },
+              "durable": {
+                "type": "boolean",
+                "default": true,
+                "description": "false = a cache or queue that a restore may legitimately start empty. Recorded rather than assumed, so 'not restored' is a decision instead of a surprise."
+              },
+              "note": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "on_uninstall": {
+          "type": "string",
+          "enum": [
+            "keep",
+            "prompt",
+            "purge"
+          ],
+          "default": "prompt"
+        },
+        "backup": {
+          "type": "string",
+          "description": "Hook producing a restorable archive before purge."
+        }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cpus": {
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "memory": {
+          "type": "string"
+        }
+      }
+    },
+    "observability": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Error reporting this app wants. The BASE app (glitchtip) must not know its consumers by name, so each app declares its own project here and the compiler emits the provisioning list. Omit the key entirely if the app needs no error project.",
+      "properties": {
+        "sentry_project": {
+          "type": "string",
+          "description": "Project name; defaults to the app id. Set it only when the DSN env var must keep a legacy spelling (indox -> incoming-docs -> INCOMING_DOCS_SENTRY_DSN)."
+        },
+        "sentry_platform": {
+          "enum": [
+            "python",
+            "node",
+            "go",
+            "other"
+          ],
+          "description": "Language tag GlitchTip shows on the project."
+        }
+      },
+      "required": [
+        "sentry_platform"
+      ]
+    },
+    "agent": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The app's own brief for the office agent (עזריה) — how to OPERATE it. This is the fixed pattern by which every app manages its agent context: the app owns one Markdown file and points at it here; `reconcile` renders every ENABLED app's brief into .generated/registry/agent-context.md, and the agent (apps/bina-ds) loads that file into every session. The point is that the agent's prompt never names an app: install an app and the agent learns it exists and how to drive it on the next turn; uninstall it and the brief leaves with it. The heading, capability, endpoint and ops are compiled from the manifest — write only what a caller cannot read off the manifest (what the app is FOR, its vocabulary, its traps).",
+      "required": [
+        "context"
+      ],
+      "properties": {
+        "context": {
+          "type": "string",
+          "description": "Path, relative to the app directory, of the Markdown brief the app owns (convention: AGENT.md). Must exist — the compiler refuses a manifest pointing at a file that is not there, because a missing brief is silent: the app installs, the agent never learns how to use it."
+        },
+        "order": {
+          "type": "integer",
+          "description": "Where this app's brief sits in the rendered file. Defaults to 100."
+        }
+      }
+    },
+    "contributes": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "What this app contributes INTO a base app. The layering rule forbids a base app from naming a layer-3 app, so the wiring is declared here, by the app that needs it, and the compiler emits it as a compose overlay on the base service. Rendered config is unchanged — only the source of the declaration moves.",
+      "properties": {
+        "env": {
+          "type": "object",
+          "description": "base-app id -> {ENV_KEY: value} merged onto that base app's service.",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        },
+        "volumes": {
+          "type": "object",
+          "description": "base-app id -> list of compose volume strings merged onto that base service.",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "connection_probes": {
+          "type": "object",
+          "description": "secret id -> health URL connections should probe to prove this app can use it.",
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "string",
+                "description": "http URL"
+              },
+              {
+                "type": "object",
+                "description": "structured probe, e.g. {type: tcp, host, port}",
+                "additionalProperties": true
+              }
+            ]
+          }
+        },
+        "connection_providers": {
+          "type": "array",
+          "description": "Whole credential-catalog entries this app OWNS. connections/providers/*.yaml is layer-1 config, so a secret that exists only because a layer-3 app exists (portainer's admin password) had to be authored there — a base app naming an installable one, gate G9. Declared here instead, the compiler emits it into the registry connections already mounts, and uninstalling the app takes its secret out of the catalog with it. Same field set as a providers/*.yaml entry, plus an optional `group` for which section of the connections UI it lands in.",
+          "items": {
+            "type": "object",
+            "required": [
+              "id"
+            ]
+          }
+        }
+      }
+    },
+    "progress_deadline_seconds": {
+      "type": "integer",
+      "minimum": 10,
+      "description": "How long this app may stay not-Ready before the control plane stops calling it 'starting' and reports ProgressDeadlineExceeded. Only raise it for apps with a genuinely slow first boot (schema migrations, model downloads) — a generous default hides real breakage."
+    },
+    "cli": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "How this app appears in the bbox CLI. The CLI dispatches `bbox <id-or-alias> <verb>` to <root>/<id>/hooks/<verb> generically, so an app's command surface is the set of files in its hooks/ directory and NOTHING is declared in bbox. Before this existed, bbox carried a `case` block per app plus its verbs in the help heredoc, so adding an app meant editing the CLI — the exact coupling gate G31 forbids everywhere else.",
+      "properties": {
+        "alias": {
+          "type": "string",
+          "description": "Extra CLI token for this app, e.g. browser42 answers to `b42`. Must not collide with a built-in bbox command or another app's id/alias."
+        },
+        "fallback": {
+          "type": "string",
+          "description": "Hook that receives the verb as its FIRST ARGUMENT when no hooks/<verb> exists. Lets an app expose several verbs from one implementation (browser42: dump|load|list|info all reach hooks/state) without a file of boilerplate per verb."
+        }
+      }
+    },
+    "reserved_paths": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^/[A-Za-z0-9._~/-]+$"
+      },
+      "description": "Origin-root paths this app serves itself (the console: its own /api/* and /healthz). A layer-3 app that root-mounts a passthrough (module.passthrough[].mount=root) is compiled with these excluded, so it can take over /api/<x> without ever shadowing the shell's own routes."
+    }
+  }
+}

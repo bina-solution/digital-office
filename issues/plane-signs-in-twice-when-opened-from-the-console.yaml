@@ -1,0 +1,110 @@
+# yaml-language-server: $schema=./schema.json
+title: "Plane asks for its own password inside the console: either the office signs in for the frame, or the office browser autofills from the vault — and Plane CE cannot federate with authentik at all"
+opened: 2026-10-06
+category: feature
+severity: medium
+status: open
+summary: "Opening `ניהול פרויקטים` from the console costs the owner TWO sign-ins (the edge's authentik, then Plane's own email+password), and the shell can only draw a «כניסה» card because a frame cannot show authentik's page. Measured: app.json declares `routing.auth: \"sso\"` AND Plane's own `ENABLE_EMAIL_PASSWORD=1`, so both logins are real; authentik cannot be Plane's identity provider because OIDC/SAML/LDAP in Plane are Pro/Business features (docs), CE offers only Google/GitHub OAuth, email codes and passwords. Two implementable paths, one of which is already half-built: (a) the office signs in ON BEHALF of the frame — a trusted-header patch in the office's own `plane-he` fork (identity preserved) or a proxy session bridge through the door (single shared identity); (b) the generic one the owner asked for — browser42's vault↔Chrome login bridge, which ALREADY holds `http://plane.localhost` and autofills `/view/`, extended to every app that brings its own login."
+description: |
+  ## What the owner asked for
+
+  «possible disabling of the plane's separated SSO so no password would be needed when opened from
+  console. (maybe even auto fill from secrets cloud solve this generically)»
+
+  ## Measured (2026-10-06, macbook office)
+
+  ```
+  apps/project-pln/app.json   routing[0] = {host: "plane", port: 80, auth: "sso",
+                                            sso: {slug: plane, default_host: plane.localhost,
+                                                  base_url_env: PROJECT_PLN_BASE_URL, local_twin: true}}
+  apps/project-pln/docker-compose.yml
+                              ENABLE_EMAIL_PASSWORD=1   ENABLE_SIGNUP=0
+                              (no GOOGLE_/GITHUB_/GITLAB_/SMTP_ keys are set)
+  apps/project-pln/README.md § Reachability  "It is auth: \"none\" because Plane CE has no OIDC: edge SSO
+                              would add a second login in front of Plane's own."      ← STALE, contradicts
+  apps/project-pln/README.md § CLI (framing)  "the whole plane.<domain> host is auth: sso in app.json"  ← the truth
+  apps/project-pln/README.md § framing        "A frame cannot show that host's sign-in (the identity
+                              provider is another site on .localhost and refuses framing), so the shell
+                              ASKS first — GET /.dgo/signed-in … — and draws a card with one button «כניסה»"
+  data/browser42/browser-logins.json          entries include "http://plane.localhost"   ← the bridge already has it
+  Plane docs (developers.plane.so/self-hosting/govern/oidc-sso)   "OIDC SSO  Pro Business"
+  Plane docs (…/govern/authentication)        CE offers: unique code (email), passwords, Google/GitHub OAuth
+  ```
+
+  So there are two independent sign-ins today (the edge's, and Plane's own), and the one place that
+  could remove Plane's own — federating it with authentik — is not in the edition we run. That is the
+  whole finding: "just disable Plane's login" has no configuration answer.
+
+  ## What can actually be built, in order of how well it fits this office
+
+  ### (a) The office signs in ON BEHALF of the frame — the only literal "no login at all"
+
+  Two shapes, and the choice between them is a decision about IDENTITY, not about code:
+
+  * **a1. Trusted-header patch in the fork we already maintain.** `apps/project-pln/patches/*.py`
+    already carries the office's own changes (gunicorn timeout, Hebrew defaults/states, no phone
+    home, redis broker), and the web bundle is the owner's own `plane-he` build. A patch to the API's
+    session middleware that accepts the edge's `X-authentik-username` (which the office's edge already
+    injects — see the generated middlewares in `platform-base/traefik/config/zz-serve.yaml`) and
+    resolves/creates that user + session would make the frame signed in AS THE USER. Identity,
+    attribution and revocation all keep working, the vault password is never replayed, and the cost
+    is the one this fork already pays: a patch to keep alive across upstream upgrades.
+  * **a2. Proxy session bridge.** The office's own proxy (`apps/dgo-extend/app.py` `/peer/<office>/<alias>/…`
+    for a remote office, the edge for a local one) posts the vault's `plane_local_admin` credential to
+    Plane's sign-in endpoint, captures `Set-Cookie`, and attaches it to the framed response — scoped to
+    `<alias>.<office>.console.<domain>`, reachable only after authentik let the request through. No
+    fork patch, but the browser becomes ONE shared identity (the office account), so "who did this"
+    stops being answerable inside Plane. Says a lot that Plane's own API token used by the office
+    (`plane_local_api_token-<agent>`) exists precisely to avoid that.
+
+  ### (b) The vault autofills, generically — what the owner guessed, and it exists
+
+  `apps/browser42/logins.py` (its header is the design) keeps ONE login in TWO stores: the credential
+  plane is the source of truth, Chrome's manager is a disposable mirror "kept for the human — it is
+  what gives native autofill in /view", with HMAC fingerprints for conflict detection and
+  `./bbox b42 logins <list|sources|sync|materialize|harvest|export>`. **It already holds
+  `http://plane.localhost`**, and it is origin-keyed, so a new site is a new credential row and NOT a
+  code change. What is missing is only the console affordance: when the shell's «כניסה» card appears
+  for an app whose login the vault knows, it should offer "open it in the office browser" (where the
+  login is already filled) instead of a password prompt — one card, one target, no new mechanism.
+  This is the generic answer to "secrets cloud solves it": it already covers n8n, glitchtip,
+  supabase-studio, chat, facebook and Plane in this very office.
+
+  ### (c) If the office ever buys Plane Pro: OIDC SSO with authentik, one login, no patch (docs above).
+
+  ## What is NOT a fix
+
+  * `auth: "none"` on the Plane host (the stale README paragraph) — it removes the SECOND login by
+    removing the FIRST, and exposes `/god-mode/` (the README itself leans on edge SSO for that).
+  * Google/GitHub OAuth in CE: authentik cannot pretend to be GitHub, so it does not federate.
+  * Email/unique-code sign-in: still a second login, and needs SMTP the office does not configure.
+
+  ## Decided in this ticket, not implied
+
+  * The recommendation is **a1 + b**: identity-preserving sign-in for the frame, vault autofill as the
+    generic path for every app that brings its own login, and the console's card as the honest
+    fallback for anything neither covers.
+  * `a2` is deliberately listed as the cheap-but-anonymous variant: it needs an explicit owner
+    decision, because it makes every human in the office the same Plane user.
+references:
+  - apps/project-pln/app.json
+  - apps/project-pln/README.md
+  - apps/project-pln/patches/
+  - apps/browser42/logins.py
+  - platform-base/traefik/config/zz-serve.yaml
+  - apps/dgo-extend/app.py
+  - https://developers.plane.so/self-hosting/govern/oidc-sso
+  - https://developers.plane.so/self-hosting/govern/authentication
+tasks:
+  - text: "Fix the stale README paragraph (auth: \"none\") that contradicts app.json's routing auth: sso"
+    done: false
+  - text: "a1: prototype the trusted-header patch in apps/project-pln/patches/ (X-authentik-username → user + session), measured against the running instance"
+    done: false
+  - text: "b: the shell's «כניסה» card offers 'open in the office browser' when ./bbox b42 logins sources has an entry for the app's own origin"
+    done: false
+  - text: "Measure the truth of 'the card appears once per session': which cookie carries the frame's sign-in, its lifetime, and what a refresh does"
+    done: false
+  - text: "Owner decision if a2 (proxy session bridge, one shared identity) is ever wanted — do not build it unasked"
+    done: false
+  - text: "Record the CE-vs-Pro fact (OIDC/SAML/LDAP are Pro/Business) next to the app so nobody re-plans federating Plane with authentik"
+    done: false

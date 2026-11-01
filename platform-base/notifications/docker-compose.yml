@@ -1,0 +1,88 @@
+# notifications — התראות: self-developed notifications microservice. Polls GlitchTip's
+# Sentry-compatible issues API (GlitchTip aggregates errors from every app) and turns each
+# NEW issue into a notification; exposes a full REST API + a Hebrew-RTL Bina SPA.
+#
+# Own host alerts-svc.localhost (adding-only; does NOT collide with glitchtip.localhost —
+# the raw GlitchTip tool stays reachable there). Embeds same-origin at console.localhost/a/alerts/.
+services:
+  notifications:
+    # The image CI publishes for this commit (DGO-41). `pull_policy: missing` means it is
+    # fetched only when it is not here already, so a checkout that has built it is untouched;
+    # the `build:` below stays as the fallback. Needs the GHCR package readable — a package made
+    # from a private repo is private, so `docker login ghcr.io` on a machine that must pull.
+    image: ghcr.io/solomonboltin/digital-office/notifications:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: notifications-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: notifications
+    restart: unless-stopped
+    environment:
+      # platform standard: report this service's OWN errors to GlitchTip (Sentry protocol)
+      - SENTRY_DSN=${NOTIFICATIONS_SENTRY_DSN:-}
+      - DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-bina-deployment}
+      - GLITCHTIP_URL=http://glitchtip:8000
+      # External browser URL for issue permalinks — must match how the stack is served
+      # (AUTH_PROTOCOL=http locally, unset→https on prod) so "פתח במקור" links don't cert-error.
+      - GLITCHTIP_WEB_URL=${AUTH_PROTOCOL:-https}://${GLITCHTIP_BASE_URL:-glitchtip.${DEPLOYMENT_DOMAIN:-localhost}}
+      # No literal last resort. COMPANY_SLUG is guaranteed present (reconcile.py sync_identity
+      # writes it on every render), and if it somehow is not, an EMPTY slug makes the poller say
+      # so once and idle — which is recoverable. A literal fallback made it poll a DIFFERENT
+      # company's org name and show an empty screen that looked like 'no alerts'.
+      - GLITCHTIP_ORG=${GLITCHTIP_ORG_SLUG:-${COMPANY_SLUG:-}}
+      # UNCERTAINTY: not provisioned yet — poller idles until this is set. See PLAN.
+      - GLITCHTIP_API_TOKEN=${GLITCHTIP_API_TOKEN:-}
+      - GLITCHTIP_QUERY=${NOTIFICATIONS_QUERY:-is:unresolved}
+      - NOTIFICATIONS_POLL_INTERVAL=${NOTIFICATIONS_POLL_INTERVAL:-60}
+      - NOTIFICATIONS_DB=/data/notifications.db
+    volumes:
+      - notifications_data:/data
+    networks:
+      - traefik-network
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik-network
+      # THREE routers, the platform's edge convention (see reconcile.py routing_labels). This app
+      # sets `emit_labels: false` and writes its own, and what it wrote was a single `web` router —
+      # so on a domain deployment https://alerts-svc.<domain> matched NOTHING and traefik answered
+      # 404. Not a 404 from the app: there was no route at all, on the only scheme a public
+      # deployment serves. It looked like "alerts is broken" and read as "no alerts".
+      - traefik.http.routers.notifications-local.rule=Host(`alerts-svc.localhost`)
+      - traefik.http.routers.notifications-local.entrypoints=web
+      - traefik.http.routers.notifications-local.middlewares=authentik@file
+      - traefik.http.routers.notifications-local.service=notifications
+      - traefik.http.routers.notifications-http.rule=Host(`${NOTIFICATIONS_BASE_URL:-alerts-svc.${DEPLOYMENT_DOMAIN:-localhost}}`)
+      - traefik.http.routers.notifications-http.entrypoints=web
+      - traefik.http.routers.notifications-http.middlewares=authentik@file
+      - traefik.http.routers.notifications-http.service=notifications
+      - traefik.http.routers.notifications-https.rule=Host(`${NOTIFICATIONS_BASE_URL:-alerts-svc.${DEPLOYMENT_DOMAIN:-localhost}}`)
+      - traefik.http.routers.notifications-https.entrypoints=websecure
+      - traefik.http.routers.notifications-https.tls=true
+      - traefik.http.routers.notifications-https.tls.certresolver=myresolver
+      - traefik.http.routers.notifications-https.middlewares=authentik@file
+      - traefik.http.routers.notifications-https.service=notifications
+      - traefik.http.services.notifications.loadbalancer.server.port=8977
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://localhost:8977/healthz',timeout=8).status==200 else 1)"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+
+volumes:
+  notifications_data:
+
+networks:
+  traefik-network:
+    external: true

@@ -1,0 +1,66 @@
+{
+  "id": "postgres",
+  "title": {
+    "he": "בסיס נתונים",
+    "en": "PostgreSQL"
+  },
+  "layer": 1,
+  "kind": "service",
+  "version": "1.0.0",
+  "system": true,
+  "summary": {
+    "he": "בסיס הנתונים של הפלטפורמה",
+    "en": "The platform database"
+  },
+  "capabilities": [
+    {
+      "name": "sql",
+      "type": "protocol",
+      "endpoint": "postgres://supabase-db:5432",
+      "required_ops": [
+        "query",
+        "transaction",
+        "migrate"
+      ]
+    }
+  ],
+  "use": [],
+  "connections": [
+    {
+      "id": "supabase-db-password",
+      "required": true
+    },
+    {
+      "id": "supabase-jwt-secret",
+      "required": true
+    }
+  ],
+  "compose": "docker-compose.yml",
+  "routing": [],
+  "health": {
+    "structural": "auto"
+  },
+  "data": {
+    "volumes": [
+      "supabase_db_data",
+      "db-config"
+    ],
+    "on_uninstall": "keep",
+    "sql": [
+      {
+        "instance": "supabase-db",
+        "database": "postgres",
+        "schemas": [
+          "supabase_functions",
+          "net"
+        ],
+        "note": "created by volumes/db/webhooks.sql and the pg_net extension"
+      },
+      {
+        "instance": "supabase-db",
+        "database": "_supabase",
+        "note": "supabase analytics/logs database - operational telemetry, dropped in config mode"
+      }
+    ]
+  }
+}

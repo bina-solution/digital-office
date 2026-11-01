@@ -1,0 +1,41 @@
+{
+  "feature": "local-aligned-value-extraction",
+  "description": "Validate aligned value extraction (find-after, find-below) using the local Tesseract OCR engine on real documents.",
+  "endpoint": "/documentJsonQuery",
+  "upload_endpoint": "/documentOcr",
+  "upload_query_params": {
+    "cache": "false",
+    "ocr_engine": "local"
+  },
+  "cases_source": "fixtures/fixtures.json",
+  "query_params": {
+    "draw": "1"
+  },
+  "assertions": [
+    {
+      "name": "match_present",
+      "source": "analysis.result_value",
+      "operator": "truthy"
+    },
+    {
+      "name": "validations_passed",
+      "source": "analysis.error",
+      "operator": "is_none"
+    },
+    {
+      "name": "result_value_equals",
+      "source": "analysis.result_value",
+      "operator": "equals"
+    },
+    {
+      "name": "text_match_equals",
+      "source": "analysis.text_match",
+      "operator": "equals"
+    }
+  ],
+  "expected": {
+    "match_present": true,
+    "validations_passed": true,
+    "notes": "Tests real document extraction using local Tesseract OCR engine"
+  }
+}

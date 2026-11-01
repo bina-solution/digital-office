@@ -1,0 +1,322 @@
+#!/usr/bin/env bash
+set -euo pipefail
+export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
+
+# push-app — the RAPID per-app deploy verb behind `bbox n8n push <app>` (and `--wf <id>` for one
+# workflow). Plan: ai/context/n8n-as-code-migration.md. This is the successor to
+# scripts/ops/deploy-workflow.sh, with the two failure classes it existed for solved at the root:
+#
+#   * updates go through the n8n REST API (PUT /workflows/:id), so nothing is ever imported
+#     inactive — the bare-import deactivation class (indoxV2FigureDocType01, 2026-08-16) cannot
+#     happen here;
+#   * activation is API-driven (POST /workflows/:id/activate after deactivate on update), which
+#     registers triggers LIVE in main — including schedule triggers, the deploy≠live caveat that
+#     forced "restart main" rituals after SQL activation.
+#
+# NO instance-global steps run here (owner/credentials/schema/gates/restart — that is
+# `bbox n8n push all`). Compile is wrap.mjs (the lossless graft); only workflows whose COMPILED
+# sha changed since the last push-app are sent (cache under .push-cache/<app>.tsv).
+#
+# Brand-NEW workflows (id absent live) cannot be API-created without n8n minting a fresh id —
+# stable ids are load-bearing here (executeWorkflow references) — so creation falls back to
+# `n8n import:workflow` + publish-model SQL, the one place that pairing still lives.
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+N8N_DIR="${REPO_ROOT}/apps/n8n"
+WRAP="${N8N_DIR}/tooling/wrap.mjs"
+log() { echo "[push-app] $*"; }
+
+# Compile writes .generated/n8n/<app>/*.json, and .push-cache/<app>.tsv records the shas. Both are
+# routinely left root-owned by a container-side `reconcile.py render` (see lib.sh). Repair before
+# touching either, or the push dies mid-compile with a raw Node EACCES — and the .push-cache case
+# is worse: it fails AFTER a successful push, so the sha cache silently goes stale and the next
+# `bbox n8n status` reports drift that is not real.
+ensure_generated_writable || die "cannot write .generated — see the message above"
+ensure_generated_writable "${N8N_DIR}/.push-cache" || true
+
+# Grammar (owner, 2026-08-16): workflow ids are POSITIONAL — `push <app> <wfId> [wfId...]`
+# pushes exactly those (the agent default: push what you edited, immediately). No ids = only
+# what changed since the last push (sha cache). `--all` = force the whole app. `--wf` kept as
+# a compat alias for the positional form.
+# Exit codes (agents parse these): 0 ok · 1 failure · 2 usage · 4 CONFLICT (live moved since
+# your base — pull, re-apply, push again; nothing was overwritten and nothing was lost).
+APP=""; WFS=""; ALL=0; PRIME=0; DRY=0; FORCE=0
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --wf)      WFS="${WFS} ${2:-}"; shift 2 || shift ;;
+    --wf=*)    WFS="${WFS} ${1#--wf=}"; shift ;;
+    --all)     ALL=1; shift ;;
+    --dry-run) DRY=1; shift ;;   # print what WOULD push, change nothing (terraform-plan style)
+    --force)   FORCE=1; shift ;; # deliberately overwrite a live change (it stays in n8n's version history)
+    --prime)   PRIME=1; shift ;; # right after a pull: blueprint==live, so record shas, push nothing
+    -*)        echo "usage: push-app <app> [wfId ...] [--all|--dry-run|--force|--prime]" >&2; exit 2 ;;
+    *)         if [ -z "${APP}" ]; then APP="$1"; else WFS="${WFS} $1"; fi; shift ;;
+  esac
+done
+[ -n "${APP}" ] || { echo "usage: push-app <app> [wfId ...] [--all|--dry-run|--force|--prime]" >&2; exit 2; }
+
+docker ps --format '{{.Names}}' | grep -Fxq "${N8N_CONTAINER}" || { echo "Error: '${N8N_CONTAINER}' not running — per-app push needs the live API. For instance birth use 'bbox n8n push all'." >&2; exit 1; }
+
+# Resolve the app's blueprint dir from its manifest (same resolver push uses).
+_rel="$( cd "${REPO_ROOT}" && python3 platform/manager/reconcile.py blueprints --for "${APP}" | tr -d '\r' | cut -f2 )" \
+  || { echo "Error: unknown app '${APP}' (no blueprints.n8n in its manifest)." >&2; exit 1; }
+[ -n "${_rel}" ] || { echo "Error: app '${APP}' declares no n8n blueprint." >&2; exit 1; }
+DIR="${REPO_ROOT}/${_rel}"
+
+# ── API key ensure — runs FIRST (before any early exit): every bbox n8n live verb (push,
+# test, plan, exec) leans on the .env key, and "0 pushed" must still leave the machine ready.
+# Keys are PER-INSTANCE (minted in n8n, not configured), so a fresh machine — or a key from
+# another deployment (the VPS's key in a laptop .env, measured 2026-08-16 as HTTP 401) — must
+# not strand the verb. Probe; on missing/401 mint as the .env owner and persist back to .env.
+_probe() {
+  docker exec -e K="${1}" "${N8N_CONTAINER}" node -e '
+    const http=require("http");
+    http.get({host:"127.0.0.1",port:5678,path:"/api/v1/workflows?limit=1",headers:{"X-N8N-API-KEY":process.env.K||""}},r=>{process.stdout.write(String(r.statusCode))}).on("error",()=>process.stdout.write("0"));' 2>/dev/null
+}
+ensure_api_key() {
+  API_KEY="$(read_env N8N_API_KEY)"
+  if [ -z "${API_KEY}" ] || [ "$(_probe "${API_KEY}")" != "200" ]; then
+    log "N8N_API_KEY missing or rejected by this instance — minting one as the owner (from .env N8N_OWNER_*)..."
+    OE="$(read_env N8N_OWNER_EMAIL)"; OP="$(read_env N8N_OWNER_PASSWORD)"
+    [ -n "${OE}" ] && [ -n "${OP}" ] || { echo "Error: cannot mint an API key — N8N_OWNER_EMAIL/PASSWORD not in .env." >&2; exit 1; }
+    API_KEY="$(docker exec -e OE="${OE}" -e OP="${OP}" "${N8N_CONTAINER}" node -e '
+      const http=require("http");
+      function req(p,m,b,c){return new Promise((res,rej)=>{const d=b?JSON.stringify(b):null;
+        const r=http.request({host:"127.0.0.1",port:5678,path:p,method:m,headers:{"Content-Type":"application/json","browser-id":"bbox",...(d?{"Content-Length":Buffer.byteLength(d)}:{}),...(c?{Cookie:c}:{})}},x=>{let s="";x.on("data",q=>s+=q).on("end",()=>res({st:x.statusCode,body:s,sc:x.headers["set-cookie"]}))});
+        r.on("error",rej); if(d)r.write(d); r.end();});}
+      (async()=>{
+        const lg=await req("/rest/login","POST",{emailOrLdapLoginId:process.env.OE,password:process.env.OP});
+        if(!lg.sc){console.error("login failed HTTP "+lg.st);process.exit(1)}
+        const cookie=lg.sc.map(c=>c.split(";")[0]).join("; ");
+        // The bbox verbs span workflows AND executions (test/exec diagnosis) — a
+        // workflow-only-scoped key 403s bbox n8n exec (measured), and the scopes field is
+        // MANDATORY (measured: plain create is 400). So: DISCOVER the scope enum this build
+        // actually offers this role (GET /rest/api-keys/scopes) and request all of it; fall
+        // back through known-good sets. Self-adapting, no name guessing.
+        const grab=(r)=>{try{const j=JSON.parse(r.body);return (j.data&&(j.data.rawApiKey||j.data.apiKey))||j.rawApiKey||"";}catch(e){return "";}};
+        const SIX=["workflow:create","workflow:read","workflow:update","workflow:list","workflow:activate","workflow:deactivate"];
+        let discovered=[];
+        try{const sc=await req("/rest/api-keys/scopes","GET",null,cookie);
+            const j=JSON.parse(sc.body); const arr=(j.data||j);
+            if(Array.isArray(arr)) discovered=arr.filter(x=>typeof x==="string");}catch(e){}
+        const tries=[];
+        if(discovered.length) tries.push(discovered);
+        tries.push([...SIX,"execution:read","execution:list"], SIX);
+        let key="", errs=[];
+        for(const scopes of tries){
+          const r=await req("/rest/api-keys","POST",{label:"bbox-n8n",expiresAt:null,scopes},cookie);
+          key=grab(r);
+          if(key) break;
+          errs.push("HTTP "+r.st+" ["+scopes.length+" scopes] "+String(r.body).slice(0,80));
+        }
+        if(!key){console.error("mint failed: "+errs.join(" | "));process.exit(1)}
+        console.log(key);
+      })();' 2>&1 | tail -1 || true)"
+    [ -n "${API_KEY}" ] && [ "$(_probe "${API_KEY}")" = "200" ] || { echo "Error: could not mint a working API key. Mint said: ${API_KEY:0:200}" >&2; exit 1; }
+    if grep -qE '^N8N_API_KEY=' "${REPO_ROOT}/.env"; then
+      sed -i "s|^N8N_API_KEY=.*|N8N_API_KEY=${API_KEY}|" "${REPO_ROOT}/.env"
+    else
+      printf '\nN8N_API_KEY=%s\n' "${API_KEY}" >> "${REPO_ROOT}/.env"
+    fi
+    log "API key minted (label bbox-n8n, full access) and saved to .env."
+  fi
+}
+ensure_api_key
+
+# Compile code files -> import JSON (.generated). Plain json alongside is taken as-is.
+GEN="${REPO_ROOT}/.generated/n8n/${APP}"
+rm -rf "${GEN}" && mkdir -p "${GEN}"
+if ls "${DIR}"/*.workflow.ts >/dev/null 2>&1; then
+  "$(bbox_node)" "${WRAP}" compile "${DIR}" "${GEN}" >/dev/null
+fi
+for _f in "${DIR}"/*.json; do [ -e "${_f}" ] && cp -n "${_f}" "${GEN}/"; done
+ls "${GEN}"/*.json >/dev/null 2>&1 || { echo "Error: '${APP}' blueprint compiled to nothing (${_rel})." >&2; exit 1; }
+
+# sha-diff cache — only changed workflows are pushed (the legacy n8n-push's one good idea).
+CACHE_DIR="${N8N_DIR}/.push-cache"; mkdir -p "${CACHE_DIR}"
+CACHE="${CACHE_DIR}/${APP}.tsv"
+sha() { command -v sha256sum >/dev/null 2>&1 && sha256sum "$1" | awk '{print $1}' || shasum -a 256 "$1" | awk '{print $1}'; }
+# Cache rows: <compiled-sha> TAB <id> TAB <live-versionId-at-last-sync>. The versionId column is
+# the human/agent CO-OP signal: `status` compares it to live to say "someone edited this in the
+# UI — pull before you touch it".
+_cache_write() {  # $1 = space-list of ids JUST SYNCED with live ("all" = every id in GEN).
+  # Synced ids get (new compiled sha, live updatedAt-epoch-ms) — their base advances. Every
+  # other id KEEPS its old row untouched: advancing an unsynced id's base would blind the
+  # conflict check and let the next push silently destroy a human's live edit.
+  # updatedAt, NOT versionId: measured on n8n 2.17 (2026-08-16), versionId is STABLE across
+  # both API PUT and editor PATCH saves — it identifies lineage, not modification. updatedAt
+  # bumps on every save, ours included (which is exactly right: base = the moment we synced).
+  _synced="${1:-all}"
+  _vids="$(docker exec -e PGPASSWORD="$(read_env POSTGRES_PASSWORD)" "${PG_CONTAINER}" \
+    psql -U "$(read_env POSTGRES_USER)" -d "$(read_env POSTGRES_DB)" -tAc \
+    'select id||chr(9)||coalesce(((extract(epoch from "updatedAt")*1000)::bigint)::text,'"'"''"'"') from workflow_entity;' 2>/dev/null | tr -d '\r')"
+  touch "${CACHE}"
+  { for _f in "${GEN}"/*.json; do
+      _id="$(basename "${_f}" .json)"
+      if [ "${_synced}" = "all" ] || { case " ${_synced} " in *" ${_id} "*) true;; *) false;; esac; }; then
+        _v="$(printf '%s\n' "${_vids}" | awk -F'\t' -v id="${_id}" '$1==id{print $2}')"
+        printf '%s\t%s\t%s\n' "$(sha "${_f}")" "${_id}" "${_v}"
+      else
+        _old="$(awk -F'\t' -v id="${_id}" '$2==id{print; exit}' "${CACHE}" 2>/dev/null)"
+        [ -n "${_old}" ] && printf '%s\n' "${_old}" || printf '%s\t%s\t%s\n' "-" "${_id}" "-"
+      fi
+    done; } > "${CACHE}.new"
+  mv "${CACHE}.new" "${CACHE}"
+}
+if [ "${PRIME}" = "1" ]; then
+  _cache_write all
+  log "${APP}: cache primed ($(ls "${GEN}"/*.json | wc -l | tr -d ' ') workflow(s)) — blueprint taken as matching live, nothing pushed."
+  exit 0
+fi
+CHANGED=""
+if [ -n "${WFS}" ]; then
+  # named workflows: push EXACTLY those — the agent said so; the cache does not veto it
+  for _id in ${WFS}; do
+    [ -f "${GEN}/${_id}.json" ] || { echo "Error: '${_id}' is not in ${APP}'s blueprint (no ${_id}.workflow.ts)." >&2; exit 1; }
+    CHANGED="${CHANGED} ${_id}"
+  done
+elif [ "${ALL}" = "1" ]; then
+  for _f in "${GEN}"/*.json; do CHANGED="${CHANGED} $(basename "${_f}" .json)"; done
+else
+  for _f in "${GEN}"/*.json; do
+    _id="$(basename "${_f}" .json)"
+    _s="$(sha "${_f}")"
+    if ! awk -F'\t' -v s="${_s}" -v id="${_id}" '$1==s && $2==id{f=1} END{exit f?0:1}' "${CACHE}" 2>/dev/null; then
+      CHANGED="${CHANGED} ${_id}"
+    fi
+  done
+fi
+if [ -z "${CHANGED}" ]; then
+  log "${APP}: nothing changed since last push — 0 pushed. (Name workflows to force: bbox n8n push ${APP} <wfId>)"
+  exit 0
+fi
+if [ "${DRY}" = "1" ]; then
+  log "${APP}: would push:$(printf '%s' "${CHANGED}") — dry run, nothing sent."
+  exit 0
+fi
+
+# ── OPTIMISTIC CONCURRENCY (the two-writer guarantee) ────────────────────────────────────────
+# Humans edit LIVE in the n8n editor; agents edit CODE. The cache's 3rd column is the live
+# versionId this code was last synced against — the write's BASE. If live has moved past it,
+# pushing would silently destroy a human's edit, so the push is REJECTED for that workflow
+# (exit 4), with the fix spelled out. Same shape as `git push` fast-forward-only / Kubernetes
+# resourceVersion. Non-blocking by design: the agent re-pulls, re-applies its edit (it holds
+# the diff), pushes again — seconds, no human, no merge. `--force` exists for the deliberate
+# case and is still safe: the human's version remains in n8n's own workflow version chain.
+if [ "${FORCE}" != "1" ]; then
+  _live_now="$(docker exec -e PGPASSWORD="$(read_env POSTGRES_PASSWORD)" "${PG_CONTAINER}" \
+    psql -U "$(read_env POSTGRES_USER)" -d "$(read_env POSTGRES_DB)" -tAc \
+    'select id||chr(9)||coalesce(((extract(epoch from "updatedAt")*1000)::bigint)::text,'"'"''"'"')||chr(9)||to_char("updatedAt",'"'"'HH24:MI'"'"') from workflow_entity;' 2>/dev/null | tr -d '\r')"
+  CONFLICTS=""
+  for _id in ${CHANGED}; do
+    _base="$(awk -F'\t' -v id="${_id}" '$2==id{print $3}' "${CACHE}" 2>/dev/null || true)"
+    _now="$(printf '%s\n' "${_live_now}" | awk -F'\t' -v id="${_id}" '$1==id{print $2}')"
+    _when="$(printf '%s\n' "${_live_now}" | awk -F'\t' -v id="${_id}" '$1==id{print $3}')"
+    if [ -n "${_now}" ] && [ -n "${_base}" ] && [ "${_now}" != "${_base}" ]; then
+      CONFLICTS="${CONFLICTS} ${_id}"
+      echo "[push-app] CONFLICT ${_id} — changed LIVE (${_when}, likely a human in the editor) after your last sync." >&2
+      echo "           Nothing was overwritten. Fix: bbox n8n pull ${APP} ${_id}  → re-apply your edit (see git diff) → bbox n8n push ${APP} ${_id}" >&2
+    fi
+  done
+  if [ -n "${CONFLICTS}" ]; then
+    _keep=""
+    for _id in ${CHANGED}; do case " ${CONFLICTS} " in *" ${_id} "*) ;; *) _keep="${_keep} ${_id}";; esac; done
+    CHANGED="${_keep}"
+    [ -z "${CHANGED// /}" ] && exit 4
+    log "continuing with the non-conflicting:$(printf '%s' "${CHANGED}")"
+  fi
+fi
+
+# (API key already ensured above, before any early exit.)
+
+# Ship the changed set into the container and run one node pass: update-or-create + activate.
+docker exec "${N8N_CONTAINER}" sh -c 'rm -rf /tmp/push-app && mkdir -p /tmp/push-app'
+for _id in ${CHANGED}; do docker cp "${GEN}/${_id}.json" "${N8N_CONTAINER}:/tmp/push-app/${_id}.json" >/dev/null; done
+RESULT="$(docker exec -e N8N_API_KEY="${API_KEY}" "${N8N_CONTAINER}" node -e '
+const fs=require("fs"), http=require("http");
+const H={"X-N8N-API-KEY":process.env.N8N_API_KEY,"Content-Type":"application/json"};
+function req(method,p,body){return new Promise((res,rej)=>{const d=body?JSON.stringify(body):null;
+  const r=http.request({host:"127.0.0.1",port:5678,path:"/api/v1"+p,method,headers:{...H,...(d?{"Content-Length":Buffer.byteLength(d)}:{})}},x=>{let s="";x.on("data",c=>s+=c).on("end",()=>res({st:x.statusCode,body:s}))});
+  r.on("error",rej); if(d)r.write(d); r.end();});}
+(async()=>{
+  const out=[];
+  for(const f of fs.readdirSync("/tmp/push-app")){
+    const wf=JSON.parse(fs.readFileSync("/tmp/push-app/"+f,"utf8"));
+    const id=wf.id||f.replace(/\.json$/,"");
+    // The public API workflow-settings schema is additionalProperties:false; live workflows
+    // rendered to code can carry extra keys (availableInMCP, binaryMode, callerPolicy) that
+    // 400 the whole PUT. Dropping them is behaviourally neutral: availableInMCP=false and
+    // callerPolicy=workflowsFromSameOwner are n8n defaults, binaryMode is not a runtime
+    // workflow setting (binary mode is instance-level env). Measured 2026-08-16:
+    // indoxV2ActionsGDoc01 was unpushable via the API path until this filter.
+    const ALLOWED=["saveExecutionProgress","saveManualExecutions","saveDataErrorExecution","saveDataSuccessExecution","executionTimeout","errorWorkflow","timezone","executionOrder"];
+    const settings=Object.fromEntries(Object.entries(wf.settings||{}).filter(([k])=>ALLOWED.includes(k)));
+    const body={name:wf.name,nodes:wf.nodes,connections:wf.connections,settings};
+    const cur=await req("GET","/workflows/"+id);
+    if(cur.st===200){
+      const wasActive=JSON.parse(cur.body).active===true;
+      const up=await req("PUT","/workflows/"+id,body);
+      if(up.st<200||up.st>=300){
+        // A WEAK dependency being absent is not a deploy failure. n8n refuses to publish a
+        // workflow whose executeWorkflow target is not imported, and a scoped
+        // `bbox n8n push <app>` imports only that app. indox declares chat as
+        //   {capability: chat, strength: wants, dependency: weak, ops: [sendDocument]}
+        // so INDOX genuinely works without WhatsApp — and indoxGmailActionProcessor01
+        // referencing whatsappSendDoc01 made the whole push exit non-zero anyway. The app
+        // model was already right; this layer was the one treating weak as required.
+        // (CI never saw it: `push all` imports every app, so the target is always present.)
+        // Reported as SKIP, naming the workflow it wanted, so it can never be mistaken for
+        // "published". Anything else still FAILs.
+        const m=/references workflow ([A-Za-z0-9_-]+)/.exec(up.body||"");
+        if(up.st===400&&m){out.push("SKIP  update "+id+" — needs "+m[1]+", which belongs to an app outside this push scope (weak dependency; run `bbox n8n push all` to include it)");continue;}
+        out.push("FAIL update "+id+" HTTP "+up.st+" "+up.body.slice(0,120));continue;
+      }
+      // [retirement 2026-08-31] The blueprint is the source of truth in BOTH directions:
+      // an explicit `active: false` DEACTIVATES a live workflow (how the retired v1
+      // processors are kept dead), while an absent flag keeps the old once-active-stays-
+      // active safety for blueprints that never state it.
+      const wantActive=wf.active===true||(wf.active!==false&&wasActive);
+      if(wantActive){
+        if(wasActive) await req("POST","/workflows/"+id+"/deactivate");
+        const ac=await req("POST","/workflows/"+id+"/activate");
+        out.push((ac.st>=200&&ac.st<300)?("ok update+activate "+id):("FAIL activate "+id+" HTTP "+ac.st+" "+ac.body.slice(0,120)));
+      } else if(wasActive){
+        const dc=await req("POST","/workflows/"+id+"/deactivate");
+        out.push((dc.st>=200&&dc.st<300)?("ok update+DEACTIVATE "+id+" (blueprint active:false)"):("FAIL deactivate "+id+" HTTP "+dc.st+" "+dc.body.slice(0,120)));
+      } else out.push("ok update "+id+" (inactive)");
+    } else if(cur.st===404){ out.push("CREATE "+id); }
+    else out.push("FAIL get "+id+" HTTP "+cur.st+" "+cur.body.slice(0,120));
+  }
+  console.log(out.join("\n"));
+})().catch(e=>{console.log("FAIL fatal "+e.message);process.exit(1)});' 2>&1)"
+printf '%s\n' "${RESULT}" | sed 's/^/[push-app]   /'
+
+# Brand-new ids: CLI import (assigns the file id) + publish-model activation, per file.
+NEW_IDS="$(printf '%s\n' "${RESULT}" | awk '$1=="CREATE"{print $2}')"
+for _id in ${NEW_IDS}; do
+  docker exec "${N8N_CONTAINER}" n8n import:workflow --input="/tmp/push-app/${_id}.json" \
+    2>&1 | grep -qi success || { echo "[push-app] FAIL import ${_id}" >&2; exit 1; }
+  _act="$(node -e "process.stdout.write(require('${GEN}/${_id}.json').active?'1':'0')" 2>/dev/null || echo 0)"
+  if [ "${_act}" = "1" ]; then
+    docker exec -e PGPASSWORD="$(read_env POSTGRES_PASSWORD)" "${PG_CONTAINER}" \
+      psql -U "$(read_env POSTGRES_USER)" -d "$(read_env POSTGRES_DB)" -q -tAc \
+      "UPDATE workflow_entity SET active=true, \"activeVersionId\"=\"versionId\" WHERE id='${_id}';" >/dev/null
+    log "created ${_id} (import + publish; schedule triggers of NEW workflows register on next main restart)"
+  else
+    log "created ${_id} (inactive)"
+  fi
+done
+
+if printf '%s\n' "${RESULT}" | grep -q '^FAIL'; then
+  echo "[push-app] FAILED — see lines above; cache NOT updated for failed ids." >&2
+  exit 1
+fi
+
+# Refresh the cache (sha + live versionId) — ONLY for the ids just pushed/created.
+_cache_write "${CHANGED} ${NEW_IDS:-}"
+_n="$(printf '%s\n' "${CHANGED}" | wc -w | tr -d ' ')"
+log "${APP}: ${_n} workflow(s) pushed via API (updates hot-reload; no restart)."
+[ -n "${CONFLICTS:-}" ] && { log "NOTE: $(printf '%s' "${CONFLICTS}") skipped on live-change conflict — see lines above."; exit 4; }
+exit 0

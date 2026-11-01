@@ -1,0 +1,140 @@
+# project-pln — the in-container edge.
+#
+# Upstream's `Caddyfile.aio.ce` is built for an EXTERNAL S3 (USE_MINIO=0), so it has no /uploads
+# route; ours is the on-box MinIO shape from `Caddyfile.ce` merged with the AIO's static-file
+# serving. Everything here is a root path, which is why Plane cannot live under /a/<alias>/ on the
+# console host (see ai/context/plane-selfhost-research.md §5).
+#
+# The office's traefik forwards the ENTIRE `plane.<domain>` host to this container, so this file —
+# not traefik — owns the path table. Keep the two in step: a host rule plus "route everything here".
+
+(plane_proxy) {
+	request_body {
+		max_size {$FILE_SIZE_LIMIT}
+	}
+
+	# Node servers this deployment does not run: space (public sharing) and live (realtime
+	# cursors). The routes are kept so the SPA's absolute URLs resolve to a 502 rather than to the
+	# catch-all static handler, which would answer a JSON request with index.html and produce a
+	# confusing parse error instead of a clear failure.
+	handle /spaces/* {
+		reverse_proxy localhost:3002
+	}
+
+	handle /live/* {
+		reverse_proxy localhost:3005
+	}
+
+	handle /api/* {
+		reverse_proxy localhost:3004
+	}
+
+	# EVERY ANSWER OF A SIGN-IN IS A REDIRECT TO `WEB_URL` — one configured origin, whatever host the
+	# browser asked (measured 2026-10-06: `Location: http://plane.localhost/…` for `Host:
+	# plane.console.localhost` and for a linked office's nested host alike). But the browser is on the
+	# host the office FRAMES this app on, which is another one: the session cookie the same answer
+	# sets stays behind, and the frame lands on a host of another site, whose sign-in it cannot show
+	# — the window of a person who had just typed the right password was the browser's "refused to
+	# connect" page. So a redirect to this app's own origin is answered on the origin that was ASKED:
+	# what the edge in front says it was (this office's, or a linked office's, which is why this is
+	# here and not in either of them), and the request's own host when nothing stands in front.
+	map {header.X-Forwarded-Proto}://{header.X-Forwarded-Host} {asked} {
+		~^(https?://[^/]+)$ "$1"
+		default "{scheme}://{hostport}"
+	}
+	handle /auth/* {
+		reverse_proxy localhost:3004 {
+			header_down Location "^{$WEB_URL}([/?#].*)?$" "{asked}$1"
+		}
+	}
+
+	handle /static/* {
+		reverse_proxy localhost:3004
+	}
+
+	# Attachments, avatars and issue files. USE_MINIO=1 makes Plane build the public URL as
+	# <WEB_URL netloc>/<bucket> and the presigned POST against the request host — i.e. this host —
+	# so this route is the whole reason uploads work behind the office edge.
+	handle /uploads/* {
+		reverse_proxy plane-minio:9000
+	}
+	handle /uploads {
+		reverse_proxy plane-minio:9000
+	}
+
+	# Instance admin ("god mode") is a static build inside the image; no program serves it.
+	handle_path /god-mode* {
+		root * /app/admin
+		try_files {path} {path}/ /index.html
+		file_server
+	}
+
+	# The SPA. It is a static export (react-router ssr:false) — every unknown path falls back to
+	# index.html so client-side routes survive a reload.
+	# The office's ‏כל מקביל timeline reads this office's work items as spans (DGO-10).
+	# Owned here, not by traefik: this container holds the path table for its host.
+	#
+	# `handle`, NOT `handle_path` — measured 2026-10-01: handle_path STRIPS the matched prefix, so
+	# the span process received `/spans?...` and its own path check answered 404 while the process
+	# itself was healthy and `curl localhost:3006/timeline/spans` returned spans. `handle` keeps the
+	# path, which is what the contract publishes (`GET /timeline/spans?since=`).
+	handle /timeline/* {
+		reverse_proxy localhost:3006
+	}
+
+	# ── what a browser may keep, and for how long ────────────────────────────────────────────────
+	# The frontend is a PATCHED bundle: this deployment rewrites strings inside the built chunks
+	# (patches/hebrew-strings.py) and then gives the directory a name made of the result's own bytes
+	# (patches/bundle-version.py) — so `/assets-<hash>/…` can never go stale, and it is the one thing
+	# here that may be cached for ever.
+	#
+	# Each directory is its OWN handle rather than a `header` matcher inside the catch-all, because a
+	# matcher there could not be made to win: two `header` directives for one field did not apply in
+	# the order written (measured 2026-10-08, both orders → the general value). Caddy evaluates two
+	# `handle`s longest-matcher-first, which is exactly the precedence this needs.
+	handle /assets-*/* {
+		root * /app/web
+		header Cache-Control "public, max-age=31536000, immutable"
+		file_server
+	}
+
+	# Before that rename these bytes were served from `/assets/`. Nothing is there now, and the
+	# catch-all's SPA fallback would answer a JavaScript request with index.html — a script that is
+	# HTML, i.e. a parse error nobody can read. A tab still holding the old index.html gets an honest
+	# 404 for a file that is gone, and its next load carries the new one. (Inside the catch-all this
+	# could not work: `try_files` runs earlier in Caddy's directive order and has already rewritten
+	# the path to `/index.html` by the time any matcher sees it.)
+	handle /assets/* {
+		respond 404
+	}
+
+	handle_path /* {
+		root * /app/web
+		try_files {path} {path}/ /index.html
+		# Everything else must be REVALIDATED. Measured 2026-10-08: with no Cache-Control at all (what
+		# file_server sends: ETag and Last-Modified only) a browser keeps a heuristic-fresh copy and
+		# never asks — the owner refreshed Plane after the Hebrew patch and read the same English
+		# screens, because the chunk was still coming out of his own cache under an unchanged URL.
+		# `no-cache` is not "do not store": it is "ask before you use it", which is an ETag 304 when
+		# nothing changed and the new bytes when it did.
+		header Cache-Control "no-cache"
+		file_server
+	}
+}
+
+{
+	{$CERT_EMAIL}
+	acme_ca {$CERT_ACME_CA:https://acme-v02.api.letsencrypt.org/directory}
+	{$CERT_ACME_DNS}
+	servers {
+		max_header_size 25MB
+		client_ip_headers X-Forwarded-For X-Real-IP
+		trusted_proxies static {$TRUSTED_PROXIES:0.0.0.0/0}
+	}
+}
+
+# Plain HTTP, always: the office's traefik terminates and routes. Setting a hostname here would
+# make Caddy attempt ACME for a name only the office edge can answer.
+{$SITE_ADDRESS::80} {
+	import plane_proxy
+}

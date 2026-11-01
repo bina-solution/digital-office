@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Removing this app must remove its automations — it owns no container, so its workflows ARE the app.
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+exec bash "${REPO_ROOT}/apps/n8n/hooks/unpush" --app google-workspace-agent

@@ -1,0 +1,65 @@
+# yaml-language-server: $schema=./schema.json
+title: The portable box runs Docker 29.1.3 (which this repo documents as breaking traefik routing), and remote n8n workers cannot run the INDOX pipeline because it addresses its own services by compose DNS name
+opened: '2026-08-11'
+severity: medium
+status: open
+summary: The portable box runs Docker 29.1.3 (which this repo documents as breaking traefik routing), and remote n8n workers cannot run the INDOX pipeline because it addresses its own services by compose DNS name
+description: |
+  id: portable-box-docker-29-and-remote-worker-dns · area: scale-out / portable box / n8n queue mode
+
+  ## Portable box
+
+  ```yaml
+  address: 192.168.16.103 (portable-ubuntu.local), user shlomy, key-only ssh
+  hardware: 4 cores, 15.4 GB RAM, 37 GB free disk
+  docker_server: 29.1.3, storage driver overlayfs
+  docker_service_note: docker.service carries a drop-in at /etc/systemd/system/docker.service.d/api-floor.conf and systemd reports the unit file changed on disk (needs daemon-reload).
+  why_this_matters: CLAUDE.md already documents that Docker 29 breaks traefik routing SILENTLY and that bbox baseline P0 fails on it. That does NOT affect stateless n8n workers — they touch neither traefik nor the docker socket — but anyone who later tries to run the FULL estate on this box will hit it. Recording it here so the fact is not confined to a session transcript.
+  docker_was_dead_for_a_week: 'Found 2026-08-11 with docker.service in ''failed'' since 2026-08-03 06:08. Root cause was a BOOT RACE, not a broken install: containerd was slow to come up, dockerd timed out dialling /run/containerd/containerd.sock three times, systemd hit "Start request repeated too quickly" (restart counter 3) and gave up. containerd has been healthy ever since; docker was simply never retried. `systemctl start docker` fixed it outright. binaos-docker.service is separately still in ''failed''. Worth a systemd drop-in (After=containerd.service + a longer restart budget) so a slow boot does not silently cost a week of an always-on compute box.'
+  ```
+
+  ## Remote worker attempt 2026-08-11t02:00z
+
+  ```yaml
+  what_worked:
+  - 'Image transport: docker save | ssh docker load for binaos/n8n:2.17.0 (2.93 GB). n8nio/runners:2.17.0 is public and pulls directly — the runner is a DIFFERENT image and binaos/n8n does not contain /usr/local/bin/task-runner-launcher at all.'
+  - 'SSH reverse tunnel from INSIDE the WSL VM. portable->WSL is unreachable (WSL2 default NAT, wslrelay binds 127.0.0.1/::1 only, no netsh portproxy, DBS_ALLOWED_IPS holds no RFC1918 range), but WSL->portable:22 is open, so push ports outward instead: ssh -N -R 6379:<redis-container-ip>:6379 -R 5433:127.0.0.1:10001 shlomy@<box> Targets must be addresses the ssh CLIENT can resolve — it runs on the WSL host, so docker-internal names are unavailable. redis publishes no port at all (hence its container IP, which is fragile across recreation); n8n-postgres uses its published 10001, which is stable.'
+  - 'network_mode: host, because a bridged container reaches host-gateway (172.17.0.1), not the 127.0.0.1 the tunnel binds to, and binding the tunnel non-loopback needs GatewayPorts in sshd_config i.e. sudo. Cost: shared port space, so each worker+runner pair needs its own N8N_PORT and N8N_RUNNERS_BROKER_PORT.'
+  - DB_POSTGRESDB_POOL_SIZE=10 (default 25) — max_connections is 100.
+  - Slots rose 16 -> 40 exactly as predicted, pinned across four samples.
+  what_failed: 'EVERY completed execution errored — 22 of 22 sampled, all ''Incoming Documents v2''. The workers consumed driver jobs and destroyed them, which is worse than not running: each failure burns a document''s retry budget.'
+  root_cause: The INDOX pipeline addresses its own services by COMPOSE DNS NAME — http://apitools:8080, http://n8n:5678/webhook/..., incoming-documents:8080, drive. A container on another Docker engine cannot resolve any of them. Only redis and n8n-postgres were tunnelled. There is no ECONNREFUSED in the worker log because the failure is inside the workflow, not at the worker layer — so worker logs are the WRONG place to look for it.
+  already_known_and_not_connected: 'A prior read of this same repo established "17 workflow JSONs hardcode http://apitools:8080 as a literal string in 37 places, with no env indirection." That fact was recorded and then not applied to the worker bring-up. The lesson is the reusable part: a remote worker needs the whole SERVICE MESH reachable, not just the datastores.'
+  what_a_real_retry_needs:
+  - 'Forward every service the pipeline calls: apitools:8080, incoming-documents:8080, n8n:5678, drive, mailapi.'
+  - apitools and incoming-documents both use :8080, so they need DISTINCT 127.0.0.x loopback addresses, each -R bound, each mapped by extra_hosts to its service name.
+  - Binary data is STILL UNTESTED. N8N_DEFAULT_BINARY_DATA_MODE=filesystem is set on main and both local workers over a shared 6.6 GB volume (12,348 objects). An earlier claim of 'zero binary-data failures' was made from worker container logs and is void. Verify with a document diff, or move to s3 on the supabase-storage already running — NOT database, which would push 6.6 GB into a 2 GiB postgres.
+  - Step up 1 worker then 2, never 3 at once, so the slope change is attributable.
+  measurement_warnings_learned_here:
+  - '`nc -z` against a tunnel proves nothing: sshd accepts the local connection BEFORE attempting the far-end forward, so a TCP accept succeeds even when forwarding fails. Use a real protocol exchange (postgres SSLRequest -> ''N''/''S'', redis PING -> -NOAUTH).'
+  - Never report throughput in executions — a broken pipeline raises the execution rate.
+  - 'Filter live work on Bull (bull:jobs:active), not execution_entity.status=''running'': orphan rows from restarts hold no slot and inflate any such metric.'
+  ```
+
+  ## Remote worker resolution 2026-08-11t15:51z
+
+  ```yaml
+  status: PART 2 IS RESOLVED. The 'what_a_real_retry_needs' list above has been implemented and is now measured working. The 'EVERY completed execution errored (22 of 22)' finding is NO LONGER TRUE and must not be quoted as current state.
+  how_the_mesh_was_closed:
+  - '21 ssh -R forwards (127.0.0.1:19001..19021 on the portable box) cover the whole service mesh, not just the datastores: apitools, incoming-documents, n8n:5678, drive, mailapi, redis (19019) and n8n-postgres (19020 + 19120).'
+  - Each service name resolves inside the worker via --add-host to a DISTINCT 127.0.0.x loopback (127.0.0.10 .. 127.0.0.30), and a per-service `socat TCP-LISTEN:<realport>, bind=127.0.0.x,fork,reuseaddr,keepalive TCP:127.0.0.1:<19xxx>` relays it to the tunnel. That is what lets a workflow keep hardcoding http://apitools:8080 and still work.
+  measured_proof_do_not_re_derive: |-
+    60-minute window ending 2026-08-11T15:51Z. Executions were attributed to workers by parsing 'Worker finished execution <id>' out of each worker's own container log and then reading execution_entity.status for exactly those ids — not by a time-bucket guess.
+      REMOTE (5 workers on the portable box): 152 success / 3 error  = 98.1%
+      LOCAL  (2 workers on this host):        265 success / 1 error  = 99.6%
+    Remote ran the same workflows as local (Incoming Documents v2, indox-v2 Action Router, Error Handler). Remote did 155 of 421 executions = 36.8% of all pipeline execution work. The old 'remote worker = 26% of a local one' figure is stale and far too pessimistic.
+  new_failure_mode_found_here:
+    what: 'THE REAL ROOT CAUSE (confirmed 16:20Z, supersedes the socat theory first written here): ORPHANED sshd -R LISTENERS ON THE PORTABLE BOX DEADLOCK EVERY RECONNECT. When the wifi link drops, the host-side ssh client dies without sending a FIN. The portable box''s sshd keeps the session half-open and KEEPS ITS -R LISTENER PORTS BOUND. The supervisors then reconnect with `-o ExitOnForwardFailure=yes`, cannot bind the still-held port, and exit instantly — forever. Measured at 16:20Z: the HOST had exactly ONE established ssh connection to the box, while the box held SIX, four of them 3859-4837s old with multi-KB stalled Send-Q. Ports 19001-19021 and 19120 all showed LISTEN with nothing behind them.'
+    why_this_is_so_easy_to_misdiagnose: The ports LISTEN, so `nc -z` and a bare TCP connect both SUCCEED — sshd accepts locally before attempting the far-end forward. Only a real protocol exchange reveals it. Probe with postgres SSLRequest (expect 'S'/'N') or redis PING (expect -NOAUTH/+PONG) and ALWAYS include a known-good control (apitools on the box's own 127.0.0.1:8080) — without the control you cannot tell a dead forward from a broken probe.
+    blast_radius: 'Only the -R legs (portable -> host: redis, postgres, apitools-by-name) die this way. The -L leg (host -> portable apitools, bound 172.18.0.1:18080 on the HOST) is unaffected and kept serving ~80% of apitools traffic throughout. So apitools scale-out survives a wifi drop; the n8n remote workers do not.'
+    worker_symptom: Workers log 'Database connection timed out' every 7s FOREVER and take zero jobs, but the PROCESS NEVER EXITS. addworker_remote.sh uses `--restart on-failure`, which only acts on a non-zero exit, so the policy never fires and `docker ps` shows 'Up' the whole time. There is no healthcheck, and the n8n worker health server is not enabled (curl /healthz -> 000 on EVERY worker, healthy ones included, so healthz is NOT a liveness probe here). `docker restart` clears the worker, but it re-wedges within minutes unless the orphaned sshd sessions are cleared first — fix the tunnel layer, not the worker.
+    the_fix: 'Terminate the orphaned sshd sessions on the portable box (SIGTERM, not -9, so sshd releases the listeners); the already-running supervisors rebind within 5-15s. Durably: set ClientAliveInterval/ClientAliveCountMax in the portable''s sshd_config so sshd reaps half-open sessions itself, which is the actual permanent fix.'
+    detection_that_does_work: 'Blocking BRPOPLPUSH clients on redis — `redis-cli client list | grep -c brpoplpush` — counts workers currently IDLE AND WAITING (7 == 2 local + 5 remote when all were idle). CAVEAT measured here: the count drops as workers get busy (it read 2 when active=23), so it is a liveness signal only when the queue is idle, NOT a worker census under load.'
+  ssh_access_gotcha_2026-08-11: '`ssh shlomy@192.168.16.103` failed with ''Permission denied (publickey)'' while the exact same connection worked with `-i ~/.ssh/portable_key`. Cause: WSL had NO ~/.ssh/config, no default-named key, and no ssh-agent, so the client had no identity to offer. The key, the host key and the remote authorized_keys entry were all intact. Fixed by adding a `Host portable 192.168.16.103` stanza with IdentityFile/IdentitiesOnly (plus ControlMaster persistence, which also cuts per-command ssh cost when probing the box in a loop).'
+  still_true_from_part_1: The portable box still runs Docker 29.1.3, so the traefik caveat above still applies to anyone running the FULL estate there. It does not affect these stateless workers.
+  ```

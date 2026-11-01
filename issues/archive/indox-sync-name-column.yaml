@@ -1,0 +1,14 @@
+title: add SYNC_NAME column to the indox table (record which sync registered each doc)
+status: resolved  # 2026-07-30 triage: FIXED — apps/indox/blueprint/fixtures/schema.sql:215 adds "SYNC_NAME" TEXT and every sync processor stamps it (drive-bs, drive-gdoc, gmail-doc, gmail-bs, gmail-link in apps/indox/blueprint/n8n/).
+created: 2026-07-07
+priority: low
+context: |
+  Doc rows in incoming_documents carry no record of WHICH sync (sync_registry name:
+  drive-gdoc / drive-bs / gmail-doc / gmail-bs / gmail-link) registered them. During
+  sync verification (release Phase 2/3) per-sync drain rates and inject->rest tracing
+  have to be inferred from source ids/labels instead of read off the row.
+  (Captured from production/next.txt scratch note, 2026-07-07.)
+action: |
+  Add a SYNC_NAME column to the indox table (supabase migration + API layer TABLE_UPSERT
+  passthrough) and have each sync processor stamp its sync_registry name when it
+  registers a doc. Read it back in STATUS/acceptance measurements for per-sync metrics.

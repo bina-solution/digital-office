@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+#: assert any-concurrency (כל מקביל) is healthy — all /healthz sources true + clean logs
+#
+# verify — any-concurrency's own post-bring-up assertion. Invoked generically by
+# `run_app_hooks verify` (scripts/lib.sh); layer 0 no longer names this app.
+#
+# This was "P6 any-concurrency" in scripts/baseline.sh, criterion 3 of the healthy baseline
+# ("any-concurrency (כל מקביל) full log review — all green"). Moved verbatim: same port, same
+# /healthz parse, same log filter, same three outcomes.
+#
+# The three outcomes are preserved exactly as baseline scored them:
+#   pass  — every source true AND no log lines to review   -> exit 0
+#   warn  — sources all true, but log lines worth a read    -> exit 0 (baseline's warn never
+#           counted as a failure; it must not start counting as one now)
+#   fail  — at least one degraded source                    -> exit 1
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # cn, ok/warn/bad, colors
+
+# GET a path inside a python container's own localhost (bypasses traefik+authentik).
+inhealth() { # inhealth <container> <port> <path>
+  docker exec "$1" python3 -c "import urllib.request,sys
+try: sys.stdout.write(urllib.request.urlopen('http://localhost:$2$3',timeout=8).read().decode())
+except Exception as e: sys.stderr.write(str(e)); sys.exit(1)" 2>/dev/null
+}
+
+ac="$(cn any-concurrency)"
+if [ -z "${ac}" ]; then
+  bad "any-concurrency — container not running"
+  exit 1
+fi
+
+acj="$(inhealth "${ac}" 8080 /healthz)"
+# A source that is False because it was never CONFIGURED (e.g. logspan/wa need LOGSPAN_CONTAINER,
+# which a deployment with no WhatsApp bridge legitimately never sets) is not the same as a source
+# that is False because it broke. /healthz's `source_details` carries an `enabled` flag for exactly
+# this; `sources` itself does not, and reading `sources` alone is why an install with no WhatsApp
+# integration configured could never pass this gate. Same philosophy baseline already applies to
+# browser42 (excluded when not enabled, not scored as a failure) — applied here to any-concurrency's
+# own optional sources instead of a second, drifting rule.
+bad_sources="$(printf '%s' "${acj}" | python3 -c "import sys,json
+try: d=json.load(sys.stdin)
+except Exception: print('parse'); sys.exit()
+sources=d.get('sources',{}); details=d.get('source_details',{})
+# 'wa' is always logspan's alias; any OTHER key with no entry of its own is the dynamic
+# CUSTOM_SOURCE_ALIAS (contributed by whichever app feeds the 'custom' source — apitools today,
+# something else tomorrow), which the app deliberately does not publish under 'custom' in
+# source_details either. Never hardcode that app's name here; resolve it the same way the app
+# does — 'wa' means logspan, anything else undetailed means custom.
+def enabled(k):
+    if k in details:
+        return details[k].get('enabled', True)
+    target = 'logspan' if k == 'wa' else 'custom'
+    det = details.get(target)
+    return det is None or det.get('enabled', True)
+print(' '.join(k for k,v in sources.items() if not v and enabled(k)))" 2>/dev/null)"
+aclog="$(docker logs --tail 400 "${ac}" 2>&1 | grep -iE 'error|retry in|not found|crashed|failed' | grep -viE 'no error' || true)"
+
+if [ -z "${bad_sources}" ] && [ -z "${aclog}" ]; then
+  # Not "6/6": the source count is no longer fixed — every app that declares a request lane
+  # (CUSTOM_SOURCE_<APP>) adds one, so a hardcoded total goes stale the moment an app is installed.
+  ok "any-concurrency — all configured sources true; logs clean"
+  exit 0
+elif [ -z "${bad_sources}" ]; then
+  warn "any-concurrency — sources ok but log lines to review:"
+  echo "${aclog}" | tail -4 | sed 's/^/      /'
+  exit 0
+fi
+bad "any-concurrency — degraded sources: ${bad_sources:-parse-error}"
+exit 1

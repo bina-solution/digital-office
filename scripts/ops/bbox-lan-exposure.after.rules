@@ -1,0 +1,75 @@
+# bbox LAN exposure + container egress — the DURABLE form
+#
+# WHAT THIS IS. The rules a bbox host needs so that (a) its console is reachable from the LAN and
+# (b) its containers can reach the internet. Both were broken on the portable box (192.168.16.103)
+# after the 2026-08-24 07:38:55 reboot, and the working fix applied that day was an `iptables -I`,
+# which lives only in memory and dies on the next restart.
+#
+# WHY IT IS A FILE IN THE REPO AND NOT A SCRIPT THAT APPLIES ITSELF. Editing a host firewall is a
+# system security change and it needs the owner's own hands and their sudo. This file exists so
+# that step is "review and apply a reviewed block", not "improvise a rule under time pressure".
+#
+# HOW TO USE IT: append the block below to /etc/ufw/after.rules ABOVE that file's final COMMIT line,
+# then reload ufw. Both need root.
+#
+# ─────────────────────────────────────────────────────────────────────────────────────────────
+# MEASURED SYMPTOMS this is meant to fix, so the acceptance test is not guesswork:
+#
+#   INBOUND (fixed 2026-08-24 by a non-persistent `iptables -I DOCKER-USER`):
+#     from another LAN host   22/tcp   OPEN
+#     from another LAN host   80/tcp   TIMEOUT   <- filtered, though traefik listens on 0.0.0.0:80
+#     from another LAN host   443/tcp  TIMEOUT
+#     from the box itself     80/tcp   302       <- proving the stack was always correct
+#
+#   OUTBOUND (still broken at the time of writing):
+#     container -> 1.1.1.1:443          TIMEOUT 5s
+#     container -> deb.debian.org:80    TIMEOUT 6s
+#     container -> the LAN router:80    TIMEOUT 5s
+#     container -> the host's OWN LAN ip:80  TIMEOUT 5s   <- reaches NOTHING past the bridge
+#     host      -> deb.debian.org:80    HTTP 500 in 0.11s <- the host itself is fine
+#     in-container DNS                  resolves in 0.03s <- NOT a DNS fault
+#     in-container IPv6                 ENETUNREACH in 0.00s <- fails fast, NOT an IPv6 stall
+#
+#   Containers still talk to EACH OTHER (the whole stack is healthy), so the bridge itself works.
+#   What fails is every packet that has to LEAVE the bridge - i.e. the FORWARD path - which is what
+#   the second block below addresses. Do not "fix" this by adding DNS servers or disabling IPv6;
+#   both were measured healthy and neither is the cause.
+#
+#   COST OF LEAVING IT: no image can be built on the host (apt/pip/npm hang rather than fail), and
+#   any container calling an external API hangs instead of erroring.
+# ─────────────────────────────────────────────────────────────────────────────────────────────
+
+*filter
+
+# 1. INBOUND — let the LAN reach the published web ports. DOCKER-USER is the correct chain: docker
+#    inserts its own rules ahead of ufw's INPUT chain, so a plain `ufw allow 80` does NOT cover a
+#    docker-published port. Narrow it to the LAN subnet rather than allowing the world.
+:DOCKER-USER - [0:0]
+-A DOCKER-USER -s 192.168.16.0/24 -p tcp --dport 80 -j ACCEPT
+-A DOCKER-USER -s 192.168.16.0/24 -p tcp --dport 443 -j ACCEPT
+
+# 2. OUTBOUND — let containers out. This is the half the owner's inbound rule does not touch. If
+#    /etc/default/ufw carries DEFAULT_FORWARD_POLICY="DROP" (the ufw default), packets leaving the
+#    docker bridge are dropped even though docker installed its own FORWARD rules, which is exactly
+#    the measured symptom above. Either set DEFAULT_FORWARD_POLICY="ACCEPT" in /etc/default/ufw, or
+#    keep DROP and allow the bridge explicitly with the two rules below.
+-A DOCKER-USER -i br+ -o !br+ -j ACCEPT
+-A DOCKER-USER -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+
+COMMIT
+
+# ─────────────────────────────────────────────────────────────────────────────────────────────
+# ACCEPTANCE TEST - and it is a REBOOT test, because the thing that failed was persistence, not
+# the rule. The previous window worked and then did not, with no configuration changed between.
+#
+#   1. from another LAN machine, the console answers 302 over plain http
+#   2. from inside any container, an outbound TCP connection to 1.1.1.1:443 succeeds
+#   3. REBOOT the box, then repeat 1 and 2 without touching anything
+#
+# Step 3 is the test. Steps 1 and 2 passing before it prove nothing about durability - that was the
+# exact state on the evening of 2026-08-23, and it did not survive the morning.
+#
+# THE PLATFORM-LEVEL POINT, which outlives this host: a bbox that is meant to serve a console on the
+# LAN should DECLARE that exposure so it can be verified, instead of inheriting whatever the host
+# firewall happens to be doing. Nothing in this repo currently states which ports a bbox expects to
+# be reachable, so nothing can check it, and a reboot can close the window silently.

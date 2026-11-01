@@ -1,0 +1,12 @@
+{
+ "section.files": "קבצים ותיקיות",
+ "section.sessions": "שיחות",
+ "candidate.noCwd": "(ללא תיקייה נוכחית)",
+ "crumb.root": "סביבת העבודה",
+ "time.now": "עכשיו",
+ "time.minutes": "{n} דק׳",
+ "time.hours": "{n} שע׳",
+ "time.days": "{n} ימים",
+ "time.months": "{n} חוד׳",
+ "time.years": "{n} שנים"
+}

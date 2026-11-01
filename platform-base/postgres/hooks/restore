@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+#: restore the application database from a `bbox export` archive
+#
+# restore <indir> <mode>   — invoked by scripts/deployment-archive.py, never by hand.
+#
+# TARGETS A FRESHLY-INITIALISED SUPABASE, not a merge. `public` is restored with --clean, so the
+# target's own copy of each table is dropped first. Restoring onto a supabase that already carries a
+# DIFFERENT deployment's rows is not supported.
+#
+# `auth` and `storage` are NOT restored here — they moved to apps/supabase/hooks/restore, which
+# starts the services that own those schemas and waits for their migrations before putting rows
+# back. Restoring them from this hook dropped 887 storage.objects rows on the first real test.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+. "${REPO_ROOT}/scripts/archive-lib.sh"   # archive_require / archive_stop / archive_project
+
+IN="${1:?usage: restore <indir> <mode>}"
+DB="$(archive_require supabase-db)"
+[ -n "${DB}" ] || { echo "[postgres/restore] no supabase-db container running" >&2; exit 1; }
+U=supabase_admin
+ERR="${BBOX_TMP}/supabase-restore.err"; : > "${ERR}"
+
+pr() {  # pr <file> <pg_restore args...>
+  local f="$1"; shift
+  [ -f "${IN}/${f}" ] || { echo "[postgres/restore] ${f} not in archive — skipped"; return 0; }
+  docker exec -i "${DB}" pg_restore -U "${U}" "$@" < "${IN}/${f}" 2>>"${ERR}" || true
+}
+
+# public + tenant schemas: schema + data, target's copy dropped first. Owners are PRESERVED, which
+# is pg_restore's default — do NOT write `--no-owner=false` to say so. That flag takes no argument,
+# pg_restore rejects the whole invocation with "option '--no-owner' doesn't allow an argument", and
+# because every pg_restore here is `|| true` the restore then reported success having restored
+# NOTHING. Measured: 0 tables in `public`, and the failure was one line at the top of a 24-line
+# error log.
+# NO `-n public` FILTER (2026-08-31, the tenancy migration's restore half): the dump now carries
+# whatever backup's tenant-schema discovery chose (public + every indox_* schema, one archive so
+# pg_restore's dependency order creates tenant tables before the public views over them). An
+# unfiltered restore is the symmetric operation; a pre-tenancy archive contains only public and
+# still restores byte-identically.
+pr supabase-public.dump -d postgres --clean --if-exists
+pr supabase-_supabase.dump -d "_supabase" --clean --if-exists
+
+if [ -s "${ERR}" ]; then
+  n="$(grep -c . "${ERR}" || true)"
+  echo "[postgres/restore] pg_restore diagnostics (${n} lines, first 3):" >&2
+  head -3 "${ERR}" >&2
+  # The FIRST lines, not only the last. An invocation rejected outright fails at line 1 and then
+  # emits nothing else; a `tail` of the log shows the tail of a DIFFERENT dump's warnings and reads
+  # like a partial success.
+  echo "[postgres/restore]   ... last 3:" >&2
+  tail -3 "${ERR}" >&2
+fi
+
+q() { docker exec "${DB}" psql -U "${U}" -d postgres -tAc "$1" 2>/dev/null | tr -d '\r' | tr -d ' '; }
+for t in incoming_documents settings sync_ledger sync_cursor sync_pipe_state sync_attempt \
+         companies drive_files ocr_cache business_documents chat_messages tag_rules; do
+  echo "FACT ${t} $(q "select count(*) from public.${t};")"
+done
+echo "FACT public_tables $(q "select count(*) from information_schema.tables where table_schema='public';")"
+# On a tenancy estate these two read through public VIEWS (active instance only) — view-level,
+# non-authoritative. The per-schema shas below are the real comparison against backup's FACTs.
+echo "FACT documents_sha $(q "select md5(string_agg(\"ID\"::text||coalesce(\"STATUS\",''), '|' order by \"ID\")) from public.incoming_documents;")"
+echo "FACT settings_sha $(q "select md5(string_agg(key||'='||coalesce(value::text,''), '|' order by key, instance)) from public.settings;")"
+# Same four invariants as backup's discovery block (fail CLOSED, plain top-level assignment,
+# escaped underscore, same-archive) — measured on the RESTORED instance so the driver's diff
+# compares real tenant tables, not views.
+TENANT_SCHEMAS="$(docker exec "${DB}" psql -U "${U}" -d postgres -tAc \
+    "select nspname from pg_namespace where nspname like 'indox\\_%' order by nspname;" \
+    | tr -d '\r')" \
+  || { echo "[postgres/restore] tenant-schema enumeration FAILED — cannot verify the restored tenants" >&2; exit 1; }
+echo "FACT tenant_schemas $(printf '%s\n' ${TENANT_SCHEMAS} | grep -c . || true)"
+for s in ${TENANT_SCHEMAS}; do
+  echo "FACT ${s}_documents $(q "select count(*) from ${s}.incoming_documents;")"
+  echo "FACT ${s}_documents_sha $(q "select md5(string_agg(\"ID\"::text||coalesce(\"STATUS\",''), '|' order by \"ID\")) from ${s}.incoming_documents;")"
+  echo "FACT ${s}_action_log $(q "select count(*) from ${s}.indox_action_execution_log;")"
+  echo "FACT ${s}_settings $(q "select count(*) from ${s}.settings;")"
+done
+exit 0

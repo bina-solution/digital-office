@@ -1,0 +1,169 @@
+# yaml-language-server: $schema=./schema.json
+title: "The desktop dock draws one tile per app PER MACHINE and runs off the screen: at the owner's own width 17 of its 40 tiles are unreachable by pointer, and the glass pill ends mid-row"
+opened: "2026-10-05"
+category: bug
+severity: high
+status: resolved
+summary: "In desktop mode the console's dock (`buildDock()`, `.dk-dock`) renders a flat, uncapped row — one 46px tile per module (38), plus the memory tool, plus «כל החלונות». Its content is 2189px wide against a pill capped at `100vw - 40px`; `max-width` caps the box, not the content, `.dk-ic` is `flex:none` and the dock has no `overflow` rule above 1024px, so 935px of tiles paint outside the pill and are hard-clipped by `.dk{overflow:hidden}` at the screen edge. Nothing scrolls, nothing warns, and in desktop mode the rail is hidden — so 16 tiles are fully off-screen (17 unreachable) at 1294px, 13 (14) at 1440px and 5 (5) at 1920px, including the shell's own tools and the Exposé tile. Reachable only by ⌘K search."
+
+description: |
+  ## Symptom (owner, 2026-10-05)
+
+  In desktop mode the bottom launcher has too many apps: the row of icons spans the whole screen,
+  the rounded glass pill's background stops mid-row so icons float past it, and the leftmost icons
+  are cut dead at the screen edge. Screenshot: `צילום מסך 2026-10-05 ב-17.10.28.png` (2589x1620,
+  ≈1294x810 CSS at 2x).
+
+  ## Measured — live console, headless Chromium, desktop mode forced on (2026-10-05)
+
+  Reproduction: `ui-capture:latest` on `traefik-network`, `http://console:8000/`,
+  `window.BinaDesktop.enable()`, then read `.dk-dock` / `.dk-ic` rects. Probe scripts and the raw
+  JSON + PNG strips: `tmp/dock-probe/` (session-local), copies in `ci-artifacts/dock-overflow/`.
+
+  | viewport (CSS px) | tiles | pill width | content width | tiles inside pill | outside pill | fully off-screen | unreachable by pointer |
+  |---|---|---|---|---|---|---|---|
+  | 1294x810 (13" retina) | 40 | 1254 | 2189 | 23 | 17 | **16** | **17** |
+  | 1440x900 (repo's `desktop` profile) | 40 | 1400 | 2189 | 25 | 15 | **13** | **14** |
+  | 1920x1080 | 40 | 1880 | 2189 | 34 | 6 | **5** | **5** |
+  | 2560x1440 | 40 | 2187 | 2190 | 40 | 0 | 0 | 0 |
+
+  `overflow-x` is `visible` at every one of those widths and `scrollWidth > clientWidth` — the
+  content exists and is unreachable: `scrollable: false`. The only scrolling dock is
+  `.dk.compact .dk-dock{overflow-x:auto}` (`desktop.css:290`), and `setCompact` is reachable only
+  below `CFG.MIN_WIDTH = 1024` (`desktop.js:29,1373`), i.e. never at any width the owner uses.
+
+  At 1294x810 the tiles that cannot be clicked at all are, in dock order:
+  `computers.vps1`, `connections`, `dgo-extend`, `connections.hp-laptop`, `dgo-extend.hp-laptop`,
+  `connections.vps1`, `dgo-extend.vps1`, `install`, `settings` (הגדרות מסוף), `git-accounts`,
+  `hello-bina.vps1`, `hello-bina`, `browser42` (דפדפן הלשכה), `console-home.hp-laptop`,
+  `console-home.vps1`, `native:memory` (זיכרון) — and the last tile of all, «כל החלונות»
+  (Exposé / key `E`), which is appended last and therefore always the first to leave the screen.
+  At 1920x1080 the losses are `browser42`, both linked-office «המרכז» tiles, `native:memory` and
+  «כל החלונות».
+
+  In desktop mode `#app` is `display:none` (`desktop.css:13`; measured `railHidden: true`), so the
+  dock is the launcher. The escape hatch that still works is the palette: Ctrl-K opened 38
+  `.pal-item` rows (`app.js:467-512`), i.e. every module is reachable by SEARCH — the tail is
+  unreachable only in the pointer path, which is the one a dock exists for.
+
+  ## Mechanism — three independent defects, all in the same 8 lines
+
+  * `platform-base/console/static/desktop.css:56-58` — `.dk-dock{display:flex;gap:8px;
+    padding:8px 10px;max-width:calc(100vw - 40px)}` with **no `overflow`** (⇒ `visible`) and **no
+    `flex-wrap`**. `max-width` caps the *box*; the content keeps its intrinsic width and is painted
+    outside the pill.
+  * `platform-base/console/static/desktop.css:60-62` — `.dk-ic{width:46px;height:46px;flex:none}`.
+    `flex:none` is `flex:0 0 auto`, so nothing shrinks and the container's min-content width is its
+    full 2189px. (Today's tiles are therefore NOT distorted — 46x46 for all 40. The distortion risk
+    belongs to the naive fix: drop `flex:none`, or add `min-width:0`, and width falls below 46 while
+    height stays 46, giving non-square tiles with a 24px glyph inside.)
+  * `platform-base/console/static/desktop.css:19-20` — `.dk{position:fixed;inset:0;overflow:hidden;
+    direction:rtl}`. In RTL the flex main-end is the LEFT edge, so the 935px excess runs off to the
+    left and is clipped by the viewport; nothing can scroll it back.
+  * `platform-base/console/static/desktop.js:1137-1172` — `buildDock()` is a flat
+    `modules().forEach` + natives + one all-windows tile. No cap, no grouping, no overflow tile, no
+    measurement, no re-measure on resize (`refresh()` rebuilds, it does not re-fit).
+
+  ## Why it is structural, not a sizing slip
+
+  Width is a closed-form function of the tile count: **W(N) = 54·(N+K+1) + 27 px** (46px tile + 8px
+  gap; 5px separator; 20px padding; 2px border; K = 1 native today) ⇒ with K=1, **W = 54N + 135**.
+  The pill's cap is `100vw - 40`, so the dock fits only while **N ≤ floor((v - 175)/54)**: 22 at
+  1294, 25 at 1440, 34 at 1920, 46 at 2560. The estate is 38 modules today, and the count is
+  monotone in two things that only grow:
+
+  * `.generated/registry/console.modules.yaml` — 35 compiled tiles = 9 local + **26 remote**
+    (16 × `.vps1`, 10 × `.hp-laptop`); `/api/modules` = 38 = 35 + 2 console-own views (`install`,
+    `settings`) + 1 peer-only tile (`hello-bina`).
+  * Every enabled app that declares `routing[].module` contributes **one tile per machine it runs
+    on**, so an app present on all three machines appears **3×** (`bina`, `bina.hp-laptop`,
+    `bina.vps1`; likewise drive, computers, connections, dgo-extend, console-home). Two thirds of
+    the dock is not "more apps" — it is the same apps on linked offices.
+
+  So the dock exceeded its cap somewhere around its 21st tile and has grown ~54px per app and per
+  linked office ever since, with nothing in the system able to notice: no test, no gate, and no
+  design surface. `bbox ui-map` never captures desktop mode (no `dk-on` anywhere under `scripts/`),
+  the sim is what the live UI is ported toward but contains no dock at all, `platform-base/console/
+  test_app.py` has no desktop assertion, layering-lint skips `/static/`, and G27's target list does
+  not include `desktop.css`.
+
+  ## Impact
+
+  * **Findability, not cosmetics.** 17 of 40 destinations are unclickable at the owner's own width,
+    including the shell's own tools — «הגדרות מסוף», the memory window, the office browser, the
+    linked-office «המרכז» tiles — and the Exposé tile, whose keyboard shortcut is invisible to a
+    mouse user. The rail that would otherwise be the launcher is hidden by design in this mode.
+  * **It looks wrong exactly as reported**: the pill's glass edge cuts through the row and the
+    remaining icons sit on bare wallpaper (see the two PNG strips: 1440 vs 2560).
+  * **It degrades silently.** Installing an app or linking an office costs another 54px; the next
+    overflow takes one more tile off-screen with no error anywhere.
+
+  ## Fix direction
+
+  Researched and specified in `ai/context/console-dock-capacity-design.md`: keep the 46px tile
+  (already at the 44px hit-target floor), make the dock's own width a function of the VIEWPORT only
+  (never of the app count) by deriving a slot budget from the measured width and rendering
+  `slots-1` tiles plus one overflow tile that opens the existing grouped launcher grid
+  (`renderHome()`'s registry-driven `.home-grid`, or app-management's all-apps screen), reusing
+  BinaNav's Priority+ cap-and-reveal (`bina-nav.js:254-272`) and the palette
+  (`app.js:467-512`). This is the same decision the platform already made for the rail
+  (`ai/context/platform-navigation-design.md:205-215` — "keep the top ~12 visible; make the tail
+  searchable, never scroll-only", whose own trigger "only when the estate grows past ~24
+  destinations", `:780-786`, is now satisfied at 38); the dock simply never received it.
+
+  Explicit non-fixes: letting tiles shrink (below the target floor and non-square — §4 of the design
+  doc), wrapping to two rows (height becomes a function of app count), or making the dock a
+  horizontal scroller (a launcher must not hide apps behind a drag).
+
+  ## Resolved 2026-10-05 — the budget, the door, and the measurement that proves it
+
+  Owner's call on the five open questions (the design doc's §8), taken as the recommended defaults:
+  one tile per (app × machine) as today; the grouped launcher grid + filter behind the door; a floor
+  of 3 slots; the `--dock-*` custom properties instead of literals; the gate in WARN mode for one
+  release.
+
+  * `platform-base/console/static/dock-budget.js` — the capacity as ONE pure function (`resolveDock`),
+    with `--dock-tile/--dock-gap/--dock-pad` reaching CSS from that single source.
+  * `buildDock()` spends it: the tiles that fit are drawn, the door takes the last slot, and what is
+    left is in the panel (`openDockMore()`) — the existing grouped `.htile` launcher plus a filter.
+    The dock is rebuilt on every resize (and on `refresh()`), never on a timer.
+  * **Measured** (`scripts/ui-coverage/dock-fit.py`, desktop mode forced, 43 apps on this office):
+    1294 → 22 tiles in a 1215px pill (row 1180px), 24 apps behind the door; 1440 → 25 tiles;
+    1920 → 34 tiles; panel 43/43 apps, search focused, clicking a tile opens it; **0 tiles outside the
+    pill and 0 off screen at all three widths**. The same probe fails loudly on the pre-fix behaviour:
+    20 tiles outside the pill and 18 off screen at 1294 (`dock-budget.js` mutated to `slots = count+1`
+    for the negative test).
+  * No `overflow:hidden` on `.dk-dock`, deliberately: the hover tooltip (58px above a tile) and the
+    hover lift are painted outside the pill by design, so a clip would trade a bug the budget makes
+    impossible for a visible regression. The guarantee is the measurement, not the clip.
+  * Gate: `scripts/refactor/dock-fit-lint.py` (static invariants + `test_dock_budget.mjs` + the live
+    measurement), wired in `run-gates.py` with `--live --warn` — warn-first for one release per the
+    design doc §8.5; the flip is removing `--warn` from `GATE_ARGS`.
+  * `python3 digital-office/sim/flow-qa.py console` — 23/23 flows, 0 JS errors, on a sim rebuilt with
+    these files.
+
+tasks:
+  - { text: "Owner decision — the app-set model: one tile per (app × machine) with an `is-remote` mark (today, `ai/context/dgo-remote-apps.md:105`) vs one tile per app whose linked-office twins live behind it. Two thirds of the dock is duplicates; this decision caps the problem before any CSS. DECIDED 2026-10-05: one tile per (app x machine), as today.", done: true }
+  - { text: "Owner decision — what the overflow surface is: the existing grouped launcher grid (renderHome/app-management) vs pinned(≤6)+recent(≤5) per the rail spec's P6. DECIDED 2026-10-05: the grouped launcher grid behind one door.", done: true }
+  - { text: "Implement the slot budget in `buildDock()`: `slots = floor((dockWidth - padding - sep - overflowTile) / (tile + gap))`, tiles `flex:0 0 46px`, always render the overflow tile when `N > slots`, re-fit from a `ResizeObserver` (and on `refresh()`), never on a timer. DONE 2026-10-05 (dock-budget.js + buildDock, rebuilt on resize).", done: true }
+  - { text: "Give `.dk-dock` a real overflow policy so content can never paint outside the pill: `overflow:hidden` (or the measured budget alone), plus a `mask-image`/fade affordance at the clipped edge if anything is still clipped. DONE differently and on purpose: the budget alone, measured, with no clip - see the resolution note.", done: true }
+  - { text: "Add the missing measurement as a gate: a headless probe at 1294/1440/1512/1920/2560 with desktop mode forced on, asserting `dock.scrollWidth <= dock.clientWidth + 1` and `every tile rect > 0`, and wire it into `scripts/refactor/run-gates.py` (today nothing covers desktop.css — G27 targets exclude it, layering-lint skips /static/). DONE 2026-10-05 as scripts/refactor/dock-fit-lint.py + scripts/ui-coverage/dock-fit.py, WARN mode for one release; the assertion is the ROW against the pill content box, not scrollWidth, which also counts the tooltip and the door badge by design.", done: true }
+  - { text: "Cover desktop mode in the UI map (`scripts/ui-coverage/capture.py` never sets `do-desktop`), or record in `ai/context/platform-navigation-design.md`/PORT-PLAN why it cannot be. STILL OPEN - the capture gap is untouched by this fix.", done: false }
+  - { text: "Regression proof for the fix: the same probe at the four widths plus `python3 scripts/refactor/run-gates.py --all` and `./bbox ui-map --profile desktop` (classic shell unchanged). DONE 2026-10-05: the probe negative run, the three widths and flow-qa console 23/23; bbox ui-map --profile desktop is the next quiet-machine step.", done: true }
+
+references:
+  - platform-base/console/static/desktop.js
+  - platform-base/console/static/desktop.css
+  - platform-base/console/static/app.js
+  - platform-base/console/app.py
+  - .generated/registry/console.modules.yaml
+  - platform-base/bina-ui/bina-nav.js
+  - ai/context/console-dock-capacity-design.md
+  - ai/context/platform-navigation-design.md
+  - ai/context/sidebar-research.md
+  - ai/context/console-desktop-working-memory.md
+  - ai/context/dgo-remote-apps.md
+  - issues/console-desktop-working-memory.yaml
+  - scripts/ui-coverage/capture.py
+  - scripts/ui-coverage/view-profiles.yaml
+  - scripts/refactor/theme-token-lint.py

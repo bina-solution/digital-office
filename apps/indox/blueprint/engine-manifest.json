@@ -1,0 +1,129 @@
+{
+  "generated_by": "apps/indox/scripts/gen-engine-manifest.py",
+  "stages": [
+    {
+      "id": "SyncApi0000000001",
+      "title": "שער ה-API",
+      "role": "כל פעולה ידנית מהמסך נכנסת דרך כאן — SCAN, STATUS, RELEASE, RESET.",
+      "why": "The only door in. The registry is enforced here, server-side: an unknown pipe, a paused one, or a v1 pipe are refusals rather than silent no-ops.",
+      "present": true,
+      "name": "sync api",
+      "nodes": 25,
+      "triggers": [
+        {
+          "name": "Webhook",
+          "kind": "webhook"
+        },
+        {
+          "name": "When Called",
+          "kind": "called"
+        }
+      ],
+      "calls": [
+        "syncLedgerApi01",
+        "syncV3Main0001"
+      ],
+      "calls_external": [
+        "IndoxResetFull01",
+        "SyncSource000001"
+      ],
+      "calls_dynamic": []
+    },
+    {
+      "id": "syncV3Main0001",
+      "title": "הסורק",
+      "role": "קורא את הרישום של כל המופעים ומפצל לעבודה — יחידה אחת לכל צמד תיקיות.",
+      "why": "The only stage that reads ACROSS instances (instance:'*'), because finding the work is its job and it has no work item to derive a tenant from.",
+      "present": true,
+      "name": "Sync v3 Reconcile",
+      "nodes": 10,
+      "triggers": [
+        {
+          "name": "Schedule 15m",
+          "kind": "schedule"
+        },
+        {
+          "name": "Manual Trigger",
+          "kind": "manual"
+        },
+        {
+          "name": "When Called",
+          "kind": "called"
+        }
+      ],
+      "calls": [
+        "syncV3Unit0001"
+      ],
+      "calls_external": [],
+      "calls_dynamic": []
+    },
+    {
+      "id": "syncV3Unit0001",
+      "title": "היחידה",
+      "role": "משווה מקור מול הרישום, תופסת פריטים, ומעבירה אותם למסירה.",
+      "why": "Where the claim happens: DIFF, then CLAIM, then deliver. The claim is what makes 'in progress' a real state and 'stuck' an honest one.",
+      "present": true,
+      "name": "Sync v3 Source Unit",
+      "nodes": 24,
+      "triggers": [
+        {
+          "name": "When Called",
+          "kind": "called"
+        }
+      ],
+      "calls": [
+        "syncLedgerApi01",
+        "syncV3Deliver0001"
+      ],
+      "calls_external": [
+        "driveApi01",
+        "gmailApiRouter01",
+        "indoxSettings01"
+      ],
+      "calls_dynamic": []
+    },
+    {
+      "id": "syncV3Deliver0001",
+      "title": "המסירה",
+      "role": "מוריד, מחלץ ורושם כל מסמך — ומחזיר תפיסה שנכשלה.",
+      "why": "Delivery then RECORD, in that order, always. A failed delivery RELEASEs its claim so the item returns to the todo instead of vanishing.",
+      "present": true,
+      "name": "Sync v3 Deliver",
+      "nodes": 46,
+      "triggers": [
+        {
+          "name": "When Called",
+          "kind": "called"
+        }
+      ],
+      "calls": [
+        "syncLedgerApi01"
+      ],
+      "calls_external": [
+        "driveApi01",
+        "gmailApiRouter01"
+      ],
+      "calls_dynamic": [
+        "={{ $json.processor_wf }}"
+      ]
+    },
+    {
+      "id": "syncLedgerApi01",
+      "title": "הרישום",
+      "role": "ספר החשבונות: מה נתפס, מה נמסר, מה בהמתנה לבדיקה.",
+      "why": "The kernel. CLAIM is an INSERT whose primary key decides the race; RELEASE only ever touches status='claimed', so it can never erase a delivery.",
+      "present": true,
+      "name": "Sync Ledger API",
+      "nodes": 30,
+      "triggers": [
+        {
+          "name": "When Called",
+          "kind": "called"
+        }
+      ],
+      "calls": [],
+      "calls_external": [],
+      "calls_dynamic": []
+    }
+  ]
+}

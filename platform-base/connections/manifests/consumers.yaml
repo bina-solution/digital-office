@@ -1,0 +1,5 @@
+# Every entry is COMPILED from each app's connections[] in its own app.json ->
+# .generated/registry/connections.consumers.yaml, mounted read-only at /app/generated.
+# A layer-1 base app must not enumerate its layer-3 consumers (gate G9).
+# This file is intentionally empty; it remains as the boot fallback shape.
+[]

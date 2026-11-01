@@ -1,0 +1,549 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>לשכות מחוברות</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2356693f'/%3E%3Crect x='6' y='7' width='20' height='14' rx='2' fill='%23f3f5f7'/%3E%3Cpath d='M12 24h8v2h-8z' fill='%23f3f5f7'/%3E%3C/svg%3E">
+<!-- the design system, bundled: every app carries its own copy on purpose (it must stay
+     independently installable), and gate G27 keeps the token block identical to the source -->
+<link rel="stylesheet" href="static/vendor/bina-table.css">
+<style>
+  .audit-row{border:1px solid var(--line);border-inline-start-width:4px;border-radius:10px;
+             padding:10px 12px;margin-bottom:8px;background:var(--surface-2)}
+  .audit-row.error{border-inline-start-color:var(--red)}
+  .audit-row.warn{border-inline-start-color:var(--lime)}
+  .audit-row.info{border-inline-start-color:var(--line)}
+  .audit-row.ok{border-inline-start-color:var(--accent)}
+  .audit-top{display:flex;gap:8px;align-items:center;margin-bottom:2px}
+  .audit-row .fix{color:var(--accent-d);margin-top:4px}
+  .modal.wide{max-width:820px}
+
+/* ── this screen's own: radii and type — the colours are the office's palette, in the block below ── */
+:root{
+  --radius:16px;--radius-sm:9px;--radius-pill:999px;
+  --font:"Segoe UI",system-ui,-apple-system,"Noto Sans Hebrew","Assistant",Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+/* @bina-theme-tokens:start */
+/* OLIVE GROVE — the one palette of the office (the owner, 2026-10-07 · DGO-450). Four hues, sampled
+   from his mock-up, and the ground they stand on. A screen never writes a colour: it names one of
+   these. Each hue is the colour itself (a FILL — a button, a bar, a dot), «-d» for text and thin
+   lines on the ground (4.5:1 or more), «-soft» and «-line» for a tint and its hairline, and «-ink»
+   for what is written ON the fill. The role names every screen already uses point at them:
+   (no backtick in this block: one of its copies lives inside a script's template string)
+     olive  the brand and the main action · what is well, what is done
+     sky    what is in motion, what only informs · a link
+     lime   look here — a warning, something waiting
+     plum   a person must act — a failure, a removal, the one final action
+   Contrast, measured (WCAG): ink on the ground 13.7 · muted 4.65 · light text on olive 5.51 and on
+   plum 9.54 · ink on lime 6.88 · its ink on sky 6.32 · sky-d 4.61 · lime-d 4.70 · violet 5.32 ·
+   on the desk: its ink 6.32 (dark: 13.96), and 11.2 where the sky pales (dark: 5.12). */
+:root,:root[data-theme="light"]{
+  color-scheme:light;
+  accent-color:var(--accent);   /* the browser's OWN controls - a checkbox, a radio, a range, a progress bar - on both grounds: said once, here (it was said for eight single controls, and every other one was the browser's blue) */
+  --bg:#f3f5f7; --surface:#fff; --surface-2:#f9fafb; --ink:#1f2a17; --muted:#6a7068; --line:#dcdfde;
+  --olive:#56693f; --olive-d:#475734; --olive-soft:#e7eae4; --olive-line:#bfc6b6; --olive-ink:#f3f5f7;
+  --sky:#7baae3; --sky-d:#2a6fc4; --sky-soft:#edf3fb; --sky-line:#cddff4; --sky-ink:#13263f;
+  --lime:#a9b84c; --lime-d:#69732e; --lime-soft:#f3f5e6; --lime-line:#dee4bb; --lime-ink:#1f2a17;
+  --plum:#5b3349; --plum-d:#4a303b; --plum-soft:#e8e2e6; --plum-line:#c1b1ba; --plum-ink:#f3f5f7;
+  --accent:var(--olive); --accent-d:var(--olive-d); --accent-soft:var(--olive-soft); --accent-ink:var(--olive-ink);
+  --blue:var(--sky-d); --amber:var(--lime-d); --red:var(--plum);
+  --violet:#7c5c6d;   /* plum, lifted a fifth toward white: someone has to look — nothing has failed */
+  --ok:var(--olive); --warn:var(--lime-d); --danger:var(--plum); --info:var(--sky-d);
+  --ok-soft:var(--olive-soft); --warn-soft:var(--lime-soft); --danger-soft:var(--plum-soft); --info-soft:var(--sky-soft);
+  --red-soft:var(--plum-soft); --amber-soft:var(--lime-soft); --blue-soft:var(--sky-soft); --violet-soft:var(--plum-soft);
+  --side:var(--olive); --side-ink:#f3f5f7; --side-mut:#dce1da; --side-line:#788765;
+  --desk:var(--sky); --desk-ink:var(--sky-ink);   /* desktop mode's ground is the sky (the owner, DGO-452), and what is written straight on it */
+  --scrim:rgba(31,42,23,.5);                      /* what dims a screen behind a pop-up */
+  --shadow:0 1px 3px rgba(31,42,23,.08),0 6px 24px rgba(31,42,23,.06);
+  --shadow-lg:0 20px 60px rgba(31,42,23,.28);
+  /* ONE COLOUR AND ONE ANIMAL PER OFFICE (the owner, 2026-10-09 · flt-002). When offices are linked,
+     a person reads WHICH office a thing belongs to without opening it, so each office gets a hue of
+     its own. The hue is an IDENTITY and never a health state: an office that stopped answering keeps
+     its colour, and the quiet mark is the one that says "not answering". Each is an ALIAS of the
+     palette's own hue — no fourth value is invented, and because the ground re-points the hue, the
+     office mark follows the ground by itself. Each office's animal (elephant, deer, eagle) is a
+     glyph of bina-icons.js. */
+  --office-hp:var(--muted);   /* hp · elephant — grey: the heavy laptop at home, in the palette's own grey */
+  --office-mac:var(--lime);   /* macbook · deer — yellow: the palette has one yellow and it is lime. A FILL, so what is written ON it is --lime-ink, never this */
+  --office-vps:var(--sky-d);  /* vps · eagle — deep sky blue, «the eagle in the clouds». THE OWNER'S OWN CHOICE (2026-10-09, in writing: vps = נשר + כחול-שמיים) — this line is the colour he picked, not a default kept for him */
+}
+
+/* ── A LINKED OFFICE'S MARK, BY NAME (flt-004) ───────────────────────────────────────────────
+   The link carries a NAME — mark: {color, animal} in the catalog, from the office's own identity
+   — and never a value: the office that DRAWS a linked tile owns the pixels, so it paints the name
+   with its own palette. These seven rules are that translation, one per family above; a screen sets
+   data-office-hue="lime" and paints var(--office-hue).
+   A name this file does not know paints nothing, which is why the vocabulary in
+   apps/dgo-extend/identity.py may only name families that exist here — and why --red and --ok
+   are not among them: they mean «danger» and «it is well» on every screen in the office. */
+[data-office-hue="grey"]   { --office-hue:var(--muted); }
+[data-office-hue="lime"]   { --office-hue:var(--lime); }
+[data-office-hue="sky"]    { --office-hue:var(--sky-d); }
+[data-office-hue="olive"]  { --office-hue:var(--olive-d); }
+[data-office-hue="plum"]   { --office-hue:var(--plum); }
+[data-office-hue="blue"]   { --office-hue:var(--blue); }
+[data-office-hue="violet"] { --office-hue:var(--violet); }
+/* the dark ground is the same four hues on the palette's own ink, and the SAME legend. Olive on that
+   ink is 2.5:1, so its text step there is olive LIFTED — its own hue and saturation, lighter (7.14
+   on a card, 4.82 on its own tint) — and the brand, the main action and «it is well» take that step.
+   Lime stays «look here» and the sky «in motion», as on the light ground: were lime the accent here
+   (it was, for a day), a warning, a selection and «it is well» were one colour. Each «-d» on its
+   own «-soft» there, measured: olive 4.82 · sky 4.62 · lime 4.63 · plum 4.71. */
+@media (prefers-color-scheme:dark){
+  :root{ color-scheme:dark;
+         --bg:#141b0f; --surface:#1f2a17; --surface-2:#192213; --ink:#f3f5f7; --muted:#a2a8a2; --line:#414a3b;
+         --olive-d:#a5ba8c; --olive-soft:#384629; --olive-line:#56693f;
+         --sky-d:#7baae3; --sky-soft:#2e3f38; --sky-line:#4d6a8c;
+         --lime-d:#a9b84c; --lime-soft:#3b4622; --lime-line:#69732e;
+         --plum-d:#ad99a4; --plum-soft:#402f33; --plum-line:#7c5c6d;
+         --accent:var(--olive-d); --accent-ink:var(--surface);
+         --red:#ad99a4; --violet:#bdadb6; --danger:#ad99a4; --ok:var(--olive-d); --side:var(--surface);
+         --desk:var(--sky-ink); --desk-ink:var(--ink); --scrim:rgba(0,0,0,.6);
+         --shadow:0 1px 3px rgba(0,0,0,.4),0 6px 24px rgba(0,0,0,.3);
+         --shadow-lg:0 20px 60px rgba(0,0,0,.55); }
+}
+:root[data-theme="midnight"]{
+  color-scheme:dark;
+  --bg:#141b0f; --surface:#1f2a17; --surface-2:#192213; --ink:#f3f5f7; --muted:#a2a8a2; --line:#414a3b;
+  --olive-d:#a5ba8c; --olive-soft:#384629; --olive-line:#56693f;
+  --sky-d:#7baae3; --sky-soft:#2e3f38; --sky-line:#4d6a8c;
+  --lime-d:#a9b84c; --lime-soft:#3b4622; --lime-line:#69732e;
+  --plum-d:#ad99a4; --plum-soft:#402f33; --plum-line:#7c5c6d;
+  --accent:var(--olive-d); --accent-ink:var(--surface);
+  --red:#ad99a4; --violet:#bdadb6; --danger:#ad99a4; --ok:var(--olive-d); --side:var(--surface);
+  --desk:var(--sky-ink); --desk-ink:var(--ink); --scrim:rgba(0,0,0,.6);
+  --shadow:0 1px 3px rgba(0,0,0,.4),0 6px 24px rgba(0,0,0,.3);
+  --shadow-lg:0 20px 60px rgba(0,0,0,.55);
+}
+/* THE KEYBOARD'S RING - what the browser draws around the stop the keyboard is on, in the palette, wherever
+   a part draws none of its own. It has no specificity at all (:where), so any rule of a part wins. Two
+   screens said this for themselves; on the others nearly every stop wore the browser's ring (DGO-455).
+   A field keeps the offset it has - fourteen rules draw a field's own outline and say no offset. An area
+   (a scroll box, a table) takes the ring inside, where nothing clips it; a control takes it outside,
+   where a filled button does not hide it. */
+:where(:focus-visible){outline:2px solid var(--accent)}
+:where(:focus-visible:not(a,button,summary,[role=button],input,select,textarea)){outline-offset:-2px}
+:where(a,button,summary,[role=button]):focus-visible{outline-offset:2px}
+/* HEBREW AT A HEAVY WEIGHT - on Windows, where the first family of --font is installed. "Segoe UI" has its
+   Hebrew in Light, Regular, Semibold and Bold. Asked for 800 or 900 the browser takes the family's Black
+   face, which has none, and so has every family after it - so the Hebrew of every title at 800 was drawn in
+   the system's last-resort serif, thin, beside Latin in Black: «חשבונות ומראות» at 20px is 150px wide at 700
+   and 120px at 800 (Chrome 154; the screens ask for 800 in 167 places, the question's title among them).
+   These faces give the family's HEBREW RANGE the faces that have it. A family a sheet names is no longer the
+   system's for those characters, so every weight and both styles are named, each as the system resolves it:
+   measured, only upright 800 and 900 change. Any other character is not theirs and goes on to the next
+   family the screen names - system-ui in --font, on Windows the same faces, Black included - which is why
+   G27 asks that system-ui follows wherever a screen names this family itself. Where the family is not
+   installed nothing here resolves and nothing changes. */
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Light");font-weight:100 300;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI");font-weight:400;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Semibold");font-weight:500 600;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Bold");font-weight:700 900;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Light Italic");font-weight:100 300;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Italic");font-weight:400;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Semibold Italic");font-weight:500 600;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Bold Italic");font-weight:700 900;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+/* @bina-theme-tokens:end */
+*{box-sizing:border-box}html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--font);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.mono{font-family:var(--mono)}
+.num{direction:ltr;unicode-bidi:isolate;font-variant-numeric:tabular-nums}
+.wrap{width:100%;max-width:1440px;margin:0 auto;padding:22px 26px 44px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:16px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:15px 17px;box-shadow:var(--shadow)}
+.tile .label{color:var(--muted);font-size:12.5px;font-weight:600}
+.tile .value{font-size:26px;line-height:1.1;font-weight:800;letter-spacing:-.02em;margin-top:5px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px;box-shadow:var(--shadow);margin-bottom:16px}
+.card>h3{margin:0 0 12px;font-size:15px;font-weight:700;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.card>h3 .small{font-weight:600}
+.btn{background:var(--accent);color:var(--accent-ink);font-weight:700;border:none;border-radius:var(--radius-sm);
+     padding:8px 14px;font-family:inherit;font-size:13px;cursor:pointer}
+.btn:hover{background:var(--accent-d)}
+.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--ink)}
+.btn.ghost:hover{background:var(--surface-2);border-color:var(--muted);color:var(--ink)}
+.btn.sm{padding:0 11px;font-size:12px;height:30px;display:inline-flex;align-items:center}
+/* refresh leads with the same line icon on every screen, and says what it will do */
+.btn svg{width:14px;height:14px;flex:none;margin-inline-end:6px}
+.btn.ghost.danger{color:var(--red);border-color:var(--plum-line)}
+.btn.ghost.danger:hover{background:var(--danger-soft);border-color:var(--red);color:var(--red)}
+.btn:disabled{opacity:.55;cursor:default}
+.link{color:var(--accent-d);font-size:12px;font-weight:600;cursor:pointer;user-select:none}
+.link:hover{text-decoration:underline}
+.link.danger{color:var(--red)}
+.dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex:none}
+.dot.ok{background:var(--accent)}.dot.warn{background:var(--amber)}.dot.bad{background:var(--red)}
+.dot.unset{background:var(--line)}
+.pill{padding:2px 10px;border-radius:var(--radius-pill);font-size:11px;font-weight:700;white-space:nowrap;display:inline-block}
+.pill.ok{background:var(--accent-soft);color:var(--accent-d)}
+.pill.warn{background:var(--warn-soft);color:var(--amber)}
+.pill.bad{background:var(--danger-soft);color:var(--red)}
+.pill.unset{background:var(--bg);color:var(--muted)}
+.callout{border:1px solid var(--line);background:var(--surface-2);border-radius:12px;padding:12px 16px;font-size:13px;margin-bottom:14px}
+.callout.warn{background:var(--warn-soft);border-color:var(--lime-line)}.callout.warn b{color:var(--amber)}
+.callout.ok{background:var(--accent-soft);border-color:var(--olive-line)}.callout.ok b{color:var(--accent-d)}
+.callout.bad{background:var(--danger-soft);border-color:var(--plum-line)}.callout.bad b{color:var(--red)}
+.table{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.table th,.table td{padding:11px 13px;text-align:start;font-size:13px;border-bottom:1px solid var(--line);vertical-align:middle}
+.table th{background:var(--surface-2);color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+.table tr:last-child td{border-bottom:none}
+.table tr:hover td{background:var(--surface-2)}
+.table .name{font-weight:700}
+.table .addr{font-family:var(--mono);font-size:12px;direction:ltr;unicode-bidi:isolate;color:var(--muted)}
+.rowacts{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.muted{color:var(--muted)}.small{font-size:12px}
+.spin{color:var(--muted);padding:20px;text-align:center}
+.field{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
+.field label{font-size:12px;color:var(--muted);font-weight:600}
+.field input,.field textarea,.field select{font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--line);
+     border-radius:var(--radius-sm);background:var(--surface);color:var(--ink);width:100%}
+.field input.mono,.field textarea.mono{font-family:var(--mono);direction:ltr;text-align:left}
+.field .hint{font-size:11.5px;color:var(--muted)}
+.grid2{display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px}
+@media (max-width:760px){.grid2{grid-template-columns:1fr}}
+.modal-ov{position:fixed;inset:0;background:var(--scrim);display:flex;align-items:center;justify-content:center;z-index:50;padding:18px}
+.modal{--mp:22px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:var(--mp);
+       width:min(760px,94vw);max-height:92vh;overflow:auto;box-shadow:var(--shadow-lg)}
+.modal.narrow{width:min(460px,94vw)}
+/* a dialog's title and its way out stay in sight while what it holds scrolls under them: a form taller
+   than its window ended at its last field with neither. --mp is the card's padding, said once: the
+   header takes it with it and sticks that far ABOVE the content edge - which is where a padded scroller
+   measures `top` from. (The action row stays at the form's end: stuck to the bottom it could be pressed
+   with the refusal it causes out of sight above it.) */
+.modal-h{display:flex;align-items:center;justify-content:space-between;gap:12px;position:sticky;top:calc(-1*var(--mp));z-index:1;
+         margin:calc(-1*var(--mp)) calc(-1*var(--mp)) 4px;padding:var(--mp) var(--mp) 10px;background:var(--surface)}
+@media (max-height:399px){.modal-ov{padding:8px}.modal{--mp:14px}}
+.modal-h h3{margin:0;font-size:16px}
+.hidden{display:none!important}
+/* what a command printed is the kit's display: olive with its ink — and plum when it failed */
+pre.out{background:var(--olive);color:var(--olive-ink);border-radius:10px;padding:12px 14px;font-family:var(--mono);font-size:12.5px;
+        direction:ltr;text-align:left;white-space:pre-wrap;word-break:break-word;max-height:340px;overflow:auto;margin:0}
+pre.out.err{background:var(--plum);color:var(--plum-ink)}
+.keybox{font-family:var(--mono);font-size:12px;direction:ltr;text-align:left;background:var(--surface-2);border:1px dashed var(--line);
+        border-radius:10px;padding:10px 12px;word-break:break-all;user-select:all}
+/* A STRIP of key-over-value cells. `.meta div` used to match the key and the value as well, which
+   drew a box inside a box inside a box. Flex, not a grid: a grid's last row keeps its empty tracks,
+   and over the 1px hairline ground an empty track is a grey cell with nothing in it (five facts in two
+   columns on a phone, 2026-10-05). A flex row's last cells grow to close the row. A Hebrew value
+   wraps instead of being cut; a machine token stays on one line and gives way last. */
+.meta{display:flex;flex-wrap:wrap;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-top:10px}
+.meta>div{flex:1 1 180px;background:var(--surface-2);padding:9px 12px;min-width:0}
+.meta .v{overflow-wrap:anywhere}
+.meta .v.mono{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* a machine token inside a Hebrew cell or sentence: ONE unbreakable left-to-right word. It is an
+   INLINE span, so the cell around it stays right-to-left and the value sits under its key — a cell
+   that was itself `direction:ltr` put the value on the far side of its own key. */
+.tok{font-family:var(--mono);font-size:.94em;direction:ltr;unicode-bidi:isolate;white-space:nowrap}
+.meta .v .tok{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom;font-size:1em}
+.subline{margin-top:10px}
+.modal .pg-note{margin:0 0 12px}
+.cardacts{display:flex;gap:8px;flex-wrap:wrap}
+.card .callout:last-child{margin-bottom:0}
+a.btn{text-decoration:none;display:inline-flex;align-items:center}
+.btn.danger{background:transparent;border:1px solid var(--red);color:var(--red)}
+.btn.danger:hover{background:var(--red);color:var(--surface)}
+.meta .k{font-size:11px;color:var(--muted);font-weight:600}
+.meta .v{font-size:13px;font-weight:700;margin-top:2px}
+.meta .v.bad{color:var(--red)} .meta .v.muted{color:var(--muted);font-weight:600}
+.bar{width:100%;height:7px;border-radius:5px;background:var(--surface-2);overflow:hidden;margin-top:6px;border:1px solid var(--line)}
+.bar i{display:block;height:100%;background:var(--accent)}
+.bar i.warn{background:var(--amber)}.bar i.bad{background:var(--red)}
+@media (max-width:900px){
+  .table thead{display:none}
+  .table tr{display:block;border-bottom:1px solid var(--line);padding:8px 4px}
+  .table td{display:flex;justify-content:space-between;gap:12px;border:none;padding:5px 10px}
+  .table td::before{content:attr(data-th);color:var(--muted);font-size:11.5px;font-weight:600}
+}
+
+/* @bina-page:start */
+.pg{
+  --pg-max:1180px;
+  width:100%;
+  max-width:var(--pg-max);
+  margin:0 auto;
+  padding:20px 24px 48px;
+  box-sizing:border-box;
+}
+/* the header: title block at the start, actions at the end. It wraps rather than shrinking,
+   which is what keeps a long action row off the title on a narrow screen. */
+.pg-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:16px;
+  flex-wrap:wrap;
+  margin-bottom:18px;
+  padding-bottom:14px;
+  border-bottom:1px solid var(--line);
+}
+.pg-head h1{
+  margin:0;
+  font-size:22px;
+  line-height:30px;
+  font-weight:700;
+  letter-spacing:-.01em;
+  color:var(--ink);
+}
+.pg-sub{margin-top:3px;color:var(--muted);font-size:13px;line-height:20px;max-width:70ch}
+.pg-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-inline-start:auto}
+
+/* the live chip. One chip, everywhere: a dot that beats while the number is fresh, and that
+   stops dead when it is not — a still dot is the whole signal that the figure is old. */
+.pg-live{
+  display:inline-flex;align-items:center;gap:7px;
+  font-size:12.5px;line-height:18px;font-weight:700;white-space:nowrap;
+  color:var(--accent-d);
+  background:var(--accent-soft);
+  border-radius:999px;
+  padding:4px 11px;
+  border:0;font-family:inherit;          /* the chip is a <button> where it pauses the refresh */
+}
+button.pg-live{cursor:pointer}
+.pg-live[data-stale="1"]{color:var(--amber);background:var(--warn-soft)}
+.pg-live .beat{width:9px;height:9px;border-radius:50%;background:currentColor;flex:none;animation:pg-beat 1.6s infinite}
+.pg-live[data-stale="1"] .beat{animation:none}
+@keyframes pg-beat{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 45%,transparent)}70%{box-shadow:0 0 0 9px transparent}100%{box-shadow:0 0 0 0 transparent}}
+
+/* the card. `> h2/h3` is the card's own title; an app that puts a toolbar in it uses .pg-cardhead */
+.pg-card{
+  box-sizing:border-box;
+  background:var(--surface);
+  border:1px solid var(--line);
+  border-radius:14px;
+  padding:16px 18px;
+  box-shadow:var(--shadow);
+  margin-bottom:16px;
+}
+.pg-card>h2,.pg-card>h3{margin:0 0 10px;font-size:15px;line-height:22px;font-weight:700;color:var(--ink)}
+.pg-cardhead{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.pg-cardhead>h2,.pg-cardhead>h3{margin:0;font-size:15px;line-height:22px;font-weight:700}
+.pg-cardhead .pg-actions{margin-inline-start:auto}
+.pg-hint{color:var(--muted);font-size:12px;line-height:18px;font-weight:400}
+.pg-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pg-note{color:var(--muted);font-size:12.5px;line-height:19px}
+.pg-empty{padding:18px 4px;color:var(--muted);font-size:13px}
+
+/* ── the KPI tile: the one number a screen leads with ─────────────────────────────
+   Four of these screens drew it four ways — 26, 28 and 30px numbers, three paddings, with and
+   without a shadow (measured 2026-10-06). One tile: a 12.5px label over a 26px tabular number.
+   A state is said twice — the number's colour and a 3px bar on the reading edge — through
+   `data-state`, in the product's legend; a zero is not a state, so a screen leaves the attribute
+   off and adds `is-zero`. The legend is the palette's: what waits is lime, what is in motion is
+   sky, what is done is olive, what failed is plum, what needs a person is plum lifted. What a
+   screen adds of its own (a chip, a sparkline, a sub-line) goes inside the tile; how many tiles
+   share a row is the screen's (`--pg-kpi-cols`), so that no row ends in a lone one. */
+.pg-kpis{display:grid;grid-template-columns:repeat(var(--pg-kpi-cols,4),minmax(0,1fr));gap:12px}
+.pg-kpi{position:relative;min-width:0;overflow:hidden;background:var(--surface);
+  border:1px solid var(--line);border-radius:14px;padding:14px 16px;
+  box-shadow:var(--shadow)}
+.pg-kpi-k{display:block;color:var(--muted);font-size:12.5px;line-height:18px;font-weight:600}
+/* `fit-content`: the number sits under its label at the page's reading edge even when it is an
+   LTR token (`.num`) — as a full-width block its own direction sent it to the far side. */
+.pg-kpi-v{display:block;width:fit-content;max-width:100%;margin-top:4px;font-size:26px;line-height:30px;
+  font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums;white-space:nowrap}
+.pg-kpi-v small{font-size:13px;font-weight:700;letter-spacing:0;margin-inline-start:4px;color:var(--muted)}
+.pg-kpi.is-zero .pg-kpi-v{color:var(--muted)}
+.pg-kpi[data-state]::after{content:"";position:absolute;inset-block:0;inset-inline-start:0;width:3px;background:var(--pg-kpi-c)}
+.pg-kpi[data-state] .pg-kpi-v{color:var(--pg-kpi-c)}
+.pg-kpi[data-state=todo]{--pg-kpi-c:var(--amber)}
+.pg-kpi[data-state=running]{--pg-kpi-c:var(--blue)}
+.pg-kpi[data-state=done]{--pg-kpi-c:var(--accent-d)}
+.pg-kpi[data-state=failed]{--pg-kpi-c:var(--red)}
+.pg-kpi[data-state=person]{--pg-kpi-c:var(--violet)}
+
+/* touch: the header's controls are the ones a phone reaches for first */
+@media (pointer:coarse){
+  .pg-actions .btn,.pg-actions button,.pg-actions a.btn{min-height:44px}
+}
+@media (max-width:640px){
+  .pg{padding:14px 12px 40px}
+  .pg-head{gap:10px;margin-bottom:14px}
+  .pg-head h1{font-size:19px;line-height:26px}
+  .pg-card{padding:14px;border-radius:12px}
+  .pg-actions{margin-inline-start:0;width:100%}
+}
+/* ── a SHORT frame: a window in desktop mode ─────────────────────────────────────
+   Desktop mode opens an app in a window of about 580 × 530, and a person halves and quarters it.
+   A page laid out for a tall frame spent that whole window on its own heading: at 640 × 330 five
+   of the office's screens showed their title, their sentence, their buttons and four tiles — and
+   none of what they are for (photographed 2026-10-07). In a short frame the heading is ONE line:
+   the window's bar already names the app, so the sentence under the title steps aside (a line
+   that reports something — `data-live` — stays), and the room is the content's. */
+@media (max-height:699px){
+  .pg{padding-block-start:10px}
+  .pg-head{gap:8px;margin-bottom:10px;padding-bottom:8px;align-items:center}
+  .pg-head h1{font-size:17px;line-height:24px}
+  .pg-sub:not([data-live]){display:none}
+  .pg-actions{width:auto;margin-inline-start:auto;gap:6px}
+  .pg-actions .btn,.pg-actions button,.pg-actions a.btn{padding:4px 9px;font-size:12px}
+}
+/* …and in the SMALLEST window — its corner dragged in as far as it goes, 380 × 224 of page — a
+   title over a row of buttons was 88px of it. The window's bar already says the screen's name,
+   so where the heading has actions the title steps aside and they are its one line. A title
+   that names a VIEW (`data-view`) stays: the bar says the app, not where in it. */
+@media (max-height:699px) and (max-width:430px){
+  .pg-head:not([data-view]):has(.pg-actions) h1{display:none}
+  .pg-actions{margin-inline-start:0}
+  /* …and a line that reports (`data-live`) shares that line with them, as far as it fits */
+  .pg-head:has(.pg-sub[data-live]){flex-wrap:nowrap}
+  .pg-head>:first-child:has(.pg-sub[data-live]){flex:1 1 0;min-width:0}
+  .pg-sub[data-live]{margin-top:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pg-head:has(.pg-sub[data-live]) .pg-actions{flex:none;flex-wrap:nowrap}
+}
+/* …and there, and at a phone's width, the leading numbers are one STRIP rather than tiles: a
+   hairline grid, key over value, in the columns the screen declares (`--pg-kpi-cols`). Four tiles
+   were 184px of a 530px window, before the first row of what they count. */
+@media (max-height:699px),(max-width:700px){
+  .pg-kpis{gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .pg-kpis>.pg-kpi{border:0;border-radius:0;box-shadow:none;padding:5px 8px}
+  .pg-kpis .pg-kpi-k{font-size:10.5px;line-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pg-kpis .pg-kpi-v{margin-top:0;font-size:17px;line-height:22px}
+  .pg-kpis .pg-kpi-v small{font-size:10.5px;margin-inline-start:3px}
+}
+@media (prefers-reduced-motion:reduce){
+  .pg-live .beat{animation:none}
+}
+/* @bina-page:end */
+</style>
+<style>
+.steps{display:flex;flex-direction:column;gap:6px;margin:6px 0 12px}
+.step{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--line);border-radius:10px;padding:9px 12px;background:var(--surface-2)}
+.step .t{font-weight:700;min-width:130px}
+.step .s{flex:1;font-size:12.5px;color:var(--muted);word-break:break-word}
+.step.running{border-color:var(--blue)}.step.failed{border-color:var(--red);background:var(--danger-soft)}
+.step.ok{border-inline-start:4px solid var(--accent)}.step.warn{border-inline-start:4px solid var(--amber)}
+.apps{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:6px;max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:10px}
+.apps label{display:flex;gap:6px;align-items:center;font-size:12.5px}
+.apps label.core{color:var(--muted)}
+.apps label.place{display:inline-flex;gap:4px;font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:8px;padding:1px 6px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:760px){.row2{grid-template-columns:1fr}}
+.ocard{border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:12px;background:var(--surface)}
+.ocard .top{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.ocard h4{margin:0;font-size:15px}
+/* THE OFFICE'S OWN COLOUR AND ANIMAL ON ITS CARD (flt-004). The mark's colour is a NAME the office
+   publishes (`mark.color`); the palette's own [data-office-hue="…"] rules above turn it into
+   --office-hue, and this paints the edge of the card that office is. Its animal is a glyph of the
+   shared set (stamped into app.js by G27), drawn beside the office's name. An office that published
+   nothing derives a pair from its name — never blank, and never the same colour as another office
+   (identity.py, 2026-10-11) — so there is no unmarked card here to explain away. */
+.ocard[data-office-hue]{border-inline-start:4px solid var(--office-hue)}
+.ocard h4 .office-animal{display:inline-flex;align-items:center;vertical-align:-3px;margin-inline-end:7px}
+.ocard h4 .office-animal svg{width:17px;height:17px;display:block}
+</style>
+</head>
+<body>
+<div class="pg">
+  <header class="pg-head">
+    <div>
+      <h1>לשכות מחוברות</h1>
+      <div class="pg-sub">שתי דרכים לחבר לשכה: <b>צימוד</b> — לשכה שכבר מותקנת מציגה קוד והשנייה קוראת אותו; או <b>התקנה</b> — על מחשב שמחובר באפליקציית מחשבים, מוצהרת ומופעלת מכאן.</div>
+    </div>
+    <div class="pg-actions">
+      <!-- The pairing screens (DGO-34). The joiner normally opens /connect on the machine being
+           joined, but the host has to be able to start it from here too — a screen reachable only
+           by typing its URL is a screen nobody uses. -->
+      <a class="btn sm" id="btnConnect" href="connect" title="פותח את מסך הצימוד: הצגת קוד, סריקה או הדבקה">צימוד לשכה</a>
+      <button class="btn ghost sm" id="btnRefresh" type="button" title="קריאה מחודשת של מצב הלשכות עכשיו"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7M21 4v4h-4"/></svg>רענון</button>
+      <button class="btn ghost sm" id="btnAdd" type="button" title="מצהיר על לשכה חדשה על מחשב שמחובר באפליקציית מחשבים">התקנת לשכה על מחשב</button>
+    </div>
+  </header>
+  <div id="alerts"></div>
+  <!-- WHO THIS OFFICE IS to another office: its name, its id, the fingerprint the other operator
+       compares, where its tunnel is dialed. All of it is this app's own record, so it is drawn even
+       on an office that cannot read its own machine. The version sits under it, when it is known. -->
+  <div class="card">
+    <h3><span>הלשכה הזאת</span>
+      <span class="cardacts">
+        <button class="btn ghost sm" id="btnRename" type="button" title="קובע את השם שבו הלשכה הזאת מופיעה בלשכות שמחוברות אליה">שינוי שם</button>
+        <button class="btn ghost sm hidden" id="btnGive" type="button" title="בוחר אילו אפליקציות של הלשכה הזאת רואות ופותחות הלשכות שמחוברות אליה">מה היא נותנת</button>
+      </span></h3>
+    <div id="self"><div class="small muted">טוען…</div></div>
+    <div id="home"></div>
+  </div>
+  <div class="card">
+    <h3><span>הלשכות</span></h3>
+    <div id="list"><div class="spin">טוען…</div></div>
+  </div>
+</div>
+
+<div class="modal-ov hidden" id="dlg">
+  <div class="modal wide">
+    <div class="modal-h"><h3 id="dlgTitle">לשכה חדשה</h3><span class="link" data-close>סגירה</span></div>
+    <div class="row2">
+      <div class="field"><label>מזהה (באנגלית)</label><input id="fId" class="mono" placeholder="vps1"></div>
+      <div class="field"><label>שם</label><input id="fLabel" placeholder="לשכת השרת"></div>
+    </div>
+    <div class="field"><label>מחשב</label><select id="fMachine"></select>
+      <div class="hint">מחשב חדש מוסיפים באפליקציית <a href="/a/computers/" target="_top">מחשבים</a>.</div></div>
+    <div class="row2">
+      <div class="field"><label>תיקיית ההתקנה במחשב</label><input id="fPath" class="mono" placeholder="/opt/digital-office/vps1"></div>
+      <div class="field"><label>&nbsp;</label><button class="btn ghost sm" id="btnInspect" type="button">בדיקה אם כבר מותקנת שם לשכה</button></div>
+    </div>
+    <div id="inspectOut" class="small"></div>
+    <div class="field"><label>דומיין הלשכה</label><input id="fDomain" class="mono" list="domList" placeholder="office2.example.co.il">
+      <datalist id="domList"></datalist>
+      <div class="hint">כל אפליקציה מקבלת &lt;שם&gt;.הדומיין (console., auth., …). צריך רשומת A (או *.) שמצביעה על המחשב — השלב "דומיין ו־DNS" בודק ואומר בדיוק מה חסר.</div></div>
+    <div class="row2">
+      <div class="field"><label>מאגר הקוד</label><input id="fRepo" class="mono"></div>
+      <div class="field"><label>חשבון git (לפי אפליקציית git)</label><select id="fAccount"></select></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>ענף</label><input id="fBranch" class="mono"></div>
+      <div class="field"><label>גרסה (commit)</label><input id="fCommit" class="mono">
+        <div class="hint"><span class="link" id="useHome">הגרסה של הלשכה הזו</span></div></div>
+    </div>
+    <div class="field"><label>אפליקציות בלשכה החדשה</label><div class="apps" id="fApps"></div>
+      <div class="hint">מה שלא מסומן — כבוי. בסיס הפלטפורמה תמיד פעיל. „מוצג כאן” = האפליקציה רצה
+        בלשכה הזו וממשיכה להופיע ולהיפתח בלשכה שאתה נמצא בה (היא תכובה שם).</div></div>
+    <div class="field"><label><input type="checkbox" id="fReplace"> להחליף את Docker אם מותקנת גרסה אחרת מ־28 (Docker 29 שובר את הניתוב)</label></div>
+    <div id="dlgErr"></div>
+    <div class="rowacts"><button class="btn" id="btnSave" type="button">שמירה</button>
+      <button class="btn ghost" id="btnSaveRun" type="button">שמירה והפעלה</button></div>
+  </div>
+</div>
+
+<div class="modal-ov hidden" id="renameDlg">
+  <div class="modal narrow">
+    <div class="modal-h"><h3>שם הלשכה הזאת</h3><span class="link" data-close>סגירה</span></div>
+    <div class="field"><label for="fName">השם שבו היא מופיעה בלשכות המחוברות</label>
+      <input id="fName" maxlength="60" autocomplete="off">
+      <div class="hint">מופיע בכרטיס הצימוד בלשכה השנייה, ובאריח של כל אפליקציה שהלשכה הזאת נותנת. לשכה שכבר מחוברת רואה את השם החדש בסנכרון הבא, בתוך כדקה.</div></div>
+    <div id="renameErr"></div>
+    <div class="rowacts"><button class="btn" id="btnRenameSave" type="button">שמירה</button>
+      <button class="btn ghost" data-close type="button">ביטול</button></div>
+  </div>
+</div>
+
+<!-- WHAT THIS OFFICE GIVES — the owner's rule: "choose give, take or both; and if give, which apps".
+     One declaration for the whole office (`serve:` is not per peer), so it is chosen on the office's
+     own card and every link in which the office gives follows it. -->
+<div class="modal-ov hidden" id="giveDlg">
+  <div class="modal">
+    <div class="modal-h"><h3>מה הלשכה הזאת נותנת</h3><span class="link" data-close>סגירה</span></div>
+    <div class="pg-note">לשכה שמחוברת בקישור שבו הלשכה הזאת נותנת רואה את האפליקציות האלה אצלה כאריחים, ופותחת אותן דרך המנהרה. ההצהרה אחת — לכל הלשכות המחוברות.</div>
+    <div class="field"><label for="giveMode">היקף</label>
+      <select id="giveMode">
+        <option value="all">כל האפליקציות — גם אלה שיותקנו בעתיד</option>
+        <option value="some">רק האפליקציות המסומנות</option>
+        <option value="none">לא לתת דבר</option>
+      </select>
+      <div class="hint" id="giveHint"></div></div>
+    <div class="field" id="giveAppsBox"><label>אפליקציות</label><div class="apps" id="giveApps"></div></div>
+    <div id="giveErr"></div>
+    <div class="rowacts"><button class="btn" id="btnGiveSave" type="button">שמירה</button>
+      <button class="btn ghost" data-close type="button">ביטול</button></div>
+  </div>
+</div>
+
+<div class="modal-ov hidden" id="runDlg">
+  <div class="modal wide">
+    <div class="modal-h"><h3 id="runTitle">הפעלה</h3><span class="link" data-close>סגירה</span></div>
+    <div class="steps" id="runSteps"></div>
+    <div id="runErr"></div>
+    <pre class="out" id="runLog"></pre>
+  </div>
+</div>
+<script src="static/app.js"></script>
+</body>
+</html>

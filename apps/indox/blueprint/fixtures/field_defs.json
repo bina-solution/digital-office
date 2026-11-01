@@ -1,0 +1,580 @@
+{
+ "INVOICE_ID": {
+  "query_after": {
+   "action": "find after",
+   "action_value": [
+    "חשבונית מס זיכוי מס':",
+    "חשבונית מס זיכוי",
+    "חשבונית מס מרוכזת מספר:",
+    "חשבונית מס מרכזת",
+    "חשבונית מס/קבלה מס':",
+    "חשבונית מס מספר:",
+    "חשבונית מס/קבלה",
+    "חשבונית מס / קבלה",
+    "חשבונית מס מספר",
+    "חשבונית מס מס':",
+    "חשבונית מס\"",
+    "חשבונית מס -",
+    "חשבונית מס :",
+    "חשבונית זיכוי",
+    "חשבונית מס'",
+    "חשבונית מס"
+   ],
+   "value_validations": [
+    {
+     "validation_type": "has_number"
+    },
+    {
+     "validation_type": "length_greater_than",
+     "validation_value": 3
+    },
+    {
+     "validation_type": "length_less_than",
+     "validation_value": 20
+    }
+   ],
+   "is_rtl": true
+  },
+  "query_below": {
+   "action": "find below",
+   "action_value": [
+    "חשבונית מס זיכוי מס':",
+    "חשבונית מס זיכוי",
+    "חשבונית מס מרוכזת מספר:",
+    "חשבונית מס מרכזת",
+    "חשבונית מס/קבלה מס':",
+    "חשבונית מס מספר:",
+    "חשבונית מס/קבלה",
+    "חשבונית מס / קבלה",
+    "חשבונית מס מספר",
+    "חשבונית מס מס':",
+    "חשבונית מס\"",
+    "חשבונית מס -",
+    "חשבונית מס :",
+    "חשבונית זיכוי",
+    "חשבונית מס'",
+    "חשבונית מס"
+   ],
+   "value_validations": [
+    {
+     "validation_type": "has_number"
+    },
+    {
+     "validation_type": "length_greater_than",
+     "validation_value": 3
+    },
+    {
+     "validation_type": "length_less_than",
+     "validation_value": 20
+    }
+   ],
+   "is_rtl": true
+  }
+ },
+ "DOC_DATE": {
+  "query_after": {
+   "action": "find after",
+   "action_value": [
+    "תאריך חשבונית",
+    "תאריך התעודה",
+    "תאריך אסמכתא",
+    "תאריך רישום",
+    "תאריך המסמך",
+    "תאריך מסמך",
+    "תאריך הפקת החשבון",
+    "תאריך הפקת המסמך",
+    "תאריך הפקת מסמך",
+    "תאריך הפקה",
+    "תאריך הזיכוי",
+    "תאריך זיכוי",
+    "תאריך חיוב",
+    "תאריך משלוח",
+    "ת.אסמכתא",
+    "ת.אסמכתה",
+    "ת.הנפקה",
+    "ת.רישום",
+    "ת.משלוח",
+    "ת.המסמך",
+    "ת.התעודה",
+    "תאריך",
+    "רישום"
+   ],
+   "value_validations": [
+    {
+     "validation_type": "has_number"
+    },
+    {
+     "validation_type": "length_greater_than",
+     "validation_value": 7
+    },
+    {
+     "validation_type": "length_less_than",
+     "validation_value": 11
+    }
+   ],
+   "is_rtl": true
+  },
+  "query_below": {
+   "action": "find below",
+   "action_value": [
+    "תאריך חשבונית",
+    "תאריך התעודה",
+    "תאריך אסמכתא",
+    "תאריך רישום",
+    "תאריך הדפסה",
+    "תאריך המסמך",
+    "תאריך מסמך",
+    "תאריך הפקת החשבון",
+    "תאריך הפקת המסמך",
+    "תאריך הפקת מסמך",
+    "תאריך הפקה",
+    "תאריך הזיכוי",
+    "תאריך זיכוי",
+    "תאריך חיוב",
+    "תאריך משלוח",
+    "ת.אסמכתא",
+    "ת.אסמכתה",
+    "ת.הנפקה",
+    "ת.רישום",
+    "ת.משלוח",
+    "ת.המסמך",
+    "ת.התעודה",
+    "תאריך",
+    "רישום"
+   ],
+   "value_validations": [
+    {
+     "validation_type": "has_number"
+    },
+    {
+     "validation_type": "length_greater_than",
+     "validation_value": 7
+    },
+    {
+     "validation_type": "length_less_than",
+     "validation_value": 11
+    }
+   ],
+   "is_rtl": true
+  }
+ },
+ "DOC_TOTAL_AMOUNT": {
+  "query_after": {
+   "action": "find after",
+   "action_value": [
+    ":סך הכל כולל מע\"מ",
+    "סך הכל כולל מע\"מ",
+    "סך הכל כולל מע״מ",
+    "סך הכל כולל מעיימ",
+    ":סך הכל לתשלום בשקל",
+    "סך הכל לתשלום בשקל",
+    ":סה\"כ לתשלום בשקל",
+    "סה\"כ לתשלום בשקל",
+    "סה״כ לתשלום בשקל",
+    "סהייכ לתשלום בשקל",
+    ":סך הכל לתשלום בש\"ח",
+    "סך הכל לתשלום בש\"ח",
+    "סך הכל לתשלום בש״ח",
+    "סך הכל לתשלום בשייח",
+    ":סה\"כ לתשלום בש\"ח",
+    "סה\"כ לתשלום בש\"ח",
+    "סה״כ לתשלום בש\"ח",
+    "סהייכ לתשלום בש\"ח",
+    "סה\"כ לתשלום בש״ח",
+    "סה״כ לתשלום בש״ח",
+    "סהייכ לתשלום בש״ח",
+    "סה\"כ לתשלום בשייח",
+    "סה״כ לתשלום בשייח",
+    "סהייכ לתשלום בשייח",
+    ":סה\"כ כולל מע\"מ",
+    "סה\"כ כולל מע\"מ",
+    "סה״כ כולל מע\"מ",
+    "סהייכ כולל מע\"מ",
+    "סה\"כ כולל מע״מ",
+    "סה״כ כולל מע״מ",
+    "סהייכ כולל מע״מ",
+    "סה\"כ כולל מעיימ",
+    "סה״כ כולל מעיימ",
+    "סהייכ כולל מעיימ",
+    ":סה\"כ חשבונית מס",
+    "סה\"כ חשבונית מס",
+    "סה״כ חשבונית מס",
+    "סהייכ חשבונית מס",
+    ":סך הכל לתשלום",
+    "סך הכל לתשלום",
+    ":סה\"כ לתשלום",
+    "סה\"כ לתשלום",
+    "סה״כ לתשלום",
+    "סהייכ לתשלום",
+    ":סכום לתשלום",
+    "סכום לתשלום",
+    ":סך לתשלום",
+    "סך לתשלום",
+    ":סה\"כ מחיר",
+    "סה\"כ מחיר",
+    "סה״כ מחיר",
+    "סהייכ מחיר",
+    ":סה\"כ כללי",
+    "סה\"כ כללי",
+    "סה״כ כללי",
+    "סהייכ כללי",
+    ":לתשלום",
+    "לתשלום",
+    ":סה\"כ",
+    "סה\"כ",
+    "סה״כ",
+    "סהייכ"
+   ],
+   "value_validations": [
+    {
+     "validation_type": "has_number"
+    },
+    {
+     "validation_type": "length_greater_than",
+     "validation_value": 1
+    },
+    {
+     "validation_type": "length_less_than",
+     "validation_value": 13
+    }
+   ],
+   "is_rtl": true
+  },
+  "query_below": {
+   "action": "find below",
+   "action_value": [
+    ":סך הכל כולל מע\"מ",
+    "סך הכל כולל מע\"מ",
+    "סך הכל כולל מע״מ",
+    "סך הכל כולל מעיימ",
+    ":סך הכל לתשלום בשקל",
+    "סך הכל לתשלום בשקל",
+    ":סה\"כ לתשלום בשקל",
+    "סה\"כ לתשלום בשקל",
+    "סה״כ לתשלום בשקל",
+    "סהייכ לתשלום בשקל",
+    ":סך הכל לתשלום בש\"ח",
+    "סך הכל לתשלום בש\"ח",
+    "סך הכל לתשלום בש״ח",
+    "סך הכל לתשלום בשייח",
+    ":סה\"כ לתשלום בש\"ח",
+    "סה\"כ לתשלום בש\"ח",
+    "סה״כ לתשלום בש\"ח",
+    "סהייכ לתשלום בש\"ח",
+    "סה\"כ לתשלום בש״ח",
+    "סה״כ לתשלום בש״ח",
+    "סהייכ לתשלום בש״ח",
+    "סה\"כ לתשלום בשייח",
+    "סה״כ לתשלום בשייח",
+    "סהייכ לתשלום בשייח",
+    ":סה\"כ כולל מע\"מ",
+    "סה\"כ כולל מע\"מ",
+    "סה״כ כולל מע\"מ",
+    "סהייכ כולל מע\"מ",
+    "סה\"כ כולל מע״מ",
+    "סה״כ כולל מע״מ",
+    "סהייכ כולל מע״מ",
+    "סה\"כ כולל מעיימ",
+    "סה״כ כולל מעיימ",
+    "סהייכ כולל מעיימ",
+    ":סה\"כ חשבונית מס",
+    "סה\"כ חשבונית מס",
+    "סה״כ חשבונית מס",
+    "סהייכ חשבונית מס",
+    ":סך הכל לתשלום",
+    "סך הכל לתשלום",
+    ":סה\"כ לתשלום",
+    "סה\"כ לתשלום",
+    "סה״כ לתשלום",
+    "סהייכ לתשלום",
+    ":סכום לתשלום",
+    "סכום לתשלום",
+    ":סך לתשלום",
+    "סך לתשלום",
+    ":סה\"כ מחיר",
+    "סה\"כ מחיר",
+    "סה״כ מחיר",
+    "סהייכ מחיר",
+    ":סה\"כ כללי",
+    "סה\"כ כללי",
+    "סה״כ כללי",
+    "סהייכ כללי",
+    ":לתשלום",
+    "לתשלום",
+    ":סה\"כ",
+    "סה\"כ",
+    "סה״כ",
+    "סהייכ"
+   ],
+   "value_validations": [
+    {
+     "validation_type": "has_number"
+    },
+    {
+     "validation_type": "length_greater_than",
+     "validation_value": 1
+    },
+    {
+     "validation_type": "length_less_than",
+     "validation_value": 13
+    }
+   ],
+   "is_rtl": true
+  }
+ },
+ "PURCHASE_ID": {
+  "query_after": {
+   "action": "find after",
+   "action_value": [
+    "מס' אצל לקוח",
+    "מס' הזמנת לקוח:",
+    "מס הזמנת לקוח",
+    "הזמנת לקוח:",
+    ":הזמ' מקור",
+    "הזמנת רכש מספר",
+    "הזמנת רכש מס",
+    "מס הזמנת רכש",
+    "ע\"ס הזמנות",
+    "---- מס' הזמנה",
+    "מס' הזמנה",
+    "הזמנת רכש",
+    "הזמנתכם",
+    "מהזמנה",
+    "הזמנה"
+   ],
+   "value_validations": [
+    {
+     "validation_type": "has_number"
+    },
+    {
+     "validation_type": "length_greater_than",
+     "validation_value": 3
+    },
+    {
+     "validation_type": "length_less_than",
+     "validation_value": 20
+    }
+   ],
+   "is_rtl": true
+  },
+  "query_below": {
+   "action": "find below",
+   "action_value": [
+    "מס הזמנת רכש",
+    "מס' הזמנה",
+    "הזמנת רכש",
+    "הזמנתכם"
+   ],
+   "value_validations": [
+    {
+     "validation_type": "has_number"
+    },
+    {
+     "validation_type": "length_greater_than",
+     "validation_value": 3
+    },
+    {
+     "validation_type": "length_less_than",
+     "validation_value": 20
+    }
+   ],
+   "is_rtl": true
+  }
+ },
+ "SHIPMENT_DOC_ID": {
+  "query_after": {
+   "shipping_id_query": {
+    "action": "find after",
+    "action_value": [
+     "מספר תעודה בפנקס:",
+     "תעודת החזרה מלקוח מספר",
+     "משלוח אריזות מספר",
+     "תעודת משלוח מספר",
+     "משלוח מספר",
+     "תעודת משלוח מס':",
+     "תעודת משלוח מס'",
+     "מס' תמ\"ש",
+     "משלוח מספר",
+     "משלוח מס' :",
+     "תעודת משלוח מס'",
+     "תעודות משלוח",
+     "תעודת משלוח",
+     "תעודת משלוח מס",
+     "ת.משלוח מס.",
+     "ת.משלוח מס",
+     "תעודת משלוח",
+     "מספר משלוח",
+     "משלוח מס'",
+     "תע' משלוח",
+     "ת.משלוח",
+     "ת משלוח",
+     "מס משלוח",
+     "מס תעודה",
+     "מספר תעודה",
+     "סהכ תעודה",
+     "תעודה מס",
+     "תעודה:"
+    ],
+    "value_validations": [
+     {
+      "validation_type": "has_number"
+     },
+     {
+      "validation_type": "length_greater_than",
+      "validation_value": 1
+     },
+     {
+      "validation_type": "length_less_than",
+      "validation_value": 20
+     }
+    ],
+    "is_rtl": true
+   },
+   "match_index": -1
+  },
+  "query_below": {
+   "action": "find below",
+   "action_value": [
+    "תעודת משלוח מספר",
+    "משלוח מספר",
+    "תעודת משלוח מס':",
+    "תעודת משלוח מס'",
+    "משלוח מספר    ",
+    "משלוח מס' :    ",
+    "תעודת משלוח מס'",
+    "תעודת משלוח",
+    "תעודת משלוח מס",
+    "תעודת משלוח",
+    "מספר משלוח",
+    "משלוח מס'",
+    "ת.משלוח",
+    "ת משלוח",
+    "משלוח",
+    "תעודה",
+    "ת.מ"
+   ],
+   "value_validations": [
+    {
+     "validation_type": "has_number"
+    },
+    {
+     "validation_type": "length_greater_than",
+     "validation_value": 3
+    },
+    {
+     "validation_type": "length_less_than",
+     "validation_value": 20
+    }
+   ],
+   "is_rtl": true
+  },
+  "query_after_dynamic": {
+   "appends_validation": {
+    "validation_type": "not_ends_with",
+    "validation_value": "last5(DOC_ID)"
+   },
+   "condition": "DOC_ID not in [null, undefined, '', 'unkown']"
+  }
+ },
+ "ORDER_DOC_ID": {
+  "query_after": {
+   "action": "find after",
+   "action_value": [
+    "מס' אצל לקוח",
+    "מס' הזמנת לקוח:",
+    "מס הזמנת לקוח",
+    "הזמנת לקוח:",
+    ":הזמ' מקור",
+    "הזמנת רכש מספר",
+    "הזמנת רכש מס",
+    "מס הזמנת רכש",
+    "ע\"ס הזמנות",
+    "---- מס' הזמנה",
+    "מס' הזמנה",
+    "הזמנת רכש",
+    "הזמנתכם",
+    "מהזמנה",
+    "הזמנה"
+   ],
+   "value_validations": [
+    {
+     "validation_type": "has_number"
+    },
+    {
+     "validation_type": "length_greater_than",
+     "validation_value": 3
+    },
+    {
+     "validation_type": "length_less_than",
+     "validation_value": 20
+    }
+   ],
+   "is_rtl": true
+  },
+  "query_below": {
+   "action": "find below",
+   "action_value": [
+    "מס הזמנת רכש",
+    "מס' הזמנה",
+    "הזמנת רכש",
+    "הזמנתכם"
+   ],
+   "value_validations": [
+    {
+     "validation_type": "has_number"
+    },
+    {
+     "validation_type": "length_greater_than",
+     "validation_value": 3
+    },
+    {
+     "validation_type": "length_less_than",
+     "validation_value": 20
+    }
+   ],
+   "is_rtl": true
+  }
+ },
+ "RECEIPT_ID": {
+  "query_after": {
+   "action": "find after",
+   "action_value": [
+    "קבלה מספר:",
+    "קבלה מס'",
+    "קבלה מספר",
+    "אישור תשלום מספר"
+   ],
+   "value_validations": [
+    {
+     "validation_type": "has_number"
+    },
+    {
+     "validation_type": "length_greater_than",
+     "validation_value": 2
+    },
+    {
+     "validation_type": "length_less_than",
+     "validation_value": 20
+    }
+   ],
+   "is_rtl": true
+  }
+ },
+ "PAYMENT_METHOD": {
+  "query_after": {
+   "action": "find after",
+   "action_value": [
+    "אמצעי תשלום",
+    "שולם ב",
+    "סוג תשלום"
+   ],
+   "value_validations": [
+    {
+     "validation_type": "length_greater_than",
+     "validation_value": 1
+    }
+   ],
+   "is_rtl": true
+  }
+ }
+}

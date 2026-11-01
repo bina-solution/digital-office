@@ -1,0 +1,73 @@
+[
+  {
+    "name": "ocr-numbers-below",
+    "source_file": "fixtures/simple-numbers.png",
+    "ocr_json_query": {
+      "action": "find below",
+      "action_value": "12345",
+      "is_rtl": false,
+      "tolerances": {
+        "max_vertical_gap": 200,
+        "max_horizontal_offset": 200,
+        "max_rotation_delta": 5
+      },
+      "value_validations": [
+        {
+          "validation_type": "has_number"
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": "67890",
+      "text_match_equals": "12345"
+    }
+  },
+  {
+    "name": "ocr-invoice-number",
+    "source_file": "fixtures/invoice-en.png",
+    "ocr_json_query": {
+      "action": "find below",
+      "action_value": "Invoice",
+      "is_rtl": false,
+      "tolerances": {
+        "max_vertical_gap": 150,
+        "max_horizontal_offset": 200,
+        "max_rotation_delta": 5
+      },
+      "value_validations": [
+        {
+          "validation_type": "length_greater_than",
+          "validation_value": 3
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": {"value": "INV-2024-0042", "max_distance": 3, "strip": true},
+      "text_match_equals": {"value": "Invoice", "max_distance": 1, "strip": true}
+    }
+  },
+  {
+    "name": "ocr-customer-id",
+    "source_file": "fixtures/invoice-en.png",
+    "ocr_json_query": {
+      "action": "find below",
+      "action_value": "Customer",
+      "is_rtl": false,
+      "tolerances": {
+        "max_vertical_gap": 150,
+        "max_horizontal_offset": 200,
+        "max_rotation_delta": 5
+      },
+      "value_validations": [
+        {
+          "validation_type": "length_greater_than",
+          "validation_value": 3
+        }
+      ]
+    },
+    "expected": {
+      "result_value_equals": {"value": "CUST-98765", "max_distance": 3, "strip": true},
+      "text_match_equals": {"value": "Customer", "max_distance": 1, "strip": true}
+    }
+  }
+]
