@@ -689,10 +689,19 @@
    font — the shortest tag that still names an office — and it leaves the label 107px, its full
    width. The percentage half keeps a WIDE rail from giving the office an unbounded share; `flex:0 8`
    then resolves what is left in the label's favour. `.is-remote` and not every meta on purpose: a
-   count has no office to name, and its fixed slot is what makes a column of them line up. */
+   count has no office to name, and its fixed slot is what makes a column of them line up.
+
+   …and it reads the way its WORDS do. An office's name is a Latin one («claude-cloud»), and in the
+   row's right-to-left direction this box cut it on the side it starts: «…laude-cloud» was drawn on
+   six screens of the live office (2026-11-02 — drive, mail, concurrency, alerts, connections, apps),
+   the same row every time. `direction:ltr` puts the cut on the name's own end, and `plaintext` takes
+   the box's direction from its first strong character, so an office named in Hebrew keeps its
+   beginning too. The `5em` cap stays as measured: it is what leaves the app's name its full width,
+   and a name cut at its END is what the row's tooltip (`remoteTip`) is for. */
 .bnv-item.is-remote .bnv-meta{
   flex:0 8 auto;min-width:0;max-inline-size:min(40%,5em);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  direction:ltr;unicode-bidi:plaintext;
 }
 /* trailing slot: a badge, a dot, a chevron. `nowrap` so it can never wrap into a second line. */
 .bnv-tail{flex:none;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;color:var(--bnv-ink-2);font-size:12px}
@@ -808,6 +817,19 @@
 .bnv-burger:hover{background:color-mix(in srgb, currentColor 8%, transparent)}
 .bnv-burger:focus-visible{outline:2px solid currentColor;outline-offset:-2px}
 .bnv-burger svg{width:20px;height:20px}
+/* The burger the BASE draws for a page that placed none (the script adds `html.bnv-float` once it
+   has): the same 44/48px target, parked in the corner a phone leaves free and ABOVE the scrim, so
+   the one button both opens the menu and shuts it. Its own test is the window and not a container —
+   the button lives on `body`, outside the menu's container, and a container query cannot see it.
+   Measured 2026-10-12: without this, `sites`, `domains` and `drive` had no way into their menu on a
+   phone at all. */
+.bnv-burger.is-float{
+  display:none;position:fixed;z-index:56;
+  inset-block-end:calc(12px + env(safe-area-inset-bottom, 0px));inset-inline-start:12px;
+  width:48px;height:48px;border-radius:50%;
+  background:var(--surface);color:var(--ink);border:1px solid var(--line);box-shadow:var(--elev-2);
+}
+@media (max-width:599px){ html.bnv-float .bnv-burger.is-float{display:inline-flex} }
 .bnv-scrim{
   position:fixed;inset:0;z-index:55;border:0;padding:0;
   background:var(--scrim);   /* the palette's own: mixed from the menu's ink it was a WHITE veil wherever that ink is light */
@@ -1420,6 +1442,33 @@ var BinaNav = (function () {
       root.appendChild(foot);
     }
 
+    // 4b. THE FRAME AND THE WAY IN, owned here too — an adopter can no longer lose its menu.
+    //   · The size classes are CONTAINER queries (`.bnv-host` + `.appgrid`), and an app that
+    //     declares neither gets the desktop menu in every frame. Measured on the live office,
+    //     2026-10-12: `sites` and `domains` drew a 56px rail **127px tall** with the rest of the
+    //     menu nowhere, and `drive` parked its drawer off-canvas at x=404 of a 390px phone — three
+    //     apps whose navigation a phone could not reach at all. So the menu marks the element it was
+    //     given as the container, which is exactly what its own sizes answer.
+    //   · A page that placed no `[data-nav-toggle]` gets one from here: a 48px button in the corner
+    //     a phone leaves free, shown only in the compact frame (`html.bnv-float` + the stylesheet).
+    function ownFrame() {
+      // A frame that cannot be asked is not a frame to fail in: every step is guarded, and losing
+      // the fallback button is the most a limited host can cost.
+      try {
+        var parent = root.parentElement;
+        if (parent && parent.classList && typeof parent.closest === "function" && !parent.closest(".bnv-host")) {
+          parent.classList.add("bnv-host");
+        }
+        if (typeof document.querySelector !== "function") return;
+        if (document.querySelector("[data-nav-toggle]")) return;
+        var b = el("button", "bnv-burger is-float");
+        b.type = "button";
+        b.setAttribute("data-nav-toggle", "menu");
+        (document.body || document.documentElement).appendChild(b);
+        if (document.documentElement && document.documentElement.classList) document.documentElement.classList.add("bnv-float");
+      } catch (e) { /* the menu still draws: the button is the only thing that can be missing */ }
+    }
+
     // 5. the drawer: a scrim, the toggles, Escape — all owned here, none of it in the app
     var scrim = null;
     function ensureScrim() {
@@ -1454,6 +1503,9 @@ var BinaNav = (function () {
         }
       });
     }
+
+    ownFrame();
+    bindToggles();
 
     var api = {
       el: root,
@@ -1644,13 +1696,75 @@ var BinaNav = (function () {
     if (!root) return null;
     opts = opts || {};
     root.classList.add("bnv");
+    root.setAttribute("data-bnv-mounted", "1");
     if (typeof opts.sections === "string") return mountSections(root, opts);
     // the flat list an app passes when it has routes and nothing else: `{items, onPick}`
     if (!opts.sections && opts.items) opts = { id: opts.id, items: null, sections: [{ items: opts.items }], onPick: opts.onPick, rail: opts.rail, collapse: false, labels: opts.labels };
     return build(root, opts);
   }
 
-  return { mount: mount, svg: svg, icons: ICONS, labels: LABELS, navs: NAVS, forId: function (id) { return NAVS[id] || null; } };
+  // ── a menu nobody mounted is still this component's menu ────────────────────────────────────────
+  // WHAT WAS WRONG. Eight screens (sites, domains, drive, git, digital-assets, social-list,
+  // telegram-tv, …) carry the menu's MARKUP — rows they wrote themselves — and copied only the CSS
+  // block, never this script. So they had the component's looks and none of its behaviour: no
+  // container, no rail geometry at the sizes it declares, no drawer, and no button to open it. On a
+  // phone that is a 56px rail 127px tall and a menu that cannot be reached (measured on the live
+  // office 2026-10-12, from the owner's screenshot: «חייב פיתרון אחיד לניווט צד שמתפקד אותו דבר בכל
+  // האפלקציות»). The answer is not eight fixes: the script ADOPTS any `.bnv` on the page that was
+  // not mounted, gives it the container its sizes answer and the way in it lacks — one mechanism,
+  // the same in every app.
+  function adoptStatic(doc) {
+    var menus = doc.querySelectorAll(".bnv:not([data-bnv-mounted])");
+    for (var i = 0; i < menus.length; i++) {
+      var menu = menus[i];
+      try {
+        var parent = menu.parentElement;
+        if (parent && parent.classList && typeof parent.closest === "function" && !parent.closest(".bnv-host")) {
+          parent.classList.add("bnv-host");
+        }
+        // the drawer's own furniture, since no `build()` ran for this menu: a scrim, Escape, and a
+        // button — and picking a row shuts it, like every mounted menu does
+        var scrim = doc.querySelector(".bnv-scrim");
+        if (!scrim) {
+          scrim = el("button", "bnv-scrim");
+          scrim.type = "button";
+          scrim.setAttribute("aria-label", LABELS.close);
+          (doc.body || doc.documentElement).appendChild(scrim);
+        }
+        var shut = function () { menu.classList.remove("is-open"); scrim.classList.remove("is-open"); };
+        scrim.addEventListener("click", shut);
+        menu.addEventListener("click", function (ev) {
+          var row = ev.target && ev.target.closest && ev.target.closest(".bnv-item");
+          if (row) shut();
+        });
+        doc.addEventListener("keydown", function (ev) { if (ev.key === "Escape") shut(); });
+        menu.setAttribute("data-bnv-mounted", "static");
+        // …and the way in: the component's own 48px button, exactly as a page that placed none
+        if (typeof doc.querySelector === "function" && !doc.querySelector("[data-nav-toggle]")) {
+          var b = el("button", "bnv-burger is-float");
+          b.type = "button";
+          b.setAttribute("data-nav-toggle", "menu");
+          b.setAttribute("aria-label", LABELS.open);
+          b.innerHTML = svg("menu");
+          b.addEventListener("click", function () {
+            var open = !menu.classList.contains("is-open");
+            menu.classList.toggle("is-open", open);
+            scrim.classList.toggle("is-open", open);
+            b.setAttribute("aria-expanded", String(open));
+          });
+          (doc.body || doc.documentElement).appendChild(b);
+          if (doc.documentElement && doc.documentElement.classList) doc.documentElement.classList.add("bnv-float");
+        }
+      } catch (e) { /* one menu that cannot be adopted is not the other menus' problem */ }
+    }
+  }
+  if (typeof document !== "undefined" && typeof document.querySelectorAll === "function") {
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", function () { adoptStatic(document); });
+    else adoptStatic(document);
+  }
+
+  return { mount: mount, svg: svg, icons: ICONS, labels: LABELS, navs: NAVS, adopt: adoptStatic,
+           forId: function (id) { return NAVS[id] || null; } };
 })();
 /* @bina-nav-js:end */
 </script>

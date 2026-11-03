@@ -1,0 +1,552 @@
+<!-- apps/meet: right-to-left for a right-to-left language. Jitsi sets no `dir`, so in Hebrew the text
+     read right-to-left inside a left-to-right page. This is its own include point (index.html, after
+     config.js), so the image is untouched. The language is the one Jitsi itself settled on: on every
+     start (and on every change in its settings) it writes that decision to localStorage "language",
+     after weighing ?lang=, the person's earlier pick and config.defaultLanguage, and refusing a
+     language it has no catalogue for. Before it has, ?lang= and the default are the best guess. -->
+<script>
+(function () {
+    var RTL = ['he', 'ar', 'fa', 'ur', 'yi', 'ps', 'ckb'];
+    var openedWith = new URLSearchParams(location.search).get('lang');
+    function language() {
+        var settled = null;
+        try { settled = localStorage.getItem('language'); } catch (e) { /* storage blocked */ }
+        return settled || openedWith || (window.config && window.config.defaultLanguage) || 'he';
+    }
+    function apply() {
+        var lang = language();
+        var dir = RTL.indexOf(lang.split('-')[0].toLowerCase()) >= 0 ? 'rtl' : 'ltr';
+        var html = document.documentElement;
+        if (html.getAttribute('dir') !== dir) { html.setAttribute('dir', dir); }
+        if (html.getAttribute('lang') !== lang) { html.setAttribute('lang', lang); }
+    }
+    apply();
+    window.addEventListener('storage', apply);
+    // The language picker writes localStorage in this same tab, which raises no `storage` event.
+    setInterval(apply, 1500);
+})();
+
+// The welcome card's two links (welcomePageAdditionalCard.html) lead to the host's door, which is
+// Jitsi's own tokenAuthUrl without its "r/{room}": one address, said once, in the office's config.
+(function () {
+    function door() {
+        var url = window.config && window.config.tokenAuthUrl;
+        return url && /r\/\{room\}/.test(url) ? url.replace(/r\/\{room\}.*$/, '') : null;
+    }
+    var ticks = 0;
+    var timer = setInterval(function () {
+        var base = door();
+        var links = document.querySelectorAll('a[data-meet-door]:not([href])');
+        for (var i = 0; base && i < links.length; i++) {
+            links[i].href = base + links[i].getAttribute('data-meet-door');
+        }
+        // the card is drawn once, on the welcome page; any other page has none to wait for
+        if ((base && links.length) || ++ticks > 60) { clearInterval(timer); }
+    }, 500);
+})();
+// Recording by default is the server's (prosody/mod_meet_auto_record.lua, DGO-831): the phone apps
+// run no page script, so a page cannot be what records a meeting.
+
+// THE MICROPHONE BANNER (fireplace, 2026-10-26: the host joined from a Mac Chrome that had never been
+// allowed the microphone — the permission was "prompt" — so Jitsi made no audio track, showed an
+// ordinary crossed microphone, the bridge got 0 kbps for the whole call and the recording is silent).
+// Once joined, if the page has no local audio track, a red banner says so, with the fix for the
+// state the browser reports (navigator.permissions: denied / prompt / granted-but-no-device), and a
+// button that asks the browser again. Once per state: it goes when a track appears, and comes back
+// only if the state changes again. Never on the recorder's own page (iAmRecorder), which is what
+// the recording shows. The server says the same to the phone apps and to the others in the room
+// (prosody/mod_meet_silent_mic.lua).
+(function () {
+    function recorder() {
+        try { return !!(window.config && window.config.iAmRecorder) || /iAmRecorder=true/.test(location.hash); } catch (e) { return false; }
+    }
+    var permission = 'unknown';
+    function watchPermission() {
+        try {
+            if (!navigator.permissions || !navigator.permissions.query) { return; }
+            navigator.permissions.query({ name: 'microphone' }).then(function (p) {
+                permission = p.state;
+                p.onchange = function () { permission = p.state; tick(); };
+            }).catch(function () { /* a browser that does not name this permission */ });
+        } catch (e) { /* same */ }
+    }
+    function localAudioTrack() {
+        try {
+            var tracks = APP.store.getState()['features/base/tracks'] || [];
+            for (var i = 0; i < tracks.length; i++) {
+                if (tracks[i].local && tracks[i].mediaType === 'audio') { return tracks[i]; }
+            }
+        } catch (e) { /* the store is not there yet */ }
+        return null;
+    }
+    var TEXT = {
+        denied: {
+            he: 'הקול שלך לא מגיע לפגישה — הדפדפן חוסם את המיקרופון. לחצו על סמל המנעול בשורת הכתובת ← מיקרופון ← אפשר, ואז רעננו את העמוד.',
+            en: 'Your voice is not reaching the meeting — the browser blocks the microphone. Click the lock icon in the address bar → Microphone → Allow, then reload.'
+        },
+        prompt: {
+            he: 'הקול שלך לא מגיע לפגישה — הדפדפן עדיין לא קיבל אישור למיקרופון. לחצו «הפעל מיקרופון» ואשרו בחלון שייפתח; אם לא נפתח חלון: סמל המנעול בשורת הכתובת ← מיקרופון ← אפשר, ואז רעננו.',
+            en: 'Your voice is not reaching the meeting — the browser has not been allowed the microphone yet. Click "Enable microphone" and allow it in the browser\'s prompt; if none opens: lock icon → Microphone → Allow, then reload.'
+        },
+        notrack: {
+            he: 'הקול שלך לא מגיע לפגישה — אין מסלול שמע מהמיקרופון (אין מכשיר שמע, או שהוא תפוס). לחצו «הפעל מיקרופון», או בחרו מיקרופון אחר בהגדרות ← התקנים.',
+            en: 'Your voice is not reaching the meeting — there is no audio track from the microphone (no audio device, or another app holds it). Click "Enable microphone", or pick another microphone in Settings → Devices.'
+        }
+    };
+    var ICON = '<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="3" y1="3" x2="21" y2="21"/></svg>';
+    var banner = null, shown = null, joinedAt = 0;
+    function hide() {
+        if (banner) { banner.remove(); banner = null; }
+    }
+    function show(kind) {
+        hide();
+        var t = TEXT[kind];
+        banner = document.createElement('div');
+        banner.id = 'meet-mic-banner';
+        banner.setAttribute('data-state', kind);
+        banner.setAttribute('role', 'alert');
+        var icon = document.createElement('div');
+        icon.className = 'meet-mic-icon';
+        icon.innerHTML = ICON;
+        var text = document.createElement('div');
+        text.className = 'meet-mic-text';
+        var he = document.createElement('div'); he.dir = 'rtl'; he.textContent = t.he;
+        var en = document.createElement('div'); en.dir = 'ltr'; en.className = 'meet-mic-en'; en.textContent = t.en;
+        text.appendChild(he); text.appendChild(en);
+        var actions = document.createElement('div');
+        actions.className = 'meet-mic-actions';
+        var enable = document.createElement('button');
+        enable.type = 'button'; enable.textContent = 'הפעל מיקרופון · Enable microphone';
+        enable.onclick = function () {
+            try { APP.conference.muteAudio(false); } catch (e) { /* Jitsi shows its own error */ }
+        };
+        var close = document.createElement('button');
+        close.type = 'button'; close.className = 'meet-mic-close'; close.setAttribute('aria-label', 'סגור · Close'); close.textContent = '✕';
+        close.onclick = hide;
+        actions.appendChild(enable); actions.appendChild(close);
+        banner.appendChild(icon); banner.appendChild(text); banner.appendChild(actions);
+        document.body.appendChild(banner);
+    }
+    function tick() {
+        if (recorder()) { return; }
+        var joined = false;
+        try { joined = !!(window.APP && APP.conference && APP.conference.isJoined()); } catch (e) { joined = false; }
+        if (!joined) { joinedAt = 0; if (shown !== null) { shown = null; hide(); } return; }
+        if (!joinedAt) { joinedAt = Date.now(); }
+        if (Date.now() - joinedAt < 3000) { return; }     // a normal join adds its tracks within a second
+        var kind = localAudioTrack() ? 'ok' : (permission === 'denied' ? 'denied' : permission === 'prompt' ? 'prompt' : 'notrack');
+        if (kind === shown) { return; }
+        shown = kind;
+        if (kind === 'ok') { hide(); } else { show(kind); }
+    }
+    watchPermission();
+    setInterval(tick, 2000);
+})();
+
+// LIVE CAPTIONS (jibri/watch.py, MEET_LIVE_CAPTIONS): the server posts each transcribed 30-s stretch
+// as a quiet chat line from «כתוביות» (no pop-up, no sound: it carries a delay stamp). The chat keeps
+// the running transcript; this shows the newest line over the video for a while, for whoever has
+// the chat closed. Not on the recorder's page: a wrong word must not be burned into the recording.
+(function () {
+    function recorder() {
+        try { return !!(window.config && window.config.iAmRecorder) || /iAmRecorder=true/.test(location.hash); } catch (e) { return false; }
+    }
+    var box = null, timer = null;
+    function caption(text) {
+        if (!box) {
+            box = document.createElement('div');
+            box.id = 'meet-captions';
+            box.setAttribute('role', 'status');
+            box.setAttribute('aria-live', 'polite');
+            document.body.appendChild(box);
+        }
+        box.dir = /[\u0590-\u05FF]/.test(text) ? 'rtl' : 'ltr';
+        // the stamp stays: the line is the office's own transcriber, ~1 minute behind the meeting, and the stamp
+        // (meeting time) beside Jitsi's own clock says how far behind
+        box.textContent = text;
+        box.style.display = 'block';
+        clearTimeout(timer);
+        timer = setTimeout(function () { if (box) { box.style.display = 'none'; } }, 25000);
+    }
+    function attach() {
+        if (recorder()) { return; }
+        var room = null;
+        try { room = window.APP && APP.conference && APP.conference._room; } catch (e) { room = null; }
+        if (!room || room.__meetCaptions || typeof room.on !== 'function') { return; }
+        room.__meetCaptions = true;
+        var event = (window.JitsiMeetJS && JitsiMeetJS.events && JitsiMeetJS.events.conference && JitsiMeetJS.events.conference.MESSAGE_RECEIVED) || 'conference.messageReceived';
+        room.on(event, function (id, text, ts, nick, isGuest, messageId, displayName) {
+            if ((nick === 'כתוביות' || displayName === 'כתוביות') && typeof text === 'string') { caption(text); }
+        });
+    }
+    setInterval(attach, 2000);
+})();
+// LIVE CAPTIONS FROM EACH PERSON'S OWN BROWSER (fireplace, 2026-10-27: the owner, after fpg103/fpg104
+// came out of a starved recorder with a third of their words gone, wanted to SEE the words being taken
+// during the meeting; and on this 2-core box «להגדיל זה לא אופציה»). The server cannot transcribe live
+// beside the recorder on two cores (measured: 126 s behind, issues/meet-live-captions-trail-the-
+// meeting-by-two-minutes-on-two-cores.yaml), so each person's browser does it for that person's own
+// voice, with the Web Speech API fed the very microphone track Jitsi sends: echo-cancelled (the others
+// coming out of the speakers are not taken as this person) and silent when muted. Measured on Chrome
+// 155 with 12 FLEURS Hebrew sentences: words on screen ~0.5 s after they are said, 87 % of them right
+// (the office's ivrit model on the same sentences: 90 %), and no server CPU at all.
+// The text goes to the room as a JSON message: every page shows it over the video with the speaker's
+// name, and prosody writes it down as it comes (prosody/mod_meet_captions.lua), so every meeting has
+// a transcript — with no recording, or a broken one. The transcript of record stays the recording's
+// (ivrit, after the meeting); this one is the live view and the safety net.
+// Not on the recorder's page (a wrong word must not be burned into the video). Not started on a phone:
+// mobile Chrome hands recognition to the phone's recognizer, which takes the microphone from the call;
+// the phone apps run no page script anyway. The chip says who is not in the captions, so nobody
+// counts on words that are not being taken.
+// PRIVACY: Chrome's recognizer is Google's speech service (Edge: Microsoft's, Safari: Apple's); while a
+// person's captions run, their voice goes there. Chrome 155 has no on-device Hebrew model
+// (SpeechRecognition.available({processLocally: true}) → "unavailable"). config.dgoCaptions.mode = 'off'
+// (custom-config.js) turns it off for the office; the chip turns it off for one person.
+(function () {
+    var cfg = (window.config && window.config.dgoCaptions) || {};
+    if (cfg.mode === 'off') { return; }
+    var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    var phone = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
+    // The track itself as the input came with SpeechRecognition.available (Chrome 139); before it,
+    // start() opens the default microphone, without the call's echo cancelling.
+    var trackInput = !!SR && typeof SR.available === 'function';
+    var TAIL = 150;          // characters of a long sentence shown on screen
+    var LINES = 3;           // speakers on screen at once
+    var LINGER = 7000;       // ms a settled line stays
+    var SEND_EVERY = 300;    // ms between two sends of a sentence still being said
+    function recorder() {
+        try { return !!(window.config && window.config.iAmRecorder) || /iAmRecorder=true/.test(location.hash); } catch (e) { return false; }
+    }
+    function saved(key, value) {
+        try {
+            if (value === undefined) { return localStorage.getItem(key); }
+            localStorage.setItem(key, value);
+        } catch (e) { /* storage blocked: the choice lasts this page */ }
+        return null;
+    }
+    function speechLang() {
+        var picked = saved('dgoCaptionsLang');
+        if (picked) { return picked; }
+        var ui = saved('language') || (window.config && window.config.defaultLanguage) || 'he';
+        return ui.indexOf('en') === 0 ? 'en-US' : (cfg.lang || 'he-IL');
+    }
+    var me = { off: saved('dgoCaptionsOff') === '1', hidden: saved('dgoCaptionsHidden') === '1' };
+    var stats = { state: 'init', input: trackInput ? 'track' : 'microphone', starts: 0, sent: 0, finals: 0, received: 0, errors: {}, last: 0 };
+    window.__dgoCaptions = { stats: stats };
+
+    function conference() { try { return window.APP && APP.conference; } catch (e) { return null; } }
+    function room() { var c = conference(); return c && c._room; }
+    function joined() { try { return !!conference().isJoined(); } catch (e) { return false; } }
+    function localAudio() {
+        try {
+            var tracks = APP.store.getState()['features/base/tracks'] || [];
+            for (var i = 0; i < tracks.length; i++) {
+                var t = tracks[i];
+                if (t.local && t.mediaType === 'audio' && t.jitsiTrack) {
+                    var track = t.jitsiTrack.getTrack ? t.jitsiTrack.getTrack() : t.jitsiTrack.track;
+                    return { track: track, muted: !!t.muted || !!(t.jitsiTrack.isMuted && t.jitsiTrack.isMuted()) };
+                }
+            }
+        } catch (e) { /* the store is not there yet */ }
+        return null;
+    }
+
+    // ── on screen ───────────────────────────────────────────────────────────────────────────
+    var box = null, lines = {};
+    function rtl(text) { return /[֐-׿]/.test(text); }
+    function tail(text) {
+        if (text.length <= TAIL) { return text; }
+        var cut = text.slice(-TAIL), space = cut.indexOf(' ');
+        return '… ' + (space > 0 && space < 30 ? cut.slice(space + 1) : cut);
+    }
+    function show(id, name, text, final) {
+        text = (text || '').trim();
+        if (me.hidden || !text) { return; }
+        if (!box) {
+            box = document.createElement('div');
+            box.id = 'meet-live-captions';
+            box.setAttribute('role', 'log');
+            box.setAttribute('aria-live', 'polite');
+            box.setAttribute('aria-label', 'כתוביות חיות · Live captions');
+            document.body.appendChild(box);
+        }
+        var line = lines[id];
+        if (!line) {
+            line = { el: document.createElement('div'), who: document.createElement('span'), text: document.createElement('span') };
+            line.el.className = 'meet-lc-line';
+            line.who.className = 'meet-lc-who';
+            line.text.className = 'meet-lc-text';
+            line.el.appendChild(line.who); line.el.appendChild(line.text);
+            lines[id] = line;
+        }
+        line.who.textContent = name;
+        line.text.textContent = tail(text);
+        line.el.dir = rtl(text) ? 'rtl' : 'ltr';
+        line.el.classList.toggle('meet-lc-interim', !final);
+        line.at = Date.now();
+        if (box.lastChild !== line.el) { box.appendChild(line.el); }
+        var ids = Object.keys(lines).sort(function (a, b) { return lines[a].at - lines[b].at; });
+        while (ids.length > LINES) { var old = ids.shift(); lines[old].el.remove(); delete lines[old]; }
+        document.body.classList.add('meet-lc-active');
+    }
+    setInterval(function () {
+        var t = Date.now();
+        Object.keys(lines).forEach(function (id) {
+            if (t - lines[id].at > LINGER) { lines[id].el.remove(); delete lines[id]; }
+        });
+        if (box && !box.firstChild) { document.body.classList.remove('meet-lc-active'); }
+    }, 1000);
+
+    // ── the chip: whether this person's voice is in the captions, and who is not ──────────────
+    var STATE = {
+        on: ['הקול שלך נכנס לכתוביות ולתמלול החי של הפגישה.', 'Your voice is in the live captions and the meeting\'s live transcript.'],
+        muted: ['מושתק — הכתוביות של הקול שלך יחזרו כשתפעיל את המיקרופון.', 'Muted — captions of your voice resume when you unmute.'],
+        off: ['כיבית את הכתוביות של הקול שלך: הדברים שלך נכנסים רק להקלטה.', 'You turned captioning of your voice off: your words are only in the recording.'],
+        nomic: ['אין מיקרופון פעיל — אין כתוביות לקול שלך.', 'No working microphone — no captions of your voice.'],
+        unsupported: ['הדפדפן הזה לא מזהה דיבור: הדברים שלך נכנסים רק להקלטה, לא לכתוביות. Chrome או Edge במחשב כן מזהים.', 'This browser cannot recognize speech: your words are only in the recording, not in the captions. Chrome or Edge on a computer can.'],
+        error: ['שירות זיהוי הדיבור לא זמין עכשיו — הדברים שלך נכנסים רק להקלטה. מנסה שוב.', 'The speech service is unavailable right now — your words are only in the recording. Retrying.'],
+        idle: ['', '']
+    };
+    var WHY = { off: 'כיבה', nomic: 'בלי מיקרופון', unsupported: 'דפדפן שלא מזהה דיבור', error: 'תקלה בזיהוי', idle: 'מצטרף', none: 'אפליקציה או דפדפן ישן' };
+    var chip = null, panel = null, ui = {};
+    function button(label, act) {
+        var b = document.createElement('button');
+        b.type = 'button'; b.textContent = label; b.setAttribute('data-act', act);
+        return b;
+    }
+    function ensureChip() {
+        if (chip || !document.body) { return; }
+        chip = document.createElement('button');
+        chip.id = 'meet-lc-chip'; chip.type = 'button';
+        chip.setAttribute('aria-expanded', 'false'); chip.setAttribute('aria-controls', 'meet-lc-panel');
+        ui.dot = document.createElement('span'); ui.dot.className = 'meet-lc-dot'; ui.dot.setAttribute('aria-hidden', 'true');
+        ui.label = document.createElement('span'); ui.label.textContent = 'כתוביות חיות';
+        ui.note = document.createElement('span'); ui.note.className = 'meet-lc-note';
+        chip.appendChild(ui.dot); chip.appendChild(ui.label); chip.appendChild(ui.note);
+        panel = document.createElement('div');
+        panel.id = 'meet-lc-panel'; panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-label', 'כתוביות חיות · Live captions');
+        panel.hidden = true;
+        ui.state = document.createElement('p'); ui.state.className = 'meet-lc-state';
+        ui.missing = document.createElement('p'); ui.missing.className = 'meet-lc-missing';
+        var actions = document.createElement('div'); actions.className = 'meet-lc-actions';
+        ui.hide = button('', 'hide'); ui.off = button('', 'off'); ui.lang = button('', 'lang');
+        actions.appendChild(ui.hide); actions.appendChild(ui.off); actions.appendChild(ui.lang);
+        var privacy = document.createElement('p'); privacy.className = 'meet-lc-privacy';
+        privacy.textContent = 'הזיהוי נעשה בדפדפן, בשירות הדיבור שלו (ב-Chrome: של Google). ההקלטה והתמלול המלא נשארים בשרת של הלשכה. · Recognition runs in the browser, through its speech service (Chrome: Google\'s). The recording and the full transcript stay on the office\'s server.';
+        panel.appendChild(ui.state); panel.appendChild(ui.missing); panel.appendChild(actions); panel.appendChild(privacy);
+        chip.onclick = function () { panel.hidden = !panel.hidden; chip.setAttribute('aria-expanded', String(!panel.hidden)); };
+        panel.addEventListener('keydown', function (e) { if (e.key === 'Escape') { panel.hidden = true; chip.setAttribute('aria-expanded', 'false'); chip.focus(); } });
+        actions.onclick = function (e) {
+            var act = e.target && e.target.getAttribute('data-act');
+            if (act === 'hide') {
+                me.hidden = !me.hidden; saved('dgoCaptionsHidden', me.hidden ? '1' : '0');
+                if (me.hidden && box) { box.textContent = ''; lines = {}; }
+            } else if (act === 'off') {
+                me.off = !me.off; saved('dgoCaptionsOff', me.off ? '1' : '0');
+            } else if (act === 'lang') {
+                saved('dgoCaptionsLang', speechLang().indexOf('he') === 0 ? 'en-US' : 'he-IL');
+                stopRecognition();                                    // the next tick starts it in the new language
+            }
+            paint();
+        };
+        document.body.appendChild(chip); document.body.appendChild(panel);
+    }
+    function missing() {
+        var out = [], r = room();
+        try {
+            (r ? r.getParticipants() : []).forEach(function (p) {
+                if (p.isHidden && p.isHidden()) { return; }
+                var s = p.getProperty && p.getProperty('dgo_captions');
+                if (s !== 'on' && s !== 'muted') { out.push((p.getDisplayName && p.getDisplayName() || 'משתתף') + ' (' + (WHY[s] || WHY.none) + ')'); }
+            });
+        } catch (e) { /* the room is changing */ }
+        return out;
+    }
+    function paint() {
+        if (!chip) { return; }
+        var s = stats.state, gone = missing();
+        chip.setAttribute('data-state', s);
+        ui.note.textContent = gone.length ? ' · ' + gone.length + ' בלי כתוביות' : '';
+        ui.state.textContent = STATE[s] ? STATE[s][0] + ' · ' + STATE[s][1] : '';
+        ui.missing.textContent = gone.length ? 'לא בכתוביות (רק בהקלטה): ' + gone.join(', ') + ' · Not in the captions (only in the recording).' : 'כל המשתתפים בכתוביות. · Everyone is in the captions.';
+        ui.hide.textContent = me.hidden ? 'הצג כתוביות · Show captions' : 'הסתר כתוביות · Hide captions';
+        ui.off.textContent = me.off ? 'הפעל כתוביות לקול שלי · Caption my voice' : 'הפסק כתוביות לקול שלי · Stop captioning my voice';
+        ui.off.hidden = s === 'unsupported';
+        ui.lang.textContent = speechLang().indexOf('he') === 0 ? 'אני מדבר אנגלית · I speak English' : 'אני מדבר עברית · I speak Hebrew';
+        ui.lang.hidden = s === 'unsupported';
+    }
+
+    // ── recognition ─────────────────────────────────────────────────────────────────────────
+    var rec = null, recTrack = null, nextStart = 0, backoff = 0, fatal = null, pending = null, lastSent = 0;
+    function send(payload) {
+        var r = room();
+        if (!r || typeof r.sendMessage !== 'function') { return; }
+        try { r.sendMessage(payload); stats.sent++; } catch (e) { stats.errors.send = (stats.errors.send || 0) + 1; }
+    }
+    setInterval(function () {                                  // the newest words of a sentence still being said
+        if (pending && Date.now() - lastSent >= SEND_EVERY) { send(pending); pending = null; lastSent = Date.now(); }
+    }, 100);
+    function myName() {
+        try { return APP.store.getState()['features/base/settings'].displayName || 'אני'; } catch (e) { return 'אני'; }
+    }
+    function emit(sid, seq, text, final, lang) {
+        text = (text || '').trim();
+        if (!text) { return; }
+        stats.last = Date.now();
+        show('local', myName(), text, final);
+        var payload = { type: 'dgo-caption', v: 1, sid: sid, seq: seq, text: text.slice(-4000), final: final, lang: lang, ts: Date.now() };
+        if (final) {
+            stats.finals++;
+            if (pending && pending.sid === sid && pending.seq === seq) { pending = null; }
+            send(payload); lastSent = Date.now();
+        } else {
+            pending = payload;
+        }
+    }
+    function stopRecognition() {
+        if (!rec) { return; }
+        var r = rec; rec = null; recTrack = null;
+        try { r.stop(); } catch (e) { /* already ended */ }   // stop, not abort: the last words still settle
+    }
+    function startRecognition(track) {
+        var r = new SR(), sid = Math.random().toString(36).slice(2, 10), lang = speechLang();
+        r.lang = lang; r.continuous = true; r.interimResults = true; r.maxAlternatives = 1;
+        r.onresult = function (e) {
+            backoff = 0;
+            var open = '', openAt = -1;
+            for (var i = e.resultIndex; i < e.results.length; i++) {
+                var res = e.results[i];
+                if (res.isFinal) { emit(sid, i, res[0].transcript, true, lang); }
+                else { if (openAt < 0) { openAt = i; } open += res[0].transcript; }
+            }
+            if (openAt >= 0) { emit(sid, openAt, open, false, lang); }
+        };
+        r.onerror = function (e) {
+            stats.errors[e.error] = (stats.errors[e.error] || 0) + 1;
+            if (e.error === 'not-allowed' || e.error === 'service-not-allowed' || e.error === 'language-not-supported') { fatal = e.error; }
+            else if (e.error !== 'no-speech' && e.error !== 'aborted') { backoff = Math.min(backoff ? backoff * 2 : 2000, 30000); }
+        };
+        r.onend = function () {
+            if (pending && pending.sid === sid) { send(pending); pending = null; }
+            if (rec === r) { rec = null; recTrack = null; }
+            nextStart = Date.now() + (backoff || 150);           // continuous mode still ends now and then: go on
+        };
+        try {
+            if (trackInput) { r.start(track); } else { r.start(); }
+        } catch (err) {
+            stats.errors.start = (stats.errors.start || 0) + 1;
+            nextStart = Date.now() + 5000;
+            return null;
+        }
+        stats.starts++;
+        return r;
+    }
+    var announced = null;
+    function tick() {
+        if (recorder()) { return; }
+        ensureChip();
+        var inRoom = joined(), a = inRoom ? localAudio() : null;
+        var s = !SR || phone ? 'unsupported' : fatal ? 'error' : !inRoom ? 'idle' : me.off ? 'off'
+            : !a || !a.track || a.track.readyState !== 'live' ? 'nomic' : a.muted ? 'muted' : backoff >= 8000 ? 'error' : 'on';
+        stats.state = s;
+        if (chip) { chip.hidden = !inRoom; }
+        var want = s === 'on' || (s === 'error' && !fatal);
+        if (rec && (!want || (a && a.track !== recTrack))) { stopRecognition(); }
+        if (!rec && want && Date.now() >= nextStart) { rec = startRecognition(a.track); recTrack = rec ? a.track : null; }
+        if (inRoom && s !== announced) {                       // the others' chips, and prosody, read it from presence
+            try { room().setLocalParticipantProperty('dgo_captions', s); announced = s; } catch (e) { /* next tick */ }
+        }
+        if (!inRoom) { announced = null; }
+        paint();
+    }
+    function listen() {
+        var r = room();
+        if (!r || r.__dgoCaptions || typeof r.on !== 'function') { return; }
+        r.__dgoCaptions = true;
+        var ev = (window.JitsiMeetJS && JitsiMeetJS.events && JitsiMeetJS.events.conference && JitsiMeetJS.events.conference.ENDPOINT_MESSAGE_RECEIVED) || 'conference.endpoint_message_received';
+        r.on(ev, function (participant, payload) {
+            if (!payload || payload.type !== 'dgo-caption' || typeof payload.text !== 'string') { return; }
+            stats.received++;
+            var id = participant && participant.getId ? participant.getId() : 'remote';
+            var name = participant && participant.getDisplayName ? participant.getDisplayName() : '';
+            show(id, name || 'משתתף', payload.text, payload.final === true);
+        });
+    }
+    window.addEventListener('pagehide', stopRecognition);
+    setInterval(function () { if (!recorder()) { listen(); tick(); } }, 1000);
+})();
+</script>
+<style>
+    /* Media keeps its own direction: a mirrored layout must not mirror a shared screen's text. */
+    html[dir="rtl"] video { direction: ltr; }
+    /* Numbers, addresses and codes read left-to-right inside a right-to-left line. */
+    html[dir="rtl"] input[type="url"], html[dir="rtl"] input[type="email"] { direction: ltr; text-align: right; }
+    /* Jitsi's styles say left/right where they mean start/end. The class names carry a build hash
+       and a stable label (css-<hash>-titleContainer), so the label is what is matched. Measured in
+       the settings dialog: the title sat on the dialog's edge, each menu icon on its text. */
+    html[dir="rtl"] [class*="-titleContainer"] { padding-left: 0; padding-right: 24px; }
+    html[dir="rtl"] [class*="-contextMenuItem"] > .jitsi-icon { margin-right: 0; margin-left: 16px; }
+    /* The welcome card (welcomePageAdditionalCard.html): Jitsi's own type and colours, laid out. */
+    .meet-office-card { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 20px; padding: 4px 0; }
+    .meet-office-title { margin: 0; font-weight: 600; opacity: .75; }
+    .meet-office-link { color: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+    /* The microphone banner: above everything Jitsi draws, Jitsi's own type, white on a red that
+       reads at 6:1, 44-px targets, visible focus, no motion. */
+    #meet-mic-banner { --meet-alert: #b3261e; --meet-on-alert: #ffffff; position: fixed; top: 0; left: 0; right: 0; z-index: 2147483000;
+        background: var(--meet-alert); color: var(--meet-on-alert); font: 16px/1.45 -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+        padding: 10px 16px; padding-top: max(10px, env(safe-area-inset-top)); box-shadow: 0 2px 8px rgba(0,0,0,.35);
+        display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+    #meet-mic-banner .meet-mic-icon { flex: 0 0 auto; display: flex; }
+    #meet-mic-banner .meet-mic-text { flex: 1 1 320px; min-width: 0; }
+    #meet-mic-banner .meet-mic-en { opacity: .9; font-size: 14px; margin-top: 2px; }
+    #meet-mic-banner .meet-mic-actions { display: flex; gap: 8px; align-items: center; }
+    #meet-mic-banner button { font: inherit; font-weight: 600; min-height: 44px; min-width: 44px; background: var(--meet-on-alert); color: var(--meet-alert);
+        border: 0; border-radius: 8px; padding: 8px 14px; cursor: pointer; }
+    #meet-mic-banner button:hover { background: #f3e6e5; }
+    #meet-mic-banner button:focus-visible { outline: 3px solid #ffffff; outline-offset: 2px; }
+    #meet-mic-banner button.meet-mic-close { background: transparent; color: var(--meet-on-alert); font-size: 20px; padding: 4px 10px; }
+    #meet-mic-banner button.meet-mic-close:hover { background: rgba(255,255,255,.15); }
+    /* The newest caption, over the video, near the bottom but above the toolbar. */
+    #meet-captions { position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%); max-width: min(900px, 92vw); z-index: 2147482000;
+        background: rgba(0,0,0,.75); color: #fff; font: 20px/1.35 -apple-system, "Segoe UI", Roboto, Arial, sans-serif; padding: 8px 14px;
+        border-radius: 8px; text-align: center; pointer-events: none; display: none; }
+    @media (max-width: 600px) { #meet-captions { font-size: 16px; bottom: 80px; } #meet-mic-banner { font-size: 15px; } }
+    /* Live captions from each browser: the newest speakers over the video, above the toolbar, never
+       in its way (pointer-events: none); white on near-black reads at 15:1, a still-being-said line
+       is a little dimmer, never lighter than 9:1. No motion beyond a short fade, none when reduced. */
+    #meet-live-captions { --meet-lc-bg: rgba(12, 12, 14, .82); --meet-lc-fg: #ffffff; --meet-lc-who: #ffd479;
+        position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%); width: max-content; max-width: min(960px, 92vw);
+        z-index: 2147481500; pointer-events: none; display: flex; flex-direction: column; gap: 4px; align-items: center; }
+    #meet-live-captions .meet-lc-line { background: var(--meet-lc-bg); color: var(--meet-lc-fg); border-radius: 8px; padding: 6px 12px;
+        font: 20px/1.4 -apple-system, "Segoe UI", Roboto, Arial, sans-serif; text-align: start; max-width: 100%;
+        transition: opacity .2s ease-out; }
+    #meet-live-captions .meet-lc-who { color: var(--meet-lc-who); font-weight: 600; margin-inline-end: 8px; }
+    #meet-live-captions .meet-lc-who::after { content: ":"; }
+    #meet-live-captions .meet-lc-interim .meet-lc-text { opacity: .86; }
+    body.meet-lc-active #meet-captions { bottom: 230px; }
+    /* The chip: whether my voice is in the captions, and how many are not. Top LEFT, under Jitsi's own
+       top row, in both directions: the filmstrip (my own tile first) is on the right. A 44-px target. */
+    #meet-lc-chip { position: fixed; top: 56px; left: 12px; z-index: 2147481600; min-height: 44px; display: inline-flex;
+        align-items: center; gap: 8px; padding: 6px 14px; border: 1px solid rgba(255,255,255,.18); border-radius: 22px; cursor: pointer;
+        background: rgba(12, 12, 14, .78); color: #fff; font: 600 14px/1.2 -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+    #meet-lc-chip:hover { background: rgba(40, 40, 46, .9); }
+    #meet-lc-chip:focus-visible, #meet-lc-panel button:focus-visible { outline: 3px solid #8ab4f8; outline-offset: 2px; }
+    #meet-lc-chip .meet-lc-dot { width: 10px; height: 10px; border-radius: 50%; background: #9aa0a6; flex: 0 0 auto; }
+    #meet-lc-chip[data-state="on"] .meet-lc-dot { background: #34c759; }
+    #meet-lc-chip[data-state="error"] .meet-lc-dot, #meet-lc-chip[data-state="unsupported"] .meet-lc-dot,
+    #meet-lc-chip[data-state="nomic"] .meet-lc-dot { background: #ffb020; }
+    #meet-lc-chip .meet-lc-note { font-weight: 400; opacity: .9; }
+    #meet-lc-panel { position: fixed; top: 106px; left: 12px; z-index: 2147481600; width: min(420px, calc(100vw - 24px));
+        background: #1f1f23; color: #fff; border: 1px solid rgba(255,255,255,.16); border-radius: 12px; padding: 12px 14px;
+        box-shadow: 0 8px 24px rgba(0,0,0,.45); font: 14px/1.5 -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+    #meet-lc-panel[hidden] { display: none; }
+    #meet-lc-panel p { margin: 0 0 10px; }
+    #meet-lc-panel .meet-lc-privacy { opacity: .82; font-size: 13px; margin: 10px 0 0; }
+    #meet-lc-panel .meet-lc-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    #meet-lc-panel button { min-height: 44px; padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,.22);
+        background: #2d2d33; color: #fff; font: inherit; cursor: pointer; }
+    #meet-lc-panel button:hover { background: #3a3a42; }
+    #meet-lc-panel button[hidden] { display: none; }
+    @media (max-width: 600px) { #meet-live-captions { bottom: 84px; } #meet-live-captions .meet-lc-line { font-size: 16px; } #meet-lc-chip { top: 48px; } #meet-lc-panel { top: 98px; } }
+    @media (prefers-reduced-motion: reduce) { #meet-live-captions .meet-lc-line { transition: none; } }
+</style>

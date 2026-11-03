@@ -187,6 +187,12 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
+// ONE IS SAID AS ONE (G86): a count of one is its own sentence — «1 סרטים» is not Hebrew — and
+// every other count is the number with the plural. The rule is written out in
+// apps/mail/mailview/static/app.js.
+const num = (n) => Number(n).toLocaleString('he-IL');
+const one = (n, single, many) => (Number(n) === 1 ? single : `${num(n)} ${many}`);
+
 const state = {
   status: null, catalog: null, series: [], films: [], query: "", view: "home",
   seriesDetail: null, season: null, chats: [], scrapers: [], mode: "qr", job: null,
@@ -444,7 +450,7 @@ function renderRows() {
   const wanted = state.query.trim() ? rowsBySearch() : rows;
   wanted.forEach((r) => {
     html += '<section class="row"><div class="row-head"><h3>' + esc(r.chat.title) + "</h3>" +
-      '<span class="count">' + r.movies.length + " סרטים</span></div>" +
+      '<span class="count">' + one(r.movies.length, "סרט אחד", "סרטים") + "</span></div>" +
       '<div class="scroller">' + r.movies.map((m) => cardHTML(m)).join("") + "</div></section>";
   });
   $("rows").innerHTML = html;
@@ -887,7 +893,7 @@ function renderChip() {
     $("syncbar").classList.add("hidden");
     if (st.ok) {
       const c = st.counts || {};
-      text.textContent = (c.movies || 0) + " סרטים · " + state.series.length + " סדרות";
+      text.textContent = one(c.movies || 0, "סרט אחד", "סרטים") + " · " + one(state.series.length, "סדרה אחת", "סדרות");
     } else {
       chip.classList.add("bad");
       text.textContent = st.instance ? "החיבור לטלגרם דורש טיפול" : "לא מחובר";
@@ -919,7 +925,7 @@ async function renderCache() {
 function renderChats() {
   const filter = ($("chat-filter").value || "").trim().toLowerCase();
   const list = state.chats.filter((c) => !filter || String(c.title || "").toLowerCase().indexOf(filter) >= 0);
-  $("chat-count").textContent = state.chats.filter((c) => c.enabled).length + " מתוך " + state.chats.length + " מסומנים";
+  $("chat-count").textContent = one(state.chats.filter((c) => c.enabled).length, "אחד", "מתוך " + state.chats.length + " מסומנים");
   $("chat-list").innerHTML = list.length ? list.map((c) =>
     '<div class="chat-row" data-id="' + c.chat_id + '">' +
     '<input type="checkbox" ' + (c.enabled ? "checked" : "") + ' aria-label="' + esc(c.title) + '">' +

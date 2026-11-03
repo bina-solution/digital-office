@@ -1,0 +1,387 @@
+name: android-engine
+
+# The engine of the Android app's full office (DGO-1071): qemu-system-aarch64 for android/arm64, built from
+# Termux's maintained recipe (termux/termux-packages, its bionic patches) under the APP's package name —
+# Termux bakes /data/data/<package>/files/usr into every program, so ours must be compiled in, with every
+# dependency built from source. packaging/android/engine/collect-qemu.sh then keeps the binary and the
+# libraries it needs as plain lib*.so files, the form an APK can carry and a phone can execute. The result
+# goes to a draft pre-release as a tarball (the account's Actions storage is full; release assets are
+# outside it). No KVM is open to an app on any phone, so the guest runs under QEMU's TCG: measured ~20×
+# slower to boot on the MacBook engine (no KVM, arm64, as a phone). Only on request: a push to
+# dgo-stable whose head commit says "[android-engine]".
+
+on:
+  push:
+    branches: [dgo-stable]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # the draft release, and nothing else
+
+jobs:
+  # The guest the engine boots: the MacBook engine's own (packaging/macos/engine.yaml's pinned Ubuntu 24.04
+  # arm64 image and provisioning), with the office in it, made here so a phone never provisions under
+  # emulation. A raw disk, xz-compressed, beside QEMU on the same draft.
+  # On the Dell (DGO-1090: the office's own machines build, not GitHub's): one privileged box of its own
+  # (packaging/android/engine/box, guest-box.sh) does all of it — its own Docker, so nothing is built into,
+  # pulled into or pruned from the Dell office's; root inside it, so no sudo; 2 CPUs and 5 GB while the Dell
+  # has no swap, 3 and 6 GB with one, started only with 8 GB available, and the least weight beside the
+  # office's own containers (it waits for them). What a killed box leaves (its loop device, the arm64
+  # handler, its files) is swept after it, whatever happened.
+  # "[android-engine-public]" builds the same guest from the PUBLIC copy of the commit
+  # (scripts/release/public-export.py, its own checks passed) instead of the checkout: the one a phone may
+  # download (DGO-1089) — a guest made from the private code must never be published (DGO-1084).
+  guest:
+    if: >-
+      github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[android-engine]')
+      || contains(github.event.head_commit.message, '[android-engine-public]')
+    concurrency:
+      group: android-engine-guest-${{ github.ref }}
+      cancel-in-progress: true
+    runs-on: [self-hosted, portable, ssd]
+    timeout-minutes: 600   # the office's images built for arm64 through emulation on 2–3 of the Dell's 4 CPUs, an hour's wait for room
+    steps:
+      # no token left in .git/config: this checkout is copied, .git and all, into the published guest disk
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: ${{ contains(github.event.head_commit.message, '[android-engine-public]') && '0' || '1' }}
+      # gh, where the runner has none (as android-app.yml): a pinned release, checked against its digest —
+      # before the build, with the draft below, so that a token or a gh that cannot write a release fails in
+      # seconds and not after the build's hour (run 64, 2026-11-03: HTTP 403 creating the draft at its end)
+      - name: gh, where the runner has none
+        if: runner.environment != 'github-hosted'
+        run: |
+          set -euo pipefail
+          if command -v gh >/dev/null 2>&1; then echo "the runner's own: $(command -v gh), $(gh --version | head -1)"; exit 0; fi
+          v=2.62.0; sum=41c8b0698ad3003cb5c44bde672a1ffd5f818595abd80162fbf8cc999418446a
+          d="${RUNNER_TOOL_CACHE}/gh/${v}"; t="${RUNNER_TEMP}/gh_${v}_linux_amd64.tar.gz"
+          if [ ! -x "${d}/bin/gh" ]; then
+            curl -fsSL -o "${t}" "https://github.com/cli/cli/releases/download/v${v}/gh_${v}_linux_amd64.tar.gz"
+            echo "${sum}  ${t}" | sha256sum -c -
+            mkdir -p "${d}"; tar -xzf "${t}" -C "${d}" --strip-components 1; rm -f "${t}"
+          fi
+          echo "${d}/bin" >> "${GITHUB_PATH}"
+          "${d}/bin/gh" --version | head -1
+      # The draft made first, empty (a re-run finds its own): the step at the end only uploads to it. A draft
+      # with no QEMU and no digest is taken by nothing (android-app.yml and android-guest.yml want both).
+      - name: The engine's draft, before the build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLIC: ${{ contains(github.event.head_commit.message, '[android-engine-public]') && '1' || '' }}
+        run: |
+          set -euo pipefail
+          t="android-engine-${{ github.run_number }}"
+          if seen="$(gh release view "${t}" 2>&1)"; then echo "draft ${t} is there (a re-run)"; exit 0; fi
+          printf '%s' "${seen}" | grep -qi "not found" || { echo "::error::could not tell whether draft ${t} exists: ${seen}"; exit 1; }
+          title="The Android engine (draft)"
+          [ -z "${PUBLIC}" ] || title="The Android engine, its guest made from the public copy of ${GITHUB_SHA::8} (draft)"
+          gh release create "${t}" --draft --prerelease --target "${GITHUB_SHA}" --title "${title}" \
+            --notes "QEMU for android/arm64 and the guest it boots (DGO-1071)."
+          echo "draft ${t} made"
+      # the export parses every JavaScript file it changes, and the Dell's runner has no node of its own
+      - uses: actions/setup-node@v4
+        if: contains(github.event.head_commit.message, '[android-engine-public]')
+        with:
+          node-version: '22'
+      - name: The public copy as the guest's source (when the commit asks for it)
+        if: contains(github.event.head_commit.message, '[android-engine-public]')
+        run: |
+          set -euo pipefail
+          bash scripts/ci/pip-ensure.sh yaml:pyyaml
+          src="${RUNNER_TEMP}/public-src"
+          rm -rf "${src}" && mkdir -p "${src}"
+          python3 scripts/release/public-export.py --rev "${GITHUB_SHA}" --out "${src}" --report "${RUNNER_TEMP}/public-src.json"
+          python3 -c "import json,sys; r=json.load(open(sys.argv[1])); print('export ok:', r.get('ok')); sys.exit(0 if r.get('ok') else 1)" "${RUNNER_TEMP}/public-src.json"
+          # a repository of its own, one commit: guest.sh gives the guest a git of this commit and its origin
+          git -C "${src}" init -q -b main
+          git -C "${src}" -c user.name=export -c user.email=export@localhost add -A
+          git -C "${src}" -c user.name=export -c user.email=export@localhost commit -q -m "the public copy of ${GITHUB_SHA::8}"
+          git -C "${src}" remote add origin https://github.com/bina-solution/digital-office.git
+          echo "SRC=${src}" >> "${GITHUB_ENV}"
+          echo "PUBLIC_COPY=1" >> "${GITHUB_ENV}"
+          echo "the guest's source: the public copy of ${GITHUB_SHA::8}, $(git -C "${src}" ls-files | wc -l) files"
+          # the same copy for the public repository, attached to the draft with its tree's hash: what is pushed
+          # there is this tree, byte for byte, and not an export made again elsewhere (another machine's tools
+          # hold back other files: the Mac's, without node, kept 4 more)
+          git -C "${src}" archive --format=tar.gz -o "${RUNNER_TEMP}/public-copy.tar.gz" HEAD
+          git -C "${src}" rev-parse 'HEAD^{tree}' > "${RUNNER_TEMP}/public-copy.tree"
+          echo "its tree $(cat "${RUNNER_TEMP}/public-copy.tree"), $(du -h "${RUNNER_TEMP}/public-copy.tar.gz" | cut -f1)"
+      - name: Room, and the box
+        run: |
+          set -euo pipefail
+          # the box's Docker store, kept between builds (guest-box.sh): on the same disk, the room it holds is
+          # room this build already has — the layers it would otherwise write again (its size, as the last
+          # box measured it)
+          store="${RUNNER_TOOL_CACHE}/dgo-guest-store"
+          mkdir -p "${store}"
+          echo "STORE=${store}" >> "${GITHUB_ENV}"
+          kept=0
+          if [ "$(stat -c %d "${store}")" = "$(stat -c %d "${RUNNER_TEMP}")" ]; then
+            kept="$(cat "${store}/kept-mb" 2>/dev/null || true)"
+            case "${kept}" in ''|*[!0-9]*) kept=0 ;; esac
+            kept=$(( kept / 1024 ))
+          fi
+          free="$(df -Pk "${RUNNER_TEMP}" | awk 'NR == 2 {print int($4 / 1048576)}')"
+          echo "${free} GB free where the box works, ${kept} GB in its kept store; load $(cut -d' ' -f1-3 /proc/loadavg)"
+          [ $(( free + kept )) -ge 30 ] || { echo "::error::${free} GB free in ${RUNNER_TEMP} and ${kept} GB kept, the box needs 30"; exit 1; }
+          b=packaging/android/engine/box
+          tag="dgo-guest-box:$(sha256sum "${b}/Dockerfile" | cut -c1-12)"
+          docker build -q -t "${tag}" "${b}"
+          echo "BOX=${tag}" >> "${GITHUB_ENV}"   # once it is built: what the sweep runs, never pulled
+          mkdir -p "${RUNNER_TEMP}/guest"
+      - name: The office's images for arm64, the guest disk, packed
+        run: |
+          set -euo pipefail
+          # The Dell's memory, measured, decides (it froze at 20:39 on 11-01 with no swap, under a -race test,
+          # its office and Ollama — DGO-1122/1123): with no swap the box takes 5 GB and 2 CPUs, with one
+          # 6 GB and 3; and it starts only once 8 GB are available, waiting up to an hour for them, as
+          # ops/prejob_waitfree.sh holds a job — the runner's own gate counts no Ollama
+          if swapon --show --noheadings 2>/dev/null | grep . >/dev/null; then mem=6g cpus=3; else mem=5g cpus=2; fi
+          s=$(date +%s)
+          while :; do
+            avail="$(awk '/^MemAvailable:/ {print int($2 / 1048576)}' /proc/meminfo)"; avail="${avail:-0}"
+            [ "${avail}" -ge 8 ] && break
+            if [ $(( $(date +%s) - s )) -ge 3600 ]; then
+              echo "::error::the machine has ${avail} GB available after an hour's wait, and the guest box needs 8 — its largest: $(ps -eo rss=,comm= --sort=-rss | head -3 | awk '{r = $1; $1 = ""; printf "%s %d MB; ", substr($0, 2), r / 1024}')"
+              exit 1
+            fi
+            echo "[$(( $(date +%s) - s ))s] ${avail} GB available, waiting for 8"; sleep 30
+          done
+          echo "the box: ${mem}, ${cpus} CPUs ($(swapon --show --noheadings 2>/dev/null | wc -l) swap), ${avail} GB available"
+          # The machine's heat, watched by the job itself: the Dell froze three times at 93–96°C under this
+          # build, and a watcher on another machine stops with it (the Mac's, 2026-11-02 15:40, its engine
+          # jammed). At 92°C the box drops to one CPU; under 80°C it has its own count again. The CPU
+          # package's temperature, read as ops/prejob_waitfree.sh reads it; no reading, nothing changed.
+          heat() {
+            for z in /sys/class/thermal/thermal_zone*; do
+              if [ "$(cat "${z}/type" 2>/dev/null)" = x86_pkg_temp ]; then
+                t="$(cat "${z}/temp" 2>/dev/null)" && [ -n "${t}" ] && { echo $(( t / 1000 )); return; }
+              fi
+            done
+            echo 0
+          }
+          ( slow=""
+            while sleep 60; do
+              c="$(heat)"
+              if [ "${c}" -ge 92 ] && [ -z "${slow}" ]; then
+                docker update --cpus 1 "dgo-guest-${GITHUB_RUN_ID}" >/dev/null 2>&1 && slow=1 && echo "heat: ${c}°C — the box down to 1 CPU"
+              elif [ "${c}" -gt 0 ] && [ "${c}" -lt 80 ] && [ -n "${slow}" ]; then
+                docker update --cpus "${cpus}" "dgo-guest-${GITHUB_RUN_ID}" >/dev/null 2>&1 && slow="" && echo "heat: ${c}°C — the box back to ${cpus} CPUs"
+              fi
+            done ) &
+          hpid=$!
+          # its sleep first: a sleep left running would hold the step's output open up to a minute; one group
+          # under `|| true`: under bash -e a failing kill in an EXIT trap would be the step's status
+          trap '{ pkill -P "${hpid}"; kill "${hpid}"; } 2>/dev/null || true' EXIT
+          # dind first: it nests the box's cgroups before guest-box.sh forks anything (its own cgroup namespace)
+          docker run --rm --privileged --pull never --cgroupns private --name "dgo-guest-${GITHUB_RUN_ID}" \
+            --cpus "${cpus}" --cpu-shares 128 --memory "${mem}" --memory-swap "${mem}" -e GUEST_BOX_CPUS="${cpus}" \
+            -v "${SRC:-${GITHUB_WORKSPACE}}:/src:ro" -v "${RUNNER_TEMP}/guest:/work" -v "${STORE}:/store" \
+            "${BOX}" dind bash /src/packaging/android/engine/guest-box.sh /work
+          mv "${RUNNER_TEMP}"/guest/out/dgo-guest-arm64.img.xz.* "${RUNNER_TEMP}"/guest/out/dgo-guest-arm64.manifest.json .
+          rm -rf pieces && mv "${RUNNER_TEMP}/guest/out/pieces" pieces
+          ls -la dgo-guest-arm64.img.xz.* dgo-guest-arm64.manifest.json; echo "$(ls pieces | wc -l) pieces"
+      - name: What the box left
+        if: always()
+        run: |
+          docker rm -f "dgo-guest-${GITHUB_RUN_ID}" >/dev/null 2>&1 || true
+          # swept only once the box is gone: never its files from under a box still running
+          if docker inspect "dgo-guest-${GITHUB_RUN_ID}" >/dev/null 2>&1; then
+            echo "::warning::the box dgo-guest-${GITHUB_RUN_ID} is still there — nothing swept"
+          elif [ -n "${BOX:-}" ]; then
+            docker run --rm --privileged --pull never -v "${GITHUB_WORKSPACE}:/src:ro" -v "${RUNNER_TEMP}/guest:/work" \
+              "${BOX}" bash /src/packaging/android/engine/guest-box.sh --sweep /work || true
+          fi
+          df -h "${RUNNER_TEMP}" | tail -1
+
+      - name: Attached to the engine's draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          t="android-engine-${{ github.run_number }}"
+          # the parts, and only then their digest, in a call of its own: gh uploads one call's files at once,
+          # and android-guest.yml takes a draft whose digest is there as one whose guest is whole
+          if seen="$(gh release view "${t}" 2>&1)"; then
+            # a re-run's draft: its last digest goes first, so it is never taken as whole while its new files
+            # replace the old ones (the digest is uploaded again last), and a part this run has not (its .xz
+            # smaller) goes too — the parts are joined in name order
+            had="$(gh release view "${t}" --json assets --jq '.assets[].name')"
+            if printf '%s\n' "${had}" | grep -x dgo-guest-arm64.img.xz.sha256 >/dev/null; then
+              gh release delete-asset "${t}" dgo-guest-arm64.img.xz.sha256 -y
+            fi
+            for a in $(printf '%s\n' "${had}" | grep -E '^dgo-guest-arm64\.img\.xz\.part[0-9]+$' || true); do
+              [ -e "${a}" ] || gh release delete-asset "${t}" "${a}" -y
+            done
+            gh release upload "${t}" dgo-guest-arm64.img.xz.part* --clobber
+          elif ! printf '%s' "${seen}" | grep -qi "not found"; then
+            echo "::error::could not tell whether draft ${t} exists: ${seen}"; exit 1
+          else
+            title="The Android engine (draft)"
+            [ -z "${PUBLIC_COPY:-}" ] || title="The Android engine, its guest made from the public copy of ${GITHUB_SHA::8} (draft)"
+            gh release create "${t}" dgo-guest-arm64.img.xz.part* --draft --prerelease \
+              --target "${GITHUB_SHA}" --title "${title}" \
+              --notes "QEMU for android/arm64 and the guest it boots (DGO-1071)."
+          fi
+          # QEMU, when this run's own qemu job makes none (GitHub's runners out of reach, DGO-1116): from the
+          # newest whole draft built from the same recipe — the qemu job below, its recipe's files — so the
+          # APK still takes one draft whole. Another recipe is never borrowed: the qemu job must build it.
+          # (Before the digest: a draft with the digest is taken as whole, QEMU and all.)
+          # the recipe at commit $1, as one digest — or a failure (an API's error is no recipe to compare)
+          recipe() {
+            local wf sh dir
+            wf="$(gh api "repos/${GITHUB_REPOSITORY}/contents/.github/workflows/android-engine.yml?ref=$1" --jq .content)" || return 1
+            sh="$(gh api "repos/${GITHUB_REPOSITORY}/contents/packaging/android/engine/collect-qemu.sh?ref=$1" --jq .sha)" || return 1
+            dir="$(gh api "repos/${GITHUB_REPOSITORY}/contents/packaging/android/engine/dgo-qemu?ref=$1" --jq '.[] | "\(.path) \(.type) \(.sha)"')" || return 1
+            wf="$(printf '%s' "${wf}" | base64 -d | sed -n '/^  qemu:/,$p')" || return 1
+            [ -n "${wf}" ] && [ -n "${sh}" ] && [ -n "${dir}" ] || return 1
+            printf '%s\n%s\n%s\n' "${wf}" "${sh}" "${dir}" | sha256sum | cut -d' ' -f1
+          }
+          if ! gh release view "${t}" --json assets --jq '.assets[].name' | grep -x qemu-android-arm64.tgz.sha256 >/dev/null; then
+            want="$(recipe "${GITHUB_SHA}")" || want=""
+            from=""
+            # every candidate whose QEMU is whole there (both files uploaded), newest first; one whose copy does
+            # not check out is passed over for the next
+            for d in $( [ -z "${want}" ] || T="${t}" gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=50" --jq '[sort_by(.created_at) | reverse | .[]
+                | select(.draft and (.tag_name | startswith("android-engine-")) and .tag_name != $ENV.T
+                  and ([.assets[] | select(.state == "uploaded") | .name]
+                       | (index("qemu-android-arm64.tgz") != null and index("qemu-android-arm64.tgz.sha256") != null)))
+                | "\(.tag_name)=\(.target_commitish)"][]'); do
+              theirs="$(recipe "${d#*=}")" || continue
+              [ "${theirs}" = "${want}" ] || continue
+              q="${RUNNER_TEMP}/qemu"; rm -rf "${q}"; mkdir -p "${q}"
+              if gh release download "${d%%=*}" -D "${q}" -p qemu-android-arm64.tgz -p qemu-android-arm64.tgz.sha256 \
+                 && (cd "${q}" && sha256sum -c qemu-android-arm64.tgz.sha256); then
+                from="${d%%=*}"; break
+              fi
+              echo "::warning::QEMU of ${d%%=*} did not check out — the next draft"
+            done
+            if [ -n "${from}" ]; then
+              gh release upload "${t}" "${q}/qemu-android-arm64.tgz" --clobber
+              gh release upload "${t}" "${q}/qemu-android-arm64.tgz.sha256" --clobber
+              echo "QEMU from ${from}, built from the same recipe"
+            else
+              echo "::warning::no draft holds a QEMU of this recipe — the qemu job's own is the one ${t} waits for"
+            fi
+          fi
+          # the pieces a phone fetches and their list (DGO-1089; the list among them under its own SHA-256, the
+          # name a phone asks for it by), before the digest too: a draft whose digest is there holds all of it.
+          # Named by their SHA-256, so a piece another draft holds already is the same file — published once
+          # wherever the machine is served (android-app.yml, DGO_MACHINE_URL). A re-run of this run uploads to
+          # its draft again: the last try's pieces this list does not name go first, so the draft holds one machine
+          for a in $(gh release view "${t}" --json assets --jq '.assets[].name' | grep -E '^[0-9a-f]{64}$' || true); do
+            [ -e "pieces/${a}" ] || gh release delete-asset "${t}" "${a}" -y
+          done
+          gh release upload "${t}" pieces/* --clobber
+          gh release upload "${t}" dgo-guest-arm64.manifest.json --clobber
+          # the public copy the guest was made from, with its tree's hash (the step that made it)
+          if [ -n "${PUBLIC_COPY:-}" ]; then
+            gh release upload "${t}" "${RUNNER_TEMP}/public-copy.tar.gz" "${RUNNER_TEMP}/public-copy.tree" --clobber
+          fi
+          gh release upload "${t}" dgo-guest-arm64.img.xz.sha256 --clobber
+          rm -rf dgo-guest-arm64.img.xz.part* dgo-guest-arm64.img.xz.sha256 dgo-guest-arm64.manifest.json pieces   # the parts and the pieces: twice the .xz on the runner's disk
+
+  qemu:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[android-engine]')
+    concurrency:
+      group: android-engine-${{ github.ref }}
+      cancel-in-progress: true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 340
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # Termux's builder image and every dependency's source and build need the room a toolchain runner
+      # gives away (as fresh-install.yml: "No space left on device" otherwise)
+      - name: Room
+        run: |
+          df -h / | tail -1
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          df -h / | tail -1
+
+      # Pinned: Termux's HEAD moves its QEMU (11.1.2 → 11.1.3 between two runs on 10-31, the second
+      # stopped by the version check below), so the engine is built from the commit it was proven on —
+      # engine run 41234165427's QEMU 11.1.2 — and with the builder image that run pulled (below). A newer
+      # QEMU is a change of this pin, of the image's digest and of dgo-qemu/build.sh, together.
+      - name: Termux's recipe, under the app's package name
+        env:
+          TERMUX_PACKAGES_COMMIT: 52b67f74e15a3c00d967c51a62ae5ff7506b51b1
+        run: |
+          set -euo pipefail
+          git init -q tp
+          git -C tp fetch -q --depth 1 https://github.com/termux/termux-packages "${TERMUX_PACKAGES_COMMIT}"
+          git -C tp checkout -q FETCH_HEAD
+          echo "termux-packages at $(git -C tp rev-parse HEAD)"
+          grep -n 'TERMUX_APP__PACKAGE_NAME=' tp/scripts/properties.sh | head -3
+          sed -i 's/^TERMUX_APP__PACKAGE_NAME=.*/TERMUX_APP__PACKAGE_NAME="il.co.digitaloffice.app"/' tp/scripts/properties.sh
+          grep -q '^TERMUX_APP__PACKAGE_NAME="il.co.digitaloffice.app"' tp/scripts/properties.sh \
+            || { echo "::error::properties.sh names no TERMUX_APP__PACKAGE_NAME to set — the recipe moved"; exit 1; }
+
+      # Our recipe, trimmed to a server guest (packaging/android/engine/dgo-qemu/build.sh), beside Termux's
+      # bionic patches and setjmp for the same QEMU version. Termux's full recipe pulls GStreamer → mesa →
+      # LLVM through spice, past any runner's hours (the second reader of 5d459659).
+      - name: The engine's recipe, beside Termux's patches
+        run: |
+          set -euo pipefail
+          mkdir -p tp/packages/dgo-qemu
+          cp packaging/android/engine/dgo-qemu/build.sh tp/packages/dgo-qemu/
+          cp tp/packages/qemu-system-x86-64-headless/*.patch tp/packages/dgo-qemu/
+          cp -r tp/packages/qemu-system-x86-64-headless/setjmp-aarch64 tp/packages/dgo-qemu/
+          # Termux's patches are for ITS version: a newer QEMU there would patch our older source and fail
+          # hours in — so the two must name the same version and source, or nothing is built
+          theirs="$(grep -h '^TERMUX_PKG_VERSION=\|^TERMUX_PKG_SHA256=' tp/packages/qemu-system-x86-64-headless/build.sh)"
+          ours="$(grep -h '^TERMUX_PKG_VERSION=\|^TERMUX_PKG_SHA256=' tp/packages/dgo-qemu/build.sh)"
+          echo "${theirs}"
+          [ "${theirs}" = "${ours}" ] || { echo "::error::the pinned TERMUX_PACKAGES_COMMIT names (${theirs}) — move the pin and dgo-qemu/build.sh together"; exit 1; }
+
+      # Before a runner's hours go into it: what it would build, and never LLVM or a graphics stack
+      - name: What it builds
+        working-directory: tp
+        run: |
+          set -euo pipefail
+          ./scripts/buildorder.py packages/dgo-qemu > ../order.txt
+          echo "$(wc -l < ../order.txt) packages:"; tr '\n' ' ' < ../order.txt | fold -w 160; echo
+          if grep -qE '(^| |/)(libllvm|mesa|libspice-server|gst-plugins-base)( |$)' ../order.txt; then
+            echo "::error::the build order still holds LLVM or a graphics stack — the recipe is not trimmed enough"; exit 1
+          fi
+
+      - name: dgo-qemu and every dependency, built from source
+        working-directory: tp
+        env:
+          # Termux's builder image, pinned with its recipe: the image run 41234165427 pulled as :latest
+          # (its NDK is the one the pinned scripts name — a newer image may carry another)
+          TERMUX_BUILDER_IMAGE_NAME: ghcr.io/termux/package-builder@sha256:e2de051a518d8b188c59c4a1ecf357d373b9ccf48d6c06d7681fdc3f61a77287
+        run: |
+          set -euo pipefail
+          s=$(date +%s)
+          # -C: remove what is built once it is packaged — the runner's disk is the limit (as Termux's CI)
+          ./scripts/run-docker.sh ./build-package.sh -C -a aarch64 dgo-qemu
+          echo "built in $(( $(date +%s) - s )) s"; ls output | sed -n 1,200p
+
+      - name: The binary and its libraries, as lib*.so
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq && sudo apt-get install -y -qq patchelf >/dev/null
+          bash packaging/android/engine/collect-qemu.sh tp/output qemu-android-arm64
+          tar -czf qemu-android-arm64.tgz qemu-android-arm64
+          sha256sum qemu-android-arm64.tgz > qemu-android-arm64.tgz.sha256
+          ls -la qemu-android-arm64.tgz
+
+      - name: Attached to a draft pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          t="android-engine-${{ github.run_number }}"
+          if seen="$(gh release view "${t}" 2>&1)"; then
+            gh release upload "${t}" qemu-android-arm64.tgz qemu-android-arm64.tgz.sha256 --clobber
+          elif ! printf '%s' "${seen}" | grep -qi "not found"; then
+            echo "::error::could not tell whether draft ${t} exists: ${seen}"; exit 1
+          else
+            gh release create "${t}" qemu-android-arm64.tgz qemu-android-arm64.tgz.sha256 --draft --prerelease \
+              --target "${GITHUB_SHA}" --title "The Android engine: qemu-system-aarch64 for the app (draft)" \
+              --notes "Built from termux-packages under il.co.digitaloffice.app; the binary and its libraries as lib*.so (DGO-1071)."
+          fi

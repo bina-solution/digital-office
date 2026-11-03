@@ -337,7 +337,10 @@ incoming-connection consent on the first packet. Until it has run on a Mac, that
 A link has exactly two ways in, and each is closed to everything it was not made for.
 
 * **The control door** (`<tunnel address>:8983`) leads to dgo-extend's LINK LISTENER
-  (`catalog.LINK_PORT`, `app.link_app`), which serves the catalog and nothing else. It is a raw
+  (`catalog.LINK_PORT`, `app.link_app`), which serves the catalog, and (since DGO-1127) the token
+  of an agent this office gives that office, to a caller that presents the pair's own secret
+  (`api_link_agent`; the peer keeps it as `dgo_link-serve-<office>-<app>-agent`,
+  `projection.pull_agents`), and nothing else. It is a raw
   splice with no opinion about paths, and it used to lead to the app's own port: a pairing that
   gave ONE app handed the peer every route of dgo-extend, unauthenticated — declare and converge
   offices, move apps, read the stored login of an installed office. What a peer may ask is now a
@@ -418,7 +421,43 @@ Proven by the first move (project-pln, MacBook → hp-laptop, 2026-10-05): 40.7 
 nine facts equal, the source's copy switched off with its volumes kept, the agent's own API key
 still working against the app on the other office. `ci-artifacts/dgo-pair-proof/app-move/`.
 
-## D — the invite: ONE code that carries the address and an access key (DESIGN — not built)
+## D — the invite: ONE code that carries the address and an access key (BUILT 2026-10-19, as D′)
+
+### D′ — what was built, and why it is not the design below (2026-10-19, `join_api.py`)
+
+The case that forced it: an office in a Claude cloud sandbox (ai/context/fresh-office-cloud-sandbox-
+2026-10-15.md) is a black box until linked — nothing reaches it, its UDP goes nowhere useful, every
+TLS connection it makes is intercepted by the sandbox's proxy, and nobody watches its screen. The
+owner, 2026-10-19: «fully declarative connection … connect to our vps via declarative properties».
+The design below cannot start there: its redeem runs OVER THE TUNNEL, and the tunnel needs the
+inviter's WireGuard UDP port, which such an office cannot reach (and which an office can publish only
+once — `hooks/prepare` 2b — so a hub of many spokes cannot give each a port). What was built instead:
+
+| | the design below (D) | built (D′) |
+|---|---|---|
+| the code | `DGOINV1:` with a WireGuard PRIVATE key | `DGOJOIN1:` with an Ed25519 access key, the host's https address and its identity key (the PIN) |
+| what the host keeps | the invite key's public half, in a pending placeholder record | the access key's public half, in `/data/join.json` — no secret, no placeholder record |
+| where the redeem runs | over the tunnel, through the control door | over HTTPS, at the host's **link door** (`link.<domain>` → `carrier/door.go` → `POST /join`) |
+| what runs | a new flow (pending record, rename on redeem) | the existing pairing (B): offer → sealed, signed reply → the same records and tokens; the six digits replaced by the invite's signature on the offer + the reply's signature checked against the pinned identity |
+| an office that cannot be dialed | "not decided here" | the door IS the relay: the pair rides the carriers' TCP path as a websocket to `wss://link.<domain>/carry` |
+| reuse | single-use | single-use or **reusable for one named office** (a sandbox reborn with new keys replaces ITS last record; a record a person paired is never replaced) |
+| without any code | — | **approval**: `DGO_JOIN=https://link.<domain>` asks; the request waits on the host's screen (and notifications) with the asker's fingerprint until a person approves or refuses it — no secret anywhere |
+
+With nobody comparing six digits and an intercepting proxy on the path, three bindings carry what the
+digits carried (the second reader found them missing before anything ran; each is a test now): the
+offer is signed by the identity it names (its ephemeral and WireGuard keys cannot be swapped under its
+name), the reply binds the host's WireGuard key inside what the host signs (`pairing.accept` — the
+screen pairing gains it too), and an offer is answered once; a join replaces only a record that a
+join through the same door wrote.
+
+Declared on the joining office as `DGO_JOIN` (+ `DGO_JOIN_PIN`, `DGO_JOIN_DIRECTION`) in `.env` or its
+environment; carried out by `join_api.Joiner` from the app's start, and again whenever its record of
+the host is gone. A password is never accepted (join_api.py's docstring says why). Gates:
+`join_api.selftest()` (both ways, every refusal, the pin), `carrier/ws_test.go` (a pair up through a
+CONNECT proxy and a TLS edge; the door's three paths), `tests/test_link_security.py` §9 (the door is
+one router, three paths, TLS only, never published).
+
+### D — the design of 2026-10-04 (kept for its reasoning; superseded by D′)
 
 **Owner's model (2026-10-04):** the reachable office shows a barcode, or hands over a code as text,
 that holds *the address and an access key*, valid for a time chosen when it is made (default one

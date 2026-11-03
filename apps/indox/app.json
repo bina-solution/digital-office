@@ -151,6 +151,10 @@
     }
   ],
   "compose": "docker-compose.yml",
+  "agent": {
+    "context": "AGENT.md",
+    "order": 35
+  },
   "blueprints": {
     "n8n": "blueprint/n8n",
     "requires_stdlib": ">=1.0"
@@ -193,6 +197,9 @@
   },
   "data": {
     "volumes": [],
+    "paths": [
+      "apps/indox/storage"
+    ],
     "on_uninstall": "prompt",
     "sql": [
       {

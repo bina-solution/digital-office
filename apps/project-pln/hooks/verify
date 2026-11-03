@@ -105,6 +105,180 @@ print("OK|" + detail if not wrong else "NO|" + detail + " — wrong: " + json.du
   rm -f /tmp/pln-verify.$$
 fi
 
+# ── 2b. the office's own sign-in is Plane's (DGO-371) ───────────────────────────────────────────
+# A person who has already signed in to the office must not be asked for a second sign-in by this
+# app. Four facts, in the order they fail, and each is the one the NEXT check assumes:
+#   · the middleware is in the IMAGE (a hand-patched container is not a fix)
+#   · the declared map is APPLIED, and every account it names exists and is active
+#   · a hand-written identity header is NOT a door — the acceptance of DGO-371 itself
+#   · the identity service this app asks is answering (302 to a stranger = answering, refusing)
+# The positive half — a browser carrying the office's cookie lands in the workspace, with no form —
+# is not reproducible here without a browser session, and is proven with the acceptance screenshots
+# recorded on DGO-371.
+SSO="$(dcx exec -T "${SVC}" ${MANAGE} shell -c '
+import json, os
+from django.conf import settings
+from plane.db.models import User
+path = os.environ.get("PLANE_SSO_MAP") or "/app/data/office-identity.json"
+try:
+    declared = (json.load(open(path, encoding="utf-8")) or {}).get("users") or []
+except (OSError, ValueError):
+    declared = []
+missing = [e.get("plane") for e in declared
+           if not User.objects.filter(email__iexact=str(e.get("plane") or ""), is_active=True).exists()]
+print("SSO|" + json.dumps({
+    "wired": any("office_identity" in m for m in settings.MIDDLEWARE),
+    "declared": len(declared),
+    "missing": missing,
+}))
+' 2>/dev/null | tr -d '\r' | grep '^SSO|' | tail -1)"
+if [ -z "${SSO}" ]; then
+  bad "project-pln-sso — could not read the office-identity state (is the API serving?)"
+  FAILED=1
+elif printf '%s' "${SSO}" | grep -q '"wired": true'; then
+  DECL="$(printf '%s' "${SSO}" | sed -n 's/.*"declared": \([0-9]*\).*/\1/p')"
+  MISSING="$(printf '%s' "${SSO}" | sed -n 's/.*"missing": \[\(.*\)\].*/\1/p')"
+  if [ -n "${MISSING}" ]; then
+    bad "project-pln-sso — the declared office identity maps to ${MISSING}, which is not an active Plane account"
+    FAILED=1
+  elif [ "${DECL}" = "0" ]; then
+    warn "project-pln-sso — no office identity is declared (bootstrap.yaml → sso:), so the office's own sign-in is off and Plane's password is the only door"
+  else
+    ok "project-pln-sso — ${DECL} declared office identity(ies) sign in without Plane's password"
+  fi
+else
+  bad "project-pln-sso — the middleware is not wired into MIDDLEWARE: the image is not the fix"
+  FAILED=1
+fi
+
+# …and the header a neighbour container can write is worth nothing. Asked at the API with a
+# hand-written identity and no cookie at all: the answer must be a refusal, and above all it must
+# not carry a session cookie (that cookie IS the signed-in state).
+FORGED="$(dcx exec -T "${SVC}" sh -c 'curl -s -D - -o /dev/null -H "X-authentik-username: akadmin" \
+  -H "X-authentik-email: ci@example.com" -H "X-authentik-jwt: forged" http://127.0.0.1/api/users/me/ \
+  | tr -d "\r" | tr "A-Z" "a-z"' 2>/dev/null | tail -20)"
+case "${FORGED}" in
+  *"set-cookie: session-id"*)
+    bad "project-pln-sso-forged — a hand-written X-authentik-username was given a session: any container on the office network can sign in"
+    FAILED=1 ;;
+  *" 401 "*|http/1.1\ 401*)
+    ok "project-pln-sso-forged — a hand-written identity header is refused (401, no session cookie)" ;;
+  *)
+    warn "project-pln-sso-forged — unexpected answer to a forged identity header ($(printf '%s' "${FORGED}" | head -1))" ;;
+esac
+
+# ── 2c. a request that crossed a LINK is signed by the door (DGO-545) ───────────────────────────
+# The other half of "no second sign-in": a browser on a LINKED office's console carries no cookie of
+# this office's provider — it was authenticated by that office, and its request arrives through the
+# link's door, which writes this office's mapped user and SIGNS it with the pair's own secret
+# (`apps/dgo-extend/link-proxy.py`). Both directions are asserted here, and they are the whole
+# contract: a request whose signature is computed from this office's own vault secret is signed in;
+# one whose signature does not match gets no session at all. The signature is computed INSIDE the
+# container, from the vault, exactly as the door computes it — so this check is also the proof that
+# the two implementations of the format still agree.
+DOOR_SIG="$(dcx exec -T "${SVC}" python3 -c '
+import hashlib, hmac, json, os, time, urllib.request
+base = (os.environ.get("CONNECTIONS_URL") or "http://connections:8990").rstrip("/")
+def get(path):
+    with urllib.request.urlopen(base + path, timeout=8) as r:
+        return json.loads(r.read() or b"{}")
+office, token = "", ""
+for row in (get("/api/instances?protocol=dgo_link").get("instances") or []):
+    iid = str(row.get("id") or "")
+    # a PAIRING row, `dgo_link-<office>`, and its office whole: an office id carries hyphens (hp-laptop), and the
+    # checker matches it exactly (office_identity.names_office, hos-005); an agent credential is not a pair
+    if not iid.startswith("dgo_link-") or (iid.startswith("dgo_link-serve-") and iid.endswith("-agent")):
+        continue
+    peer = iid[len("dgo_link-"):]
+    sec = get("/api/instances/" + iid + "/secret").get("secret") or {}
+    office, token = str(sec.get("peer") or peer), str(sec.get("token") or "")
+    if office == peer and token:
+        break
+    office, token = "", ""
+user = ""
+try:
+    users = (json.load(open("/app/data/office-identity.json", encoding="utf-8")) or {}).get("users") or []
+    names = (users[0].get("authentik") or []) if users else []
+    user = str(names[0] if names else "")
+except (OSError, ValueError, IndexError, KeyError):
+    user = ""
+if not (office and token and user):
+    print("UNSIGNED")
+else:
+    ts = int(time.time())
+    mac = hmac.new(token.encode("utf-8"), ("v1\n" + office + "\n" + user + "\n" + str(ts)).encode("utf-8"),
+                   hashlib.sha256).hexdigest()
+    print("v1 " + office + " " + user + " " + str(ts) + " " + mac)
+' 2>/dev/null | tr -d '\r' | tail -1)"
+if [ -z "${DOOR_SIG}" ] || [ "${DOOR_SIG}" = "UNSIGNED" ]; then
+  warn "project-pln-link-identity — no link secret in this office's vault, so the door's signature cannot be checked here (a single-office install: nothing to prove)"
+else
+  # The positive half: the door's own request, at the API, with no cookie of any kind.
+  DOORED="$(dcx exec -T -e DOOR_SIG="${DOOR_SIG}" "${SVC}" sh -c 'curl -s -D - -o /dev/null \
+    -H "X-Dgo-Identity: ${DOOR_SIG}" -H "X-Dgo-Office: vps1" -H "Host: plane.localhost" \
+    http://127.0.0.1/api/users/me/ | tr -d "\r" | tr "A-Z" "a-z"' 2>/dev/null | tail -20)"
+  case "${DOORED}" in
+    *"set-cookie: session-id"*|*" 200 "*)
+      ok "project-pln-link-identity — a request signed by the link's door enters the workspace (no form)" ;;
+    *)
+      bad "project-pln-link-identity — a signed request from a linked office was refused: opening Plane from a linked console asks for a password again (DGO-545)"
+      FAILED=1 ;;
+  esac
+  # …and the negative half: the same shape with a signature that does not match the secret.
+  FORGED_SIG="$(printf '%s' "${DOOR_SIG}" | sed 's/.\{8\}$/00000000/')"
+  faked="$(dcx exec -T -e DOOR_SIG="${FORGED_SIG}" "${SVC}" sh -c 'curl -s -D - -o /dev/null \
+    -H "X-Dgo-Identity: ${DOOR_SIG}" -H "Host: plane.localhost" \
+    http://127.0.0.1/api/users/me/ | tr -d "\r" | tr "A-Z" "a-z"' 2>/dev/null | tail -20)"
+  case "${faked}" in
+    *"set-cookie: session-id"*)
+      bad "project-pln-link-identity-forged — a signature that does not match the link's secret was given a session"
+      FAILED=1 ;;
+    *)
+      ok "project-pln-link-identity-forged — a signature that does not match is refused (no session cookie)" ;;
+  esac
+  # …and the token API (`/api/v1/…`) — the one a CLI or an agent reads — is open to that same proved
+  # identity and to no other: a linked office's agent has no key of ours, and this is the exact
+  # request that answered `401 Authentication credentials were not provided` before
+  # `patches/api-door-identity.py` (measured on vps1, 2026-10-13 — the app was reachable through the
+  # link and the work items were not).
+  TOKENIZED="$(dcx exec -T -e DOOR_SIG="${DOOR_SIG}" "${SVC}" sh -c 'curl -s -o /dev/null -w "%{http_code}" \
+    -H "X-Dgo-Identity: ${DOOR_SIG}" -H "Host: plane.localhost" \
+    http://127.0.0.1/api/v1/workspaces/bina/projects/' 2>/dev/null | tr -d '\r' | tail -1)"
+  case "${TOKENIZED}" in
+    200) ok "project-pln-link-api — the token API answers a signed link request (no key needed)" ;;
+    *) bad "project-pln-link-api — /api/v1/ answered '${TOKENIZED:-nothing}' to a signed link request: an agent of a linked office cannot read the work items (lnk-027)"
+       FAILED=1 ;;
+  esac
+  # …and the same path with no signature at all must stay closed.
+  UNSIGNED="$(dcx exec -T "${SVC}" sh -c 'curl -s -o /dev/null -w "%{http_code}" -H "Host: plane.localhost" \
+    http://127.0.0.1/api/v1/workspaces/bina/projects/' 2>/dev/null | tr -d '\r' | tail -1)"
+  case "${UNSIGNED}" in
+    200)
+      bad "project-pln-link-api-unsigned — the token API answered an UNSIGNED request: it is open to anyone who can reach the container"
+      FAILED=1 ;;
+    *) ok "project-pln-link-api-unsigned — with no signature the token API still refuses (${UNSIGNED})" ;;
+  esac
+fi
+
+# The service the middleware asks. A stranger's request (no cookie) is answered with a redirect to
+# the office's authorization endpoint — an answer means the dependency is up; a timeout means this
+# app cannot sign anybody in, and it says so instead of looking broken in the console.
+# Which service: the office's DGO_IDENTITY, as the middleware picks it (office_identity.PROVIDERS). The
+# host asked about is this office's own Plane host (DOMAIN_NAME): forward-auth answers 400, not a
+# redirect, for a host its office does not serve, so `plane.localhost` on a real domain reads as down.
+ASKED="$(dcx exec -T "${SVC}" sh -c 'case "${DGO_IDENTITY:-}" in
+    forward-auth) u=http://forward-auth:9078/auth/traefik ;;
+    *) u=http://authentik-server:9000/outpost.goauthentik.io/auth/traefik ;;
+  esac
+  curl -s -o /dev/null -w "%{http_code}" --max-time 8 \
+  -H "X-Forwarded-Host: ${DOMAIN_NAME:-plane.localhost}" -H "X-Forwarded-Proto: http" -H "X-Forwarded-Uri: /" \
+  "${PLANE_SSO_OUTPOST:-$u}"' 2>/dev/null | tr -d '\r' | tail -1)"
+case "${ASKED}" in
+  302|200) ok "project-pln-sso-provider — the office's identity service answers (${ASKED})" ;;
+  *) bad "project-pln-sso-provider — the identity service answered '${ASKED:-nothing}': nobody can be signed in from the office"
+     FAILED=1 ;;
+esac
+
 # ── 3. can the owner sign in? (the promise, end to end) ─────────────────────────────────────────
 EMAIL="$(read_env PLANE_OWNER_EMAIL)"; EMAIL="${EMAIL:-$(read_env N8N_OWNER_EMAIL)}"
 PASSWORD="$(read_env PLANE_OWNER_PASSWORD)"

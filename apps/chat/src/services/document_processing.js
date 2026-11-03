@@ -181,7 +181,7 @@ const processLinkDocument = async ({ url, textContext, messageDate, senderId }) 
     responseType: 'arraybuffer', 
     timeout: 60000,
     maxRedirects: 10,
-    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; BinaCompBot/1.0)' }
+    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; HacohenBot/1.0)' }
   });
   
   const buffer = Buffer.from(response.data);

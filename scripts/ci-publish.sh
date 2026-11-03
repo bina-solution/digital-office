@@ -18,7 +18,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 SRC="${1:-${REPO_ROOT}/ci-artifacts}"
 DEST="${REPO_ROOT}/.ci-cd/latest"
 README="${REPO_ROOT}/.ci-cd/README.md"
-REPO_SLUG="${GITHUB_REPOSITORY:-solomonBoltin/deployment-bina-comp}"
+REPO_SLUG="${GITHUB_REPOSITORY:-solomonBoltin/deployment-hacohen}"
 
 BRANCH="${GITHUB_REF_NAME:-$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)}"
 SHA="${GITHUB_SHA:-$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || echo unknown)}"; SHA_SHORT="${SHA:0:7}"

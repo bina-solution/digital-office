@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+#: mkdir — get-or-create a folder path in «קבצים»:  ./bbox drive mkdir "/פגישות/2026-10-28"
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+case "${1:-}" in ""|-h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+dcx exec -T drive python /app/cli.py mkdir "$1"

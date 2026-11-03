@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+#: n8n — the office moved to another domain: its users' sign-in addresses move with it
+#
+# rename-address — every n8n user whose address is <local>@<old domain> becomes <local>@<new domain>: the
+# SAME user (workflows, credentials, personal project), never a new one; the personal project of each MOVED
+# user, whose name carries the address, follows. Then N8N_OWNER_EMAIL in .env — the sign-in the platform
+# itself uses (connections injecting OAuth grants, the vault's login, the dump scripts) — decided from
+# STATE: it follows whenever no account holds the old address any more (moved now, by an earlier run cut
+# short before the key, or never created). The domains come from the environment (DGO_RENAME_FROM,
+# DGO_RENAME_TO, DGO_RENAME_DRY_RUN): `bbox rename-address [--dry-run] <old> <new>` (FPG-34).
+#
+# One transaction in n8n's own database. An address whose new form already belongs to ANOTHER user is
+# refused and named — two people never become one. n8n's database being DOWN is a failure, not "nothing to
+# move". The dry run measures inside the transaction, rolls back, and exits non-zero when the real run would
+# refuse. A moved user's open sessions end (n8n signs them over the address); the next sign-in is the new
+# one. Who is on which domain afterwards is noted (rename_note) for the hooks after this one.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # say, colors, running, read_env, read_env_value, env_set, rename_note, PG_CONTAINER
+OLD="$(printf '%s' "${DGO_RENAME_FROM:-}" | tr '[:upper:]' '[:lower:]')"
+NEW="$(printf '%s' "${DGO_RENAME_TO:-}" | tr '[:upper:]' '[:lower:]')"
+DRY="${DGO_RENAME_DRY_RUN:-0}"
+domain='^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$'
+if ! [[ "${OLD}" =~ ${domain} && "${NEW}" =~ ${domain} && "${OLD}" != "${NEW}" ]]; then
+  say "${cr}[n8n] rename-address: DGO_RENAME_FROM and DGO_RENAME_TO must be two different domains${c0}"
+  exit 1
+fi
+if ! running "${PG_CONTAINER}"; then
+  say "${cr}[n8n] rename-address: n8n is enabled here but its database is not running — nothing was moved; run it and try again${c0}"
+  rename_note N8N_OWNER_EMAIL failed
+  exit 1
+fi
+END=COMMIT
+[ "${DRY}" = 1 ] && END=ROLLBACK
+KEYVAL="$(read_env_value N8N_OWNER_EMAIL | tr '[:upper:]' '[:lower:]')"
+PGU="$(read_env POSTGRES_USER)"; PGD="$(read_env POSTGRES_DB)"; PGP="$(read_env POSTGRES_PASSWORD)"
+
+# `user` is a reserved word, so it is double-quoted; camelCase columns too. Every value reaches psql as a
+# variable (:'old'), never pasted into the text; the password reaches docker by NAME (`-e PGPASSWORD`), so
+# it is on no command line `ps` can read.
+export PGPASSWORD="${PGP}"
+OUT="$(docker exec -i -e PGPASSWORD "${PG_CONTAINER}" \
+  psql -U "${PGU:-root}" -d "${PGD:-n8n}" -v ON_ERROR_STOP=1 -tA \
+       -v old="${OLD}" -v new="${NEW}" -v key="${KEYVAL}" 2>&1 <<SQL | tr -d '\r'
+BEGIN;
+CREATE TEMP TABLE mv ON COMMIT DROP AS
+  SELECT id, email AS was, split_part(email, '@', 1) AS local,
+         split_part(email, '@', 1) || '@' || :'new' AS target
+  FROM "user" WHERE lower(email) LIKE '%@' || :'old';
+SELECT 'REFUSED=' || coalesce(string_agg(m.local, ',' ORDER BY m.local), '') FROM mv m
+  WHERE EXISTS (SELECT 1 FROM "user" o WHERE lower(o.email) = lower(m.target) AND o.id <> m.id);
+DELETE FROM mv m
+  WHERE EXISTS (SELECT 1 FROM "user" o WHERE lower(o.email) = lower(m.target) AND o.id <> m.id);
+UPDATE "user" u SET email = m.target FROM mv m WHERE u.id = m.id;
+UPDATE project p SET name = replace(p.name, m.was, m.target)
+  FROM project_relation r, mv m
+  WHERE r."projectId" = p.id AND r."userId" = m.id AND p.type = 'personal' AND position(m.was in p.name) > 0;
+SELECT 'MOVED=' || coalesce(string_agg(local, ',' ORDER BY local), '') FROM mv;
+SELECT 'PRESENT=' || coalesce(string_agg(DISTINCT split_part(lower(email), '@', 1), ','), '')
+  FROM "user" WHERE lower(email) LIKE '%@' || :'new';
+SELECT 'BEHIND=' || coalesce(string_agg(DISTINCT split_part(lower(email), '@', 1), ','), '')
+  FROM "user" WHERE lower(email) LIKE '%@' || :'old';
+SELECT 'FOLLOWS=' || CASE
+  WHEN :'key' LIKE '%@' || :'old' AND NOT EXISTS (SELECT 1 FROM "user" WHERE lower(email) = :'key')
+  THEN split_part(:'key', '@', 1) || '@' || :'new' ELSE '' END;
+${END};
+SQL
+)"
+RC=$?
+fact() { printf '%s\n' "${OUT}" | sed -n "s/^$1=//p" | tail -1; }
+moved="$(fact MOVED)"; refused="$(fact REFUSED)"; follows="$(fact FOLLOWS)"
+if [ "${RC}" -ne 0 ] || ! printf '%s\n' "${OUT}" | grep -q '^FOLLOWS='; then
+  say "${cr}[n8n] rename-address FAILED — nothing in n8n was changed (one transaction)${c0}"
+  printf '%s\n' "${OUT}" | grep -v '^[A-Z]*=' | grep -iv 'password\|secret\|token' | tail -6 | sed 's/^/  /'
+  rename_note N8N_OWNER_EMAIL failed
+  exit 1
+fi
+rename_note N8N_OWNER_EMAIL present "$(fact PRESENT)"
+rename_note N8N_OWNER_EMAIL behind "$(fact BEHIND)"
+if [ "${DRY}" = 1 ]; then
+  say "[n8n] DRY RUN, nothing changed — would move to @${NEW}: ${moved:-none}; N8N_OWNER_EMAIL → ${follows:-unchanged}; refused: ${refused:-none}"
+  [ -z "${refused}" ]; exit $?
+fi
+say "[n8n] sign-in addresses moved to @${NEW}: ${moved:-none}"
+{ [ -n "${moved}" ] || [ -n "${follows}" ]; } && rename_note - changed
+if [ -n "${follows}" ]; then
+  env_set N8N_OWNER_EMAIL "${follows}" && say "[n8n] N8N_OWNER_EMAIL now names ${follows}" \
+    || { say "${cr}[n8n] N8N_OWNER_EMAIL could not be written — run this again${c0}"; exit 1; }
+fi
+if [ -n "${refused}" ]; then
+  say "${cy}[n8n] NOT moved — the new address is already someone else's: ${refused}${c0}"
+  exit 1
+fi
+exit 0

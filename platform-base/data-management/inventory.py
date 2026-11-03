@@ -75,7 +75,7 @@ def project_name() -> str:
             return ARCHIVER.project_name()
         except Exception:                                 # noqa: BLE001
             pass
-    return os.environ.get("COMPOSE_PROJECT_NAME", "deployment-bina-comp")
+    return os.environ.get("COMPOSE_PROJECT_NAME", "deployment-hacohen")
 
 
 def deployment_name() -> str:
@@ -184,7 +184,7 @@ def live_volumes(project):
 # allowed in this file are storage technologies it has to speak in order to dump them — postgres,
 # redis, docker. Never n8n, authentik, glitchtip, indox.
 #
-# This list used to be a table of (user, database) logins: supabase_admin/postgres, bina-comp/n8n,
+# This list used to be a table of (user, database) logins: supabase_admin/postgres, hacohen/n8n,
 # authentik/authentik, glitchtip/glitchtip. Every one of those pairs is an app's private
 # credential, and a new app with its own database was simply invisible until someone remembered to
 # come back here. Each of them is also recoverable from the container itself — POSTGRES_USER and
@@ -193,8 +193,8 @@ def live_volumes(project):
 PG_IMAGE_HINTS = ("postgres", "pgvector", "timescale")
 KV_IMAGE_HINTS = ("redis", "valkey", "keydb")
 
-# The -d is load-bearing: postgres defaults dbname to the username, so a bare `psql -U bina-comp`
-# fails with "database bina-comp does not exist" and that store renders as an error, not an inventory.
+# The -d is load-bearing: postgres defaults dbname to the username, so a bare `psql -U hacohen`
+# fails with "database hacohen does not exist" and that store renders as an error, not an inventory.
 PG_FALLBACK_LOGINS = (("postgres", "postgres"),)
 
 

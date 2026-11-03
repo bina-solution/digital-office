@@ -1,0 +1,65 @@
+# bina-claude-desktop — the official Claude Desktop app for Linux (beta), streamed into the console with
+# Selkies (DGO-1074). The owner, 2026-10-31: «I want everything to be natively like I installed the
+# software … served like I serve browser 42 … I'm not sure if VNC is the best way».
+#
+# Why Selkies and not VNC (the research is on DGO-1074): it streams H.264 decoded by the browser's own
+# WebCodecs over ONE websocket — no UDP, no TURN, so it passes Traefik + SSO like every app here — and
+# it follows the browser window's size, pins a DPI (96–288), syncs the clipboard both ways (images too),
+# moves files up and down, and takes phone touch and IME input. noVNC/TigerVNC (browser42's stack) sends
+# lossy JPEG text and a text-only clipboard through a side panel; linuxserver.io, who build this base,
+# replaced their KasmVNC images with it. X11 mode (Xvfb + Openbox): the safer road for an Electron app.
+#
+# The app is installed exactly as https://code.claude.com/docs/en/desktop-linux.md says: Anthropic's apt
+# repository, its signing key checked against the fingerprint the docs publish.
+# linuxserver.io publishes no `latest` and makes breaking changes between versions, so the tag is pinned
+# by digest (gate G15); a bump is a deliberate edit of this line.
+FROM ghcr.io/linuxserver/baseimage-selkies:debiantrixie@sha256:51461db2f6c9ff821ba58773e989b8f83ce0a4fcaac7497649dd76c4e819e327
+
+# GNOME Keyring + the session bus: the app keeps its sign-in in the desktop's keyring, and without an
+# unlocked one it asks again on every launch (the docs' own troubleshooting). Fonts that render Hebrew
+# and emoji. git + the CLI's tools for the app's Code tab on the office checkout. node runs the front
+# door (gate.mjs), the same one the terminal has.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates curl gnupg dbus-x11 gnome-keyring libsecret-1-0 libsecret-tools \
+      fonts-noto-core fonts-noto-color-emoji culmus \
+      git openssh-client python3-yaml jq ripgrep nodejs \
+ && curl -fsSLo /usr/share/keyrings/claude-desktop-archive-keyring.asc https://downloads.claude.ai/claude-desktop/key.asc \
+ && gpg --show-keys --with-colons /usr/share/keyrings/claude-desktop-archive-keyring.asc \
+      | grep -q '^fpr:::::::::31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE:$' \
+ && echo "deb [arch=amd64,arm64 signed-by=/usr/share/keyrings/claude-desktop-archive-keyring.asc] https://downloads.claude.ai/claude-desktop/apt/stable stable main" \
+      > /etc/apt/sources.list.d/claude-desktop.list \
+ && apt-get update \
+ # Recommends skipped on purpose: they are QEMU/OVMF for Cowork, which needs /dev/kvm — a container
+ # has none (the docs: "common … in container-based Linux environments").
+ && apt-get install -y --no-install-recommends claude-desktop \
+ && rm -rf /var/lib/apt/lists/* \
+ && command -v claude-desktop
+
+# What the session runs (the base image's single-application hook, X11 mode: openbox runs
+# ~/.config/openbox/autostart, copied from /defaults on the first start). The autostart only names the
+# launcher, which lives in the image — so a new image changes what runs, even on a /config that keeps
+# the first start's copy.
+COPY desktop/autostart /usr/local/bin/bina-claude-desktop
+RUN chmod 755 /usr/local/bin/bina-claude-desktop \
+ && printf '/usr/local/bin/bina-claude-desktop\n' > /defaults/autostart \
+ && mkdir -p /workspace && chown 1000:1000 /workspace
+# /workspace is the desktop user's, so the launcher can keep /workspace/office pointing at the checkout,
+# which is mounted at its HOST path (the short spelling every brief and agent uses, DGO-1275).
+
+# THE FRONT DOOR. The stream is a signed-in Claude account; the image's nginx listens on every interface,
+# where any container of traefik-network could reach it. So nginx moves to the container's loopback
+# (CUSTOM_PORT=3100 in docker-compose.yml; init-nginx substitutes the port into this template), and
+# gate.mjs takes :3000 and admits the edge and the console only — the terminal's own door, the same file.
+RUN sed -i -e 's/^\(\s*\)listen 3000 default_server;/\1listen 127.0.0.1:3000 default_server;/' \
+           -e 's/^\(\s*\)listen 3001 ssl;/\1listen 127.0.0.1:3001 ssl;/' \
+           -e '/listen \[::\]/d' /defaults/default.conf \
+ && grep -q 'listen 127.0.0.1:3000 default_server;' /defaults/default.conf \
+ && grep -q 'listen 127.0.0.1:3001 ssl;' /defaults/default.conf \
+ && ! grep -qE 'listen (\[::\]:)?300[01]' /defaults/default.conf
+COPY adapter/gate.mjs /opt/bina-claude/gate.mjs
+COPY desktop/svc-bina-gate /etc/s6-overlay/s6-rc.d/svc-bina-gate
+RUN echo longrun > /etc/s6-overlay/s6-rc.d/svc-bina-gate/type \
+ && mkdir -p /etc/s6-overlay/s6-rc.d/svc-bina-gate/dependencies.d \
+ && touch /etc/s6-overlay/s6-rc.d/svc-bina-gate/dependencies.d/init-services \
+ && touch /etc/s6-overlay/s6-rc.d/user/contents.d/svc-bina-gate \
+ && chmod 755 /etc/s6-overlay/s6-rc.d/svc-bina-gate/run

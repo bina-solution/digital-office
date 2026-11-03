@@ -1,0 +1,23 @@
+{
+  "name": "@bina/dsh-client-ui-nav-collapse",
+  "description": "Full collapse of the agent's own navigation: the sidebar and the side panel fold away completely (not to a 56px rail) and the conversation gets the whole frame — by a toggle of its own, and automatically while the console is in full screen",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": []
+    }
+  },
+  "license": "MIT"
+}

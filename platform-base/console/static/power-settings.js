@@ -112,14 +112,27 @@ var binaNoAnswer = () => ({ ok: false, status: 0, json: async () => ({}), text: 
     let data = null, saved = null, timer = 0;
 
     async function load() {
+      let fresh = null;
       try {
         const r = await fetch(API, { headers: { Accept: "application/json" }, credentials: "same-origin" }).catch(binaNoAnswer);
         if (!r.ok) throw new Error(binaSaid(r.status));
-        data = await read(r);
-        draw();
+        fresh = await read(r);
       } catch (e) {
+        // …and ONLY here is the sentence the service's. Everything below this is this screen's own
+        // drawing: a fault there used to land in the same catch and be printed as «שירות «מכונה»: …»,
+        // which is how a JavaScript message reached the owner wearing another service's name (DGO-520).
         body.innerHTML = '<div class="pw-callout bad"><h4>לא ניתן לקרוא את מצב החשמל</h4><p>שירות «מכונה»: ' +
           esc(e.message) + ". נסה שוב בעוד רגע.</p></div>";
+        return;
+      }
+      data = fresh;
+      try {
+        draw();
+      } catch (e) {
+        // Named for what it is, kept off «טוען…», and left in the console for whoever reads it next.
+        console.error("power-settings: the card could not be drawn", e);
+        body.innerHTML = '<div class="pw-callout bad"><h4>המסך לא הוצג</h4><p>הקריאה מהמחשב הצליחה ' +
+          "והציור נכשל. רענן את החלון; אם זה חוזר, פרטי השגיאה בקונסול של הדפדפן.</p></div>";
       }
     }
 
@@ -211,7 +224,15 @@ var binaNoAnswer = () => ({ ok: false, status: 0, json: async () => ({}), text: 
           '<pre class="pw-cmd" dir="ltr">./bbox engine power start</pre></div>';
       }
       const wantsLid = p.lid.ac === "run" || p.lid.battery === "run";
-      if (s && wantsLid && !s.lid_permission) {
+      // THE PERMISSION IS A macOS FACT, AND AN ABSENT ONE IS NOT A MISSING ONE (DGO-520). This drew
+      // itself whenever the lid was asked to keep working — reading `s.lid_permission` (false on a Mac
+      // that has not granted it) as "not true" rather than "false", and then `s.setup.grant` on a
+      // status that has no agent at all. On this Windows office that threw
+      // "Cannot read properties of undefined (reading 'grant')" INSIDE draw(), the catch around load()
+      // printed that engine sentence as «שירות «מכונה»: …», and the card showed a JavaScript message
+      // attributed to another service. A status carrying no `lid_permission` is a status from an agent
+      // that does not report one — nothing is owed, and nothing is drawn.
+      if (s && wantsLid && s.lid_permission === false && s.setup) {
         html += '<div class="pw-callout"><h4>הרשאה חד-פעמית כדי לעבוד כשהמכסה סגור</h4>' +
           "<p>macOS מכניס את המחשב לשינה כשהמכסה נסגר, ושום תוכנה לא יכולה למנוע את זה בלי הרשאת מנהל. " +
           "ההרשאה מתירה רק שלוש פקודות: הפעלה וכיבוי של מניעת השינה, והכנסה לשינה. בכל הפעלה של המחשב המניעה מתאפסת מעצמה. " +

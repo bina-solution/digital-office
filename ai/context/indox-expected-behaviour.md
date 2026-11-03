@@ -3,7 +3,7 @@
 # (indox-sync-control-plane.md, sync-pattern-optimal.md, indox-runtime-attention.md,
 # indox-debug-run.md). Canonical runtime spec; the product goal lives in ai/context/goals.txt.
 
-Backend: **supabase** (Redis toggle `n8n.indox.data_backend = supabase`). Tenant: person2@example.com.
+Backend: **supabase** (Redis toggle `n8n.indox.data_backend = supabase`). Tenant: person3@example.com.
 Goal: lightning-fast, out-of-the-box, high-load-proven. A fresh demo state at high load must reach
 **all COMPLETED within ~10 minutes** — no errors, no human review, no spurious MISSING_TYPE.
 

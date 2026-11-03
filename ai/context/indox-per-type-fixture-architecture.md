@@ -118,7 +118,7 @@ guard-DSL (§E.2). This keeps it seedable via `TABLE_UPSERT` `[config]` and diff
     "model": "gemini-3.1-pro-preview",
     "cache": { "prefix": "invoice", "key": "sha256_binary", "bust_on": ["version", "model"] },  // §D.4
     "system_preamble": "You extract structured data from a single Israeli business document.",
-    "constants": { "own_company_vat": "515561520" },   // was hardcoded in the invoice prompt [ai]
+    "constants": { "own_company_vat": "500000088" },   // was hardcoded in the invoice prompt [ai]
     "response_schema": {
       "AI_TYPE":        { "type": "enum", "values": ["INVOICE","SHIPMENT","BALANCE_SHEET","ORDER","RECEIPT","IRRELEVANT"], "desc": "document type" },
       "AI_COMPANY_ID":  { "type": "string", "desc": "issuer VAT/ח.פ, EXCLUDING {{own_company_vat}}", "hint": "ע.מ / ח.פ" },
@@ -196,7 +196,7 @@ guard-DSL (§E.2). This keeps it seedable via `TABLE_UPSERT` `[config]` and diff
   // so the generic handler stays type-agnostic [linking].
   "side_effects": {
     "priority_sync": {
-      "endpoint": "https://msh.macomp.vip/odata/Priority/tabula.ini/binacomp/SHIM_RECEIVE_SUPDOC",
+      "endpoint": "https://msh.macomp.vip/odata/Priority/tabula.ini/mscohen/SHIM_RECEIVE_SUPDOC",
       "id_field": "SELECTED_DOC_ID",            // INVOICE_ID for invoices; SHIPMENT_ID for shipments [linking]
       "field_map": { "SUPNAME":"SELECTED_COMPANY_ID", "IVNUM":"SELECTED_DOC_ID", "CURDATE":"SELECTED_DOC_DATE", "QPRICE":"SELECTED_DOC_AMOUNT" /* …13 fields */ }
     },
@@ -240,7 +240,7 @@ change, no workflow deploy `[config][lifecycle]`.
     "model": "gemini-3.1-pro-preview",
     "cache": { "prefix": "receipt", "key": "sha256_binary", "bust_on": ["version","model"] },
     "system_preamble": "You extract structured data from a single Israeli payment receipt.",
-    "constants": { "own_company_vat": "515561520" },
+    "constants": { "own_company_vat": "500000088" },
     "response_schema": {
       "AI_TYPE":       { "type":"enum", "values":["INVOICE","SHIPMENT","BALANCE_SHEET","ORDER","RECEIPT","IRRELEVANT"], "desc":"document type" },
       "AI_COMPANY_ID": { "type":"string", "desc":"issuer VAT/ח.פ, EXCLUDING {{own_company_vat}}" },
@@ -446,7 +446,7 @@ are `TYPE=INVOICE` and re-enter this exact flow as ordinary invoices `[bs]`.
 ## D. Making AI prompts per-type (schema-driven prompt templating)
 
 Today the invoice prompt is a hardcoded string in a Set node, tightly coupled to invoice semantics: it
-bakes in `515561520` (own VAT to ignore), and references `חשבונית מס`, `יתרה לתשלום`, `סכום כולל`,
+bakes in `500000088` (own VAT to ignore), and references `חשבונית מס`, `יתרה לתשלום`, `סכום כולל`,
 `מספר הזמנת לקוח` `[ai]`. To make prompts per-type WITHOUT a workflow per type, we **generate the prompt
 from `fixture.ai_extract`** at runtime inside `aiExtract01` (§B.3).
 
@@ -467,8 +467,8 @@ responseSchema = compile(response_schema)   // {type:'object', properties:{…}}
 ```
 
 `interpolate` replaces `{{own_company_vat}}` etc. from `constants`. So the invoice prompt's
-"issuer VAT, EXCLUDING 515561520" is produced from `AI_COMPANY_ID.desc = "issuer VAT/ח.פ, EXCLUDING
-{{own_company_vat}}"` + `constants.own_company_vat = "515561520"` `[ai]`. The RECEIPT fixture yields a
+"issuer VAT, EXCLUDING 500000088" is produced from `AI_COMPANY_ID.desc = "issuer VAT/ח.פ, EXCLUDING
+{{own_company_vat}}"` + `constants.own_company_vat = "500000088"` `[ai]`. The RECEIPT fixture yields a
 receipt-specific prompt from the same code — no new node.
 
 ### D.2 Type-shape (flat vs nested)

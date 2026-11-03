@@ -10,7 +10,7 @@ const DISPATCH_PUBLIC_URL = (process.env.DISPATCH_PUBLIC_URL || 'http://localhos
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 const API = `https://api.telegram.org/bot${TOKEN}`;
-const DOWNLOADS_DIR = '/root/deployment-bina-comp/development/openhands/downloads';
+const DOWNLOADS_DIR = '/root/deployment-hacohen/development/openhands/downloads';
 try { mkdirSync(DOWNLOADS_DIR, { recursive: true }); } catch(e) {}
 
 // In-memory image cache for URL proxy

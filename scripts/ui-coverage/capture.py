@@ -86,8 +86,14 @@ CTX_KWARGS = {
     "is_mobile": bool(PROFILE.get("is_mobile", False)),
     "has_touch": bool(PROFILE.get("has_touch", False)),
 }
+# Phone and tablet carry a user agent too: apps decide "phone" from navigator.userAgent, not from
+# the viewport, so without it a 390px capture photographs the desktop branch (view-profiles.yaml
+# says which apps, and what was measured). Desktop has none — the browser's own is a desktop.
+if PROFILE.get("user_agent"):
+    CTX_KWARGS["user_agent"] = PROFILE["user_agent"]
 print(f"[ui-map] view profile: {PROFILE_NAME} "
-      f"({VIEWPORT['width']}x{VIEWPORT['height']} @{CTX_KWARGS['device_scale_factor']}x)")
+      f"({VIEWPORT['width']}x{VIEWPORT['height']} @{CTX_KWARGS['device_scale_factor']}x)"
+      + (f"\n[ui-map] user agent: {CTX_KWARGS['user_agent']}" if "user_agent" in CTX_KWARGS else ""))
 
 OWN_BROWSER = os.getenv("UI_OWN_BROWSER", "1") != "0"
 
@@ -167,6 +173,21 @@ def hydrate_frame(page, target: int = 60, budget_ms: int = 18000):
             stable = 0
         last = n
         page.wait_for_timeout(400)
+
+
+#: The identity the office's edge establishes, as the headers its forwardAuth middleware writes
+#: (`platform-base/traefik/config/authentik-forwardauth.yaml`; the SSO-off branch of the same file
+#: writes these five values). A capture that skips the edge carries them itself — see the context
+#: creation in main() — for the account the capture signs in as.
+def _edge_identity() -> dict[str, str]:
+    user = AK_USER or "akadmin"
+    return {
+        "X-authentik-username": user,
+        "X-authentik-name": "Developer",
+        "X-authentik-email": f"{user}@localhost",
+        "X-authentik-groups": "authentik Admins",
+        "X-authentik-uid": "dev",
+    }
 
 
 def ak_login(page) -> bool:
@@ -380,8 +401,33 @@ def validate(page, png: Path, framed: bool = False,
                         " return !!(c && c.querySelector('.spin') && !c.classList.contains('hidden')); }")
                 except Exception:
                     stuck = False
-                return False, ("console shell never opened the app (its content pane is still on the "
-                               "spinner)" if stuck else f"embedded app near-empty ({inner['n']} nodes)")
+                if stuck:
+                    return False, ("console shell never opened the app (its content pane is still on the "
+                                   "spinner)")
+                # A THIN PAGE CAN BE A WRAPPER, and the screen is one level down. Archify's viewer is
+                # a title bar plus an iframe holding the rendered diagram — the wrapper carries 13
+                # nodes while the diagram itself is 768,740 bytes of inline SVG — so every diagram
+                # in the office would read as "near-empty" (measured 2026-10-10, `archify/diagram`).
+                # Judge the nested frame when it can be read, and treat an unreadable one as the
+                # deliberate thing it is: archify serves the rendered diagram sandboxed
+                # (`Content-Security-Policy: sandbox`, so it is an origin of its own and no script
+                # here may look inside). Laid out with a real src = the screen exists.
+                try:
+                    nested = page.eval_on_selector(FRAME_SEL, """el => {
+                        const d = el.contentDocument; if (!d) return null;
+                        return [...d.querySelectorAll('iframe')].map(f => {
+                            let n = null;
+                            try { n = f.contentDocument ? f.contentDocument.querySelectorAll('*').length : null; }
+                            catch (e) { n = null; }
+                            return { src: f.getAttribute('src') || '', nodes: n, h: f.clientHeight };
+                        }); }""") or []
+                except Exception:
+                    nested = []
+                if any((f["nodes"] or 0) >= 30 for f in nested):
+                    return True, "ok"
+                if any(f["src"] and f["h"] > 80 for f in nested):
+                    return True, "ok"
+                return False, f"embedded app near-empty ({inner['n']} nodes)"
             if BAD_TEXT.search(inner["t"] or ""):
                 return False, f"embedded app shows error/login"
         except Exception:
@@ -956,12 +1002,25 @@ def main() -> int:
         else:
             browser = p.chromium.connect_over_cdp("http://127.0.0.1:9222")
         try:
-            # Viewport, deviceScaleFactor, is_mobile and has_touch all come from the active view
-            # profile (see _load_profile). The scale factor keeps downscaled map tiles and the
-            # zoomable gallery crisp; is_mobile/has_touch make phone and tablet profiles behave like
-            # real touch devices, so hover-only affordances correctly do NOT appear.
+            # Viewport, deviceScaleFactor, is_mobile, has_touch and the user agent all come from the
+            # active view profile (see _load_profile). The scale factor keeps downscaled map tiles and
+            # the zoomable gallery crisp; is_mobile/has_touch make phone and tablet profiles behave
+            # like real touch devices, so hover-only affordances correctly do NOT appear; the user
+            # agent is what an app that asks «am I on a phone?» reads (DGO-576).
+            #
+            # The identity is carried BY HAND, and that is the edge's own identity: the office's
+            # traefik writes X-authentik-* through its forwardAuth middleware, an app behind it may
+            # take that as its authentication — the agent does exactly that (`apps/bina-ds`: "accept
+            # the identity Traefik already established, like every other embedded app") — and this
+            # capture reaches the console on its container address, skipping the edge, so those
+            # headers never exist and such an app answers the visitor with a 401 nobody else sees.
+            # Measured 2026-10-10: `bina/main` came back `embedded app near-empty (20 nodes)` — the
+            # console's "no screen to show" card — while the same tile through the edge renders 462
+            # nodes for the signed-in owner. The five values are the ones this stack's own SSO-off
+            # mode writes, for the account the capture signs in as.
             ctx = browser.new_context(ignore_https_errors=True, viewport=VIEWPORT,
-                                      locale="he-IL", **CTX_KWARGS)
+                                      locale="he-IL", extra_http_headers=_edge_identity(),
+                                      **CTX_KWARGS)
         except Exception:
             ctx = browser.contexts[0]
         page = ctx.new_page()

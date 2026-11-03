@@ -130,7 +130,8 @@ check("an artifact longer than it claims is cut off at the claim, not stored",
 
 # 5. names that are not plain paths under the archive
 for label, rel in (("climbs out with ..", "../../etc/cron.d/x"), ("is absolute", "/etc/passwd"),
-                   ("shadows the manifest", "manifest.json"), ("hides a .. inside", "volumes/../../x")):
+                   ("shadows the manifest", "manifest.json"), ("hides a .. inside", "volumes/../../x"),
+                   ("ends in a line break", "volumes/x.tar.gz\n")):        # DGO-623: `$` passed it
     def tamper(man, files, rel=rel):
         man["artifacts"][rel] = {"kind": "volume", "bytes": 3, "sha256": "0" * 64, "app": "notes"}
     PEER["evil"] = archive(GOOD, tamper)
@@ -166,7 +167,8 @@ check("an office that refuses an artifact part-way is quoted, and nothing is lis
 # 8. the route refuses names that are not identifiers (before any job exists)
 import asyncio
 from fastapi import HTTPException
-for office, name in (("macbook", "../x"), ("Mac Book", "good"), ("macbook/../vps1", "good"), ("", "good")):
+for office, name in (("macbook", "../x"), ("Mac Book", "good"), ("macbook/../vps1", "good"), ("", "good"),
+                     ("macbook", "good\n")):                               # DGO-623: the router delivers %0A
     try:
         asyncio.run(dm.api_pull(office=office, name=name))
         check(f"the route refuses office={office!r} name={name!r}", False)

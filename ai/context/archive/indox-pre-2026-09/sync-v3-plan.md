@@ -4,7 +4,7 @@ Status: **W0–W4 DONE (laptop/dev)** — 2026-07-10: proc-mode parity landed, a
 all 5 registry sources flipped to `engine:v3` (proc auto via processor_wf), live business-like docs from
 localdrive+localmail delivered with full v1 enrichment (sender→company, date−2mo naming, OCR figuring,
 filename-parse, link resolution), billboards flipped, second pass idempotent, sync state AT REST.
-Remaining: prod (bina-comp-vps) cutover as a deliberate separate step + W5 optimizations.
+Remaining: prod (hacohen-vps) cutover as a deliberate separate step + W5 optimizations.
 Supersedes the claim/label sync (`sync-refactor-v1`: SyncScanner00001 → SyncScanUnit0001 → SyncProc*).
 Companion decisions + research: memory `indox-sync-best-practices-research` (★/★★ sections + code-review gate).
 

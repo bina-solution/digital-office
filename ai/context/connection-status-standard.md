@@ -55,7 +55,7 @@ normally — the machine is fine; the **tunnel** is not.
 This is the part worth writing down, because it rules out the usual suspects:
 
 ```
-# every packet sent from this office to 203.0.113.10:51820 arrives at the server —
+# every packet sent from this office to 93.184.216.5:51820 arrives at the server —
 # proven by the server's own ufw counter, which moved by exactly the number sent:
 iptables -L -n -v -x | grep 'udp dpt:51820'        # on vps1
 #   268566 → 268596  (+30, python socket, ephemeral source port)
@@ -90,8 +90,8 @@ The declared tunnel endpoint is the **name** `staging.digital-office.co.il`
 
 ```
 staging.digital-office.co.il        → NOERROR, no answer (only a TXT spf record)
-*.staging.digital-office.co.il      → 203.0.113.10, at ANY depth (a.b.c.d.staging… resolves)
-bina.macbook.console.staging.…      → 203.0.113.10
+*.staging.digital-office.co.il      → 93.184.216.5, at ANY depth (a.b.c.d.staging… resolves)
+bina.macbook.console.staging.…      → 93.184.216.5
 ```
 
 Two consequences, both already recorded as traps and neither enforced:
@@ -100,7 +100,7 @@ Two consequences, both already recorded as traps and neither enforced:
   `wg-quick up` fails with `Name or service not known`, **the entrypoint logs `wg-quick failed on
   re-apply` and carries on**, and *"the office runs with no tunnel while every screen says the link
   is up"*. Today this is only survived because the applied config still holds the IP resolved
-  earlier (203.0.113.10).
+  earlier (93.184.216.5).
 * `digital-office-network-plan.md` נספח ב — *"an entry host must be a name that resolves"*. Nothing in
   `platform/manager/serve.py` or `apps/dgo-extend/*.py` resolves a host before publishing it
   (no `getaddrinfo` anywhere in either), so the rule is documentation only.
@@ -150,7 +150,7 @@ WireGuard kept counting it as sent.** Steps that proved it:
 1. A local listener test (the peer's endpoint pointed at another container for 20 s) showed the
    handshake initiations **are** transmitted: `RX … from ('172.18.0.2', 51820) len 148 type 1`.
 2. `tcpdump` on the office's own machine showed each one leaving as
-   `192.168.5.15.51820 > 203.0.113.10.51820: UDP, length 148` — out of the VM, on the wire.
+   `192.168.5.15.51820 > 31.97.196.82.51820: UDP, length 148` — out of the VM, on the wire.
 3. `tcpdump` on the server, and its ufw counter, saw **none** of them — while 148-byte packets of the
    same shape, from the same machine and from another container, sent to the same address and port,
    arrived every time (proved by the counter moving by exactly the number sent).

@@ -936,7 +936,11 @@ async def api_remote(request: Request):
 
 # ── the UI ───────────────────────────────────────────────────────────────────────────────────────
 @app.get("/")
+@app.get("/accounts")
+@app.get("/mirrors")
 def index():
+    # Every screen is an address (G83): a link to /mirrors opened cold, or a reload there, gets the page,
+    # and the page's own router draws that screen from the path.
     return FileResponse(_STATIC / "index.html")
 
 

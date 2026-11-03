@@ -18,7 +18,7 @@ Verbs:
     compose-files  print the canonical -f list (the one answer to "which files are the stack?")
     services       print the compose SERVICE names a lane must start, DERIVED from the graph
 """
-import argparse, hashlib, shutil, json, pathlib, re, sys, subprocess
+import argparse, hashlib, shutil, json, pathlib, re, sys, subprocess, types
 
 try:
     import yaml
@@ -63,13 +63,13 @@ MAX_BRIEF_BYTES = 6000
 # ── company identity: BUSINESS_NAME -> COMPANY_SLUG -> every host and the mail address ─────────
 # A deployment has exactly ONE company identity, and the operator states it once, as a human name:
 #
-#   BUSINESS_NAME=Bina-comp
-#     -> COMPANY_SLUG          bina-comp
-#        -> DEPLOYMENT_NAME    bina-comp                        -> n8n-bina-comp, mailserver-bina-comp, …
-#        -> DEPLOYMENT_DOMAIN  bina-comp.digital-office.co.il   -> console.bina-comp…, n8n.bina-comp…, …
+#   BUSINESS_NAME=Hacohen
+#     -> COMPANY_SLUG          hacohen
+#        -> DEPLOYMENT_NAME    hacohen                        -> n8n-hacohen, mailserver-hacohen, …
+#        -> DEPLOYMENT_DOMAIN  hacohen.digital-office.co.il   -> console.hacohen…, n8n.hacohen…, …
 #        -> MAIL_DOMAIN        = DEPLOYMENT_DOMAIN            -> person1@example.com
-#        -> MAIL_DKIM_SELECTOR bina-comp
-#        -> GLITCHTIP_ORG_SLUG bina-comp
+#        -> MAIL_DKIM_SELECTOR hacohen
+#        -> GLITCHTIP_ORG_SLUG hacohen
 #
 # Everything after the slug is ordinary `${VAR}` interpolation, which compose already does inside
 # .env. The slug itself is the one step compose CANNOT do: there is no lowercase and no substitution
@@ -85,11 +85,90 @@ MAX_BRIEF_BYTES = 6000
 # `#@derived slug` marker line. Anything else in .env — secrets, operator overrides, CI's own
 # DEPLOYMENT_NAME — is out of reach by construction.
 DERIVED_MARKER = "#@derived slug"
-ENVFILE = REPO / ".env"
+_HOME = pathlib.Path(__file__).resolve().parents[2]     # the repo this file lives in
+_SELF = sys.modules.get(__name__)                       # …and the module object itself
+_ENVFILE = None                     # None = "the repo's own .env"; a tmp path once a test says so
+# The HONEST name, bound here as a real global. guard_envfile() below sets it again (through the
+# guarded class, so a test may redirect it), but a name this module READS must also be a name it
+# BINDS: for a while it existed only as an attribute created by `_SELF.ENVFILE = …`, so the reader
+# in `_envfile_value` referenced a global that no line of this file defines — G80's NameError.
+ENVFILE = _HOME / ".env"
+
+# The repo's own `.env` is NOT writable through this module, and not redirectable off it either.
+# Measured 2026-10-14 17:01: this repo's test module was loaded by a hand-written runner (there is no
+# pytest in the office container), so its autouse `_hermetic` fixture never fired and one
+# `rc.ENVFILE.write_text("CONSOLE_BASE_URL=…")` — written for a tmp_path — landed on the LIVE `.env`:
+# 50,193 bytes -> 43, one line, and the whole perf-profile section went with it. The guard therefore
+# sits at the WRITE and at the ASSIGNMENT, not at the runner: a test may only name a temp `.env`, and
+# until it does, the repo's own file is refused by name.
+#
+# It is installed on the module object (`__getattr__`/`__setattr__`), not as a property: a module
+# attribute is not a descriptor, so a property would silently never see the assignment.
+
+
+def envfile_write(text, *, encoding="utf-8", newline=None):
+    """Write `text` to `.env` — refusing, by name, the repo's own file until a test redirected it."""
+    if _ENVFILE is None:
+        raise RuntimeError(
+            f"refusing to write the repo's own {REPO / '.env'} from a test/loader path — point REPO "
+            f"and ENVFILE at a temp dir first (test_resolve.py's `_hermetic` fixture does exactly "
+            f"that), or run the module under pytest"
+        )
+    if newline is None:
+        _ENVFILE.write_text(text, encoding=encoding)
+    else:
+        with _ENVFILE.open("w", encoding=encoding, newline=newline) as fh:
+            fh.write(text)
+
+
+class _GuardedEnvModule(types.ModuleType):
+    """This module's own class, with `.env` access guarded.
+
+    A module-level `__setattr__` is never consulted — attribute writes go through `type(module)`, so
+    the guard has to BE the type. `REPO = tmp_path` (what test_resolve.py's `_hermetic` fixture does
+    first) drags ENVFILE with it, and while REPO is still this repo, ENVFILE may only be *named* as
+    the file it already is — a redirection needs the temp repo first.
+    """
+
+    def __setattr__(self, name, value):
+        if name == "REPO":
+            super().__setattr__("REPO", value)
+            if value != _HOME:                     # a temp repo: ENVFILE follows it here and now
+                super().__setattr__("ENVFILE", pathlib.Path(value) / ".env")
+                super().__setattr__("_ENVFILE", pathlib.Path(value) / ".env")
+            return
+        if name == "ENVFILE":
+            path = pathlib.Path(value)
+            if REPO == _HOME:                      # still the office's own repo
+                if path != REPO / ".env":
+                    raise ValueError(
+                        f"ENVFILE may only be redirected to a temp .env — name a temp REPO first "
+                        f"(refusing {path}; the office's file is {REPO / '.env'})"
+                    )
+                super().__setattr__("ENVFILE", path)      # the honest name, not a redirection
+                super().__setattr__("_ENVFILE", None)     # …and still not writable
+                return
+            super().__setattr__("ENVFILE", path)
+            super().__setattr__("_ENVFILE", path)
+            return
+        super().__setattr__(name, value)
+
+
+def guard_envfile():
+    """Make `.env` access honest. Called at import (and by the tests' fixture); idempotent."""
+    global _SELF
+    _SELF = sys.modules.get(__name__)
+    if _SELF is None or isinstance(_SELF, _GuardedEnvModule):
+        return
+    _SELF.__class__ = _GuardedEnvModule
+    _SELF.ENVFILE = REPO / ".env"          # the honest name; `_ENVFILE` stays None = not writable
+
+
+guard_envfile()
 
 
 def slugify(name):
-    """"Bina-comp" -> "bina-comp"; "Bina Solutions Ltd." -> "bina-solutions-ltd"."""
+    """"Hacohen" -> "hacohen"; "Bina Solutions Ltd." -> "bina-solutions-ltd"."""
     return re.sub(r"[^a-z0-9]+", "-", (name or "").strip().lower()).strip("-")
 
 
@@ -206,8 +285,7 @@ def sync_identity():
     if changed:
         # newline="" so `nl` (the file's OWN ending) is what lands on disk, not python's translation.
         # Path.write_text() only grew a newline= kwarg in 3.10; open() has had it forever.
-        with ENVFILE.open("w", encoding="utf-8", newline="") as fh:
-            fh.write(nl.join(lines))
+        envfile_write(nl.join(lines), newline="")
         print(f"  identity  BUSINESS_NAME={business!r} -> slug {slug!r}", file=sys.stderr)
         for c in changed:
             print(f"  identity  .env {c}", file=sys.stderr)
@@ -271,6 +349,39 @@ def enabled_ids(state, cat):
             if aid in cat and disposition(e) == "enabled"}
 
 
+def workflows_here(entry, runs=None) -> bool:
+    """Does THIS office's n8n run this app's workflows? (`apps.<id>.workflows`, DGO-945.)
+
+    Absent: where the app runs — an app that runs here has its workflows imported here, one that does
+    not has not (the refusal that stopped sixty-nine INDOX workflows being created on an office that
+    runs no INDOX). `runs` is the caller's answer to "does it run here for its workflows": enabled, or
+    the workflow engine pulled in by the plan (DGO-1001 — n8n, pulled in by bina-ds and off in the state,
+    never got its own workflows on a fresh install). Without it, enabled is the answer.
+    `here`: this office runs them although the app runs in a linked office — the HP's n8n runs
+    Meet's while Meet runs on vps1, and its workflows reach Meet through the link
+    (`link_endpoints`). Another office's name: that office runs them, so this one does not, although
+    the app runs here (vps1, once Meet's workflow moved to the HP). Each office states its own half.
+    """
+    w = str(entry.get("workflows") or "").strip().lower() if isinstance(entry, dict) else ""
+    if not w:
+        return disposition(entry) == "enabled" if runs is None else bool(runs)
+    return w == "here"
+
+
+def linked_from(entry) -> str:
+    """The linked office whose doors this app's LINK capabilities are used from although the app runs
+    here (`apps.<id>.linked`, DGO-945) — "" when none is named.
+
+    The owner's rule is that transcription runs on the Dell, always: an HP that runs apitools for its
+    OCR keeps the transcriber's container too (idle, ~60 MB), and without this its workflows would
+    transcribe on the HP. `apitools: { state: enabled, linked: dell }` points this office's calls to
+    the app's `link: true` capabilities (`speech`) at dell's door, and leaves the rest of the app —
+    its OCR, its tile — here. Stated by the office that CALLS, never by the one that serves: a linked
+    office cannot take over the address of an app this office runs."""
+    v = str(entry.get("linked") or "").strip().lower() if isinstance(entry, dict) else ""
+    return v if re.fullmatch(r"[a-z][a-z0-9-]{1,30}", v) else ""
+
+
 def set_disposition(aid, dispo, by="user", create=False):
     """THE writer for apps.<id> in platform.state.yaml. One implementation, beside the reader.
 
@@ -297,8 +408,15 @@ def set_disposition(aid, dispo, by="user", create=False):
         raise ValueError(f"unknown disposition {dispo!r}; expected one of {DISPOSITIONS}")
     txt = STATE.read_text(encoding="utf-8")
     repl = f"{{ state: {dispo}, by: {by} }}"
-    new, n = re.subn(rf"^(\s+{re.escape(aid)}:\s*)\{{[^}}]*\}}",
-                     lambda m: m.group(1) + repl, txt, count=1, flags=re.M)
+
+    def keep(m):
+        # The entry's OTHER keys are not this writer's (`workflows:`, DGO-945): kept as written, after
+        # the two it owns, so `bbox apps enable meet` does not silently move Meet's workflows back.
+        others = [kv.strip() for kv in m.group(2).split(",")
+                  if kv.strip() and kv.split(":", 1)[0].strip() not in ("state", "by", "enabled")]
+        return m.group(1) + (f"{{ state: {dispo}, by: {by}, {', '.join(others)} }}" if others else repl)
+
+    new, n = re.subn(rf"^(\s+{re.escape(aid)}:\s*)\{{([^}}]*)\}}", keep, txt, count=1, flags=re.M)
     if n:
         if new != txt:
             STATE.write_text(new, encoding="utf-8", newline="\n")
@@ -582,6 +700,27 @@ def load_state():
     return st
 
 
+def default_bindings():
+    """The PRODUCT's capability → provider choices: `product_bindings:` in platform.state.default.yaml.
+
+    resolve() pulls in the provider they name for a capability that two apps provide when the office
+    runs neither and has not switched the product's choice off — a state that names only the apps
+    that use it, as every state could while one app provided it (forward-auth beside authentik,
+    2026-10-22) — and names it between two the office runs. An office running one provider keeps it
+    (rule 3), so a change here moves no office that runs authentik: the forward-auth window is each
+    office's own state change (core-006). Read from the default file every time, under a key a fresh
+    install's copy does not make its own binding. A default file that is missing, unreadable or binds
+    nothing answers {}, and an ambiguity is refused as before."""
+    try:
+        doc = yaml.safe_load(DEFAULT_STATE.read_text(encoding="utf-8")) or {}
+    except (OSError, UnicodeDecodeError, yaml.YAMLError):
+        return {}
+    raw = doc.get("product_bindings") if isinstance(doc, dict) else None
+    if not isinstance(raw, dict):
+        return {}
+    return {k: (v.get("provider") if isinstance(v, dict) else v) for k, v in raw.items()}
+
+
 # ── validate ──────────────────────────────────────────────────────────────────
 def _check_enums(aid, val, spec, path, errs):
     """Recursively enforce every `enum` the schema declares — including inside array items.
@@ -795,7 +934,12 @@ def resolve(cat, state, roots=None):
     # Admin-chosen capability -> provider bindings (the durable half of the decision).
     bindings = {k: v.get("provider") if isinstance(v, dict) else v
                 for k, v in (state.get("bindings") or {}).items()}
-    want, frontier = set(enabled), list(enabled)
+    # ...and the product's, for a capability the office's state binds nothing for (default_bindings).
+    product = default_bindings()
+    # The walk starts from the SORTED seed, as the Go twin's does: `enabled` is a set, and a list made
+    # of it follows the process's string hashing, so the `info` lines came in another order from one
+    # process to the next and the twins' read verbs disagreed on the HP's state (DGO-1000).
+    want, frontier = set(enabled), sorted(enabled)
     while frontier:
         aid = frontier.pop()
         for u in cat[aid].get("use", []):
@@ -829,9 +973,16 @@ def resolve(cat, state, roots=None):
             #   1. a binding recorded in platform.state.yaml   (the admin's choice — Android's
             #      remembered "preferred activity" / Debian's update-alternatives manual mode)
             #   2. the consumer's declared `default_provider`  (Snap's default-provider)
-            #   3. the only candidate
-            # Ambiguity with no rule is NOT resolved by guessing: it fails the plan and names every
-            # candidate, so the operator picks instead of finding out in production.
+            #   3. the ONE eligible provider this office runs (its own state enables it) — its
+            #      choice, made by enabling it: authentik in every office this product starts, and
+            #      forward-auth in a pre-release office that runs it alone
+            #   4. the product's binding, `product_bindings:` in platform.state.default.yaml — which
+            #      provider to pull in for an office that runs neither (a state that names only the
+            #      apps that use it), and which of two it runs — never one this office switched off
+            #   5. the only candidate
+            # Rules 3 and 4 decide only what was refused before them, so an office that planned
+            # keeps its provider. Ambiguity with no rule is NOT resolved by guessing: it fails the
+            # plan and names every candidate, so the operator picks instead of finding out in production.
             chosen = None
             if len(ok) == 1:
                 chosen = ok[0]
@@ -848,10 +999,23 @@ def resolve(cat, state, roots=None):
                     chosen = pref
                     diags.append(("info", f"{cap}: '{chosen}' selected via {aid}'s default_provider"))
                 else:
-                    diags.append(("error",
-                        f"{aid}: capability '{cap}' has {len(ok)} eligible providers "
-                        f"({', '.join(sorted(ok))}) and no rule to choose — set "
-                        f"`bindings.{cap}` in platform.state.yaml or `default_provider` on the use[] entry"))
+                    # what THIS office's state runs, and what it lists but switched off — the state's,
+                    # never a lane's roots; a provider that names the capability twice is one provider
+                    running = sorted({p for p in ok if p in enabled_ids(state, cat)})
+                    listed = state.get("apps") or {}
+                    prod = product.get(cap)
+                    if len(running) == 1:
+                        chosen = running[0]
+                        diags.append(("info", f"{cap}: '{chosen}' is the one eligible provider this office runs"))
+                    elif prod and prod in ok and (prod in running if running else prod not in listed):
+                        chosen = prod
+                        diags.append(("info", f"{cap}: bound to '{chosen}' by {DEFAULT_STATE.name} "
+                                              f"(this office's {STATE.name} binds none)"))
+                    else:
+                        diags.append(("error",
+                            f"{aid}: capability '{cap}' has {len(ok)} eligible providers "
+                            f"({', '.join(sorted(ok))}) and no rule to choose — set "
+                            f"`bindings.{cap}` in platform.state.yaml or `default_provider` on the use[] entry"))
             if chosen and chosen not in want:
                 want.add(chosen); frontier.append(chosen)
                 diags.append(("info", f"{chosen}: pulled in as provider of '{cap}' for {aid}"))
@@ -942,7 +1106,24 @@ def write(path, text):
             return
     except OSError:
         pass                            # not there yet (or unreadable): writing it is the answer
-    path.write_bytes(data)
+    _put(path, data)
+
+
+def _put(path, data):
+    """`data` into `path`, every time (`Path.write_bytes`) — and a compiled file ANOTHER user wrote, in a
+    directory this one owns, is replaced rather than refused.
+
+    The control plane compiles inside its container as root (app-management, for a linked office's
+    apps). Measured 2026-11-01 on the Dell (DGO-1080): the MacBook's apps arrived as root-owned
+    `remote.macbook.*.json`, and the owner's next `bbox run` refused to start on «Permission denied».
+    Only on that failure: a rename on every write would leave a single-file mount on the old inode.
+    The Go twin's `writeText` does the same."""
+    path = pathlib.Path(path)
+    try:
+        path.write_bytes(data)
+    except PermissionError:
+        path.unlink()
+        path.write_bytes(data)
 
 
 def compose_files():
@@ -968,7 +1149,8 @@ def compose_files():
         files.append(bootstrap.relative_to(REPO).as_posix())
     # The CPU plan (gate G65), rendered by scripts/perf-profile-apply. What compose is given of it
     # is only its `services:` — a cap this machine has too few cores to create, lowered to the
-    # machine's — LAST, because a later file wins. The budget's SCALE is not here: it moves with
+    # machine's (on an emulated CPU, every cap lifted: cpu-budget-lint.py) — LAST, because a later
+    # file wins. The budget's SCALE is not here: it moves with
     # every app switched on or off, so it is told to the running containers (`docker update`,
     # lib.sh cpu_caps_apply) and is no container's identity.
     if (GEN / "cpu-budget.yml").exists():
@@ -1486,7 +1668,10 @@ def routing_labels(app_id, r, framed=""):
         L.append(f"{p}.entrypoints={entry}")
         if tls:
             L.append(f"{p}.tls=true")
-            L.append(f"{p}.tls.certresolver=myresolver")
+            # the resolver is the OFFICE's: Let's Encrypt where the domain is public, none on a
+            # `.localhost` office (scripts/lib.sh derives TRAEFIK_CERTRESOLVER="" there — no authority
+            # issues for `<app>.localhost`, and the edge asked again on every reload: DGO-901)
+            L.append(f"{p}.tls.certresolver=${{TRAEFIK_CERTRESOLVER-myresolver}}")
         L.append(f"{p}.service={svc}")
         if mw and auth == "sso":
             # authentik@file, NOT a bare `authentik`. The middleware is defined in traefik's FILE
@@ -1572,7 +1757,7 @@ def console_passthrough_labels(app_id, r, console_r, console_app=None):
             labels.append(f"{key}.priority=100")
             if tls:
                 labels.append(f"{key}.tls=true")
-                labels.append(f"{key}.tls.certresolver=myresolver")
+                labels.append(f"{key}.tls.certresolver=${{TRAEFIK_CERTRESOLVER-myresolver}}")
             labels.append(f"{key}.service={svc}")
             labels.append(f"{key}.middlewares={','.join(middlewares)}")
 
@@ -1639,6 +1824,71 @@ def render_broker(cat, order):
             + body)
 
 
+# ── on demand (DGO-1270): a heavy app runs only while someone uses it ─────────────────────────────
+# A route that declares `on_demand: {idle: 2h}` gets two things. Its service carries ON_DEMAND_LABEL
+# (the window, in seconds) and ON_DEMAND_APP_LABEL (the app), which is what autoheal reads to stop it once
+# its network has been quiet that long — and only while a running container carries the app's wake route,
+# since the waker is recreated by a render + up, not when the app is switched on from the screen. And the
+# WAKER (app-management, which already starts apps and runs on every office) carries the
+# same routers again under `<name>-wake-<suffix>`, at priority 1, behind the same sign-in and then a
+# header naming the app: a stopped container takes its own routers with it, and without these its address
+# would answer a bare 404 and nothing could start it. While the app runs, its own routers win (traefik's
+# default priority is the rule's length); while it sleeps, the waker answers, starts it and shows a page
+# that reloads until it is up. No waker in the compiled set: no label either, so the app is never stopped.
+ON_DEMAND_LABEL = "binaos.on-demand.idle"
+ON_DEMAND_APP_LABEL = "binaos.on-demand.app"
+WAKE_SERVICE = "dgo-wake"
+WAKE_HEADER = "X-Dgo-Wake"
+_IDLE = re.compile(r"([1-9][0-9]*)([smh])")
+
+
+def on_demand_waker(cat, order):
+    """(service, port) of the route that wakes on-demand apps, or None when app-management is not run."""
+    if "app-management" not in order or "app-management" not in cat:
+        return None
+    routes = cat["app-management"].get("routing") or []
+    if not routes:
+        return None
+    return routes[0].get("service") or "app-management", routes[0]["port"]
+
+
+def on_demand_idle(app_id, r):
+    """The route's idle window in seconds, from `on_demand.idle` ("90m", "2h"): 5 minutes to 30 days."""
+    raw = str((r.get("on_demand") or {}).get("idle") or "")
+    m = _IDLE.fullmatch(raw) if len(raw) <= 10 else None
+    secs = int(m.group(1)) * {"s": 1, "m": 60, "h": 3600}[m.group(2)] if m else 0
+    if not 300 <= secs <= 30 * 86400:
+        raise SystemExit(f"{app_id}: routing.on_demand.idle must be a duration from 5 minutes to 30 days "
+                         f"(\"30m\", \"2h\"), got {raw!r}")
+    return secs
+
+
+def on_demand_labels(app_id, r, labels):
+    """The waker's copy of every router `labels` declares for this route: same rule, entrypoints and TLS,
+    priority 1, the waker's service, and the route's middlewares followed by the one that names the app."""
+    name = r.get("name") or app_id
+    pre = f"traefik.http.routers.{name}-"
+    routers = {}
+    for label in labels:
+        key, _, value = label.partition("=")
+        if key.startswith(pre):
+            suffix, _, field = key[len(pre):].partition(".")
+            routers.setdefault(suffix, []).append((field, value))
+    out = []
+    for suffix, fields in routers.items():
+        p = f"traefik.http.routers.{name}-wake-{suffix}"
+        chain = []
+        for field, value in fields:
+            if field == "middlewares":
+                chain.append(value)
+                continue
+            out.append(f"{p}.{field}={WAKE_SERVICE if field == 'service' else value}")
+        out.append(f"{p}.priority=1")
+        out.append(f"{p}.middlewares={','.join(chain + [name + '-wake'])}")
+    out.append(f"traefik.http.middlewares.{name}-wake.headers.customrequestheaders.{WAKE_HEADER}={app_id}")
+    return out
+
+
 def render_routing(cat, order):
     """Generated compose override: routing labels, plus env each app contributes to a base app.
 
@@ -1651,6 +1901,7 @@ def render_routing(cat, order):
     svcs = {}
     console_routes = (cat.get("console") or {}).get("routing") or []
     console_r = console_routes[0] if console_routes else None
+    waker, woken = on_demand_waker(cat, order), False
     for aid in order:
         a = cat[aid]
         for r in a.get("routing", []):
@@ -1668,8 +1919,18 @@ def render_routing(cat, order):
                       if (r.get("module") or {}).get("external") and r.get("host")
                       and (_envfile_value("DEPLOYMENT_DOMAIN") or "localhost") == "localhost"
                       and r.get("auth", "sso") == "sso" else "")
-            svcs.setdefault(svc, {}).setdefault("labels", []).extend(
-                routing_labels(aid, r, framed))
+            labels = routing_labels(aid, r, framed)
+            svcs.setdefault(svc, {}).setdefault("labels", []).extend(labels)
+            # An app that runs only while it is used (DGO-1270): autoheal stops it after its idle
+            # window, and these routes on the waker keep its address answering while it sleeps.
+            idle = on_demand_idle(aid, r) if r.get("on_demand") else 0
+            if idle and waker:
+                svcs[svc]["labels"] += [f"{ON_DEMAND_LABEL}={idle}", f"{ON_DEMAND_APP_LABEL}={aid}"]
+                svcs.setdefault(waker[0], {}).setdefault("labels", []).extend(
+                    on_demand_labels(aid, r, labels))
+                woken = True
+    if woken:
+        svcs[waker[0]]["labels"].append(f"traefik.http.services.{WAKE_SERVICE}.loadbalancer.server.port={waker[1]}")
 
     # A contribution lands only on an app that is IN the compiled set. Installed-but-disabled is not
     # enough: the overlay would declare a service no compose file defines ("has neither an image nor
@@ -1861,17 +2122,45 @@ def archive_generation():
     return dst.name
 
 
+def _sync_tree(src, dst, skip=()):
+    """Make the folder `dst` hold exactly what `src` holds WITHOUT replacing `dst`, or any folder below it that
+    exists on both sides: files are written over in place, what `src` lacks is removed, and a file that already
+    says the same is left alone (write()'s rule — every file here is watched). Names in `skip` (the generations
+    archive itself) are neither removed nor copied.
+
+    Running containers bind-mount folders of .generated/ — connections, the console, security, dgo-extend and
+    computers all mount .generated/registry — and a bind mount follows the folder it was given, not its path. A
+    folder deleted and made again under a running container leaves the container on the deleted one: empty, while
+    it reports healthy. That is FPG-497 (2026-10-29): .generated/ was deleted and re-extracted at 08:45:54Z, the
+    credential broker kept reading the deleted registry, and every app that started after it was refused its
+    connections until connections was restarted by hand."""
+    dst.mkdir(parents=True, exist_ok=True)
+    keep = {c.name for c in src.iterdir()} | set(skip)
+    for c in list(dst.iterdir()):
+        if c.name not in keep:
+            shutil.rmtree(c, ignore_errors=True) if c.is_dir() and not c.is_symlink() else c.unlink()
+    for c in src.iterdir():
+        if c.name in skip:
+            continue
+        d = dst / c.name
+        if c.is_dir() and not c.is_symlink():
+            if d.is_symlink() or (d.exists() and not d.is_dir()):
+                d.unlink()
+            _sync_tree(c, d)
+            continue
+        if d.is_dir() and not d.is_symlink():
+            shutil.rmtree(d, ignore_errors=True)
+        elif d.is_file() and not d.is_symlink() and d.read_bytes() == c.read_bytes():
+            continue
+        shutil.copy2(c, d)
+
+
 def restore_generation(gid):
     src = GENS / gid
     if not src.is_dir():
         sys.exit(f"FATAL no generation '{gid}' (see `reconcile.py generations`)")
     archive_generation()          # the state we are leaving is itself worth keeping
-    for c in list(GEN.iterdir()):
-        if c.name in _GEN_SKIP:
-            continue
-        shutil.rmtree(c, ignore_errors=True) if c.is_dir() else c.unlink()
-    for c in src.iterdir():
-        (shutil.copytree if c.is_dir() else shutil.copy2)(c, GEN / c.name)
+    _sync_tree(src, GEN, skip=_GEN_SKIP)   # IN PLACE: never under a running container's mount (FPG-497)
     return gid
 
 
@@ -1938,7 +2227,7 @@ def render(cat, order, state):
     served, serrs = serve.plan(state, cat)
     if serrs:
         sys.exit("SERVE PLAN REFUSED:\n" + "\n".join(f"  - {e}" for e in serrs))
-    render_serve(cat, served, framed_hosts(cat, order))
+    render_serve(cat, served, framed_hosts(cat, order), lan=lan_name(order))
     render_registries(cat, order, served)
     render_agent_context(cat, order)
     render_authentik(cat, order, served)
@@ -1950,7 +2239,23 @@ def render(cat, order, state):
     return migrated
 
 
-def render_serve(cat, served, framed=()):
+def lan_name(order) -> tuple[str, str]:
+    """The NAME and port this office's console has on its local network, or ("", "") (DGO-1126).
+
+    Only while apps/lan-console is enabled. `LAN_DOMAIN` when .env states one; otherwise the address
+    itself as a name, `192-168-16-100.sslip.io`, which public DNS answers with that same private
+    address, so the office's own Wi-Fi reaches it with nothing set up (measured 2026-11-02 through the
+    home router's resolver). A name, because a host can be nested under it and not under an address:
+    that is what lets a shared app of its own host open in the console there (serve.render).
+    """
+    if "lan-console" not in order:
+        return "", ""
+    addr = (_envfile_value("LAN_ADDRESS") or "").strip()
+    name = (_envfile_value("LAN_DOMAIN") or "").strip() or (f"{addr.replace('.', '-')}.sslip.io" if addr else "")
+    return (name, (_envfile_value("LAN_PORT") or "8080").strip()) if name else ("", "")
+
+
+def render_serve(cat, served, framed=(), lan=("", "")):
     """Write the reverse plane: the apps of OTHER offices, routed on this office's own edge.
 
     The module `serve` owns the decisions (what a `serve:` block means, what is refused, what a tile
@@ -1971,12 +2276,13 @@ def render_serve(cat, served, framed=()):
     aliases = GEN / "remote.override.yml"
     doc = serve.render(served, cat, domain=_envfile_value("DEPLOYMENT_DOMAIN") or "localhost",
                        console_port=_console_port(),
-                       framed={f"{aid}-frame": host for aid, host in dict(framed).items()})
+                       framed={f"{aid}-frame": host for aid, host in dict(framed).items()},
+                       lan_domain=lan[0], lan_port=lan[1])
     if not doc:
         dest.unlink(missing_ok=True)
         aliases.unlink(missing_ok=True)
         return 0
-    dest.write_text(doc, encoding="utf-8", newline="\n")
+    _put(dest, doc.encode("utf-8"))
     # Every router above points at `http://<alias>.<office>:<port>` — a NETWORK ALIAS on the link
     # proxy, not the peer's tunnel address (which exists only inside the tunnel container's
     # namespace and is not routable from the edge's network). An alias can only be set when the
@@ -1984,7 +2290,7 @@ def render_serve(cat, served, framed=()):
     # same breath, because a router to a name nobody resolves is a 502 with a healthy-looking stack.
     overlay = serve.render_aliases(served)
     if overlay:
-        aliases.write_text(overlay, encoding="utf-8", newline="\n")
+        _put(aliases, overlay.encode("utf-8"))
     else:
         aliases.unlink(missing_ok=True)
     return len(served)
@@ -2005,11 +2311,13 @@ def _office_apps(cat, order) -> dict:
       · `agent_api_port` — the SECOND door of an agent app, read from its own `capabilities[]`
         endpoint (DGO-32): a UI and an adapter, and a link that opens one and not the other leaves a
         CLI accepted by the firewall and answered by nobody;
+      · `agent_api_service` — the service that answers that door, when the app states it is not the UI's
+        (`agent_api_service` in its manifest, DGO-1018: browser42's task runner);
       · `host` — the authority the app expects to be reached under (its `sso.default_host`), because
         every harness here refuses an authority it was never told about (measured, DGO-32);
       · `module`/`health` — how the peer frames it and what it can probe.
     """
-    rows = []
+    rows, doors = [], []
     for aid in order:
         man = cat[aid]
         for r in (man.get("routing") or []):
@@ -2053,21 +2361,35 @@ def _office_apps(cat, order) -> dict:
             agent_port = _agent_door(man, port)
             if agent_port:
                 row["agent_api_port"] = agent_port
+                # …and WHO answers it, when the app states that it is not the UI's service (DGO-1018):
+                # browser42's agent API is its task runner. A link that delivered the agent port to the
+                # UI's service reached nothing, so a far `bbox b42 task` answered 502 out of the box.
+                # Absent, the UI's service answers both (bina-ds), as every row said before.
+                agent_service = _agent_service(man)
+                if agent_service and agent_service != row["service"]:
+                    row["agent_api_service"] = agent_service
             authority = str((r.get("sso") or {}).get("default_host") or "").strip().lower()
             if authority:
                 row["host"] = authority
             elif r.get("host"):
                 row["host"] = f"{r['host']}.localhost"
             rows.append(row)
+        doors.extend(_link_rows(aid, man))
     rows.sort(key=lambda x: (x.get("order", 999), x["alias"]))
-    return {"generated_by": "platform/manager/reconcile.py",
-            "source": "apps/*/app.json + platform-base/*/app.json (enabled only)", "apps": rows}
+    out = {"generated_by": "platform/manager/reconcile.py",
+           "source": "apps/*/app.json + platform-base/*/app.json (enabled only)", "apps": rows}
+    # The doors with no tile (DGO-945) are a list of their own, never rows of `apps`: everything that
+    # draws a tile, an edge route, a sign-in entry or an app list reads `apps`, and an office still on
+    # code from before this list ignores a key it does not know instead of drawing a door as a screen.
+    if doors:
+        out["services"] = sorted(doors, key=lambda x: x["alias"])
+    return out
 
 
 def _own_host_only(module: dict) -> bool:
     """Can a peer frame this app ONLY on a host of its own, never under a path of its console?
 
-    Three declarations say so, and each is the app's own:
+    FOUR declarations say so, and each is the app's own:
       · `external` — at home the shell already frames it on its own host;
       · `embed: false` — at home it is not framed at all (the console itself, n8n…);
       · a `passthrough` — it is embedded at home only because THIS edge also answers paths of the
@@ -2087,14 +2409,28 @@ def _own_host_only(module: dict) -> bool:
 
 
 def _agent_door(man: dict, ui_port: int) -> int:
-    """The app's agent API port, or 0 — the port of its first capability endpoint that is not the UI.
+    """The app's agent API port, or 0 — what the manifest says, else its first non-UI capability.
 
     Read from the manifest rather than declared a second time: an app whose adapter listens on 3081
     publishes that in the capability a caller is supposed to use, and asking the manifest is what
     keeps one number in one place. A capability on the SAME port as the UI is the same door (many
     apps are), and publishing it as an agent API would render a duplicate rule for one listener.
+
+    That derivation answers only while the adapter IS one of the capabilities. browser42's is not:
+    its one capability is the MCP on 8931, and the door a CLI speaks to is its task runner on 8766
+    (`/v1/task`), so the derivation published a door nothing answers on and a linked office's
+    `b42 task` was refused with `no_agent_door` (lnk-037/DGO-570). An app that knows its own door
+    therefore states it (`agent_api_port`), and the statement wins; where it is absent the
+    derivation below is untouched, which is every other app.
     """
+    declared = man.get("agent_api_port")
+    if declared is not None:
+        if not isinstance(declared, int) or isinstance(declared, bool):
+            return 0
+        return declared if 1 <= declared <= 65535 else 0
     for cap in (man.get("capabilities") or []):
+        if cap.get("link"):
+            continue            # a door of its own (`_link_rows`), never the app's agent API as well
         endpoint = str(cap.get("endpoint") or "")
         m = re.search(r":(\d{2,5})(?:/|$)", endpoint)
         if not m:
@@ -2103,6 +2439,123 @@ def _agent_door(man: dict, ui_port: int) -> int:
         if port != ui_port and 1 <= port <= 65535:
             return port
     return 0
+
+
+#: A service name a link may deliver to (`agent_api_service`, as the app states it) — the link's own
+#: rule (`apps/dgo-extend/linkproxy.SERVICE_RE`). The door refuses more (the link app's own names,
+#: `catalog.agent_service_ok`); for those it delivers to the UI's service and the catalog leaves them out.
+SERVICE_NAME = re.compile(r"[a-z][a-z0-9-]{1,62}")
+
+
+def _agent_service(man: dict) -> str:
+    """The compose service that ANSWERS the app's agent door (`_agent_door`), or "" — the UI's own then.
+
+    The agent port alone was never enough: the link delivers it to a SERVICE, and it used the one
+    that serves the UI. That is right when one container answers both (bina-ds: 3080 and 3081), and
+    wrong when the API is a container of its own — browser42's task runner — where the door reached
+    nothing and a shared app's CLI answered 502 out of the box (DGO-1018, the owner: "whenever I'm
+    sharing an app … I'm sharing also the console, also the API and also the CLI").
+
+    So the app STATES it (`agent_api_service`), beside its port or beside a derived one — and it is
+    never inferred. An endpoint's host would name mail's mailapi, an API with no authentication of
+    its own (send, search, delete mailboxes), and delivering there would hand every office given mail
+    the whole of it through a door that proves nothing about the caller (the second reader of
+    DGO-1018). An app's API is shared by its own word, the day its door can be trusted with it.
+    `localhost` is never a delivery target: the link shares one network namespace with dgo-net.
+    """
+    stated = str(man.get("agent_api_service") or "").strip().lower()
+    return stated if SERVICE_NAME.fullmatch(stated) and stated != "localhost" else ""
+
+
+def _endpoint_parts(endpoint) -> tuple[str, int]:
+    """`http://apitools-asr:8987` → ("apitools-asr", 8987); ("", 0) for anything else."""
+    m = re.fullmatch(r"https?://([a-z0-9][a-z0-9-]*)(?::(\d{1,5}))?/?", str(endpoint or "").strip().lower())
+    if not m:
+        return "", 0
+    port = int(m.group(2) or 80)
+    return (m.group(1), port) if 1 <= port <= 65535 else ("", 0)
+
+
+def link_endpoints(cat, enabled, served, entries=None, notes=None) -> dict:
+    """{in-network address of an app that does NOT run here: the linked office's door to it}.
+
+    A workflow names what it calls by the address its app declares — `http://apitools-asr:8987`, a
+    capability's endpoint; `http://project-pln:80`, a tile's backend. In the office that runs that
+    app the name resolves. In an office that does not, the app may run in a linked office that
+    publishes it, and then the same call goes to `http://<alias>.<office>:<door>` (DGO-945: the
+    Meet workflow in the HP's n8n reaches the Dell's transcriber and vps1's recordings). `bbox n8n
+    push` rewrites the compiled workflows with this map, so a blueprint names an app once and the
+    office that imports it says where it is. An app that runs here is never in the map — its own name
+    wins — unless its entry names the office its link capabilities are used from (`linked_from`):
+    then those, and only those, go to that office's door.
+    """
+    doors, door_of = {}, {}
+    for e in served or []:
+        for app in list(e["apps"]) + list(e.get("services") or []):
+            url = f"http://{app['alias']}.{e['office']}:{e.get('link_port') or app['port']}"
+            doors.setdefault((app["app"], app["alias"]), url)
+            door_of[(e["office"], app["app"], app["alias"])] = url
+    out = {}
+    for aid in sorted(cat):
+        man = cat[aid]
+        caps = [(_endpoint_parts(c.get("endpoint")), str(c.get("name") or "").lower())
+                for c in (man.get("capabilities") or []) if c.get("link")]
+        office = linked_from((entries or {}).get(aid))
+        bases = [(parts, alias, True) for parts, alias in caps]
+        if aid not in enabled:
+            bases += [(_endpoint_parts((r.get("module") or {}).get("url")),
+                       str((r.get("module") or {}).get("alias") or "").lower(), False)
+                      for r in (man.get("routing") or [])]
+        for (host, port), alias, is_cap in bases:
+            if not (host and alias):
+                continue
+            if office and is_cap:
+                # An office the entry NAMES is the only one used for its link capabilities, the app
+                # here or not: the owner's "on the Dell, always" never moves to whichever office comes
+                # first when the Dell stops giving it — the call keeps the app's own address, and says so.
+                url = door_of.get((office, aid, alias))
+                if not url and notes is not None:
+                    notes.append(f"{aid}: `linked: {office}`, but {office} gives no `{alias}` door to this "
+                                 f"office — http://{host}:{port} is left as it is")
+            elif aid in enabled:
+                continue
+            else:
+                url = doors.get((aid, alias))
+            if url:
+                out.setdefault(f"http://{host}:{port}", url)
+    return out
+
+
+def link_endpoint_map(cat, state, notes=None) -> tuple[dict, list[str]]:
+    """(link_endpoints for this office, errors). "Runs here" is the RESOLVED set: a provider another
+    app pulls in runs although its own line says disabled (n8n under INDOX), and its address must
+    never be pointed at a linked office's. A remote plan or a resolution that is refused is an error,
+    not an empty map: importing the local names where they do not resolve is a workflow that fails."""
+    served, serrs = serve.plan(state, cat)
+    order, diags = resolve(cat, state)
+    errs = list(serrs) + [m for lvl, m in diags if lvl == "error"]
+    return ({} if errs else link_endpoints(cat, set(order), served, state.get("apps") or {}, notes)), errs
+
+
+def _link_rows(aid: str, man: dict) -> list[dict]:
+    """The `services` rows of the app's capabilities offered to LINKED offices (`link: true`, DGO-945).
+
+    A door with NO TILE: a transcriber, a machines' door, a webhook receiver is not a screen anyone
+    opens, but another office's workflow has to reach it. Named by the capability, so a linked office
+    reaches it at `http://<name>.<office>:<door>`; the serving office's link door routes it by that
+    name (apps/dgo-extend/link-proxy.py `_table`). Only the doors the serving office NAMES in its
+    `serve:` are published, never under `*` (apps/dgo-extend/catalog.py `publishable_services`).
+    """
+    rows = []
+    for cap in (man.get("capabilities") or []):
+        if not cap.get("link"):
+            continue
+        host, port = _endpoint_parts(cap.get("endpoint"))
+        alias = str(cap.get("name") or "").strip().lower()
+        if not host or not alias:
+            continue
+        rows.append({"app": aid, "alias": alias, "port": port, "service": host, "health": "/healthz"})
+    return rows
 
 
 #: The office column's value for a row that belongs to THIS office. `dgo-extend` gives this office
@@ -2267,7 +2720,8 @@ def main():
                                      "required-by",
                                      "compose-services", "blueprints", "generations", "rollback",
                                      "apply", "enabled-apps", "set-state", "capability-provider",
-                                     "serve-plan", "remote-get", "remote-set", "office-get", "office-set"])
+                                     "serve-plan", "remote-get", "remote-set", "office-get", "office-set",
+                                     "link-endpoints"])
     ap.add_argument("--capability", metavar="NAME",
                     help="capability-provider: the capability name to resolve")
     ap.add_argument("--app", metavar="ID", help="set-state: the app id to write")
@@ -2476,11 +2930,30 @@ def main():
         def csv(vals):
             return [x for v in (vals or []) for x in re.split(r"[,\s]+", v) if x]
         want = set(csv(a.roots))
-        # Enablement is the install state. A DISABLED app's automations must not be pushed —
-        # that is the whole "imported on enable, removed on disable" contract, and a gallery app
+        # Enablement is the install state. A DISABLED app's automations must not be pushed (the one
+        # exception, the engine's own, is below) — that is the whole "imported on enable, removed on
+        # disable" contract, and a gallery app
         # that ships disabled would otherwise have its workflows imported by any full push.
         # An explicit --for still resolves (so `unpush --app X` can clean up after disabling X).
+        # …and WHERE an app's workflows run is the app entry's `workflows` (workflows_here, DGO-945):
+        # an app of a linked office whose workflows run here is pushed, an app of this office whose
+        # workflows run in another office is not. Enablement is still asked first, even with --for:
+        # a state it cannot read is refused here as it always was.
+        # …and the workflow ENGINE's own automations (n8n's error handler, its process lock …) are part of
+        # the engine: they follow it wherever it runs, pulled in as much as enabled (DGO-1001 — n8n, pulled
+        # in by bina-ds and off in the state, never got its own on a fresh install). Any OTHER app the plan
+        # only pulls in runs as a provider, and its automations stay off unless its own entry switches them
+        # on (enabled, or `workflows: here`): chat pulling INDOX in for its API must not activate INDOX's
+        # sixty-nine workflows (the second reader of DGO-1001; the HP's incident of 2026-10-11). A refused
+        # plan pulls nothing in: its closure can name a provider only the refused plan pulls in.
         enabled = enabled_ids(state, cat)
+        # `--for` names its apps and never asks who runs: it does not depend on the plan resolving either
+        # (present, unpush, push-app and pull-app call it — the second reader of DGO-998)
+        running, diags = resolve(cat, state) if not want else ([], [])
+        engines = set() if any(lvl == "error" for lvl, _ in diags) else {
+            aid for aid in running if any(c["name"] == "workflow" for c in cat[aid].get("capabilities", []))}
+        runs = enabled | engines
+        entries = state.get("apps") or {}
         rows = []
         for aid, app in sorted(cat.items()):
             bp = ((app.get("blueprints") or {}).get("n8n") or "").strip()
@@ -2489,7 +2962,7 @@ def main():
             if want:
                 if aid not in want:
                     continue
-            elif aid not in enabled:
+            elif not workflows_here(entries.get(aid), aid in runs):
                 continue
             d = (app["_dir"] / bp).resolve()
             if not d.is_dir():
@@ -2509,26 +2982,56 @@ def main():
             print(f"{aid}\t{rel}")
         return 0
 
-    # capability-provider: "which ENABLED app, if any, declares this capability?" — one app id on
-    # stdout, or nothing (exit 1) if no enabled app provides it. Exists so layer 0 (bbox) can reach a
+    # link-endpoints: {address an app declares: the linked office's door to it}, for the apps that do
+    # not run here (link_endpoints). `bbox n8n push` rewrites the compiled workflows with it. "Runs
+    # here" is the RESOLVED set — a provider another app pulls in runs although its own line says
+    # disabled, and INDOX's calls to that office's n8n must stay in it. A remote plan that is refused
+    # refuses this too: a push with the local names would import addresses that do not resolve.
+    if a.verb == "link-endpoints":
+        notes = []
+        emap, errs = link_endpoint_map(cat, state, notes)
+        for e in errs:
+            print("  ERROR " + e, file=sys.stderr)
+        for n in notes:
+            print("  NOTE " + n, file=sys.stderr)
+        if errs:
+            return 1
+        print(json.dumps(emap, indent=2, sort_keys=True))
+        return 0
+
+    # capability-provider: "which RUNNING app, if any, declares this capability?" — one app id on
+    # stdout, or nothing (exit 1) if no running app provides it. RUNNING is the resolved closure: the
+    # enabled apps AND the providers they pull in (DGO-993). The clean install of the public copy
+    # (2026-10-22) ran n8n only because bina-ds pulls it in, so the enabled set had no `workflow`
+    # provider: app-management skipped the agent's blueprints as "presence undeterminable" and the
+    # agent came up with none of its workflows. Exists so layer 0 (bbox) can reach a
     # singleton service like the app-management control plane by the ROLE it plays (a capability
     # name — see platform-base/app-management/app.json's "control-plane" capability) instead of
     # hardcoding that app's id, which is exactly the app-specific knowledge G31 (layer0-lint) exists
-    # to keep out of the CLI. Two enabled providers of the same capability is not resolved here by
+    # to keep out of the CLI. Two running providers of the same capability is not resolved here by
     # guessing — ambiguity is reported and the caller gets nothing, same philosophy as plan()'s
     # provider selection above, just without the full binding/default_provider machinery this
-    # narrow, read-only lookup does not need.
+    # narrow, read-only lookup does not need. It does not read `bindings:` either: a capability with
+    # two running providers (`identity`, with authentik and forward-auth both running) is ambiguous
+    # here even when the state binds one; no caller asks for such a capability today.
     if a.verb == "capability-provider":
         if not a.capability:
             print("capability-provider needs --capability <name>", file=sys.stderr)
             return 2
-        enabled = enabled_ids(state, cat)
-        provs = sorted(aid for aid in enabled
+        # A refused plan answers nothing, as enabled-apps and services refuse it: the closure of a plan
+        # with errors can name a provider that only the refused plan pulls in (the second reader, DGO-993).
+        running, diags = resolve(cat, state)
+        for lvl, m in diags:
+            if lvl == "error":
+                print("  ERROR " + m, file=sys.stderr)
+        if any(lvl == "error" for lvl, _ in diags):
+            return 1
+        provs = sorted(aid for aid in running
                        if any(c["name"] == a.capability for c in cat[aid].get("capabilities", [])))
         if not provs:
             return 1
         if len(provs) > 1:
-            print(f"  ERROR capability '{a.capability}' has {len(provs)} enabled providers "
+            print(f"  ERROR capability '{a.capability}' has {len(provs)} running providers "
                   f"({', '.join(provs)}) — ambiguous", file=sys.stderr)
             return 1
         print(provs[0])
@@ -2798,7 +3301,7 @@ def render_agent_context(cat, order):
     return len(rows)
 
 
-def external_origin(app_id, r, m):
+def external_origin(app_id, r, m, default_host=""):
     """The BROWSER origin of an app the shell frames on its OWN host (`module.external`), or None.
 
     The shell can derive this itself — `externalUrl()` in the console builds
@@ -2815,9 +3318,14 @@ def external_origin(app_id, r, m):
     AND the identity layer knows. `module.url` is deliberately not the source: for an embedded app
     it is the console PROXY's internal base (`http://project-pln:80`), and a compose service name
     means nothing in a browser.
+
+    `default_host` is the host the app's routers fall back to when that variable is unset —
+    `routing_labels()` renders `Host(${<VAR>:-<host>.${DEPLOYMENT_DOMAIN}})` — so an office that never
+    set the variable frames the host its edge actually serves (staging's Meet tile, DGO-1274: no
+    MEET_START_BASE_URL, so the shell nested `meet-start.console.<domain>`, a host nothing routes).
     """
     var = (r.get("sso") or {}).get("base_url_env") or m.get("url_env") or base_url_env(app_id)
-    val = (_envfile_value(var) or "").strip()
+    val = (_envfile_value(var) or "").strip() or default_host
     host = val.split("//", 1)[-1].split("/", 1)[0]
     if not host or "." not in host.split(":")[0]:
         return None                      # unset, or a compose service name — not a browser address
@@ -2843,6 +3351,7 @@ def render_registries(cat, order, served=None):
     reg.mkdir(parents=True, exist_ok=True)
 
     modules, bases, framed = [], {}, framed_hosts(cat, order)
+    domain = _envfile_value("DEPLOYMENT_DOMAIN") or "localhost"
     for aid in order:
         for r in (cat[aid].get("routing") or []):
             m = r.get("module") or {}
@@ -2853,6 +3362,13 @@ def render_registries(cat, order, served=None):
             # text in a codebase owning none of them.
             alias = m.get("alias")
             embedded = bool(alias) and m.get("embed", True) is not False
+            # `tile: false` (DGO-890) = a DOOR WITHOUT A TILE: the /a/<alias>/ route stays (machine's
+            # power API is what the console's power card calls), the launcher shows nothing — the
+            # app's screen lives in another app (machine's resource view is computers' now).
+            if m.get("tile") is False:
+                if embedded and m.get("url"):
+                    bases[alias] = {"env": m.get("url_env"), "default": m["url"]}
+                continue
             # `external` = the shell FRAMES this app on its own host instead of proxying it under
             # `/a/<alias>/`. It is declared by an app that is EMBEDDED as well as by one that is not,
             # and it has to win in both cases: the proxy is a rewriter, so an app whose bundle
@@ -2878,6 +3394,15 @@ def render_registries(cat, order, served=None):
                 # variable does not already. `module.url` is deliberately not used either: for an
                 # embedded app it is the console PROXY's internal base (`http://project-pln:80`),
                 # and a compose service name means nothing in a browser.
+                # ON A REAL DOMAIN the address is the same for every browser (https, no port), and it
+                # is NOT the nested one the shell derives: the app sits BESIDE the console
+                # (`meet-start.<domain>`), which is the host its routers serve and its provider knows,
+                # while `meet-start.console.<domain>` is routed by nothing — staging's Meet tile showed
+                # a broken frame (DGO-1274). So there, and only there, the app's own origin is rendered.
+                if domain != "localhost":
+                    own = external_origin(aid, r, m, default_host=f"{r['host']}.{domain}")
+                    if own:
+                        ext["url"] = own
                 if embedded:
                     ext["embed"] = f"/a/{alias}/"
                 if aid in framed:
@@ -3043,7 +3568,10 @@ def render_authentik(cat, order, served=None):
     filename order, hence the zz- prefix: base definitions first, generated apps last."""
     out = [(aid, s) for aid, s, _host in sso_providers(cat, order)]
     dest = REPO / BOOTSTRAP_INPUTS_DIR / "blueprints" / GENERATED_BLUEPRINT
-    if not out:
+    # An office whose identity is forward-auth (authentik switched off, release 0.3.0) has nobody to
+    # apply a blueprint: none is written, and the last one is removed. The providers are still read
+    # above, so a broken `sso` block is refused the same on every office.
+    if not out or "authentik" not in order:
         dest.unlink(missing_ok=True)
         return 0
     body = [
@@ -3216,4 +3744,11 @@ def render_authentik(cat, order, served=None):
 
 
 if __name__ == "__main__":
+    # Run as the compiler itself (`bbox run`, `reconcile.py render`), this IS the office's own writer of
+    # the derived slug (sync_identity). The guard above refuses the repo's `.env` to an IMPORT — a test,
+    # a loader — and was never meant to refuse the program: since 2026-10-15 every render whose `.env`
+    # held a stale slug raised RuntimeError here, while the Go twin wrote the slug and went on
+    # (TestRenderMatchesPython, red since; found by DGO-1040). A module-level assignment writes the
+    # module's own namespace, so the guarded class is not asked.
+    _ENVFILE = ENVFILE
     sys.exit(main())

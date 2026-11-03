@@ -75,7 +75,7 @@ if ! docker ps --format '{{.Names}}' | grep -qx "${PG_CONTAINER}"; then
   log "n8n postgres (${PG_CONTAINER}) not running — nothing to remove."; exit 0
 fi
 
-PGUSER="$(read_env POSTGRES_USER)"; PGUSER="${PGUSER:-bina-comp}"
+PGUSER="$(read_env POSTGRES_USER)"; PGUSER="${PGUSER:-hacohen}"
 PGDB="$(read_env POSTGRES_DB)"; PGDB="${PGDB:-n8n}"
 psql_n8n() { docker exec -i "${PG_CONTAINER}" psql -U "${PGUSER}" -d "${PGDB}" "$@"; }
 
@@ -83,6 +83,22 @@ BEFORE="$(psql_n8n -tAc "select count(*) from workflow_entity where id in (${IDS
 WAS_ACTIVE="$(psql_n8n -tAc "select count(*) from workflow_entity where active and id in (${IDS});" | tr -d '\r ')"
 [ "${BEFORE}" != "0" ] || { log "none of the workflows of '${APP_SCOPE}' is on this instance — nothing to remove."; exit 0; }
 log "removing ${BEFORE} workflow(s) owned by '${APP_SCOPE}' from n8n (${WAS_ACTIVE} active)…"
+
+# A workflow that names one of these as its errorWorkflow would be left naming a workflow that does
+# not exist: n8n logs one line, records no execution, and its failures vanish (push's step 3b, G38).
+# Point it at the Error Handler first, unless the handler itself is among the removed; a test or CI
+# workflow, which push keeps off the handler (noise during tests), loses the key instead. vps1,
+# 2026-11-02: 46 workflows named the retired old Error Handler 'RqAY1Z1i2F7ZaPbe'.
+EH_ID="${INDOX_ERROR_HANDLER_ID:-errorHandler01}"
+REPOINTED="$(psql_n8n -tAc "with u as (update workflow_entity
+    set settings = (case when name ~ '(Test|_diag|\[FV\]|\[CI\]|Seed Fixtures|MCP Server)'
+                         then coalesce(settings::jsonb,'{}'::jsonb) - 'errorWorkflow'
+                         else jsonb_set(coalesce(settings::jsonb,'{}'::jsonb),'{errorWorkflow}',to_jsonb('${EH_ID}'::text)) end)::json
+  where (settings->>'errorWorkflow') in (${IDS}) and id not in (${IDS})
+    and id not in ('${EH_ID}','glitchtipReporter01','sAjhxlLTUq9vEL8L') and '${EH_ID}' not in (${IDS})
+    and exists (select 1 from workflow_entity h where h.id = '${EH_ID}') returning 1)
+  select count(*) from u;" | tr -d '\r ')"
+[ "${REPOINTED:-0}" = "0" ] || log "pointed ${REPOINTED} workflow(s) that named one of them as their errorWorkflow at ${EH_ID}"
 
 # Deactivate first so the runtime unregisters triggers/webhooks, THEN delete. Deleting an active
 # workflow leaves the in-memory trigger registered until the next restart, which is how a
@@ -93,8 +109,9 @@ psql_n8n -q -c "delete from workflow_entity where id in (${IDS});" >/dev/null
 AFTER="$(psql_n8n -tAc "select count(*) from workflow_entity where id in (${IDS});" | tr -d '\r ')"
 [ "${AFTER}" = "0" ] || { echo "Error: ${AFTER} workflow(s) still present after delete." >&2; exit 1; }
 
-# The runtime caches active triggers; restart so the removed ones stop firing.
-if [ -n "${RETIRED}" ] && [ "${WAS_ACTIVE}" = "0" ]; then
+# The runtime caches active triggers, and active workflows their settings; restart so the removed ones
+# stop firing and the repointed ones stop naming a workflow that is gone.
+if [ -n "${RETIRED}" ] && [ "${WAS_ACTIVE}" = "0" ] && [ "${REPOINTED:-0}" = "0" ]; then
   log "removed ${BEFORE} workflow(s); none was active, so n8n was not restarted."
   exit 0
 fi

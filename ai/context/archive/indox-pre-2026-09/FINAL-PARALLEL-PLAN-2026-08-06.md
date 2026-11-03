@@ -60,7 +60,7 @@ Grouped, de-duplicated, with disposition. **D**=done+verified · **F**=in flight
 ### A. Coverage — the actual client outcome
 | # | Objective | Msg | St |
 |---|---|---|---|
-| A1 | 100% of bina-comp mail (each mail + multiple attachments) + drive (thousands incl. failed) reaching `COMPLETED` | 262 | B |
+| A1 | 100% of hacohen mail (each mail + multiple attachments) + drive (thousands incl. failed) reaching `COMPLETED` | 262 | B |
 | A2 | ~3,000 docs/month expected, no gaps — *measured universe is ~32,000 over 6 months (~5,300/mo)* | 262 | B |
 | A3 | Move 5,555 `(בוריס)` docs from past 6 months back to `to_sync`; same for mail fail tags | 287 | B |
 | A4 | `OldDocumentMonthsBack` = 6 **and** it must bound sync discovery | 296 | F |

@@ -359,7 +359,7 @@ export function LocationFields({ title, fields, active, onActive }: {
       <div className="pickhead">
         <span style={{ color: 'var(--ink)', fontWeight: 600 }}>{title}</span>
         <span title="הרשימה נקראת מהחיבור הזה, בדפדפן">
-          {connLabel ? <>מתוך <b>{connLabel}</b>{total ? ` · ${total} פריטים` : ''}</> : 'בחרו חיבור תחילה'}
+          {connLabel ? <>מתוך <b>{connLabel}</b>{total ? ` · ${total === 1 ? 'פריט אחד' : total + ' פריטים'}` : ''}</> : 'בחרו חיבור תחילה'}
         </span>
       </div>
 
@@ -506,7 +506,7 @@ export function LocationFields({ title, fields, active, onActive }: {
                 )}
               </span>
             ) : (
-              <span>{total} פריטים</span>
+              <span>{total === 1 ? 'פריט אחד' : total + ' פריטים'}</span>
             )}
             <span className="sp" />
             <span className="kbd">↑</span><span className="kbd">↓</span><span className="kbd">Enter</span>

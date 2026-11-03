@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+#: content-status — the content library against its plan: per type planned/ok/short/long/broken/missing, or the jobs still to write
+#
+#   ./bbox digital-assets content-status             # the table
+#   ./bbox digital-assets content-status --list      # one line per piece
+#   ./bbox digital-assets content-status --jobs [--repo PATH] [--no-import]   # args for content/workflow.js
+#
+# Reads files only (content/assignments.yaml and content/<type>/<slug>.he.md); the app need not run.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # npath: a host path a native python3 can open (G10)
+case "${1:-}" in -h|--help) sed -n 's/^#: //p; s/^#   //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+exec python3 "$(npath "${SCRIPT_DIR}")/../content/status.py" "$@"

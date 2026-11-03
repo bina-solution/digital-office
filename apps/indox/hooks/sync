@@ -21,7 +21,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 
 verb="${1:-state}"; shift || true
 case "${verb}" in
-  state|status)   exec bash "${SCRIPT_DIR}/sync-state" STATUS ;;
+  state|status)   exec bash "${SCRIPT_DIR}/sync-state" "$@" ;;   # its --instance=<id>, as reset gets its own
   reset)          exec bash "${SCRIPT_DIR}/sync-reset" "$@" ;;
   # cd to the repo root first: a Windows python3 mis-resolves the /c/... absolute form, so this
   # is invoked by a path relative to the root.

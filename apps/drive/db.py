@@ -4,39 +4,87 @@ Split out of adapters/local.py so that profiles.py and bootstrap.py can talk to 
 WITHOUT importing the adapter package (adapters/__init__ imports connections_client, which would
 close an import cycle the moment the profile store needed a query).
 
-Nothing here knows what a table means. `q` runs SQL and hands back rows; ownership of every
-statement stays with the module that declares the table.
+Nothing here knows what a table means. `q` runs one statement and hands back rows; `tx` holds one
+transaction open for a block of them. Ownership of every statement stays with the module that
+declares the table.
+
+POOLED (2026-10-28). Every statement used to open its own connection — a TCP handshake and a
+Postgres backend per query, several per request. The workers are threaded now (gunicorn.conf.py),
+so one small thread-safe pool per worker serves them all; a connection the server dropped is
+discarded and the statement retried once on a fresh one.
 """
 import os
+import threading
+from contextlib import contextmanager
 
 import psycopg2
+from psycopg2 import pool as _pool
 
-DB = dict(host=os.environ.get("PGHOST", "supabase-db"), port=5432,
-          dbname="postgres", user="postgres",
-          password=os.environ.get("SUPABASE_DB_PASSWORD", ""))
+DB = dict(host=os.environ.get("PGHOST", "supabase-db"), port=int(os.environ.get("PGPORT", "5432")),
+          dbname=os.environ.get("PGDATABASE", "postgres"), user=os.environ.get("PGUSER", "postgres"),
+          password=os.environ.get("SUPABASE_DB_PASSWORD", ""), connect_timeout=10)
+
+_POOL = None
+_POOL_LOCK = threading.Lock()
+
+
+def _pool_get():
+    global _POOL
+    if _POOL is None:
+        with _POOL_LOCK:
+            if _POOL is None:
+                _POOL = _pool.ThreadedConnectionPool(1, int(os.environ.get("DRIVE_DB_POOL", "10")), **DB)
+    return _POOL
+
+
+@contextmanager
+def _conn():
+    p = _pool_get()
+    c = p.getconn()
+    broken = False
+    try:
+        yield c
+    except (psycopg2.OperationalError, psycopg2.InterfaceError):
+        broken = True
+        raise
+    finally:
+        if not broken and not c.closed:
+            try:
+                c.rollback()            # nothing a caller left open survives into the next borrower
+            except Exception:
+                broken = True
+        p.putconn(c, close=broken or bool(c.closed))
 
 
 def q(sql, args=()):
-    with psycopg2.connect(**DB) as c, c.cursor() as cur:
-        cur.execute(sql, args)
-        if cur.description:
-            return cur.fetchall()
-        return []
+    """Run one statement in its own transaction; rows when it returns any, else []."""
+    for attempt in (1, 2):
+        try:
+            with _conn() as c:
+                with c.cursor() as cur:
+                    cur.execute(sql, args)
+                    rows = cur.fetchall() if cur.description else []
+                c.commit()
+                return rows
+        except (psycopg2.OperationalError, psycopg2.InterfaceError):
+            if attempt == 2:
+                raise
+
+
+@contextmanager
+def tx():
+    """`with tx() as cur:` — one transaction for a block of statements, committed when the block
+    ends and rolled back when it raises. What a get-or-create or a recursive delete needs, so that
+    two workers cannot each create the same folder or half-delete one tree."""
+    with _conn() as c:
+        with c.cursor() as cur:
+            yield cur
+        c.commit()
 
 
 def try_advisory_lock(key):
-    """Best-effort cross-worker mutex.
-
-    gunicorn runs this service with several workers and each one boots the profile reconciler. Two
-    workers reconciling the same declaration at the same instant would each see "no instance" and
-    each mint one — two vault instances, two keys, one profile. A Postgres advisory lock is the
-    cheapest mutex that both workers can actually see (a process-local lock cannot).
-
-    Returns True when THIS connection holds the lock. The lock is released when the connection
-    closes, which `q`'s context manager does at the end of every call — so it is held for exactly
-    the length of this check and the caller must serialise itself by other means if it needs more.
-    Hence `with_advisory_lock` below, which keeps ONE connection open for the whole critical section.
-    """
+    """Best-effort cross-worker mutex, held only for the length of this one statement — see
+    `advisory_lock` below for one held across a block."""
     return bool(q("SELECT pg_try_advisory_lock(%s)", (int(key),))[0][0])
 
 
@@ -44,7 +92,8 @@ class advisory_lock:  # noqa: N801 — used as a context manager, reads as a sta
     """`with advisory_lock(k) as got:` — holds the lock for the whole block, or reports it was taken.
 
     Keeping the connection open is the point: pg advisory locks are owned by a SESSION, so a lock
-    taken on a connection that is immediately closed protects nothing.
+    taken on a connection that is immediately closed protects nothing. It is a connection of its
+    own, outside the pool, because the pool would hand the session (and its lock) to someone else.
     """
 
     def __init__(self, key):

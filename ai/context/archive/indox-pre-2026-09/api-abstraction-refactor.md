@@ -28,7 +28,7 @@ Code nodes: Strip Control, Resolve IDs, Build Get SQL, Build Table Get, Build Ta
 Also 2 scheduleTriggers (supabase-only drivers: line-change poll + recovery sweep + 15-min terminalizer)
 — these stay in the supabase backend; the SHEETS backend won't have the postgres line-change trigger
 (sheets has no change-feed; main is driven by scanners/poll differently — check how sheets mode drove main before).
-Tenant sheet: INDOX_SHEET_ID=1SfWUiXCpzGcfgfqbd1xogN1sUpMIlsVajL-sKH4y11U. Tabs (from _gidmap.json):
+Tenant sheet: INDOX_SHEET_ID=1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0048. Tabs (from _gidmap.json):
 מסמכים נכנסים=incoming_documents, הגדרות=settings, חברות/Companies, + log tabs.
 
 ## DATA API — EXACT contract (extracted from indoxApiSupabase01; mirror in sheets)

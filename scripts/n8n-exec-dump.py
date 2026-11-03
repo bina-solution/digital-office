@@ -42,6 +42,7 @@ def detect():
     global BASE, HOST_HDR
     if BASE:
         return
+    reasons = []
     for base, host in (("http://localhost:5678", ""), ("http://127.0.0.1", "n8n.localhost")):
         try:
             req = urllib.request.Request(base + "/rest/settings",
@@ -50,9 +51,15 @@ def detect():
                 if r.status == 200:
                     BASE, HOST_HDR = base, host
                     return
-        except Exception:
-            pass
-    sys.exit("n8n unreachable (tried localhost:5678 and traefik n8n.localhost)")
+        except urllib.error.HTTPError as e:
+            # An endpoint that answers with an error STATUS is a different fact from one that does
+            # not answer at all, and the body is where n8n says which — keep both (G66).
+            reasons.append(f"{base} (Host: {host or '-'}): HTTP {e.code} — "
+                           f"{e.read()[:300].decode('utf-8', 'replace').strip()}")
+        except Exception as error:
+            reasons.append(f"{base} (Host: {host or '-'}): {type(error).__name__}: {error}")
+    sys.exit("n8n unreachable (tried localhost:5678 and traefik n8n.localhost)"
+             + "".join(f"\n  {reason}" for reason in reasons))
 
 
 def req(path, method="GET", body=None, cookie=None, timeout=60):

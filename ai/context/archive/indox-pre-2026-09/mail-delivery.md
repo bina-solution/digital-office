@@ -15,16 +15,16 @@ evidence, because each one looked like something else.
 
 ## The working configuration
 
-Host `bina-devops-vps` (203.0.113.10), mailbox `person12@example.com`.
+Host `bina-devops-vps` (93.184.216.5), mailbox `person12@example.com`.
 
 | Layer | Value | Why it matters |
 |---|---|---|
-| A | `mail.digital-office.co.il` → `203.0.113.10` | the MX target must resolve to the MTA |
+| A | `mail.digital-office.co.il` → `93.184.216.5` | the MX target must resolve to the MTA |
 | MX | `digital-office.co.il` → `mail.digital-office.co.il` | where the internet delivers |
 | SPF | `v=spf1 a:mail.digital-office.co.il -all` | authorises the sender; without it → spam |
 | DKIM | `mail._domainkey` TXT, key from the MTA | signature; without it → spam |
 | DMARC | `_dmarc` TXT, `p=none` to start | policy + reporting |
-| **PTR** | `203.0.113.10` → `mail.digital-office.co.il` | set at the **VPS provider**, not the registrar |
+| **PTR** | `93.184.216.5` → `mail.digital-office.co.il` | set at the **VPS provider**, not the registrar |
 | HELO | `mail.digital-office.co.il` | must equal the PTR name |
 
 **Forward-confirmed reverse DNS is the step most guides skim.** The PTR name has to resolve *back* to
@@ -170,7 +170,7 @@ by mx.google.com with ESMTPS id … (version=TLS1_3 cipher=TLS_AES_256_GCM_SHA38
 ```
 
 That is the receiver describing the session it just had with us, which is the only evidence that is
-not our own opinion of our own configuration. `person14@example.com` is the companion for
+not our own opinion of our own configuration. `person14-x@example.com` is the companion for
 SPF/DKIM/iprev — it replies to the envelope sender, so the report lands in the mailbox under test
 and doubles as proof that a brand-new address can receive mail from the public internet.
 
@@ -181,7 +181,7 @@ the postfix cleanup line, and it is easy to read past because the line otherwise
 
 ```
 postfix/cleanup[3704]: 4C9B0ABD74: message-id=<>          ← ours, composed by mailapi
-postfix/cleanup[1957]: EF48BAB5C7: message-id=<person15@example.com>   ← inbound, normal
+postfix/cleanup[1957]: EF48BAB5C7: message-id=<person15-x@example.com>   ← inbound, normal
 ```
 
 Google states the consequence plainly:
@@ -224,7 +224,7 @@ parameter name** — whether it applies to a given submission depends on `local_
 the mailserver.
 
 Proof is the same log line, with the field populated, plus the receiver's own copy of the headers
-from a `person14@example.com` report.
+from a `person14-x@example.com` report.
 
 ## Deliberately still closed
 

@@ -52,6 +52,9 @@ export class RaphaelDataScanWorkflow {
     ScanData = {
         jsCode: `const INV = 'http://data-management:8080/api/inventory?wait=true';
 const NOTIFY = 'http://notifications:8977/api/notifications';
+// ONE IS SAID AS ONE (DGO-526) — see the note in raphaelMachine00001; a Code node cannot import.
+const num = n => Number(n).toLocaleString('he-IL');
+const one = (n, single, many) => (Number(n) === 1 ? single : num(n) + ' ' + many);
 let inv;
 try {
   inv = await this.helpers.httpRequest({ method: 'GET', url: INV, json: true, timeout: 180000 });
@@ -69,7 +72,7 @@ if (atRisk.length) {
     await this.helpers.httpRequest({
       method: 'POST', url: NOTIFY, json: true, timeout: 20000,
       body: { source: 'raphael', source_id: 'scan-data-at-risk',
-        title: 'רפאל: ' + atRisk.length + ' נפחי נתונים בסיכון', body: names.join(', '), level: 'warn' },
+        title: 'רפאל: ' + one(atRisk.length, 'נפח נתונים אחד בסיכון', 'נפחי נתונים בסיכון'), body: names.join(', '), level: 'warn' },
     });
   } catch (e) { /* the notice is best-effort; the finding is still returned */ }
 }

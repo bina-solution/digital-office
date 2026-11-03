@@ -1,7 +1,7 @@
 # Central Business System — Consolidation & Unified Connections (Design Proposal)
 
 Status: **proposal / thinking doc** (no code yet). Branch: `claude/centralized-business-system-qs1edt`.
-Author intent (paraphrased): collapse the whole `deployment-bina-comp` estate into **one business
+Author intent (paraphrased): collapse the whole `deployment-hacohen` estate into **one business
 webapp** that centralizes everything — dashboard, פנקס (ledger), דרייב (drive), מייל (mail),
 incoming documents, WhatsApp bot (from wadmin), any-concurrency, alerts (from GlitchTip API),
 machine, apps (from homepage), system validation (feature-validation / test suite), settings

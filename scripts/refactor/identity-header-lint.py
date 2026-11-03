@@ -42,7 +42,12 @@ WHAT IT CHECKS — four things, each of which fails the gate:
      python, by comment marker otherwise — `apps/dgo-extend/firewall.py:56` is prose inside the
      module docstring, `apps/bina-ds/harness/customize.sh:6` is a `#` comment, and neither reads
      anything). Docs, tests, plans, diagrams and one-shot tools are not code paths. A file in
-     `platform-base/<x>/` whose app has no `app.json` is not an installed app.
+     `platform-base/<x>/` whose app has no `app.json` is not an installed app. Nor is a CHECKER: the
+     files in `CHECKER_DIRS` name the family in order to SEARCH for it (the gates beside this one) or
+     in order to INJECT a synthetic one (the office's UI/QA tooling, which drives the RUNNING office
+     from outside as a browser client so it can open every declared route without a human login).
+     Neither is a host the edge gates — the edge produces nothing for them and no manifest can
+     declare them — and each suspension prints its own reason.
   3. EVERY READER DECLARES IT, in its OWN manifest — `use: [{capability: "identity"}]`, or providing
      `identity` itself (`platform-base/authentik`, and the replacement's day). A reader whose
      manifest declares neither is a finding NAMING THE FILE, because that file is exactly what a swap
@@ -65,6 +70,11 @@ WHAT IT DELIBERATELY DOES NOT CHECK.
     carrying traefik's `customRequestHeaders` / `authResponseHeaders`. A producer using another shape
     is not recognised as one here — and is then judged as a reader (its app must declare `identity`),
     so the narrowness costs declarations, never silence.
+  * Whether a file the CHECKER_DIRS rule exempts also EMITS the family. Such a file is classified no
+    further: it needs no manifest declaration, and it is not held to `PRODUCERS`' still-emits
+    assertion (the QA driver's `AUTH = {...}` is a header it SENDS to the office as a client, a shape
+    `WRITE_SIGNS` cannot see either way). What it writes is its own synthetic claim about who the
+    caller is, not the producer `core-006` swaps — so a swap does not move it.
   * Whether a reader is ENABLED in this office. `platform.state.yaml` is this deployment's choice;
     `my-docs`, `indox` and `social-list` are disabled here and are still consumers, because the
     contract belongs to the tree and every other office runs them (the gate is static and
@@ -133,6 +143,65 @@ PRODUCERS: dict[str, dict] = {
             "the serving office's user before forwarding into a linked office. This is the ONE file "
             "that is both a rewriter and a reader, which is why the pair is written down.",
     },
+    "packaging/dgo/internal/compiler/serve.go": {
+        "reads": False,
+        "reason":
+            "the NATIVE port of `platform/manager/serve.py` above (:296) — renders the same per-office "
+            "identity middleware through a Go helper, `headers(\"X-authentik-username\", mapped)`, so "
+            "the family is EMITTED by the successor as well. Layer 0 has no manifest to declare it in, "
+            "which is why the supply side is where it has to be written down.",
+    },
+    "packaging/dgo/internal/console/edge.go": {
+        "reads": False,
+        "reason":
+            "the native console's guard — `identityHeader()` names every family a caller may not "
+            "assert, and `screen()` DELETES those headers from a request that did not come through a "
+            "trusted proxy (and any `_`-spelled one even from the trusted proxy). A STRIP, like "
+            "`apps/dgo-extend/link-proxy.py`; a swap of the family moves this list with it.",
+    },
+    "platform-base/forward-auth/handlers.go": {
+        "reads": True,
+        "reason":
+            "THE PRODUCER since DGO-1090: `identityHeaders()` answers traefik's forwardAuth with the five "
+            "headers, which `authResponseHeaders` copies onto the request it forwards. And on a phone's "
+            "machine behind its native core, `fromCore` READS them — `edgeIdentity` — from a request the "
+            "core's edge signed for this machine (FORWARD_AUTH_EDGE_TOKEN): the core's identity handed on, "
+            "taken only as signed. Its app provides `identity` itself, so the reading is declared.",
+    },
+    "packaging/dgo/internal/edge/edge.go": {
+        "reads": False,
+        "reason":
+            "the native EDGE (`dgo be-child edge`, DGO-1090) — traefik's `authentik@file` for the core "
+            "that runs without traefik (the phone): `Claimed()` DROPS the family whole (its jwt and "
+            "meta-* too) and every other one the native console's screen refuses — Remote-*, "
+            "X-Auth-Request-*, X-Webauth-*, X-DGO-*, the forwarding headers — in every spelling, from every "
+            "request, and the identity forward-auth answered is WRITTEN onto the request it "
+            "forwards (`Rewrite`). It reads no identity to decide anything; a swap of the family moves "
+            "this list and these writes with it, as it moves the middleware.",
+    },
+    "apps/n8n/hooks/pull": {
+        "reads": False,
+        "reason":
+            "STRIPS the family's JWT out of pinned data: a webhook trigger's pinData is the request it "
+            "received, `x-authentik-jwt` included (DGO-980), so `pull` scrubs the credential headers "
+            "before a workflow is written to the repo. It reads no identity — n8n routes no `auth: sso` "
+            "— which is exactly why it belongs here and not in `apps/n8n/app.json`'s `use`.",
+    },
+    "apps/n8n/hooks/pull-app": {
+        "reads": False,
+        "reason":
+            "the same scrub for `pull-app`'s one-workflow export — the strip list is gate G87's "
+            "(`scripts/refactor/pinned-credential-lint.py`), and `x-authentik-jwt` is a member of it.",
+    },
+    "apps/lan-console/docker-compose.yml": {
+        "reads": False,
+        "reason":
+            "the LAN door (DGO-1125/1126) — `lan-auth`, a forwardAuth to the LAN's own sign-in, whose "
+            "`authResponseHeaders` LISTS the family so traefik deletes a client's own and copies the "
+            "signed-in user's onto the request: the family's producer on the console's LAN name and on "
+            "every shared app's `…-console-lan` router, as `authentik-forwardauth.yaml` is on the "
+            "domain. A swap of the sign-in moves this middleware with it.",
+    },
 }
 
 #: Readers of the family whose manifest does not declare `identity`. KNOWN RED, wired anyway: each is
@@ -146,7 +215,12 @@ PRODUCERS: dict[str, dict] = {
 #: `auth: sso`, so the edge produces the family for it today). Kept as an empty dict, and kept wired:
 #: the mechanism is what a future reader's warn phase needs (AGENTS.md rule 8), and the anti-rot
 #: assertion below still fails on an entry whose app has since declared the capability.
-WAIVERS: dict[str, str] = {}
+WAIVERS: dict[str, str] = {
+    # `scripts/ui-coverage/capture.py` was here until 2026-10-25 and is gone, not hidden: the tool
+    # no longer names the `X-authentik-*` family at all (it drives the office's own browser through
+    # the edge's sign-in instead of forging the header mapping by hand), so the anti-rot rule below
+    # read the entry as a stale waiver. A waiver is for a reader that still reads.
+}
 
 DOC_SUFFIXES = {".md", ".svg", ".mmd", ".txt", ".rst", ".html", ".png", ".pdf"}
 #: Path segments that hold something other than a code path.
@@ -159,6 +233,19 @@ WRITE_SIGNS = (
     re.compile(r"^\s*-\s*[\"']?x-authentik-", re.I),        # a YAML list of headers to emit
     re.compile(r"=\s*b?[\"']x-authentik-", re.I),            # a constant naming the header to write
     re.compile(r"x-authentik-[a-z-]*[\"']?\]\s*=", re.I),    # fwd["X-authentik-username"] = user
+    # A helper that emits the header WITH a value — `headers("X-authentik-username", user)`, the Go
+    # successor of `platform/manager/serve.py`'s door. Narrow on purpose: a `.get("x-authentik-…")`
+    # READ is named differently and stays a read.
+    re.compile(r"\bheaders\(\s*[\"']x-authentik-[a-z-]*[\"']\s*,", re.I),
+    # The family opening a collection literal — `[]string{"x-authentik-", …}` in the console's guard,
+    # or a mapping keyed by it. The same judgement the YAML list rule above already makes.
+    re.compile(r"\{\s*[\"']x-authentik-", re.I),
+    # The family CLOSING a collection literal — `new Set([… "x-authentik-jwt"])` in the n8n hooks
+    # that scrub a pinned credential before a workflow reaches the repo. Deliberately the last-member
+    # shape only: a READ list (`('X-authentik-username', 'X-authentik-uid')`, apps/my-docs) is not
+    # this, and a file that builds such a literal in order to read it is reported the OTHER way — as
+    # an undeclared producer — so any misclassification is loud, never silent.
+    re.compile(r"[\"']x-authentik-[a-z-]*[\"']\s*\]", re.I),
     re.compile(r"customrequestheaders|authresponseheaders", re.I),
 )
 COMMENT_STARTS = ("#", "//", "/*", "*", "<!--", ";", "--")
@@ -167,10 +254,21 @@ COMMENT_STARTS = ("#", "//", "/*", "*", "<!--", ";", "--")
 #: is not this shape and stays a consumer.)
 YAML_LABEL = re.compile(r"^\s*-?\s*(name|description)\s*:")
 
-#: A checker beside the gates names the family in order to SEARCH for it — this gate included, which
-#: must spell the family to enumerate it. Nothing in this directory is a service, so nothing in it
-#: can consume the family; a sibling enumerator written later is exempt by the same rule, on purpose.
-GATE_DIR = "scripts/refactor/"
+#: Directories whose files are CHECKERS rather than consumers, each with the reason printed beside
+#: every file it exempts. Two shapes, one mechanism: a file names the family in order to SEARCH for
+#: it, or in order to INJECT a synthetic one — and neither shape is a host the edge gates, so the
+#: edge produces nothing for it and no manifest can declare it. A sibling enumerator written later
+#: is exempt by the same rule, on purpose; a REAL app or platform service never is (it lives under
+#: `apps/`/`platform-base/`, where the rule does not reach).
+CHECKER_DIRS: dict[str, str] = {
+    "scripts/refactor/":
+        "a checker beside the gates — it names the family in order to search for it, and no service "
+        "lives here",
+    "scripts/ui-coverage/":
+        "a QA driver — it opens the running office from OUTSIDE in a real browser and injects a "
+        "synthetic identity so it can reach every declared route without a human login; it serves "
+        "nothing, is routed nowhere, and no manifest can declare it",
+}
 
 
 # ── enumeration (rule 8 step 1+2) ──────────────────────────────────────────────────────────────
@@ -223,6 +321,14 @@ def kind_reason(path: str) -> str | None:
     return None
 
 
+def checker_reason(path: str) -> str | None:
+    """Why this file is a checker rather than a consumer — searched-for, or injected, not routed."""
+    for prefix, reason in CHECKER_DIRS.items():
+        if path.startswith(prefix):
+            return reason
+    return None
+
+
 def mention_only(text: str, suffix: str, lines: list[int]) -> bool:
     """True when EVERY match is a comment or a docstring — a mention, not a read.
 
@@ -269,8 +375,21 @@ def has_write_sign(texts: list[str]) -> bool:
     return any(sign.search(t) for t in texts for sign in WRITE_SIGNS)
 
 
+#: Layer-0 twins of an app: Go that answers that app's own routes in its place — the native console and
+#: control plane of `dgo be-child native`, the phone's core with no containers (DGO-1090). What a twin
+#: reads, the app reads: it is declared in THAT app's manifest, as the Python original's reading is.
+TWINS = {
+    "packaging/dgo/internal/console/": "platform-base/console",
+    "packaging/dgo/internal/serve/": "platform-base/app-management",
+}
+
+
 def owner_of(path: str) -> tuple[str, pathlib.Path | None]:
     """(the app id that owns this file, its app.json — or None when the directory has none)."""
+    for prefix, app in TWINS.items():
+        if path.startswith(prefix):
+            manifest = REPO / app / "app.json"
+            return app, (manifest if manifest.exists() else None)
     parts = pathlib.PurePosixPath(path).parts
     if len(parts) > 1 and parts[0] in ("apps", "platform-base"):
         app_id = f"{parts[0]}/{parts[1]}"
@@ -354,6 +473,15 @@ def self_test() -> int:
                                    "a/diagrams/d.json", "a/tools/t.py", "apps/x/app.py")],
          ["doc — a prose or asset file", "test — a tests/ file", "test — a test file, not a code path",
           "plan — a plans/ file", "diagram — a diagrams/ file", "tooling — a tools/ file", None]),
+        ("a checker directory is exempt, a real code path is not",
+         [bool(checker_reason(p)) for p in ("scripts/refactor/run-gates.py",
+                                            "scripts/ui-coverage/route-runtime-qa.py",
+                                            "apps/drive/app.py",
+                                            "platform-base/console/app.py")],
+         [True, True, False, False]),
+        ("the QA-driver rule says what it exempts",
+         (checker_reason("scripts/ui-coverage/route-runtime-qa.py") or "").startswith("a QA driver"),
+         True),
         ("a manifest that declares identity is declared",
          declares_identity(manifest_ok), (True, ["use: identity"])),
         ("the provider declares itself", declares_identity(manifest_provider), (True, ["provides: identity"])),
@@ -392,13 +520,9 @@ def main() -> int:
         lines = [n for n, _ in found[path]]
         texts = [t for _, t in found[path]]
         spec = PRODUCERS.get(path)
-        reason = None if spec else kind_reason(path)
+        reason = None if spec else (kind_reason(path) or checker_reason(path))
         if reason:
             nonruntime.append((path, lines, reason))
-            continue
-        if path.startswith(GATE_DIR):
-            nonruntime.append((path, lines, "a checker beside the gates — it names the family in "
-                                            "order to search for it, and no service lives here"))
             continue
         text = ""
         if not spec:

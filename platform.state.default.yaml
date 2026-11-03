@@ -20,13 +20,26 @@
 # that joined after that decision (computers, git, sites, domains, telegram-tv, project-pln,
 # dgo-extend, social-list, digital-assets, archify) are therefore off.
 #
-# EVERY LINE IS A DISPOSITION AND NOTHING ELSE: `{ enabled: true|false }`. No `state:`, no `by:`, no
-# `remote:` — those describe a deployment's history, and a fresh install has none. Gate G23
+# EVERY APP LINE IS A DISPOSITION AND NOTHING ELSE: `{ enabled: true|false }`. No `state:`, no `by:`,
+# no `remote:` — those describe a deployment's history, and a fresh install has none. Gate G23
 # (gallery-default-lint) judges THIS file for exactly that reason.
 #
 # The shape of an app's own state entry, its instances and its `remote:` block all still live in
 # platform.state.yaml once an office has one; `schema_version` is checked by the compiler either way.
 schema_version: 1
+
+# WHICH PROVIDER TO PULL IN, when two apps provide one capability and the office runs neither: the
+# PRODUCT's choice, for a state that names only the apps that use the capability — as every state
+# could while one app provided it. It is read from THIS file every time (reconcile.default_bindings(),
+# and packaging/dgo's twin), never as an office's own binding, so it is not `bindings:`, which a
+# fresh install's copy would turn into a binding of its own. The office decides first: its
+# `bindings:`, a consumer's default_provider, or the one eligible provider it runs; and this never
+# starts a provider the office lists switched off. So it moves no office that runs authentik alone.
+# Release 0.3.0 (r030-005, the owner 2026-11-02: authentik out): a fresh office starts on forward-auth,
+# so this line, the two `apps:` lines below and .env.ex's DGO_IDENTITY changed together. An office
+# that already runs authentik keeps it until its own window (r030-004/006) switches its own state.
+product_bindings:
+  identity: forward-auth
 
 apps:
   # ── layer 1 — headless base (system: cannot be disabled) ───────────────────────
@@ -34,9 +47,12 @@ apps:
   traefik:          { enabled: true }   # the edge — provides routing/TLS/forward-auth
   postgres:         { enabled: true }   # provides sql — the db, and only the db
   redis:            { enabled: true }   # provides kv
-  authentik:        { enabled: true }   # provides identity + forward-auth
+  forward-auth:     { enabled: true }   # provides identity: one Go binary; first-run setup makes the owner
+  authentik:        { enabled: false }  # replaced by forward-auth (release 0.3.0)
   connections:      { enabled: true }   # secret-base
   autoheal:         { enabled: true }   # restarts containers docker marked unhealthy (opt-in label)
+  follow-runner:    { enabled: false }  # DGO_FOLLOW's schedule where bbox runs only in containers (the HP); a host
+                                        # `bbox run` installs a systemd timer instead (scripts/follow.sh, r030-205)
 
   # ── layer 2 — base apps ────────────────────────────────────────────────────────
   console:          { enabled: true }
@@ -83,6 +99,7 @@ apps:
   domains:          { enabled: false }
   telegram-tv:      { enabled: false }
   project-pln:      { enabled: false }
+  meet:             { enabled: false }   # video meetings (Jitsi Meet)
   dgo-extend:       { enabled: false }
   social-list:      { enabled: false }
   digital-assets:   { enabled: false }

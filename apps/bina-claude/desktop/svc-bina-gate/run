@@ -1,0 +1,5 @@
+#!/usr/bin/with-contenv bash
+# The desktop stream's front door (Dockerfile.desktop says why): :3000 → nginx on 127.0.0.1:3100,
+# admitting only the office's edge and console. s6 restarts it if it ever exits. It holds no secret
+# and binds an unprivileged port, so it runs as the session's user, not root.
+exec s6-setuidgid abc env BINA_CLAUDE_TERMINAL_PORT=3000 BINA_CLAUDE_TTYD_PORT="${CUSTOM_PORT:-3100}" node /opt/bina-claude/gate.mjs

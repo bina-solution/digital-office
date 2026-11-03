@@ -283,11 +283,11 @@ const DO = (function(){
              customers:5, items:5, documents:5, revenue:52488},
     live:[{text:'סנכרון gmail הושלם — 12 פריטים',when:'14:55'},{text:'חשבונית INV-2048 הופקה',when:'14:53'},{text:'מסמך חדש התקבל · INDOX',when:'14:52'}], // event feed (newest first)
     customers:[
-      {id:'C-101',name:'ישראל קרטון בע״מ',taxid:'514112233',city:'תל אביב',email:'person118@example.com',phone:'04-8112255',balance:25488,docs:3},
-      {id:'C-102',name:'מאפיית הבוקר',taxid:'039221144',city:'חיפה',email:'person123@example.com',phone:'04-8620011',balance:8900,docs:2},
-      {id:'C-103',name:'שריזלי הובלות',taxid:'514778812',city:'ראשל״צ',email:'person124@example.com',phone:'03-9512244',balance:0,docs:1},
-      {id:'C-104',name:'טכנולוגיות אור',taxid:'515903221',city:'הרצליה',email:'person125@example.com',phone:'09-7712345',balance:8500,docs:1},
-      {id:'C-105',name:'ספק הענן בע״מ',taxid:'514330099',city:'פתח תקווה',email:'person126@example.com',phone:'03-6440022',balance:-1240,docs:2},
+      {id:'C-101',name:'ישראל קרטון בע״מ',taxid:'514112233',city:'תל אביב',email:'person96@example.com',phone:'04-0000015',balance:25488,docs:3},
+      {id:'C-102',name:'מאפיית הבוקר',taxid:'030000020',city:'חיפה',email:'person101@example.com',phone:'04-0000021',balance:8900,docs:2},
+      {id:'C-103',name:'שריזלי הובלות',taxid:'514778812',city:'ראשל״צ',email:'person102@example.com',phone:'03-0000022',balance:0,docs:1},
+      {id:'C-104',name:'טכנולוגיות אור',taxid:'515903221',city:'הרצליה',email:'person103@example.com',phone:'09-0000023',balance:8500,docs:1},
+      {id:'C-105',name:'ספק הענן בע״מ',taxid:'514330099',city:'פתח תקווה',email:'person104@example.com',phone:'03-0000024',balance:-1240,docs:2},
     ],
     items:[
       {id:'IT-1',name:'ייעוץ שעת עבודה',sku:'SRV-01',unit:'שעה',price:420},
@@ -325,11 +325,11 @@ const DO = (function(){
       // incoming documents flow through the real INDOX status enum:
       // NEEDS_REVIEW(לבדיקה) -> IN_PROGRESS(בעיבוד) -> COMPLETED(הושלם) | EXTRACTION_FAILED(חילוץ נכשל)
       incoming:[
-        {date:'12/06/2026',name:'סבח סוכנויות בע"מ-6...',company:'סבח סוכנויות בע"מ',cid:'570043745',short:'06146',type:'INVOICE',did:'demo-inv-1001',status:'NEEDS_REVIEW'},
-        {date:'28/05/2026',name:'אגן שיווק-10004',company:'אגן שיווק',cid:'511301129',short:'10004',type:'ORDER',did:'demo-ord-7001',status:'NEEDS_REVIEW'},
-        {date:'14/05/2026',name:'ישראל קרטון-00818',company:'ישראל קרטון',cid:'512093170',short:'00818',type:'INVOICE',did:'demo-inv-1002',status:'IN_PROGRESS'},
-        {date:'22/04/2026',name:'מ.ש. בינה קומפ בע"מ-1...',company:'מ.ש. בינה קומפ בע"מ',cid:'511020471',short:'01661',type:'INVOICE',did:'demo-inv-1003',status:'NEEDS_REVIEW'},
-        {date:'03/06/2026',name:'פוליראן תעשיות-05179',company:'פוליראן תעשיות',cid:'513498345',short:'05179',type:'SHIPMENT',did:'demo-shp-5001',status:'NEEDS_REVIEW'},
+        {date:'12/06/2026',name:'סבח סוכנויות בע"מ-6...',company:'סבח סוכנויות בע"מ',cid:'500000153',short:'06146',type:'INVOICE',did:'demo-inv-1001',status:'NEEDS_REVIEW'},
+        {date:'28/05/2026',name:'אגן שיווק-10004',company:'אגן שיווק',cid:'500000062',short:'10004',type:'ORDER',did:'demo-ord-7001',status:'NEEDS_REVIEW'},
+        {date:'14/05/2026',name:'ישראל קרטון-00818',company:'ישראל קרטון',cid:'500001003',short:'00818',type:'INVOICE',did:'demo-inv-1002',status:'IN_PROGRESS'},
+        {date:'22/04/2026',name:'מ.ש. הכהנים בע"מ-1...',company:'מ.ש. הכהנים בע"מ',cid:'500001011',short:'01661',type:'INVOICE',did:'demo-inv-1003',status:'NEEDS_REVIEW'},
+        {date:'03/06/2026',name:'פוליראן תעשיות-05179',company:'פוליראן תעשיות',cid:'500000187',short:'05179',type:'SHIPMENT',did:'demo-shp-5001',status:'NEEDS_REVIEW'},
       ]},
     // real notifications__main/state-empty capture shows an empty center — start empty, then the
     // tick's notify() streams notifications in live (matches both the capture and "running business")

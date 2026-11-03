@@ -3,7 +3,7 @@
 import os, json, glob
 from PIL import Image, ImageDraw
 import numpy as np
-ROOT='/home/user/deployment-bina-comp'
+ROOT='/home/user/deployment-hacohen'
 MOCK='verify/out/mock'
 REAL_DIRS=[ROOT+'/ci-artifacts/screenshots-ui', 'reference/real-screenshots']  # prefer latest capture
 mp=json.load(open('tooling/map.json'))  # mock-id -> real basename

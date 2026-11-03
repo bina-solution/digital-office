@@ -17,13 +17,14 @@
 # container actually listens on — otherwise the container is healthy only by accident, or unhealthy
 # forever and restarted by autoheal.
 #
-# THE PREP FILES ARE NOT IN THE REPOSITORY. The users file (password hashes from authentik's own
-# database) and — during the migration only — the sessions snapshot live in `/tmp/forward-auth` on
-# the host, `chmod 600` and owned by 65534 (the uid the image runs as: `scratch` has no /etc/passwd,
-# and a service whose whole job is deciding who may enter does not run as root). The host directory
-# itself is mode 711: traversal for the container's uid, no listing. A file at 600 root-owned is
-# unreadable by the container, and the service refuses to start without a users file — measured
-# shape, not a guess: `loadUsers` returns the read error, `main` fatal-logs it.
+# ITS STATE IS A NAMED VOLUME, forward_auth_data at /etc/forward-auth (DGO-1090): the users file — the
+# one fact this service holds, written once by first-run setup or, during a migration, from authentik's
+# own database — and, before the owner exists, the first-run code's hash (hooks/prepare writes it with
+# `forward-auth -first-run`; a scratch image has no shell). A volume, not a host directory, so the
+# office's backup carries it (app.json data.volumes; the archiver reads volume names) and nothing in the
+# checkout or on the host has to be made, owned or kept by hand. The image's /etc/forward-auth is 700
+# and owned by 65534 (the uid it runs as: `scratch` has no /etc/passwd, and a service whose whole job is
+# deciding who may enter does not run as root); a new volume starts as a copy of it.
 services:
   forward-auth:
     # The image CI publishes for this commit (DGO-41). `pull_policy: missing` means it is fetched
@@ -42,13 +43,18 @@ services:
       # signing key signs every session with an empty one (see the binary's own message).
       - FORWARD_AUTH_SECRET=${FORWARD_AUTH_SECRET:-}
       # Where a BROWSER reaches this service. Never derived from a request — a redirect target built
-      # from a header is an open redirect.
-      - FORWARD_AUTH_EXTERNAL_URL=${FORWARD_AUTH_EXTERNAL_URL:-http://auth.${DEPLOYMENT_DOMAIN:-localhost}}
+      # from a header is an open redirect. Its own host (`signin`, app.json's routing — `auth` stays
+      # authentik's while both exist), with the edge's port where the edge has one: scripts/ci-env.sh
+      # writes FORWARD_AUTH_BASE_URL=signin.localhost:8080 on the phone and the Mac (DGO-1090).
+      - FORWARD_AUTH_EXTERNAL_URL=${FORWARD_AUTH_EXTERNAL_URL:-${AUTH_PROTOCOL:-http}://${FORWARD_AUTH_BASE_URL:-signin.${DEPLOYMENT_DOMAIN:-localhost}}}
       # Which hosts this office serves: the bound on every return-to URL. `.localhost` = every host
       # under it; the domain itself is added separately when the edge carries one.
       - FORWARD_AUTH_ALLOWED_HOSTS=${FORWARD_AUTH_ALLOWED_HOSTS:-.${DEPLOYMENT_DOMAIN:-localhost}}
       - FORWARD_AUTH_USERS_FILE=/etc/forward-auth/users
       - FORWARD_AUTH_LISTEN=:9078
+      # A phone's machine behind its native core (DGO-1090): the core's per-boot token, which the guest's
+      # boot writes into .env from QEMU's fw_cfg (guest.sh); empty — everywhere else — is off.
+      - FORWARD_AUTH_EDGE_TOKEN=${FORWARD_AUTH_EDGE_TOKEN:-}
       # THE MIGRATION PAIR, both-or-neither, and EMPTY IS OFF (the binary's own rule): the first
       # verifies authentik's cookie, the second names which of its sessions are still live. The
       # window sets both in .env for the length of the migration and recreates this one container.
@@ -56,13 +62,9 @@ services:
       - FORWARD_AUTH_LEGACY_SESSIONS=${FORWARD_AUTH_LEGACY_SESSIONS:-}
       - TZ=${TZ:-Asia/Jerusalem}
     volumes:
-      # The prep files, read-only, at the path the binary reads once at boot. On the HOST, OUTSIDE
-      # the checkout — they are secrets (password hashes, session ids) and must never enter git.
-      # `/var/lib`, not `/tmp`: measured 2026-10-10 — the host's /tmp was wiped, the users file went
-      # with it, and the service crash-looped (the file is required to boot), taking the office's
-      # notifications with it until somebody noticed. Secrets a service boots on do not live in a
-      # directory the machine is free to empty.
-      - /var/lib/forward-auth:/etc/forward-auth:ro
+      # The service's state (see the header): never the checkout, never /tmp — measured 2026-10-10, a
+      # wiped /tmp took the users file and the service crash-looped.
+      - forward_auth_data:/etc/forward-auth
     networks:
       - traefik-network
     healthcheck:
@@ -72,6 +74,9 @@ services:
       timeout: 5s
       start_period: 5s
       retries: 3
+
+volumes:
+  forward_auth_data:
 
 networks:
   traefik-network:

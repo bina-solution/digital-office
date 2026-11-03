@@ -116,6 +116,14 @@ apps whose labels have not been migrated yet.
 - `module` present = a tile in the shell. Absent = routed but not surfaced.
 - `module.embed: true` needs an `alias`; you are framed at `/a/<alias>/` with the navigation intact.
   `embed: false` means your UI lives on its own host and opens in a new tab.
+- **Let the console frame you.** Framed apps (`embed`, `external`) must allow the console as a frame
+  ancestor: answer `Content-Security-Policy: frame-ancestors 'self' https://console.<domain>` and send
+  no `X-Frame-Options` (an embedded app also passes with `SAMEORIGIN`, being proxied under the
+  console's origin). Enable and `bbox update` ask your answer once you are up
+  (`platform/manager/framecheck.py`, the console's own verdict) and record it in
+  `data/platform/frame-checks.json`; with `FRAME_GATE=refuse` in `.env` (default `warn`) a refusal
+  switches a new app off again / puts the previous image back. An `embed: false` app is recorded,
+  never refused — it opens in a tab by design.
 - **Your name, icon and description live here.** The console does not keep a list of apps — it did
   once, for five of them, and the list drifted and advertised tiles for apps that were not
   installed.

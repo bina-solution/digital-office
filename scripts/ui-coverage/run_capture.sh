@@ -24,7 +24,6 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$(cd "${SCRIPT_DIR}/.." && pwd)/lib.sh"   # read_env, cn, colors — REPO_ROOT resolved here too
-TIMEOUT_BIN="$(timeout_bin)"   # empty on a macOS without coreutils -> run uncapped rather than fail
 
 # in-capture logins fall back to the repo .env so the caller (CI step) needs no secret passthrough
 AK_USER="${AK_USER:-akadmin}"
@@ -60,46 +59,13 @@ CONSOLE="${UI_CONSOLE_CONTAINER:?set UI_CONSOLE_CONTAINER to the console contain
 # [2026-10-07] archify added: in the rail since it shipped, in no map.
 APPS="${UI_MAP_APPS-console connections incoming-documents mailview drive machine notifications any-concurrency sites domains telegram-tv git computers app-management data-management bina digital-assets social-list dgo-extend project-pln archify}"
 SHARDS="${UI_MAP_SHARDS:-4}"
-IMAGE="${UI_CAPTURE_IMAGE:-ui-capture:latest}"
 SHARD_TIMEOUT="${UI_SHARD_TIMEOUT:-900}"
 
-if [ "${UI_CAPTURE_SKIP_BUILD:-0}" = 1 ] && docker image inspect "${IMAGE}" >/dev/null 2>&1; then
-  echo "### ui-map — using prebuilt capture image (${IMAGE})"
-else
-  echo "### ui-map — build capture image (${IMAGE})"
-  # Build context = the Dockerfile's own dir, NOT the repo root: the Dockerfile has no COPY, so it
-  # needs nothing from the tree, and sending the whole repo (data/, .git/, node_modules) as context
-  # every run wasted minutes. capture.py is bind-mounted at runtime, not baked in. Layers (apt+pip)
-  # are content-addressed, so on the persistent runner the second run onward is a near-instant cache
-  # hit. Bounded by `timeout`: a wedged apt/pip download must fail fast, never wedge the whole run
-  # for the job's 60-min ceiling the way an un-timed build did.
-  bargs=(${UI_CAPTURE_BUILD_ARGS:-})
-  # MITM-proxy sandbox: `bbox run` CA-shadows python:3.12-slim so pip trusts the proxy CA; if this
-  # capture is run standalone (base not shadowed), trust pypi directly so `pip install playwright`
-  # still succeeds. Also share the host network + pass the proxy build-args so the image's apt-get
-  # (chromium + fonts) reaches a strict egress proxy. Empty/absent on a normal host → same as before.
-  if command -v ccr_have_proxy_ca >/dev/null 2>&1 && ccr_have_proxy_ca; then
-    bargs+=(--build-arg "PIP_TRUSTED=--trusted-host=pypi.org --trusted-host=files.pythonhosted.org")
-  fi
-  # [2026-08-23] MOVED OUT of the proxy-CA branch. ccr_proxy_build_flags answers TWO questions,
-  # and only one of them is about a proxy: it also emits `--network host` for a host whose DEFAULT
-  # BRIDGE has no egress, where a build cannot reach deb.debian.org at all. Nesting the call inside
-  # `if ccr_have_proxy_ca` meant that on a no-proxy/dead-bridge host the flag was never asked for,
-  # and this build died after 481s of:
-  #     Err:3 http://deb.debian.org/debian-security trixie-security InRelease
-  #       Temporary failure resolving 'deb.debian.org'
-  #     ::error::ui-capture image build failed or timed out (600s)
-  # which is why `bbox ui-map` produced no capture results. The function is a no-op on a healthy
-  # host (empty output, same command as before), so calling it unconditionally costs nothing.
-  # Third site with this shape — ccr_build_serial and baseline.sh P2 had the same gate.
-  if command -v ccr_proxy_build_flags >/dev/null 2>&1; then
-    # shellcheck disable=SC2206 — flags (--network host + --build-arg …) are meant to word-split.
-    bargs+=( $(ccr_proxy_build_flags) )
-  fi
-  ${TIMEOUT_BIN:+${TIMEOUT_BIN} --kill-after=30 --signal=KILL ${UI_BUILD_TIMEOUT:-600}} \
-    docker build -f "$(npath "${SCRIPT_DIR}")/Dockerfile" -t "${IMAGE}" "${bargs[@]}" "$(npath "${SCRIPT_DIR}")" \
-    || { echo "::error::ui-capture image build failed or timed out (${UI_BUILD_TIMEOUT:-600}s)"; exit 1; }
-fi
+# The browser image — where Playwright + Chromium are declared — is built in ONE place next door, so
+# this capture and the flow suite (`bbox flow-qa`) can never drift on what "the office's browser" is.
+# ensure_capture_image sets IMAGE (${UI_CAPTURE_IMAGE:-ui-capture:latest}).
+. "${SCRIPT_DIR}/capture-image.sh"
+ensure_capture_image "ui-map" || exit 1
 
 # The console's serving network + its IP ON THAT network, read together so they can't disagree.
 # We attach each shard to this network and point Chromium's host-resolver at this IP, so
@@ -175,7 +141,10 @@ if [ -n "${AGENT_HOST}" ]; then
     fi
     if [ -n "${EDGE_IP}" ]; then
       resolve_ip="${EDGE_IP}"
-      trap 'docker rm -f "${EDGE_NAME}" >/dev/null 2>&1 || true' EXIT
+      # The removal is done by the ONE trap set below (cleanup_shards), not here: a trap set here is
+      # replaced by that later `trap ... EXIT INT TERM`, so this line's handler never ran and every
+      # run left its `uicap-edge-<pid>` container up — five of them were alive on 2026-10-10, the
+      # oldest 59 minutes after its run had finished. One handler, two names.
       echo "### ui-map — capture edge ${EDGE_IP}:${CPORT:-8000}: console → ${CIP}, ${AGENT_HOST} → ${AGENT_IP} on ${EDGE_ROOTS[*]}"
     else
       echo "### ui-map — capture edge did not come up; the console is captured directly (bina will fail)"
@@ -238,6 +207,11 @@ cleanup_shards() {
   for n in "${names[@]:-}"; do
     docker rm -f "$n" >/dev/null 2>&1 || true
   done
+  # …and the capture edge, when one was started (EDGE_NAME is set far above). Both kinds of container
+  # this script starts are removed by this one handler — see the note at its creation.
+  if [ -n "${EDGE_NAME:-}" ]; then
+    docker rm -f "${EDGE_NAME}" >/dev/null 2>&1 || true
+  fi
 }
 trap cleanup_shards EXIT INT TERM
 

@@ -17,7 +17,7 @@
 set -u
 DK="docker -H unix:///run/bbox-docker.sock"
 PSQL="$DK exec -i supabase-db-shlomo-laptop psql -U postgres -tAc"
-ENVF=/mnt/c/Users/user/Desktop/personalWorkspace/AutomateOs/deployment-bina-comp/.env
+ENVF=/mnt/c/Users/user/Desktop/personalWorkspace/AutomateOs/deployment-hacohen/.env
 
 local_mode () {
   $PSQL "SELECT lower(btrim(value)) FROM public.settings
@@ -39,7 +39,7 @@ require_local () {
     echo "         CLIENT'S ERP. Set the setting first, or leave this off."
     exit 1
   fi
-  local w; w=$($DK exec -i n8n-postgres-shlomo-laptop psql -U bina-comp -d n8n -tAc \
+  local w; w=$($DK exec -i n8n-postgres-shlomo-laptop psql -U hacohen -d n8n -tAc \
     "SELECT active::text FROM workflow_entity WHERE id='priorityLocalApi01'" | tr -d '\r ')
   echo "  priorityLocalApi01 active = '${w:-<missing>}'"
   [ "$w" = "true" ] || { echo "  ABORT: the local mock is not active; there is nowhere safe to send."; exit 1; }

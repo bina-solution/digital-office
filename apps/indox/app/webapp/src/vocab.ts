@@ -17,74 +17,90 @@
  *    in the grid and on the detail page.
  */
 
-/** Hebrew label per document STATUS. */
-const STATUS_LABEL: Record<string, string> = {
-  COMPLETED: 'הושלם',
-  MISSING_COMPANY_ID: 'חסר מזהה חברה',
-  UNKNOWN_COMPANY: 'חברה לא מזוהה',
-  MISSING_TYPE: 'חסר סוג',
-  MISSING_LINK: 'חסר קישור',
-  EXTRACTION_FAILED: 'חילוץ נכשל',
-  PRIORITY_SYNC_FAILED: 'סנכרון לפריוריטי נכשל',
-  MAX_ITERATIONS: 'חריגת ניסיונות',
-  DOUBLE: 'כפילות',
-  OLD: 'ישן',
-  PAUSE: 'מושהה',
-  NEEDS_REVIEW: 'לבדיקה',
-  FROM_OFFICE: 'מהמשרד',
-  IN_PROGRESS: 'בעיבוד',
-  ACTION_RESTART: 'הפעלה מחדש',
-  ACTION_REQUIRED: 'דורש פעולה',
-  MISSING_SHIPMENT: 'חסרה תעודת משלוח',
-  TRASH: 'אשפה',
-  // delivered by sync, awaiting extraction — the thin-pipe resting state, not a failure
-  TO_EXTRACT: 'ממתין לעיבוד',
-  // terminal RESOLVED outcomes (not failures)
-  MERGED: 'מוזג למסמך אחר',
-  GARBAGE: 'מסמך לא קריא',
-  // the apitools leg gave up on this document — it was reaching the UI as a bare English enum
-  API_TOOLS_FAILED: 'כשל בעיבוד',
-  '(ריק)': 'ללא סטטוס',
+/* ── THE WORDS COME FROM THE CATALOG, NOT FROM HERE (DGO-524) ────────────────────────────────
+   These three maps used to be hand-written in this file — a second copy of
+   `blueprint/schema/display.json`, which says of itself that it is "the one place a human writes how
+   this app's data reads … no screen keeps a private label map". Two hand-written copies agree until
+   the day one is edited; on that day the grid and the dashboard show two words for one status.
+   The block below is GENERATED from that catalog by `apps/indox/test_enum_words.py --fix`, and the
+   test fails when the two disagree — so this file has the words without owning them. */
+/* @indox-enum-words:start */
+/* GENERATED from apps/indox/blueprint/schema/display.json by
+   apps/indox/test_enum_words.py --fix. Edit the CATALOG, never this block: the words
+   for an enum are written once, there, and a screen that disagrees fails this test.
+   The words for an ABSENT value («ללא סטטוס» and friends) are the screen's own and
+   stay below the block — the catalog describes values that exist. */
+const ENUM_WORDS: Record<string, Record<string, string>> = {
+  STATUS: {
+    COMPLETED: 'הושלם',
+    // delivered by sync, awaiting extraction — the thin-pipe resting state, not a failure
+    TO_EXTRACT: 'ממתין לעיבוד',
+    IN_PROGRESS: 'בעיבוד',
+    NEEDS_REVIEW: 'לבדיקה',
+    MISSING_COMPANY_ID: 'חסר מזהה חברה',
+    UNKNOWN_COMPANY: 'חברה לא מזוהה',
+    MISSING_TYPE: 'חסר סוג',
+    MISSING_LINK: 'חסר קישור',
+    MISSING_SHIPMENT: 'חסרה תעודת משלוח',
+    ACTION_REQUIRED: 'דורש פעולה',
+    ACTION_RESTART: 'הפעלה מחדש',
+    PAUSE: 'מושהה',
+    FROM_OFFICE: 'מהמשרד',
+    EXTRACTION_FAILED: 'חילוץ נכשל',
+    MAX_ITERATIONS: 'חריגת ניסיונות',
+    PRIORITY_SYNC_FAILED: 'סנכרון לפריוריטי נכשל',
+    // the apitools leg gave up on this document — it was reaching the UI as a bare English enum
+    API_TOOLS_FAILED: 'כשל בעיבוד',
+    DOUBLE: 'כפילות',
+    OLD: 'ישן',
+    TRASH: 'אשפה',
+    // terminal RESOLVED outcome, not a failure
+    MERGED: 'מוזג למסמך אחר',
+    // terminal RESOLVED outcome, not a failure
+    GARBAGE: 'מסמך לא קריא',
+  },
+  TYPE: {
+    INVOICE: 'חשבונית',
+    SHIPMENT: 'תעודת משלוח',
+    ORDER: 'הזמנה',
+    RECEIPT: 'קבלה',
+    BALANCE_SHEET: 'דוח גיול',
+    UNKNOWN: 'לא מזוהה',
+    // classified as "not a business document we act on" — was rendering as raw English
+    IRRELEVANT: 'לא רלוונטי',
+    // GARBAGE is BOTH a TYPE and a STATUS: BaseDocEx01 stamps both on the same row.
+    GARBAGE: 'לא קריא',
+  },
+  SOURCE_TYPE: {
+    GOOGLE_DRIVE_FOLDER: 'תיקיית דרייב',
+    GOOGLE_DRIVE_FILE: 'קובץ בדרייב',
+    MAIL_ATTACHMENT: 'קובץ מצורף במייל',
+    GMAIL: 'מייל',
+    WHATSAPP: 'וואטסאפ',
+    BALANCE_SHEET: 'מסלול דוח גיול',
+    INVOICE: 'מסלול חשבוניות',
+  },
+};
+/* @indox-enum-words:end */
+
+/** What this screen says when there is NO value. Not in the catalog on purpose: the catalog
+ *  describes the values that exist, and «ללא סטטוס» is a sentence about their absence. */
+const ABSENT: Record<string, string> = {
+  'STATUS:(ריק)': 'ללא סטטוס',
+  'TYPE:(ללא סוג)': 'ללא סוג',
+  'SOURCE_TYPE:': 'ללא מקור',
 };
 
-/** Hebrew label per document TYPE. */
-const TYPE_LABEL: Record<string, string> = {
-  INVOICE: 'חשבונית',
-  BALANCE_SHEET: 'דוח גיול',
-  SHIPMENT: 'תעודת משלוח',
-  ORDER: 'הזמנה',
-  RECEIPT: 'קבלה',
-  UNKNOWN: 'לא מזוהה',
-  // classified as "not a business document we act on" — was rendering as raw English
-  IRRELEVANT: 'לא רלוונטי',
-  // GARBAGE is BOTH a TYPE and a STATUS: BaseDocEx01 stamps both on the same row.
-  GARBAGE: 'לא קריא',
-  '(ללא סוג)': 'ללא סוג',
-};
-
-/** Hebrew label per SOURCE_TYPE — where the document entered INDOX from.
- *  BALANCE_SHEET / INVOICE genuinely appear here: they are document types that leaked into
- *  the source axis via those ingestion lanes, so they are labelled as the LANE they are,
- *  never folded into another bucket. */
-const SOURCE_LABEL: Record<string, string> = {
-  GOOGLE_DRIVE_FOLDER: 'תיקיית דרייב',
-  GOOGLE_DRIVE_FILE: 'קובץ בדרייב',
-  MAIL_ATTACHMENT: 'קובץ מצורף במייל',
-  GMAIL: 'מייל',
-  WHATSAPP: 'וואטסאפ',
-  BALANCE_SHEET: 'מסלול דוח גיול',
-  INVOICE: 'מסלול חשבוניות',
-  '': 'ללא מקור',
-};
-
-const label = (map: Record<string, string>, v: unknown): string => {
+const label = (enumName: string, v: unknown): string => {
   const s = v == null ? '' : String(v);
-  return map[s] ?? map[s.toUpperCase()] ?? s;
+  const map = ENUM_WORDS[enumName] ?? {};
+  const absent = ABSENT[enumName + ':' + s];
+  return map[s] ?? map[s.toUpperCase()] ?? (absent !== undefined ? absent : s);
 };
 
-export const statusLabel = (v: unknown): string => label(STATUS_LABEL, v);
-export const typeLabel = (v: unknown): string => label(TYPE_LABEL, v);
-export const sourceLabel = (v: unknown): string => label(SOURCE_LABEL, v);
+export const statusLabel = (v: unknown): string => label('STATUS', v);
+export const typeLabel = (v: unknown): string => label('TYPE', v);
+export const sourceLabel = (v: unknown): string => label('SOURCE_TYPE', v);
 
 /** Labels for a grid column's enum options, so a cell and its header filter read the same words
  *  the dashboard does.
@@ -94,7 +110,8 @@ export const sourceLabel = (v: unknown): string => label(SOURCE_LABEL, v);
  *  value missing from it still has to RENDER, in Hebrew. Keying the labels off the editable list
  *  alone is exactly how `NEEDS_REVIEW` reached the screen as raw English on 3,131 documents. */
 export const statusLabels = (values: readonly string[]): Record<string, string> => ({
-  ...STATUS_LABEL,
+  ...(ENUM_WORDS.STATUS ?? {}),
+  ...(ABSENT['STATUS:(ריק)'] ? { '(ריק)': ABSENT['STATUS:(ריק)'] } : {}),
   ...Object.fromEntries(values.map((v) => [v, statusLabel(v)])),
 });
 

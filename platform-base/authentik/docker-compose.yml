@@ -39,6 +39,14 @@ services:
       # carries a one-office forward-auth load with room to spare; the second one bought nothing
       # but a second boot. BBOX_AUTHENTIK_WEB_WORKERS in .env raises it on a bigger machine.
       AUTHENTIK_WEB__WORKERS: ${BBOX_AUTHENTIK_WEB_WORKERS:-1}
+      # …and the timeout that kills it. authentik's gunicorn.conf.py sets none, so gunicorn's 30 s applies: a
+      # worker whose event loop goes more than 30 s without a heartbeat (it beats every timeout/2) is killed and
+      # re-booted. On a stalled engine that never ends —
+      # MacBook 2026-11-02 17:43Z → 18:00Z: every worker logged «authentik Core Worker finished starting» and was
+      # killed on «WORKER TIMEOUT» seconds later (pids 301, 320, 361, 397, 424 …), so sign-in and the console stayed
+      # 502/404 with the server «running». GUNICORN_CMD_ARGS overrides the config file; 120 s rides out a stall,
+      # and a worker that is truly wedged still dies.
+      GUNICORN_CMD_ARGS: --timeout ${BBOX_AUTHENTIK_WEB_TIMEOUT:-120}
       AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY}
       AUTHENTIK_REDIS__HOST: redis
       AUTHENTIK_REDIS__PASSWORD: ${REDIS_PASSWORD}
@@ -50,6 +58,12 @@ services:
       AUTHENTIK_BOOTSTRAP_PASSWORD: ${AUTHENTIK_BOOTSTRAP_PASSWORD:-}
       AUTHENTIK_BOOTSTRAP_EMAIL: ${AUTHENTIK_BOOTSTRAP_EMAIL:-}
       AUTHENTIK_BOOTSTRAP_TOKEN: ${AUTHENTIK_BOOTSTRAP_TOKEN:-}
+      # No phone-home (DGO-902): the worker asked version.goauthentik.io for the latest release, and
+      # a new install reports itself to the vendor's analytics — the office's security app lists every
+      # such call, and an open-source office makes none it was not asked to. An office that wants the
+      # «new version» banner sets these to false in its .env.
+      AUTHENTIK_DISABLE_UPDATE_CHECK: ${AUTHENTIK_DISABLE_UPDATE_CHECK:-true}
+      AUTHENTIK_DISABLE_STARTUP_ANALYTICS: ${AUTHENTIK_DISABLE_STARTUP_ANALYTICS:-true}
     volumes:
     - authentik_media:/media
     - authentik_templates:/templates
@@ -67,6 +81,10 @@ services:
       options:
         max-size: 10m
         max-file: '3'
+    # The time a FIRST start needs, as the worker's below and prepare's cold allowance: the server runs
+    # the migrations of two schemas before it serves. At the image's 60 s it turned unhealthy at 150 s on
+    # a fresh install (DGO-1040 drill) and `up --wait` returned there, though prepare allowed 600 s. A
+    # start period only forgives failures — the first passing check is healthy at once.
     healthcheck:
       test:
       - CMD
@@ -75,7 +93,7 @@ services:
       interval: ${HEALTHCHECK_INTERVAL:-30s}
       timeout: ${HEALTHCHECK_TIMEOUT:-10s}
       retries: 3
-      start_period: 60s
+      start_period: 600s
     labels:
     - traefik.enable=true
     - traefik.docker.network=traefik-network
@@ -94,12 +112,16 @@ services:
     - traefik.http.routers.authentik-https.rule=Host(`${AUTHENTIK_BASE_URL}`)
     - traefik.http.routers.authentik-https.entrypoints=websecure
     - traefik.http.routers.authentik-https.tls=true
-    - traefik.http.routers.authentik-https.tls.certresolver=myresolver
+    - traefik.http.routers.authentik-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
     - traefik.http.routers.authentik-https.service=authentik-server
     - traefik.http.services.authentik-server.loadbalancer.server.port=9000
+    # traefik's own probe of the one sign-in server marks it down — 503 for every sign-in — on a single slow answer.
+    # It reads the office's probe knobs like every docker healthcheck here (perf-profiles.yml: 90s/30s on a starved
+    # engine). At the literal 10 s, sign-in answered 503 on the MacBook (2026-11-02 19:25Z) while the server was
+    # healthy and the console behind it already answered.
     - traefik.http.services.authentik-server.loadbalancer.healthcheck.path=/-/health/live/
-    - traefik.http.services.authentik-server.loadbalancer.healthcheck.interval=30s
-    - traefik.http.services.authentik-server.loadbalancer.healthcheck.timeout=10s
+    - traefik.http.services.authentik-server.loadbalancer.healthcheck.interval=${HEALTHCHECK_INTERVAL:-30s}
+    - traefik.http.services.authentik-server.loadbalancer.healthcheck.timeout=${HEALTHCHECK_TIMEOUT:-10s}
   authentik-worker:
     image: ghcr.io/goauthentik/server:2024.12
     container_name: authentik-worker-${DEPLOYMENT_NAME:-bina-deployment}
@@ -129,6 +151,17 @@ services:
       AUTHENTIK_BOOTSTRAP_PASSWORD: ${AUTHENTIK_BOOTSTRAP_PASSWORD:-}
       AUTHENTIK_BOOTSTRAP_EMAIL: ${AUTHENTIK_BOOTSTRAP_EMAIL:-}
       AUTHENTIK_BOOTSTRAP_TOKEN: ${AUTHENTIK_BOOTSTRAP_TOKEN:-}
+      # No phone-home (DGO-902): the worker asked version.goauthentik.io for the latest release, and
+      # a new install reports itself to the vendor's analytics — the office's security app lists every
+      # such call, and an open-source office makes none it was not asked to. An office that wants the
+      # «new version» banner sets these to false in its .env.
+      AUTHENTIK_DISABLE_UPDATE_CHECK: ${AUTHENTIK_DISABLE_UPDATE_CHECK:-true}
+      AUTHENTIK_DISABLE_STARTUP_ANALYTICS: ${AUTHENTIK_DISABLE_STARTUP_ANALYTICS:-true}
+      # How many celery processes the worker forks (authentik's default: 2). Each is ~190 MiB
+      # resident — measured 2026-10-26 on fireplace (2 vCPU / 8 GiB, one admin): 327 MiB for the
+      # pair, the fourth-largest resident set on a box 4 GiB into swap. Sized by the performance
+      # profile (platform/profiles/perf-profiles.yml); a profile that says nothing keeps the default.
+      AUTHENTIK_WORKER__CONCURRENCY: ${AUTHENTIK_WORKER_CONCURRENCY:-2}
     volumes:
     - authentik_media:/media
     - authentik_templates:/templates
@@ -138,6 +171,19 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    # Its own healthcheck, the image's probe with the time a first start needs. The image's default
+    # gives a cold start 60 s + 3 x 30 s, and a worker that runs every migration first is starting,
+    # not failing: on a fresh office (2026-10-22, DGO-839 F4) it turned unhealthy at ~2.5 min,
+    # `up --wait` gave up, and it healed by itself a little later. The server and the bootstrap have the same.
+    healthcheck:
+      test:
+      - CMD
+      - ak
+      - healthcheck
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 600s
     networks:
     - traefik-network
     - authentik-internal
@@ -171,10 +217,18 @@ services:
       - CMD
       - python3
       - /outpost-ready.py
-      interval: 10s
+      # 10 s is the bring-up cadence: the rest of the stack waits on this container being healthy.
+      # After bring-up it is `sleep infinity`, and the probe is a python interpreter plus an API
+      # call to the sign-in — at 10 s, 8 640 a day. Measured 2026-10-26 on fireplace (2 vCPU): 877
+      # throttled periods in 8 minutes at its 0.15 cap, the busiest "idle" container on the box.
+      # The performance profile of a small machine sets a minute; the default keeps the cadence.
+      interval: ${AUTHENTIK_BOOTSTRAP_PROBE_INTERVAL:-10s}
       timeout: ${HEALTHCHECK_TIMEOUT:-10s}
       retries: 6
-      start_period: 240s
+      # A first start's whole length (migrations, authentik's own blueprints, then ours, then the outpost
+      # serving them — 316 s measured on the HP's empty database, past the 240 s + 60 s this had), the
+      # same 600 s as the server, the worker and prepare's cold allowance (DGO-1040).
+      start_period: 600s
     environment:
       AUTH_EXTERNAL_URL: ${AUTH_EXTERNAL_URL:-${AUTHENTIK_BASE_URL:-auth.${DEPLOYMENT_DOMAIN:-localhost}}}
       AUTH_PROTOCOL: ${AUTH_PROTOCOL:-https}

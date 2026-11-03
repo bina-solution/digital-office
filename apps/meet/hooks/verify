@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+#: check every meeting service answers, and what the video bridge tells browsers (--call: hold a synthetic meeting and check it end to end)
+# verify — `./bbox meet verify`. Read-only: asks each service's own health endpoint from inside its
+# container, and prints the bridge's media address and the conferences running now.
+set -uo pipefail
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # npath() for host paths, and PYTHONIOENCODING=utf-8 for the Hebrew printed below
+# `--call` (FPG-87): a synthetic host joins a new room with a known recording as its microphone, a guest with no
+# microphone beside it, and the recording, both transcripts, the MEET item, meet-flow, Drive «פגישות», the captions,
+# the silent-mic guard and «no voice leaves the office» are checked against what really happened.
+# apps/meet/qa/verify_call.py --help says how; it never runs beside a real meeting.
+for a in "$@"; do
+  [ "$a" = "--call" ] && exec python3 "$(npath "${REPO_ROOT}")/apps/meet/qa/verify_call.py" "$@"
+done
+NAME="$(sed -n 's/^DEPLOYMENT_NAME=//p' "${REPO_ROOT}/.env" 2>/dev/null | tail -1)"
+NAME="${NAME:-bina-deployment}"
+fail=0
+check() {   # <container> <url> <label>
+  if docker exec "$1-${NAME}" curl -fsS -o /dev/null --max-time 10 "$2" 2>/dev/null; then
+    echo "  ok    $3"
+  else
+    echo "  FAIL  $3  ($1-${NAME} → $2)"; fail=1
+  fi
+}
+echo "[meet] services"
+check meet         http://localhost:8000/               "web — the meeting page"
+check meet-prosody http://localhost:5280/health         "prosody — signalling"
+check meet-jicofo  http://localhost:8888/about/health   "jicofo — the focus"
+check meet-jvb     http://localhost:8080/about/health   "jvb — the video bridge"
+if docker exec "meet-start-${NAME}" python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/healthz', timeout=5)" 2>/dev/null; then
+  echo "  ok    meet-start — the host's door (signing secret present)"
+else
+  echo "  FAIL  meet-start — /healthz (is MEET_JWT_SECRET in .env?)"; fail=1
+fi
+echo "[meet] the recorder"
+# A recorder under 1.5 CPUs loses sound and time (fireplace 2026-10-26: capped at 0.48, ffmpeg ran at
+# 0.97x and 2.6 % of a call never reached the file). 0 = no cap, which is fine.
+caps="$(docker inspect -f '{{.HostConfig.NanoCpus}} {{.HostConfig.CpuShares}}' "meet-jibri-${NAME}" 2>/dev/null)"
+nano="${caps%% *}"; shares="${caps##* }"
+if [ -z "$nano" ]; then
+  echo "  FAIL  jibri — the recorder is not running"; fail=1
+elif [ "$nano" -eq 0 ] || [ "$nano" -ge 1500000000 ]; then
+  echo "  ok    jibri — CPU cap $(awk "BEGIN{printf \"%.2f\", $nano/1e9}") (0 = none), weight $shares"
+else
+  echo "  FAIL  jibri — CPU cap $(awk "BEGIN{printf \"%.2f\", $nano/1e9}") < 1.5: a starved recorder loses sound (apps/meet/docker-compose.yml, the budget)"; fail=1
+fi
+if docker exec "meet-jibri-${NAME}" pgrep -f meet-watch.py >/dev/null 2>&1; then
+  echo "  ok    jibri — the recorder's watchdog runs (jibri/watch.py)"
+else
+  echo "  FAIL  jibri — the recorder's watchdog is not running (jibri/watch.py, s6 60-meet-watch)"; fail=1
+fi
+# …and does the focus KNOW it has a recorder? Jibri can sit in its brewery room while jicofo counts
+# none (measured 2026-10-26 after prosody and Jibri were restarted one after the other): then every
+# recording start fails, and only prosody's log says so.
+seen="$(docker exec "meet-jicofo-${NAME}" curl -fsS --max-time 10 http://localhost:8888/stats 2>/dev/null \
+  | python3 -c 'import json,sys; d=json.load(sys.stdin).get("jibri_detector") or {}; print("%s %s" % (d.get("count", "?"), d.get("available", "?")))' 2>/dev/null)"
+case "$seen" in
+  "? ?"|"") echo "  FAIL  jicofo — cannot read /stats (JICOFO_ENABLE_REST?)"; fail=1 ;;
+  0\ *)     echo "  FAIL  jicofo — sees NO recorder (jibri_detector count 0): recordings cannot start. Restart meet-jibri while no conference is live, then check again"; fail=1 ;;
+  *)        echo "  ok    jicofo — sees ${seen%% *} recorder(s), ${seen##* } available" ;;
+esac
+echo "[meet] the bridge"
+docker exec "meet-jvb-${NAME}" sh -c 'echo "  advertises: ${JVB_ADVERTISE_IPS:-(container address only)}  port ${JVB_PORT:-10000}/udp"' 2>/dev/null
+docker port "meet-jvb-${NAME}" 2>/dev/null | sed 's/^/  published: /'
+docker exec "meet-jvb-${NAME}" curl -fsS --max-time 10 http://localhost:8080/colibri/stats 2>/dev/null \
+  | python3 -c 'import json,sys; d=json.load(sys.stdin); print("  now: %s conference(s), %s participant(s)" % (d.get("conferences"), d.get("participants")))' 2>/dev/null
+exit $fail

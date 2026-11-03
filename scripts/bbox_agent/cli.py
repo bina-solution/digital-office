@@ -22,6 +22,10 @@ drives the other exactly as the local one does:
   The office must appear in this office's `remote:`/`serve:` block (`platform.state.yaml`, written by
   dgo-extend on converge) and the credential comes from the vault; `--url`/`--token` still win.
 
+ANOTHER agent app of this office, by id (DGO-1074) — every verb, the same contract:
+  bbox agent --app bina-claude list               Claude Code's sessions (apps/bina-claude)
+  bbox agent --app bina-claude new -F "…"         a question to Claude, followed to the end of the turn
+
 The agent's work items live in the office's project tool (Plane, apps/project-pln) and are his:
   bbox agent tasks [list|show|start|done|comment|take] …   his tasks — `bbox project-pln tasks --as <agent>`, one implementation
   bbox agent do <DGO-12> [more words] [-s <id>] [-F]      hand him a work item: "complete task @project-pln/DGO-12" (a new session, or -s into one)
@@ -37,6 +41,7 @@ Exit codes: 0 ok · 1 error · 2 usage · 3 unreachable/timeout · 4 not found �
 from __future__ import annotations
 
 import argparse
+import calendar
 import json
 import os
 import re
@@ -73,7 +78,12 @@ def when(iso: Optional[str]) -> str:
     if not iso:
         return "—"
     try:
-        t = time.mktime(time.strptime(iso[:19], "%Y-%m-%dT%H:%M:%S")) - time.timezone
+        # The contract's timestamps are UTC. `mktime` reads a struct_time as LOCAL time and applies
+        # whatever DST it guesses, so the old `mktime(...) - time.timezone` corrected the offset
+        # twice wherever summer time is in force: every row read exactly one hour older than it was,
+        # and a session that had just answered printed "1h 00m ago" — which reads as "stuck".
+        # `timegm` is the inverse of gmtime and needs no correction at all.
+        t = calendar.timegm(time.strptime(iso[:19], "%Y-%m-%dT%H:%M:%S"))
         age = time.time() - t
         return f"{fmt_dur(age)} ago" if age < 86400 * 2 else iso[:10]
     except ValueError:
@@ -627,6 +637,8 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--office", help="a LINKED office: talk to ITS agent over the link "
                                      "(e.g. --office macbook list) — resolves through this office's "
                                      "`remote:`/`serve:` block, token from the vault")
+    ap.add_argument("--app", help="another agent app of THIS office, by id (e.g. --app bina-claude list): "
+                                  "any app whose capability speaks agent.v1")
     ap.add_argument("--timeout", type=float, default=None, help="seconds per call (default 240)")
     ap.add_argument("-q", "--quiet", action="store_true")
     # the global flags are accepted after the verb too (`bbox agent list --json`): each subparser
@@ -635,6 +647,7 @@ def build_parser() -> argparse.ArgumentParser:
     common.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
     common.add_argument("-q", "--quiet", action="store_true", default=argparse.SUPPRESS)
     common.add_argument("--office", default=argparse.SUPPRESS)
+    common.add_argument("--app", default=argparse.SUPPRESS)
     common.add_argument("--timeout", type=float, default=argparse.SUPPRESS)
     sub = ap.add_subparsers(dest="cmd", parser_class=lambda **kw: argparse.ArgumentParser(parents=[common], **kw))
 
@@ -703,7 +716,7 @@ def main(argv=None) -> int:
     if getattr(a, "agent", None) in (None, DEFAULT_AGENT):
         a.agent = agent
     try:
-        c = Client(url=a.url, token=a.token, timeout=a.timeout or 240.0, office=a.office or "")
+        c = Client(url=a.url, token=a.token, timeout=a.timeout or 240.0, office=a.office or "", app=a.app or "")
         c.quiet = a.quiet
         return a.fn(c, a)
     except AgentError as e:

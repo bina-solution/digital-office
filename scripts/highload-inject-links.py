@@ -52,7 +52,7 @@ def rest(method, path, body=None):
 
 
 def psql_n8n(q):
-    return subprocess.run(['docker', 'exec', f'n8n-postgres-{DN}', 'psql', '-U', 'bina-comp', '-d', 'n8n', '-tAc', q],
+    return subprocess.run(['docker', 'exec', f'n8n-postgres-{DN}', 'psql', '-U', 'hacohen', '-d', 'n8n', '-tAc', q],
                           capture_output=True, text=True, encoding='utf-8', errors='replace').stdout.strip()
 
 

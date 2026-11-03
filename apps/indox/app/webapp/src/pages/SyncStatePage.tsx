@@ -369,7 +369,7 @@ function PipeCard({ entry, busy, conns, n8nBase, onRun, onRetry, onToggle, onEdi
             if (!v) return null;
             return (
               <button key={r.reason} type="button" className={`reason ${v.kind}`}
-                      title={`${v.translated ? `${v.raw}\n` : ''}${he(r.count)} פריטים${r.last_at ? ` · האחרון ${fmtDateTime(r.last_at)}` : ''} · לחיצה פותחת אותם`}
+                      title={`${v.translated ? `${v.raw}\n` : ''}${r.count === 1 ? 'פריט אחד' : `${he(r.count)} פריטים`}${r.last_at ? ` · האחרון ${fmtDateTime(r.last_at)}` : ''} · לחיצה פותחת אותם`}
                       onClick={() => onItems('', r.reason)}>
                 <span className="n num">{he(r.count)}</span>
                 <span className={`t${v.translated ? '' : ' raw'}`}>{v.he}</span>
@@ -386,7 +386,7 @@ function PipeCard({ entry, busy, conns, n8nBase, onRun, onRetry, onToggle, onEdi
       )}
 
       <div className="pipe-activity">
-        <span className="it" title={`הסבב רץ כל ${cadence} דק׳${take != null ? ` · עד ${take} פריטים לסבב` : ''}${chunk != null ? ` · בנגלות של ${chunk}` : ''}`}>
+        <span className="it" title={`הסבב רץ כל ${cadence} דק׳${take != null ? ` · עד ${take === 1 ? 'פריט אחד' : take + ' פריטים'} לסבב` : ''}${chunk != null ? ` · בנגלות של ${chunk}` : ''}`}>
           <Ic p={IC.clock} /> כל <b className="num">{cadence}</b> דק׳{take != null && <> · <b className="num">{take}</b> לסבב</>}
         </span>
         <span className="it" title={entry.last_run ? `הרצה אחרונה ${fmtDateTime(entry.last_run)}` : 'המקור טרם רץ'}>
@@ -403,7 +403,7 @@ function PipeCard({ entry, busy, conns, n8nBase, onRun, onRetry, onToggle, onEdi
           </span>
         )}
         {entry.oldest_waiting_at && (entry.waiting || 0) > 0 && (
-          <span className="it" title={`${he(entry.waiting || 0)} ממתינים · הוותיק ביותר התגלה ${fmtDateTime(entry.oldest_waiting_at)} (פריטים הדורשים בדיקה אינם נספרים)`}>
+          <span className="it" title={`${(entry.waiting || 0) === 1 ? 'ממתין אחד' : `${he(entry.waiting || 0)} ממתינים`} · הוותיק ביותר התגלה ${fmtDateTime(entry.oldest_waiting_at)} (פריטים הדורשים בדיקה אינם נספרים)`}>
             <Ic p={IC.alert} /> הוותיק בתור <b>{ago(entry.oldest_waiting_at)}</b>
           </span>
         )}
@@ -425,7 +425,7 @@ function PipeCard({ entry, busy, conns, n8nBase, onRun, onRetry, onToggle, onEdi
         </button>
         {red > 0 && (
           <button className="btn sm ghost" onClick={onRetry} disabled={anyBusy}
-                  title={`מחזיר ${he(red)} פריטים שנכשלו או דורשים בדיקה לתור ומתחיל סבב`}>
+                  title={`מחזיר ${red === 1 ? 'פריט אחד שנכשל או דורש בדיקה' : `${he(red)} פריטים שנכשלו או דורשים בדיקה`} לתור ומתחיל סבב`}>
             {isBusy('retry') ? <span className="spinner" /> : <Ic p={IC.refresh} />} נסה שוב <span className="num">({he(red)})</span>
           </button>
         )}
@@ -511,7 +511,7 @@ function ItemsDrawer({ entry, status, reason, onStatus, onClose, docsLink }: {
           <div className="atl-chips" style={{ marginBottom: 10 }}>
             {chips.map((ch) => (
               <button key={ch.s} type="button" className={`chip${status === ch.s ? ' on' : ''}`} aria-pressed={status === ch.s}
-                      onClick={() => onStatus(ch.s, reason)} title={`${ch.l}: ${he(ch.n)} פריטים`}>
+                      onClick={() => onStatus(ch.s, reason)} title={`${ch.l}: ${ch.n === 1 ? 'פריט אחד' : `${he(ch.n)} פריטים`}`}>
                 {ch.l}<span className="num">{he(ch.n)}</span>
               </button>
             ))}
@@ -589,7 +589,7 @@ function ItemsDrawer({ entry, status, reason, onStatus, onClose, docsLink }: {
           )}
           {items !== null && items.length >= limit && (
             <div className="muted small" style={{ marginTop: 8 }}>
-              מוצגים {he(limit)} הפריטים האחרונים.{' '}
+              מוצגים {limit === 1 ? 'הפריט האחרון' : `${he(limit)} הפריטים האחרונים`}.{' '}
               <button className="link" onClick={() => setLimit((l) => l + 500)}>טען עוד 500</button>
             </div>
           )}
@@ -644,7 +644,7 @@ function ReconcileModal({ entries, initial, onPick, onClose }: {
         if (!label) throw new Error('למקור אין תווית מקור');
         const msgs = await mailMessages(conn, label, RECON_SOURCE_N);
         source = msgs.map((m) => ({ id: m.id, name: m.subject || '(ללא נושא)', when: m.date }));
-        note = `${he(source.length)} ההודעות החדשות ביותר הנושאות את התווית «${label}» (התווית נשארת גם אחרי מסירה).`;
+        note = `${source.length === 1 ? 'ההודעה החדשה ביותר' : `${he(source.length)} ההודעות החדשות ביותר`} הנושאות את התווית «${label}» (התווית נשארת גם אחרי מסירה).`;
       } else {
         const pairs = (entry.pairs || []) as { from?: string; to_sync?: string }[];
         const folder = String(pairs[0]?.to_sync || pairs[0]?.from || '');
@@ -652,7 +652,7 @@ function ReconcileModal({ entries, initial, onPick, onClose }: {
         const files = await driveFiles(conn, folder);
         files.sort((a, b) => String(b.created || b.modified || '').localeCompare(String(a.created || a.modified || '')));
         source = files.slice(0, RECON_SOURCE_N).map((f) => ({ id: f.id, name: f.name, when: String(f.created || f.modified || '') }));
-        note = `${he(source.length)} הקבצים שבתיקיית המקור כרגע (קובץ שנמסר עובר לתיקיית «אחרי סנכרון», ולכן כאן אמורים להיות רק ממתינים).`;
+        note = `${source.length === 1 ? 'הקובץ שבתיקיית המקור' : `${he(source.length)} הקבצים שבתיקיית המקור`} כרגע (קובץ שנמסר עובר לתיקיית «אחרי סנכרון», ולכן כאן אמורים להיות רק ממתינים).`;
       }
       const r = await api.getSyncItems(entry.name, { limit: RECON_ITEMS_N });
       const ids = new Set((r.items || []).map((i) => String(i.platform_id)));
@@ -705,14 +705,14 @@ function ReconcileModal({ entries, initial, onPick, onClose }: {
               <span className="li"><span className={`sw ${res.unknown.length ? 'failed' : 'synced'}`} />לא מוכרים<b className="num">{he(res.unknown.length)}</b></span>
             </div>
             <div className="muted small" style={{ marginTop: 6 }}>
-              {res.note} הושוו מול {he(res.itemsN)} שורות ספר{res.itemsCapped ? ` (הקריאה נעצרה בתקרת ${he(RECON_ITEMS_N)} — פריט ותיק יותר עלול להיראות «לא מוכר»)` : ''}.
+              {res.note} הושוו מול {res.itemsN === 1 ? 'שורת ספר אחת' : `${he(res.itemsN)} שורות ספר`}{res.itemsCapped ? ` (הקריאה נעצרה בתקרת ${he(RECON_ITEMS_N)} — פריט ותיק יותר עלול להיראות «לא מוכר»)` : ''}.
               נבדק ב-{res.at.toLocaleTimeString('he-IL')}.
             </div>
             {res.unknown.length === 0 ? (
               <div className="callout ok" style={{ marginTop: 10 }}><b>תואם.</b> כל מה שנקרא מהמקור מוכר לספר הסנכרון.</div>
             ) : (
               <div className="callout warn" style={{ marginTop: 10 }}>
-                <b>{he(res.unknown.length)} פריטים במקור שאינם בספר הסנכרון.</b> הסבב הבא אמור לגלות אותם; אם הם נשארים
+                <b>{res.unknown.length === 1 ? 'פריט אחד במקור שאינו בספר הסנכרון.' : `${he(res.unknown.length)} פריטים במקור שאינם בספר הסנכרון.`}</b> הסבב הבא אמור לגלות אותם; אם הם נשארים
                 כאן סבב אחרי סבב, זו התשובה לבדוק (חלון הזמן, הסמן, או תווית שהוסרה).
                 <div className="tbl-scroll" style={{ marginTop: 8, maxHeight: 220, overflowY: 'auto' }}>
                   <table className="table">
@@ -923,7 +923,7 @@ export default function SyncStatePage() {
         ...((e.reasons || []).slice(0, 3).map((r) => {
           const v = reasonView(r.reason);
           return {
-            label: `${he(r.count)} פריטים`,
+            label: `${r.count === 1 ? 'פריט אחד' : `${he(r.count)} פריטים`}`,
             value: v?.translated
               ? <span title={v.raw}>{v.he}</span>
               : <span className="mono small" style={{ direction: 'ltr', unicodeBidi: 'isolate' }}>{r.reason.slice(0, 80)}</span>,
@@ -941,7 +941,7 @@ export default function SyncStatePage() {
       const r = await api.resetSyncEntry(e.name);
       const started = r.started;
       const ex = started?.execution || r.execution || null;
-      const parts = [`${he(r.reset ?? 0)} פריטים של '${e.name}' חזרו לתור`];
+      const parts = [`${(r.reset ?? 0) === 1 ? 'פריט אחד' : `${he(r.reset ?? 0)} פריטים`} של '${e.name}' חזרו לתור`];
       if (r.no_listing) parts.push(`${he(r.no_listing)} מהם ללא רישום — יאותרו מחדש`);
       if (r.skipped) parts.push(`${he(r.skipped)} דולגו`);
       if (r.success === false) { push('bad', r.error || 'הניסיון החוזר נדחה'); return; }

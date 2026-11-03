@@ -7,7 +7,7 @@
 - Version: `0.5.3` (per `src/api/__init__.py` and `Dockerfile`/`run.py` is `0.5.2`; mismatch noted)
 - Runtime: Python 3.11+ (Docker image: 3.12), Flask + Gunicorn
 - Entry: `run.py` → `src.api:app`
-- Container: `apitools-${DEPLOYMENT_NAME}` exposed at `apitools.bina-comp.bina-solutions.co.il`
+- Container: `apitools-${DEPLOYMENT_NAME}` exposed at `apitools.hacohen.bina-solutions.co.il`
 
 ## Existing HTTP API (today)
 | Method | Path                   | Purpose |

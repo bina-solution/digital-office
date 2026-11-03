@@ -1,4 +1,4 @@
-# deployment-bina-comp → Central Business System: Master Map & Path to a Product
+# deployment-hacohen → Central Business System: Master Map & Path to a Product
 
 Status: **understanding + product map** (companion to `central-business-system-plan.md`). Branch:
 `claude/centralized-business-system-qs1edt`. Built from a full read of every service (both submodules
@@ -37,9 +37,9 @@ machine** that turns Gmail/Drive documents into rows in one `incoming_documents`
    `WHSP2_EVOLUTION_*` and `CHATBASE_*` keys in `.env` are **declared but unbuilt** (no container, no
    code) — a planned second WhatsApp account + multi-account layer, not current infrastructure.
    *(This corrects the `.env`-only impression that WhatsApp runs on Evolution.)*
-3. **The whole thing is single-business, and hardwired to "Bina-comp."** The design was re-scoped
+3. **The whole thing is single-business, and hardwired to "Hacohen."** The design was re-scoped
    (2026-07-08) from multi-tenant SaaS to **one deployment = one business**. But the "one business" is
-   still literally BINA/Bina-comp: domain, org name, admin emails, Gmail address, allow-listed IPs, Google
+   still literally BINA/Hacohen: domain, org name, admin emails, Gmail address, allow-listed IPs, Google
    Sheet/Drive/Label IDs are hardcoded across compose defaults, blueprints, and n8n nodes. Turning this
    into "install for ANY business" is mostly a **config-routing + secret-generation problem**, not a
    logic rewrite.
@@ -50,7 +50,7 @@ machine** that turns Gmail/Drive documents into rows in one `incoming_documents`
   ship. Back it with **Infisical** (text) + a **Nango-shaped OAuth broker** + a **QR pairing UI** for
   Baileys. Generalize the n8n `credential_overrides` `.env`-seed mechanism deployment-wide.
 - **(B) An install wizard** driven by a per-service **connections manifest** — auto-mints machine
-  secrets, asks only for the human/OAuth/QR gaps, parameterizes every "Bina-comp" literal from one
+  secrets, asks only for the human/OAuth/QR gaps, parameterizes every "Hacohen" literal from one
   "business name + domain" input.
 - **(C) A `console` shell** — one RTL portal that federates the existing BFFs behind the SSO + homepage
   registry that already exist. Plus finishing the **ledger backend** (the one genuinely missing engine).
@@ -262,7 +262,7 @@ cert, ITA allocation, gapless numbering, tamper chain, מבנה-אחיד) are de
 
 **What chat IS.** One Node.js process running two things (`src/main.js`): an **Express 5 + EJS admin
 panel** (server-rendered, `express-session` login) showing bot status/number/subscriber-count + quick
-actions; and a **Baileys WhatsApp bot** — a Hebrew chatbot for "חברת בינה קומפ" (numbered menu, referral/
+actions; and a **Baileys WhatsApp bot** — a Hebrew chatbot for "חברת הכהנים" (numbered menu, referral/
 lottery, per-user daily limits, subscribers in NeDB `data/subscribers.db`, archive `data/wa_archive.db`).
 A business user logs into `chat.<domain>`, scans a QR to connect the org's number, then manages
 subscribers/broadcasts and **sends/receives financial documents**. Admin menu options drive intake
@@ -286,7 +286,7 @@ then **POST to the n8n "Incoming Documents" webhook** (`INCOMING_DOCS_WEBHOOK`) 
 WhatsApp-side **intake front-end** for the same INDOX pipeline. Outbound (all `isAuthenticated`):
 `/api/bot/broadcast`, `/api/bot/send-document` (PDF thumbnail via poppler), `/api/bot/send`,
 `/api/bot/send-image`, `/api/bot/create-group`. n8n's **"WhatsApp Send Document"** workflow
-(`whatsappSendDoc01`) HTTP-POSTs `https://chat.bina-comp.bina-solutions.co.il/api/bot/send-document` with
+(`whatsappSendDoc01`) HTTP-POSTs `https://chat.hacohen.bina-solutions.co.il/api/bot/send-document` with
 the `Chat Auth` basic-auth cred (`BmKlKWiEeZAxNWyi` = `${CHAT_AUTH_USER}`/`_PASS`).
 
 **Where it runs:** container `chat`, `chat.${DEPLOYMENT_DOMAIN}` + `chat.localhost`,
@@ -296,7 +296,7 @@ the `Chat Auth` basic-auth cred (`BmKlKWiEeZAxNWyi` = `${CHAT_AUTH_USER}`/`_PASS
 `CHAT_APP_BASE_URL`/`_PORT`, `AUTH_USERNAME`/`_PASSWORD` (= `CHAT_AUTH_USER`/`_PASS`, also the n8n
 cred), `SESSION_SECRET`/`_MAX_AGE`, `ADMIN_PHONE_*` (+ hardcoded numbers in `config.js`),
 `DAILY_MESSAGE_LIMIT`, `DEFAULT_COUNTRY_CODE`(972), `N8N_*_WEBHOOK`+`_USER`/`_PASS`,
-`DOCUMENT_OCR_ENDPOINT`, `WHATSAPP_BINA_COMP_SENTRY_DSN`, `AGENT_RUNNER_URL/TOKEN`, `DISPATCHER_URL/TOKEN`,
+`DOCUMENT_OCR_ENDPOINT`, `WHATSAPP_HACOHANIM_SENTRY_DSN`, `AGENT_RUNNER_URL/TOKEN`, `DISPATCHER_URL/TOKEN`,
 `DEV_GROUP_JID`. **Declared-but-unused:** `WHSP2_EVOLUTION_BASE_URL/API_KEY`, `WHSP2_APP_BASE_URL`,
 `CHATBASE_*`.
 
@@ -377,7 +377,7 @@ Per-service map (role · container · route · port · notes):
 - **glitchtip** — alerts / error tracking (Sentry-compatible). 5 containers (web :8000 + worker + migrate
   + postgres:16 + valkey), own `glitchtip-internal` net; `glitchtip.<dom>`, **own auth**. Deterministic
   DSNs `sha256(GLITCHTIP_SECRET_KEY:<project>)[:32]` (survive `down -v`). `glitchtip-push` seeds org
-  `Bina-comp` + team `developers` + **one project per app** (n8n, apitools, whatsapp, librechat, traefik,
+  `Hacohen` + team `developers` + **one project per app** (n8n, apitools, whatsapp, librechat, traefik,
   machine, any-concurrency, feature-validation) and writes each DSN back into `.env`. **REST API** (Bearer)
   exposes `/api/0/organizations|teams|projects|.../keys` — the read surface for a future notifications
   aggregator.
@@ -416,7 +416,7 @@ cookie key, anon/service JWTs, dashboard basic-auth, storage bucket); `REDIS_*`;
 pw file; `BROWSER42_MCP_TOKEN`/`VNC_PASSWORD`/`STATE_PASSPHRASE`; `MACHINE_*`, `ANY_CONCURRENCY_BASE_URL`,
 `FV_*`, `HOMEPAGE_*`.
 
-**Productization gaps:** hardcoded org identity everywhere (domain, "Bina-comp", admin emails, IPs, homepage
+**Productization gaps:** hardcoded org identity everywhere (domain, "Hacohen", admin emails, IPs, homepage
 title); no secret generation on install (all `change_me…`); inconsistent auth coverage (apitools + fv
 public; n8n binds 0.0.0.0:5678); DNS/TLS assume a real public domain (no offline/self-signed/LAN path);
 manual/scripted post-up steps; host-root exposure (`machine`), `docker.sock` (portainer rw); literal
@@ -519,7 +519,7 @@ Generalize the n8n `credential_overrides` `${VAR}`→PATCH→re-encrypt mechanis
 
 **Install wizard (מסך התקנה)** — driven by a per-service **connections manifest** (each service declares
 its required connections, like `credential_overrides` generalized). Flow: base settings (ONE "business
-name + domain" input drives every "Bina-comp" literal) → **auto-detected-from-`.env`** (green, nothing to
+name + domain" input drives every "Hacohen" literal) → **auto-detected-from-`.env`** (green, nothing to
 do) → **only the gaps** (text fields / "Connect" buttons / QR panels) → **verify** (health probes; done
 when required ones are green — mirrors the 25-check CI ethos).
 
@@ -546,7 +546,7 @@ when required ones are green — mirrors the 25-check CI ethos).
 
 **The four structural gaps** (everything else is config): (i) **the ledger backend doesn't exist**;
 (ii) **no central credential plane / secret generation** (`.env` hand-editing, OAuth dance, QR scan);
-(iii) **hardwired to "Bina-comp"** (domain/org/emails/IPs/Sheet-Drive-Label IDs); (iv) **no GUI install
+(iii) **hardwired to "Hacohen"** (domain/org/emails/IPs/Sheet-Drive-Label IDs); (iv) **no GUI install
 wizard** (CLI + hand-edit only).
 
 **Phased (each step additive, shippable, reversible — repo's "one perfect example → scale" rule):**
@@ -559,7 +559,7 @@ wizard** (CLI + hand-edit only).
 5. **Ledger backend** — build `doc_data`/`doc_gen`/`doc_models` against Supabase; point `morning`'s
    `APITOOLS_URL`/BFF at it; gate apitools.
 6. **`console` shell** — portal chrome + design tokens; fold homepage in; iframe legacy UIs under the nav.
-7. **De-Bina-comp / tenant setup** — parameterize every literal from one input; finish the "Tenant Setup"
+7. **De-Hacohen / tenant setup** — parameterize every literal from one input; finish the "Tenant Setup"
    workflow (`indoxSetupWF001`) that provisions Drive tree + sheets + labels and writes IDs back.
 8. **Install wizard** on top of the now-complete manifest; generate machine secrets; ask only the gaps.
 9. **Federate first-party SPAs**; **notifications aggregator** over the GlitchTip API + fv + machine.

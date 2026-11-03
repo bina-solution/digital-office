@@ -75,16 +75,19 @@ BLOCK = "remote"
 #: The name that block had before the catalog existed. Read for one release, never written.
 LEGACY_BLOCK = "serve"
 
+#: Every rule below ends in `\Z`, never `$`: Python's `$` also matches just BEFORE a trailing newline,
+#: so `^…$` accepted "alice\n" — a header value with a line break, the very injection HEADER_RE exists
+#: to refuse (the identity's `to`/`from` are not stripped before the check). DGO-615.
 #: An office id: the same rule `apps/dgo-extend/declaration.py` applies to `link.office`.
-OFFICE_RE = re.compile(r"^[a-z][a-z0-9-]{1,30}$")
+OFFICE_RE = re.compile(r"^[a-z][a-z0-9-]{1,30}\Z")
 #: A host label / tile alias: DNS-safe, and it becomes part of `bina.macbook.console.<domain>`.
-LABEL_RE = re.compile(r"^[a-z][a-z0-9-]{0,30}$")
+LABEL_RE = re.compile(r"^[a-z][a-z0-9-]{0,30}\Z")
 #: What may be written into an HTTP header. A value with CR/LF in it is header injection, and a
 #: value with a space is a header the reverse proxy would split — both are refusals, not sanitizing.
-HEADER_RE = re.compile(r"^[A-Za-z0-9@._+\-]{1,128}$")
+HEADER_RE = re.compile(r"^[A-Za-z0-9@._+\-]{1,128}\Z")
 #: A host authority a served app may be told it is being reached under (`host`). A DNS name (or an
 #: address) plus an optional port — never a path, never a space, never a second host.
-AUTHORITY_RE = re.compile(r"^[a-z0-9]([a-z0-9.\-]{0,251})?(:\d{1,5})?$")
+AUTHORITY_RE = re.compile(r"^[a-z0-9]([a-z0-9.\-]{0,251})?(:\d{1,5})?\Z")
 #: The link plane's own range (`apps/dgo-extend/net.py`): one /24 per pair, under 10.79.0.0/16.
 TUNNEL_NET = ipaddress.ip_network("10.79.0.0/16")
 #: On a remote app's own host, the one path THIS office answers itself and never forwards: "is this
@@ -262,8 +265,14 @@ def plan(state: dict, cat: dict) -> tuple[list[dict], list[str]]:
                         f"(מ-.dgo) — הצד השני הוא הקצה האחר של אותו /24")
             continue
 
+        doors = entry.get("services")
+        if doors is not None and not isinstance(doors, list):
+            errs.append(f"{where}.services חייב להיות רשימה של דלתות (app, alias, port)")
+            continue
         apps = entry.get("apps")
-        if not isinstance(apps, list) or not apps:
+        # …empty only beside a door with no tile (DGO-945): an office may give this one a capability
+        # and no screen at all — vps1's recordings, to the office that runs their workflow.
+        if not isinstance(apps, list) or (not apps and not doors):
             errs.append(f"{where}.apps חייב להיות רשימה של אפליקציות שהלשכה הזו מציגה")
             continue
         clean = []
@@ -312,15 +321,29 @@ def plan(state: dict, cat: dict) -> tuple[list[dict], list[str]]:
             if not isinstance(ident, dict):
                 errs.append(f"{where}.apps[{j}].identity חייב להיות אובייקט (to, from)")
                 continue
-            for k in ("to", "from"):
-                v = ident.get(k)
-                if v in (None, ""):
-                    continue
-                if not HEADER_RE.match(str(v)):
-                    errs.append(f"{where}.apps[{j}].identity.{k}: הערך נכתב לכותרת HTTP, ולכן "
+            # `to` is ONE user name — the identity a request BECOMES here. `from` is the LIST of the
+            # peer's own user names that map onto it, which is the shape the serving office's
+            # `catalog.build` publishes and the shape every reader below wants (the delivery plan
+            # writes the whole list into `X-DGO-From`). Read as a single header string, the pair's own
+            # `from` did not merely fail validation: it reached `sorted({…})` further down with the
+            # list intact and the compiler died on `unhashable type: 'list'`, so a peer publishing the
+            # shape it declares could not be consumed at all (measured 2026-10-09, DGO-49).
+            to_v = ident.get("to")
+            if to_v not in (None, ""):
+                if not HEADER_RE.match(str(to_v)):
+                    errs.append(f"{where}.apps[{j}].identity.to: הערך נכתב לכותרת HTTP, ולכן "
                                 f"מותר רק אותיות, ספרות ותווי @ . _ + - (בלי רווחים ובלי שורה חדשה)")
                     continue
-                ident[k] = str(v)
+                ident["to"] = str(to_v)
+            from_v = ident.get("from")
+            if from_v not in (None, ""):
+                users = list(from_v) if isinstance(from_v, (list, tuple)) else [from_v]
+                users = [u for u in users if u not in (None, "")]
+                if any(not HEADER_RE.match(str(u)) for u in users):
+                    errs.append(f"{where}.apps[{j}].identity.from: כל שם נכתב לכותרת HTTP, ולכן "
+                                f"מותר רק אותיות, ספרות ותווי @ . _ + - (בלי רווחים ובלי שורה חדשה)")
+                    continue
+                ident["from"] = [str(u) for u in users]
             seen_label[f"{oid}.{label}"] = f"{oid}:{aid}"
             host = str(app.get("host") or "").strip().lower()
             if host and not AUTHORITY_RE.match(host):
@@ -351,7 +374,33 @@ def plan(state: dict, cat: dict) -> tuple[list[dict], list[str]]:
                 "module_id": str((app.get("module") or {}).get("id") or aid),
                 "identity": {k: ident[k] for k in ("to", "from") if ident.get(k)},
             })
-        if clean:
+        # …and its DOORS WITH NO TILE (DGO-945): the capabilities that office offers to this one, each
+        # only an address on this office's network (`render_aliases`) and a place a workflow imported
+        # here is pointed at (reconcile.link_endpoints). Never a tile, an edge route or a sign-in
+        # entry: nothing below reads this list but those two.
+        services = []
+        for j, svc in enumerate(doors or []):
+            if not isinstance(svc, dict):
+                errs.append(f"{where}.services[{j}] חייב להיות אובייקט (app, alias, port)")
+                continue
+            sid = str(svc.get("app") or "").strip().lower()
+            label = str(svc.get("alias") or "").strip().lower()
+            if not LABEL_RE.match(sid) or not LABEL_RE.match(label):
+                errs.append(f"{where}.services[{j}]: app/alias {svc.get('app')!r}/{svc.get('alias')!r} אינם תקינים")
+                continue
+            if f"{oid}.{label}" in seen_label:
+                errs.append(f"{where}.services[{j}].alias '{label}' כבר נתפס על ידי {seen_label[f'{oid}.{label}']}")
+                continue
+            try:
+                port = int(svc.get("port"))
+            except (TypeError, ValueError):
+                port = 0
+            if not 1 <= port <= 65535:
+                errs.append(f"{where}.services[{j}].port {svc.get('port')!r} אינו פורט בטווח")
+                continue
+            seen_label[f"{oid}.{label}"] = f"{oid}:{sid}"
+            services.append({"app": sid, "alias": label, "port": port})
+        if clean or services:
             # ONE identity per link, not per app: two apps of the same office reachable under two
             # different identities is a second trust plane that nobody declared.
             to_users = sorted({a["identity"]["to"] for a in clean if a["identity"].get("to")})
@@ -383,8 +432,13 @@ def plan(state: dict, cat: dict) -> tuple[list[dict], list[str]]:
                         # typo is worse than a tile without a mark.
                         "mark": _mark(entry.get("mark"), oid),
                         "identity": {"to": to_users[0] if to_users else None,
-                                     "from": sorted({a["identity"]["from"] for a in clean
-                                                     if a["identity"].get("from")})}})
+                                     # The names, flattened out of the per-app lists and de-duplicated:
+                                     # ONE identity per link, and this is the list the edge turns into
+                                     # `X-DGO-From` — so it is a list of strings, never a list of lists.
+                                     "from": sorted({u for a in clean
+                                                     for u in (a["identity"].get("from") or [])})}})
+            if services:
+                out[-1]["services"] = services
     return out, errs
 
 
@@ -404,6 +458,13 @@ def through_console(app: dict) -> bool:
         authority is the proxy's, and it refuses every call (measured the same day: 403).
     """
     return app.get("module_kind") != "external" and bool(app.get("host"))
+
+
+def _tileless(cat: dict, app_id) -> bool:
+    """True when the app's own manifest declares every routed module `tile: false`."""
+    mods = [r.get("module") or {} for r in ((cat or {}).get(app_id) or {}).get("routing") or []]
+    mods = [m for m in mods if m]
+    return bool(mods) and all(m.get("tile") is False for m in mods)
 
 
 def module_entries(entries: list[dict], cat: dict, taken=None) -> list[dict]:
@@ -428,6 +489,12 @@ def module_entries(entries: list[dict], cat: dict, taken=None) -> list[dict]:
     out = []
     for entry in entries:
         for app in entry["apps"]:
+            # an app whose OWN manifest says `tile: false` (its screen lives in another app — machine's in
+            # computers, DGO-890) gets no tile as a linked office's app either. Decided from THIS office's
+            # copy of the manifest, so it holds for a peer that predates the flag; the link still carries
+            # the app (computers reads machine.<office> through the door), only the launcher omits it.
+            if _tileless(cat, app.get("app")):
+                continue
             tile = f"{app['alias']}.{entry['office']}"
             # THE SAME APP THROUGH THIS CONSOLE'S OWN ORIGIN. On a console whose identity provider
             # is another SITE — every `*.localhost` office: `auth.localhost` and `console.localhost`
@@ -486,12 +553,14 @@ def own_origins(host: str, entry_points, port: str = "") -> list[str]:
     Exact strings, never a pattern: a page on another port of the same name is another origin (the
     browser sends it the same cookies, which is exactly why it must not pass for this one).
     """
-    schemes = [s for s, ep in (("http", "web"), ("https", "websecure")) if ep in entry_points]
+    # `lan` is plain HTTP like `web` (apps/lan-console: the office's console on its local network)
+    schemes = [s for s, eps in (("http", ("web", "lan")), ("https", ("websecure",)))
+               if any(ep in entry_points for ep in eps)]
     return [f"{s}://{host}{p}" for p in ([""] + ([f":{port}"] if port else [])) for s in schemes]
 
 
 def render(entries: list[dict], cat: dict, domain: str = "localhost",
-           console_port: str = "", framed=()) -> str | None:
+           console_port: str = "", framed=(), lan_domain: str = "", lan_port: str = "") -> str | None:
     """Traefik FILE-provider dynamic config for every remote app, or None when there is none.
 
     Two routers per app, the platform's own convention (`routing_labels()`):
@@ -499,6 +568,16 @@ def render(entries: list[dict], cat: dict, domain: str = "localhost",
       · `<alias>.<office>-console`       — `Host(<alias>.<office>.console.<domain>)`, web + TLS
         (omitted when this office's domain IS localhost — a second router with an identical rule is
         noise, and traefik would pick between two identical matchers)
+      · `<alias>.<office>-console-http`  — the same nested host on `web` ALONE, answering a permanent
+        redirect to https (`dgo-remote-https`, traefik's `redirectScheme`) and forwarding nothing
+        (`noop@internal`). A router with a `tls` section handles TLS requests only, so the `-console`
+        router above — `web` + `websecure` + `tls` — never matched on :80, and a link typed without
+        `https://` was the edge's 404 (measured 2026-10-14 on vps1,
+        `browser42.hp-laptop.console.staging.digital-office.co.il`; DGO-569). The base apps serve
+        plain `web` behind SSO (`routing_labels`: `-http`), which a nested host must not — the sign-in
+        and the console it hands back to are https — so the twin redirects. One twin per nested host
+        covers every router of that host (`-own-origin`, `-signed-in`, `-enter` share it); the
+        `.localhost` routers are `web`-only and plain, and get none.
     …for an app that names its authority, an `-own-origin` twin of each, and for an app that keeps
     its own host on every console, a `-signed-in` and an `-enter` one (explained where they are built). That
     is why `console_port` is asked for: the port a browser on the host reaches this edge on is part
@@ -515,6 +594,13 @@ def render(entries: list[dict], cat: dict, domain: str = "localhost",
 
     `framed` — {router name: host} of THIS office's apps the shell frames on a host of their own —
     is here for the routers such a host shares with a remote one: the shell's question and the way in.
+
+    `lan_domain` — the NAME this office's console has on the local network (DGO-1126: the owner's phone
+    on the office Wi-Fi, `console.<lan_domain>:<lan_port>`, apps/lan-console). An address cannot have a
+    host nested under it, so a shared app that keeps its own host could not open there; under a name it
+    can, exactly as on a real domain. Each app then gets one more form, `…-console-lan`, on the `lan`
+    entry, signed in by that entry's own door (`lan-auth@docker`, the LAN outpost) instead of
+    `authentik@file`, whose sign-in lives on a host the phone cannot reach.
     """
     if not entries and not framed:
         return None
@@ -525,11 +611,20 @@ def render(entries: list[dict], cat: dict, domain: str = "localhost",
     routers, services, middlewares = dict(), dict(), dict()
     asks_mw, answers, asked = "dgo-remote-console-asks", "dgo-remote-console-answers", False
     returns = "dgo-remote-console-returns"
+    https_mw = "dgo-remote-https"
+
+    lan_domain = (lan_domain or "").strip()
+    lan_auth = "lan-auth@docker"
+
+    def door_of(entry_points):
+        """The sign-in in front of a form: the LAN entry's own outpost there, authentik's elsewhere."""
+        return lan_auth if list(entry_points) == ["lan"] else "authentik@file"
 
     def own_host(name, host, entry_points):
         """The two routers of a host whose sign-in a frame cannot show — answered HERE, both of them,
         and never forwarded to the office the app runs on."""
         nonlocal asked
+        auth = door_of(entry_points)
         for tail, path, chain in (
                 # THE SHELL'S QUESTION: `authentik@file` sends an unsigned browser to the identity
                 # provider, and a signed one is answered by this office's own console, at its health
@@ -539,10 +634,10 @@ def render(entries: list[dict], cat: dict, domain: str = "localhost",
                 # error to the page that asked, i.e. "the office is down" where the truth is "sign
                 # in" (measured on traefik v3.3: the headers middleware decorates the auth server's
                 # own 302).
-                ("signed-in", f"Path(`{SIGNED_IN_PATH}`)", [asks_mw, "authentik@file", answers]),
+                ("signed-in", f"Path(`{SIGNED_IN_PATH}`)", [asks_mw, auth, answers]),
                 # …AND THE WAY IN: the same sign-in, met by a browser that came to pass it, and
                 # then the console again.
-                ("enter", f"PathPrefix(`{ENTER_PATH}`)", ["authentik@file", returns])):
+                ("enter", f"PathPrefix(`{ENTER_PATH}`)", [auth, returns])):
             routers[f"{name}-{tail}"] = dict([
                 ("rule", f"Host(`{host}`) && {path}"), ("entryPoints", list(entry_points)),
                 ("service", answers), ("middlewares", chain)])
@@ -621,7 +716,11 @@ def render(entries: list[dict], cat: dict, domain: str = "localhost",
             if domain != "localhost":
                 forms.append((f"{svc}-console", f"{tile}.{console_host}.{domain}",
                               ["web", "websecure"], ""))
+            if lan_domain:
+                forms.append((f"{svc}-console-lan", f"{tile}.{console_host}.{lan_domain}",
+                              ["lan"], lan_port))
             for name, host, entry_points, port in forms:
+                chain = [door_of(entry_points) if m == "authentik@file" else m for m in base_mw]
                 def router(rule, chain):
                     r = dict([("rule", rule), ("entryPoints", list(entry_points)),
                               ("service", svc), ("middlewares", list(chain))])
@@ -629,12 +728,22 @@ def render(entries: list[dict], cat: dict, domain: str = "localhost",
                         r["tls"] = dict([("certResolver", "myresolver")])
                     return r
                 # The longer rules below outrank this one (traefik orders routers by rule length).
-                routers[name] = router(f"Host(`{host}`)", base_mw)
+                routers[name] = router(f"Host(`{host}`)", chain)
+                if "websecure" in entry_points:
+                    # THE HTTP TWIN (DGO-569, see the docstring): `web` alone, no `tls`, so it is the
+                    # one router of this host the non-TLS handler keeps. No sign-in in front of it —
+                    # nothing is served here, so there is nothing to protect, and the sign-in itself
+                    # runs where the redirect lands.
+                    routers[f"{name}-http"] = dict([
+                        ("rule", f"Host(`{host}`)"), ("entryPoints", ["web"]),
+                        ("service", "noop@internal"), ("middlewares", [https_mw])])
+                    middlewares[https_mw] = dict([("redirectScheme", dict([
+                        ("scheme", "https"), ("permanent", True)]))])
                 if own_mw:
                     own = " || ".join(f"Header(`Origin`, `{o}`)"
                                       for o in own_origins(host, entry_points, port))
                     routers[f"{name}-own-origin"] = router(f"Host(`{host}`) && ({own})",
-                                                           base_mw + [own_mw])
+                                                           chain + [own_mw])
                 if not through_console(app):
                     own_host(name, host, entry_points)
     # …AND THE SAME TWO FOR AN APP OF THIS OFFICE that the shell frames on its own host. The
@@ -651,6 +760,9 @@ def render(entries: list[dict], cat: dict, domain: str = "localhost",
         consoles = own_origins(names[0], ["web"], console_port if domain == "localhost" else "")
         for wide in names[1:]:
             consoles += own_origins(wide, ["web", "websecure"])
+        if lan_domain:
+            names.append(f"{console_host}.{lan_domain}")
+            consoles += own_origins(names[-1], ["lan"], lan_port)
         middlewares[asks_mw] = dict([("headers", dict([
             ("accessControlAllowOriginList", consoles),
             ("accessControlAllowCredentials", True),
@@ -701,7 +813,9 @@ def render_aliases(entries: list[dict]) -> str | None:
     Named `remote.override.yml` and included by `compose_files()` LAST among the aliases' peers: a
     later `-f` file wins, and this one only ever ADDS aliases under the service's own network stanza.
     """
-    aliases = sorted({f"{a['alias']}.{e['office']}" for e in entries for a in e["apps"]})
+    # every app's, and every door's with no tile (DGO-945): an alias is all a door is on this side
+    aliases = sorted({f"{a['alias']}.{e['office']}" for e in entries
+                      for a in list(e["apps"]) + list(e.get("services") or [])})
     if not aliases:
         return None
     doc = dict([("services", dict([("dgo-net", dict([
@@ -860,6 +974,36 @@ def selftest() -> list[str]:
     if "8080" in str((wide.get("dgo-remote-macbook-drive-console-local-own-origin") or {}).get("rule")):
         problems.append("the console's port belongs to a localhost office's Origin only")
 
+    # THE HTTP TWIN (DGO-569): on a real domain every nested host answers :80 with a permanent
+    # redirect to https, through a router on `web` ALONE that forwards nothing — and the existing
+    # `-console` router is untouched. A `.localhost` office, plain web, gets no twin and no redirect.
+    wide_doc = routers(domain="example.co.il", console_port="8080")
+    twin = wide.get("dgo-remote-macbook-drive-console-http")
+    if twin != {"rule": f"Host(`{there}`)", "entryPoints": ["web"], "service": "noop@internal",
+                "middlewares": ["dgo-remote-https"]}:
+        problems.append(f"a nested host on a real domain must have an http twin on `web` alone, no TLS, "
+                        f"no sign-in, forwarding nothing and redirecting to https: {twin}")
+    if (wide_doc.get("middlewares") or {}).get("dgo-remote-https") != {
+            "redirectScheme": {"scheme": "https", "permanent": True}}:
+        problems.append(f"the twin's middleware must be a permanent redirectScheme to https: "
+                        f"{(wide_doc.get('middlewares') or {}).get('dgo-remote-https')}")
+    twins = sorted(k for k, r in wide.items() if r.get("service") == "noop@internal")
+    nested = sorted({r["rule"] for r in wide.values()
+                     if r.get("entryPoints") == ["web", "websecure"] and "&&" not in r["rule"]})
+    if len(twins) != len(dentries[0]["apps"]) or len(nested) != len(twins) \
+            or not all(k.endswith("-console-http") for k in twins):
+        problems.append(f"exactly ONE twin per nested host on the real domain, named `-console-http`: "
+                        f"{twins} for {nested}")
+    kept = wide.get("dgo-remote-macbook-drive-console") or {}
+    if kept.get("entryPoints") != ["web", "websecure"] or "tls" not in kept \
+            or kept.get("middlewares", [None])[0] != "authentik@file":
+        problems.append(f"the twin is an ADDITION: the `-console` router keeps its entry points, its TLS "
+                        f"and its sign-in: {kept}")
+    if any(r.get("service") == "noop@internal" for r in (local.get("routers") or {}).values()) \
+            or "dgo-remote-https" in (local.get("middlewares") or {}) \
+            or "dgo-remote-macbook-drive-console-local-http" in wide:
+        problems.append("a `.localhost` router is plain web and gets neither a twin nor a redirect")
+
     # THE SHELL'S QUESTION: only a tile that keeps its own host names it, the edge answers it itself,
     # and only this office's console may read the answer.
     asks = (local.get("routers") or {}).get("dgo-remote-macbook-bina-console-local-signed-in") or {}
@@ -973,6 +1117,13 @@ def selftest() -> list[str]:
         ({"remote": [{"office": "macbook", "address": "10.79.3.2",
                       "apps": [{"app": "bina-ds", "port": 3080,
                                 "identity": {"to": "owner\r\nX-Evil: 1"}}]}]}, "כותרת"),
+        # a TRAILING newline alone — Python's `$` let it through (DGO-615)
+        ({"remote": [{"office": "macbook", "address": "10.79.3.2",
+                      "apps": [{"app": "bina-ds", "port": 3080,
+                                "identity": {"to": "owner\n"}}]}]}, "כותרת"),
+        ({"remote": [{"office": "macbook", "address": "10.79.3.2",
+                      "apps": [{"app": "bina-ds", "port": 3080,
+                                "identity": {"to": "owner", "from": ["guest\n"]}}]}]}, "כותרת"),
         ({"remote": [{"office": "macbook", "address": "10.79.3.2",
                       "apps": [{"app": "bina-ds", "port": 3080,
                                 "identity": {"to": "a@b"}},
@@ -1024,6 +1175,41 @@ def selftest() -> list[str]:
     if "bina.macbook" not in talias or "bina.vps1" not in talias:
         problems.append(f"both offices' aliases must be emitted, got {talias}")
     # And the SAME office twice on one alias is still refused (checked above) — namespace, not luck.
+
+    # A DOOR WITH NO TILE (DGO-945): the Dell's transcriber beside a tile of the same office. It gets
+    # its address on this office's network and nothing else — no tile, no route on this office's edge.
+    svc = {"remote": [{"office": "dell", "address": "10.79.5.2", "link_port": 9005, "label": "Dell",
+                       "apps": [{"app": "ollama", "alias": "ollama", "port": 11434,
+                                 "module": {"kind": "embedded"}}],
+                       "services": [{"app": "apitools", "alias": "speech", "port": 8987}]}]}
+    sentries, serrs = run(svc)
+    if serrs or len(sentries) != 1 or sentries[0].get("services") != [
+            {"app": "apitools", "alias": "speech", "port": 8987}]:
+        problems.append(f"a service door beside a tile must be accepted as a door: {serrs} {sentries}")
+    else:
+        if [t["id"] for t in module_entries(sentries, cat)] != ["ollama.dell"]:
+            problems.append(f"a service door must draw no tile, got {module_entries(sentries, cat)}")
+        routed = render(sentries, cat) or ""
+        if "speech.dell" in routed or "dgo-remote-dell-speech" in routed:
+            problems.append("a service door must get no route on this office's edge")
+        if "ollama.dell" not in routed:
+            problems.append("the tile beside it must keep its route")
+        if "speech.dell" not in (render_aliases(sentries) or ""):
+            problems.append("a service door must get its network alias — that is the whole door")
+        if "speech" in json.dumps(sso_hosts(sentries, cat), ensure_ascii=False):
+            problems.append("a service door must get no sign-in entry")
+    # …and a door that takes an app's own alias is refused like two apps on one host
+    clash = {"remote": [dict(svc["remote"][0], services=[{"app": "apitools", "alias": "ollama", "port": 8987}])]}
+    if not run(clash)[1]:
+        problems.append("a door on the alias of an app of the same office must be refused")
+    # …and an office that gives a door and no app at all is one entry with its alias and no tile
+    only_door = {"remote": [dict(svc["remote"][0], apps=[])]}
+    oentries, oerrs = run(only_door)
+    if oerrs or len(oentries) != 1 or module_entries(oentries, cat) \
+            or "speech.dell" not in (render_aliases(oentries) or ""):
+        problems.append(f"a door with no app beside it must still be an alias, and nothing else: {oerrs}")
+    if not run({"remote": [dict(svc["remote"][0], apps=[], services=[])]})[1]:
+        problems.append("an office that gives neither an app nor a door must still be refused")
     return problems
 
 

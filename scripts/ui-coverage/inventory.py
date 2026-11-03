@@ -115,6 +115,14 @@ def _office() -> dict:
             for r in app.get("routing") or []:
                 owner.setdefault(r.get("host"), app.get("id"))
                 mod = r.get("module") or {}
+                if mod.get("tile") is False:
+                    # DGO-890: a DOOR WITHOUT A TILE. reconcile.py keeps the `/a/<alias>/` route
+                    # (machine's power API is what the console's power card calls) and emits no
+                    # console module for it, because the app's screen now lives in another app
+                    # (machine's resource view is computers'). Reading `embed` alone made this
+                    # inventory demand a module the compiler deliberately does not write, and the
+                    # whole map refused to build over it.
+                    continue
                 if mod.get("embed") and mod.get("alias"):      # a tile the shell frames at /a/<alias>/
                     tiles.append({"app": app.get("id"), "host": r.get("host"),
                                   "module": mod.get("id", app.get("id")), "proxy": mod["alias"]})
@@ -137,27 +145,37 @@ def console_embed(man) -> dict:
     rail without a row, and each time the map either refused to build or measured a smaller product
     than the one in front of the owner. The module id and the alias are the manifest's own facts;
     what is still declared by hand is the `hosts` row (auth and tier are judgments), and a tile
-    without one is said here."""
+    without one is said here.
+
+    A tile can also EMBED a second module on a service the app already routes: drive's `recorder`
+    (`{"port": 8975, "service": "drive", "module": {"alias": "recorder", …}}` in
+    `apps/drive/app.json`) publishes no route of its own — it is served at `/rec/` by drive's own
+    host, and reconcile renders its tile from `routing[].module`. So it has no host to look up and
+    no `hosts` row to add: the row belongs to the app whose host carries it, and the tile is named
+    by its own module id. Reading `r["host"]` off it is what refused the whole map (2026-10-29)."""
     by_host = {row["local"].split(".")[0]: key for key, row in (man.get("hosts") or {}).items()}
     out, orphans = {}, []
     for t in _office()["tiles"]:
-        key = by_host.get(t["host"])
+        key = by_host.get(t["host"]) if t["host"] else t["module"]
         if key is None:
             orphans.append(f"{t['app']} (host `{t['host']}`)")
         else:
-            out[key] = {"module": t["module"], "proxy": t["proxy"]}
+            out[key] = {"module": t["module"], "proxy": t["proxy"], "app": t["app"]}
     if orphans:
         raise DriftError(f"a tile the shell frames has no `hosts` row in manifest.yaml: {', '.join(orphans)} "
                          f"— add the row (env, local, auth, tier); the embed itself is read from app.json")
     return out
 
 
-def runs_here(man, view_app: str) -> bool:
+def runs_here(man, view_app: str, app_id: str | None = None) -> bool:
     """Does this office run the app a view belongs to? The app is found by the routing host the
-    manifest's `hosts` row names; a row that names no declared host is taken as running."""
+    manifest's `hosts` row names; a row that names no declared host is taken as running — unless
+    the caller knows the app itself (`app_id`): a tile with no host of its own (drive's `recorder`)
+    has no row to look up, and taking it as running demanded its module on an office where drive
+    is off, so the whole map refused to build there (2026-10-30, DGO-1037)."""
     office = _office()
     label = ((man.get("hosts") or {}).get(view_app) or {}).get("local", "").split(".")[0]
-    aid = office["owner"].get(label)
+    aid = office["owner"].get(label) or app_id
     return True if aid is None or office["on"] is None else aid in office["on"]
 
 
@@ -172,7 +190,7 @@ def embed_index(man) -> dict:
     is that office's screen, mapped there.
     """
     mods = _modules(man)
-    declared = {app: spec for app, spec in console_embed(man).items() if runs_here(man, app)}
+    declared = {app: spec for app, spec in console_embed(man).items() if runs_here(man, app, spec.get("app"))}
     by_module = {m["id"]: m for m in mods if m.get("embed") and not (m.get("remote") or m.get("office"))}
     idx = {}
     for app, spec in declared.items():
@@ -185,8 +203,16 @@ def embed_index(man) -> dict:
         if f"/a/{spec['proxy']}/" not in embed_path:
             raise DriftError(f"{app}: its manifest's alias {spec['proxy']!r} does not match the "
                              f"compiled embed {embed_path!r}")
+        # A tile the shell does NOT frame, even though the compiler emitted an embed for it: an
+        # `external` module is one that stands on a host of its own, and on a `.localhost` office the
+        # console cannot nest that host — it shows a card with a link instead ("האפליקציה לא נטענה
+        # בתוך הלשכה — אפשר לפתוח אותה בחלון נפרד", and the address it names). That is the screen a
+        # person gets, so the map photographs THAT, not a frame that stays `about:blank`: measured
+        # 2026-10-10, `project-pln/main` came back `embedded app near-empty (3 nodes)` — reported as
+        # a broken app when it was the console's deliberate card.
+        framed_here = not (by_module[mid].get("external") and not by_module[mid].get("proxy"))
         idx[app] = {**spec, "group": by_module[mid].get("group"),
-                    "name": by_module[mid].get("name", mid)}
+                    "name": by_module[mid].get("name", mid), "framed": framed_here}
     covered = {s["module"] for s in declared.values()}
     missing = [mid for mid in by_module if mid not in covered]
     if missing:
@@ -249,7 +275,14 @@ def rewrite_for_console(views: list[dict], man: dict) -> list[dict]:
         if not e or v["tier"] != "first_party":
             continue
         proxy, path = e["proxy"], v.get("url") or "/"
-        v["framed"] = True
+        v["framed"] = bool(e.get("framed", True))
+        if not v["framed"]:
+            # Not framed here (see embed_index): the view is the console's own page for this tile —
+            # the card, the link, the address — exactly what the person sees. No frame steps.
+            v["url"] = f"/#/m/{e['module']}"
+            v["host_override"] = "console"
+            v["steps"] = []
+            continue
         v["group"] = v.get("group") or e["group"]
         v["console_module"] = e["module"]
         v["proxy"] = proxy
@@ -304,7 +337,11 @@ def x_my_docs(_m) -> list[dict]:
     D = ("for(const i of['onboard','overlay']){const e=document.getElementById(i);"
          "if(e)e.classList.add('hidden');}")
     out = [
-        _view("my-docs", v, title, kind="dom-state",
+        # A ROUTE, not a DOM recipe, since 2026-10-13: this app keeps its screen in its own URL now
+        # (`#/m/my-docs/dash` … — the owner's "one address per screen" work), so the map can reach the
+        # view the way a person does: by opening its address. The recipe stays as the fallback for a
+        # capture that has to drive the app's own switch when the route is not honoured.
+        _view("my-docs", v, title, kind="route", url=f"/{v}",
               steps=[{"js": D + f"show('{v}')"}],
               source="apps/my-docs/static/app.js:VIEWS")
         for v, title in js_views.items()
@@ -365,8 +402,18 @@ def x_incoming(_m) -> list[dict]:
     for path, comp in routes:
         # parameterised routes need a real id at capture time; the driver substitutes
         # from seeded demo data (see resolve_params.py / capture.py PARAM_APIS).
+        #
+        # A BARE PATH IS A REDIRECT, NOT A SCREEN, and the app says so itself: "THE BARE PAGE PATHS
+        # ARE REDIRECTS NOW, not pages … they keep old links and bookmarks working by resolving the
+        # instance ONCE and sending you to the scoped URL" (App.tsx). Declaring them as screens made
+        # the runtime gate call a working redirect a failure — `/repos` answers the documents screen,
+        # which is exactly what it promises (measured 2026-10-13, route-runtime-qa.py). They stay in
+        # the denominator as what they are: an address that must still land inside the app, with the
+        # address bar naming where. Every `…Redirect` element is one; the scoped `/i/:instance/…`
+        # routes are the screens.
         out.append(_view("incoming-documents", path.strip("/").replace("/", "-") or "root",
-                         comp, kind="route", url=path, source=f"{rel}:{path}"))
+                         comp, kind=("redirect" if comp.endswith("Redirect") else "route"),
+                         url=path, source=f"{rel}:{path}"))
 
     # ── extraction detail panes (tab state inside /extraction/:type/:name) ──────────
     # 2026-08-06: the pane state + subnav tabs were lifted OUT of ExtractionDocPage.tsx into a
@@ -418,11 +465,18 @@ def x_mailview(_m) -> list[dict]:
 
 
 def x_localdrive(_m) -> list[dict]:
-    """drive: pushState paths parsed by parseUrl()."""
-    rel = "apps/drive/static/app.js"
+    """drive: pushState paths parsed by parse()/pathOf() in the app's own core.
+
+    The router moved out of `app.js` when «קבצים» was rebuilt (js/core.js, 2026-10-28): the parser
+    is `parse()`, its writer is `pathOf()`, and the shapes it reads are `folder/<id>[/file/<f>]`,
+    `open/<file>`, `trash`, `search?q=`, `p/<view>`. The anchor is the GRAMMAR that owns the
+    address, not the file one revision happened to keep it in — a parser that moves must be
+    followed here, and a parser that is RENAMED must fail rather than shrink the map."""
+    rel = "apps/drive/static/js/core.js"
     src = _read(rel)
-    if "function parseUrl()" not in src:
-        raise DriftError(f"{rel}: parseUrl() missing — routes changed")
+    for anchor in ("function parse()", "function pathOf(", '"folder/"', '"open/"'):
+        if anchor not in src:
+            raise DriftError(f"{rel}: URL-shape anchor {anchor!r} missing — routes changed")
     return [
         _view("drive", "root", "דרייב — שורש", kind="route", url="/", source=rel),
         _view("drive", "folder", "דרייב — תיקייה", kind="route", url="/folder/{folder}", source=rel),
@@ -473,6 +527,95 @@ _ROUTER_SMELLS = ("addEventListener(\"popstate\"", "addEventListener('popstate'"
                   "location.hash", "history.pushState", "data-view=", "setTab(")
 
 
+def x_notifications(man) -> list[dict]:
+    """notifications (התראות) — the list, and ONE alert (the screen a link opens).
+
+    It stopped being a single-view app on 2026-10-13: the owner's "one address per screen" work gave
+    it a route per alert (`#/m/alerts/<id>` — the row expands). The anti-drift check inside
+    x_single_view is what said so out loud, which is why this extractor exists instead of a
+    declaration. The alert view is PARAMETERISED, like indox's `/extraction/:type/:name`: the real id
+    is resolved at capture time (`resolve_params.py`), never typed here.
+    """
+    rel = "platform-base/notifications/static/index.html"
+    if 'onclick="onRowClick' not in _read(rel):
+        raise DriftError(f"{rel}: the alert row's own handler is gone — the alert view below is "
+                         f"a screen this app no longer has")
+    return [
+        _view("notifications", "list", "התראות — מרכז התראות", kind="route", url="/", source=rel),
+        # AN ADDRESS, filled by resolve_params — `{id}` is the map's placeholder syntax; `:id` (the
+        # first version, 2026-10-13) has no filler and the pipeline turned it into
+        # `frame_fill: null`, which would have photographed the list and filed it as "the alert".
+        # The app's own row click stays as the fallback step.
+        _view("notifications", "alert", "התראות — התראה בודדת", kind="route", url="/{id}",
+              steps=[{"js": "document.querySelector('.item[data-id]').click()"}], source=rel),
+    ]
+
+
+def x_any_concurrency(man) -> list[dict]:
+    """any-concurrency (כל מקביל) — the timeline, and one WINDOW of it.
+
+    It stopped being a single-view app on 2026-10-13 for the same reason as notifications: a route
+    per window (`#/m/concurrency/w/<hours>`). The window view is parameterised and filled at capture
+    time, so the map counts the screen a person actually sends.
+    """
+    rel = "apps/any-concurrency/static/index.html"
+    if "data-w=" not in _read(rel):
+        raise DriftError(f"{rel}: the window control is gone — the window view below is a screen "
+                         f"this app no longer has")
+    return [
+        _view("any-concurrency", "timeline", "כל מקביל — ציר-זמן מקביליות", kind="route", url="/", source=rel),
+        # A real recipe, for the same reason as the alert view above: the `:hours` in the address is
+        # not something resolve_params knows, and a capture at a literal `:hours` would photograph the
+        # default window and call it another one. Pressing the app's own window control is a real
+        # window on any office.
+        # Same shape as the alert view above: an ADDRESS, filled by resolve_params (`subs["hours"]`),
+        # with the app's own window control kept as the fallback step.
+        _view("any-concurrency", "window", "כל מקביל — חלון זמן", kind="route", url="/w/{hours}",
+              steps=[{"js": "document.querySelector('[data-w]').click()"}], source=rel),
+    ]
+
+
+def x_data_management(_m) -> list[dict]:
+    """data-management (ניהול נתונים) — its own PLACES table, one view per section address.
+
+    It stopped being a single-view app on 2026-10-22 ("the screen lives in its own URL"): the page
+    writes `pushState` on a menu row, reads the path back on `popstate` and SERVES every one of
+    those addresses (app.py's catch-all returns static/index.html, so a deep path is not a 404).
+    The anti-drift check inside x_single_view is what said so out loud — the same way notifications
+    and any-concurrency left that list — so this extractor replaces the declaration instead of the
+    declaration hiding four screens.
+
+    Read OUT OF THE PAGE, never typed here: `PLACES` is the app's own route table (its own comment
+    calls them "the addresses of this page"), and each section's title is the `data-nav` its own
+    menu renders. `/` is NOT a sixth view: `showRoute('')` writes the bare mount when nothing has
+    scrolled past the top, which is the summary section at the top of this same page — counting it
+    again would count one screen twice.
+    """
+    rel = "platform-base/data-management/static/index.html"
+    src = _read(rel)
+    # Anchor on the GRAMMAR, not on one revision's spelling: the places table, the writer of an
+    # address and the reader of one. Any of the three gone = the addresses below are not screens
+    # this app has, and the map must say so rather than photograph one page five times.
+    if "function showRoute(place, replace)" not in src or "addEventListener('popstate'" not in src:
+        raise DriftError(f"{rel}: the place router (showRoute + popstate) is gone — the addresses "
+                         f"below are not screens this app has")
+    m = re.search(r"var PLACES = \[([^\]]*)\];", src)
+    if not m:
+        raise DriftError(f"{rel}: no PLACES table — the app's own view model changed")
+    places = re.findall(r"'([\w-]+)'", m.group(1))
+    if len(places) < 2:
+        raise DriftError(f"{rel}: PLACES parsed {len(places)} row(s) — expected >=2")
+    out = []
+    for place in places:
+        node = re.search(r'id="sec-' + re.escape(place) + r'"[^>]*data-nav="([^"]+)"', src)
+        if not node:
+            raise DriftError(f"{rel}: the #{place} section has no data-nav — the menu that names "
+                             f"it is gone, so its title cannot be read")
+        out.append(_view("data-management", place, f"ניהול נתונים — {node.group(1)}",
+                         kind="route", url=f"/{place}", source=f"{rel}:PLACES"))
+    return out
+
+
 def x_single_view(man) -> list[dict]:
     out = []
     probes = {
@@ -484,10 +627,13 @@ def x_single_view(man) -> list[dict]:
         # reported "100% of first-party views" without ever photographing them. Each is
         # genuinely one screen today — proven by running _ROUTER_SMELLS over its own source,
         # not by reading its README — so declaring it here is honest, and the probe below is
-        # what keeps it honest the day someone adds a tab.
-        "computers": "apps/computers/static/index.html",
+        # what keeps it honest the day someone adds a tab. (computers grew navigation on 2026-10-21 —
+        # every office's computer, one page each, DGO-890 — and has its own extractor below.)
         "git": "apps/git/static/index.html",
-        "data-management": "platform-base/data-management/static/index.html",
+        # data-management LEFT this list on 2026-10-22, and the probe is what said so: it grew a
+        # place router (summary|byapp|unclaimed|archives|raw, `pushState`/`popstate`), so its
+        # sections are the map's screens now — an extractor (`x_data_management`), not a
+        # declaration that hides four of them.
         "dgo-extend": "apps/dgo-extend/static/index.html",
     }
     for app, spec in man["single_view"].items():
@@ -535,15 +681,25 @@ def _tab_rows(src: str, rel: str, names: tuple = ("tabs", "TABS")) -> list[tuple
 
 
 def x_sites(_m) -> list[dict]:
-    """sites: its own hash grammar (`#/`, `#/new`, `#/adopt`, `#/s/<id>/<tab>`) + its tab table."""
+    """sites: its own grammar (`/`, `/new`, `/adopt`, `/s/<id>/<tab>`) + its tab table.
+
+    The URLS are PATH form, and that is a measurement, not a preference: `#/m/sites/s/<id>/overview`
+    was opened in the console and the frame landed on `/a/sites/s/<id>/overview` with the shell
+    carrying it back (2026-10-13, scripts/ui-coverage/route-runtime-qa.py). The `#/s/…` form the app
+    used to live in is now its own internal mirror; a view declared there could not be measured
+    through the console at all, which is how this was found. The guard reads the parser the app
+    still uses for that mirror AND the path it adopts."""
     rel = "apps/sites/static/app.js"
     src = _read(rel)
     if "parts[0] === 's'" not in src:
-        raise DriftError(f"{rel}: the '#/s/<id>/<tab>' route parser is gone — grammar changed")
+        raise DriftError(f"{rel}: the 's/<id>/<tab>' route parser is gone — grammar changed")
+    if "location.pathname" not in src:
+        raise DriftError(f"{rel}: the app no longer reads location.pathname — its address is not "
+                         f"the console's tail, and the views declared below would be unreachable")
     out = [
         _view("sites", "overview", "אתרים — כל האתרים", kind="route", url="/", source=rel),
-        _view("sites", "new", "אתרים — חיבור אתר חדש", kind="route", url="/#/new", source=rel),
-        _view("sites", "adopt", "אתרים — אימוץ אתר קיים", kind="route", url="/#/adopt", source=rel),
+        _view("sites", "new", "אתרים — חיבור אתר חדש", kind="route", url="/new", source=rel),
+        _view("sites", "adopt", "אתרים — אימוץ אתר קיים", kind="route", url="/adopt", source=rel),
     ]
     # The table moved into the side menu's own vocabulary (`SITE_TABS`, 2026-09-29) — the views are
     # the same five, so the extractor follows the source of truth instead of the old location. The
@@ -551,26 +707,31 @@ def x_sites(_m) -> list[dict]:
     # make the denominator fail loudly rather than quietly shrink.
     for k, label in _tab_rows(src, rel, ("SITE_TABS", "tabs", "TABS")):
         out.append(_view("sites", f"site-{k}", f"אתרים · אתר — {label}", kind="route",
-                         url=f"/#/s/{{site}}/{k}", source=f"{rel}:SITE_TABS"))
+                         url=f"/s/{{site}}/{k}", source=f"{rel}:SITE_TABS"))
     return out
 
 
 def x_domains(_m) -> list[dict]:
-    """domains: account → domain → tab, exactly as its own header documents the grammar."""
+    """domains: account → domain → tab, exactly as its own header documents the grammar — in PATH
+    form (`/a/<acct>/d/<name>/<tab>`), which is what the console hands over and what was measured
+    live on 2026-10-13 (see x_sites for the same correction and how it was found)."""
     rel = "apps/domains/static/app.js"
     src = _read(rel)
     if "const tab = parts[4] || 'overview'" not in src:
-        raise DriftError(f"{rel}: the '#/a/<acct>/d/<name>/<tab>' parser is gone — grammar changed")
+        raise DriftError(f"{rel}: the 'a/<acct>/d/<name>/<tab>' parser is gone — grammar changed")
+    if "location.pathname" not in src:
+        raise DriftError(f"{rel}: the app no longer reads location.pathname — its address is not "
+                         f"the console's tail, and the views declared below would be unreachable")
     out = [
         _view("domains", "accounts", "דומיינים — חשבונות", kind="route", url="/", source=rel),
         _view("domains", "account", "דומיינים — הדומיינים של החשבון", kind="route",
-              url="/#/a/{account}", source=rel),
+              url="/a/{account}", source=rel),
     ]
     # Same move as sites: the tab table now lives in the side menu's vocabulary (`DOMAIN_TABS`),
     # and the extractor follows the source of truth rather than a second copy of it.
     for k, label in _tab_rows(src, rel, ("DOMAIN_TABS", "tabs", "TABS")):
         out.append(_view("domains", f"domain-{k}", f"דומיינים · דומיין — {label}", kind="route",
-                         url=f"/#/a/{{account}}/d/{{domain}}/{k}", source=f"{rel}:DOMAIN_TABS"))
+                         url=f"/a/{{account}}/d/{{domain}}/{k}", source=f"{rel}:DOMAIN_TABS"))
     return out
 
 
@@ -916,8 +1077,46 @@ def x_archify(_m) -> list[dict]:
                   source=f"apps/archify/diagrams:{one}")]
 
 
+def x_security(_m) -> list[dict]:
+    """security (DGO-890): its own VIEWS table — one view per screen — and the two drawers (an address
+    that came in, a destination that was called), which are addresses of their own."""
+    rel = "platform-base/security/static/app.js"
+    src = _read(rel)
+    views = re.findall(r'\{ id: "(\w*)", label: "([^"]+)", icon: "[\w-]+", title: "([^"]+)"', src)
+    if len(views) < 5:
+        raise DriftError(f"{rel}: the VIEWS table did not read ({len(views)} rows) — the router shape changed")
+    out = [_view("security", "view-" + (vid or "overview"), f"אבטחה — {title if vid else label}", kind="hash",
+                 url=f"/#/{vid}", source=f"{rel}:VIEWS") for vid, label, title in views]
+    for vid, what, fn in (("in", "כתובת שנכנסה", "dInbound"), ("out", "יעד שהלשכה פנתה אליו", "dOutbound")):
+        if f'view === "{vid}") {fn}(arg)' not in src:
+            raise DriftError(f"{rel}: the {vid} drawer route is gone — grammar changed")
+        out.append(_view("security", f"drawer-{vid}", f"אבטחה — {what}", kind="hash",
+                         url=f"/#/{vid}/{{address}}", source=f"{rel}:route"))
+    return out
+
+
+def x_computers(_m) -> list[dict]:
+    """computers (DGO-890, machine's screen moved in): the fleet, and one computer's page by its tabs."""
+    rel = "apps/computers/static/app.js"
+    src = _read(rel)
+    m = re.search(r'\[((?:"\w+",\s*)+"\w+")\]\.indexOf\(parts\[2\]\)', src)
+    if 'parts[0] === "c"' not in src or not m:
+        raise DriftError(f"{rel}: the /c/<computer>/<tab> route is gone — grammar changed")
+    tabs = re.findall(r'"(\w+)"', m.group(1))
+    titles = {"res": "המשאבים של מחשב", "net": "הרשת של מחשב", "disk": "האחסון של מחשב", "ssh": "הגישה למחשב"}
+    # the path under the app's mount, like every app the console frames (G83): `/` the fleet,
+    # `/c/<where>/<tab>` one computer of the herd
+    out = [_view("computers", "fleet", "מחשבים — כל המחשבים", kind="route", url="/", source=f"{rel}:paintView")]
+    for t in tabs:
+        out.append(_view("computers", f"computer-{t}", f"מחשבים — {titles.get(t, t)}", kind="route",
+                         url=f"/c/local/{t}", source=f"{rel}:paintView"))
+    return out
+
+
 EXTRACTORS = [
     ("console", x_console),
+    ("security", x_security),
+    ("computers", x_computers),
     ("my-docs", x_my_docs),
     ("connections", x_connections),
     ("incoming-documents", x_incoming),
@@ -932,7 +1131,10 @@ EXTRACTORS = [
     ("telegram-tv", x_telegram_tv),
     ("app-management", x_app_management),
     ("archify", x_archify),
+    ("data-management", x_data_management),
     ("single-view apps", x_single_view),
+    ("notifications", x_notifications),
+    ("any-concurrency", x_any_concurrency),
     ("third-party", x_third_party),
     ("reveal states", x_reveal_states),
     ("declared states", x_states),
@@ -957,8 +1159,11 @@ def build() -> dict:
     # out and counted apart (`not_here`, printed by main) — not captured as a failure, which made
     # the map of a 22-app office mostly red, and not hidden, which is how a screen goes unlooked at.
     not_here: dict[str, int] = {}
+    # A tile with no host of its own (drive's `recorder`) is a view app of its own name: its app is
+    # the one that declares the tile, the same answer embed_index asks of it.
+    tile_app = {t["module"]: t["app"] for t in _office()["tiles"]}
     for v in views:
-        if not runs_here(man, v["app"]):
+        if not runs_here(man, v["app"], tile_app.get(v["app"])):
             not_here[v["app"]] = not_here.get(v["app"], 0) + 1
     views = [v for v in views if v["app"] not in not_here]
 

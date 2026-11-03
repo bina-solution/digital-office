@@ -42,7 +42,7 @@ services:
     - traefik.http.routers.portainer-https.rule=Host(`${PORTAINER_BASE_URL}`)
     - traefik.http.routers.portainer-https.entrypoints=websecure
     - traefik.http.routers.portainer-https.tls=true
-    - traefik.http.routers.portainer-https.tls.certresolver=myresolver
+    - traefik.http.routers.portainer-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
     - traefik.http.routers.portainer-https.service=portainer
     - traefik.http.services.portainer.loadbalancer.server.port=9000
     healthcheck:

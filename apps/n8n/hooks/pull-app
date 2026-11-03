@@ -65,6 +65,8 @@ else
   if [ -f "${CACHE}" ] && ls "${DIR}"/*.workflow.ts >/dev/null 2>&1; then
     _chk="$(mktemp -d)"
     "$(bbox_node)" "${WRAP}" compile "${DIR}" "${_chk}" >/dev/null 2>&1 || true
+    # …as push SENDS it (the linked offices' doors applied, DGO-945): the cache holds that sha
+    ( cd "${REPO_ROOT}" && python3 scripts/link-endpoints-apply --stage "${_chk}" ) >/dev/null 2>&1 || true
     _sha() { command -v sha256sum >/dev/null 2>&1 && sha256sum "$1" | awk '{print $1}' || shasum -a 256 "$1" | awk '{print $1}'; }
     _kept=""
     for _id in ${IDS}; do
@@ -85,19 +87,26 @@ else
 fi
 
 # Export the targets in ONE in-container CLI call (export:workflow --backup dumps all; we take
-# only the ids asked for), then normalize the volatile fields exactly like `pull all` does.
+# only the ids asked for), then normalize the volatile fields and strip the credential headers pinned
+# data captured exactly like `pull all` does (DGO-980, gate G87).
 C_TMP="/tmp/pull-app.$$"
 docker exec "${N8N_CONTAINER}" sh -c "rm -rf ${C_TMP} && mkdir -p ${C_TMP} && n8n export:workflow --backup --output ${C_TMP}" \
   2>&1 | grep -viE '"event"|error tracking|deprecat|dockerenv' | grep -iE 'exported|error' | tail -1 || true
 docker exec -e IDS="${IDS}" "${N8N_CONTAINER}" node -e '
   const fs=require("fs"),d="'"${C_TMP}"'",VOL=["updatedAt","createdAt","versionId","activeVersionId","versionCounter","triggerCount"];
+  const CRED=new Set(["authorization","proxy-authorization","cookie","set-cookie","x-api-key","x-n8n-api-key","x-auth-token","x-authentik-jwt"]);
+  const isCred=v=>typeof v==="string"?v.trim()!=="":Array.isArray(v)&&v.some(isCred);
+  const scrub=o=>{ if(Array.isArray(o)){o.forEach(scrub);return;} if(!o||typeof o!=="object")return;
+    for(const [k,v] of Object.entries(o)){ if(k.toLowerCase()==="headers"&&v&&typeof v==="object"&&!Array.isArray(v))
+      for(const h of Object.keys(v)) if(CRED.has(h.toLowerCase())&&isCred(v[h])) delete v[h];
+      scrub(v); } };
   const want=new Set(process.env.IDS.trim().split(/\s+/));
   let kept=0, missing=[...want];
   for(const f of fs.readdirSync(d)){ if(!f.endsWith(".json")) continue; const p=d+"/"+f;
     const id=f.replace(/\.json$/,"");
     if(!want.has(id)){ fs.unlinkSync(p); continue; }
     missing=missing.filter(x=>x!==id); kept++;
-    try{const w=JSON.parse(fs.readFileSync(p,"utf8")); for(const k of VOL) delete w[k];
+    try{const w=JSON.parse(fs.readFileSync(p,"utf8")); for(const k of VOL) delete w[k]; scrub(w.pinData);
       fs.writeFileSync(p,JSON.stringify(w,null,2)+"\n"); }catch(e){}
   }
   if(missing.length){ console.error("MISSING live: "+missing.join(", ")); process.exit(3); }
@@ -107,6 +116,10 @@ H_TMP="$(mktemp -d)"
 docker exec "${N8N_CONTAINER}" tar -C "${C_TMP}" -cf - . | tar -C "${H_TMP}" -xf -
 docker exec "${N8N_CONTAINER}" rm -rf "${C_TMP}"
 
+# The doors push pointed this office's copies at (DGO-945) are turned back into the apps' own
+# addresses: the blueprint is shared, and another office's n8n must never be pointed at this one's.
+( cd "${REPO_ROOT}" && python3 scripts/link-endpoints-apply --stage "${H_TMP}" --inverse ) \
+  || { rm -rf "${H_TMP}"; echo "Error: '${APP}': the linked offices' addresses could not be turned back — nothing written." >&2; exit 1; }
 "$(bbox_node)" "${WRAP}" render "${H_TMP}" "${DIR}" >/dev/null
 
 # Whole-app pull mirrors live: delete local .ts whose id is not in the FULL live set
@@ -128,6 +141,8 @@ _pulled_ts=""
 for _id in ${IDS}; do _pulled_ts="${_pulled_ts} ${DIR}/${_id}.workflow.ts"; done
 # shellcheck disable=SC2086
 mkdir -p "${G_TMP}/in" && cp ${_pulled_ts} "${G_TMP}/in/" && "$(bbox_node)" "${WRAP}" compile "${G_TMP}/in" "${G_TMP}/out" >/dev/null
+# the sha push sends; a map that cannot be computed leaves the plain one (the next push says why)
+( cd "${REPO_ROOT}" && python3 scripts/link-endpoints-apply --stage "${G_TMP}/out" ) >/dev/null 2>&1 || true
 sha() { command -v sha256sum >/dev/null 2>&1 && sha256sum "$1" | awk '{print $1}' || shasum -a 256 "$1" | awk '{print $1}'; }
 CACHE_DIR="${N8N_DIR}/.push-cache"; mkdir -p "${CACHE_DIR}"; CACHE="${CACHE_DIR}/${APP}.tsv"
 _vids="$(_pg 'select id||chr(9)||coalesce(((extract(epoch from "updatedAt")*1000)::bigint)::text,'"'"''"'"') from workflow_entity')"

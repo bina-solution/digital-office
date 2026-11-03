@@ -1,0 +1,118 @@
+name: release-check
+
+# The binaries of a release draft, as a stranger's clean Linux machine meets them (r030-104, DGO-1203): the
+# draft's files downloaded, checked against its SHA256SUMS, then run inside a fresh ubuntu:24.04 container
+# that has nothing of ours — dgo says its version and, with no checkout around it, what it needs; with a
+# checkout it shows its verbs; dgo-install says what it is and, while packaging/installer/roots.txt names
+# no root (DGO-1208, the owner's key ceremony), refuses to install anything (fail-closed). Once the roots
+# exist, this is where the installer's own install is proven.
+#
+#   a push to mac-dgo whose head commit says "[release-check binaries-dev-5]" (or "[release-check v0.3.0]")
+#   checks that draft
+
+on:
+  push:
+    branches: [mac-dgo]
+
+permissions:
+  contents: write   # a draft release is visible only to a token that may write
+
+jobs:
+  check:
+    if: contains(github.event.head_commit.message, '[release-check ')
+    runs-on: [self-hosted, portable, ssd]
+    timeout-minutes: 60   # 15 for the check, up to 45 that ops/prejob_waitfree.sh may hold it
+    env:
+      MSG: ${{ github.event.head_commit.message }}
+      CLEAN: ubuntu:24.04@sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: The draft the commit names
+        id: draft
+        run: |
+          set -euo pipefail
+          t="$(printf '%s\n' "${MSG}" | sed -nE 's/.*\[release-check ([A-Za-z0-9._-]+)\].*/\1/p' | head -1)" || true
+          [ -n "${t}" ] || { echo "::error::name the draft in the commit: [release-check <tag>]"; exit 1; }
+          echo "tag=${t}" >> "${GITHUB_OUTPUT}"
+          echo "draft ${t}"
+
+      - name: gh, where the runner has none
+        run: |
+          set -euo pipefail
+          if command -v gh >/dev/null; then gh --version | head -1; exit 0; fi
+          v=2.62.0
+          sum=41c8b0698ad3003cb5c44bde672a1ffd5f818595abd80162fbf8cc999418446a   # gh_2.62.0_checksums.txt
+          d="${RUNNER_TOOL_CACHE:-${RUNNER_TEMP}}/gh/${v}"
+          if [ ! -x "${d}/bin/gh" ]; then
+            mkdir -p "${d}"
+            t="${RUNNER_TEMP}/gh.tgz"
+            curl -fsSL "https://github.com/cli/cli/releases/download/v${v}/gh_${v}_linux_amd64.tar.gz" -o "${t}"
+            echo "${sum}  ${t}" | sha256sum -c -
+            tar -xzf "${t}" -C "${d}" --strip-components=1
+            rm -f "${t}"
+          fi
+          echo "${d}/bin" >> "${GITHUB_PATH}"
+          "${d}/bin/gh" --version | head -1
+
+      - name: The draft's files, against its SHA256SUMS
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          d="${RUNNER_TEMP}/rel"
+          rm -rf "${d}" && mkdir -p "${d}"
+          gh release download "${{ steps.draft.outputs.tag }}" -R "${GITHUB_REPOSITORY}" -D "${d}" \
+            -p SHA256SUMS -p 'dgo-linux-amd64' -p 'dgo-install-linux-amd64' -p 'forward-auth-linux-amd64'
+          (cd "${d}" && grep -E ' (dgo|dgo-install|forward-auth)-linux-amd64$' SHA256SUMS | sha256sum -c -)
+          chmod +x "${d}"/*-linux-amd64
+          ls -l "${d}"
+
+      - name: On a clean machine
+        run: |
+          # the step's shell is `bash -e`: off here, as each check reads an exit code it expects to be non-zero
+          set +e
+          set -uo pipefail
+          d="${RUNNER_TEMP}/rel"
+          fail=0
+          # the clean image first, so its pull is not read as the binaries' answers
+          docker pull -q "${CLEAN}" >/dev/null || { echo "::error::could not pull ${CLEAN}"; exit 1; }
+          # the container has nothing of ours: the three files read-only, a checkout read-only, no network
+          box() { docker run --rm --network none -v "${d}:/rel:ro" -v "${GITHUB_WORKSPACE}:/office:ro" "${CLEAN}" bash -c "$1"; }
+          say() { echo "--- $1"; }
+
+          say "dgo --version"
+          out="$(box '/rel/dgo-linux-amd64 --version' 2>&1)"; echo "${out}"
+          grep -q '^dgo [0-9]' <<< "${out}" || { echo "::error::dgo --version did not say its version"; fail=1; }
+
+          say "dgo with no checkout around it: says what it needs, does not crash"
+          out="$(box 'cd /tmp && /rel/dgo-linux-amd64 help' 2>&1)"; rc=$?; echo "${out}" | head -8
+          { [ "${rc}" -ne 0 ] && [ -n "${out}" ] && ! grep -qi 'panic\|goroutine ' <<< "${out}"; } \
+            || { echo "::error::dgo with no checkout: exit ${rc}, and it should say what it needs, not crash"; fail=1; }
+
+          say "dgo help, in a checkout"
+          out="$(box 'cd /office && /rel/dgo-linux-amd64 help' 2>&1)"; rc=$?; echo "${out}" | head -15
+          [ "${rc}" -eq 0 ] && [ "$(wc -l <<< "${out}")" -gt 3 ] || { echo "::error::dgo help in a checkout: exit ${rc}"; fail=1; }
+
+          say "forward-auth starts and answers its own version or usage"
+          out="$(box '/rel/forward-auth-linux-amd64 --version 2>&1 || /rel/forward-auth-linux-amd64 -h 2>&1' 2>&1 | head -5)"; echo "${out}"
+          ! grep -qi 'exec format\|not found\|panic' <<< "${out}" || { echo "::error::forward-auth does not run here"; fail=1; }
+
+          say "dgo-install --version"
+          out="$(box '/rel/dgo-install-linux-amd64 --version' 2>&1)"; echo "${out}"
+          grep -q '^dgo-install ' <<< "${out}" || { echo "::error::dgo-install --version did not say what it is"; fail=1; }
+
+          say "dgo-install, asked to install"
+          out="$(box '/rel/dgo-install-linux-amd64 --accept-terms --no-launch --dest /tmp/dgo' 2>&1)"; rc=$?; echo "${out}" | tail -4
+          if grep -q 'development build' <<< "$(box '/rel/dgo-install-linux-amd64 --version' 2>&1)"; then
+            # no roots (DGO-1208): it must refuse, out loud, and leave nothing behind
+            { [ "${rc}" -ne 0 ] && grep -q 'installs nothing' <<< "${out}"; } \
+              || { echo "::error::a development build did not refuse to install (exit ${rc})"; fail=1; }
+            echo "the installer refuses, as a development build must, until the release roots exist (DGO-1208)"
+          else
+            # a signed release: the install itself is the proof (no network here: it must say so, not hang)
+            echo "::notice::a release build — its install needs the download site; run this check with the network once the site serves it"
+          fi
+          exit "${fail}"

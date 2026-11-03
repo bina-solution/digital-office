@@ -71,10 +71,10 @@ Scope: users, 1:1 chats, groups, membership, messages, media/file attachments, m
 ```
 bots/
   chat_bot.js            the runtime: load bots, attach one per connection, dispatch inbound
-  bina-comp-bot/index.js   today's bot, ported and fully working
+  hacohen-bot/index.js   today's bot, ported and fully working
 ```
 A bot receives normalised inbound messages from ANY backend and replies through the abstract API, so
-a bot written once runs on local chat, WhatsApp or Telegram unchanged. Default: `bina-comp-bot`
+a bot written once runs on local chat, WhatsApp or Telegram unchanged. Default: `hacohen-bot`
 attached to `local-chat`.
 
 ### 5 — UI

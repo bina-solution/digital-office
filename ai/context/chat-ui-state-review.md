@@ -373,7 +373,7 @@ free, (c) costs the app nothing it does not already do on its own switch, and (d
 §3's R1/R2 guards and the visibility check are separate items rather than alternatives.
 
 **Do not** fix this by hiding one of the two controls. Both are legitimate: the app is reachable at
-its own origin (`chat.bina-comp.bina-solutions.co.il`) where there is no console chip, and the shell
+its own origin (`chat.hacohen.bina-solutions.co.il`) where there is no console chip, and the shell
 owns "which account" for every embedded service by design (`console/app.js:272-276`). Making them
 agree is the fix; removing one is a different product.
 

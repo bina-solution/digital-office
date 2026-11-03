@@ -163,7 +163,7 @@ def main():
                      help="actually clear confirmed zombies (default: dry run / report only)")
     ap.add_argument("--n8n-container", type=str, default="n8n-postgres")
     ap.add_argument("--n8n-db", type=str, default="n8n")
-    ap.add_argument("--n8n-user", type=str, default="bina-comp")
+    ap.add_argument("--n8n-user", type=str, default="hacohen")
     ap.add_argument("--redis-container", type=str, default="redis")
     ap.add_argument("--repo-root", type=str, default=".")
     args = ap.parse_args()

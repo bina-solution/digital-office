@@ -890,17 +890,23 @@ routes (drive 200 on `/trash`), and apps that route by hash never need one.
    content). Nothing is required of an app, so there is no exception to declare.
 
 **WHAT REMAINS.**
-3. The `bina:route` postMessage — the shell no longer needs to be told. Keep the listener for one
-   cycle as a compatibility bridge (carriers today: `mailview`, `incoming`), and make the gate count
-   the carriers so the removal is provable rather than hopeful; delete the listener and the two
-   reports when the count is zero.
+3. The `bina:route` postMessage — **DONE, 2026-10-13.** The listener is gone from both shells
+   (`platform-base/console/static/app.js`, and `desktop.js` — which had no other source for a window's
+   route, so it gained the same reader, `watchWinRoute`). What made it provable rather than hopeful:
+   a repo-wide search for senders came back with none (the only ones left were the simulation's own
+   mocks, which were converted too), the two carriers `mailview` and `incoming` were already converted
+   and deployed, and then it was measured on the running office — the console's address still follows
+   the frame's own `navigate` (`ci-artifacts/route-contract/navigate-after-listener-removal.log`),
+   every declared screen still opens at its address (105/106 in `ci-artifacts/route-runtime/final2.log`),
+   and desktop mode's window suite is unchanged (303/308, the same five screens as before).
 4. `apps/bina-ds/plugins/session-link` — shrinks to what is genuinely the app's own business: the
    harness's vendor client has no routing of its own, so the plugin keeps the open conversation in
    the harness's OWN URL (`/?s=<id>`, which the watcher now reflects). Its `report()`/postMessage
    half goes.
 6. Gate **G83** carries the product half: every screen the UI map declares
    (`scripts/ui-coverage/inventory.py` derives a route per view) opens at `#/m/<module><route>` —
-   measured per app in a browser, and the `frame_src` workaround in `rewrite_for_console` stops being
+   measured by `scripts/ui-coverage/route-runtime-qa.py`, in a browser, against a running office, and
+   the `frame_src` workaround in `rewrite_for_console` stops being
    a workaround and becomes the ordinary link. The seven apps whose screens are not in their URL at
    all are the gate's list.
 7. The rewritten app-author contract in `build-your-first-app.md` § "the address is the state":
@@ -912,16 +918,23 @@ the console's URL names the app (and the office), never the screen inside it. Th
 boundary doing its job, not a gap to close. An app that navigates by full page load is re-attached on
 `load`. An app whose state is not in its URL has nothing to mirror: that is the app's work, above.
 
-**MIGRATION — WHERE IT STANDS (2026-10-12, the same night).** DONE: the shell watcher + the identity
-tail, verified against drive BOTH with the block present and after deleting it
-(`navigate-probe.py`, `drive-trash/`, `drive-reopen/`); the block, its G27 row and drive's wiring
-deleted; `module.route` removed before it was published; the app-author contract and gate G83
-rewritten to the new rule; the console and drive deployed. NEXT, in this order: (1) the seven apps
-whose screens are not in their URL — `my-docs`, `any-concurrency`, `alerts`, `machine`, `computers`,
-`connections`, `dgo-extend` (G83 is the list, each one a route per screen in the app's own idiom);
-(2) the two `bina:route` carriers converted and the listener deleted, with the gate counting the
-carriers until then; (3) `session-link` shrunk to the plugin's own business; (4) G83's runtime half —
-every view the inventory declares opens at `#/m/<module><route>`.
+**MIGRATION — WHERE IT STANDS (2026-10-13).** DONE: the shell watcher + the identity tail, verified
+against drive BOTH with the block present and after deleting it (`navigate-probe.py`, `drive-trash/`,
+`drive-reopen/`); the block, its G27 row and drive's wiring deleted; `module.route` removed before it
+was published; the app-author contract and gate G83 rewritten to the new rule; the console and drive
+deployed. (1) the seven apps whose screens were not in their URL — `my-docs`, `any-concurrency`,
+`alerts`, `machine`, `computers`, `connections`, `dgo-extend` — converted, and **G83 passes** (13
+routing, 2 allowed by name). (2) the two `bina:route` carriers converted and **the listener deleted**
+from both shells, with the removal measured: no sender is left in the tree, the console's address
+still follows the frame's own `navigate` (`ci-artifacts/route-contract/navigate-after-listener-removal.log`),
+and desktop mode is unchanged (`windows`, 303/308 — the same five screens as before the removal).
+(3) `session-link` shrunk to the plugin's own business. (4) **G83's runtime half exists**:
+`scripts/ui-coverage/route-runtime-qa.py` opens every view the inventory declares, in a browser, and
+requires the frame to arrive at that route and the shell's address to carry it — 105 of 106 on this
+office (`ci-artifacts/route-runtime/final2.log`), with the one exception named in the log. What it
+found on its first run: `sites` and `domains` were still declaring their pre-conversion `#/s/…`
+addresses, and INDOX's bare paths (`/repos`, `/documents`, `/sync` …) are REDIRECTS rather than
+screens — both corrected in the inventory, which is what the runtime half is for.
 
 ---
 

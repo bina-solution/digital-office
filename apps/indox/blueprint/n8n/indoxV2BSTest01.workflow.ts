@@ -177,7 +177,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
     /*__n8n__*/ meta: {"templateCredsSetupCompleted":true},
     /*__n8n__*/ pinData: {},
     /*__n8n__*/ staticData: null,
-    /*__n8n__*/ shared: [{"updatedAt":"2026-07-30T23:42:27.037Z","createdAt":"2026-07-30T23:42:27.037Z","role":"workflow:owner","workflowId":"indoxV2BSTest01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <shlomo@local.dev>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
+    /*__n8n__*/ shared: [{"updatedAt":"2026-07-30T23:42:27.037Z","createdAt":"2026-07-30T23:42:27.037Z","role":"workflow:owner","workflowId":"indoxV2BSTest01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
     id: 'indoxV2BSTest01',
     name: 'indox-v2 BS E2E Test',
     active: false,
@@ -253,10 +253,10 @@ return [{ json: {
     "COMPANY_ID": "C1",
     "COMPANY_NAME": "Acme",
     "NAME": "Acme-BSE2E",
-    "LINK": "https://drive.localhost/file/d/1liZ2Zr4SNLv9iDxof6Ylrfxvr8XGBGee/view?usp=drivesdk",
+    "LINK": "https://drive.localhost/file/d/1REDACTEDdrivexxxxxxxxxxxxxxx0081/view?usp=drivesdk",
     // [bs-fixture 2026-08-07] LINK points at a REAL client balance sheet, so without this
     // flag the base stage runs BaseDocEx01 and 'Select Base Values' overwrites the fixture's
-    // COMPANY_ID 'C1' with the company resolved from the actual PDF (511744898). The BS
+    // COMPANY_ID 'C1' with the company resolved from the actual PDF (500000682). The BS
     // line-linker then searches existing invoices by the RESOLVED id, so the seeded
     // ex_upd/ex_skp (still 'C1') can never match: matchCount=0 and the CREATE branch ran for
     // every line. That is why 'SKP03 duplicated (2)' fired -- and why the UPDATE and SKIP
@@ -427,7 +427,7 @@ return [{ json: {
     "NAME": "Acme-FAIL",
     "BASE_EXTRACTION_COMPLETED": true,
     "BASE_SELECTION_COMPLETED": true,
-    "LINK": "https://drive.localhost/file/d/1e-0EKP8OVC3aJpkwdCHm8-3iVeoJ_r31/view"
+    "LINK": "https://drive.localhost/file/d/1REDACTEDdrivexxxxxxxxxxxxxxx0082/view"
   },
   "failCacheFixture": {
     "success": false,

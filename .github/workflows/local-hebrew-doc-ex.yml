@@ -39,13 +39,13 @@ permissions:
   packages: write   # images job pushes content-addressed builds to GHCR
 
 env:
-  REG: ghcr.io/solomonboltin/deployment-bina-comp
+  REG: ghcr.io/solomonboltin/deployment-hacohen
 
 jobs:
   # ── content-addressed apitools prebake (same scheme as indox-e2e) ──
   images:
-    runs-on: [self-hosted, portable]
-    timeout-minutes: 45
+    runs-on: [self-hosted, portable, ssd]
+    timeout-minutes: 90   # 45 for the job + up to 45 that ops/prejob_waitfree.sh may hold it (memory, heat, a fresh boot)
     outputs:
       apitools_tag: ${{ steps.tags.outputs.apitools }}
     steps:
@@ -91,8 +91,8 @@ jobs:
   # ── the gate: ONE apitools container + the standalone harness ──
   gate:
     needs: images
-    runs-on: [self-hosted, portable]
-    timeout-minutes: 100
+    runs-on: [self-hosted, portable, ssd]
+    timeout-minutes: 145   # 100 for the job + up to 45 that ops/prejob_waitfree.sh may hold it (memory, heat, a fresh boot)
     env:
       EXPECTED_DOCS: "138"
       EXPECTED_VALUES: "527"

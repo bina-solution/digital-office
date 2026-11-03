@@ -35,8 +35,8 @@ I also **ran** the read-only gates G5, G9 and G25 locally.
 | # | Assumption | Why it matters | What I checked |
 |---|---|---|---|
 | A1 | `packaging/OPTIMISATION.md`'s "4.7 GB / 33 containers" is the closest thing to current truth | It is the entire empirical basis of §3 | Dated 2026-07-29 (today). But the **current render is 41 services** (DERIVED, §3.1), not 33. The measurement was taken against the installed Linux artifact, which almost certainly had a different app set. I did not reconcile the two. |
-| A2 | The live bina-comp VPS runs the same app set as `platform.state.yaml` in this tree | §3 and §4 assume it | I have no access to the VPS from this session. `.env` says `PERFORMANCE_PROFILE=prod` (`.env:409`), which `bbox:147-153` picks for an 8-core host — but `ai/context/low-memory-mode.md:3` says "~8 GB total". A `prod` profile on an 8 GB host is itself worth checking. |
-| A3 | `.generated/` on disk matches what `render` would produce today | `.generated/compose.runtime.yml` is dated 2026-07-28 while `.generated/compose.yml` is 2026-07-29 and lists a different service set (`compose.runtime.yml` contains `inbox` and `whatsapp-bina-comp`, neither of which is defined in any current compose file). **Treat `compose.runtime.yml` as stale.** I used the source composes instead. |
+| A2 | The live hacohen VPS runs the same app set as `platform.state.yaml` in this tree | §3 and §4 assume it | I have no access to the VPS from this session. `.env` says `PERFORMANCE_PROFILE=prod` (`.env:409`), which `bbox:147-153` picks for an 8-core host — but `ai/context/low-memory-mode.md:3` says "~8 GB total". A `prod` profile on an 8 GB host is itself worth checking. |
+| A3 | `.generated/` on disk matches what `render` would produce today | `.generated/compose.runtime.yml` is dated 2026-07-28 while `.generated/compose.yml` is 2026-07-29 and lists a different service set (`compose.runtime.yml` contains `inbox` and `whatsapp-hacohanim`, neither of which is defined in any current compose file). **Treat `compose.runtime.yml` as stale.** I used the source composes instead. |
 | A4 | No live user-count, request-rate or DB-size data exists anywhere | §4's ceilings are structural, not empirical | Searched `ci-artifacts/`, `data/reports/`, `ai/context/`. Found only RAM/latency snapshots. There is **no traffic or tenant-count measurement in this repo at all**, so every "when does this break" in §4 is an argument from structure, not from a curve. |
 | A5 | ~~`attic/` and `legacy/` are genuinely inert~~ | — | **DISPROVEN during this review.** Both READMEs assert it; both are wrong in a specific way. See §2.3. |
 | A6 | The untracked-file sweep is incomplete | §2 | Reference analysis used `git grep` (tracked files only). A full `rg --no-ignore` over 5 GB of `dist/` + `data/` + `attic/` timed out twice at 5 min. A local untracked wrapper script could still invoke something listed as zero-reference in §2.2 (C21). |
@@ -495,7 +495,7 @@ app's `blueprints.n8n` directory):
 | entries resolving to a live blueprint | 60 | — |
 | entries whose only on-disk copy is in `legacy/` | **25** | `Balance Sheet Extractor`, `BS_EX_1`, the 8 `_diag_*` probes, the 4 `[FV] Test Integration - *`, `Gmail Documents Scanner`, `Google Integration Health`, `My workflow 15`, `_pdbg`, `_pgs` |
 | entries resolving to **nothing anywhere** | **4** | `Gmail MCP Server`, `drive api - local`, `gmail api - oauth`, `ztest gmail api` |
-| duplicated entries | 2 | `Google Drive MCP Server - agent.bina-comp`, `Google Sheets MCP Server - agent.bina-comp` each appear twice |
+| duplicated entries | 2 | `Google Drive MCP Server - agent.hacohen`, `Google Sheets MCP Server - agent.hacohen` each appear twice |
 
 **Severity: LOW, and the reason is worth stating precisely.** `active_workflows` is **written** by
 `platform-base/n8n/hooks/pull:172` — it is a *snapshot of the live n8n instance*, not authored

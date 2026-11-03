@@ -9,7 +9,7 @@
 #   ./bbox project-pln tasks list --project DGO --mine
 #   ./bbox project-pln tasks list --project DGO --state unstarted --json
 #   ./bbox project-pln tasks show DGO-12
-#   ./bbox project-pln tasks start|done|take|comment DGO-12 [--comment "…"]
+#   ./bbox project-pln tasks start|done|take|comment DGO-12 [--comment "…" | --comment @<file>]
 #   ./bbox project-pln tasks attach DGO-12 <file> [<file>…]     # a request's files, on its item
 #   …add `--as azaria` to act as that office agent (its own vault account).
 set -uo pipefail
@@ -36,6 +36,39 @@ for i in "${!PASSTHRU[@]}"; do
     AS_SLUG="${PASSTHRU[$((i + 1))]}"
   fi
 done
+# `--comment @<file>`: the comment is that file's text. An agent writes it with its file tool, so a
+# Hebrew `דו"ח`, a `$` or a backtick in it never meets a shell — inline in double quotes a small model's
+# comment was cut, or ran as a command (DGO-948, the operatives' second reader). Arguments then travel
+# to the applier as one array, never re-parsed.
+ARGS=("${PASSTHRU[@]}")          # as typed: through the hub, `@<file>` travels as the file (below)
+for i in "${!PASSTHRU[@]}"; do
+  if [ "${PASSTHRU[$i]}" = "--comment" ] && [ $((i + 1)) -lt ${#PASSTHRU[@]} ]; then
+    v="${PASSTHRU[$((i + 1))]}"
+    if [ "${v:0:1}" = "@" ]; then
+      [ -f "${v:1}" ] || { say "${cr}[project-pln] --comment ${v}: no such file${c0}"; exit 2; }
+      PASSTHRU[$((i + 1))]="$(cat "${v:1}")"
+    fi
+  fi
+done
+# `batch @<file.jsonl>`: the actions file, the same way — its text goes to the applier as the one argument
+# after the verb (one JSON object per line; tasks.py `batch`).
+if [ "${PASSTHRU[0]:-}" = batch ] && [ "${#PASSTHRU[@]}" -gt 1 ] && [ "${PASSTHRU[1]:0:1}" = "@" ]; then
+  [ -f "${PASSTHRU[1]:1}" ] || { say "${cr}[project-pln] batch ${PASSTHRU[1]}: no such file${c0}"; exit 2; }
+  # one argv entry is capped at 128 KiB by the kernel (MAX_ARG_STRLEN); Hebrew escaped in JSON is ~6 B a letter
+  [ "$(wc -c <"${PASSTHRU[1]:1}")" -le 120000 ] || { say "${cr}[project-pln] batch ${PASSTHRU[1]}: over 120 KB — split it${c0}"; exit 2; }
+  PASSTHRU[1]="$(cat "${PASSTHRU[1]:1}")"
+fi
+# `attach`: every file named must be one THIS bbox can read. On a Mac, bbox runs inside its engine, which
+# sees only the checkout: a file under /private/tmp was skipped here without a word and failed at the
+# applier (FileNotFoundError), through the hub as well (the Obsidian session, 2026-11-01).
+if [ "${ARGS[0]:-}" = attach ]; then
+  skip=""
+  for a in "${ARGS[@]:2}"; do
+    if [ -n "${skip}" ]; then skip=""; continue; fi
+    case "${a}" in --as) skip=1; continue ;; --*) continue ;; esac
+    [ -f "${a}" ] || { say "${cr}[project-pln] attach: ${a} is not a file bbox can read here — on a Mac it runs in its engine, which sees only the checkout: put the file under it (ci-artifacts/ is ignored by git)${c0}"; exit 2; }
+  done
+fi
 WORKSPACE="${PLANE_LOCAL_WORKSPACE:-$(read_env PLANE_LOCAL_WORKSPACE)}"
 if [ -z "${WORKSPACE}" ]; then
   WORKSPACE="$(python3 -c 'import sys,yaml;print((yaml.safe_load(open(sys.argv[1],encoding="utf-8")).get("workspace") or {}).get("slug",""))' "$(npath "${APP_DIR}")/bootstrap.yaml" 2>/dev/null)"
@@ -43,7 +76,67 @@ fi
 WORKSPACE="${WORKSPACE:-bina}"
 [ -f "${APPLIER}" ] || { say "${cr}[project-pln] ${APPLIER} is missing${c0}"; exit 1; }
 
-. "${APP_DIR}/where.sh"          # PLN_IN, PLN_API — here, or behind the link
+# ── THE OUTBOX (DGO-1100, any-201) ──────────────────────────────────────────────────────────────────
+# A WRITE that finds no path to Plane — the app does not run here and no linked office publishes it, the
+# door of the office that does is not answering, and the herd's hub is not answering either — used to
+# fail and take the words with it. It is KEPT instead (outbox.py, `.state/outbox/project-pln/`), the
+# reply says «בתור, N ממתין», and the first run that has a path sends it, oldest first, once. A READ
+# cannot be kept and never pretends: with no path it answers «לא מחובר מאז …».
+OUTBOX="${PLN_OUTBOX_DIR:-${REPO_ROOT}/.state/outbox/project-pln}"
+obx() { python3 "$(npath "${APP_DIR}/outbox.py")" --dir "${OUTBOX}" "$@"; }
+VERB="${PASSTHRU[0]}"
+case "${VERB}" in
+  start|done|comment|take|attach|label|link) WRITES=1 ;;
+  *)                                         WRITES=0 ;;
+esac
+if [ "${VERB}" = flush ]; then   # send what is waiting, now — this verb and nothing else
+  obx flush; exit $?
+fi
+PLN_PATH=1
+WHERE_RC=0
+. "${APP_DIR}/where.sh" || WHERE_RC=$?   # PLN_IN, PLN_API — here, or behind the link; PLN_DEAD
+[ "${WHERE_RC}" -eq 0 ] && [ "${PLN_DEAD:-0}" != 1 ] || PLN_PATH=0
+# which files travel with a kept write: `attach`'s are THIS machine's and the applier runs elsewhere
+COPY_FILES=()
+if [ "${VERB}" = attach ]; then
+  for f in "${PASSTHRU[@]:2}"; do [ -f "${f}" ] && COPY_FILES+=(--copy "${f}"); done
+fi
+if [ "${PLN_PATH}" = 0 ]; then
+  if [ "${WRITES}" = 1 ] && [ -z "${PLN_OUTBOX_REPLAY:-}" ]; then
+    N="$(obx queue --verb "${VERB}" ${COPY_FILES[@]+"${COPY_FILES[@]}"} -- "${PASSTHRU[@]}")" || exit 1
+    say "${cy}[project-pln] אין עכשיו דרך ל-Plane — הכתיבה נשמרה, ותישלח כשתהיה: בתור, ${N} ממתין${c0}"
+    printf '%s\n' "${PASSTHRU[@]}" | grep -qx -- '--json' \
+      && printf '{"ok":true,"queued":true,"waiting":%s}\n' "${N}"
+    exit 0
+  fi
+  SINCE="$(obx lastseen)"
+  if [ -n "${PLN_OUTBOX_REPLAY:-}" ]; then
+    say "${cr}[project-pln] עדיין אין דרך ל-Plane — הכתיבה נשארה בתור, $(obx count) ממתין${c0}"
+    exit 3
+  fi
+  say "${cr}[project-pln] לא מחובר מאז ${SINCE:-אף פעם} — אין תשובה חיה, ולכן אין תשובה${c0}"
+  exit 1
+fi
+# A path IS here: send what was kept while there was none, BEFORE this run's own work — so the order
+# the person asked in is the order Plane sees. Never inside a replay: that run IS the send.
+if [ -z "${PLN_OUTBOX_REPLAY:-}" ]; then
+  obx flush --quiet || true
+fi
+if [ -n "${PLN_HUB:-}" ]; then   # away from home: the same verb, run on the herd's hub (where.sh, DGO-1092)
+  # This machine's files travel with it (bbox via --put): `attach`'s, and a `--comment @<file>`'s — sent
+  # as typed, so the hub reads the file itself and a comment that only starts with `@` stays a comment.
+  PUT=(); prev=""
+  for a in "${ARGS[@]}"; do
+    [ "${prev}" = --comment ] && [ "${a:0:1}" = "@" ] && [ -f "${a:1}" ] && PUT+=(--put "${a:1}")
+    [ "${prev}" = batch ] && [ "${a:0:1}" = "@" ] && [ -f "${a:1}" ] && PUT+=(--put "${a:1}")
+    prev="${a}"
+  done
+  if [ "${ARGS[0]:-}" = attach ]; then
+    for f in "${ARGS[@]:2}"; do [ -f "${f}" ] && PUT+=(--put "${f}"); done
+  fi
+  VIA_T=(); [ "${ARGS[0]:-}" = batch ] && VIA_T=(--timeout 600)   # a batch runs past via's default 300 s
+  exec "${REPO_ROOT}/bbox" via "${PLN_HUB}" ${VIA_T[@]+"${VIA_T[@]}"} ${PUT[@]+"${PUT[@]}"} project-pln tasks "${ARGS[@]}"
+fi
 # `attach`: its files are THIS machine's and the applier runs in the container. Each is streamed in
 # under a directory of this run and named to the applier by where it landed; removed afterwards.
 STAGE=""
@@ -67,7 +160,11 @@ CONSOLE_HOST="$(read_env CONSOLE_BASE_URL)"
 case "${CONSOLE_HOST}" in
   http://*|https://*) CONSOLE_URL="${CONSOLE_HOST}" ;;
   "")                 CONSOLE_URL="" ;;
-  *)                  CONSOLE_URL="$(read_env AUTH_PROTOCOL):"; CONSOLE_URL="${CONSOLE_URL:-http:}//${CONSOLE_HOST}" ;;
+  # `AUTH_PROTOCOL` unset means https, the platform's own default (`${AUTH_PROTOCOL:-https}` in the
+  # authentik blueprints and the notifications app). Building the fallback as `"${AUTH_PROTOCOL}:"`
+  # before it made the `:-http:` unreachable — an unset value became ":" — and the reported link came
+  # out as `://console.…` (measured on vps1, 2026-10-13).
+  *)                  CONSOLE_URL="$(read_env AUTH_PROTOCOL)"; CONSOLE_URL="${CONSOLE_URL:-https}://${CONSOLE_HOST}" ;;
 esac
 dcx exec -T \
   -e PLANE_API_URL="${PLN_API}" \
@@ -83,6 +180,18 @@ RC=$?
 if grep -q '^\[project-pln\]' "${OUT}"; then
   sed -n 's/^\[project-pln\] //p' "${OUT}" | sed 's/^/  /' >&2
 fi
-grep -v '^\[project-pln\]' "${OUT}"
-rm -f "${OUT}"
+grep -v '^\[project-pln\]' "${OUT}" >"${OUT}.json"
+# A write that died on the NETWORK is no different from one that found no path a second ago: the words
+# are kept instead of lost. A refusal FROM Plane (401/404/500) is an answer, and is reported as it always
+# was — only "we could not talk to it" is queued.
+if [ "${RC}" -ne 0 ] && [ "${WRITES}" = 1 ] && [ -z "${PLN_OUTBOX_REPLAY:-}" ] \
+   && grep -qiE 'urlerror|gave up|connection refused|timed out|name or service not known' "${OUT}"; then
+  N="$(obx queue --verb "${VERB}" ${COPY_FILES[@]+"${COPY_FILES[@]}"} -- "${PASSTHRU[@]}")"
+  say "${cy}[project-pln] Plane לא ענה — הכתיבה נשמרה, ותישלח כשתהיה דרך: בתור, ${N} ממתין${c0}"
+  rm -f "${OUT}" "${OUT}.json"; exit 0
+fi
+# Reaching Plane is what "offline since …" is measured against: this run is the last time it answered.
+[ "${RC}" -eq 0 ] && obx seen >/dev/null 2>&1
+cat "${OUT}.json"
+rm -f "${OUT}" "${OUT}.json"
 exit "${RC}"

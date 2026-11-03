@@ -34,11 +34,15 @@ C_WF="/home/node/workflows"; C_CRED="/tmp/n8n-pull-cred"
 # blueprint changes. The export itself is always instance-wide (n8n has no per-app export), so the
 # scoping is applied after the workflows are routed back to their owners.
 APP_SCOPE=""
+# --prune-absent: delete a blueprint workflow that this instance does not hold. NOT the default,
+# because the blueprint is SHARED: see the deletion rule in render_dir below.
+PRUNE_ABSENT=0
 _pullrest=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --app)   APP_SCOPE="${2:-}"; shift 2 || shift ;;
     --app=*) APP_SCOPE="${1#--app=}"; shift ;;
+    --prune-absent) PRUNE_ABSENT=1; shift ;;
     *)       _pullrest="${_pullrest} $1"; shift ;;
   esac
 done
@@ -64,11 +68,20 @@ log "Exporting workflows (human-readable)..."
 docker exec "${N8N_CONTAINER}" sh -c "rm -f ${C_WF}/*.json; n8n export:workflow --backup --output ${C_WF}" \
   2>&1 | grep -viE '"event"|error tracking|deprecat' | grep -iE 'exported|error' | tail -1 || true
 # Normalize: drop volatile runtime fields so the blueprint round-trips deterministically (n8n re-assigns
-# these on import/publish; keeping them churns all workflow files on every pull).
+# these on import/publish; keeping them churns all workflow files on every pull). And strip every
+# credential header a trigger captured into pinned data — a webhook's pinData is the request it got,
+# `authorization` included (DGO-980). The list is gate G87's (scripts/refactor/pinned-credential-lint.py);
+# n8n's own redaction object is no credential and stays.
 docker exec "${N8N_CONTAINER}" node -e '
   const fs=require("fs"),d="'"${C_WF}"'",VOL=["updatedAt","createdAt","versionId","activeVersionId","versionCounter","triggerCount"];
+  const CRED=new Set(["authorization","proxy-authorization","cookie","set-cookie","x-api-key","x-n8n-api-key","x-auth-token","x-authentik-jwt"]);
+  const isCred=v=>typeof v==="string"?v.trim()!=="":Array.isArray(v)&&v.some(isCred);
+  const scrub=o=>{ if(Array.isArray(o)){o.forEach(scrub);return;} if(!o||typeof o!=="object")return;
+    for(const [k,v] of Object.entries(o)){ if(k.toLowerCase()==="headers"&&v&&typeof v==="object"&&!Array.isArray(v))
+      for(const h of Object.keys(v)) if(CRED.has(h.toLowerCase())&&isCred(v[h])) delete v[h];
+      scrub(v); } };
   for(const f of fs.readdirSync(d)){ if(!f.endsWith(".json"))continue; const p=d+"/"+f;
-    try{const w=JSON.parse(fs.readFileSync(p,"utf8")); for(const k of VOL) delete w[k];
+    try{const w=JSON.parse(fs.readFileSync(p,"utf8")); for(const k of VOL) delete w[k]; scrub(w.pinData);
       fs.writeFileSync(p,JSON.stringify(w,null,2)+"\n"); }catch(e){} }' 2>/dev/null || true
 # ── RETIRED workflows never come back ────────────────────────────────────────────────────────
 # The export above is the whole instance, and an instance keeps every workflow it ever imported.
@@ -88,13 +101,23 @@ done
 # (the old signal, kept below as fallback) could only route files that already existed in git.
 # `app:n8n` = the central platform blueprint (apps/n8n/blueprint/n8n).
 _tagmap="$( cd "${REPO_ROOT}" && python3 platform/manager/reconcile.py blueprints | tr -d '\r' )"
-_routed=0; _untagged=""
+_routed=0; _untagged=""; _central_declared=0
+# The heredoc below FEEDS the loop, so its body is expanded on purpose — but an unquoted body that
+# CARRIES a `$( )` is a command substitution waiting to be read as text (G88). So the substitution
+# is made here, in a variable, and the here-document carries `${_wf_tags}` only.
+_wf_tags="$(docker exec "${N8N_CONTAINER}" node -e '
+  const fs=require("fs"),d="'"${C_WF}"'";
+  for(const f of fs.readdirSync(d)){ if(!f.endsWith(".json")) continue;
+    try{ const w=JSON.parse(fs.readFileSync(d+"/"+f,"utf8"));
+      const t=(w.tags||[]).map(x=>typeof x==="string"?x:(x&&x.name)||"").find(n=>n.startsWith("app:"));
+      console.log(f+"\t"+(t||"-")); }catch(e){ console.log(f+"\t-"); } }' 2>/dev/null)"
 while IFS= read -r _line; do
   _f="${_line%%	*}"; _tag="${_line#*	}"
   [ -n "${_f}" ] && [ -f "${WF_DIR}/${_f}" ] || continue
   _dest=""
   if [ "${_tag}" = "app:n8n" ]; then
     _dest=""   # central blueprint IS WF_DIR — already home
+    _central_declared=$((_central_declared + 1))
   elif [ -n "${_tag}" ] && [ "${_tag}" != "-" ]; then
     while IFS="$(printf '\t')" read -r _aid _rel; do
       [ -n "${_aid}" ] || continue
@@ -103,8 +126,20 @@ while IFS= read -r _line; do
     done <<EOF2
 ${_tagmap}
 EOF2
-    [ -z "${_dest}" ] && log "  WARNING: '${_f}' tagged '${_tag}' but no enabled app matches — left in central blueprint."
-  else
+    # A tag whose app this office does NOT enable still names a real home: the blueprint dir exists in
+    # the tree, the render step below writes into every one of them, and the pull already routes such
+    # a workflow there by the legacy fallback (measured 2026-10-13: whatsappApi01 → apps/chat,
+    # driveApi01 → apps/drive). The tag is simply the better statement of the same fact, so it wins.
+    if [ -z "${_dest}" ]; then
+      _app="${_tag#app:}"
+      for _bp in "${REPO_ROOT}"/apps/*/blueprint/n8n; do
+        [ -d "${_bp}" ] || continue
+        _an="$(basename "$(dirname "$(dirname "${_bp}")")")"
+        [ "$(printf '%.24s' "app:${_an}")" = "${_tag}" ] && { _dest="${_bp}"; break; }
+      done
+    fi
+    [ -z "${_dest}" ] && log "  WARNING: '${_f}' tagged '${_tag}' but no blueprint dir in the tree matches — left in central blueprint."
+  elif [ "${_tag}" = "-" ] || [ -z "${_tag}" ]; then
     _untagged="${_untagged} ${_f}"
   fi
   if [ -n "${_dest}" ]; then
@@ -113,39 +148,46 @@ EOF2
     _routed=$((_routed + 1))
   fi
 done <<EOF3
-$(docker exec "${N8N_CONTAINER}" node -e '
-  const fs=require("fs"),d="'"${C_WF}"'";
-  for(const f of fs.readdirSync(d)){ if(!f.endsWith(".json")) continue;
-    try{ const w=JSON.parse(fs.readFileSync(d+"/"+f,"utf8"));
-      const t=(w.tags||[]).map(x=>typeof x==="string"?x:(x&&x.name)||"").find(n=>n.startsWith("app:"));
-      console.log(f+"\t"+(t||"-")); }catch(e){ console.log(f+"\t-"); } }' 2>/dev/null)
+${_wf_tags}
 EOF3
 # Fallback for UNTAGGED workflows: legacy directory membership, loudly — tag them so this stops.
 _fell=0
 for _bp in "${REPO_ROOT}"/apps/*/blueprint/n8n; do
   [ -d "${_bp}" ] || continue
+  # The CENTRAL blueprint IS ${WF_DIR} — an untagged file already there is home, and `mv x x` fails.
+  [ "${_bp}" = "${WF_DIR}" ] && continue
   for _b in ${_untagged}; do
     _owned=""
     [ -f "${_bp}/${_b}" ] && _owned=1
     [ -f "${_bp}/${_b%.json}.workflow.ts" ] && _owned=1
     if [ -n "${_owned}" ] && [ -f "${WF_DIR}/${_b}" ]; then
       mv -f "${WF_DIR}/${_b}" "${_bp}/${_b}"; _fell=$((_fell + 1))
-      log "  WARNING: '${_b}' has NO app:* tag — routed by legacy dir membership. Tag it in n8n (or re-run the app-tag seeding) so pull routing stays declarative."
+      log "  WARNING: '${_b}' has NO app:* tag — routed by legacy dir membership: the file already exists in ${_bp#"${REPO_ROOT}/"}. Tag it in n8n, or run './bbox n8n tags seed' when a blueprint file already declares its home."
     fi
   done
 done
-log "Routed ${_routed} workflow(s) by app:* tag${_fell:+ + ${_fell} by legacy dir fallback}."
+log "Routed ${_routed} workflow(s) by app:* tag${_fell:+ + ${_fell} by legacy dir fallback}${_central_declared:+ (${_central_declared} tagged app:n8n stay central by design)}."
+# Who has NO declared owner: untagged files that no blueprint dir matched. They are not an error, but
+# nothing says where they belong, so every pull brings them back into the central blueprint and into
+# `git status` (measured 2026-10-13: 48 of this office's 82 workflows). Naming the count is the whole
+# point — the fix is a tag in n8n, and there is no seeding tool that does it for you.
+_homeless=$(( $(printf '%s' "${_untagged}" | wc -w) - ${_fell:-0} ))
+[ "${_homeless}" -gt 0 ] && log "  ${_homeless} workflow(s) with NO owner (no app:* tag, no blueprint file) stayed in the CENTRAL blueprint — tag each in n8n (app:<app id>) so routing is declarative ('./bbox n8n tags' says who has an owner and who has none)."
 # Scoped pull: keep only the requested app's blueprint changes, restore every other owner's dir.
 if [ -n "${APP_SCOPE}" ]; then
   # tr -d CR: python on Windows prints CRLF; a trailing CR breaks every path comparison/glob.
   _keep="$( cd "${REPO_ROOT}" && python3 platform/manager/reconcile.py blueprints --for "${APP_SCOPE}" \
             | tr -d '\r' | cut -f2 )" || { echo "Error: unknown app '${APP_SCOPE}'." >&2; exit 1; }
+  # The here-document below FEEDS the loop, so it must expand — and an unquoted body must therefore
+  # not CARRY a `$( )` (G88: that is what a reader executes). The list is made here; the body is a
+  # plain `${_all_blueprints}`.
+  _all_blueprints="$( cd "${REPO_ROOT}" && python3 platform/manager/reconcile.py blueprints | tr -d '\n' )"
   while IFS="$(printf '\t')" read -r _aid _rel; do
     [ -n "${_rel}" ] || continue
     [ "${_rel}" = "${_keep}" ] && continue
     ( cd "${REPO_ROOT}" && git checkout -- "${_rel}" 2>/dev/null ) || true
   done <<EOF
-$( cd "${REPO_ROOT}" && python3 platform/manager/reconcile.py blueprints | tr -d '' )
+${_all_blueprints}
 EOF
   log "Scoped pull: kept only '${APP_SCOPE}' blueprint changes; other blueprints restored."
 fi
@@ -245,14 +287,34 @@ fi
 #      marker lines) so compile round-trips deep-equal — proven 81/81 on this estate before the
 #      flip. The exported JSON is an intermediate here and is DELETED once its .ts exists.
 WRAP="${N8N_DIR}/tooling/wrap.mjs"
+# A blueprint workflow file this instance does NOT hold. Kept, and named at the end (see render_dir).
+KEPT_ABSENT=""; KEPT_ABSENT_N=0
 render_dir() {  # $1 = blueprint dir: render every *.json to *.workflow.ts in place, then rm json
   ls "$1"/*.json >/dev/null 2>&1 || return 0
+  # The doors push pointed this office's copies at (DGO-945), back to the apps' own addresses: the
+  # blueprint is shared, and another office's n8n must never be pointed at this one's.
+  ( cd "${REPO_ROOT}" && python3 scripts/link-endpoints-apply --stage "$1" --inverse ) \
+    || { echo "[n8n-pull] FATAL: the linked offices' addresses could not be turned back in $1 — JSONs left in place." >&2; exit 1; }
   if "$(bbox_node)" "${WRAP}" render "$1" "$1" >/dev/null; then
-    # remove old .ts for workflows that no longer exist live, then the json intermediates
+    # Remove old .ts for workflows that no longer exist live — but a TRACKED file whose workflow is
+    # absent from this export is not automatically stale: this blueprint is SHARED between offices
+    # through git, and an office that never imported that workflow would otherwise delete another
+    # office's file on a plain `pull all`. Measured 2026-10-13 on this office: 82 workflows live here
+    # against 91 files in the blueprint, 57 of them absent (43 indox, 6 raphael, 4 gwa, 1 mail …) —
+    # a `pull all` deleted all 57 and, with 48 workflows this instance holds and the blueprint does
+    # not, rewrote the shared blueprint to this office's shape. So: keep it, name it, and make the
+    # removal deliberate (`--prune-absent`). Untracked ones still go — a leftover of a pull that did
+    # not finish is nobody's blueprint.
     for _ts in "$1"/*.workflow.ts; do
       [ -e "${_ts}" ] || continue
       _idj="$(basename "${_ts}" .workflow.ts).json"
-      [ -f "$1/${_idj}" ] || rm -f "${_ts}"
+      [ -f "$1/${_idj}" ] && continue
+      if [ "${PRUNE_ABSENT}" != "1" ] \
+         && git -C "${REPO_ROOT}" ls-files --error-unmatch "${_ts#"${REPO_ROOT}/"}" >/dev/null 2>&1; then
+        KEPT_ABSENT="${KEPT_ABSENT} ${_ts#"${REPO_ROOT}/"}"; KEPT_ABSENT_N=$((KEPT_ABSENT_N + 1))
+        continue
+      fi
+      rm -f "${_ts}"
     done
     rm -f "$1"/*.json
     log "  rendered $(ls "$1"/*.workflow.ts 2>/dev/null | wc -l | tr -d ' ') workflow(s) as code: $1"
@@ -262,12 +324,21 @@ render_dir() {  # $1 = blueprint dir: render every *.json to *.workflow.ts in pl
   fi
 }
 render_dir "${WF_DIR}"
-while IFS="$(printf '\t')" read -r _aid _rel; do
-  [ -n "${_rel}" ] && [ -d "${REPO_ROOT}/${_rel}" ] && render_dir "${REPO_ROOT}/${_rel}"
-done <<EOF4
-${_tagmap}
-EOF4
+# Every dir the routing above can write to — the fallback moves untagged JSONs into ANY
+# apps/*/blueprint/n8n, enabled or not, so rendering only the enabled ones (the tag map) left raw
+# JSON in the dirs of apps this office has off (measured 2026-10-13: apps/chat, apps/drive).
+for _bp in "${REPO_ROOT}"/apps/*/blueprint/n8n; do
+  [ -d "${_bp}" ] || continue
+  [ "${_bp}" = "${WF_DIR}" ] && continue
+  render_dir "${_bp}"
+done
 rm -f "${WF_DIR}/.n8n_push_hashes"   # legacy scripts/n8n-push cache — retired with it
+
+if [ "${KEPT_ABSENT_N}" -gt 0 ]; then
+  log "  KEPT ${KEPT_ABSENT_N} blueprint workflow file(s) THIS INSTANCE DOES NOT HOLD — the blueprint is shared with the other offices, and a pull does not delete their files:"
+  for _p in ${KEPT_ABSENT}; do log "    ${_p}"; done
+  log "  To delete one here on purpose (it is gone from every office): './bbox n8n pull all --prune-absent'."
+fi
 
 log "Blueprint written: ${BLUEPRINT}"
 log "  workflows=${WF_COUNT}  credentials=${CRED_COUNT}  active=${ACTIVE_COUNT}  community_nodes=${CN_COUNT}  owner=.env(N8N_OWNER_*)"

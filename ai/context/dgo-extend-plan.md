@@ -3,7 +3,7 @@
 Owner decision document, 2026-09-30. The readable copy with the drawings is the owner's Claude doc
 "DGO Extend — remote offices, links and placement: design and decisions"; this file is the same
 content in the repository, the working reference for agents implementing it. Facts below were
-verified in this checkout and on the two live machines (MacBook engine, vps1 203.0.113.10) on
+verified in this checkout and on the two live machines (MacBook engine, vps1 93.184.216.5) on
 2026-09-30; research sources are linked in §4.
 
 **Read §13 first.** The sections below are the decision as it was taken on 2026-09-30 and are kept
@@ -203,7 +203,12 @@ revoke = remove link. Forged identity headers → dropped unless from the link p
 derive. Lost keys → in the backup set; a new key means announced re-pairing. Wrong direction →
 enforced on the receiving side (`use` vs `serve`). Commit drift → placements refused. Audit → offices
 run log + connections events + computers command log. Not done: shared passwords, authentik
-federation, any public port besides WireGuard UDP on a reachable office.
+federation, any public port besides WireGuard UDP on a reachable office — and, since 2026-10-19, the
+carriers' TCP door (51443, `apps/dgo-extend/carrier`) for a pair that can never carry a UDP packet.
+That door answers nothing to a connection that cannot name the pair (a tag of both public keys) and
+admits nobody who cannot prove a pair's private key (a static X25519 agreement, never sent); WireGuard
+still encrypts every packet end to end. It is published on loopback by default, and on a LAN only by a
+MacBook's engine door (`packaging/macos/lan-door.py`, private sources only).
 
 ## 10. Declarative model
 
@@ -212,11 +217,11 @@ federation, any public port besides WireGuard UDP on a reachable office.
 id: vps1
 machine: computer_ssh-b154fa0c        # absent for a QR-paired office
 domain: staging.digital-office.co.il
-path: /root/deployment-bina-comp
+path: /root/deployment-hacohen
 source: {repo: …, branch: dgo, commit: 5d6fa5f1, account: git_github_token-1d2d52f4}
 apps: {console: enabled, n8n: enabled, chat: disabled, …}
 identity: {office_key: ed25519:…, wg_pubkey: wg:…, fingerprint: 7K3M-Q2ZP}
-tunnel: {slot: 2, endpoint: 203.0.113.10:51820, dial: home, relay_for: []}
+tunnel: {slot: 2, endpoint: 93.184.216.5:51820, dial: home, relay_for: []}
 links:
   - {direction: use,   token_ref: dgo_link-a1b2c3}
   - {direction: serve, token_ref: dgo_link-d4e5f6, trust_identity_headers: true}
@@ -336,3 +341,153 @@ come back by itself after the listening side's Wi-Fi reconnects (DGO-404), and a
 sleeps takes the link down with it until it wakes (DGO-410, the owner's setting on that machine).
 
 The app's own map — which file owns which fact — is [apps/dgo-extend/README.md](../../apps/dgo-extend/README.md).
+
+## 14. Results — measured on the live office, 2026-10-14 (DGO-51)
+
+§13 above is the 2026-10-07 record and stands as written. This section is what was **measured**, not
+recalled: every line carries the command or the file that produced it, so a reader can re-open it and
+get the same answer. Nothing below is a claim about a machine that was not asked.
+
+**The link plane as it answers today** (vps1, branch `vps1-dgo`):
+
+```bash
+curl -s http://dgo-extend:8983/manifest
+# {"id":"dgo-extend","interface":"dgo-extend.v1","ops":["list","create","delete","converge","status"]}
+curl -s http://dgo-extend:8983/healthz     # {"ok":true}
+curl -s http://dgo-extend:8983/api/link
+# home vps1 slot 1 fingerprint CHANGE_ME, listen console.staging.digital-office.co.il:51830
+# items[0]: hp-laptop kind=paired declared=true machine=null, verdict {"ok":true,"hop":"","why":""},
+#   tunnel.alive=true handshake_age_s=76, catalog.ok=true, delivery.door.listening=true,
+#   apps = bina (bina-ds:3080), plane (project-pln:80) and browser42 (browser42:80)
+./bbox dgo              # "dgo-extend: 1 office(s) declared"  → hp-laptop  run=-  placement=-
+./bbox dgo link status  # home slot=1; hp-laptop link slot=3 both 3A4B-3343-4492-5A1A, answers: up,
+                        #   handshake 84s ago; rendered: nftables.rules, addressing.json,
+                        #   edge-guard.json, link-proxy.json, wg0.conf
+./bbox dgo project --check   # "dgo project: up to date — 3 remote app(s) declared"
+python3 apps/dgo-extend/tests/test_link_security.py
+# link_security: 14 claim(s), 14 pass, 0 xfail (documented gap(s) still open), 0 fail
+#   — the one claim that was red (the identity mapping, `serve.py` fixed at `3d3c8b77`) is green; the
+#     door refusing a name it does not serve was never the red one (README.md §9)
+```
+
+`GET /ops` answers **404** on this app. Nothing in `README.md`, `AGENT.md` or `app.json` claims it;
+`/manifest` is the contract it serves.
+
+**Built as decided** (decisions in §11; the file is where it lives, the command is how it was checked)
+
+| Decision | Where it lives | Evidence |
+| --- | --- | --- |
+| 1 · rename to `dgo-extend` (alias `dgo`) | `apps/dgo-extend`; `hooks/migrate`, `hooks/prepare` | `./bbox dgo` answers; `hooks/` holds identity, link, migrate, prepare, project, state, test |
+| 2 · self-run WireGuard, one tunnel per pair | `net.py`, containers `dgo-net` + `dgo-link` (`network_mode: service:dgo-net`) | `/api/link` → `tunnel.addressing.pairs[0]`: iface `wg3`, self `10.79.3.2`, peer `10.79.3.1`; `dgo_tunnel` holds `wg0.conf` (510 B), `nftables.rules` (1748 B), `link-proxy.json` (2263 B), `addressing.json`, `edge-guard.json` |
+| 3 · a link is a directed edge | `declaration.py` (rules), `links.py` (the token of ONE direction) | one token per direction, and each link carries its own `direction` — the live pair uses the third value the vocabulary shipped with, `both` (see the note below) |
+| 7 · three pairing flows, one result | `pairing.py`, `pair_api.py`, `/connect` | `static/connect.html` + `static/connect.js` + `vendor/`; `tests/pair_contract.py`, `tests/connect-selftest.mjs` (gate G72) |
+| 8 · one Ed25519 + one WireGuard key per office, in the backup | `identity.py`, volume `dgo_identity` | `/api/office` → `identity.ed25519`, `identity.wg`, `fingerprint 3A4B-3343-4492-5A1A`; `dgo_identity:/identity:ro` in the compose file. The backup half is traced, not assumed: `dgo_identity` is declared in `apps/dgo-extend/app.json` → `data.volumes`, and that inventory is exactly what the archive walks — `scripts/deployment-archive.py:441` (`declared_volumes`, from every ENABLED app's manifest), tarred at `:845` as `volumes/dgo_identity.tar.gz` (the same decision is recorded in `platform/data-volumes-waivers.yaml:55`) |
+| 9 · direction enforced on the receiving side | `firewall.py` (permission), `linkproxy.py` + `link-proxy.py` (delivery) | `link-proxy.py` carries `X-Dgo-Door: no-app \| app-down \| unreachable` and strips/replaces the identity headers; `test_link_security.py` passes 5 of its claims |
+
+**Added after the plan was written, and standing today**
+
+* **`direction: both` shipped.** Decision 3 rejected "a bidirectional flag", but the vocabulary is
+  `use` | `serve` | `both` (`declaration.py:65`, `net.link_direction`, `firewall.py:117`), and `both` is
+  its OWN mirror rather than a flipped one (`converge._mirror`). The live pair to hp-laptop is declared
+  that way — `/api/office` → `"links":[{"office":"vps1","direction":"both"}]`, and `./bbox dgo link
+  status` prints `both`.
+* **The catalog + `serve:` model replaced placement** (§13; decisions 4, 5, 11). Serving side:
+  `catalog.py`, written by `POST /api/link/serve` (route live; `GET` on it → 405). Consuming side:
+  `projection.py` every 60 s (`PROJECTION_SECONDS`), projected onto the `remote:` block of
+  `platform.state.yaml` through the control plane (`PUT /api/remote`), tiles `<alias>.<office>`.
+  This office's live `serve` block: `{"*":{},"bina-ds":{"port":3080,"agent_api_port":3081,
+  "identity":{"to":"akadmin","from":[]}}}`.
+* **One verdict per office** — `{ok, hop, why}` with **four** hops: `tunnel`, `office`, `door`,
+  `pair` (`app.py:_verdict`, `_HOP_HE`). `ok` is `null` while nothing was measured, and an office
+  inside its quick retries is unmeasured rather than failed (`projection.QUICK_RETRIES = 5`, 8 s apart).
+* **The link heals its own one hop** — `POST /api/link/heal` (a fresh source port,
+  `/data/listen-ports.json`) and `POST /api/link/find` (`{"office": …}`, a bounded nearest-first
+  search of the lost address's own `/24`, `/data/find-peer.json`); both marked *measured 2026-10-12*
+  in `app.py`. `dgo-link` is re-created whenever the container it lives in is replaced
+  (`scripts/lib.sh:netns_rejoin`, measured 2026-10-04 and again 2026-10-06).
+* **`bbox remote <office> <alias> [path]`** — the apps of a LINKED office, and one authenticated call
+  through the link (`bbox`, dispatches to `scripts/remote.py`).
+* **The move route is live** — `POST /api/apps/<id>/move` (`platform-base/app-management/app.py:1705`),
+  `POST /api/office/{oid}/move` (`apps/dgo-extend/app.py:2182`), `move.py`,
+  `tests/move_acceptance.py`, `tests/move_back.py`. See the caveat below.
+
+**Moved since §13** (states read from Plane project `DGO` on 2026-10-14)
+
+| Item | State now | Was, on 2026-10-07 |
+| --- | --- | --- |
+| DGO-38 · `computers.v1 stream` (volumes with progress and resume) | **בוצע** — closed | open in §13 |
+| DGO-49 · §9 as automated tests | **בוצע** — closed (`test_link_security.py` runs: 5 pass / 1 xfail / 0 fail) | open in §13 |
+| DGO-46 · gate of phase 5 | **בתהליך** — started, not passed | open in §13 |
+
+**Still open** (same read; the hub is the authority, this is a snapshot)
+
+* Gates and phases: **DGO-29** (gate 2), **DGO-42** (gate 4), **DGO-46** (gate 5, בתהליך) — all
+  `מלאי` except 46.
+* Scaling and reach: **DGO-39** replicas, **DGO-43** `relay_for`, **DGO-41** CI-built images
+  (בתהליך), **DGO-44** `bbox agent answer`, **DGO-47** baseline green on both offices, **DGO-50** a
+  fresh clone on a fourth machine.
+* Release proof: **DGO-48** `flow-qa.py --url` against a live linked office.
+* Carried over from the retired placement model, to be re-read against the catalog model before
+  anyone builds them: **DGO-25** (placement as a vault connection), **DGO-28**, **DGO-32**, **DGO-35**,
+  **DGO-37**, **DGO-40** (the same-commit check).
+* Found in use and still open: **DGO-404** (`מלאי`, urgent, labels `HP`/`באג`) — the link died after
+  the HP's Wi-Fi reconnected and did not come back by itself; **DGO-410** (`מלאי`, label `בעלים`) —
+  a Mac whose screen locks or lid closes takes the link down overnight.
+
+**Corrected in the app's own documents on 2026-10-14** (each was checked against the running code,
+not against the previous text)
+
+* The step list was missing two of `converge.STEPS` — `login` and `link` (`converge.py:53`).
+* The verdict was described with three hops; there are four (`pair`, `app.py:_verdict`).
+* §9 was described as having **two** unheld claims; both are closed — `POST /api/apps/<id>/apply` by
+  `e5f8dbac` (2026-10-09), and the identity-`from` shape at `serve.plan`'s own intake of the mapping,
+  which reads both shapes (the run of 2026-10-14 reports `0 xfail`). The cited line
+  `platform/manager/serve.py:357` is 392 today. That run's single failure is a claim the same pass
+  added — the door refusing a name it does not serve (`link-proxy.py`'s `Door`); see README.md.
+* `/data/peers/link.json` was attributed to `app.py`; its writer is `peers.publish_link`
+  (`peers.py:141`), which `app.py` calls after every projection pass.
+* `AGENT.md` was quoted as 5978 bytes; it is 5985 after this pass (`reconcile.MAX_BRIEF_BYTES` = 6000).
+* `./bbox dgo test pair` (the two throwaway offices paired through their own screens, recorded by
+  `tests/pair-video.sh`) was missing from the tests table.
+
+**What was NOT verified here, and why**
+
+* `./bbox dgo test 0…3`, `test fresh` and `test pair` were **not run in this session**: they act on the
+  live link, and this work item forbids touching links or pairings. The files exist
+  (`tests/phase0.py`…`phase3.py`, `fresh-offices.sh`, `pair-video.sh`); whether each phase passes is
+  the hub's statement, not this document's.
+* `move.py` and its acceptance tests exist and both move routes are live, but the item that owns them
+  (**DGO-37**) is still `מלאי` — "an app moves with its data and back, on real machines" is therefore
+  **not** claimed here.
+* `GET http://computers:8977/manifest` does not list `stream` among its ops, while DGO-38 is `בוצע`
+  and `GET http://computers:8977/api/transfers` answers `{"transfers":[]}`. The doors exist; the op
+  list is that app's own fact and is recorded here only so the next reader is not surprised.
+
+## 15. Results since §14 — the link, the door, the pairing (2026-10-15)
+
+§14 stands as the 2026-10-14 record. Re-measured today on this tree, and what landed after it:
+
+* **The link is down, and the verdict says where** — `GET /api/link` → `items[0]` hp-laptop
+  kind=paired declared=true, `verdict {"ok":false,"hop":"tunnel"}`, `tunnel.alive=false`, while
+  `delivery.door.listening=true` on port 9003 and the peer's catalog answers `HTTP 502`. §14's
+  `ok:true` is a dated measurement, not a standing property — the same office, one day apart. The
+  pair itself is unchanged: `GET /api/office` → fingerprint `3A4B-3343-4492-5A1A`,
+  `links[0] {"office":"vps1","direction":"both"}`, slot 3, side 2, role joiner, dial host, endpoint
+  `console.staging.digital-office.co.il:51830`.
+* **An agent door is the app's own statement, not a derivation** — `apps/browser42/app.json:14`
+  declares `"agent_api_port": 8766`. The manifest-derived number had been 8931 (its MCP), which
+  answers `/v1/task` nowhere, so a linked office's `b42 task` died on `no_agent_door` (`7a8e45b1`,
+  `45a69657`).
+* **The door to a peer's browser is still closed, and the missing half is HP's** —
+  `./bbox remote hp-laptop bina /v1/sessions` reaches `http://bina.hp-laptop:3081/v1/sessions` and
+  comes back **401**: that office does not accept `dgo_link-hp-laptop`. What is missing is HP's own
+  `serve:` and its re-render (lnk-039 → DGO-590), not a defect in this office.
+* **The claims did not drift while the file grew** —
+  `python3 apps/dgo-extend/tests/test_link_security.py` on this tree: `14 claim(s), 14 pass, 0 xfail
+  (documented gap(s) still open), 0 fail` (exit 0), the count §14 records, measured after
+  `test_link_security.py` itself changed at `7a8e45b1` (lnk-037).
+* **README.md and AGENT.md re-checked against the live contract, no drift** — `/manifest` still
+  equals `app.json`'s `required_ops`, `/healthz` answers `{"ok":true}`, and AGENT.md is 5985 B
+  (`reconcile.MAX_BRIEF_BYTES` = 6000).
+* **The hub was not read in this pass** — `http://project-pln` answers `000` from this office today,
+  so §14's item states remain its last read (2026-10-14).

@@ -1,6 +1,6 @@
-# MASTER PLAN — INDOX perfect + Bina-comp live (2026-08-05)
+# MASTER PLAN — INDOX perfect + Hacohen live (2026-08-05)
 
-Supersedes `indox-perfect-and-bina-comp-live-tasklist.md`. Everything here is MEASURED against the
+Supersedes `indox-perfect-and-hacohen-live-tasklist.md`. Everything here is MEASURED against the
 live system unless explicitly marked as an assumption.
 
 Status key: ✅ done & verified · 🔄 in flight · ⛔ blocked · ⬜ not started · ⚠️ found, not yet fixed
@@ -145,7 +145,7 @@ To retire: `mail-private`, `drive-invoices`, `drive-gdoc`, `drive-bs` (all sandb
 - **P0.4** Verify: gmail-doc reports `at_source≈919`, not 0
 
 ### Phase 1 — finish the registry set
-- **P1.1** Create `מסמכים כללים` + `לסינכרון`/`בוצע`/`נכשל` under root `חשבוניות בינה קומפ`
+- **P1.1** Create `מסמכים כללים` + `לסינכרון`/`בוצע`/`נכשל` under root `חשבוניות הכהנים`
 - **P1.2** Build registries #4–#7; retire the four sandbox ones
 - **P1.3** Fix C4 (thin-mode validation) so any entry is editable
 - **P1.4** Normalise C5 (`connection` vs `connection_id`)

@@ -9,7 +9,7 @@
 # even with direct outbound — the bot connects, fetches the WA version, then hangs at "connecting" with
 # no QR. Pair from a local/residential IP; the connections<->console QR flow is otherwise proven.
 #
-# Apply: docker compose -p deployment-bina-comp -f production/chat/docker-compose.yml \
+# Apply: docker compose -p deployment-hacohen -f production/chat/docker-compose.yml \
 #                       -f apps/<id>/whatsapp-bot.sandbox.override.yml up -d
 services:
   chat:

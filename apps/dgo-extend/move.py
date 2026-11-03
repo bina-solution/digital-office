@@ -122,7 +122,7 @@ def _dest_project(machine: str, path: str) -> str:
                 "grep -v '^$' | sort | uniq -c | sort -rn | head -1 | awk '{print $2}'", 60).strip()
     if out:
         return out
-    return re.sub(r"[^a-z0-9-]", "", os.path.basename(path).lower()) or "deployment-bina-comp"
+    return re.sub(r"[^a-z0-9-]", "", os.path.basename(path).lower()) or "deployment-hacohen"
 
 
 def _services(machine: str, app: str, path: str) -> list[str]:

@@ -39,18 +39,19 @@ export const EMBEDDED =
    route into its own hash (#/m/<id>/inner?query), so the browser's address bar is ALWAYS a
    copyable deep link — one selector for navigation, display and actions, in both mounts.
    We report; the shell writes (replaceState, no history spam). */
+/* ── the screen in the address bar: NOTHING IS POSTED ANY MORE (2026-10-13) ───────────────────────
+   This component used to hand the console its route (`bina:route`). It does not have to: the shell
+   reads the frame's own URL now (platform-base/console/static/app.js `watchFrameRoute`), and what
+   this component sent — `loc.pathname + loc.search`, react-router's own location — is exactly what
+   that URL already holds. Removing the message is one deletion plus an image rebuild; the console's
+   `bina:route` listener goes with it once no app sends it.
+   `useLocation` stays: this component still renders only inside a Router, and the location is what
+   makes it re-render when the route changes (the split of "who owns the route" is unchanged). */
 function RouteReporter() {
   const loc = useLocation();
   useEffect(() => {
-    if (!EMBEDDED) return;
-    try {
-      window.parent.postMessage(
-        { type: 'bina:route', path: `${loc.pathname}${loc.search}` },
-        window.location.origin,
-      );
-    } catch {
-      /* opaque parent — nothing to mirror */
-    }
+    void loc.pathname;
+    void loc.search;
   }, [loc.pathname, loc.search]);
   return null;
 }
@@ -68,7 +69,7 @@ function RouteReporter() {
 // /repos and /repos/:repo redirect rather than 404 so old links still land somewhere sensible.
 //
 // EVERY TAB CARRIES THE INSTANCE. They used to be bare (`/sync`, `/settings`, …), and a bare path
-// resolves to the FIRST ENABLED instance — so selecting לוי and clicking הגדרות put you on בינה קומפ's
+// resolves to the FIRST ENABLED instance — so selecting לוי and clicking הגדרות put you on הכהן's
 // settings with לוי still showing in the chip. Only the documents tab was scoped, and it was scoped
 // with `active`, the REPO, which is what produced `/i/incoming-documents-main/documents` in the nav.
 // The argument here is the INSTANCE; `match` compares against `pageOf(p)` so a tab still highlights
@@ -265,9 +266,9 @@ export default function App() {
     (opts?: { resetView?: boolean }) =>
       /* TWO DIFFERENT THINGS, AND CONFLATING THEM BROKE THE APP.
          `active` is a REPO NAME — every route is /repos/:repo/documents and the redirect below
-         builds one from it. The INSTANCE is a different identifier entirely (`bina-comp`), lives in
+         builds one from it. The INSTANCE is a different identifier entirely (`hacohen`), lives in
          `public.indox_instances`, and rides in `?instance=`. Setting `active` to a instance id made
-         the app navigate to /repos/bina-comp/documents, which is not a repo and 404s.
+         the app navigate to /repos/hacohen/documents, which is not a repo and 404s.
 
          So: the repo registry still answers "which table am I routed at", and the instance registry
          answers "whose data is in it". The top-bar switcher shows INSTANCES; the switcher inside
@@ -364,7 +365,7 @@ export default function App() {
   /* READ THE PARENT'S HASH WHEN EMBEDDED — this app runs in an iframe at /a/incoming/ inside the
      console shell, and the SHELL owns the address bar. Reading only `window.location.hash` meant
      `?instance=` never arrived: every request went out unscoped and answered for instance one, which
-     is exactly how the action log showed בינה קומפ's 71 rows while לוי was selected. Same-origin, so
+     is exactly how the action log showed הכהן's 71 rows while לוי was selected. Same-origin, so
      the parent's hash is readable; wrapped because a cross-origin parent must degrade to the
      app's own URL rather than throw on every render. */
   const instanceInUrl = (() => {
@@ -393,7 +394,7 @@ export default function App() {
   /* BOUND DURING RENDER, NOT IN AN EFFECT — and that ordering is the whole point.
      React runs CHILD effects before PARENT effects, so a screen's first fetch fires before this
      component's effect would have run. Bound in an effect, the very first request of every page
-     load went out with no instance and answered for instance one: the action log showed bina-comp's 71
+     load went out with no instance and answered for instance one: the action log showed hacohen's 71
      rows while `לוי` was selected and its own log holds none. `setInstance` is a module-level
      assignment, not React state, so calling it during render is safe and happens early enough. */
   api.setInstance(boundInstance);
@@ -534,7 +535,7 @@ export default function App() {
           />
           {/* THE BARE PAGE PATHS ARE REDIRECTS NOW, not pages.
               An instance-less path has to guess which instance it means, and it guessed "the first
-              enabled one" — so every screen except the grid answered for בינה קומפ no matter which
+              enabled one" — so every screen except the grid answered for הכהן no matter which
               instance was selected, while the chip went on saying לוי. These keep old links and
               bookmarks working by resolving the instance ONCE and sending you to the scoped URL. */}
           <Route path="/sync" element={<ScopedRedirect to="/sync" />} />

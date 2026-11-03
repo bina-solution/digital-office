@@ -2,12 +2,21 @@
 // each fact: machines (computers), git accounts (git), domains (domains), apps (app-management).
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+// The repository cell shows the HOST, not the whole URL: the raw address is wider than its cell and
+// the cell clipped it at the start (the windowed-layout finding). The address itself stays one click
+// away, and a title carries it whole for a hover.
+const repoCell = (repo) => {
+  const r = String(repo ?? "");
+  const m = /^https?:\/\/([^/]+)\/?/.exec(r);
+  return m ? `<a href="${esc(r)}" target="_blank" rel="noopener" title="${esc(r)}">${esc(m[1])}</a>` : esc(r);
+};
 let CTX = null, EDIT = null, POLL = null, RUN_OFFICE = null, LOG_OFF = 0;
 
 // One glyph from the set above, the size of the text it sits in — the same call the console's shell
 // makes (app.js `mIcon`). A name the set lacks draws the neutral window rather than a word.
 function mIcon(name) {
-  const p = BINA_ICONS[name];
+  // own keys only: a name such as "constructor" is not an icon (another office's catalog names these)
+  const p = Object.prototype.hasOwnProperty.call(BINA_ICONS, name) ? BINA_ICONS[name] : "";
   return `<svg class="ic-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p || BINA_ICONS.app}</svg>`;
 }
 
@@ -32,10 +41,12 @@ const BINA_ICONS = {
   book:      '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>',
   'file-text': '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/>',
   folder:    '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>',
+  clipboard: '<path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/>',
   mail:      '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/>',
   inbox:     '<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
   message:   '<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z"/>',
   activity:  '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
+  mic:       '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/>',   // the recorder «הקלטות» (CHAT-81)
   bell:      '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
   server:    '<rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/>',
   monitor:   '<rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>',
@@ -309,10 +320,18 @@ const ticks = (s) => esc(s).replace(/`([^`]+)`/g, '<span class="tok">$1</span>')
 
 // THIS office, as another office sees it. None of it needs the machine, so it is drawn at once.
 let SELF = null, GIVING = null;
-// what the office gives, in one cell: the count is the fact, the names are one hover away
-const giveText = (g) => (g.mode === "all" ? `כל האפליקציות (${g.count})`
-  : g.mode === "some" ? `${g.count} מתוך ${g.total}`
-  : (g.chosen ? "לא נותנת דבר" : "עוד לא נבחר"));
+// what the office gives, in one cell: the count is the fact, the names are one hover away — and its
+// doors for machines (DGO-945: the recordings, the transcriber, a webhook) beside the apps, so the
+// cell never says "nothing" over a door that is open
+const doorsText = (n) => (n === 1 ? "דלת אחת למכונות" : `${n} דלתות למכונות`);
+const giveText = (g) => {
+  const doors = (g.doors || []).length;
+  const apps = g.mode === "all" ? `כל האפליקציות (${g.count})`
+    : g.mode === "some" ? `${g.count} מתוך ${g.total}`
+    : doors ? "לא נותנת אפליקציות" : (g.chosen ? "לא נותנת דבר" : "עוד לא נבחר");
+  return doors ? `${apps} · ${doorsText(doors)}` : apps;
+};
+const giveTitle = (g) => [...g.apps.filter((a) => a.given).map((a) => a.name), ...(g.doors || [])].join(" · ");
 async function loadSelf() {
   // an office on older code has no "giving" answer: the card is drawn without that cell
   const [p, g] = await Promise.all([api("api/pair"), api("api/pair/giving").catch(() => null)]);
@@ -329,7 +348,7 @@ async function loadSelf() {
       <div><div class="k">מזהה</div><div class="v"><span class="tok">${esc(SELF.id || "")}</span></div></div>
       <div><div class="k">טביעת זהות</div><div class="v"><span class="tok">${esc(SELF.fingerprint || "")}</span></div></div>
       <div><div class="k">כתובת למנהרה</div><div class="v" id="reachCell">${l ? `<span class="tok">${esc(l.endpoint)}:${esc(l.port)}</span>` : "אין — רק מחייגת"}</div></div>
-      ${g ? `<div><div class="k">נותנת ללשכות מחוברות</div><div class="v" id="giveCell" title="${esc(g.apps.filter((a) => a.given).map((a) => a.name).join(" · "))}">${esc(giveText(g))}</div></div>` : ""}
+      ${g ? `<div><div class="k">נותנת ללשכות מחוברות</div><div class="v" id="giveCell" title="${esc(giveTitle(g))}">${esc(giveText(g))}</div></div>` : ""}
     </div>
     ${only ? `<div class="callout subline" id="dialOnly"><b>הלשכה הזאת רק מחייגת</b> — היא מתחברת רק ללשכה שאפשר לחייג אליה. ${ticks(only.reason)} ${ticks(only.fix)}</div>` : ""}
     ${l && l.moved_from ? `<div class="callout subline" id="listenMoved"><b>הכתובת של המחשב התחלפה.</b> ההצהרה עדיין אומרת <span class="tok">${esc(l.moved_from)}</span>; הלשכות שמחייגות מגיעות לכתובת שלמעלה, וההצעה הבאה לצימוד תישא אותה. ההצהרה מתעדכנת בהפעלה הבאה של הלשכה.</div>` : ""}`;
@@ -358,7 +377,7 @@ async function loadContext() {
     return;
   }
   $("home").innerHTML = `<div class="meta">
-    <div><div class="k">מאגר</div><div class="v mono small">${esc(h.repo)}</div></div>
+    <div><div class="k">מאגר</div><div class="v mono small">${repoCell(h.repo)}</div></div>
     <div><div class="k">ענף</div><div class="v mono">${esc(h.branch)}</div></div>
     <div><div class="k">גרסה</div><div class="v mono">${esc((h.commit || "").slice(0, 10))}</div></div>
     <div><div class="k">פורסמה ל־origin</div><div class="v">${h.pushed ? "כן" : "<span style='color:var(--red)'>לא — לשכה מרוחקת לא תוכל למשוך אותה</span>"}</div></div>
@@ -421,6 +440,8 @@ function pairedCard(p, link, giving) {
   // side can repair it, and the pill says so instead of the card quietly describing a dial into a
   // network this office is not on (lnk-032).
   if (v.hop === "pair") [cls, text] = ["bad", "הצימוד הפוך"];
+  // …and this office is the one that is dialed while its agreed port is not published at all.
+  if (v.hop === "listen") [cls, text] = ["bad", "הפורט לא מפורסם"];
   // …and the door's port rides in the tooltip, as the paragraph above promises: the verdict's
   // sentence replaced the old one and the port went with it.
   const door = ((link || {}).delivery || {}).door || {};
@@ -459,38 +480,175 @@ async function loadList() {
   const pairedIds = new Set(paired.map((p) => p.office));
   const items = all.filter((o) => !pairedIds.has(o.id) && o.kind !== "paired");
   const linkOf = (id) => (link.items || []).find((i) => i.office === id);
-  const pairedHtml = paired.map((p) => pairedCard(p, linkOf(p.office), giving)).join("");
-  if (!items.length) {
-    $("list").innerHTML = pairedHtml || `<div class="callout">עדיין אין לשכות מחוברות. <b>צימוד לשכה</b> מחבר לשכה שכבר מותקנת; <b>התקנת לשכה על מחשב</b> מקימה אחת חדשה על מחשב מחובר.</div>`;
+  // THE HERD of each office (DGO-1003): what /api/link says — the owner's mark, then the office's own
+  // word — and an office that has neither is taken as one of this office's own herd.
+  const ownHerd = (link.home || {}).herd || "";
+  const herdOf = (id) => (linkOf(id) || {}).herd || ownHerd;
+  const cards = paired.map((p) => ({ herd: herdOf(p.office), html: pairedCard(p, linkOf(p.office), giving) }));
+  if (!items.length && !cards.length) {
+    $("list").innerHTML = `<div class="callout">עדיין אין לשכות מחוברות. <b>צימוד לשכה</b> מחבר לשכה שכבר מותקנת; <b>התקנת לשכה על מחשב</b> מקימה אחת חדשה על מחשב מחובר.</div>`;
     return;
   }
   const mname = (id) => ((CTX?.machines || []).find((m) => m.id === id) || {}).label || id;
-  $("list").innerHTML = pairedHtml + items.map((o) => {
-    const r = o.run || {};
-    const behind = CTX?.home?.commit && o.source?.commit && !CTX.home.commit.startsWith(o.source.commit) && !o.source.commit.startsWith(CTX.home.commit.slice(0, 7));
-    // `כניסה` — the console of THAT office and the account its deployment created. Fetched on click
-    // and shown in place: a password that is rendered by default is a password in every screenshot.
-    const loginBtn = `<button class="btn ghost sm" data-login="${esc(o.id)}" type="button">כניסה</button>`;
-    const mark = officeMark(o);
-    return `<div class="ocard"${mark.hue}><div class="top">
-      <div><h4 title="${esc(o.id)}">${mark.animal}${esc(o.label || o.id)}</h4>
-        <div class="small muted" title="${esc(o.path)}">${esc(mname(o.machine))}</div></div>
-      <div class="rowacts">${pill(r.status)}
-        <button class="btn sm" data-run="${esc(o.id)}" title="מביא את הלשכה הזאת למצב שהוצהר כאן">הפעלה</button>
-        <a class="btn ghost sm" href="https://console.${esc(o.domain)}/" target="_blank" rel="noopener" title="פותח את המסוף של הלשכה בלשונית חדשה">פתיחה</a>
-        <button class="btn ghost sm" data-log="${esc(o.id)}" title="מה קרה בהפעלה האחרונה">מצב</button>
-        <button class="btn ghost sm" data-edit="${esc(o.id)}" title="שינוי ההצהרה של הלשכה">עריכה</button>
-        <button class="btn ghost danger sm" data-forget="${esc(o.id)}" data-label="${esc(o.label || o.id)}" title="מוחק רק את ההצהרה מכאן — המחשב והלשכה שעליו נשארים כמו שהם">מחיקת ההצהרה</button></div></div>
-      <div class="meta">
-        <div><div class="k">דומיין</div><div class="v mono small">${esc(o.domain)}</div></div>
-        <div><div class="k">גרסה מוצהרת</div><div class="v mono">${esc((o.source?.commit || "").slice(0, 10))}${behind ? ` <span class="pill warn">שונה מכאן</span>` : ""}</div></div>
-        <div><div class="k">הפעלה אחרונה</div><div class="v small">${when(r.ended || r.started)}</div></div>
-        <div><div class="k">קונטיינרים</div><div class="v">${r.health ? `${esc(r.health.healthy)}/${esc(r.health.total)} בריאים` : "—"}</div></div>
-      </div>
-      ${behind ? `<div class="small" style="margin-top:8px"><span class="link" data-upgrade="${esc(o.id)}">שדרוג לגרסה של הלשכה הזו (${esc(CTX.home.commit.slice(0, 10))})</span></div>` : ""}
-    </div>`;
+  cards.push(...items.map((o) => ({ herd: herdOf(o.id), html: officeCard(o, mname) })));
+  $("list").innerHTML = herdGroups(cards, ownHerd);
+}
+
+// THE HERDS (DGO-1003): one group per herd — this office's own first, then the others by name. A
+// screen whose offices are all of this office's own herd draws the cards as they always were; one
+// external office is enough for the headings, or nothing would say it is external.
+function herdGroups(cards, own) {
+  const names = [...new Set(cards.map((c) => c.herd))];
+  if (names.every((h) => h === own)) return cards.map((c) => c.html).join("");
+  names.sort((a, b) => (a === own ? -1 : b === own ? 1 : a.localeCompare(b, "he")));
+  return names.map((h) => {
+    const group = cards.filter((c) => c.herd === h);
+    const count = group.length === 1 ? "לשכה אחת" : `<span class="num">${group.length}</span> לשכות`;
+    return `<section class="herd"><div class="herd-h"><h4>${esc(h || "העדר של הלשכה הזאת")}</h4>
+      <span class="small muted">${h === own ? "העדר שלנו" : "עדר חיצוני"} · ${count}</span></div>
+      ${group.map((c) => c.html).join("")}</section>`;
   }).join("");
 }
+
+function officeCard(o, mname) {
+  const r = o.run || {};
+  const behind = CTX?.home?.commit && o.source?.commit && !CTX.home.commit.startsWith(o.source.commit) && !o.source.commit.startsWith(CTX.home.commit.slice(0, 7));
+  const mark = officeMark(o);
+  return `<div class="ocard"${mark.hue}><div class="top">
+    <div><h4 title="${esc(o.id)}">${mark.animal}${esc(o.label || o.id)}</h4>
+      <div class="small muted" title="${esc(o.path)}">${esc(mname(o.machine))}</div></div>
+    <div class="rowacts">${pill(r.status)}
+      <button class="btn sm" data-run="${esc(o.id)}" title="מביא את הלשכה הזאת למצב שהוצהר כאן">הפעלה</button>
+      <a class="btn ghost sm" href="https://console.${esc(o.domain)}/" target="_blank" rel="noopener" title="פותח את המסוף של הלשכה בלשונית חדשה">פתיחה</a>
+      <button class="btn ghost sm" data-log="${esc(o.id)}" title="מה קרה בהפעלה האחרונה">מצב</button>
+      <button class="btn ghost sm" data-edit="${esc(o.id)}" title="שינוי ההצהרה של הלשכה">עריכה</button>
+      <button class="btn ghost danger sm" data-forget="${esc(o.id)}" data-label="${esc(o.label || o.id)}" title="מוחק רק את ההצהרה מכאן — המחשב והלשכה שעליו נשארים כמו שהם">מחיקת ההצהרה</button></div></div>
+    <div class="meta">
+      <div><div class="k">דומיין</div><div class="v mono small">${esc(o.domain)}</div></div>
+      <div><div class="k">גרסה מוצהרת</div><div class="v mono">${esc((o.source?.commit || "").slice(0, 10))}${behind ? ` <span class="pill warn">שונה מכאן</span>` : ""}</div></div>
+      <div><div class="k">הפעלה אחרונה</div><div class="v small">${when(r.ended || r.started)}</div></div>
+      <div><div class="k">קונטיינרים</div><div class="v">${r.health ? `${esc(r.health.healthy)}/${esc(r.health.total)} בריאים` : "—"}</div></div>
+    </div>
+    ${behind ? `<div class="small" style="margin-top:8px"><span class="link" data-upgrade="${esc(o.id)}">שדרוג לגרסה של הלשכה הזו (${esc(CTX.home.commit.slice(0, 10))})</span></div>` : ""}
+  </div>`;
+}
+
+// ── THE DGO MAP (DGO-1006) ────────────────────────────────────────────────────────────────────────
+// The owner, 2026-10-22: «I will be able to see the three groups, and then every DGO in every group and
+// every app we have access to … how everything is connected, where does everything run». One read of
+// /api/map; the view is an ADDRESS — the PATH `map/<office>/<app>`, the way every screen of this app is
+// one (`showRoute`): the console carries a frame's path into its own address and drops a fragment, so a
+// `#map` would not survive a reload or a sent link there (the second reader of DGO-1006).
+let MAP = null, MAP_LOADING = null;
+const MAP_DIR = { use: "חד-כיווני: משתמשים כאן באפליקציות שלה", serve: "חד-כיווני: היא משתמשת באפליקציות מכאן", both: "דו־כיווני" };
+const mapRoute = () => {
+  let id = "";
+  try { id = routeOf(); } catch (_) { return null; }            // a malformed `%` in the address is no route
+  if (id !== "map" && !id.startsWith("map/")) return null;
+  const [, office = "", app = ""] = id.split("/");
+  return { office, app };
+};
+const goMap = (office, app) => {
+  showRoute(["map", office, app].filter(Boolean).map((p, i) => (i ? encodeURIComponent(p) : p)).join("/"), false);
+  showMap();
+};
+// each part isolated: a Hebrew count beside an English system name reorders itself in a right-to-left line
+const mapMachine = (m) => [m && m.os, m && m.cores ? `${m.cores} ליבות` : "", m && m.memory_gb ? `${m.memory_gb}GB` : ""]
+  .filter(Boolean).map((p) => `<bdi>${esc(p)}</bdi>`).join(" · ");
+
+async function showMap() {
+  document.body.classList.toggle("mapmode", !!mapRoute());
+  if (!mapRoute()) return;
+  if (!MAP) {
+    $("map").innerHTML = `<div class="spin">טוען…</div>`;
+    // ONE read in flight: a second call while it loads waits for the same answer
+    MAP_LOADING = MAP_LOADING || api("api/map").finally(() => { MAP_LOADING = null; });
+    try { MAP = await MAP_LOADING; }
+    catch (e) { $("map").innerHTML = `<div class="callout bad" id="mapFailed"><b>המפה לא נטענה:</b> ${esc(e.message)}</div>`; return; }
+  }
+  const r = mapRoute();                 // the address NOW — it may have moved while the map loaded
+  if (!r) return;
+  $("mapAt").innerHTML = `נקרא ${when(MAP.at)}`;
+  renderMap(r);
+}
+
+function renderMap(r) {
+  const home = MAP.home || {};
+  const own = home.herd || "";
+  const nodes = [{ office: home.id, label: home.label || home.id, herd: own, home: true, state: "up",
+                   apps: home.apps || [], machine: home.machine || {}, commit: home.commit || "", shared: [] },
+                 ...(MAP.items || []).map((i) => ({ ...i, herd: i.herd || own }))];
+  const sel = nodes.find((n) => n.office === r.office) || nodes[0];
+  const names = [...new Set(nodes.map((n) => n.herd))]
+    .sort((a, b) => (a === own ? -1 : b === own ? 1 : a.localeCompare(b, "he")));
+  const herds = names.map((h) => {
+    const group = nodes.filter((n) => n.herd === h);
+    const ext = h !== own;
+    const dirs = [...new Set(group.filter((n) => !n.home).map((n) => MAP_DIR[n.direction] || ""))].filter(Boolean);
+    const line = ext ? `הקישור אליו: ${dirs.join(" · ") || "עוד אין"}` : "העדר של הלשכה הזאת, והקישורים שלה אל כל לשכה בו";
+    const count = group.length === 1 ? "לשכה אחת" : `<span class="num">${group.length}</span> לשכות`;
+    return `<section class="hpanel${ext ? " ext" : ""}">
+      <div class="hpanel-h"><h4>${esc(h || "העדר של הלשכה הזאת")}</h4>
+        <span class="small muted">${ext ? "עדר חיצוני" : "העדר שלנו"} · ${count}</span></div>
+      <div class="hlink">${esc(line)}</div>
+      <div class="ogrid">${group.map((n) => mapNode(n, n === sel)).join("")}</div></section>`;
+  }).join("");
+  $("map").innerHTML = `<div class="map"><div class="map-herds">${herds}</div>${mapSide(sel, r.app, own)}</div>`;
+}
+
+function mapNode(n, on) {
+  const [cls, text] = n.home ? ["ok", "הלשכה הזאת"] : (STATE_HE[n.state] || STATE_HE.unknown);
+  const mark = officeMark(n);
+  const link = n.home ? "מכאן מסתכלים" : [MAP_DIR[n.direction], n.transport ? n.transport.toUpperCase() : ""].filter(Boolean).join(" · ");
+  const apps = (n.apps || []).filter((a) => !a.hidden).length;
+  return `<button type="button" class="onode${n.home ? " home" : ""}" data-mnode="${esc(n.office)}" aria-pressed="${on}"${mark.hue}
+      title="פתיחת הפרטים של ${esc(n.label || n.office)}">
+    <span class="top"><span class="nm">${mark.animal}${esc(n.label || n.office)}</span><span class="pill ${cls}">${text}</span></span>
+    <span class="ln${n.state === "up" ? " ok" : ""}">${esc(link)}</span>
+    <span class="ft"><span>${mapMachine(n.machine) || "המחשב לא נמסר לכאן"}</span><span>${apps === 1 ? "אפליקציה אחת" : `<span class="num">${apps}</span> אפליקציות`}</span></span>
+  </button>`;
+}
+
+function mapSide(n, appId, own) {
+  const m = n.machine || {};
+  const cell = (k, v) => `<div><div class="k">${k}</div><div class="v">${v}</div></div>`;
+  const apps = (n.apps || []).filter((a) => !a.hidden);
+  const app = apps.find((a) => a.alias === appId);
+  const commit = String(n.commit || "");          // another office's catalog: not promised to be text
+  const chips = apps.map((a) => `<button type="button" class="achip" data-mapp="${esc(a.alias === appId ? "" : a.alias)}"
+      data-moffice="${esc(n.office)}" aria-pressed="${a.alias === appId}" title="${esc(a.desc || a.title)}">${mIcon(a.icon)}${esc(a.title || a.alias)}</button>`).join("");
+  const box = app ? `<div class="appbox">
+      <div class="hpanel-h"><h5>${esc(app.title || app.alias)}</h5><span class="tok">${esc(app.alias)}</span></div>
+      <div>${esc(app.desc || "האפליקציה לא מסרה תיאור")}</div>
+      <div class="meta">${cell("רצה על", esc(n.label || n.office))}${cell("גרסה", commit ? `<span class="tok">${esc(commit.slice(0, 10))}</span>` : "לא נמסרה")}
+        ${cell("דלת API", app.api ? "יש — סוכן ו-CLI מלשכה מקושרת" : "מסך בלבד")}${cell("מי רואה אותה", n.herd === own ? "הלשכות של העדר" : "רק אנחנו, דרך הקישור")}</div></div>`
+    : `<div class="small muted">בחרו אפליקציה כדי לראות מה יש בה, באיזו גרסה היא רצה ואם יש לה דלת API.</div>`;
+  const hops = (n.shared || []).map((s) => `<div class="hop"><b>${esc(s.label || s.office)}</b> נתנה לה: ${esc((s.apps || []).map((a) => a.title || a.alias).join(" · ") || "כלום")}</div>`).join("");
+  return `<aside class="map-side" aria-label="פרטי הלשכה שנבחרה">
+    <div class="hpanel-h"><h4>${esc(n.label || n.office)}</h4><span class="pill ${n.herd === own ? "ok" : "unset"}">${esc(n.herd || "העדר של הלשכה הזאת")}</span></div>
+    <div class="meta">
+      ${cell("המחשב", esc([m.hostname, m.arch].filter(Boolean).join(" · ") || "לא נמסר לכאן"))}
+      ${cell("מערכת ומשאבים", mapMachine(m) || "לא נמסר לכאן")}
+      ${cell("גרסה", commit ? `<span class="tok">${esc(commit.slice(0, 10))}</span>` : "לא נמסרה")}
+      ${cell("הקישור", n.home ? "הלשכה הזאת" : esc([MAP_DIR[n.direction], n.transport ? n.transport.toUpperCase() : ""].filter(Boolean).join(" · ") || "—"))}
+      ${n.home ? "" : cell("הכתובת", n.endpoint ? `<span class="tok">${esc(n.endpoint)}</span>` : "דרך לשכה אחרת")}
+    </div>
+    <div class="hpanel-h"><h5>האפליקציות שהיא נותנת · <span class="num">${apps.length}</span></h5></div>
+    <div class="achips">${chips || `<span class="small muted">לא נותנת כלום לכאן</span>`}</div>
+    ${box}
+    ${hops ? `<h5>צעד אחד הלאה — מה לשכות אחרות נתנו לה</h5><div class="hops">${hops}</div>` : ""}
+  </aside>`;
+}
+
+document.addEventListener("click", (ev) => {
+  const node = ev.target.closest("[data-mnode]");
+  if (node) { goMap(node.dataset.mnode); return; }
+  const chip = ev.target.closest("[data-mapp]");
+  if (chip) { goMap(chip.dataset.moffice, chip.dataset.mapp); return; }
+  if (ev.target.closest("#btnMap")) { goMap(); return; }
+  if (ev.target.closest("#btnMapList")) { showRoute("", false); showMap(); }
+});
+window.addEventListener("popstate", showMap);
 
 function fillForm(o) {
   EDIT = o;
@@ -653,13 +811,49 @@ document.addEventListener("click", async (ev) => {
     });
   }
 });
+/* ── the screen in the address bar (the console's route contract) ────────────────────────────────
+   The tail of the console's hash is this app's own URL — `#/m/dgo-extend/<id>` is
+   `/a/dgo-extend/<id>` — and the shell mirrors whatever this page's URL says, so nothing here talks
+   to the console. One screen of this app is worth an address: the DECLARATION of a linked office
+   (`fillForm`); `/` is the list of them. The route holds the office's ID, and the reader resolves it
+   against the list the app already reads (`api/office`) — the id is what a person copies, and the
+   object it names is looked up rather than baked into the link.
+   See ai/context/build-your-first-app.md § "the address is the state". */
+const MOUNT = new URL(document.baseURI).pathname.replace(/\/+$/, "");
+const routeOf = () => {
+  const p = location.pathname;
+  if (!MOUNT) return p === "/" ? "" : p.replace(/^\/+/, "");
+  if (p === MOUNT || p === MOUNT + "/") return "";
+  return p.startsWith(MOUNT + "/") ? decodeURIComponent(p.slice(MOUNT.length + 1)) : "";
+};
+const showRoute = (route, replace) => {
+  const next = MOUNT + (route ? "/" + route : "/");
+  if (location.pathname + location.search !== next) history[replace ? "replaceState" : "pushState"]({}, "", next);
+};
+async function applyRoute() {
+  const id = routeOf();
+  if (!id || mapRoute()) return;          // `map/…` is the map's address, not a declaration's
+  try {
+    const { items } = await api("api/office");
+    const hit = (items || []).find((o) => String(o.id) === id);
+    if (hit) fillForm(hit);
+  } catch (e) {
+    /* the list is the source: a read that failed leaves the screen exactly as it is */
+  }
+}
+window.addEventListener("popstate", applyRoute);
+// opening a declaration writes the address (`fillForm` is called from the list and from «+», so the
+// one function is wrapped instead of teaching each call site about the URL)
+const formWithoutRoute = fillForm;
+fillForm = function (o) { formWithoutRoute(o); showRoute(o && o.id ? String(o.id) : "", true); };
+
 $("btnAdd").onclick = () => fillForm(null);
 $("btnSave").onclick = () => save(false);
 $("btnSaveRun").onclick = () => save(true);
 $("btnInspect").onclick = inspect;
 $("useHome").onclick = () => { $("fCommit").value = CTX.home.commit || ""; $("fBranch").value = CTX.home.branch || ""; };
 $("fId").oninput = () => { if (!EDIT) $("fPath").placeholder = `/opt/digital-office/${$("fId").value.trim() || "…"}`; };
-$("btnRefresh").onclick = () => boot();
+$("btnRefresh").onclick = () => { MAP = null; boot(); showMap(); };
 $("btnRename").onclick = () => {
   $("fName").value = SELF?.named ? SELF.label : "";
   $("fName").placeholder = SELF?.id || "";
@@ -681,7 +875,12 @@ $("fName").addEventListener("keydown", (ev) => { if (ev.key === "Enter") $("btnR
 function renderGive() {
   const mode = $("giveMode").value;
   $("giveAppsBox").classList.toggle("hidden", mode === "none");
-  $("giveHint").textContent = mode === "none" ? "הקישורים נשארים, אבל הלשכות המחוברות לא יראו אף אפליקציה של הלשכה הזאת."
+  // "nothing" closes the doors for machines too (the writer reads it as nothing at all): said here,
+  // with their number, before anyone saves — a door closed by accident cuts another office's workflow
+  const doors = (GIVING?.doors || []).length;
+  $("giveHint").textContent = mode === "none"
+    ? "הקישורים נשארים, אבל הלשכות המחוברות לא יראו אף אפליקציה של הלשכה הזאת."
+      + (doors ? ` גם ${doors === 1 ? "הדלת היחידה למכונות שהיא נותנת תיסגר" : `${doors} הדלתות למכונות שהיא נותנת ייסגרו`}.` : "")
     : mode === "some" ? "אפליקציה שתותקן בעתיד לא תינתן עד שתסומן כאן." : "";
   $("giveApps").innerHTML = (GIVING?.apps || []).map((a) =>
     `<label><input type="checkbox" data-give="${esc(a.alias)}" ${mode === "all" || a.given ? "checked" : ""} ${mode === "all" ? "disabled" : ""}>
@@ -704,6 +903,93 @@ $("btnGiveSave").onclick = async () => {
   finally { btn.disabled = false; btn.textContent = "שמירה"; }
 };
 
+// JOINING BY DECLARATION (join_api.py). Two halves on one card: the offices that join THIS one through
+// its link door (the requests a person approves here, and the invites that need no person), and this
+// office's own declared join (DGO_JOIN) — waiting, joined, refused. The card stays hidden where neither
+// applies: an office with no door and no declaration has nothing to show here.
+const JOIN_STATE = { waiting: ["warn", "ממתינה לאישור"], joined: ["ok", "מצורפת"], refused: ["bad", "נדחתה"],
+  failed: ["bad", "נכשלה — מנסה שוב"], invalid: ["bad", "ההצהרה אינה תקינה"], asking: ["warn", "מבקשת"] };
+let JOIN = null;
+async function loadJoin() {
+  let d;
+  try { d = await api("api/join"); } catch (_) { $("joinCard").classList.add("hidden"); return; }  // older server
+  JOIN = d;
+  const door = d.door || {}, me = d.joiner || {};
+  const declared = me.state && me.state !== "off";
+  $("joinCard").classList.toggle("hidden", !door.host && !declared);
+  $("btnInvite").classList.toggle("hidden", !door.host);
+  const left = (t) => Math.max(0, Math.round((t - Date.now() / 1000) / 60));
+  const reqs = (d.requests || []).filter((r) => r.state === "pending");
+  const invs = (d.invites || []).filter((i) => i.state === "live");
+  const [cls, word] = JOIN_STATE[me.state] || ["unset", me.state || ""];
+  $("join").innerHTML = `
+    ${declared ? `<div class="meta" id="joinSelf">
+        <div><div class="k">הלשכה הזאת מצטרפת אל</div><div class="v"><span class="tok">${esc(me.hub || "")}</span></div></div>
+        <div><div class="k">מצב</div><div class="v"><span class="pill ${cls}">${esc(word)}</span></div></div>
+        <div><div class="k">טביעת זהות להשוואה</div><div class="v"><span class="tok">${esc(me.fingerprint || "")}</span></div></div>
+      </div>
+      ${me.error || me.note ? `<div class="callout subline ${me.error ? "bad" : ""}">${ticks(me.error || me.note)}</div>` : ""}` : ""}
+    ${door.host ? `<div class="small muted" id="joinDoor">דלת הקישור: <span class="tok">${esc(door.url)}</span> — לשכה שאי אפשר להגיע אליה מצטרפת דרכה, בהזמנה או באישור כאן.</div>
+      ${reqs.length ? `<table class="table" id="joinRequests"><thead><tr><th>מבקשת</th><th>טביעת זהות</th><th>מאיפה</th><th>תוקף</th><th></th></tr></thead><tbody>
+        ${reqs.map((r) => `<tr><td><b>${esc(r.label)}</b> <span class="muted tok">${esc(r.office)}</span></td>
+          <td><span class="tok">${esc(r.fingerprint)}</span></td><td><span class="tok">${esc(r.from || "?")}</span></td>
+          <td>${left(r.expires_at)} דק׳</td>
+          <td class="rowacts"><button class="btn sm" data-approve="${esc(r.rid)}" data-label="${esc(r.label)}" data-fp="${esc(r.fingerprint)}" type="button">אישור</button>
+            <button class="btn ghost sm" data-refuse="${esc(r.rid)}" data-label="${esc(r.label)}" type="button">דחייה</button></td></tr>`).join("")}
+        </tbody></table>` : `<div class="small muted">אין בקשות הצטרפות ממתינות.</div>`}
+      ${invs.length ? `<table class="table subline" id="joinInvites"><thead><tr><th>הזמנה</th><th>ללשכה</th><th>כיוון</th><th>שימושים</th><th>פגה</th><th></th></tr></thead><tbody>
+        ${invs.map((i) => `<tr><td><span class="tok">${esc(i.id)}</span></td><td>${esc(i.office || "כל לשכה")}${i.reusable ? " · רב-פעמית" : ""}</td>
+          <td>${esc(DIR_HE[i.direction] || i.direction)}</td><td>${esc(i.uses || 0)}</td><td>${i.expires_at ? when(i.expires_at) : "לעולם לא"}</td>
+          <td><button class="btn ghost sm" data-revoke="${esc(i.id)}" type="button">ביטול</button></td></tr>`).join("")}
+        </tbody></table>` : ""}` : ""}`;
+}
+$("join").addEventListener("click", async (ev) => {
+  const t = ev.target.closest("[data-approve],[data-refuse],[data-revoke]");
+  if (!t) return;
+  if (t.dataset.approve) {
+    const ok = await binaAsk({
+      title: `לאשר את ההצטרפות של «${t.dataset.label}»?`, ok: "אישור",
+      body: "השוו את טביעת הזהות שלמטה לזו שהלשכה המבקשת מציגה אצלה (בפלט שלה או במסך שלה). אם הן שונות — מישהו באמצע: דחו.\nאחרי האישור היא משלימה את הצימוד בעצמה תוך שניות.",
+      facts: [["טביעת זהות", t.dataset.fp]],
+      run: () => post(`api/join/${t.dataset.approve}/approve`, {}),
+    });
+    if (ok) { binaTell(`«${t.dataset.label}» אושרה`, "ok"); await Promise.all([loadJoin(), loadList()]).catch((e) => alertBox(e.message)); }
+  } else if (t.dataset.refuse) {
+    if (await binaAsk({ danger: true, title: `לדחות את «${t.dataset.label}»?`, ok: "דחייה",
+      body: "הבקשה נמחקת, והלשכה לא תשאל שוב ברבע השעה הקרובה.", run: () => post(`api/join/${t.dataset.refuse}/refuse`, {}) })) await loadJoin();
+  } else if (t.dataset.revoke) {
+    if (await binaAsk({ danger: true, title: "לבטל את ההזמנה?", ok: "ביטול ההזמנה",
+      body: "מי שמחזיק בקוד לא יוכל להצטרף בו יותר. לשכה שכבר הצטרפה בו נשארת מחוברת.",
+      run: () => api(`api/invite/${t.dataset.revoke}`, { method: "DELETE" }) })) await loadJoin();
+  }
+});
+$("btnInvite").onclick = () => {
+  $("inviteForm").classList.remove("hidden");
+  $("inviteOut").classList.add("hidden");
+  $("inviteErr").innerHTML = "";
+  $("inviteText").value = "";
+  $("inviteDlg").classList.remove("hidden");
+  $("iOffice").focus();
+};
+$("btnInviteMake").onclick = async () => {
+  const btn = $("btnInviteMake");
+  btn.disabled = true; btn.textContent = "יוצר…";
+  try {
+    const out = await post("api/invite", { office: $("iOffice").value.trim(), direction: $("iDirection").value,
+      ttl_seconds: Number($("iTtl").value), reusable: $("iReusable").checked });
+    $("inviteText").value = `DGO_JOIN=${out.text}`;
+    $("inviteForm").classList.add("hidden");
+    $("inviteOut").classList.remove("hidden");
+    $("inviteText").select();
+    await loadJoin();
+  } catch (e) { $("inviteErr").innerHTML = `<div class="callout bad">${esc(e.message)}</div>`; }
+  finally { btn.disabled = false; btn.textContent = "יצירת הזמנה"; }
+};
+$("btnInviteCopy").onclick = async () => {
+  try { await navigator.clipboard.writeText($("inviteText").value); binaTell("ההזמנה הועתקה", "ok"); }
+  catch (_) { $("inviteText").select(); document.execCommand("copy"); }
+};
+
 // THE LIST NEVER WAITS FOR THE CONTEXT. The context asks four neighbours and reads this office's own
 // checkout; on an office with no door to its own machine that takes its whole timeout, and the list —
 // which needs none of it for a paired office — sat on „טוען…” the entire time (seen 2026-10-05).
@@ -721,6 +1007,7 @@ async function boot() {
       : `<div class="callout bad"><b>פרטי הלשכה לא נטענו:</b> ${esc(e.message)}</div>`;
     if (refused) { $("btnRename").classList.add("hidden"); $("btnGive").classList.add("hidden"); }
   });
+  loadJoin();
   try { await loadList(); }
   catch (e) {
     // A list that was never read says so where it stands, as the office's own card above it does: under an
@@ -732,4 +1019,5 @@ async function boot() {
   await ctx;
   if (document.querySelector("#list [data-run]")) { try { await loadList(); } catch (e) { alertBox(e.message); } }
 }
-boot();
+boot().then(applyRoute);   // …and the URL decides which declaration is open (a deep link lands on it)
+showMap();                 // …and `map/…` opens the DGO map in place of the list

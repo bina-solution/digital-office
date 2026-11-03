@@ -99,7 +99,10 @@ if (!machine.ok) {
     title: 'הדופק: אפליקציית המכונה לא עונה',
     body: 'לא הצלחתי לקרוא את מצב הקונטיינרים: ' + machine.error });
 } else {
-  const containers = Array.isArray(machine.body && machine.body.containers) ? machine.body.containers : [];
+  // ONE IS SAID AS ONE (DGO-526) — see the note in raphaelMachine00001; a Code node cannot import.
+  const num = n => Number(n).toLocaleString('he-IL');
+  const one = (n, single, many) => (Number(n) === 1 ? single : num(n) + ' ' + many);
+const containers = Array.isArray(machine.body && machine.body.containers) ? machine.body.containers : [];
   const self = containers.find((c) => ((c.labels || {})['com.docker.compose.service']) === 'machine');
   const project = self ? (self.labels || {})['com.docker.compose.project'] : null;
   const ours = project ? containers.filter((c) => ((c.labels || {})['com.docker.compose.project']) === project) : containers;
@@ -107,7 +110,7 @@ if (!machine.ok) {
   fingerprint.containers = ours.length;
   if (unhealthy.length) {
     problems.push({ id: 'pulse-containers-unhealthy', level: 'warn',
-      title: 'הדופק: ' + unhealthy.length + ' קונטיינרים לא בריאים',
+      title: 'הדופק: ' + one(unhealthy.length, 'קונטיינר אחד לא בריא', 'קונטיינרים לא בריאים'),
       body: unhealthy.join(', ') });
   }
 }
@@ -137,7 +140,13 @@ if (problems.length) {
     try {
       await this.helpers.httpRequest({ method: 'POST', url: NOTIFY, json: true, timeout: 15000,
         body: { source: 'raphael', source_id: problem.id, title: problem.title, body: problem.body,
-                level: problem.level, link: 'http://console.localhost:8080/#/m/machine' } });
+                // AN OFFICE-RELATIVE PATH, not an address (DGO-531). This used to be an absolute
+                // address with the macOS engine's edge port written as a constant, so on this office —
+                // whose console does not stand at that address — «פתח במקור» opened a tab
+                // that did not load. The notifications screen resolves a relative path against the office
+                // it is shown in (its own opens(): same origin, path "/", hash #/m/… — then it opens
+                // INSIDE the office and not in a new tab), so this is right wherever the office stands.
+                level: problem.level, link: '/#/m/machine' } });
     } catch (e) { /* the finding is still returned below */ }
     // ...and ASK THE AGENT TO ACT ON IT. An outside container holds no agent token by design, so the
     // wake travels as a notice whose source_id starts with "wake"; the agent's own timer reads it,
@@ -154,8 +163,30 @@ if (problems.length) {
 }
 
 const agent = health.ok ? ((health.body || {}).sessions ?? null) : null;
+
+// The pulse CLOSES the notices it opened (DGO-537, from-azaria §56): an alarm nobody closes keeps
+// asking, and a condition that has passed left its notice — and its wake copy — on the owner's list
+// and in the wake queue for ever. Only this pulse's own ids (pulse-*) and their wake- copies are
+// touched, and only while unread; a problem this run DOES see is never closed by it.
+const liveIds = new Set(problems.map((p) => p.id));
+const cleared = [];
+const openRows = await get(NOTIFY + '?limit=60');
+const noticeRows = (openRows.ok && Array.isArray(openRows.body && openRows.body.notifications))
+  ? openRows.body.notifications : [];
+for (const row of noticeRows) {
+  const sid = String((row && row.source_id) || '');
+  const own = sid.startsWith('pulse-') ? sid
+            : (sid.startsWith('wake-pulse-') ? sid.slice('wake-'.length) : '');
+  if (!own || !row.id || row.is_read) continue;
+  if (liveIds.has(own)) continue;
+  try {
+    await this.helpers.httpRequest({ method: 'POST', url: NOTIFY + '/' + row.id + '/read',
+                                     json: true, timeout: 10000 });
+    cleared.push(sid);
+  } catch (e) { /* a notice left open is not a failure of the pulse */ }
+}
 return [{ json: { pulse: true, at: new Date().toISOString(), problems: problems.length,
-                  sent: problems.map((p) => p.id), agent_sessions: agent, ...fingerprint } }];
+                  sent: problems.map((p) => p.id), cleared: cleared, agent_sessions: agent, ...fingerprint } }];
 `,
     };
 

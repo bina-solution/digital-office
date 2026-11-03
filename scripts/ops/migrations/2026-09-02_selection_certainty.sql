@@ -5,7 +5,7 @@
 -- (TRUSTED_SOURCE_TYPES + a SELECTION_CERTAINTY===100 gate over a column that never existed).
 --
 -- Run per tenant schema:
---   psql -U postgres -d postgres -v schema=indox_bina_comp -f 2026-09-02_selection_certainty.sql
+--   psql -U postgres -d postgres -v schema=indox_hacohen -f 2026-09-02_selection_certainty.sql
 
 \set ON_ERROR_STOP on
 set search_path to :"schema", public;

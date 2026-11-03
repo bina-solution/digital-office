@@ -21,8 +21,9 @@
 // operator's own `bbox agent login` (which reads it via the engine — the same trust as docker).
 import { createServer } from "node:http";
 import { randomUUID, timingSafeEqual } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import path from "node:path";
 
 const PORT = Number(process.env.BINA_DS_ADAPTER_PORT || 3081);
 const HARNESS = `http://127.0.0.1:${process.env.DSH_PORT || 3080}`;
@@ -363,6 +364,184 @@ function sse(res) {
   return { send, close: () => { clearInterval(keep); try { res.end(); } catch {} } };
 }
 
+// ── the seder door (DGO-562) ────────────────────────────────────────────────────────────────────
+// The office's clock is an n8n workflow DECLARED in apps/bina-ds/blueprint/n8n/ and imported into the
+// office's own n8n. n8n holds no credential — and must not: the agent token can list, read and drive
+// every conversation. So the app owns ONE narrow door for the clock to call, and it is this: start one
+// work cycle (a סדר).
+//
+// CORRECTED 2026-10-14, because the comment here said the opposite of what the code does: this door
+// does NOT refuse a second cycle on the same day. The day's budget is the bound (each cycle is told
+// the day's grant and reads its own spend), and the plan says which fire of the day this is — that is
+// the whole bound, and it is deliberate. The old text promised a guard that was never implemented,
+// which is how a door can look protected while a probe walks straight through it.
+const SEDER_CYCLES = { shacharit: "שחרית", mincha: "מנחה", arvit: "ערבית" };
+// WHO MAY START ONE. The clock's own name, sent as `{"by": …}` in the body — the value both the
+// declared workflow and this file carry, and the thing that makes a cycle deliberate rather than the
+// side effect of a probe. See the route for what it refuses, and why it refuses it in words.
+const SEDER_DRIVER = "bina-seder";
+const sederFile = () => `${process.env.DSH_HOME || "/data/dsh"}/seder.json`;
+
+// ── the routine's own folder: «שגרת עזריה» (2026-10-14) ─────────────────────────────────────────
+// The owner, looking at the sidebar: «אני רוצה שכל השיחות של מחזור היום יופיעו תחת תקייה "שגרת עזריה"
+// … ואין להריץ את זה ישירות כמובן הכל צריך להיות מופעל בטבעיות לתוך התקייה הרצוייה». A folder in this
+// UI is a WORKSPACE, and a workspace is a directory — the harness groups a session under it only when
+// the session's own recorded cwd resolves to that directory (attach validates it, and a session
+// belongs to one workspace). So the routine gets a home of its own, and the door — not a human, not a
+// cleanup script — is what puts every cycle inside it: ensure the record, name it, create the session
+// with its id. The path is the day folders' own root: the day page, the instruction and the sessions
+// list all live there, so the folder the owner sees is also the folder the routine really works in.
+const SEDER_HOME = process.env.BINA_DS_SEDER_HOME || `${OFFICE}/data/bina-ds/sedarim`;
+const SEDER_WORKSPACE_TITLE = "שגרת עזריה";
+
+/** The routine workspace's id, creating and naming it when it is not there yet (idempotent). */
+async function sederWorkspaceId() {
+  const made = await rpc("workspace/create", { request: { path: SEDER_HOME } });
+  const ws = made && made.workspace;
+  if (!ws || !ws.workspaceId) return undefined;
+  if (ws.title !== SEDER_WORKSPACE_TITLE) {
+    await rpc("workspace/rename", { request: { workspaceId: ws.workspaceId, title: SEDER_WORKSPACE_TITLE } })
+      .catch(() => { /* the folder is there; its name is cosmetic and the next cycle retries */ });
+  }
+  return ws.workspaceId;
+}
+
+/**
+ * What the door remembers: EVERY cycle it has opened — a list, not a slot.
+ *
+ * THERE IS NO SUCH THING AS A שחרית SLOT. The owner, 2026-10-14: «אין דבר כזה חריץ של שחרית, הפעלה
+ * אוטומטית צריכה לעבוד כשלעצמה… יכול להיות ימים שאני אריץ גם 100 פעמים את מחזור היום כדי להעלות את
+ * קצב הפיתוח, לכן זה צריך עדיין לרוץ ולהתחשב רק בתקציב היומי». So the once-per-cycle-per-day refusal is
+ * gone: a call opens a cycle, always. The count that matters is the DAY'S BUDGET, which lives in
+ * `data/bina-ds/sedarim/<day>/תקציב.json` and is handed to the cycle in its brief — the cycle reads
+ * the day's spend itself (`ledger.mjs --line`) and works inside it.
+ */
+function sederState() {
+  try {
+    const raw = JSON.parse(readFileSync(sederFile(), "utf8"));
+    if (Array.isArray(raw)) return { fires: raw };
+    return raw && Array.isArray(raw.fires) ? raw : { fires: [] };
+  } catch {
+    return { fires: [] };
+  }
+}
+
+function sederKeep(state, entry) {
+  state.fires.push(entry);
+  const kept = { fires: state.fires.slice(-200) };
+  try { writeFileSync(sederFile(), JSON.stringify(kept, null, 1)); } catch { /* the cycle still opened */ }
+  return kept;
+}
+
+/** The day's grant, in shekels — what the owner put on the day, or the office default of ₪1. */
+function sederGrant(day) {
+  try {
+    const file = path.join(OFFICE, "data/bina-ds/sedarim", day, "תקציב.json");
+    const grant = Number(JSON.parse(readFileSync(file, "utf8")).grant);
+    if (Number.isFinite(grant) && grant > 0) return grant;
+  } catch { /* no grant written for this day */ }
+  return 1;
+}
+
+/** The notice centre, best effort — the same door this app already uses for its boot notice. */
+function notifyOffice(title, body, link) {
+  const payload = JSON.stringify({ source: "bina-ds", source_id: "seder-door", level: "info", title, body, ...(link ? { link } : {}) });
+  fetch(process.env.BINA_DS_NOTIFY_URL || "http://notifications:8977/api/notifications", {
+    method: "POST", headers: { "content-type": "application/json" }, body: payload, signal: AbortSignal.timeout(8000),
+  }).catch(() => {});
+}
+
+// THE DAY'S PAGE, WRITTEN BY THE DOOR (DGO-562). The owner asked the direct question — «זה בטוח יווצר
+// בתקייה חדשה?» — and "the session will do it if it follows the skill" is not an answer to "certain".
+// So the folder is created the moment a cycle opens, by the same call that opens it: one folder per
+// day, with the day's index, the machine-readable list, and the cycle's own page. The balance is added
+// later by the session (step תיעוד) — it is the only part that needs the cycle to have finished.
+function sederDayPage(entry) {
+  const dir = path.join(OFFICE, "data/bina-ds/sedarim", entry.day);
+  try {
+    mkdirSync(dir, { recursive: true });
+    const listFile = path.join(dir, "sessions.json");
+    let rows = [];
+    try { rows = JSON.parse(readFileSync(listFile, "utf8")); } catch { rows = []; }
+    rows = Array.isArray(rows) ? rows.filter((r) => r && r.session !== entry.session) : [];
+    rows.push(entry);
+    rows.sort((a, b) => String(a.at).localeCompare(String(b.at)));
+    writeFileSync(listFile, JSON.stringify(rows, null, 1));
+    const index = [
+      `# סדרים · ${entry.day}`, "",
+      "| שעה | סדר | שיחה | קישור |", "|---|---|---|---|",
+      ...rows.map((r) => `| ${r.at} | ${r.name} | \`${String(r.session).slice(0, 20)}…\` | [פתח](${r.link}) |`),
+      "", "## מאזן היום", "", "(נכתב בסדר ערבית — שלב תיעוד)",
+    ];
+    writeFileSync(path.join(dir, "index.md"), `${index.join("\n")}\n`);
+    writeFileSync(path.join(dir, `${entry.at.replace(":", "-")}-${entry.cycle}.md`),
+      `# סדר ${entry.name} · ${entry.day} · ${entry.at}\n\n- שיחה: \`${entry.session}\`\n- קישור: ${entry.link}\n- הבריף: ${entry.brief}\n\n## מאזן הסדר\n\n(נכתב בשלב תיעוד)\n`);
+    return dir;
+  } catch {
+    return ""; // the cycle opened; the page is best effort and the door never fails on it
+  }
+}
+
+/** The day and clock time a cycle is named by: THE CLOCK'S, when the clock says (2026-11-02). The
+ *  office's clock sends `fired`, its Schedule Trigger's timestamp, written in the workflow's own zone
+ *  with its offset (`2026-11-02T21:00:00.013+02:00`), and that wall clock names the brief, the session
+ *  and the record. This container's zone is the host's (scripts/lib.sh, host_tz), and on vps1 that is
+ *  Etc/UTC while the clock fires in Asia/Jerusalem: arvit's 21:00 was titled «19:00» and written to
+ *  `19-00-arvit.md` (execution 1682286). Without a `fired` in that shape (a dry run, an older clock),
+ *  the time is now, read in TZ, as before. */
+function sederClock(fired) {
+  const m = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$/.exec(String(fired || ""));
+  if (m) return { day: m[1], at: m[2] };
+  const now = new Date();
+  return {
+    day: now.toLocaleDateString("sv-SE", { timeZone: TZ }),
+    at: now.toLocaleTimeString("he-IL", { timeZone: TZ, hour: "2-digit", minute: "2-digit" }),
+  };
+}
+
+/** What a cycle WOULD be — the day, the clock time, the grant, which fire of the day it is, and the
+ *  brief it would carry — with nothing opened and no money spent. `startSeder` builds its own answer
+ *  from this, so the dry run cannot drift from the real call: one computation, two doors. */
+function sederPlan(cycle, fired) {
+  const { day, at } = sederClock(fired);
+  const state = sederState();
+  const name = SEDER_CYCLES[cycle];
+  const grant = sederGrant(day);
+  const openedToday = state.fires.filter((f) => f && f.day === day).length;
+  const title = `סדר ${name} · ${day} · ${at}`;
+  // The brief carries the DAY'S BUDGET, because that is the only thing a cycle is bounded by: there is
+  // no slot to run out of, and a day may hold a hundred cycles. The spend itself is read by the cycle
+  // (`ledger.mjs --line`) — the door does not keep a second copy of the price table.
+  const text = `${title} — טען את המיומנות \`seder\` ובצע את הסדר הזה עכשיו, במלואו, בלי לשאול שאלות ביניים. `
+    + `תקציב היום שהוקצה: ₪${grant.toFixed(2)} (זה הסדר ה-${openedToday + 1} היום). בדוק את המאזן בפתח הבירור, `
+    + `שמור על יחס הביצוע (90% לעבודה בפועל), וסיים בהקפצה אחת. `
+    + `השיחה הזו יושבת בסביבת העבודה «${SEDER_WORKSPACE_TITLE}» (${SEDER_HOME}) — הלשכה עצמה ב-${OFFICE}, `
+    + `ולכן כל נתיב שנכתב כאן הוא נתיב מלא.`;
+  return { cycle, name, day, at, title, brief: text, grant, opened_today: openedToday };
+}
+
+/** Open one cycle: a new session, the fixed brief, the record, and the owner's link. */
+async function startSeder(cycle, fired) {
+  const plan = sederPlan(cycle, fired);
+  const { day, at, name, grant, title, brief: text, opened_today: openedToday } = plan;
+  // INSIDE THE ROUTINE'S OWN WORKSPACE. `session/create` takes a workspaceId OR a cwd, never both, and
+  // a workspace is what the sidebar's folder is — so a cycle opened with the workspace id lands under
+  // «שגרת עזריה» by construction, and one opened with a cwd would land ungrouped, which is how the
+  // day's conversations came to be scattered. When the workspace cannot be had (an older harness, a
+  // storage fault) the cycle still opens, in the office directory — an unfiled cycle beats no cycle.
+  const workspaceId = await sederWorkspaceId().catch(() => undefined);
+  const created = await rpc("session/create", { request: workspaceId ? { workspaceId } : { cwd: OFFICE } });
+  const id = created.sessionId;
+  await rpc("session/rename", { request: { sessionId: id, title } }).catch(() => {});
+  await prompt(id, text, [], false);
+  live.refreshList(true);
+  const entry = { cycle, name, day, at, session: id, link: `/#/m/bina?s=${id}`, brief: text, grant };
+  sederKeep(sederState(), entry);
+  const folder = sederDayPage(entry);
+  notifyOffice(`השעון: סדר ${name} נפתח`, `שיחה חדשה לסדר ${name} (${at}) — ה-${entry.at} היום, תקציב היום ₪${grant.toFixed(2)}.`, entry.link);
+  return [201, { started: true, opened_today: openedToday + 1, grant, folder, ...entry }];
+}
+
 // ── routes ──────────────────────────────────────────────────────────────────────
 async function health(deep) {
   const t0 = Date.now();
@@ -401,6 +580,36 @@ async function route(req, res) {
     const hours = Number(q.get("hours") || 0);
     const store = await ledger();
     return [200, await store.readSpans({ dir: store.ledgerDir(), ...(since > 0 ? { since } : hours > 0 ? { hours } : {}), limit })];
+  }
+  // ── the seder door (DGO-562) — deliberately outside the token gate, and ONE verb wide ──────────
+  // The office's clock is an n8n workflow declared in apps/bina-ds/blueprint/n8n/; n8n holds no
+  // credential. What an in-network caller can do here is exactly one thing: start a cycle. Listing,
+  // reading and driving conversations still answer 401 without the Bearer token. What a cycle costs is
+  // why the two shapes below exist — a dry run answers for free, and a real call must name the clock.
+  if (req.method === "POST" && p.startsWith("/v1/seder/")) {
+    const cycle = p.slice("/v1/seder/".length).replace(/[^a-z]/g, "");
+    if (!SEDER_CYCLES[cycle]) throw new Fail(404, "cycle", `no seder named ${cycle} — one of ${Object.keys(SEDER_CYCLES).join(", ")}`);
+    // ── ONE CALL, TWO ANSWERS, AND NEITHER OF THEM COSTS MONEY ────────────────────────────────────
+    // A cycle is a FULL AUTONOMOUS SESSION: it reads the day's ledger, works real items, and spends
+    // the day's budget. On 2026-10-14 two ordinary `curl -X POST` probes — the way every other door in
+    // this office is tested — opened exactly that, twice, and had to be cancelled by hand minutes
+    // later. The door therefore has to be deliberate:
+    //   · `{"dry_run": true}` answers with EVERYTHING a real call would do — the cycle, the day, the
+    //     grant, which fire of the day it would be — and opens nothing. This is what any test or
+    //     monitor sends, and it is the only way to exercise this door for free.
+    //   · anything else must name the clock it comes from (`{"by": "bina-seder"}`), the value the
+    //     declared n8n workflow sends. A caller that does not name it is refused with the reason, so
+    //     an accidental POST reads as a refusal instead of as a 25-minute session.
+    const b = await jsonBody(req);
+    if (b.dry_run === true) return [200, { ...(await sederPlan(cycle, b.fired)), dry_run: true }];
+    if (String(b.by || "") !== SEDER_DRIVER) {
+      throw new Fail(403, "caller",
+        `a POST to /v1/seder/${cycle} starts a full autonomous session and spends the day's budget — `
+        + `it is for the office's own clock (${SEDER_DRIVER}). A real call names it: {"by": "${SEDER_DRIVER}"}. `
+        + `To see what it would do without starting anything: {"dry_run": true}.`);
+    }
+    const [status, body] = await startSeder(cycle, b.fired);
+    return [status, body];
   }
   if (!authorized(req)) throw new Fail(401, "auth", "missing or wrong Bearer token");
 

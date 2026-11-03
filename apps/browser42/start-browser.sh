@@ -203,10 +203,34 @@ fi
     wmctrl -i -c "$w" 2>/dev/null || true
   done ) &
 
+# 4a. WHERE THIS CONTAINER LISTENS (DGO-983). It sits on two networks:
+#     - browser42's own, where its drivers are (mcp, reaper, watchdog, task runner, caddy);
+#     - the office's shared one, for its own calls OUT (Traefik for *.localhost, connections,
+#       notifications, any-concurrency).
+#     CDP has no credential by design, and the broker and noVNC have none either. Measured
+#     2026-10-22: all three answered every container on the shared network, so any of them could
+#     read every cookie. Now CDP, the broker, noVNC and the hand-off listen on loopback, and one
+#     forwarder (§4f-ter) gives them to browser42's network alone. The address is the one the alias
+#     in BROWSER42_BIND_ALIAS resolves to; the alias is declared on browser42's network only.
+B42_BIND=""
+if [ -n "${BROWSER42_BIND_ALIAS:-}" ]; then
+    for _ in {1..30}; do
+        B42_BIND="$(python3 -c 'import socket, sys; print(socket.gethostbyname(sys.argv[1]))' "${BROWSER42_BIND_ALIAS}" 2>/dev/null || true)"
+        [ -n "${B42_BIND}" ] && break
+        sleep 1
+    done
+    # Refuse rather than fall back to every interface: a browser no driver reaches is a loud
+    # failure; one every container reaches is the silent one this exists to remove.
+    [ -n "${B42_BIND}" ] || { echo "FATAL: ${BROWSER42_BIND_ALIAS} does not resolve — not serving CDP on every interface" >&2; exit 1; }
+    export BROWSER42_BROKER_HOST=127.0.0.1 BROWSER42_HANDOFF_HOST=127.0.0.1 BROWSER42_CDP_HOST=127.0.0.1
+    echo "[4a] CDP, broker, noVNC and hand-off on loopback, and on ${B42_BIND} (browser42's network) only"
+fi
+B42_LOOP="${B42_BIND:+127.0.0.1}"    # loopback when the alias is declared; every interface without it
+
 # 4. websockify serves the noVNC static client AND bridges WS->VNC on one port.
 #    Target 127.0.0.1 (not "localhost") to avoid an IPv6/IPv4 mismatch with Xvnc's
 #    loopback bind.
-websockify --web=/usr/share/novnc 6080 127.0.0.1:5900 >/dev/null 2>&1 &
+websockify --web=/usr/share/novnc "${B42_LOOP:+${B42_LOOP}:}6080" 127.0.0.1:5900 >/dev/null 2>&1 &
 
 # 4b. Add Browser42's navigation toggle to noVNC's existing toolbar. The control
 #     sends F11 over the current RFB connection, so it changes only Chromium's
@@ -214,8 +238,26 @@ websockify --web=/usr/share/novnc 6080 127.0.0.1:5900 >/dev/null 2>&1 &
 #     Same mechanism carries the clipboard bridge (4b'): the viewer has no auto-sync of its
 #     own (noVNC 1.6 ships the manual panel only), so the owner's Cmd/Ctrl+V is read, pushed
 #     to the remote as a cut-text and then forwarded — KasmVNC's "clipboard seamless".
-cp /usr/local/share/browser42/browser-navigation.js /usr/share/novnc/app/browser42-navigation.js
-cp /usr/local/share/browser42/browser-clipboard.js /usr/share/novnc/app/browser42-clipboard.js
+#     And the phone keyboard (4b''): on a touch device a TAP on the screen focuses noVNC's
+#     keyboard input, because a remote desktop drawn as pixels has no field to focus and the
+#     toolbar's own keyboard button sits in a control bar that collapses itself 2s after
+#     connect (DGO-575). Touch-only by construction, so the agent's view is unchanged.
+#
+#     Each module is copied FROM THE IMAGE, so a container recreated from an image older than this
+#     code does not carry it. That is said by name and the browser keeps running: it is the office's
+#     shared surface, and losing it over a viewer gadget would be the wrong trade — the fix is the
+#     rebuild the message names. (The injected <script> tag follows the file: §4b's `stamped` emits
+#     nothing for a module that is not there, so a missing one is one line on stderr, not a 404 in
+#     every viewer.)
+for module in navigation clipboard keyboard; do
+  src="/usr/local/share/browser42/browser-${module}.js"
+  if [ -f "${src}" ]; then
+    cp "${src}" "/usr/share/novnc/app/browser42-${module}.js"
+  else
+    echo "[4b] ${src} is not in this image — the viewer's ${module} module will not load;" \
+         "rebuild it with: ./scripts/dc up -d --build browser42-browser" >&2
+  fi
+done
 python3 - <<'PY'
 import re
 from pathlib import Path
@@ -238,12 +280,14 @@ button = """            <input type="image" alt="Toggle browser navigation" src=
 # "did my change arrive?" a non-question.
 def stamped(name):
     path = Path(f"/usr/share/novnc/app/browser42-{name}.js")
+    if not path.exists():
+        return ""          # a module this image does not carry: no tag, so no 404 in every viewer
     stamp = int(path.stat().st_mtime) if path.exists() else 0
     return f'    <script type="module" src="app/browser42-{name}.js?v={stamp}"></script>\n'
 
-scripts = "".join(stamped(name) for name in ("navigation", "clipboard"))
+scripts = "".join(stamped(name) for name in ("navigation", "clipboard", "keyboard"))
 html = html.replace(button, "")
-html = re.sub(r'[ \t]*<script type="module" src="app/browser42-(navigation|clipboard)\.js(\?v=\d+)?"></script>\n', '', html)
+html = re.sub(r'[ \t]*<script type="module" src="app/browser42-(navigation|clipboard|keyboard)\.js(\?v=\d+)?"></script>\n', '', html)
 
 marker = "            <!-- Extra manual keys -->"
 if marker not in html:
@@ -285,6 +329,29 @@ fi
 # 4f. Invisible loopback broker for native Chrome Tab Groups. The extension's
 # service worker connects here; no extension or placeholder page is opened.
 python3 /usr/local/bin/browser42-broker.py &
+
+# 4f-bis. The human hand-off route (DGO-571): :8767 behind Caddy's /handoff/* — wake, that group's tab
+#     to the front through the broker above, compact → standard, then the live view. MOUNTED, not
+#     copied (docker-compose.yml), so a fix lands without a rebuild; a container recreated from an
+#     older compose has no file and says so — the browser keeps running, because losing the shared
+#     surface over a hand-off helper would be the wrong trade.
+if [ -f /handoff.py ]; then
+    python3 /handoff.py serve &
+else
+    echo "[4f-bis] /handoff.py is not mounted — /handoff/<slug> will answer 502; recreate: ./scripts/dc up -d browser42-browser" >&2
+fi
+
+# 4f-ter. browser42's network alone reaches the four loopback services of §4a: CDP, the broker,
+#     noVNC and the hand-off. The same port on browser42's address is piped to loopback, so a
+#     driver's URL and the Host header CDP answers with are what they were. It is every driver's only
+#     way in, and no health check sees it (they all probe loopback), so it is kept alive here.
+if [ -n "${B42_BIND}" ]; then
+    ( while :; do
+        FORWARD_LISTEN="${B42_BIND}" python3 /usr/local/bin/localhost-forward.py 127.0.0.1 9222 8765 6080 8767 || true
+        echo "[4f-ter] the forwarder to browser42's network exited — starting it again" >&2
+        sleep 1
+      done ) &
+fi
 
 # 4g. CDP self-heal watchdog — the definitive fix for "CDP keeps dying".
 #     A saturated headed Chrome (ad-heavy tabs on software compositing over Xvnc)
@@ -786,6 +853,17 @@ if grep -q 'async def _wait_for_cdp(port: int, timeout: float = 10.0)' /usr/loca
     sed -i 's/async def _wait_for_cdp(port: int, timeout: float = 10.0)/async def _wait_for_cdp(port: int, timeout: float = 180.0)/' /usr/local/bin/cloakserve
 elif ! grep -q 'async def _wait_for_cdp(port: int, timeout: float = 180.0)' /usr/local/bin/cloakserve; then
     echo "[start-browser] WARNING: cloakserve's _wait_for_cdp anchor not found — launch wait NOT raised; re-derive the patch" >&2
+fi
+# cloakserve picks its own address and ignores --host: every interface inside a container (its
+# main()). §4a needs loopback, so the line reads BROWSER42_CDP_HOST first, anchored like the wait
+# above. A vendor bump that moves the line STOPS the container while §4a asks for loopback — it does
+# not start a CDP on every interface and hope the forwarder still holds <internal>:9222.
+if grep -q 'host = "0.0.0.0" if in_container else "127.0.0.1"' /usr/local/bin/cloakserve; then
+    sed -i 's/host = "0.0.0.0" if in_container else "127.0.0.1"/host = os.environ.get("BROWSER42_CDP_HOST") or ("0.0.0.0" if in_container else "127.0.0.1")/' /usr/local/bin/cloakserve
+fi
+if ! grep -q 'os.environ.get("BROWSER42_CDP_HOST")' /usr/local/bin/cloakserve; then
+    [ -n "${BROWSER42_CDP_HOST:-}" ] && { echo "FATAL: cloakserve's host anchor not found — refusing to start CDP on every interface; re-derive the patch" >&2; exit 1; }
+    echo "[start-browser] WARNING: cloakserve's host anchor not found — CDP's address NOT set; re-derive the patch" >&2
 fi
 cloakserve \
     --host=0.0.0.0 \

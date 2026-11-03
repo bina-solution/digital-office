@@ -150,10 +150,10 @@ network_dynamic/*.yml  (file provider של traefik; volume שנקרא ע"י trae
 | הטענה ב־rev 1 | מה שנמדד |
 |---|---|
 | "שרתי השמות ב־Cloudflare" | **לא.** `NS digital-office.co.il` → `ns1.sitesdepot.com`, `ns2.sitesdepot.com`; SOA: `ns1.sitesdepot.com admin.intervision.co.il` (Plesk של InterVision). DNS-01 ב־Cloudflare **אינו זמין** בלי להעביר את הדלגציה. |
-| "wildcard ברמה אחת" | `*.staging.digital-office.co.il` קיים, ו**עונה בכל עומק** אצל שרת השמות הזה: `macbook1.staging…`, `plane.macbook1.staging…`, ואפילו `a.b.c.d.e.staging…` — כולם `203.0.113.10`. לעומת זאת `x.digital-office.co.il` → NXDOMAIN, כלומר `*.digital-office.co.il` **לא** קיים, וכלל "wildcard של תווית אחת" שבהערות `.env` נשאר נכון ל־`*.<slug>`. |
+| "wildcard ברמה אחת" | `*.staging.digital-office.co.il` קיים, ו**עונה בכל עומק** אצל שרת השמות הזה: `macbook1.staging…`, `plane.macbook1.staging…`, ואפילו `a.b.c.d.e.staging…` — כולם `93.184.216.5`. לעומת זאת `x.digital-office.co.il` → NXDOMAIN, כלומר `*.digital-office.co.il` **לא** קיים, וכלל "wildcard של תווית אחת" שבהערות `.env` נשאר נכון ל־`*.<slug>`. |
 | "הדומיין `staging.digital-office.co.il` הוא נקודת הכניסה" | **אין לו רשומת A.** `staging.digital-office.co.il` → תשובה ריקה (NODATA); `curl https://staging…` → `000`. נקודת כניסה חייבת להיות שם שפותר. |
-| — | ה־edge החי על `203.0.113.10` **כבר** מגיש `console.staging.digital-office.co.il` (302 → `auth.staging…/application/o/authorize/`) ו־`auth.staging.digital-office.co.il` (302 → זרימת authentik). `edge.staging…` ו־`macbook1.staging…` מחזירים **404 של traefik** (אין ראוטר). |
-| — | `203.0.113.10` **כבר בצי המחשבים**: `computer_ssh-b154fa0c` ("שרת פיתוח בינה סלושנס"). |
+| — | ה־edge החי על `93.184.216.5` **כבר** מגיש `console.staging.digital-office.co.il` (302 → `auth.staging…/application/o/authorize/`) ו־`auth.staging.digital-office.co.il` (302 → זרימת authentik). `edge.staging…` ו־`macbook1.staging…` מחזירים **404 של traefik** (אין ראוטר). |
+| — | `93.184.216.5` **כבר בצי המחשבים**: `computer_ssh-b154fa0c` ("שרת פיתוח בינה סלושנס"). |
 
 **ההכרעה שנובעת מזה:**
 
@@ -177,7 +177,7 @@ network_dynamic/*.yml  (file provider של traefik; volume שנקרא ע"י trae
 
 - **הוא היה גובר על ראוטרים חיים.** ב־Traefik v3 אורך הכלל קובע את ה־priority כברירת מחדל, ו־regexp
   ארוך מנצח `Host()` קצר — כלומר `console.staging` ו־`auth.staging` (הקונסול והזהות החיים על
-  `203.0.113.10`) היו נבלעים לתוך ה־gateway. זו לא השערה: הם באמת רצים שם, עם ראוטרים משלהם.
+  `93.184.216.5`) היו נבלעים לתוך ה־gateway. זו לא השערה: הם באמת רצים שם, עם ראוטרים משלהם.
 - **ACME לא מנפיק תעודה לכלל regexp.** traefik מנפיק ל־`Host()` מדויקים; catch-all מקבל את תעודת
   ברירת המחדל של הקצה — כלומר "עובד" בדפדפן עם אזהרה, וזה בדיוק סוג הכשל שמדווח כהצלחה.
 
@@ -367,7 +367,7 @@ rev 1 נתן ללשכה המקומית להנפיק ולחתום לעצמה את
 ```
 # ההתקנה עצמה — offices (הבעל), לא network
 POST http://offices:8983/api/offices                     {"id":"vps1","machine":"...","domain":"...",
-                                                          "path":"/root/deployment-bina-comp",
+                                                          "path":"/root/deployment-hacohen",
                                                           "source":{"repo":"...","ref":"<commit>"},
                                                           "apps":["traefik","network","site-runtime",
                                                                   "app-management"]}
@@ -611,7 +611,7 @@ Tenant: customer-b  office: (אין)      server: shared-vps  → b.digital-offi
 |---|---|---|---|
 | **P0 — הקפאת חוזים** | מסמכים אלה + נעילת D1–D7 | סקירה; אין קוד | S |
 | **P1 — זהות, אסימון, מסך הצטרפות** | אפלקציית `network` + אסימוני הרשמה + מצלמה + instance במישור האישורים | אסימון שנוצר מאחורי SSO; אסימון שנצרך פעמיים נדחה; בקשה בלי אסימון נדחית; אסימון מדייר אחר נדחה | M |
-| **P2 — מישור נתונים** | `dow0` (kernel + userspace), gateway, ראוטרים מדויקים, בדיקת פתירות | **על המסלול האמיתי: המקבוק ↔ `203.0.113.10`.** ראיות: handshake, rtt, GET פדרטיבי של קונסול המקבוק מהשרת, בדיקת payload של 10 MB אחרי כיוון MTU, וסבב עם UDP חסום שמוכיח את ה־fallback. הסים המקומי הוא בדיקת קדם מהירה בלבד, **לא** הקבלה | L |
+| **P2 — מישור נתונים** | `dow0` (kernel + userspace), gateway, ראוטרים מדויקים, בדיקת פתירות | **על המסלול האמיתי: המקבוק ↔ `93.184.216.5`.** ראיות: handshake, rtt, GET פדרטיבי של קונסול המקבוק מהשרת, בדיקת payload של 10 MB אחרי כיוון MTU, וסבב עם UDP חסום שמוכיח את ה־fallback. הסים המקומי הוא בדיקת קדם מהירה בלבד, **לא** הקבלה | L |
 | **P3 — הצטרפות של צומת מרוחק** | `use: offices`; מסך שמפעיל `create` + `converge`, ואז אסימון ההרשמה; verify עם ראיות | הצהרה + converge על VPS נקי → לשכה עולה (`home.pushed` אמת); converge שני מדווח "כבר מותקן"; preflight מסרב ל־Docker 29; אחריו הצומת `active` | M |
 | **P4 — פדרציה בקונסול** | `modules.d`, אריחי צומת ב־rail, `/a/<peer>/`, `/vps1`, JWT | לחיצה על אריח מרוחק נפתחת בלי התחברות שנייה, כולל WS; revoke מסיר את האריחים | L |
 | **P5 — פיצול האתרים** | `site-runtime`, המנהל דרך ה־overlay, מעבר adopted | שני האתרים ממשיכים לשרת לאורך כל המעבר; כיבוי המאסטר לא מפסיק הגשה | M |
@@ -643,7 +643,7 @@ Tenant: customer-b  office: (אין)      server: shared-vps  → b.digital-offi
 | **2** | **DNS ותעודות** | (א) HTTP-01 לכל host (עובד היום); (ב) wildcard ב־DNS-01 — דורש העברת דלגציה ל־Cloudflare **או** מפתח API ל־Plesk + הוספת ה־IP שלנו לרשימת ההיתר | ה־NS הם `sitesdepot.com`; ה־API של Plesk מסרב לפי IP (`403 Access to API is disabled for <ip>`). (א) מספיק עד ~50 צמתים/שבוע; (ב) נדרש בסקייל | P6 (ריבוי דיירים גדול) בלבד |
 | **3** | **ה־URL הקנוני** | (א) `<edge-host>/<node>/…` (מה שביקשת); (ב) `staging.digital-office.co.il/<node>/…` — דורש **רשומת A אחת** ל־`staging` בפאנל Plesk; (ג) `/digital-office/<tenant>/<node>/…` לריבוי דיירים | ל־`staging` אין רשומת A ⇒ (א) עובד מיד עם `NETWORK_EDGE_HOST=console.staging…`; (ב) הוא קליק אחד אצלך | P1 (קביעת `NETWORK_EDGE_HOST`) |
 | **4** | **מודל אישור הצימוד** | (א) השער מנפיק אסימון מאחורי SSO, הצומת סורק (ברירת המחדל כאן); (ב) הצומת מציג, השער סורק, והאישור דורש SSO | (א) אפס משטחים לא־מאומתים; (ב) נוח יותר בטלפון אבל מוסיף סריקה+התחברות | P1 (מימוש הזרימה) |
-| **5** | **איזה VPS הוא הקצה** | (א) `203.0.113.10` — כבר בצי כ־`computer_ssh-b154fa0c`, כבר מריץ `console.staging` + `auth.staging`; (ב) מכונה חדשה | (א) מומלץ: ה־wildcard, הקונסול והזהות כבר שם | P2 (היעד של מסלול הקבלה) |
+| **5** | **איזה VPS הוא הקצה** | (א) `93.184.216.5` — כבר בצי כ־`computer_ssh-b154fa0c`, כבר מריץ `console.staging` + `auth.staging`; (ב) מכונה חדשה | (א) מומלץ: ה־wildcard, הקונסול והזהות כבר שם | P2 (היעד של מסלול הקבלה) |
 | **6** | **WireGuard עצמי מול Headscale** | (א) עצמי (התוכנית); (ב) Headscale — NAT traversal ו־DERP בחינם, אבל מישור בקרה שני | (א) מומלץ ל־P1–P3 (שני צמתים, אחד מהם ציבורי); (ב) אם יתגלה צומת כפול־NAT בלי קצה — וניתן להחליף **מתחת לאותה אפליקציה** | P6 (טופולוגיות בלי קצה ציבורי) |
 
 **לא החלטה פתוחה, כי היא כבר הוכרעה:** "הרכב התקנה" (אילו אפליקציות בצומת) הוא ה־`apps:` בהצהרת
@@ -670,12 +670,12 @@ Tenant: customer-b  office: (אין)      server: shared-vps  → b.digital-offi
 NS digital-office.co.il            → ns1.sitesdepot.com, ns2.sitesdepot.com
                                      SOA: ns1.sitesdepot.com admin.intervision.co.il (serial 2026091701)
 A  staging.digital-office.co.il    → תשובה ריקה (NODATA, Status 0)     ← אין רשומה
-A  *.staging.digital-office.co.il  → 203.0.113.10
-A  macbook1.staging...             → 203.0.113.10
-A  plane.macbook1.staging...       → 203.0.113.10
-A  a.b.c.d.e.staging...            → 203.0.113.10                        ← עונה בכל עומק
+A  *.staging.digital-office.co.il  → 93.184.216.5
+A  macbook1.staging...             → 93.184.216.5
+A  plane.macbook1.staging...       → 93.184.216.5
+A  a.b.c.d.e.staging...            → 93.184.216.5                        ← עונה בכל עומק
 A  x.digital-office.co.il          → NXDOMAIN (Status 3)                 ← אין wildcard על ה־apex
-A  digital-office.co.il            → 203.0.113.10
+A  digital-office.co.il            → 93.184.216.5
 
 curl -k https://console.staging.digital-office.co.il/  → 302 → auth.staging.../application/o/authorize/
                                                           (client_id + redirect_uri=/outpost.goauthentik.io/callback)
@@ -685,6 +685,6 @@ curl -k https://macbook1.staging.digital-office.co.il/ → 404 (traefik, אין 
 curl    https://staging.digital-office.co.il/          → 000 (לא פותר; TLS לא מתחיל)
 
 GET http://computers:8977/api/computers → computer_local-local (172.18.0.1) ·
-                                          computer_ssh-b154fa0c ("שרת פיתוח בינה סלושנס", 203.0.113.10)
+                                          computer_ssh-b154fa0c ("שרת פיתוח בינה סלושנס", 93.184.216.5)
 Host( ב־.generated/routing.override.yml  → 25 שמות מנוקמפלים (המקור לרשימת ה־hosts השמורים)
 ```

@@ -155,6 +155,28 @@ def is_debt(rel, line):
     return any(rel == f and s in line for f, s, _ in DEBT)
 
 
+_URL_HOST = re.compile(r"[A-Za-z0-9.-]+")
+
+
+def _third_party_url(code, m):
+    """True when the match is a label of a literal host in a URL (`scheme://host`) that is not the
+    office's: no `$` in it, at least two labels after the matched one, and a last label of letters that
+    is not `localhost`."""
+    start = m.start()
+    head = code[:start]
+    k = head.rfind("://")
+    if k < 0 or not re.fullmatch(r"[A-Za-z0-9.-]*", head[k + 3:]):
+        return False
+    host = _URL_HOST.match(code, k + 3)
+    if not host or host.end() < m.end():
+        return False
+    nxt = code[host.end():host.end() + 1]
+    if nxt == "$" or nxt == "{":
+        return False
+    labels = host.group(0).strip(".").split(".")
+    return len(labels) >= 3 and labels[-1].isalpha() and labels[-1].lower() != "localhost"
+
+
 def scan(overrides=None):
     """overrides: {rel: text} — scan this content instead of the file on disk, so --self-test can
     plant a violation without ever touching the real CLI."""
@@ -223,7 +245,13 @@ def scan(overrides=None):
             # the next heading that happens to contain "drive" or "console" is safe too.
             if HEADING.match(cs):
                 continue
-            m = pat.search(code)
+            # [2026-10-21] A literal URL to a THIRD-PARTY host is not this office's app, even when a
+            # label of it is an app's id: `http://security.debian.org` (the apt mirror the cloud
+            # sandbox rewrites to https) named the `security` app the day that app was added. The
+            # office's own hosts are never written literally in layer 0 — they hang off
+            # ${DEPLOYMENT_DOMAIN} or end in `.localhost` — so a host right after `://` that carries no
+            # variable and ends in a real top-level label is somebody else's server.
+            m = next((x for x in pat.finditer(code) if not _third_party_url(code, x)), None)
             if not m and alias_pat is not None:
                 am = alias_pat.search(code)
                 if am:
@@ -314,6 +342,13 @@ SELF_TEST = [
     ("a comment discussing an app",        '  # portainer used to be bootstrapped here', False),
     ("a trailing comment discussing an app",
                                            '  _wt=600     # cold: glitchtip has real work to do', False),
+    # [2026-10-21] a third-party host that shares a label with an app id is not the app…
+    ("a third-party URL whose first label is an app id",
+     '  sed -i "s#http://glitchtip.example.org#https://glitchtip.example.org#g" "$f"', False),
+    # …and the office's own host for an app still is, literal or not
+    ("an app's own host in a URL",         '  curl -s http://glitchtip.localhost/api/0/', True),
+    ("an app's host under the office's domain",
+                                           '  curl -s "https://glitchtip.${DEPLOYMENT_DOMAIN}/api/0/"', True),
 ]
 
 

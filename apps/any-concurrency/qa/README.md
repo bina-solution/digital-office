@@ -10,7 +10,7 @@ using the Playwright MCP browser tools.
 
 Open the live dashboard:
 ```
-https://any-concurrency.bina-comp.bina-solutions.co.il/
+https://any-concurrency.hacohen.bina-solutions.co.il/
 ```
 
 Each test case file describes:
@@ -47,9 +47,9 @@ after each automated run.
 
 | Variable | Value |
 |---|---|
-| Base URL | `https://any-concurrency.bina-comp.bina-solutions.co.il` |
-| Ingest URL | `https://any-concurrency.bina-comp.bina-solutions.co.il/ingest/span` |
-| Health URL | `https://any-concurrency.bina-comp.bina-solutions.co.il/healthz` |
+| Base URL | `https://any-concurrency.hacohen.bina-solutions.co.il` |
+| Ingest URL | `https://any-concurrency.hacohen.bina-solutions.co.il/ingest/span` |
+| Health URL | `https://any-concurrency.hacohen.bina-solutions.co.il/healthz` |
 
 ---
 

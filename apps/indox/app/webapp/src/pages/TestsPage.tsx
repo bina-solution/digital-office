@@ -298,7 +298,7 @@ export default function TestsPage() {
         title: `הרצת בדיקות · ${title}`,
         consequence: (
           <>
-            <b className="num">{inScope.length}</b> מערכים ({casesTotal} לוחות) ירוצו עכשיו מול מנוע ה-n8n
+            <b className="num">{inScope.length}</b> מערכים ({casesTotal === 1 ? 'לוח אחד' : casesTotal + ' לוחות'}) ירוצו עכשיו מול מנוע ה-n8n
             החי. המערכים עובדים על מופע הבדיקה «test» — לא על נתוני הלקוח — אך הם משתפים את המנוע עם
             הצינור החי ומקפיאים זמנית את המתגים הראשיים ומחזירים אותם בסיום. תוצאות קודמות של המערכים
             האלה יוחלפו.
@@ -331,7 +331,7 @@ export default function TestsPage() {
         stopPolling();
         pollTimer.current = setInterval(pollRun, POLL_MS);
         pollRun(); // immediate first tick
-        push('ok', `ההרצה «${title}» התחילה — ${casesTotal} לוחות`);
+        push('ok', `ההרצה «${title}» התחילה — ${casesTotal === 1 ? 'לוח אחד' : casesTotal + ' לוחות'}`);
       } catch (e: unknown) {
         push('bad', `לא ניתן להתחיל הרצה: ${e instanceof Error ? e.message : String(e)}`);
         setRun(null);

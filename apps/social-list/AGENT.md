@@ -17,6 +17,9 @@ The caller never picks the implementation: the account's protocol does. `fixture
 own test network (served at `/fixture/`), used to prove the whole chain without a real account.
 
 ## What you can do from here
+From the shell, two reads that ask no network: `./bbox social-list accounts [platform]` and
+`activity`. A profile or posts are not CLI verbs: a cold or stale cache is re-read from the network,
+which for a browser account drives the office browser.
 
 ```bash
 curl -s http://social-list:8986/api/accounts                        # every account, its network and kind

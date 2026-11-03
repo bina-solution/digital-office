@@ -63,8 +63,8 @@ if [ -s "${ERR}" ]; then
   head -3 "${ERR}" >&2
 fi
 
-echo "FACT auth_users $(q 'select count(*) from auth.users;')"
-echo "FACT storage_objects $(q 'select count(*) from storage.objects;')"
-echo "FACT storage_buckets $(q 'select count(*) from storage.buckets;')"
-echo "FACT storage_sha $(q "select md5(string_agg(id::text||coalesce(name,''), '|' order by id)) from storage.objects;")"
+factq auth_users "$(q 'select count(*) from auth.users;')"
+factq storage_objects "$(q 'select count(*) from storage.objects;')"
+factq storage_buckets "$(q 'select count(*) from storage.buckets;')"
+factq storage_sha "$(q "select coalesce(md5(string_agg(id::text||coalesce(name,''), '|' order by id)), 'empty') from storage.objects;")"
 exit 0

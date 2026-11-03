@@ -13,7 +13,7 @@ set -uo pipefail
 
 GUEST_PORT=2222
 GUEST_USER=binaos
-GUEST_PASS='BinaOS!test1'
+GUEST_PASS='CHANGE_ME'
 SETUP="${SETUP:-/home/shlomy/vm/BinaOS-Setup.exe}"
 
 # sshpass keeps this scriptable without provisioning keys into the guest during OOBE, which would

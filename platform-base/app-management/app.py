@@ -28,7 +28,7 @@ import urllib.parse
 import urllib.request
 
 import yaml
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, Response, jsonify, request, send_from_directory
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))   # its own modules, however it is loaded
 import admission  # noqa: E402
@@ -99,7 +99,7 @@ def _public_origin(app_id: str, host: str, base_url_env: str | None) -> str:
     if dom and dom != "localhost":
         return f"https://{host}.{dom}"
     return f"http://{host}.localhost"
-PROJECT = os.getenv("COMPOSE_PROJECT", "deployment-bina-comp")
+PROJECT = os.getenv("COMPOSE_PROJECT", "deployment-hacohen")
 STATE = os.path.join(REPO, "platform.state.yaml")
 RECONCILE = os.path.join(REPO, "platform", "manager", "reconcile.py")
 # apps/ holds layer 3 (installable); platform-base/ holds layers 1-2 (core, protected).
@@ -260,16 +260,17 @@ def _container_index():
             m = _HEALTH_RE.search(a.get("Status") or "")
             health = {"healthy": "healthy", "unhealthy": "unhealthy",
                       "health: starting": "starting"}.get(m.group(1)) if m else None
-            exit_code, policy = None, ""
+            exit_code, policy, oom = None, "", False
             if status != "running":
                 try:
                     full = client.api.inspect_container(a.get("Id"))
                     exit_code = (full.get("State") or {}).get("ExitCode")
+                    oom = bool((full.get("State") or {}).get("OOMKilled"))
                     policy = ((full.get("HostConfig") or {}).get("RestartPolicy") or {}).get("Name", "")
                 except Exception:
                     pass
             idx[svc] = {"status": status, "health": health, "exit_code": exit_code,
-                        "restart": policy}
+                        "restart": policy, "oom": oom}
         _CIDX.update(at=time.time(), value=idx)
         return idx
     except Exception:
@@ -431,6 +432,12 @@ def _build_conditions(aid, rt, dispo, gen, deps_unmet, auth_missing=(), deadline
     if dispo != "enabled":
         out.append(c("Started", "False", "Disabled", "switched off by the operator"))
         out.append(c("Ready", "False", "Disabled"))
+        return out
+    if rt.get("state") == "asleep":
+        # An on-demand app autoheal stopped after its idle window (DGO-1270): nothing is wrong with it,
+        # and opening it starts it — so it is not the amber "0/1 running" of an app that fell.
+        out.append(c("Started", "False", "Asleep", "נעצרה כשלא השתמשו בה"))
+        out.append(c("Ready", "True", "Asleep", "פתיחה שלה מפעילה אותה"))
         return out
 
     if total and running == total:
@@ -611,6 +618,8 @@ def _catalog():
                       "module": module.get("id") or aid}
         services = _services_of(m)
         rt = _app_runtime(services, cidx, enabled)
+        if rt["state"] == "stopped" and enabled and rt.get("present") and _asleep(services, cidx, m):
+            rt = {**rt, "state": "asleep"}         # stopped by autoheal after its idle window (DGO-1270)
         _rt_cache[aid] = rt
         title = m.get("title") or {}
         summary = m.get("summary") or {}
@@ -785,6 +794,21 @@ def _compose_up(services):
             + ((r.stderr or r.stdout or "").strip()[-400:] or "no output"))
 
 
+def _capability_provider(cap):
+    """The ONE running app that provides `cap`, as the compiler answers it: enabled, or pulled in by an
+    app that is (DGO-993). None when no app runs it, when two do (the compiler calls that ambiguous and
+    answers nothing), or when the plan is refused. Asking the compiler is the point: a list of this
+    plane's own, of the ENABLED apps only, missed every provider that is only pulled in — the agent's
+    workflows on a clean install (DGO-993), the sign-in refresh (DGO-999)."""
+    try:
+        r = subprocess.run(["python3", RECONCILE, "capability-provider", "--capability", cap],
+                           cwd=REPO, capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.SubprocessError):
+        return None   # a compiler that cannot be asked answers nothing, as one that refuses does
+    out = (r.stdout or "").strip()
+    return out.splitlines()[-1].strip() if r.returncode == 0 and out else None
+
+
 def _signin_refresh():
     """Make sign-in serve every host that was just compiled — the sign-in app's own verb.
 
@@ -792,20 +816,20 @@ def _signin_refresh():
     keeps the set it loaded, and a new one answers 404 there until that app's `refresh` hook has
     run (its header tells the whole story). `bbox run` runs it; this plane has to as well, or an app
     switched on from the apps screen — or by a linked office — is up, healthy, and unreachable.
-    Reached by the ROLE the app plays (`forward-auth`), never by its name."""
-    state = _load_state()
-    for m in _load_manifests():
-        if _disposition(state.get(m.get("id"))) != "enabled":
-            continue
-        if any((c or {}).get("name") == "forward-auth" for c in m.get("capabilities") or []):
-            # Longer than the sum of the hook's own bounds, which it states: three minutes for a
-            # server that has only just started, fifteen for a sentinel asked to apply every
-            # blueprint again, a minute and a half for the outpost to learn after that, four for the
-            # server it may then restart (1410 s) — its slow path; the usual one is a few seconds.
-            # A shorter bound here killed it mid-wait on the first real install (hp-laptop,
-            # 2026-10-05: 420 s) and left the new host unserved while the job said it had finished.
-            return _run_hook(m, "refresh", 1560)
-    return None
+    Reached by the ROLE the app plays (`forward-auth`), never by its name, among the apps that RUN:
+    an identity app pulled in only through the product's binding is as much the sign-in as an enabled
+    one, and a host switched on there went unserved until the next `bbox run` (DGO-999)."""
+    pid = _capability_provider("forward-auth")
+    m = _manifest(pid) if pid else None
+    if not m:
+        return None
+    # Longer than the sum of the hook's own bounds, which it states: three minutes for a server that
+    # has only just started, fifteen for a sentinel asked to apply every blueprint again, a minute and a
+    # half for the outpost to learn after that, four for the server it may then restart (1410 s) — its
+    # slow path; the usual one is a few seconds. A shorter bound here killed it mid-wait on the first
+    # real install (hp-laptop, 2026-10-05: 420 s) and left the new host unserved while the job said it
+    # had finished.
+    return _run_hook(m, "refresh", 1560)
 
 
 def _hook_said(r):
@@ -832,11 +856,10 @@ def _workflow_hooks():
     named. The automation engine is an installable app since core-001 (apps/n8n), and this control
     plane is layer 1: naming it would be the inversion G9 forbids, and would also be wrong on an
     office that runs no engine at all (agents and control only). The compiler answers with the ONE
-    enabled provider (it refuses an ambiguous answer), and its directory is wherever the catalog
-    found the manifest. None when no engine is enabled — the callers say so rather than guess."""
-    r = subprocess.run(["python3", RECONCILE, "capability-provider", "--capability", "workflow"],
-                       cwd=REPO, capture_output=True, text=True, timeout=60)
-    pid = (r.stdout or "").strip().splitlines()[-1].strip() if r.returncode == 0 and (r.stdout or "").strip() else ""
+    running provider — enabled, or pulled in by an app that is (DGO-993) — and refuses an ambiguous
+    answer or a refused plan; its directory is wherever the catalog found the manifest. None when no
+    engine runs — the callers say so rather than guess."""
+    pid = _capability_provider("workflow")
     if not pid:
         return None
     for root in ("apps", "platform-base"):
@@ -844,6 +867,22 @@ def _workflow_hooks():
         if os.path.isdir(d):
             return d
     return None
+
+
+def _workflow_apps():
+    """The apps whose n8n workflows THIS office holds, as the compiler lists them (`reconcile.py
+    blueprints`, the list `bbox n8n push` pushes): an app that runs here — enabled, or pulled in as a
+    provider (DGO-1001) — unless its state row gives another office (`workflows: vps1`), and an app whose
+    row says `workflows: here` although it runs in a linked office (DGO-945). (ids, None), or (None, why)
+    when the compiler cannot answer — why is its ERROR line, as _hook_said reads a hook's."""
+    try:
+        r = subprocess.run(["python3", RECONCILE, "blueprints"], cwd=REPO, capture_output=True, text=True,
+                           timeout=60, encoding="utf-8", errors="replace")
+    except (OSError, subprocess.SubprocessError) as e:
+        return None, str(e)[:400]
+    if r.returncode != 0:
+        return None, _hook_said(r)
+    return [line.split("\t", 1)[0] for line in (r.stdout or "").splitlines() if "\t" in line], None
 
 
 def _blueprint_apply(aid, install):
@@ -856,7 +895,7 @@ def _blueprint_apply(aid, install):
     implementation of import/remove — the hooks of whichever app provides `workflow` here.
 
     Best-effort by design: a failure here must not strand the lifecycle call that already
-    succeeded, so it is reported, not raised. No engine enabled is reported the same way: an app
+    succeeded, so it is reported, not raised. No engine running is reported the same way: an app
     that REQUIRES workflow never reaches this point without one (the compiler pulls the provider in
     first), so the case is an app that only wants automations, on an office that runs none.
     """
@@ -867,7 +906,7 @@ def _blueprint_apply(aid, install):
     hooks = _workflow_hooks()
     if not hooks:
         return {"hook": hook, "ok": False,
-                "detail": "no enabled app provides `workflow` — the automations have nowhere to go"}
+                "detail": "no running app provides `workflow` — the automations have nowhere to go"}
     try:
         r = subprocess.run(
             # REPO, never a literal "/repo": the repo is mounted at its HOST path now (so compose
@@ -891,7 +930,7 @@ def _blueprint_present(aid):
     """
     hooks = _workflow_hooks()
     if not hooks:
-        return None                                       # no engine enabled: nobody can tell
+        return None                                       # no engine runs: nobody can tell
     r = subprocess.run(["bash", os.path.join(hooks, "present"), "--app", aid],
                        cwd=REPO, capture_output=True, text=True, timeout=120,
                        encoding="utf-8", errors="replace")
@@ -917,10 +956,16 @@ def reconcile_once():
       * blueprint declared but missing from the instance -> import (via _blueprint_apply)
     It never removes or deactivates. Convergence that deletes needs a much stronger definition of
     "should not exist" than "I did not see it", and n8n's own push has the same rule.
+
+    Containers are an enabled app's. Automations are the apps' whose workflows THIS office holds, the
+    list the compiler gives (_workflow_apps) — not the enabled apps: an app whose state row gives another
+    office keeps its workflows there (DGO-998), and a provider the plan pulls in holds workflows of its
+    own here (n8n's four, DGO-1001).
     """
     report = {"checked": [], "converged": [], "skipped": [], "errors": []}
     state = _load_state()
-    for m in _load_manifests():
+    manifests = _load_manifests()
+    for m in manifests:
         aid = m.get("id")
         if not aid or m.get("_broken"):
             continue
@@ -928,6 +973,25 @@ def reconcile_once():
         # Only enabled apps. A disabled or archived app being "missing" is the desired state.
         dispo = _disposition(entry)   # third copy — same one parser
         if dispo != "enabled":
+            # …BUT A DISABLED APP THAT IS STILL RUNNING IS NOT "MISSING", and this loop used to walk
+            # past it in silence: `bbox apps disable` writes the disposition and tells the operator to
+            # run `bbox run`, and the converge then said nothing about the containers that stayed up.
+            # Measured 2026-10-10 on hp-laptop: `supabase: {state: disabled, by: user}` with five
+            # containers running for 26 hours, and the apps screen showing enabled=false, state=running.
+            #
+            # IT REPORTS AND DOES NOT ACT, deliberately. This loop's own doctrine is that it never
+            # removes or deactivates — and the same measurement is the reason: this office's state
+            # file also declares `n8n: disabled` while its twelve n8n containers run, so a converge
+            # that STOPPED what a disabled entry names would take the office's automations down on
+            # the next `bbox run`. Which of the two is the intent is a decision about this office's
+            # own state (the owner's, and the subject of DGO-408), not something a sweep may decide.
+            services = _services_of(m)
+            up = [c for c in _app_containers(services) if c.status == "running"] if services else []
+            report["skipped"].append({
+                "app": aid, "why": dispo,
+                **({"drift": f"{len(up)} container(s) still running while the state file says "
+                             f"{dispo}: `bbox apps enable {aid}` (or the apps screen) is what "
+                             f"settles it"} if up else {})})
             continue
         report["checked"].append(aid)
 
@@ -940,21 +1004,31 @@ def reconcile_once():
                     report["converged"].append({"app": aid, "action": "containers", "created": created})
                 report["errors"] += [{"app": aid, "error": e} for e in errs]
 
-        if ((m.get("blueprints") or {}).get("n8n") or "").strip():
-            present = _blueprint_present(aid)
-            if present is False:
-                r = _blueprint_apply(aid, True) or {}
-                # VERIFY, do not assume. Reporting "converged" off the fact that we called
-                # something is how a control plane starts lying: the first version of this recorded
-                # a successful blueprint apply while the hook had failed on a stale path and
-                # imported nothing. Re-ask the same question that found the drift.
-                if r.get("ok") and _blueprint_present(aid) is True:
-                    report["converged"].append({"app": aid, "action": "blueprint", "detail": r.get("detail")})
-                else:
-                    report["errors"].append({"app": aid, "action": "blueprint",
-                                             "error": r.get("detail") or "apply did not restore the blueprint"})
-            elif present is None:
-                report["skipped"].append({"app": aid, "why": "blueprint presence undeterminable"})
+    wf_apps, why = _workflow_apps()
+    if wf_apps is None:
+        # SAID as an error, and the enabled apps that declare automations are still checked, as they were
+        # before the compiler was asked: one app the compiler refuses (a blueprint directory that is not
+        # there) does not stop every other app's (the second reader of DGO-998).
+        report["errors"].append({"app": "*", "action": "blueprint",
+                                 "error": "the compiler could not list the automations this office holds: " + why})
+        wf_apps = [m["id"] for m in manifests if m.get("id") and not m.get("_broken")
+                   and _disposition(state.get(m["id"])) == "enabled"
+                   and ((m.get("blueprints") or {}).get("n8n") or "").strip()]
+    for aid in wf_apps:
+        present = _blueprint_present(aid)
+        if present is False:
+            r = _blueprint_apply(aid, True) or {}
+            # VERIFY, do not assume. Reporting "converged" off the fact that we called
+            # something is how a control plane starts lying: the first version of this recorded
+            # a successful blueprint apply while the hook had failed on a stale path and
+            # imported nothing. Re-ask the same question that found the drift.
+            if r.get("ok") and _blueprint_present(aid) is True:
+                report["converged"].append({"app": aid, "action": "blueprint", "detail": r.get("detail")})
+            else:
+                report["errors"].append({"app": aid, "action": "blueprint",
+                                         "error": r.get("detail") or "apply did not restore the blueprint"})
+        elif present is None:
+            report["skipped"].append({"app": aid, "why": "blueprint presence undeterminable"})
     return report
 
 
@@ -1095,6 +1169,34 @@ def _wait_ready(services, seconds):
         time.sleep(3)
 
 
+def _was_enabled(aid):
+    """Whether the state file called this app enabled BEFORE a change — True when that cannot be told, so
+    the frame gate never switches off an app it cannot prove was off (#63)."""
+    try:
+        return _disposition(_load_state().get(aid)) == "enabled"
+    except Exception:                                    # noqa: BLE001
+        return True
+
+
+def _frame_gate(aid, m, was_on, step):
+    """#63: may the console show this app inside itself? Asked once it answers (platform/manager/framecheck.py,
+    read from the mounted checkout). FRAME_GATE (.env): warn (default) records the verdict and says so; refuse
+    marks a NEW app's refusal for `_apply` to switch it off again; off asks nothing. None when there is
+    nothing to ask or the checker cannot run — a check that cannot run never stops an enable."""
+    try:
+        import framecheck
+    except Exception:                                    # noqa: BLE001
+        return None
+    try:
+        if framecheck.mode() == "off" or not framecheck.targets(aid, m):
+            return None
+        step("frame")
+        return framecheck.gate(aid, m, "enable", was_enabled=was_on)
+    except Exception as e:                               # noqa: BLE001
+        print(f"frame-check {aid}: could not run ({type(e).__name__}: {e})", flush=True)
+        return None
+
+
 def _apply(aid, m, enable, step=lambda _name: None, patience=-1, restore=None):
     """One lifecycle change, start to finish. Returns (payload, http status).
 
@@ -1127,6 +1229,8 @@ def _apply(aid, m, enable, step=lambda _name: None, patience=-1, restore=None):
                 "busy": sorted(a for a, j in _JOBS.items() if not j["finished"].is_set())}, 409
     try:
         step("state")
+        # whether it was ON before this change: the frame gate never takes down an app that was running
+        was_on = _was_enabled(aid) if enable else True
         # writes either form, so an entry already migrated to `{ state: ... }` is updated too
         if not _set_disposition(aid, "enabled" if enable else "disabled"):
             # the desired state did not change hands, so nothing after this may: containers started
@@ -1175,6 +1279,15 @@ def _apply(aid, m, enable, step=lambda _name: None, patience=-1, restore=None):
             errs.append(problem)
         elif not _wait_ready(services, allowance):
             errs.append(late + " after its data was restored")
+    frame = None
+    if enable and not errs:
+        # may the console show it inside itself? (#63) — before its bootstrap, so a refused NEW app is
+        # switched off again through this same plane (state, compile, containers, automations)
+        frame = _frame_gate(aid, m, was_on, step)
+        if frame and frame.get("refuse"):
+            off, _code = _apply(aid, m, False, step)
+            return ({"ok": False, "id": aid, "enabled": False, "error": frame["sentence"], "frame": frame,
+                     "switched_off": bool(off.get("ok"))}, 409)
     if enable and not errs:
         if any((r or {}).get("auth") == "sso" for r in m.get("routing") or []):
             step("signin")
@@ -1218,7 +1331,8 @@ def _apply(aid, m, enable, step=lambda _name: None, patience=-1, restore=None):
              "create_errors": errs, "blueprint": blueprint, "required_by": needed,
              "providers_down": providers_down,
              "restored": restore if (restore and not errs) else None,
-             "hooks": {k: v for k, v in hooks.items() if v}, **rt}, 200 if not errs else 500)
+             "hooks": {k: v for k, v in hooks.items() if v},
+             **({"frame": frame} if frame else {}), **rt}, 200 if not errs else 500)
 
 
 # A bring-up — and a move, which contains one — is a JOB: it is as long as its slowest part, an image nobody has built yet (ten
@@ -1865,25 +1979,87 @@ def _stage_gc():
 
 @app.get("/api/catalog")
 def api_catalog_index():
-    """The local signed index, if this deployment has built one. Refused if it does not verify."""
+    """The local signed index, if this deployment has built one. Refused if it does not verify.
+
+    `?ref=` is NOT read (DGO-604, cyc-204). It was handed to `catalog.fetch`, which pulls any http(s)
+    address from inside the office network and reads any local path, and the error came back with the
+    ref in it: a probe of the network and the disk for anyone who reached this route, a linked office
+    through the door included. No screen sends it (the apps screen asks `api/catalog` bare), so the
+    route serves this office's own signed index and nothing else."""
     if catalog_mod is None:
         return jsonify(error=f"catalog unavailable: {_CATALOG_IMPORT_ERROR}"), 503
-    ref = request.args.get("ref") or str(catalog_mod.DEFAULT_OUT / catalog_mod.INDEX_NAME)
     try:
-        index, meta = catalog_mod.load_index(ref, require_signature=True)
+        index, meta = catalog_mod.load_index(str(catalog_mod.DEFAULT_OUT / catalog_mod.INDEX_NAME),
+                                             require_signature=True)
     except Exception as e:
-        return jsonify(error=str(e), ref=ref, entries=[]), 200
+        return jsonify(error=str(e), entries=[]), 200
     return jsonify(meta=meta, repo=index.get("repo"), entries=index.get("entries") or [])
+
+
+#: What a preview may take an app from (DGO-604, cyc-204). An id in this office's own signed index, and a
+#: file the operator uploaded, always. An https address is the one other thing the apps screen offers
+#: («הדביקו כתובת לחבילת אפליקציה»), so it goes in two stages (AGENTS.md rule 8): `warn` (the default)
+#: fetches it only from a public address, never through a redirect, and logs that it will be refused;
+#: `refuse` answers 400. A local path, file:// and http:// are refused in both: no screen sends one, and
+#: they are exactly what read this office's disk and network.
+CATALOG_URL_REFS = (os.environ.get("CATALOG_URL_REFS") or "warn").strip().lower()
+_FETCH_MAX = 256 * 1024 * 1024
+
+
+def _public_https(url):
+    """'' if `url` is https to a host whose every address is public; otherwise why not."""
+    import ipaddress
+    import socket
+    u = urllib.parse.urlsplit(url)
+    if u.scheme != "https" or not u.hostname:
+        return "only an https address is fetched"
+    if u.username or u.password:
+        return "an address with credentials in it is not fetched"
+    if u.port not in (None, 443):
+        return "only the https port (443) is fetched"
+    try:
+        infos = socket.getaddrinfo(u.hostname, u.port or 443, proto=socket.IPPROTO_TCP)
+    except (OSError, UnicodeError):
+        return f"{u.hostname} does not resolve"
+    for info in infos:
+        if not ipaddress.ip_address(info[4][0].split("%")[0]).is_global:
+            return f"{u.hostname} is not a public address — this office's own network is never fetched"
+    return ""
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """A redirect is refused, not followed: it could point anywhere the address check never saw."""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise urllib.error.HTTPError(req.full_url, code, f"redirects to {newurl} — not followed", headers, fp)
+
+
+def _fetch_public(url, dest):
+    # no proxy from the environment either: the address checked must be the address connected to
+    opener = urllib.request.build_opener(_NoRedirect, urllib.request.ProxyHandler({}))
+    req = urllib.request.Request(url, headers={"User-Agent": "bina-platform-catalog/1"})
+    with opener.open(req, timeout=120) as r, open(dest, "wb") as out:   # noqa: S310 - checked above
+        got = 0
+        while chunk := r.read(1 << 20):
+            got += len(chunk)
+            if got > _FETCH_MAX:
+                raise ValueError(f"the package is larger than {_FETCH_MAX >> 20} MB")
+            out.write(chunk)
 
 
 @app.post("/api/catalog/preview")
 def api_catalog_preview():
     """Fetch + verify + validate a candidate and return the PRE-INSTALL DISCLOSURE. Writes nothing
-    into apps/ or platform.state.yaml. Accepts a JSON {ref} or an uploaded file."""
+    into apps/ or platform.state.yaml. Accepts a JSON {ref} (an id in the signed index, or — while
+    CATALOG_URL_REFS is `warn` — a public https address) or an uploaded file."""
+    if request.headers.get(OFFICE_HEADER):
+        # It fetches from the network and reads what it fetched (DGO-604): a linked office installs an app
+        # on itself, so it has nothing to preview here, and `catalog/install` refuses it anyway.
+        return jsonify(error="a linked office does not preview installs in this office"), 403
     if appinstall is None:
         return jsonify(error=f"catalog unavailable: {_CATALOG_IMPORT_ERROR}"), 503
     _stage_gc()
     work = tempfile.mkdtemp(prefix="bbox-install-")
+    url = ""
     try:
         up = request.files.get("file")
         if up and up.filename:
@@ -1896,14 +2072,33 @@ def api_catalog_preview():
             if not ref:
                 shutil.rmtree(work, ignore_errors=True)
                 return jsonify(error="no ref and no file"), 400
+            if not appinstall._looks_like_id(ref):
+                why = ("not a catalog source: give an app id from the signed catalog, or upload the file"
+                       if not ref.lower().startswith("https://") or CATALOG_URL_REFS == "refuse"
+                       else _public_https(ref))
+                if why:
+                    shutil.rmtree(work, ignore_errors=True)
+                    return jsonify(error=why), 400
+                print(f"[app-management] catalog/preview: fetched an https address that is not a catalog "
+                      f"source ({urllib.parse.urlsplit(ref).hostname}); with CATALOG_URL_REFS=refuse it is "
+                      f"refused (DGO-604)", file=sys.stderr, flush=True)
+                url = ref
+                name = os.path.basename(urllib.parse.urlsplit(ref).path) or "artifact.zip"
+                ref = os.path.join(work, re.sub(r"[^A-Za-z0-9._-]", "_", name))
+                _fetch_public(url, ref)
         app_dir, prov = appinstall.stage(
-            ref, index_ref=body.get("index") or None,
+            # the index is always this office's own: a caller-named index is a caller-named fetch
+            ref, index_ref=None,
             expect_sha=(body.get("sha256") or None),
             # An UPLOAD is an operator handing the platform a file it chose. There is no signature
             # to demand, so it is accepted and reported as unverified — unless its hash happens to
             # match an entry in the signed index, which stage() checks and upgrades.
             allow_unverified=bool(body.get("allow_unverified") or (up and up.filename)),
             workdir=os.path.join(work, "stage"))
+        if url:
+            prov["ref"] = url        # say where it came from, not the temp file it was saved to
+            if "artifact_url" in prov:
+                prov["artifact_url"] = url
         manifest, cat, state, dis, refusals = appinstall.inspect(app_dir, prov)
     except SystemExit as e:          # reconcile.py exits on a broken catalog; do not take us with it
         shutil.rmtree(work, ignore_errors=True)
@@ -1993,10 +2188,14 @@ def _office_installed(rec):
         return True
     try:
         state = _load_state()
-        roots = {m.get("id"): m.get("_root") for m in _load_manifests()}
+        manifests = _load_manifests()
+        roots = {m.get("id"): m.get("_root") for m in manifests}
+        # an app the product ships as part of the core office (`"core": true` — the extensions, which a
+        # fresh core office runs before anybody chose an app, DGO-1090) is not a sign the wizard has run
+        core = {m.get("id") for m in manifests if m.get("core") is True}
     except Exception:
         return False
-    return any(_disposition(entry) == "enabled" and roots.get(aid) == "apps"
+    return any(_disposition(entry) == "enabled" and roots.get(aid) == "apps" and aid not in core
                for aid, entry in state.items())
 
 
@@ -2027,6 +2226,120 @@ def api_office_put():
     except Exception as e:
         return jsonify(error=str(e)), 500
     return jsonify(ok=True, office=rec, installed=_office_installed(rec))
+
+
+# ── on demand (DGO-1270): the waker ──────────────────────────────────────────────────────────────
+# The compiler gives every `routing.on_demand` route a copy of its routers on THIS service, at priority
+# 1, behind the same sign-in and then a header naming the app (reconcile.on_demand_labels). While the
+# app runs, its own routers win; once autoheal has stopped it for idleness, its address lands here. The
+# answer starts its containers — `docker start`, the same container as compiled, or scripts/dc for one
+# that is missing — and is a page that reloads itself until the app's own routers take the address back
+# (traefik routes to a container only once it is healthy, so the page keeps answering while it boots).
+WAKE_HEADER = "X-Dgo-Wake"
+_WAKE_LOCK = threading.Lock()
+
+
+def _on_demand(m):
+    return any(isinstance(r, dict) and r.get("on_demand") for r in (m or {}).get("routing") or [])
+
+
+# How a container ends when it is STOPPED: 0 or 143 (it took the SIGTERM), 137 (killed at the end of
+# the grace) — and not by the kernel's OOM killer, which ends it with 137 too.
+_STOPPED_CODES = (0, 137, 143)
+
+
+def _asleep(services, cidx, m):
+    """An on-demand app whose every container ended as a stop does, not as a crash: asleep, not fallen."""
+    if not _on_demand(m) or cidx is None:
+        return False
+    rows = [cidx[s] for s in services if s in cidx]
+    return bool(rows) and all(r["status"] == "exited" and r.get("exit_code") in _STOPPED_CODES
+                              and not r.get("oom") for r in rows)
+
+
+def _wake(services):
+    """Start an on-demand app's stopped containers: (started, state). One start at a time — a request
+    that finds a start under way only answers, it never queues behind it. Nothing is CREATED here: a
+    missing container is the lifecycle's to make (enable/apply, under its lock), so it is said, not
+    built in a request thread. state: "starting", "missing" or "unhealthy" (running, and its probe fails)."""
+    if not _WAKE_LOCK.acquire(blocking=False):
+        return [], "starting"
+    try:
+        client = docker_sdk.from_env(timeout=_CIDX_TIMEOUT)
+        started, have, sick = [], set(), False
+        for svc in services:
+            for c in client.containers.list(all=True, filters={"label": [
+                    f"com.docker.compose.project={PROJECT}", f"com.docker.compose.service={svc}"]}):
+                have.add(svc)
+                if c.status != "running":
+                    c.start()
+                    started.append(svc)
+                elif ((c.attrs.get("State") or {}).get("Health") or {}).get("Status") == "unhealthy":
+                    sick = True
+        _CIDX["at"] = 0.0                                  # the next catalog read sees it starting
+        if any(s not in have for s in services):
+            return started, "missing"
+        return started, "unhealthy" if sick and not started else "starting"
+    finally:
+        _WAKE_LOCK.release()
+
+
+_WAKE_SAID = {
+    "starting": (4, "היא נכבתה כשלא השתמשו בה, ועולה עכשיו. הדף יתרענן לבד ויפתח אותה כשתהיה מוכנה."),
+    "unhealthy": (30, "היא פועלת, אבל בדיקת התקינות שלה נכשלת. הדף ינסה שוב בעוד חצי דקה."),
+    "missing": (30, "המכולה שלה חסרה בלשכה. אפשר להפעיל אותה שוב ממסך האפליקציות."),
+    "failed": (30, "ההפעלה נכשלה. הדף ינסה שוב בעוד חצי דקה."),
+}
+
+
+def _wake_page(title, state, failed=""):
+    from html import escape
+    every, said = _WAKE_SAID[state]
+    raw = f"<details><summary>פרטים</summary><pre>{escape(failed)}</pre></details>" if failed else ""
+    return (f'<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8">'
+            f'<meta name="viewport" content="width=device-width,initial-scale=1">'
+            f'<meta http-equiv="refresh" content="{every}">'
+            f"<title>מפעיל את {escape(title)}…</title>"
+            f"<style>:root{{color-scheme:light dark}}body{{font:16px/1.6 system-ui,sans-serif;margin:0;"
+            f"display:grid;place-items:center;min-height:100vh;text-align:center}}main{{padding:24px;max-width:28em}}"
+            f"</style></head><body><main><h1>מפעיל את {escape(title)}…</h1><p>{said}</p>{raw}</main></body></html>")
+
+
+@app.before_request
+def _wake_on_demand():
+    """Only a request the edge tagged with WAKE_HEADER; everything else goes on to its route. It starts
+    only an app that declares on_demand AND is switched on here (a disabled one stays off, whatever
+    routes are still up), and never for a caller that crossed a link: starting this office's
+    containers is the lifecycle's to decide, and the §9 boundary gate G85 holds for the routes holds
+    here too (the gate reads routes, so this hook is named in its place by this line)."""
+    aid = (request.headers.get(WAKE_HEADER) or "").strip()
+    if not aid:
+        return None
+    if request.headers.get(OFFICE_HEADER):
+        return jsonify(error="a linked office does not start this office's apps"), 403
+    m = _manifest(aid)
+    if not _on_demand(m):
+        return jsonify(error=f"{aid} is not an app that runs on demand"), 404
+    try:
+        dispo = _disposition(_load_state().get(aid))
+    except Exception:                                          # noqa: BLE001 — unknown is not "on"
+        dispo = None
+    if dispo != "enabled":
+        return jsonify(error=f"{aid} is switched off in this office"), 409
+    if docker_sdk is None:
+        return jsonify(error="docker socket unavailable"), 503
+    failed = ""
+    try:
+        woke, state = _wake(_services_of(m))
+    except Exception as e:                                     # noqa: BLE001 — said on the page, not a 500
+        woke, state, failed = [], "failed", f"{type(e).__name__}: {e}"[:300]
+    if woke or state != "starting":
+        print(f"[wake] {aid}: started {woke or '-'} ({state}{': ' + failed if failed else ''})", flush=True)
+    headers = {"Retry-After": str(_WAKE_SAID[state][0]), "Cache-Control": "no-store"}
+    if "text/html" not in (request.headers.get("Accept") or ""):
+        return jsonify(waking=aid, started=woke, state=state, error=failed or None), 503, headers
+    title = (m.get("title") or {}).get("he") or (m.get("title") or {}).get("en") or aid
+    return Response(_wake_page(title, state, failed), 503, headers, content_type="text/html; charset=utf-8")
 
 
 @app.get("/healthz")

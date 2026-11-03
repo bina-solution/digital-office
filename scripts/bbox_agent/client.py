@@ -13,6 +13,7 @@ Python 3.9 (the Mac's system python) and the standard library only.
 """
 from __future__ import annotations
 
+import atexit
 import base64
 import http.client
 import json
@@ -21,9 +22,11 @@ import re
 import socket
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
+import uuid
 from pathlib import Path
 from typing import Iterator, Optional
 
@@ -112,7 +115,29 @@ def _remote_blocks() -> list[dict]:
                     out.append({"office": str(entry.get("office") or off), **entry})
         elif isinstance(block, list):
             out.extend(e for e in block if isinstance(e, dict))
-    return out
+    return out or _registry_blocks()
+
+
+def _registry_blocks() -> list[dict]:
+    """The same blocks, read from what layer 0 compiled of them (`.generated/registry/remote.<office>.<alias>.json`),
+    for a python with no yaml: the Mac's system python3 runs this CLI, and without PyYAML `_state()` is empty — so
+    `bbox agent --office hp-laptop` found no HP at all (the Obsidian session, 2026-11-01). JSON needs nothing."""
+    offices: dict = {}
+    for f in sorted((REPO / ".generated" / "registry").glob("remote.*.json")):
+        try:
+            d = json.loads(f.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        remote = d.get("remote") if isinstance(d, dict) else None
+        if not isinstance(remote, dict) or not remote.get("office"):
+            continue
+        entry = offices.setdefault(str(remote["office"]), {
+            "office": str(remote["office"]), "label": remote.get("label"), "address": remote.get("address"),
+            "apps": []})
+        entry["apps"].append({"app": d.get("app"), "alias": d.get("alias"),
+                              "agent_api_port": d.get("agent_api_port"), "port": d.get("port"),
+                              "link_port": d.get("link_port"), "host": d.get("host")})
+    return list(offices.values())
 
 
 def _vault_instances() -> list[dict]:
@@ -187,6 +212,204 @@ def _link_host(alias: str, office: str, addr: str) -> str:
         return addr
 
 
+#: The other end of `_relay`, run inside a container on the office network: one TCP connection to the
+#: link's name, carried over stdin/stdout. It sits in argv base64-encoded, because stdin is the stream.
+_RELAY_PIPE = (
+    "import os,socket,sys,threading\n"
+    "s=socket.create_connection((sys.argv[1],int(sys.argv[2])),timeout=20)\n"
+    "s.settimeout(None)\n"
+    "def up():\n"
+    "    while True:\n"
+    "        d=os.read(0,65536)\n"
+    "        if not d: break\n"
+    "        s.sendall(d)\n"
+    "    try: s.shutdown(socket.SHUT_WR)\n"
+    "    except OSError: pass\n"
+    "threading.Thread(target=up,daemon=True).start()\n"
+    "while True:\n"
+    "    d=s.recv(65536)\n"
+    "    if not d: break\n"
+    "    os.write(1,d)\n")
+_LINK_NAME_RE = re.compile(r"[a-z0-9][a-z0-9.\-]{0,200}")      # fullmatch: no trailing newline
+_DEPLOYMENT_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.\-]{0,63}")
+_relays: dict = {}
+
+
+def _deployment_name() -> str:
+    """This office's `DEPLOYMENT_NAME` — the suffix of every one of its containers (`<svc>-<name>`) —
+    read from the checkout's `.env` by that one key, never printed. Absent, it is compose's own default
+    (`container_name: dgo-extend-${DEPLOYMENT_NAME:-bina-deployment}`); "" only for a value a shell
+    could misread."""
+    try:
+        for line in (REPO / ".env").read_text(encoding="utf-8").splitlines():
+            if line.startswith("DEPLOYMENT_NAME="):
+                value = line.split("=", 1)[1].strip().strip('"').strip("'")
+                return value if _DEPLOYMENT_RE.fullmatch(value) else ""
+    except OSError:
+        pass
+    return "bina-deployment"
+
+
+#: The relay processes alive in this run, so an interrupted `bbox agent` takes them with it: each one
+#: runs in a session of its own (`killpg` reaches bash → limactl → ssh), and that same session is what
+#: keeps a Ctrl-C in the terminal from reaching them.
+_live: set = set()
+
+
+def _kill_chain(p) -> None:
+    try:
+        os.killpg(p.pid, 9)
+    except OSError:
+        try:
+            p.kill()
+        except OSError:
+            pass
+
+
+@atexit.register
+def _kill_relays() -> None:
+    for p in list(_live):
+        _kill_chain(p)
+
+
+def _relay_cmd(name: str, port: int) -> list:
+    """The process that carries one connection: `_RELAY_PIPE` in THIS office's dgo-extend, which is on the
+    office network. By its container name (`dgo-extend-<DEPLOYMENT_NAME>`) where the checkout says it: a
+    machine that runs two offices has two dgo-extends, and the other one's alias leads to the other
+    office's link. `name` and `port` were checked by `_relay` and are inert in a shell."""
+    b64 = base64.b64encode(_RELAY_PIPE.encode()).decode()
+    dep = _deployment_name()
+    pick = (f"--filter name=^dgo-extend-{dep}$" if dep else "") + " --filter label=com.docker.compose.service=dgo-extend"
+    script = (f"c=$(docker ps -q {pick} | head -1); "
+              "[ -n \"$c\" ] || { echo 'no dgo-extend of this office is running' >&2; exit 1; }; "
+              f"exec docker exec -i \"$c\" python3 -c \"import base64;exec(base64.b64decode('{b64}').decode())\" "
+              f"{name} {int(port)}")
+    return _engine_cmd(["sh", "-c", script])
+
+
+def _relay_one(client: socket.socket, name: str, port: int) -> None:
+    try:
+        p = subprocess.Popen(_relay_cmd(name, port), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE, bufsize=0, start_new_session=True)
+    except OSError:
+        client.close()
+        return
+    _live.add(p)
+    carried = [0]
+    said = bytearray()
+
+    def drain():
+        # stderr is read while the connection lives: a pipe nobody reads blocks its writer at ~64 KB
+        # (engine.sh says things on every hop), and only the last few lines are worth an answer
+        try:
+            while True:
+                d = os.read(p.stderr.fileno(), 4096)
+                if not d:
+                    break
+                said.extend(d)
+                del said[:-2000]
+        except OSError:
+            pass
+    drained = threading.Thread(target=drain, daemon=True)
+    drained.start()
+
+    def down():
+        try:
+            while True:
+                d = os.read(p.stdout.fileno(), 65536)
+                if not d:
+                    break
+                carried[0] += len(d)
+                client.sendall(d)
+        except OSError:
+            pass
+        if not carried[0]:
+            # Nothing came back: the hop itself failed (no dgo-extend, no engine, a name the network does
+            # not know). Said as an HTTP answer, so the caller reads why instead of "connection dropped".
+            try:
+                p.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                pass
+            drained.join(timeout=2)
+            why = bytes(said) or b"the relay carried nothing"
+            body = b"relay to " + name.encode() + b":" + str(port).encode() + b" failed: " + why.strip()
+            try:
+                client.sendall(b"HTTP/1.1 502 Bad Gateway\r\ncontent-type: text/plain\r\ncontent-length: "
+                               + str(len(body)).encode() + b"\r\nconnection: close\r\n\r\n" + body)
+            except OSError:
+                pass
+        try:
+            client.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
+    t = threading.Thread(target=down, daemon=True)
+    t.start()
+    try:
+        while True:
+            d = client.recv(65536)
+            if not d:
+                break
+            p.stdin.write(d)
+            p.stdin.flush()
+    except OSError:
+        pass
+    try:
+        p.stdin.close()
+    except OSError:
+        pass
+    t.join(timeout=60)                   # the far side had its minute to finish what it was sending
+    client.close()
+    try:
+        p.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        _kill_chain(p)                   # the whole chain, not only its first process
+    _live.discard(p)
+
+
+def _relay(name: str, port: int) -> str:
+    """A loopback door to `<name>:<port>` as the office network sees it, for a process that is not on it.
+
+    `<alias>.<office>` is a network alias on the link proxy: it resolves in a container on the office
+    network and nowhere else. The Mac host is not there, and neither is a Linux host whose tunnel lives
+    in a container (the HP, the Dell). So each connection is carried by one `docker exec -i` into this
+    office's dgo-extend, which is on that network. Measured 2026-11-02 on the Mac: `bbox agent --office
+    hp-laptop` dialled 10.79.5.1:10080, a tunnel address the host has no route to, on the port of the
+    Mac's OWN listener (DGO-1127). "" when the name is not one this may pass to a shell."""
+    if not _LINK_NAME_RE.fullmatch(name or "") or not 1 <= int(port) <= 65535:
+        return ""
+    key = (name, int(port))
+    if key in _relays:
+        return _relays[key]
+    srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    srv.bind(("127.0.0.1", 0))
+    srv.listen(16)
+
+    def serve():
+        while True:
+            try:
+                c, _ = srv.accept()
+            except OSError:
+                return
+            threading.Thread(target=_relay_one, args=(c, name, int(port)), daemon=True).start()
+    threading.Thread(target=serve, daemon=True, name=f"relay-{name}").start()
+    _relays[key] = f"http://127.0.0.1:{srv.getsockname()[1]}"
+    return _relays[key]
+
+
+def _link_url(alias: str, office: str, addr: str, port: int) -> str:
+    """Where a linked office's app answers FROM HERE: by the link's name where it resolves, through
+    `_relay` where it does not and the engine is at hand, and at the peer's tunnel address last (a
+    machine whose tunnel is its own interface, with no engine to ask)."""
+    name = f"{alias}.{office}"
+    if _link_host(alias, office, addr) == name:
+        return f"http://{name}:{port}"
+    if not os.path.exists("/.dockerenv"):
+        relayed = _relay(name, port)
+        if relayed:
+            return relayed
+    return f"http://{addr}:{port}"
+
+
 def _vault_provider(office: str = "") -> Optional[dict]:
     """A linked office's agent, resolved from THIS office's vault alone (DGO-32).
 
@@ -212,6 +435,11 @@ def _vault_provider(office: str = "") -> Optional[dict]:
             return n == want or (len(want) >= 4 and re.search(r"(^|[^a-z0-9])" + re.escape(want) + r"([^a-z0-9]|$)", n) is not None)
         if want and not any(_named(n) for n in names if n):
             continue
+        # …and an agent credential is the office its secret names, never the one its id seems to:
+        # `hp` + `laptop-bina-ds` is `dgo_link-serve-hp-laptop-bina-ds-agent` too (DGO-1127).
+        if want and str(row.get("id") or "").startswith("dgo_link-serve-") and sec.get("office") \
+                and not (_named(str(sec["office"])) or _named(str(sec.get("label") or ""))):
+            continue
         addr = str(sec.get("address") or "").strip()
         port = int(sec.get("port") or 0)
         appid = str(sec.get("app") or "")
@@ -220,6 +448,9 @@ def _vault_provider(office: str = "") -> Optional[dict]:
         alias = str(sec.get("alias") or appid or "bina")
         return {"app": appid or "bina-ds", "alias": alias,
                 "port": port, "service": f"dgo-serve-{sec.get('office')}-{appid}",
+                # never through `_relay`: this port is the PEER's published one, and on this office's link
+                # proxy that number may be another peer's listener (`apply_plan` moves ours) — only the
+                # state block's port is ours to dial by the link's name
                 "url": f"http://{_link_host(alias, want or str(sec.get('office') or ''), addr)}:{port}",
                 "served_by": str(sec.get("office") or ""),
                 "instances": [str(row.get("id") or "")], "instance": str(row.get("id") or ""),
@@ -250,9 +481,13 @@ def remote_provider(office: str = "") -> Optional[dict]:
         if want and want not in {off.lower(), label.lower()}:
             continue
         addr = str(entry.get("address") or "").strip()
-        for app in (entry.get("apps") or []):
-            if not isinstance(app, dict):
-                continue
+        # THE office's agent first — the app declaring `office-agent` — and another agent.v1 app (bina-claude:
+        # `claude-agent`) only where it is the one served. In file order `bina-claude` sorts before `bina`, so the HP's
+        # update, which serves both, sent `--office hp-laptop` to bina-claude's door instead of Azaria (2026-11-03).
+        apps = [a for a in (entry.get("apps") or []) if isinstance(a, dict)]
+        apps.sort(key=lambda a: 0 if any(c.get("name") == "office-agent" and c.get("interface") == "agent.v1"
+                                         for c in _manifest(str(a.get("app") or "")).get("capabilities") or []) else 1)
+        for app in apps:
             aid = str(app.get("app") or "").strip()
             alias = str(app.get("alias") or aid).strip()
             port = int(app.get("agent_api_port") or 0)
@@ -265,9 +500,15 @@ def remote_provider(office: str = "") -> Optional[dict]:
             inst = str(app.get("instance") or entry.get("instance") or "").strip()
             cands = [i for i in (inst, AGENT_INSTANCE.format(office=off, app=aid),
                                  f"{PROTOCOL}-{off}", f"{PROTOCOL}-{off}-{aid}") if i]
+            # The app's OWN door on the link (the screen's), for HarnessFallback: the office's link port and the
+            # host the app answers under there. Kept as facts, dialled only if the agent door is not served.
+            link_port = int(app.get("link_port") or entry.get("link_port") or 0)
+            rpc = {"office": off, "alias": alias, "address": addr, "port": link_port,
+                   "host": str(app.get("host") or f"{alias}.localhost")} if link_port else None
             return {"app": aid, "alias": alias, "port": port,
-                    "service": f"dgo-serve-{off}-{alias}", "url": f"http://{_link_host(alias, off, addr)}:{port}",
-                    "served_by": off, "instances": cands, "instance": cands[0], "from": "state"}
+                    "service": f"dgo-serve-{off}-{alias}", "url": _link_url(alias, off, addr, port),
+                    "served_by": off, "instances": cands, "instance": cands[0], "from": "state",
+                    **({"rpc": rpc} if rpc else {})}
     # The state block is the primary answer; the credential plane is the fallback that works on a
     # machine whose compiler has not caught up (see _vault_provider).
     return _vault_provider(office)
@@ -285,12 +526,55 @@ def _served_provider() -> Optional[dict]:
     return remote_provider("")
 
 
-def provider(office: str = "") -> dict:
+def _peer_host(service: str) -> str:
+    """How THIS process reaches an agent service: by its name from another container on the office
+    network, by the host's loopback everywhere else — inside the provider itself, on the host, and in
+    a container that cannot resolve the name (host networking, a CI runner, a devcontainer), where the
+    loopback is what always worked."""
+    if not os.path.exists("/.dockerenv") or socket.gethostname() == service:
+        return "127.0.0.1"
+    try:
+        socket.gethostbyname(service)
+        return service
+    except OSError:
+        return "127.0.0.1"
+
+
+def _app_provider(app_id: str) -> Optional[dict]:
+    """An agent.v1 provider named by its app id (`bbox agent --app bina-claude list`, DGO-1074).
+
+    The office agent is the app whose capability is `office-agent`; another app may serve the same
+    contract under a name of its own (bina-claude: `claude-agent`), so it never competes for the
+    default. Addressed by id, any capability with `interface: agent.v1` is its door. From a container
+    on the office network the door is the service itself; from the host it is the loopback port the
+    compose file publishes, which every agent app publishes under the same number.
+    """
+    j = _manifest(app_id)
+    for c in j.get("capabilities") or []:
+        if c.get("interface") == "agent.v1" and c.get("endpoint"):
+            m = re.match(r"https?://([^:/]+):?(\d+)?", str(c["endpoint"]))
+            if not m:
+                continue
+            service, port = m.group(1), int(m.group(2) or 80)
+            return {"app": j["id"], "service": service, "port": port, "url": f"http://{_peer_host(service)}:{port}"}
+    return None
+
+
+def provider(office: str = "", app: str = "") -> dict:
     """Where an agent is: this office's own, or the one a linked office serves (DGO-32).
 
     `office` names the far office explicitly (`bbox agent --office macbook list`); without it the
-    local provider wins when there is one, and a served agent is the fallback.
+    local provider wins when there is one, and a served agent is the fallback. `app` names a local
+    agent app by id (`--app bina-claude`), whatever its capability is called.
     """
+    if app:
+        if office:
+            raise AgentError("--app names an agent app of THIS office; another office's agent is --office alone", 2)
+        found = _app_provider(app)
+        if found:
+            return found
+        raise AgentError(f"no app {app!r} here declares a capability with interface agent.v1 "
+                         f"(apps/{app}/app.json)", 3)
     if office:
         remote = remote_provider(office)
         if remote:
@@ -300,6 +584,11 @@ def provider(office: str = "") -> dict:
                          f"it and converge, or read `GET /api/link` on dgo-extend for what is declared", 3)
     local = _local_provider()
     if local:
+        # From ANOTHER container on the office network (bina-claude asking Azaria) the host's loopback
+        # is that container's own: the door is the service, when its name resolves (_peer_host).
+        host = _peer_host(local["service"])
+        if host != "127.0.0.1":
+            local["url"] = f"http://{host}:{local['port']}"
         return local
     served = _served_provider()
     if served:
@@ -362,11 +651,18 @@ def _vault_token(instances, served_by: str = "") -> str:
     names = [str(i).strip() for i in (instances if isinstance(instances, (list, tuple)) else [instances]) if i]
     if not names:
         raise AgentError("the served provider names no vault instance", 3)
+    # An agent credential names the office that gave it (`secret.office`): office and app ids are joined
+    # with dashes, so `hp` + `laptop-bina-ds` names hp-laptop's row, and a row of another office is
+    # never this office's token. sys.argv[2] is the office asked for ("" when not known).
     lookup = ("import json,urllib.request,sys;"
-              "print((json.load(urllib.request.urlopen("
+              "s=(json.load(urllib.request.urlopen("
               "'http://127.0.0.1:8990/api/instances/%s/secret' % sys.argv[1],timeout=20)"
-              ").get('secret') or {}).get('token',''))")
+              ").get('secret') or {});"
+              "o=sys.argv[2] if len(sys.argv)>2 else '';"
+              "print('' if (o and sys.argv[1].startswith('dgo_link-serve-') and s.get('office') "
+              "and str(s.get('office'))!=o) else s.get('token',''))")
     b64 = base64.b64encode(lookup.encode()).decode()
+    who = served_by if INSTANCE_RE.match(served_by or "") else ""     # read back through a shell: inert
     tok = ""
     for name in names:
         if not INSTANCE_RE.match(name):
@@ -375,7 +671,7 @@ def _vault_token(instances, served_by: str = "") -> str:
             "c=$(docker ps -q --filter label=com.docker.compose.service=connections | head -1); "
             "[ -n \"$c\" ] || { echo 'the vault container is not running' >&2; exit 1; }; "
             f"docker exec \"$c\" python3 -c \"import base64;exec(base64.b64decode('{b64}').decode())\" "
-            f"{name}"
+            f"{name} {who}"
         )
         try:
             got = _run(_engine_cmd(["sh", "-c", script]), timeout=240).splitlines()[-1].strip()
@@ -385,8 +681,9 @@ def _vault_token(instances, served_by: str = "") -> str:
             return got
     raise AgentError(
         f"no credential for the agent of {served_by or 'the linked office'} in this office's vault — "
-        f"tried {', '.join(names)}. The office that serves it hands it over on a converge with the "
-        f"link (`bbox dgo converge <office>`), or the catalog names the instance the contract wants "
+        f"tried {', '.join(names)}. This office's dgo-extend takes it over the link on its next "
+        f"projection pass (DGO-1127) once both offices run it, the serving office's converge pushes it "
+        f"(`bbox dgo converge <office>`), or the catalog names the instance the contract wants "
         f"(`dgo_link-<office>`)", 3)
 
 
@@ -410,6 +707,381 @@ def repo_key() -> str:
     return str(REPO)
 
 
+# ── a linked office whose agent door is not served: its harness, through the link's app door ────────
+#: Where a new session starts when none is named — the adapter's own default, a path every office's bina-ds keeps
+#: (entrypoint.sh links it to the checkout).
+HARNESS_OFFICE_ROOT = "/workspace/office"
+HARNESS_FULL_ID = re.compile(r"^(session-)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+HARNESS_VERBS = "list, show, new, send, log, wait, rename, cancel and follow"
+
+
+def _iso(ms) -> Optional[str]:
+    try:
+        return time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(float(ms) / 1000)) + ".000Z"
+    except (TypeError, ValueError):
+        return None
+
+
+def harness_summary(s: dict) -> dict:
+    """One harness session as agent.v1's row — the adapter's `summary()` (apps/bina-ds/adapter/server.mjs)."""
+    v = ((s.get("projections") or {}).get("values")) or {}
+    goal = (v.get("goal") or {}).get("goal")
+    inbox = v.get("inbox") or {}
+    return {
+        "id": s.get("sessionId"), "title": v.get("title") or None, "running": bool(s.get("running")),
+        "blank": bool(s.get("blank")), "cwd": s.get("cwd") or None, "updated_at": _iso(s.get("updatedAt")),
+        "preset": v.get("agentPreset") or None, "permissions": (v.get("permissions") or {}).get("currentValue"),
+        "model": (v.get("modelSelection") or {}).get("lastUsed") or (v.get("modelSelection") or {}).get("next"),
+        "goal": {"objective": goal.get("objective"), "phase": goal.get("phase"), "rounds": (v.get("goal") or {}).get("roundsStarted"),
+                 "max_rounds": goal.get("maxGoalRounds")} if goal else None,
+        "todos": v.get("todos") or None, "turns": len(v.get("turnOutline") or []), "tokens": v.get("tokenUsage") or None,
+        "queue": len(inbox.get("next-turn") or []) + len(inbox.get("next-step") or []), "stale": False,
+    }
+
+
+def _blocks_text(blocks) -> str:
+    out = []
+    for b in blocks or []:
+        if isinstance(b, str):
+            out.append(b)
+        elif (b or {}).get("type") == "text":
+            out.append(b.get("text") or "")
+        elif (b or {}).get("type") in ("image", "file"):
+            out.append(f"[{b['type']} {(b.get('attachment') or {}).get('name') or ''}]")
+    return "".join(out)
+
+
+def _args(s):
+    if not isinstance(s, str):
+        return s
+    try:
+        return json.loads(s)
+    except ValueError:
+        return s
+
+
+def harness_normalize(ev: dict) -> list:
+    """One harness log event as agent.v1's compact events — the adapter's `normalize()`, type for type."""
+    d = ev.get("data") or {}
+    base = {"seq": ev.get("seq"), "at": _iso(ev["time"]) if isinstance(ev.get("time"), (int, float)) else ev.get("time"),
+            "turn": d.get("turn"), "step": d.get("step")}
+    t = ev.get("type")
+    if t == "turn/start":
+        return [{**base, "type": "turn.start"}]
+    if t == "turn/end":
+        return [{**base, "type": "turn.end", "reason": d.get("reason") or d.get("outcome")}]
+    if t == "step/start":
+        return [{**base, "type": "step.start"}]
+    if t == "step/end":
+        return [{**base, "type": "step.end"}]
+    if t == "user/message":
+        c = d.get("content") or (d.get("message") or {}).get("content") or []
+        return [{**base, "type": "user", "text": _blocks_text(c), "source": (d.get("source") or {}).get("kind")}]
+    if t == "assistant/message":
+        out = []
+        for b in (d.get("message") or {}).get("content") or []:
+            if b.get("type") == "reasoning" and b.get("text"):
+                out.append({**base, "type": "reasoning", "text": b["text"]})
+            elif b.get("type") == "text" and b.get("text"):
+                out.append({**base, "type": "assistant", "text": b["text"]})
+            elif b.get("type") == "tool-call":
+                out.append({**base, "type": "tool.call", "id": b.get("id"), "name": b.get("name"), "args": _args(b.get("arguments"))})
+        return out
+    if t == "tool/call":
+        return [{**base, "type": "tool.call", "id": d.get("callId") or d.get("id"), "name": d["name"], "args": _args(d.get("arguments"))}] \
+            if d.get("name") else []
+    if t == "tool/result":
+        m = d.get("message") or d
+        content = m.get("content") or []
+        blocks = [x for b in content for x in ((b.get("content") or []) if (b or {}).get("type") == "tool-result" else [b])]
+        err = any((b or {}).get("type") == "tool-result" and b.get("isError") for b in content) or bool(d.get("isError"))
+        return [{**base, "type": "tool.result", "id": (m.get("source") or {}).get("callId") or d.get("callId"),
+                 "ok": not err, "text": _blocks_text(blocks)}]
+    if t == "llm/retry":
+        return [{**base, "type": "retry", "provider": d.get("provider"), "reason": d.get("reason") or (d.get("failure") or {}).get("message")}]
+    if t == "llm/retry-started":
+        return [{**base, "type": "retry.start", "attempt": d.get("retry")}]
+    if t == "agent/inbox/spliced":
+        txt = _blocks_text([c for i in d.get("inserted") or [] for c in (i.get("content") or [])])
+        return [{**base, "type": "inbox", "target": d.get("target"), "text": txt}] if txt else []
+    if t == "approval/asked":
+        return [{**base, "type": "approval.asked", "request": d}]
+    if t == "approval/decided":
+        return [{**base, "type": "approval.decided", "decision": d.get("decision") or d}]
+    if t == "goal/change":
+        return [{**base, "type": "goal", "goal": d.get("goal") or d}]
+    if t == "session/title":
+        return [{**base, "type": "title", "title": d.get("title") or d.get("value")}]
+    if t == "session/not-found":
+        return [{**base, "type": "error", "code": t}]
+    return []
+
+
+class HarnessFallback:
+    """agent.v1 answered from a linked office's HARNESS, through the link's app door (r030-204, DGO-1228).
+
+    WHY. An office that fell behind serves no agent door — the door is newer code than it runs — so `bbox agent
+    --office hp-laptop` met 502 (the HP, 761 commits behind, 2026-11-02), and the only way left to tell its agent
+    «take dgo-stable» was the owner at the machine (rep-local-261102-201500). Its harness was there all along,
+    behind the app the link already shares with this office: the screen speaks to it with `POST /api/<ns>/<method>`
+    under the app's own Host and Origin, and so does this — the same door and the same trust as the screen, from
+    this office's network (the relay the client already uses when this process is not on it).
+
+    WHAT. The verbs that operate an office: list, show, new, send, log, wait, rename, cancel, and follow — each
+    translated as the adapter translates it (apps/bina-ds/adapter/server.mjs), so the CLI renders the same thing.
+    Reading the log is `session/page` against the newest sequence number, found by probing (the page refuses a
+    sequence the log does not hold, and -1 is the empty cut); following is that read, repeated, because live tokens
+    need the harness's websocket, which an HTTP door does not carry. Files, models, goals and the rest answer that
+    they need the agent door, with the reason it is not served.
+    """
+
+    POLL = 3.0
+    #: a follow gives up only after this many reads in a row failed (one slow relay hop is not the end of it)
+    FAILS = 20
+
+    def __init__(self, base: str, host: str, office: str, why: str, timeout: float = 240.0):
+        self.base, self.host, self.office, self.why, self.timeout = base.rstrip("/"), host, office, why, timeout
+        self._items: Optional[list] = None
+        self._listed_at = 0.0
+        #: per session, the newest sequence BEFORE this run prompted it: a follow that opens right after a send starts
+        #: there, so the turn the send began is seen from its start (it may have started before the follow looked)
+        self._marks: dict = {}
+
+    # ── the wire
+    def rpc_result(self, method: str, args: dict, timeout: Optional[float] = None) -> dict:
+        """The harness's `result` ({ok, value | error}); raises only when its door did not answer."""
+        body = json.dumps({"type": "client-request", "rpcId": str(uuid.uuid4()), "method": method,
+                           "payload": {"args": args}}).encode()
+        req = urllib.request.Request(f"{self.base}/api/{method}", data=body, method="POST",
+                                     headers={"content-type": "application/json", "Host": self.host,
+                                              "Origin": f"http://{self.host}"})
+        try:
+            with urllib.request.urlopen(req, timeout=timeout or self.timeout) as r:
+                return (json.loads(r.read() or b"{}") or {}).get("result") or {}
+        except urllib.error.HTTPError as e:
+            raise AgentError(f"{self.office}'s harness answered HTTP {e.code} to {method} through its app door "
+                             f"({e.headers.get('X-Dgo-Door') or e.reason})", 5 if e.code in (401, 403) else 3, http=e.code)
+        except (urllib.error.URLError, OSError, ValueError, http.client.HTTPException) as e:
+            raise AgentError(f"{self.office}'s harness did not answer {method} through its app door ({e})", 3)
+
+    def rpc(self, method: str, args: dict, timeout: Optional[float] = None):
+        res = self.rpc_result(method, args, timeout)
+        if res.get("ok") is not True:
+            # an answer that does not SAY it worked did not work: "queued" must never be printed for a message
+            # the harness never took
+            err = res.get("error") or {"code": "harness/no-result", "message": f"{method} answered without a result"}
+            code = str(err.get("code") or "harness/error")
+            http_status = 404 if "not-found" in code else 400 if re.search(r"bad-request|invalid", code) else 502
+            raise AgentError(str(err.get("message") or code), {404: 4, 400: 2}.get(http_status, 1),
+                             http=http_status, detail=code)
+        return res.get("value")
+
+    # ── sessions
+    def items(self, fresh: bool = False) -> list:
+        """The harness's own list — its most expensive call (15 s for 271 sessions on the HP), so once per run, and a
+        `fresh` read within seconds of the last one is that one."""
+        if self._items is None or (fresh and time.time() - self._listed_at > 5):
+            self._items = list((self.rpc("session/list", {"_request": {}}, max(self.timeout, 600)) or {}).get("items") or [])
+            self._listed_at = time.time()
+        return self._items
+
+    def resolve(self, given: str) -> str:
+        if HARNESS_FULL_ID.match(given):
+            return given
+        items = self.items()
+        exact = [s for s in items if s.get("sessionId") == given]
+        hits = exact or [s for s in items if str(s.get("sessionId") or "").startswith((given, "session-" + given))]
+        if len(hits) == 1:
+            return hits[0]["sessionId"]
+        if hits:
+            raise AgentError(f"{len(hits)} sessions match {given!r}", 6, http=409)
+        raise AgentError(f"no session {given}", 4, http=404)
+
+    def page(self, sid: str, through: int, max_messages: int, before: Optional[int] = None) -> dict:
+        req = {"address": {"kind": "session", "sessionId": sid}, "throughSeq": int(through), "maxMessages": int(max_messages)}
+        if before is not None:
+            req["beforeSeq"] = int(before)
+        return self.rpc("session/page", {"request": req}) or {}
+
+    def _holds(self, sid: str, seq: int) -> bool:
+        """Does the log hold `seq`? Only a page that CONTAINS it says yes — an answer without it is a no."""
+        try:
+            recs = self.page(sid, seq, 1).get("records") or []
+        except AgentError as e:
+            if e.detail and "bad-request" in e.detail:
+                return False            # the log does not hold that sequence (yet)
+            raise
+        return any(((r or {}).get("event") or {}).get("seq") == seq for r in recs)
+
+    def latest_seq(self, sid: str, hint: int = -1) -> int:
+        """The newest sequence the session's log holds, -1 for an empty log.
+
+        One call: a page asked far past the end is refused with the cursor in the refusal («past cursor N» — the same
+        reading apps/project-pln/report.py does). Every RPC here is a hop through the engine when relayed, so that one
+        call is the norm; doubling-then-halving from `hint` is the backup for a harness that words it otherwise."""
+        res = self.rpc_result("session/page", {"request": {"address": {"kind": "session", "sessionId": sid},
+                                                           "throughSeq": 10 ** 9, "maxMessages": 1}})
+        if res.get("ok") is not True:
+            err = res.get("error") or {}
+            past = re.search(r"past cursor (-?\d+)", json.dumps(err))
+            if past:
+                return int(past.group(1))
+            if "not-found" in str(err.get("code") or ""):
+                raise AgentError(str(err.get("message") or f"no session {sid}"), 4, http=404, detail=str(err.get("code")))
+        lo = hint if hint >= 0 and self._holds(sid, hint) else 0
+        if lo == 0 and not self._holds(sid, 0):
+            return -1
+        step, hi = 1, lo + 1
+        while hi < 10 ** 7 and self._holds(sid, hi):
+            lo, step = hi, step * 2
+            hi = lo + step
+        while hi - lo > 1:
+            mid = (lo + hi) // 2
+            lo, hi = (mid, hi) if self._holds(sid, mid) else (lo, mid)
+        return lo
+
+    def events_after(self, sid: str, cursor: int, latest: int) -> list:
+        """Every log event with cursor < seq <= latest, oldest first — pages sized to what is new."""
+        got: dict = {}
+        before = None
+        while True:
+            v = self.page(sid, latest, max(1, min(200, latest - cursor)), before)
+            seqs = []
+            for r in v.get("records") or []:
+                ev = (r or {}).get("event")
+                if (r or {}).get("type") == "event" and ev and isinstance(ev.get("seq"), int):
+                    seqs.append(ev["seq"])
+                    if ev["seq"] > cursor:
+                        got[ev["seq"]] = ev
+            if not seqs or min(seqs) <= cursor + 1 or not v.get("hasMore") \
+                    or (before is not None and min(seqs) >= before):      # no progress: never loop on one page
+                break
+            before = min(seqs)
+        return [got[k] for k in sorted(got)]
+
+    def prompt(self, sid: str, text, files, steer: bool) -> None:
+        if files:
+            raise AgentError(f"files cannot reach {self.office} while its agent door is not served ({self.why}) — "
+                             f"send the text alone", 2)
+        if not str(text or "").strip():
+            raise AgentError("text required", 2, http=400)
+        if sid not in self._marks:
+            self._marks[sid] = self.latest_seq(sid)
+        self.rpc("session/prompt", {"request": {
+            "requestId": str(uuid.uuid4()), "sessionId": sid, "mode": "steer" if steer else "queue",
+            "content": [{"type": "text", "text": str(text)}],
+            # the office's own zone — the adapter's TZ there — not whatever this machine says
+            "clientTimeZone": "Asia/Jerusalem"}})
+
+    def unsupported(self, what: str):
+        raise AgentError(f"`{what}` needs {self.office}'s agent door, which is not served ({self.why}). Over its harness "
+                         f"this CLI speaks {HARNESS_VERBS}; the rest comes back when the office takes dgo-stable", 3)
+
+    # ── agent.v1, translated
+    def call(self, method: str, path: str, body=None) -> dict:
+        from urllib.parse import parse_qs, urlsplit
+        u = urlsplit(path)
+        p, q = (u.path.rstrip("/") or "/"), parse_qs(u.query)
+        fresh = (q.get("fresh") or [""])[0] == "1"
+        b = body or {}
+        if method == "GET" and p == "/v1/sessions":
+            return {"sessions": [harness_summary(s) for s in self.items(fresh)], "partial": False}
+        if method == "POST" and p == "/v1/sessions":
+            req = {"cwd": b.get("cwd") or HARNESS_OFFICE_ROOT, **({"agentPreset": b["preset"]} if b.get("preset") else {})}
+            created = self.rpc("session/create", {"request": req}) or {}
+            sid = created.get("sessionId")
+            if not sid:
+                raise AgentError(f"{self.office}'s harness created no session", 1)
+            self._marks[sid] = -1           # new: everything in its log is this run's
+            if b.get("title"):
+                try:
+                    self.rpc("session/rename", {"request": {"sessionId": sid, "title": str(b["title"])}})
+                except AgentError:
+                    pass                # the session is there; its name is cosmetic
+            if b.get("text") or b.get("files"):
+                self.prompt(sid, b.get("text"), b.get("files"), False)
+            self._items = None
+            return {"id": sid, "preset": created.get("agentPreset")}
+        m = re.match(r"^/v1/sessions/([A-Za-z0-9_.\-]+)(?:/([a-z]+))?$", p)
+        if not m:
+            self.unsupported(f"{method} {p}")
+        sid, sub = self.resolve(m.group(1)), m.group(2) or ""
+        if not sub and method == "GET":
+            s = next((x for x in self.items(fresh) if x.get("sessionId") == sid), None)
+            if not s:
+                raise AgentError(f"no session {sid}", 4, http=404)
+            return harness_summary(s)
+        if sub == "messages" and method == "POST":
+            self.prompt(sid, b.get("text"), b.get("files"), bool(b.get("steer")))
+            return {"accepted": True, "id": sid}
+        if sub == "messages" and method == "GET":
+            limit = max(1, min(500, int((q.get("limit") or ["20"])[0] or 20)))
+            latest = self.latest_seq(sid)
+            recs = (self.page(sid, latest, limit).get("records") or []) if latest >= 0 else []
+            evs = [e for r in recs if (r or {}).get("type") == "event" and r.get("event") for e in harness_normalize(r["event"])]
+            return {"id": sid, "has_more": False, "events": evs}
+        if sub == "rename" and method == "POST":
+            if not b.get("title"):
+                raise AgentError("title is required", 2, http=400)
+            self.rpc("session/rename", {"request": {"sessionId": sid, "title": str(b["title"])}})
+            self._items = None
+            return {"id": sid, "title": str(b["title"])}
+        if sub == "cancel" and method == "POST":
+            self.rpc("session/cancel", {"request": {"sessionId": sid}})
+            return {"accepted": True, "id": sid}
+        self.unsupported(f"{method} {p}")
+
+    def events(self, path: str) -> Iterator[dict]:
+        """The adapter's follow stream, rebuilt from the log: `open`, the `snapshot` asked for, then each new event as
+        it lands (read every POLL seconds)."""
+        from urllib.parse import parse_qs, urlsplit
+        u = urlsplit(path)
+        q = parse_qs(u.query)
+        m = re.match(r"^/v1/sessions/([A-Za-z0-9_.\-]+)/events$", u.path.rstrip("/"))
+        if not m or (q.get("raw") or [""])[0] == "1":
+            self.unsupported(f"GET {u.path}" + (" (raw)" if m else ""))
+        sid = self.resolve(m.group(1))
+        history = max(0, min(500, int((q.get("history") or ["0"])[0] or 0)))
+        since = int((q.get("since") or ["-1"])[0] or -1)
+        latest = self.latest_seq(sid)
+        yield {"event": "open", "data": {"id": sid, "since": since, "history": history, "raw": False, "stream": False}, "id": None}
+        # the snapshot always comes, empty when no history was asked — as the harness's own follow opens
+        recs = (self.page(sid, latest, history).get("records") or []) if history and latest >= 0 else []
+        evs = [e for r in recs if (r or {}).get("type") == "event" and r.get("event") and r["event"].get("seq", -1) > since
+               for e in harness_normalize(r["event"])]
+        yield {"event": "snapshot", "data": {"id": sid, "header": None, "cursor": latest, "events": evs}, "id": None}
+        cursor = max(latest, since)
+        if since < 0 and not history and sid in self._marks:
+            cursor = min(cursor, self._marks.pop(sid))   # right after a send: from where the send found the log
+            yield from self._new_events(sid, cursor, latest)
+            cursor = latest
+        fails = 0
+        while True:
+            time.sleep(self.POLL)
+            try:
+                now = self.latest_seq(sid, cursor)
+                batch = list(self._new_events(sid, cursor, now)) if now > cursor else []
+            except AgentError as e:
+                # reads only: retried, and given up after FAILS of them failed in a row, never at the first slow hop —
+                # but a session that is gone (4) or a door that refuses this office (5) will not come back by waiting
+                if e.code in (4, 5):
+                    raise
+                fails += 1
+                if fails >= self.FAILS:
+                    raise AgentError(f"following {sid} on {self.office}: {self.FAILS} reads in a row failed ({e.message})", 3)
+                continue
+            fails = 0
+            yield from batch
+            cursor = max(cursor, now)
+
+    def _new_events(self, sid: str, cursor: int, latest: int) -> Iterator[dict]:
+        if latest <= cursor:
+            return
+        for ev in self.events_after(sid, cursor, latest):
+            for e in harness_normalize(ev):
+                yield {"event": e["type"], "data": e, "id": str(ev.get("seq"))}
+
+
 class Client:
     """One office agent provider, reached over agent.v1.
 
@@ -420,19 +1092,22 @@ class Client:
     """
 
     def __init__(self, url: Optional[str] = None, token: Optional[str] = None, timeout: float = 240.0,
-                 office: str = ""):
+                 office: str = "", app: str = ""):
         self.timeout = timeout
         self.office = (office or "").strip().lower()
+        self.app = (app or "").strip().lower()
         self.cfg_all = load_config()
         # A remote office's entry lives under its own key: one office's URL and token must never be
-        # used for another's, and the plain repo key belongs to THIS office's own agent.
-        entry = (self.cfg_all.get(f"{repo_key()}::{self.office}") or {}) if self.office \
-            else (self.cfg_all.get(repo_key()) or {})
+        # used for another's, and the plain repo key belongs to THIS office's own agent. An agent app
+        # named by `--app` has its own key for the same reason.
+        self.cfg_key = f"{repo_key()}::{self.office}" if self.office \
+            else (f"{repo_key()}::app:{self.app}" if self.app else repo_key())
+        entry = self.cfg_all.get(self.cfg_key) or {}
         self.url = (url or os.environ.get("BBOX_AGENT_URL") or entry.get("url") or DEFAULT_URL).rstrip("/")
         self.explicit_url = bool(url or os.environ.get("BBOX_AGENT_URL"))    # `--url` wins, at login too
         self.provider_cache: Optional[dict] = None
-        if self.office:
-            prov = provider(self.office)          # raises with the office named when nothing matches
+        if self.office or self.app:
+            prov = provider(self.office, self.app)  # raises with the office/app named when nothing matches
             self.provider_cache = prov
             if not url and not os.environ.get("BBOX_AGENT_URL"):
                 # The DECLARED address always wins over a cache: it is what this office's own state
@@ -451,6 +1126,34 @@ class Client:
         self.token = token or os.environ.get("BBOX_AGENT_TOKEN") or entry.get("token")
         self.explicit_token = bool(token or os.environ.get("BBOX_AGENT_TOKEN"))
         self.token_source = "flag/env" if self.explicit_token else ("cache" if entry.get("token") else "none")
+        self.fallback: Optional[HarnessFallback] = None
+
+    # ── a linked office whose agent door is not served (r030-204)
+    def _fall_back(self, why: str) -> bool:
+        """Answer the rest of this run from the linked office's harness, through the link's app door
+        (HarnessFallback). Only for `--office`, only once, and only when the state names that door."""
+        if self.fallback:
+            return True
+        rpc = (self.provider_cache or {}).get("rpc") if self.office else None
+        if not rpc or os.environ.get("BBOX_AGENT_NO_FALLBACK"):
+            return False
+        base = _link_url(rpc["alias"], rpc["office"], rpc["address"], int(rpc["port"]))
+        self.fallback = HarnessFallback(base, rpc["host"], rpc["office"], why, self.timeout)
+        sys.stderr.write(f"agent: {rpc['office']}'s agent door is not served ({why}) — answering from its harness "
+                         f"through the link's app door ({HARNESS_VERBS})\n")
+        return True
+
+    @staticmethod
+    def _door_unserved(e: urllib.error.HTTPError) -> bool:
+        """The LINK answered for the agent's door: the office is there, the door is not (`X-Dgo-Door: app-down`,
+        apps/dgo-extend/link-proxy.py). An answer from the agent itself — whatever its status — never is: a
+        message it took must not be sent twice."""
+        return e.code == 502 and str((e.headers or {}).get("X-Dgo-Door") or "") == "app-down"
+
+    def _via_fallback(self, method: str, path: str, body=None, raw: Optional[bytes] = None):
+        if raw is not None:
+            self.fallback.unsupported("upload")
+        return self.fallback.call(method, path, body)
 
     # ── auth
     def login(self, force: bool = False) -> dict:
@@ -461,14 +1164,15 @@ class Client:
             self.token = obtain_token(prov)
             self.token_source = "engine"
         entry = {"url": self.url, "token": self.token, "provider": prov["app"], "obtained_at": int(time.time())}
+        if self.url in _relays.values():
+            # A relay lives as long as this process: a URL saved for the next run would be a dead port, or
+            # one another program has taken by then, and that program would be handed the token.
+            entry.pop("url")
         if prov.get("served_by"):
             entry["served_by"] = prov["served_by"]
-        if self.office:
-            # A remote office's URL and token are cached under its own key: the plain repo key belongs
-            # to the local agent, and one office's token must never be presented to another's.
-            self.cfg_all[f"{repo_key()}::{self.office}"] = entry
-        else:
-            self.cfg_all[repo_key()] = entry
+        # A remote office's (or a named app's) URL and token are cached under its own key: the plain
+        # repo key belongs to the local agent, and one office's token must never be presented to another's.
+        self.cfg_all[self.cfg_key] = entry
         save_config(self.cfg_all)
         return {"url": self.url, "provider": prov["app"], "config": str(CONFIG_PATH),
                 **({"office": self.office} if self.office else {}),
@@ -492,47 +1196,105 @@ class Client:
 
     def call(self, method: str, path: str, body=None, raw: Optional[bytes] = None, content_type: Optional[str] = None,
              timeout: Optional[float] = None, _retry: bool = True):
+        if self.fallback and path.split("?")[0] != "/v1/health":
+            return self._via_fallback(method, path, body, raw)
         if path != "/v1/health":
-            self.ensure_token()
+            try:
+                self.ensure_token()
+            except AgentError as e:
+                # no token for a linked office's agent: its door would refuse anyway — its harness need not
+                if path.split("?")[0] != "/v1/health" and self._fall_back(f"no token for its agent here: {e.message[:160]}"):
+                    return self._via_fallback(method, path, body, raw)
+                raise
         try:
             with self._request(method, path, body, raw, content_type, timeout) as r:
                 text = r.read()
                 return json.loads(text or b"{}")
         except urllib.error.HTTPError as e:
+            # `health` asks about the AGENT door itself: it is answered by that door (or its absence), never elsewhere
+            usable = path.split("?")[0] != "/v1/health"
+            if usable and self._door_unserved(e) and self._fall_back(f"the link answered {e.code} app-down for it"):
+                return self._via_fallback(method, path, body, raw)
             try:
                 err = json.loads(e.read())
             except ValueError:
                 err = {"error": str(e)}
             if e.code == 401 and _retry and not self.explicit_token:
-                self.login(force=True)
-                return self.call(method, path, body, raw, content_type, timeout, _retry=False)
+                try:
+                    self.login(force=True)
+                except AgentError:
+                    pass                    # no fresh token to be had here: the 401 below decides
+                else:
+                    return self.call(method, path, body, raw, content_type, timeout, _retry=False)
+            # the door refused this office's token even fresh from the vault (it changed there, and the link has not
+            # handed the new one over): refused before anything ran, so its harness may answer instead
+            if e.code == 401 and usable and self._fall_back("its agent door refused this office's token (401)"):
+                return self._via_fallback(method, path, body, raw)
             code = {404: 4, 401: 5, 409: 6}.get(e.code, 1)
             raise AgentError(f"{err.get('error') or e.reason}", code, http=e.code, detail=err.get("code"))
         except urllib.error.URLError as e:
+            # Never connected — nothing reached the agent. urllib also wraps an error raised while SENDING in URLError,
+            # so a write goes the other way only on a connection that never opened (refused, or a name that did not resolve).
+            never = isinstance(e.reason, (ConnectionRefusedError, socket.gaierror))
+            if path.split("?")[0] != "/v1/health" and (method == "GET" or never) and self._fall_back(f"{self.url} unreachable ({e.reason})"):
+                return self._via_fallback(method, path, body, raw)
             raise AgentError(f"provider unreachable at {self.url} ({e.reason}) — is the office up? try: bbox agent doctor", 3)
         except (socket.timeout, TimeoutError):
             raise AgentError(f"no answer from {self.url}{path} within {timeout or self.timeout:.0f}s — the engine is overloaded "
                              "or the harness is busy; retry, or raise --timeout", 3)
         except (http.client.HTTPException, ConnectionError, OSError) as e:
-            # a port that accepts and then drops (a forwarder whose far end is gone) shows up here
+            # a port that accepts and then drops (a forwarder whose far end is gone) shows up here. A READ may go to the
+            # harness instead; a write may already have reached the agent, so it is not sent a second way.
+            if method == "GET" and path.split("?")[0] != "/v1/health" and self._fall_back(f"{self.url} dropped the connection ({type(e).__name__})"):
+                return self._via_fallback(method, path, body, raw)
             raise AgentError(f"the connection to {self.url} dropped before an answer ({type(e).__name__}) — "
                              "the provider's port is not being served on this host; try: bbox agent doctor", 3)
 
     # ── server-sent events
     def events(self, path: str) -> Iterator[dict]:
         """Yield {'event','data','id'} per SSE message, until the server ends the stream."""
-        self.ensure_token()
+        if self.fallback:
+            yield from self.fallback.events(path)
+            return
+        try:
+            self.ensure_token()
+        except AgentError as e:
+            if self._fall_back(f"no token for its agent here: {e.message[:160]}"):
+                yield from self.fallback.events(path)
+                return
+            raise
         try:
             resp = self._request("GET", path, timeout=None, stream=True)
         except urllib.error.HTTPError as e:
+            if self._door_unserved(e) and self._fall_back(f"the link answered {e.code} app-down for it"):
+                yield from self.fallback.events(path)
+                return
+            resp = None
             if e.code == 401 and not self.explicit_token:
-                self.login(force=True)
-                resp = self._request("GET", path, timeout=None, stream=True)
-            else:
-                raise AgentError(f"{e.reason}", {404: 4}.get(e.code, 1), http=e.code)
+                try:
+                    self.login(force=True)
+                    resp = self._request("GET", path, timeout=None, stream=True)
+                except AgentError:
+                    pass                    # no fresh token to be had here
+                except urllib.error.HTTPError as again:
+                    e = again
+                except (urllib.error.URLError, http.client.HTTPException, OSError) as gone:
+                    raise AgentError(f"the connection to {self.url} failed after a fresh token ({type(gone).__name__})", 3)
+            if resp is None:
+                if ((e.code == 401 and self._fall_back("its agent door refused this office's token (401)"))
+                        or (self._door_unserved(e) and self._fall_back(f"the link answered {e.code} app-down for it"))):
+                    yield from self.fallback.events(path)
+                    return
+                raise AgentError(f"{e.reason}", {404: 4, 401: 5}.get(e.code, 1), http=e.code)
         except urllib.error.URLError as e:
+            if self._fall_back(f"{self.url} unreachable ({e.reason})"):
+                yield from self.fallback.events(path)
+                return
             raise AgentError(f"provider unreachable at {self.url} ({e.reason})", 3)
         except (http.client.HTTPException, ConnectionError, OSError) as e:
+            if self._fall_back(f"{self.url} dropped the connection ({type(e).__name__})"):
+                yield from self.fallback.events(path)
+                return
             raise AgentError(f"the connection to {self.url} dropped before the stream opened ({type(e).__name__}); try: bbox agent doctor", 3)
         ev, data, eid = None, [], None
         with resp:
@@ -561,8 +1323,11 @@ class Client:
 
     # ── convenience
     def health(self, deep: bool = False) -> dict:
+        # 30 s is the adapter's own budget; through `_relay` each connection first crosses the engine
+        # (15–44 s on the MacBook, 2026-11-02), so that hop gets the run's own timeout on top
+        budget = 30 + (self.timeout if self.url in _relays.values() else 0)
         try:
-            return self.call("GET", "/v1/health" + ("?deep=1" if deep else ""), timeout=30)
+            return self.call("GET", "/v1/health" + ("?deep=1" if deep else ""), timeout=budget)
         except AgentError as e:
             if e.http == 502:
                 # the adapter answered (502 = its harness is down): still a health answer

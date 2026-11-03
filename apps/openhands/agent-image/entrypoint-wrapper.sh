@@ -13,7 +13,7 @@ export DOCKER_HOST="${DOCKER_HOST:-tcp://host.docker.internal:2375}"
 echo "[agent] DOCKER_HOST=$DOCKER_HOST"
 
 git config --global --add safe.directory /workspace/project 2>/dev/null || true
-git config --global --add safe.directory /root/deployment-bina-comp 2>/dev/null || true
+git config --global --add safe.directory /root/deployment-hacohen 2>/dev/null || true
 git config --global --add safe.directory /workspace 2>/dev/null || true
 echo "[agent] Workspace: $(ls /workspace/ 2>/dev/null | head -3 | tr '\n' ' ')"
 

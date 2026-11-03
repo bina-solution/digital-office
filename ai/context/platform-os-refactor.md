@@ -142,11 +142,11 @@ unaffected; only a hand-kept dev stack drifts this way. Worth a glance at image 
 ✅ sync_kernel   6/6    28s     ✅ bs        4/4    85s
 ✅ sync_sources 10/10  116s     ✅ gdoc      5/5   429s
 ✅ sync_full     6/6    91s
-❌ doc_base      2/3   196s   one demo doc: dbf_ord resolved COMPANY 514947746, fixture wants 511234567
+❌ doc_base      2/3   196s   one demo doc: dbf_ord resolved COMPANY 500000096, fixture wants 511234567
 ❌ pipeline      0/–  1087s   harness gave up polling; the n8n execution was STILL running
 ```
 Both reds are non-structural. **doc_base** is a single-document company-resolution miss on
-`order/files/PO25010001` — and `gdoc` ran the *same file* (`gdx_ord1`, same expected 511301129-style
+`order/files/PO25010001` — and `gdoc` ran the *same file* (`gdx_ord1`, same expected 500000062-style
 company) and passed 5/5, so it is a flake in the resolver, not a systemic break. **pipeline** never
 returned a verdict: its n8n execution was still `running` when the harness stopped waiting, i.e. a
 timeout on the heaviest suite, last in a back-to-back battery, on a laptop right after a full image

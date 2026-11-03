@@ -7,6 +7,9 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/pyval"
+	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/yamlish"
 )
 
 // maxBriefBytes mirrors MAX_BRIEF_BYTES: an app's AGENT.md is injected into every agent session.
@@ -43,7 +46,7 @@ func Validate(repo string, cat *Catalog) ([]string, map[string][]string, error) 
 
 	var errs []string
 	provided := map[string][]string{}
-	claimedHosts, claimedModules := map[string][]string{}, map[string][]string{}
+	claimedHosts, claimedModules := map[string][]any{}, map[string][]any{}
 	for _, aid := range cat.Order {
 		a := cat.Apps[aid]
 		var keys []string
@@ -95,74 +98,161 @@ func Validate(repo string, cat *Catalog) ([]string, map[string][]string, error) 
 			checkEnums(aid, v, spec, path, &errs)
 			checkTypes(aid, v, spec, path, &errs)
 		}
-		if l, ok := intOf(a.Raw["layer"]); !ok || (l != 1 && l != 2 && l != 3) {
+		layerOK := false // `a.get("layer") not in (1, 2, 3)` compares by ==: 1.0 and true are 1
+		for _, l := range []int64{1, 2, 3} {
+			layerOK = layerOK || pyEqual(a.Raw["layer"], l)
+		}
+		if !layerOK {
 			errs = append(errs, fmt.Sprintf("%s: layer must be 1|2|3", aid))
 		}
+		if _, ok := pyKey(a.Raw["kind"]); !ok { // `not in set(enum)` hashes it
+			return nil, nil, died("%s: kind is %s, which cannot be looked up", aid, pyval.Repr(a.Raw["kind"]))
+		}
 		if !inEnum(a.Raw["kind"], kindEnum) {
-			errs = append(errs, fmt.Sprintf("%s: invalid kind '%s'", aid, pyStr(a.Raw["kind"])))
+			errs = append(errs, fmt.Sprintf("%s: invalid kind '%s'", aid, pyval.Str(a.Raw["kind"])))
 		}
-		for _, c := range a.list("capabilities") {
-			if name, ok := c["name"].(string); ok {
-				provided[name] = append(provided[name], aid)
+		caps, err := a.entries("capabilities")
+		if err != nil {
+			return nil, nil, err
+		}
+		for i, c := range caps {
+			name, ok := c["name"]
+			if !ok {
+				return nil, nil, died("%s: capabilities[%d] has no name", aid, i)
+			}
+			if _, ok := pyKey(name); !ok {
+				return nil, nil, died("%s: capabilities[%d].name is %s, which cannot name anything", aid, i, pyval.Repr(name))
+			}
+			// a name that is not text fails the type check above, so the OK line never lists it
+			if s, isText := name.(string); isText {
+				provided[s] = append(provided[s], aid)
 			}
 		}
-		for _, u := range a.list("use") {
-			s := strOr(u, "strength", "requires")
-			if !strengths[s] {
-				errs = append(errs, fmt.Sprintf("%s: use[%s] bad strength '%s'", aid, pyStr(u["capability"]), s))
+		uses, err := a.entries("use")
+		if err != nil {
+			return nil, nil, err
+		}
+		for i, u := range uses {
+			s := pyGet(u, "strength", "requires")
+			if _, ok := pyKey(s); !ok {
+				return nil, nil, died("%s: use[%d].strength is %s, which cannot be looked up", aid, i, pyval.Repr(s))
+			}
+			if name, _ := s.(string); !strengths[name] {
+				errs = append(errs, fmt.Sprintf("%s: use[%s] bad strength '%s'", aid, pyval.Str(pyGet(u, "capability", nil)), pyval.Str(s)))
 			}
 		}
-		for _, r := range a.list("routing") {
-			if host, ok := r["host"].(string); ok && host != "" {
-				claimedHosts[host] = append(claimedHosts[host], aid)
+		if routing := a.Raw["routing"]; truthy(routing) { // `a.get("routing") or []`
+			items, ok := pyIter(routing)
+			if !ok {
+				return nil, nil, died("%s: routing is %s, which cannot be iterated", aid, pyval.Repr(routing))
 			}
-			if mod, ok := r["module"].(map[string]any); ok {
-				if mid, ok := mod["id"].(string); ok && mid != "" {
-					claimedModules[mid] = append(claimedModules[mid], aid)
+			for i, x := range items {
+				r, ok := x.(map[string]any)
+				if !ok {
+					return nil, nil, died("%s: routing[%d] is %s, not an object", aid, i, pyval.Repr(x))
+				}
+				if host := pyGet(r, "host", nil); truthy(host) {
+					if err := claim(claimedHosts, host, aid); err != nil {
+						return nil, nil, died("%s: routing[%d].host %v", aid, i, err)
+					}
+				}
+				if mod := pyGet(r, "module", nil); truthy(mod) { // `(r.get("module") or {}).get("id")`
+					m, ok := mod.(map[string]any)
+					if !ok {
+						return nil, nil, died("%s: routing[%d].module is %s, not an object", aid, i, pyval.Repr(mod))
+					}
+					if mid := pyGet(m, "id", nil); truthy(mid) {
+						if err := claim(claimedModules, mid, aid); err != nil {
+							return nil, nil, died("%s: routing[%d].module.id %v", aid, i, err)
+						}
+					}
 				}
 			}
 		}
 		// the app's brief for the office agent
 		if ag, ok := a.Raw["agent"]; ok && ag != nil {
-			agm, _ := ag.(map[string]any)
-			rel := strings.TrimSpace(strOr(agm, "context", ""))
+			agm, ok := ag.(map[string]any)
+			if !ok {
+				return nil, nil, died("%s: agent is %s, not an object", aid, pyval.Repr(ag))
+			}
+			rel := ""
+			if ctx := pyGet(agm, "context", nil); truthy(ctx) { // `(ag.get("context") or "").strip()`
+				s, ok := ctx.(string)
+				if !ok {
+					return nil, nil, died("%s: agent.context is %s, not text", aid, pyval.Repr(ctx))
+				}
+				rel = pyval.Strip(s)
+			}
 			switch {
 			case rel == "":
 				errs = append(errs, fmt.Sprintf("%s: agent.context must name the brief file (convention: AGENT.md)", aid))
 			case strings.HasPrefix(rel, "/") || hasDotDot(rel):
-				errs = append(errs, fmt.Sprintf("%s: agent.context must be a path INSIDE apps/%s/, got '%s'", aid, aid, rel))
+				errs = append(errs, fmt.Sprintf("%s: agent.context must be a path INSIDE apps/%s/, got %s", aid, aid, pyval.Repr(rel)))
 			default:
-				st, err := os.Stat(filepath.Join(a.Dir, filepath.FromSlash(rel)))
-				if err != nil || st.IsDir() {
+				st, err := os.Stat(joinPath(a.Dir, rel))
+				if err != nil || !st.Mode().IsRegular() {
 					errs = append(errs, fmt.Sprintf("%s: agent.context '%s' does not exist — the agent would never learn how to operate this app", aid, rel))
 				} else if st.Size() > maxBriefBytes {
 					errs = append(errs, fmt.Sprintf("%s: agent.context '%s' is %d bytes, over the %d budget — this file is injected into EVERY agent session, so it buys its size from every other app's brief. Cut it to what a caller cannot read off the manifest (what the app is FOR, its vocabulary, its traps).", aid, rel, st.Size(), maxBriefBytes))
 				}
 			}
 		}
-		comp := strOr(a.Raw, "compose", "")
-		if comp != "" {
-			if _, err := os.Stat(filepath.Join(a.Dir, filepath.FromSlash(comp))); err != nil {
-				errs = append(errs, fmt.Sprintf("%s: compose '%s' not found", aid, comp))
+		comp := a.Raw["compose"]
+		if truthy(comp) {
+			s, ok := comp.(string)
+			if !ok { // the path join raises
+				return nil, nil, died("%s: compose is %s, not a path", aid, pyval.Repr(comp))
 			}
-			if kind := strOr(a.Raw, "kind", ""); kind == "blueprint" || kind == "library" {
+			if _, err := os.Stat(joinPath(a.Dir, s)); err != nil {
+				errs = append(errs, fmt.Sprintf("%s: compose '%s' not found", aid, s))
+			}
+			if kind, _ := a.Raw["kind"].(string); kind == "blueprint" || kind == "library" {
 				errs = append(errs, fmt.Sprintf("%s: kind=%s must not declare compose", aid, kind))
 			}
 		}
 	}
-	for _, host := range sortedKeysOf(claimedHosts) {
-		if owners := claimedHosts[host]; len(owners) > 1 {
-			sort.Strings(owners)
-			errs = append(errs, fmt.Sprintf("route conflict: host '%s' claimed by %s — only one app can own an edge route", host, strings.Join(owners, ", ")))
+	for _, c := range []struct {
+		claims     map[string][]any
+		what, line string
+	}{
+		{claimedHosts, "routing hosts", "route conflict: host '%s' claimed by %s — only one app can own an edge route"},
+		{claimedModules, "console modules", "tile conflict: console module '%s' claimed by %s — the shell would route one app's tile to the other"},
+	} {
+		names := make([]any, 0, len(c.claims))
+		for _, cl := range c.claims {
+			names = append(names, cl[0])
 		}
-	}
-	for _, mid := range sortedKeysOf(claimedModules) {
-		if owners := claimedModules[mid]; len(owners) > 1 {
-			sort.Strings(owners)
-			errs = append(errs, fmt.Sprintf("tile conflict: console module '%s' claimed by %s — the shell would route one app's tile to the other", mid, strings.Join(owners, ", ")))
+		sorted, ok := pySorted(names) // sorted(claims.items()): text beside a number is where Python raises
+		if !ok {
+			return nil, nil, died("the %s %s cannot be sorted", c.what, pyval.Repr(names))
+		}
+		for _, name := range sorted {
+			key, _ := pyKey(name)
+			if owners := c.claims[key][1:]; len(owners) > 1 {
+				ids := make([]string, len(owners))
+				for i, o := range owners {
+					ids[i] = o.(string)
+				}
+				sort.Strings(ids)
+				errs = append(errs, fmt.Sprintf(c.line, pyval.Str(name), strings.Join(ids, ", ")))
+			}
 		}
 	}
 	return errs, provided, nil
+}
+
+// claim is claims.setdefault(name, []).append(aid): each entry holds the name first, then every
+// claimant. A name Python cannot hash is where it raises.
+func claim(claims map[string][]any, name any, aid string) error {
+	key, ok := pyKey(name)
+	if !ok {
+		return fmt.Errorf("is %s, which cannot be looked up", pyval.Repr(name))
+	}
+	if claims[key] == nil {
+		claims[key] = []any{name}
+	}
+	claims[key] = append(claims[key], aid)
+	return nil
 }
 
 // checkEnums mirrors _check_enums: every `enum` the schema declares, at every depth, including
@@ -173,7 +263,7 @@ func checkEnums(aid string, val any, spec map[string]any, path string, errs *[]s
 			return
 		}
 		if !inEnum(val, enum) {
-			*errs = append(*errs, fmt.Sprintf("%s: %s must be one of %s, got %s", aid, path, joinEnum(enum), pyReprJSON(val)))
+			*errs = append(*errs, fmt.Sprintf("%s: %s must be one of %s, got %s", aid, path, joinEnum(enum), pyval.Repr(val)))
 		}
 		return
 	}
@@ -274,6 +364,9 @@ func isOfTypes(val any, types []string) bool {
 			if _, ok := val.(json.Number); ok {
 				return true
 			}
+			if _, ok := val.(float64); ok { // NaN or an infinity, which a manifest holds as float64
+				return true
+			}
 		}
 	}
 	return false
@@ -300,8 +393,12 @@ func pyTypeName(v any) string {
 		return "float"
 	case []any:
 		return "list"
-	case map[string]any:
+	case map[string]any, *yamlish.Map:
 		return "dict"
+	case int64, yamlish.BigInt: // the state file's and stdin's values
+		return "int"
+	case float64:
+		return "float"
 	}
 	return fmt.Sprintf("%T", v)
 }
@@ -316,78 +413,13 @@ func inEnum(val any, enum []any) bool {
 	return false
 }
 
-func pyEqual(a, b any) bool {
-	na, aNum := numericValue(a)
-	nb, bNum := numericValue(b)
-	if aNum && bNum {
-		return na == nb
-	}
-	if aNum != bNum {
-		return false
-	}
-	switch ta := a.(type) {
-	case nil:
-		return b == nil
-	case string:
-		tb, ok := b.(string)
-		return ok && ta == tb
-	}
-	return false
-}
-
-// numericValue reads a number or a bool (Python's bool is an int) as float64.
-func numericValue(v any) (float64, bool) {
-	switch t := v.(type) {
-	case bool:
-		if t {
-			return 1, true
-		}
-		return 0, true
-	case json.Number:
-		f, err := t.Float64()
-		return f, err == nil
-	case int:
-		return float64(t), true
-	case int64:
-		return float64(t), true
-	case float64:
-		return t, true
-	}
-	return 0, false
-}
-
 // joinEnum is '|'.join(map(str, enum)).
 func joinEnum(enum []any) string {
 	parts := make([]string, len(enum))
 	for i, e := range enum {
-		parts[i] = pyStr(e)
+		parts[i] = pyval.Str(e)
 	}
 	return strings.Join(parts, "|")
-}
-
-// pyReprJSON is repr() of a decoded JSON scalar (what `{val!r}` prints).
-func pyReprJSON(v any) string {
-	switch t := v.(type) {
-	case string:
-		if strings.Contains(t, "'") && !strings.Contains(t, "\"") {
-			return "\"" + t + "\""
-		}
-		return "'" + strings.ReplaceAll(t, "'", "\\'") + "'"
-	case []any:
-		parts := make([]string, len(t))
-		for i, e := range t {
-			parts[i] = pyReprJSON(e)
-		}
-		return "[" + strings.Join(parts, ", ") + "]"
-	case map[string]any:
-		keys := sortedKeysAny(t)
-		parts := make([]string, len(keys))
-		for i, k := range keys {
-			parts[i] = pyReprJSON(k) + ": " + pyReprJSON(t[k])
-		}
-		return "{" + strings.Join(parts, ", ") + "}"
-	}
-	return pyStr(v)
 }
 
 func hasDotDot(rel string) bool {
@@ -397,15 +429,6 @@ func hasDotDot(rel string) bool {
 		}
 	}
 	return false
-}
-
-func sortedKeysOf(m map[string][]string) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
 }
 
 func sortedKeysAny(m map[string]any) []string {

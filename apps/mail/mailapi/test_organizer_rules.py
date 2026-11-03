@@ -95,7 +95,7 @@ def test_seed_goes_through_validation(store, monkeypatch):
     "attachments.length > 0 && !includesAny(email.labels, [\"a\", \"b\"])",
     "attachments.some(a => !a.inline)",
     "attachments.filter((a, i) => a.size > 1000 && i < 3).length > 0",
-    "thread.messages[0].text === 'x' || thread.from === \"person113@example.com\"",
+    "thread.messages[0].text === 'x' || thread.from === \"person87@example.com\"",
     "noHebrew(email.text) && (isEmpty(email.cc) ? true : false)",
     "email.ageDays <= 3 && email.size !== 0",
     "email.from?.toLowerCase() === \"a@b.c\"",

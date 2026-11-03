@@ -35,7 +35,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
     /*__n8n__*/ meta: null,
     /*__n8n__*/ pinData: {},
     /*__n8n__*/ staticData: null,
-    /*__n8n__*/ shared: [{"updatedAt":"2026-08-25T22:15:39.057Z","createdAt":"2026-08-25T22:15:39.057Z","role":"workflow:owner","workflowId":"SelectConformTest01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <shlomo@local.dev>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
+    /*__n8n__*/ shared: [{"updatedAt":"2026-08-25T22:15:39.057Z","createdAt":"2026-08-25T22:15:39.057Z","role":"workflow:owner","workflowId":"SelectConformTest01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
     id: 'SelectConformTest01',
     name: 'SelectConformTest01 — selector conformance (TEST ONLY, not product)',
     active: true,
@@ -113,7 +113,7 @@ const C = [
   { _case: 'junk id — date shaped, rejected',
     TYPE: 'INVOICE', LOCAL_DOC_ID: '12/03/2026', _expect: { DOC_ID: null } },
   { _case: 'junk id — company number shaped, rejected',
-    TYPE: 'INVOICE', LOCAL_DOC_ID: '515463354', _expect: { DOC_ID: null } },
+    TYPE: 'INVOICE', LOCAL_DOC_ID: '500001029', _expect: { DOC_ID: null } },
   { _case: 'junk id — purely alphabetic, rejected',
     TYPE: 'INVOICE', LOCAL_DOC_ID: 'INVOICE', _expect: { DOC_ID: null } },
   { _case: 'junk id — under 3 alphanumerics, rejected',
@@ -187,7 +187,13 @@ return C.map((c, i) => ({ json: { ID: '__conform_' + i, __instance: 'test', ...c
         position: [672, 0],
     })
     Assert = {
-        jsCode: `const cases = $('Cases').all().map(i => i.json);
+        jsCode: `// 'Call SelectType01' continues on error, so a FAILED call arrives here as an item with no ID:
+// every case then "fails" on fields nobody wrote, which reads as a selector defect rather than as
+// a call that never ran. Read the failure and say so first — that is the answer the suite needs.
+const call_failures = $input.all().map(i => i.json || {})
+  .filter(j => j.error || j.errorMessage)
+  .map(j => String(j.error || j.errorMessage).slice(0, 200));
+const cases = $('Cases').all().map(i => i.json);
 const got = {};
 for (const it of $input.all()) { const j = it.json || {}; if (j.ID) got[String(j.ID)] = j; }
 
@@ -210,6 +216,8 @@ for (const c of cases) {
 return [{ json: {
   total: cases.length, passed: pass.length, failed: fail.length,
   failures: fail, passed_cases: pass.map(p => p.case),
+  call_failed: call_failures.length > 0, call_failures,
+  error: call_failures[0] || null,
 }}];
 `,
     };

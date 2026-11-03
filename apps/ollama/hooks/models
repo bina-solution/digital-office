@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+#: models — the models this office's Ollama holds, with their sizes (reads; adding one is OLLAMA_PULL's):  ./bbox ollama models
+# Runs the release's own client inside the container (`ollama list`, the same answer as GET /api/tags).
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+dcx exec -T ollama ollama list

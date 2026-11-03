@@ -229,7 +229,7 @@ in one label:
 
 - **Priority.** Traefik v3 derives default priority from rule length; a long regexp outranks a short
   `Host()`. On the live VPS that means `console.staging…` and `auth.staging…` — real, running routers —
-  would be swallowed by the gateway's catch-all. Not hypothetical: both are served from `203.0.113.10`
+  would be swallowed by the gateway's catch-all. Not hypothetical: both are served from `93.184.216.5`
   right now (evidence in §1.4).
 - **ACME cannot issue for a regexp.** Traefik issues per exact `Host()`; a catch-all falls back to the
   edge's default certificate — which "works" in a browser with a warning, exactly the kind of failure that
@@ -258,10 +258,10 @@ everything that depends on which nodes exist is written to the file provider ins
 | Round-1 claim | What was measured |
 |---|---|
 | "nameservers at Cloudflare" | **No.** `NS digital-office.co.il` → `ns1.sitesdepot.com`, `ns2.sitesdepot.com`; SOA `ns1.sitesdepot.com admin.intervision.co.il` (InterVision's Plesk). Cloudflare DNS-01 is unavailable without moving delegation. |
-| "a one-label wildcard" | `*.staging.digital-office.co.il` exists and **answers at any depth on this nameserver**: `macbook1.staging…`, `plane.macbook1.staging…`, `a.b.c.d.e.staging…` all → `203.0.113.10`. But `x.digital-office.co.il` → NXDOMAIN, so `*.digital-office.co.il` does **not** exist and the platform's documented one-label rule for `*.<slug>` still holds. |
+| "a one-label wildcard" | `*.staging.digital-office.co.il` exists and **answers at any depth on this nameserver**: `macbook1.staging…`, `plane.macbook1.staging…`, `a.b.c.d.e.staging…` all → `93.184.216.5`. But `x.digital-office.co.il` → NXDOMAIN, so `*.digital-office.co.il` does **not** exist and the platform's documented one-label rule for `*.<slug>` still holds. |
 | "`staging.digital-office.co.il` is the entry point" | **It has no A record.** NODATA; `curl https://staging…` → `000`. An entry host must be a name that resolves. |
-| — | The live edge on `203.0.113.10` **already** serves `console.staging.digital-office.co.il` (302 → `auth.staging…/application/o/authorize/`) and `auth.staging.digital-office.co.il` (302 → the authentik flow). `edge.staging…` and `macbook1.staging…` return **traefik 404** (wildcard resolves; no router). |
-| — | `203.0.113.10` is **already in the fleet** as `computer_ssh-b154fa0c` ("שרת פיתוח בינה סלושנס"). |
+| — | The live edge on `93.184.216.5` **already** serves `console.staging.digital-office.co.il` (302 → `auth.staging…/application/o/authorize/`) and `auth.staging.digital-office.co.il` (302 → the authentik flow). `edge.staging…` and `macbook1.staging…` return **traefik 404** (wildcard resolves; no router). |
+| — | `93.184.216.5` is **already in the fleet** as `computer_ssh-b154fa0c` ("שרת פיתוח בינה סלושנס"). |
 
 **Amendment (adopted).**
 
@@ -379,7 +379,7 @@ down: the office runs in the Lima/vz guest (Docker CE 28.5.2 pinned), so WireGua
 the container needs `cap_add: [NET_ADMIN]` and `devices: ["/dev/net/tun"]`, with `wireguard-go` as a
 reported fallback; and the Mac edge listens on `:8080`, so **a Mac can never be the public edge** (no :80,
 and ACME HTTP-01 needs :80). (5) **P2 acceptance moved to the real path** — the owner's Mac ↔
-`203.0.113.10` over the internet, with handshake/rtt/MTU/UDP-blocked evidence; the local two-container sim
+`93.184.216.5` over the internet, with handshake/rtt/MTU/UDP-blocked evidence; the local two-container sim
 is a fast pre-check, not the acceptance.
 
 #### F-24 · MEDIUM · The plan re-implemented installation that the `offices` app already owns
@@ -961,7 +961,7 @@ and a recommendation — so a decision needs no further research.
 | **2** | **DNS and certificates** | (a) HTTP-01 per exact host (works today); (b) a wildcard via DNS-01 — requires moving delegation to Cloudflare **or** a Plesk API key plus our IP on their allowlist | Nameservers are `sitesdepot.com` (InterVision Plesk); its API refuses by IP (`403 Access to API is disabled for <ip>`). (a) suffices to roughly 50 nodes/week; (b) is a fleet-scale need | P6 at scale only |
 | **3** | **The canonical public URL** | (a) `<edge-host>/<node>/…` (what was asked); (b) `staging.digital-office.co.il/<node>/…` — requires **one A record** for `staging` in the Plesk panel; (c) `/digital-office/<tenant>/<node>/…` for multi-tenant | `staging` has no A record (measured) ⇒ (a) works immediately with `NETWORK_EDGE_HOST=console.staging.digital-office.co.il`; (b) is one click on your side | P1 (fixing `NETWORK_EDGE_HOST`) |
 | **4** | **The enrollment approval model** | (a) gateway issues the token behind SSO, the node scans (this plan's default); (b) the node displays, the gateway scans, and approval requires SSO | (a) leaves zero unauthenticated surfaces; (b) is nicer on a phone but adds a scan plus a login | P1 (which flow to implement) |
-| **5** | **Which VPS is the edge** | (a) `203.0.113.10` — already in the fleet as `computer_ssh-b154fa0c`, already serving `console.staging` and `auth.staging`; (b) a new machine | (a) recommended: the wildcard, the console and the identity already point there | P2 (the acceptance path's target) |
+| **5** | **Which VPS is the edge** | (a) `93.184.216.5` — already in the fleet as `computer_ssh-b154fa0c`, already serving `console.staging` and `auth.staging`; (b) a new machine | (a) recommended: the wildcard, the console and the identity already point there | P2 (the acceptance path's target) |
 | **6** | **Own WireGuard vs Headscale** | (a) own (this plan); (b) Headscale — NAT traversal and DERP relays included, but a second control plane | (a) recommended for P1–P3 (two nodes, one of them public). If a node appears with **no** reachable edge, (b) can be swapped **underneath the same app UI** | P6 (topologies without a public edge) |
 
 **Not an open decision, because it is already answered:** the per-office app set (what the plan called an

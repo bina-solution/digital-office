@@ -29,18 +29,22 @@ claiming otherwise would be the dangerous part:
     is "two factors an attacker must defeat together", not "authentication".
 
   ⚠ **The docker socket is read here, and reading it is a privilege.** We issue GET requests only —
-    `/_ping`, `/containers/json` — and never a POST, so this module cannot create, exec into or
+    `/_ping`, `/containers/json`, and for `agent_token` one container's config and the archive of
+    the one file it names — and never a POST, so this module cannot create, exec into or
     start anything. But the bind mount itself grants the container the ability to; see the residual
     risks in README.md. Point `DOCKER_SOCK` at a read-only socket proxy where one is available.
 
 No third-party dependency: the Docker Engine API is plain HTTP over a unix socket.
 """
 import http.client
+import io
 import json
 import os
 import socket
+import tarfile
 import threading
 import time
+import urllib.parse
 
 DOCKER_SOCK = os.environ.get("DOCKER_SOCK", "/var/run/docker.sock")
 API_VERSION = os.environ.get("DOCKER_API_VERSION", "v1.41")
@@ -91,6 +95,75 @@ def _docker_get(path, timeout=3.0):
             conn.close()
         except OSError:
             pass
+
+
+def _docker_get_raw(path, timeout=5.0, limit=1 << 20):
+    """GET one Docker API path and return its body as bytes (None when it did not answer 200).
+
+    Still GET ONLY: the one body that is not JSON is the archive of a single file
+    (`GET /containers/<id>/archive`), which is how `agent_token` reads a file without exec."""
+    conn = _UnixHTTPConnection(DOCKER_SOCK, timeout=timeout)
+    try:
+        conn.request("GET", f"/{API_VERSION}{path}")
+        r = conn.getresponse()
+        body = r.read(limit)
+        return body if r.status == 200 else None
+    except OSError:
+        return None
+    finally:
+        try:
+            conn.close()
+        except OSError:
+            pass
+
+
+#: The variable an `agent.v1` provider names its action token's file with (ai/context/agent-contract.md).
+AGENT_TOKEN_ENV = "AGENT_TOKEN_FILE"
+
+
+def own_project():
+    """The compose project this vault runs in — its office — or "" when it cannot be told."""
+    return (_by_id(_fresh(), self_container_id()) or {}).get("project") or ""
+
+
+def agent_token(service):
+    """(token, reason): the action token an `agent.v1` provider minted into its own state.
+
+    For `dgo-extend` alone (app.py's route says so): a linked office is handed this token so that its
+    `bbox agent --office` can talk to the agent here, and the office that serves has to read it first.
+    It used to read it with `docker exec` through `computers`, which is ssh to its own machine, and a
+    machine with no sshd (the HP) could therefore hand nothing to anyone (DGO-1127).
+
+    Read with GETs: the container's own `AGENT_TOKEN_FILE` from its config, then that one file from
+    its archive. Only a container of THIS office's compose project, so a second office on the same
+    docker host is never read, and every container carrying the label is asked, because a self-update
+    helper carries the same service label with no token file. A vault that cannot tell its own
+    project reads nothing: "any office's agent" is not a fallback."""
+    project = own_project()
+    if not project:
+        return "", "this vault cannot tell its own compose project, so no agent of it is read"
+    filters = urllib.parse.quote(json.dumps({"label": [f"{_SERVICE_LABEL}={service}"]}))
+    for c in _docker_get(f"/containers/json?filters={filters}") or []:
+        labels = c.get("Labels") or {}
+        if labels.get(_PROJECT_LABEL) != project:
+            continue
+        info = _docker_get(f"/containers/{c.get('Id', '')}/json") or {}
+        env = ((info.get("Config") or {}).get("Env")) or []
+        path = next((e.split("=", 1)[1] for e in env if e.startswith(AGENT_TOKEN_ENV + "=")), "")
+        if not path.startswith("/"):
+            continue
+        raw = _docker_get_raw(f"/containers/{c.get('Id', '')}/archive?path={urllib.parse.quote(path)}")
+        if not raw:
+            continue
+        try:
+            with tarfile.open(fileobj=io.BytesIO(raw)) as tar:
+                member = next((m for m in tar.getmembers() if m.isfile()), None)
+                token = tar.extractfile(member).read(4096).decode("utf-8", "replace").strip() if member else ""
+        except (tarfile.TarError, OSError):
+            continue
+        if len(token) >= 32:
+            return token, ""
+    return "", f"no running container of {service} exposes {AGENT_TOKEN_ENV}"
 
 
 _lock = threading.Lock()
@@ -196,6 +269,7 @@ def identify(remote_addr, claimed_container_id=None):
                 "container_id": claimed_rec["container_id"],
                 "container_name": claimed_rec["container_name"],
                 "service": claimed_rec["service"], "app": claimed_rec["app"],
+                "project": claimed_rec.get("project") or "",
                 "reason": ""}
 
     hits = cache["by_ip"].get(remote_addr or "", [])

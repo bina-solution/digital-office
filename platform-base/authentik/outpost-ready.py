@@ -34,7 +34,7 @@ by the same render). Two earlier answers to "which hosts", and what each cost:
 The blueprint is bind-mounted, so the list is the declaration itself: it changes in the same
 instant the render does, needs no token and no API, and is still readable while authentik is down.
 """
-import json, os, re, sys, time, urllib.request, urllib.error
+import json, os, re, sys, tempfile, time, urllib.request, urllib.error
 
 SERVER    = os.environ.get("AUTHENTIK_READY_SERVER", "http://authentik-server:9000")
 ENDPOINT  = SERVER + "/outpost.goauthentik.io/auth/traefik"
@@ -48,6 +48,53 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 
 _OPENER = urllib.request.build_opener(_NoRedirect)
 
+# THE PROBE MUST NOT MINT A SESSION PER ASK. Every 302 the outpost answers a cookie-less visitor with opens a new
+# proxy session in redis (`authentik_proxy_session_*`, kept for the provider's token validity). This file runs as
+# the bootstrap container's healthcheck, every 10 s, against every gated host (~40): 1.5 new sessions a second,
+# for ever. Measured on the MacBook 2026-11-02: 972,249 keys in redis db1, redis at its 256 MiB cap, a BGSAVE
+# running 2¼ hours, the engine at load 100–140 and every container unhealthy for hours. So the cookie the outpost
+# sets for a host is kept here and sent back on the next ask: one session per host, re-used, instead of one per ask.
+COOKIES = os.environ.get("OUTPOST_READY_COOKIES", "/tmp/outpost-ready-cookies.json")
+
+
+def _cookies() -> dict:
+    try:
+        with open(COOKIES, encoding="utf-8") as f:
+            got = json.load(f)
+        return got if isinstance(got, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _keep_cookies(jar: dict) -> None:
+    # `--wait` (bootstrap.sh, up to 10 min) and the 10 s healthcheck run at the same time: each writes through a
+    # temp file of its own, and keeps the hosts the other one wrote meanwhile
+    tmp = None
+    try:
+        fd, tmp = tempfile.mkstemp(dir=os.path.dirname(COOKIES) or ".", suffix=".tmp")
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump({**_cookies(), **jar}, f)
+        os.replace(tmp, COOKIES)
+    except OSError:
+        if tmp:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass                  # a probe that cannot remember still answers; it only mints again
+
+
+def _set_cookies(headers) -> str:
+    """The `name=value` pairs of a response's Set-Cookie headers, as one Cookie header value."""
+    pairs = []
+    for raw in headers.get_all("Set-Cookie") or []:
+        pair = raw.split(";", 1)[0].strip()
+        if "=" in pair:
+            pairs.append(pair)
+    return "; ".join(pairs)
+
+
+_JAR = None
+
 
 def _served(host):
     """Does the OUTPOST answer for `host`? 302/200/401/403 = it knows the host; 404 = it does not.
@@ -58,14 +105,23 @@ def _served(host):
     through one re-creation of the server: 50 s refusing connections, then 21 s of 502 for a host it
     serves AND for a host nobody declared, 3 s of 404 for both, and only then 302 / 404. The hook
     that restarts the server waits on this very answer to know the restart has finished."""
-    req = urllib.request.Request(ENDPOINT, headers={
-        "X-Forwarded-Host": host, "X-Forwarded-Proto": "http", "X-Forwarded-Uri": "/"})
+    global _JAR
+    if _JAR is None:
+        _JAR = _cookies()
+    headers = {"X-Forwarded-Host": host, "X-Forwarded-Proto": "http", "X-Forwarded-Uri": "/"}
+    if _JAR.get(host):
+        headers["Cookie"] = _JAR[host]
+    req = urllib.request.Request(ENDPOINT, headers=headers)
     try:
-        code = _OPENER.open(req, timeout=5).status
+        resp = _OPENER.open(req, timeout=5)
+        code, got = resp.status, _set_cookies(resp.headers)
     except urllib.error.HTTPError as e:
-        code = e.code
+        code, got = e.code, _set_cookies(e.headers)
     except Exception:
         return False                  # server not reachable yet
+    if got and got != _JAR.get(host):
+        _JAR[host] = got
+        _keep_cookies(_JAR)
     return code != 404 and code < 500
 
 

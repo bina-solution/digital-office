@@ -1,24 +1,101 @@
 # Single entry point, fronted by Traefik in this deployment.
 #   SITE_ADDRESS=:80  -> plain HTTP, match any Host (Traefik terminates routing/TLS)
 # Traefik routes browser42.localhost (and BROWSER42_BASE_URL) to this Caddy on :80.
+#
+# THE GATE ON THE LIVE VIEW AND THE HAND-OFF (DGO-988).
+# `/view/*` (the live screen), `/websockify` (its keyboard and mouse) and `/handoff/*` (wakes the
+# browser and brings a tab to the front) were protected by NOTHING here: the only check was the
+# Authentik forwardAuth on Traefik's routers, and that check exists only on the requests that
+# traverse a router the edge rendered. Every container on the shared network (`traefik-<deployment>`)
+# reaches this Caddy by its service name and skips the edge entirely — so any container, including a
+# compromised one, had a keyboard and a mouse on the office's browser, which is where the owner's
+# SSO sessions live. This Caddy is the app's ONE door, so the app checks its own callers.
+#
+# WHAT IT ASKS, AND WHY THIS IS AUTHENTICATION RATHER THAN A HEADER: it repeats the edge's own call —
+# the identity provider's forward-auth endpoint, with THIS REQUEST'S OWN COOKIE — and lets the
+# request through only when the provider answers 2xx. A cookie cannot be invented by a container on
+# the network (it is signed by the provider); an `X-authentik-*` header can, by any container, so the
+# headers are neither trusted nor copied onwards. This is the same trust model as
+# `apps/project-pln/office_identity.py` ("never X-authentik-* on the request — any container can
+# write it"). No shared secret is involved, so there is no key for a container to find: the app
+# holds no credential of its own for this door, only the address of the provider.
+#
+# WHICH provider is the office's one switch, `DGO_IDENTITY` (.env) — the value the edge's own
+# middleware reads (platform-base/traefik/config/authentik-forwardauth.yaml) — so this door asks
+# whoever the edge asks (r030-002). It is resolved when Caddy reads this file: a value with no
+# snippet below is a Caddyfile that does not load, so the door stays shut rather than open.
+(gate) {
+	import gate-{$DGO_IDENTITY:authentik}
+}
+
+(gate-authentik) {
+	forward_auth http://authentik-server:9000 {
+		uri /outpost.goauthentik.io/auth/traefik
+		import gate-headers
+	}
+}
+
+(gate-forward-auth) {
+	forward_auth http://forward-auth:9078 {
+		uri /auth/traefik
+		import gate-headers
+	}
+}
+
+(gate-headers) {
+	# `X-Forwarded-Host` is the app's host as the EDGE saw it, and the provider matches the
+	# application by it: `console.<domain>` for a request that arrives through the console's own
+	# proxy (which drops `Host` but forwards this header) and for the passthrough routers, and
+	# `browser42.<domain>` for this app's own routers. Caddy would otherwise overwrite it with this
+	# request's `Host` (`browser42-caddy:80` behind the console), which matches no application and
+	# would refuse a signed-in owner. A request with no such header — a container calling this Caddy
+	# by its service name — is refused, which is exactly the caller this exists to stop.
+	header_up X-Forwarded-Host {http.request.header.X-Forwarded-Host}
+	header_up X-Forwarded-Proto {http.request.header.X-Forwarded-Proto}
+	header_up X-Forwarded-Uri {http.request.uri}
+	header_up X-Forwarded-Method {http.request.method}
+	header_up -Connection
+	header_up -Upgrade
+}
+
 {$SITE_ADDRESS::80} {
 	# No basic-auth here: access control is done declaratively at the Traefik
 	# edge (Authentik forward-auth on the -https and -local routers, like machine
-	# / homepage). The noVNC view's VNC password is an OPTIONAL extra factor
-	# (BROWSER42_VNC_PASSWORD); empty by default since Authentik already gates it.
+	# / homepage) AND, since DGO-988, at the three doors below (the `gate` snippet),
+	# because the edge's check does not exist for a caller that does not cross it.
+	# The noVNC view's VNC password is an OPTIONAL extra factor
+	# (BROWSER42_VNC_PASSWORD); empty by default, and it is not a gate: /view/ writes
+	# it into its own refresh URL, so anyone who can read the view has it.
 
 	# Live browser view (noVNC): open /view/ and you SEE the agent's browser.
 	# The console injects <base href="/a/browser42/"> into this HTML, so the relative
 	# websocket path below resolves to /a/browser42/websockify when embedded and to
 	# /websockify when standalone. Including the mount prefix here would apply it twice.
-	redir /view /view/vnc.html?autoconnect=true&reconnect=true&resize=remote&quality=6&compression=2
-	redir /view/ /view/vnc.html?autoconnect=true&reconnect=true&resize=remote&quality=6&compression=2&path=websockify
+	# `{query}` carries the hand-off's honest marker (`/view/?lost=<slug>` — the tab it promised could
+	# not be brought to the front) through to the viewer, which says so (browser-navigation.js).
+	# The redirects below carry no browser state and are gated nothing; the FILES are, and they are
+	# what draws the live screen.
+	redir /view /view/vnc.html?autoconnect=true&reconnect=true&resize=remote&quality=6&compression=2&{query}
+	redir /view/ /view/vnc.html?autoconnect=true&reconnect=true&resize=remote&quality=6&compression=2&path=websockify&{query}
 	handle_path /view/* {
-		reverse_proxy browser42-browser:6080
+		import gate
+		# The viewer is CODE THAT CHANGES: noVNC's files are patched at container start by
+		# start-browser.sh 4b, which injects browser42-navigation/-clipboard/-keyboard into vnc.html.
+		# Python's static handler — what websockify serves with — sends only Last-Modified, and a
+		# browser keeps serving the copy it already has, so a deployed fix never reached the owner's
+		# phone: measured 2026-10-14 on DGO-575, the injected <script> tag was served while the phone
+		# still ran the page from before it. `no-cache` means REVALIDATE, never "don't store": with
+		# Last-Modified the answer is a 304, and no fix depends on a human reloading by hand.
+		header Cache-Control "no-cache"
+		reverse_proxy {$BROWSER42_UPSTREAM}:6080
 	}
-	# noVNC opens its websocket back to /websockify on the same origin.
+	# noVNC opens its websocket back to /websockify on the same origin. This is a keyboard and a
+	# mouse on the shared browser, so it is gated like the screen it belongs to; a websocket
+	# handshake carries the same cookie, and the gate's auth subrequest drops `Connection`/`Upgrade`
+	# so the provider is asked a plain GET and the tunnel is left to the proxy below.
 	handle /websockify {
-		reverse_proxy browser42-browser:6080
+		import gate
+		reverse_proxy {$BROWSER42_UPSTREAM}:6080
 	}
 	# MCP endpoint: point your MCP client at <addr>/mcp with header
 	#   Authorization: Bearer $BROWSER42_MCP_TOKEN
@@ -26,6 +103,8 @@
 	# token is enforced here in Caddy — it applies on every ingress (the public
 	# Traefik route AND the loopback dev port). @playwright/mcp has DNS-rebinding
 	# protection and 403s unless the Host header is its bind address, so rewrite it.
+	# A caller with no browser has no cookie to be identified by, so this door keeps its bearer
+	# token and is deliberately NOT behind `gate` (DGO-988 leaves it exactly as it was).
 	handle_path /mcp* {
 		@unauthorized not header Authorization "Bearer {$MCP_TOKEN}"
 		route {
@@ -38,6 +117,50 @@
 		}
 	}
 
+	# The human hand-off (DGO-571): /handoff/<slug> wakes the browser, brings that group's tab to the
+	# front and lands on /view/ — apps/browser42/handoff.py, started by start-browser.sh §4f-bis. Behind
+	# the console it arrives through the /a/browser42/handoff passthrough (app.json), prefix stripped;
+	# the route reads X-Forwarded-Prefix to land back inside the mount.
+	# The token it carries is what handoff.py requires (a hand-off wakes the browser and moves tabs),
+	# and that token is Caddy's own — handed to every caller that gets this far. So this door is gated
+	# FIRST, for the same reason as the view (DGO-988): a hand-off is a pointer at a signed-in tab.
+	handle /handoff/* {
+		import gate
+		reverse_proxy {$BROWSER42_UPSTREAM}:8767 {
+			header_up X-Browser42-Handoff {$MCP_TOKEN}
+		}
+	}
+
 	# Bare / -> the live view.
 	redir / /view/
+
+	# Nothing else is this app's door — say so.
+	# Caddy's default for "no route matched" is an EMPTY 200, and an empty 200 reads as success to
+	# every caller that looks at the status alone: measured 2026-10-14, `POST /v1/task` through the
+	# link's door answered 200 with length 0 while browser42's task runner (8766) was not published
+	# anywhere, so a linked office's agent could not tell "no door" from "answered nothing"
+	# (lnk-037/DGO-570). A 404 is the one answer that cannot be mistaken for one.
+	handle {
+		respond 404
+	}
+}
+
+# The agent door (DGO-32, lnk-037, DGO-1002): a linked office's `bbox b42 task --office` posts /v1/task to
+# <alias>.<office>:<agent_api_port>, and the link delivers to the app's ROUTED service, this Caddy, on that
+# port. Two numbers name that port, and this site listens on both:
+#   8766 — the one app.json states on the release line (45a69657, DGO-570);
+#   8931 — what a line that still derives it from the MCP capability publishes. The HP's link served
+#          browser42-caddy:8931 to the Mac, the Dell and vps1 with nothing listening here, and every far
+#          `b42 task` got 502 (measured 2026-10-22 from the Mac and inside dgo-link-hp). The host's own
+#          127.0.0.1:8931 is this container's :80, the site above, so nothing here collides with it.
+# The task runner is a container of its own (8766): this site hands it that one path and nothing else; the
+# screen (/view), the hand-off and the MCP stay on the site above. The design is the Mac session's (FPG-29).
+# The runner asks no credential and already sits on the shared network, so this door reaches nothing a
+# container there could not; through the link every office of ours drives every verb, `login` included —
+# the owner's decision: one browser, in the HP, that all our offices use (FPG-29, DGO-570).
+:8766, :8931 {
+	handle /v1/task {
+		reverse_proxy browser42-task-runner:8766
+	}
+	respond 404
 }

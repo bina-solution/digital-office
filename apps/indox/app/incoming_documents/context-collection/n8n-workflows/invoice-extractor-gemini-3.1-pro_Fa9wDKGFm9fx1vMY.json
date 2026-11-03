@@ -656,7 +656,7 @@
       "credentials": {
         "googleDriveOAuth2Api": {
           "id": "KirWFwoFdEFmnN0R",
-          "name": "Google Drive person17@example.com"
+          "name": "Google Drive person17.x@example.com"
         }
       },
       "onError": "continueRegularOutput"
@@ -791,7 +791,7 @@
             {
               "id": "04ce5540-a4e3-42c4-bc5c-0c34cbcd02cf",
               "name": "prompt",
-              "value": "You are an expert accounting assistant. The provided file is a business document, typically an invoice (\"חשבונית מס\"), receipt, or related document.\n\nExtract the strictly required fields below from the document based on these guidelines:\n\n1. **AI_COMPANY_ID**: The company identification number or VAT number (e.g., ח.פ, עוסק מורשה, מספר תאגיד) of the issuing company. **CRITICAL: Do NOT extract or use our company's VAT number (515561520 / בינה קומפ חומרי בניין בע\"מ). This is the recipient's ID and must be completely ignored.** If not found, use \"\".\n2. **AI_DOC_AMOUNT**: The total amount of the document including VAT (סה\"כ כולל מע\"מ / סכום כולל / סה\"כ לתשלום / לתשלום). Return amounts as strings. CRITICAL: Do NOT confuse the total amount with the order number (\"הזמנה\"). If not found, use \"\".\n3. **AI_DOC_DATE**: The date of the document in DD/MM/YYYY format. If multiple potential Dates exist, pick according to this strict order: 1. \"תאריך הפקה\", 2. \"תאריך חשבונית\", 3. \"תאריך מסמך\", 4. \"תאריך\". Do NOT use the payment date (\"תאריך תשלום\") or the pay-by date (\"לתשלום עד\"). If not found, use \"\".\n4. **AI_DOC_ID**: The full document number. If multiple potential IDs exist, pick according to this strict order: 1. \"חשבונית מס\", 2. \"מס' חשבונית\", 3. \"מסמך\", 4. \"מספר מסמך\", 5. \"מסמך חיוב\". If not found, use \"\".\n5. **AI_ORDER_IDS**: Purchase Order ID: For documents of type INVOICE, extract the purchase order number as it appears in the customer's records (e.g., \"מספר הזמנת לקוח\", \"מס' הזמנת מקור\", \"הזמנת רכש\", etc.) rather than the issuer's internal order reference. If multiple order numbers are listed, extract only the first one. If not found, use \"\".\n6. **AI_SHIPMENT_IDS: The linked shipment document numbers (מספר תעודת משלוח / ת. משלוח). Extract all unique shipment numbers and return them as an array of strings. Do not repeat the same number. If not found, return an empty array[].\n7. **AI_TYPE**: Identify the type of the document and classify it into exactly one of the following labels:\n   - If the document is an invoice or bill, return INVOICE.\n   - If it is a shipping document or delivery note, return SHIPMENT.\n   - If it is a financial balance sheet (including screenshots of balance sheets), return BALANCE_SHEET.\n   - If it is a purchase order, return ORDER.\n   - If the document is irrelevant, return IRRELEVANT.\n\nStrictly return ONLY the JSON object with the following structure. Do not use null values; use an empty string \"\" for missing string values. Do not include any explanations, apologies, or conversational text outside of the JSON structure. Ensure that any double quotes that are part of the string data itself are properly escaped with a backslash.\n\n{\n  \"AI_COMPANY_ID\": \"string\" | \"\",\n  \"AI_DOC_AMOUNT\": \"string\" | \"\",\n  \"AI_DOC_DATE\": \"DD/MM/YYYY\" | \"\",\n  \"AI_DOC_ID\": \"string\" | \"\",\n  \"AI_ORDER_IDS\": \"string\" | \"\",\n  \"AI_SHIPMENT_IDS\": [\"string\"] |[],\n  \"AI_TYPE\": \"INVOICE\" | \"SHIPMENT\" | \"BALANCE_SHEET\" | \"ORDER\" | \"IRRELEVANT\"\n}",
+              "value": "You are an expert accounting assistant. The provided file is a business document, typically an invoice (\"חשבונית מס\"), receipt, or related document.\n\nExtract the strictly required fields below from the document based on these guidelines:\n\n1. **AI_COMPANY_ID**: The company identification number or VAT number (e.g., ח.פ, עוסק מורשה, מספר תאגיד) of the issuing company. **CRITICAL: Do NOT extract or use our company's VAT number (500000088 / הכהנים חומרי בניין בע\"מ). This is the recipient's ID and must be completely ignored.** If not found, use \"\".\n2. **AI_DOC_AMOUNT**: The total amount of the document including VAT (סה\"כ כולל מע\"מ / סכום כולל / סה\"כ לתשלום / לתשלום). Return amounts as strings. CRITICAL: Do NOT confuse the total amount with the order number (\"הזמנה\"). If not found, use \"\".\n3. **AI_DOC_DATE**: The date of the document in DD/MM/YYYY format. If multiple potential Dates exist, pick according to this strict order: 1. \"תאריך הפקה\", 2. \"תאריך חשבונית\", 3. \"תאריך מסמך\", 4. \"תאריך\". Do NOT use the payment date (\"תאריך תשלום\") or the pay-by date (\"לתשלום עד\"). If not found, use \"\".\n4. **AI_DOC_ID**: The full document number. If multiple potential IDs exist, pick according to this strict order: 1. \"חשבונית מס\", 2. \"מס' חשבונית\", 3. \"מסמך\", 4. \"מספר מסמך\", 5. \"מסמך חיוב\". If not found, use \"\".\n5. **AI_ORDER_IDS**: Purchase Order ID: For documents of type INVOICE, extract the purchase order number as it appears in the customer's records (e.g., \"מספר הזמנת לקוח\", \"מס' הזמנת מקור\", \"הזמנת רכש\", etc.) rather than the issuer's internal order reference. If multiple order numbers are listed, extract only the first one. If not found, use \"\".\n6. **AI_SHIPMENT_IDS: The linked shipment document numbers (מספר תעודת משלוח / ת. משלוח). Extract all unique shipment numbers and return them as an array of strings. Do not repeat the same number. If not found, return an empty array[].\n7. **AI_TYPE**: Identify the type of the document and classify it into exactly one of the following labels:\n   - If the document is an invoice or bill, return INVOICE.\n   - If it is a shipping document or delivery note, return SHIPMENT.\n   - If it is a financial balance sheet (including screenshots of balance sheets), return BALANCE_SHEET.\n   - If it is a purchase order, return ORDER.\n   - If the document is irrelevant, return IRRELEVANT.\n\nStrictly return ONLY the JSON object with the following structure. Do not use null values; use an empty string \"\" for missing string values. Do not include any explanations, apologies, or conversational text outside of the JSON structure. Ensure that any double quotes that are part of the string data itself are properly escaped with a backslash.\n\n{\n  \"AI_COMPANY_ID\": \"string\" | \"\",\n  \"AI_DOC_AMOUNT\": \"string\" | \"\",\n  \"AI_DOC_DATE\": \"DD/MM/YYYY\" | \"\",\n  \"AI_DOC_ID\": \"string\" | \"\",\n  \"AI_ORDER_IDS\": \"string\" | \"\",\n  \"AI_SHIPMENT_IDS\": [\"string\"] |[],\n  \"AI_TYPE\": \"INVOICE\" | \"SHIPMENT\" | \"BALANCE_SHEET\" | \"ORDER\" | \"IRRELEVANT\"\n}",
               "type": "string"
             }
           ]
@@ -897,7 +897,7 @@
     },
     {
       "parameters": {
-        "jsCode": "for (const item of $input.all()) {\n  item.json.json_schema = {\n    \"$schema\": \"https://json-schema.org/draft/2020-12/schema\",\n    \"title\": \"JSON_INVOICE_EXTRACTION\",\n    \"type\": \"object\",\n    \"description\": \"Extraction of required fields from a business document.\",\n    \"additionalProperties\": false,\n    \"properties\": {\n      \"AI_COMPANY_ID\": {\n        \"type\": \"string\",\n        \"description\": \"The company identification number or VAT number. Ignore 515561520 / בינה קומפ חומרי בניין בע\\\"מ.\"\n      },\n      \"AI_DOC_AMOUNT\": {\n        \"type\": \"string\",\n        \"description\": \"The total amount of the document including VAT (סה\\\"כ כולל מע\\\"מ / סכום כולל / סה\\\"כ לתשלום / לתשלום). Do NOT confuse with order number.\"\n      },\n      \"AI_DOC_DATE\": {\n        \"type\": \"string\",\n        \"description\": \"The date of the document in DD/MM/YYYY format. Preference: 1. תאריך הפקה, 2. תאריך חשבונית, 3. תאריך מסמך, 4. תאריך. Do NOT use payment date.\"\n      },\n      \"AI_DOC_ID\": {\n        \"type\": \"string\",\n        \"description\": \"The full document number. Preference: 1. חשבונית מס, 2. מס' חשבונית, 3. מסמך, 4. מספר מסמך, 5. מסמך חיוב.\"\n      },\n      \"AI_ORDER_IDS\": {\n        \"type\": \"string\",\n        \"description\": \"Purchase Order ID (מספר הזמנת לקוח, הזמנת רכש, etc.). If multiple, extract only the first.\"\n      },\n      \"AI_SHIPMENT_IDS\": {\n        \"type\": \"array\",\n        \"items\": {\n          \"type\": \"string\"\n        },\n        \"uniqueItems\": true,\n        \"description\": \"Array of unique linked shipment document numbers (מספר תעודת משלוח / ת. משלוח). If not found, use an empty array.\"\n      },\n      \"AI_TYPE\": {\n        \"type\": \"string\",\n        \"enum\":[\"INVOICE\", \"SHIPMENT\", \"BALANCE_SHEET\", \"ORDER\", \"IRRELEVANT\"],\n        \"description\": \"Document classification based on guidelines.\"\n      }\n    },\n    \"required\":[\n      \"AI_COMPANY_ID\",\n      \"AI_DOC_AMOUNT\",\n      \"AI_DOC_DATE\",\n      \"AI_DOC_ID\",\n      \"AI_ORDER_IDS\",\n      \"AI_SHIPMENT_IDS\",\n      \"AI_TYPE\"\n    ]\n  };\n}\n\nreturn $input.all();"
+        "jsCode": "for (const item of $input.all()) {\n  item.json.json_schema = {\n    \"$schema\": \"https://json-schema.org/draft/2020-12/schema\",\n    \"title\": \"JSON_INVOICE_EXTRACTION\",\n    \"type\": \"object\",\n    \"description\": \"Extraction of required fields from a business document.\",\n    \"additionalProperties\": false,\n    \"properties\": {\n      \"AI_COMPANY_ID\": {\n        \"type\": \"string\",\n        \"description\": \"The company identification number or VAT number. Ignore 500000088 / הכהנים חומרי בניין בע\\\"מ.\"\n      },\n      \"AI_DOC_AMOUNT\": {\n        \"type\": \"string\",\n        \"description\": \"The total amount of the document including VAT (סה\\\"כ כולל מע\\\"מ / סכום כולל / סה\\\"כ לתשלום / לתשלום). Do NOT confuse with order number.\"\n      },\n      \"AI_DOC_DATE\": {\n        \"type\": \"string\",\n        \"description\": \"The date of the document in DD/MM/YYYY format. Preference: 1. תאריך הפקה, 2. תאריך חשבונית, 3. תאריך מסמך, 4. תאריך. Do NOT use payment date.\"\n      },\n      \"AI_DOC_ID\": {\n        \"type\": \"string\",\n        \"description\": \"The full document number. Preference: 1. חשבונית מס, 2. מס' חשבונית, 3. מסמך, 4. מספר מסמך, 5. מסמך חיוב.\"\n      },\n      \"AI_ORDER_IDS\": {\n        \"type\": \"string\",\n        \"description\": \"Purchase Order ID (מספר הזמנת לקוח, הזמנת רכש, etc.). If multiple, extract only the first.\"\n      },\n      \"AI_SHIPMENT_IDS\": {\n        \"type\": \"array\",\n        \"items\": {\n          \"type\": \"string\"\n        },\n        \"uniqueItems\": true,\n        \"description\": \"Array of unique linked shipment document numbers (מספר תעודת משלוח / ת. משלוח). If not found, use an empty array.\"\n      },\n      \"AI_TYPE\": {\n        \"type\": \"string\",\n        \"enum\":[\"INVOICE\", \"SHIPMENT\", \"BALANCE_SHEET\", \"ORDER\", \"IRRELEVANT\"],\n        \"description\": \"Document classification based on guidelines.\"\n      }\n    },\n    \"required\":[\n      \"AI_COMPANY_ID\",\n      \"AI_DOC_AMOUNT\",\n      \"AI_DOC_DATE\",\n      \"AI_DOC_ID\",\n      \"AI_ORDER_IDS\",\n      \"AI_SHIPMENT_IDS\",\n      \"AI_TYPE\"\n    ]\n  };\n}\n\nreturn $input.all();"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -1665,40 +1665,7 @@
   },
   "staticData": null,
   "meta": null,
-  "pinData": {
-    "Webhook Trigger": [
-      {
-        "json": {
-          "headers": {
-            "host": "n8n:5678",
-            "user-agent": "feature-validation-balance-sheet/1.0",
-            "accept-encoding": "gzip, deflate",
-            "accept": "*/*",
-            "connection": "keep-alive",
-            "content-type": "application/json",
-            "content-length": "112",
-            "authorization": "Basic YWRtaW46d2Rua2pkNzI4NzYyODczYmhqZDM4NjIxM2hqZzM3ZGtzeGk3MnNo"
-          },
-          "params": {},
-          "query": {},
-          "body": {
-            "LINK": "https://drive.google.com/file/d/1MaLIw1Yly2KSeoFBU-kul8JvqVbVU2vBRAn5FVbDDLQ/edit",
-            "use_cache": false
-          },
-          "webhookUrl": "https://n8n.bina-comp.bina-solutions.co.il/webhook/bs_ex_2",
-          "executionMode": "production"
-        }
-      }
-    ],
-    "When Executed by Another Workflow": [
-      {
-        "json": {
-          "LINK": "https://drive.google.com/file/d/1SCkHFYEgQRRX9_Eq_kI_X0zoAmitW34m",
-          "use_cache": false
-        }
-      }
-    ]
-  },
+  "pinData": {},
   "versionId": "17b2373a-71d5-4151-9e54-edc94fab2be2",
   "activeVersionId": "96f791ee-bce7-49ea-a4ba-9058a4a6f0bc",
   "versionCounter": 89,

@@ -61,17 +61,17 @@ PATTERNS = (
     # The cost is that the list needs a line per production folder — which is exactly the
     # set `data/registry/sync_registry.json` already enumerates, so it is auditable.
     ("known-prod-folder-id", re.compile(
-        r"1YpapJ3vJDYo_idP3aZiFJR_1WoEaCNhu|1stuMSjbnyUTCtbq6KIzooHCGXpEey_7P|"
-        r"11rj5zDw2lhYnc8zMUxmYADKIJaPaunhb|1xthreeBl1VD-5uN9PFu9Zi-0IABQDwst|"
-        r"1DYzDE5T3c2PGFOfNwnmCP3jjSqr2DiBx|1PYaVJ4dKdOl1iGJlVKFT0pzJ_Rs2mYNL|"
-        r"1m25RdFEkfv_5KjSqFGM8gpjupXWZuUW2|16GXkekZeHSyYtvkcoDGrEYiEu6Nn5Z1b|"
-        r"1qTtoAQ1b-9c0gpdbfGy48fSRcskNzNgG|1zTQxUKtm1h7GUcGdb3ltSY0HjEsINzEV|"
-        r"1gwx2QFdZCXjv4RvkY7qAY09ARi0aNBKI|1Lmhka14VGQMVGr4VQFRpF1YDEdOUnUhM")),
+        r"1REDACTEDlintxxxxxxxxxxxxxxxx0002|1REDACTEDlintxxxxxxxxxxxxxxxx0094|"
+        r"1REDACTEDlintxxxxxxxxxxxxxxxx0014|1REDACTEDlintxxxxxxxxxxxxxxxx0093|"
+        r"1REDACTEDlintxxxxxxxxxxxxxxxx0098|1REDACTEDlintxxxxxxxxxxxxxxxx0015|"
+        r"1REDACTEDlintxxxxxxxxxxxxxxxx0009|1REDACTEDlintxxxxxxxxxxxxxxxx0100|"
+        r"1REDACTEDlintxxxxxxxxxxxxxxxx0101|1REDACTEDlintxxxxxxxxxxxxxxxx0095|"
+        r"1REDACTEDlintxxxxxxxxxxxxxxxx0102|1REDACTEDlintxxxxxxxxxxxxxxxx0003")),
     ("connection-instance-id", re.compile(
         r"(?:drive_google_service_account|mail_imap_app_password|mail_imap_local|drive_local)"
         r"-[0-9a-f]{6,}")),
     ("client-mailbox", re.compile(
-        r"\b(?:hachohen|bina-comp\.agent|hachohen\.rikuz|bina-comp\.pituah|shimshon300|"
+        r"\b(?:hachohen|hacohen\.agent|hachohen\.rikuz|hacohanim\.pituah|shimshon300|"
         r"hachohen\.office|ah0529898)[\w.+-]*@[\w.-]+", re.I)),
 )
 
@@ -128,7 +128,7 @@ def main():
         cases = [
             ("a real Drive file id in a shipped workflow", {
                 "apps/x/blueprint/n8n/w.json":
-                    '{"url":"https://drive.google.com/file/d/1YpapJ3vJDYo_idP3aZiFJR_1WoEaCNhu"}'}, True),
+                    '{"url":"https://drive.google.com/file/d/1REDACTEDlintxxxxxxxxxxxxxxxx0002"}'}, True),
             ("a connection instance id in a shipped workflow", {
                 "apps/x/blueprint/n8n/w.json": '{"connection_id":"drive_google_service_account-ea660043"}'}, True),
             ("a client mailbox in a demo seed", {

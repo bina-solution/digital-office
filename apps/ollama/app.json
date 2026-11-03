@@ -27,12 +27,29 @@
   "use": [],
   "connections": [],
   "compose": "docker-compose.yml",
+  "agent": {
+    "context": "AGENT.md",
+    "order": 85
+  },
   "routing": [
     {
       "host": "ollama",
       "port": 11434,
       "auth": "sso",
       "emit_labels": false,
+      "module": {
+        "group": "תשתית",
+        "icon": "brain",
+        "embed": true,
+        "alias": "ollama",
+        "id": "ollama",
+        "name": "מודלים מקומיים",
+        "desc": "Ollama — מודלי שפה שרצים על המחשב הזה, בלי API חיצוני; הסוכן של כל לשכה מקושרת מוצא אותם",
+        "order": 30,
+        "service": "ollama",
+        "url_env": "OLLAMA_INTERNAL_URL",
+        "url": "http://ollama:11434"
+      },
       "sso": {
         "slug": "ollama",
         "base_url_env": "OLLAMA_BASE_URL",

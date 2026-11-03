@@ -3,18 +3,18 @@
 > Snapshot of the currently running production config, to be used as the **first document-repo** in the new system.
 
 ## Document Repo (Google Sheet)
-- **Spreadsheet ID:** `1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo`
+- **Spreadsheet ID:** `1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0049`
 - **Spreadsheet name:** `AutomationValues`
 - **Tab (sheet) name:** `מסמכים נכנסים` ("Incoming Documents")
 - **gid:** `542119184`
-- **URL:** https://docs.google.com/spreadsheets/d/1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo/edit#gid=542119184
+- **URL:** https://docs.google.com/spreadsheets/d/1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0049/edit#gid=542119184
 - **Lookup column / primary key:** `ID`
 - **Header row:** row 1 (52 columns — see `sample-data/incoming-documents.csv`)
 
 ## Google credential (n8n)
 - Credential ID: `e2knIZpw8YF0QBAB`
-- Credential name: `Google Sheets person17@example.com`
-- Service account / OAuth2 user: `person17@example.com`
+- Credential name: `Google Sheets person17.x@example.com`
+- Service account / OAuth2 user: `person17.x@example.com`
 - **PLACEHOLDER:** `GOOGLE_SERVICE_ACCOUNT_JSON` — service-account JSON for the new Python API. To be provisioned; current n8n uses OAuth2 stored inside n8n.
 
 ## Workflows in scope for this migration
@@ -42,10 +42,10 @@
 - `Schedule Trigger` periodic sweep.
 - **Future (per plan):** replace GSheet trigger with a Kafka trigger on topic prefix `${config.document-repo}` (e.g. `incoming-documents.AutomationValues_main`).
 
-## Infra (deployment-bina-comp)
+## Infra (deployment-hacohen)
 - Redis: `redis-${DEPLOYMENT_NAME}` (also exposed via Traefik TCP 6379)
 - n8n: queue mode + worker + task-runners
-- Postgres (Supabase) available at `supabase.bina-comp.bina-solutions.co.il` — see `SUPABASE_*` env vars
+- Postgres (Supabase) available at `supabase.hacohen.bina-solutions.co.il` — see `SUPABASE_*` env vars
 - **PLACEHOLDER:** `KAFKA_BROKERS` — no Kafka broker is currently deployed in the stack.
 - **PLACEHOLDER:** `INCOMING_DOCS_DEFAULT_REPO` — name of the first repo entry to seed (e.g. `prod_gsheet`).
 

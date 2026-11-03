@@ -54,6 +54,13 @@ a fresh clone needs only `bbox run`.
 
 - Generated `<workflow-map>` header: node index + routing map — the workflow at a glance.
 - `@workflow({...})` / `@node({...})` decorators; `jsCode`/SQL as real template literals.
+  **A backtick inside jsCode is `` \` `` — always.** A raw one (a comment quoting `a name`, a
+  Markdown fragment) ENDS the literal there: the transformer's parser is tolerant and the rest of
+  the body is swallowed, so n8n was once handed 1191 of 2161 chars under "ok update+activate" while
+  `code validate` said valid (DGO-584, twice in one day). Now `compile`/`validate`/`verify` refuse
+  the file naming the backtick's line:col (`tooling/literal-check.mjs`, plus TypeScript's own
+  syntax errors), and `push` reads every stored workflow back and fails on a Code node whose body
+  differs from what was sent. Same escape for `${` → `\${`.
 - `/*__n8n__*/` marker lines carry what the upstream transformer drops (round-trip proven
   81/81): **`connections:` is the authoritative graph** (edit routing there — the links() DSL
   below is a generated view); `notes:` under each node's `name:` is its documentation; plus

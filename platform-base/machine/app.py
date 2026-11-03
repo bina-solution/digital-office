@@ -41,7 +41,7 @@ if _SENTRY_DSN:
 APP_ROOT = Path(__file__).parent
 STATIC_DIR = APP_ROOT / "static"
 HOST_ROOT = Path(os.getenv("HOST_ROOT", "/host/root"))
-DEPLOYMENT_PATH = Path(os.getenv("DEPLOYMENT_PATH", "/host/root/root/deployment-bina-comp"))
+DEPLOYMENT_PATH = Path(os.getenv("DEPLOYMENT_PATH", "/host/root/root/deployment-hacohen"))
 POLL_TIMEOUT_S = float(os.getenv("MACHINE_DU_TIMEOUT_S", "20"))
 CLEANUP_ALLOWED_ACTIONS = {
     action.strip()
@@ -51,6 +51,11 @@ CLEANUP_ALLOWED_ACTIONS = {
 DEPLOYMENT_NAME = os.getenv("DEPLOYMENT_NAME", "bina-deployment")
 MAX_STAT_WORKERS = int(os.getenv("MACHINE_STAT_WORKERS", "8"))
 OVERVIEW_CACHE_TTL_S = float(os.getenv("MACHINE_OVERVIEW_CACHE_TTL_S", "8"))
+# The heavy disk walk (`du` of /var/lib/docker, /usr, the logs, home, the deployment, and `docker system df`)
+# is taken again at most this often while a screen is open. Once a minute it re-walked FPG's 67 GB Docker
+# tree all the time the owner watched it, on a 2-vCPU server the provider was throttling (DGO-1231); the
+# folder sizes it shows do not move by the minute, and the disk's own use beside them stays live.
+STORAGE_HEAVY_TTL_S = float(os.getenv("MACHINE_STORAGE_HEAVY_TTL_S", "900"))
 # Background collector: keep the overview cache warm off the request path so the
 # page loads instantly. Poll fast only while it's actually being watched (a
 # request within ACTIVE_WINDOW_S), then relax to an idle heartbeat — light + optimised.
@@ -197,7 +202,7 @@ def _disk_usage(path: Path) -> dict[str, Any]:
 def _du_bytes(path: Path) -> int | None:
     try:
         output = subprocess.check_output(
-            ["du", "-sx", "--block-size=1", str(path)],
+            ["nice", "-n", "19", "du", "-sx", "--block-size=1", str(path)],
             stderr=subprocess.DEVNULL,
             text=True,
             timeout=POLL_TIMEOUT_S,
@@ -220,7 +225,7 @@ def _storage_overview() -> dict[str, Any]:
     last measurement and its time, and an empty one — `generated_at: null` — until the first exists.
     """
     global _storage_measuring
-    if not _storage_measuring and (not _storage_cache or time.time() - _storage_cache[0] >= 60):
+    if not _storage_measuring and (not _storage_cache or time.time() - _storage_cache[0] >= STORAGE_HEAVY_TTL_S):
         _storage_measuring = True
         threading.Thread(target=_storage_measure, daemon=True).start()
     heavy = _storage_cache[1] if _storage_cache else {"top_paths": [], "docker_df": {}, "generated_at": None}

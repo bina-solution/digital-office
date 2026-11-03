@@ -22,6 +22,12 @@ const $ = (s, r = document) => r.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
+// ONE IS SAID AS ONE (G86): a count of one is its own sentence — «1 אפליקציות» is not Hebrew —
+// and every other count is the number with the plural. The rule is written out in
+// apps/mail/mailview/static/app.js.
+const num = (n) => Number(n).toLocaleString('he-IL');
+const one = (n, single, many) => (Number(n) === 1 ? single : `${num(n)} ${many}`);
+
 const STATE = { apps: [], counts: {}, project: "", tab: "installed", q: "", office: "", jobs: new Map(),
                 remote: null, loaded: false };
 
@@ -35,10 +41,12 @@ const BINA_ICONS = {
   book:      '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>',
   'file-text': '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/>',
   folder:    '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>',
+  clipboard: '<path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/>',
   mail:      '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/>',
   inbox:     '<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
   message:   '<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z"/>',
   activity:  '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
+  mic:       '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/>',   // the recorder «הקלטות» (CHAT-81)
   bell:      '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
   server:    '<rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/>',
   monitor:   '<rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>',
@@ -579,7 +587,7 @@ function peersHTML() {
           <div class="idl">${esc(o.office)}${o.machine ? " · " + esc(o.machine) : ""}</div></div>
       </div>
       <div class="row"><span class="badge ${o.off ? "b-off" : "b-run"}"><i class="dot"></i>${esc(state)}</span>
-        <span class="badge">${o.apps.length} אפליקציות</span></div>
+        <span class="badge">${one(o.apps.length, "אפליקציה אחת", "אפליקציות")}</span></div>
       ${o.apps.length ? `<div class="peers-list">${o.apps.map((a) => `
         <label class="peers-row${a.off ? " off" : ""}" title="${esc(a.off ? o.label + " לא זמינה כרגע" : o.label)}">
           <span class="peers-ic${a.off ? "" : " is-remote"}"${officeHue(o)}>${icon(a.icon)}</span>
@@ -686,7 +694,7 @@ function render() {
   // The same numbers the menu shows, in the menu's own words. "ניתנות להתקנה" used to print the
   // server's `installable` — every app that is not core, installed or not — beside a store badge
   // that counts what is actually left to install: 25 against 18 on one screen.
-  $("#sub").textContent = `${c.total ?? 0} אפליקציות · ${c.running ?? 0} פועלות · ${b.store.length} בחנות` +
+  $("#sub").textContent = `${one(c.total ?? 0, "אפליקציה אחת", "אפליקציות")} · ${one(c.running ?? 0, "אחת פועלת", "פועלות")} · ${one(b.store.length, "אחת בחנות", "בחנות")}` +
     (rem || REMOTE.offices.length
       ? ` · ${rem} מרוחקות ${REMOTE.offices.length === 1 ? "בלשכה אחת" : `ב-${REMOTE.offices.length} לשכות`}` : "");
   $("#note").textContent = `פרויקט ${STATE.project} · מתעדכן כל 5 שניות`;
@@ -947,7 +955,7 @@ async function act(id, action) {
     const n = (a.volumes || []).length;
     where = await whereSheet({
       a, here: false, verb: "העבר", title: `לאן להעביר את ${a.name}?`,
-      body: `האפליקציה תותקן בלשכה שתבחר, <b>הנתונים שלה יועברו אליה</b>${n ? ` (${n} אחסונים)` : ""}
+      body: `האפליקציה תותקן בלשכה שתבחר, <b>הנתונים שלה יועברו אליה</b>${n ? ` (${one(n, "אחסון אחד", "אחסונים")})` : ""}
         ונבדקים שם מול מה שיצא מכאן, ורק אז היא תכובה כאן. הנתונים שכאן נשמרים עד שתסיר אותה.${
         asleep ? " האפליקציה אינה פועלת כאן כרגע, ולכן <b>תודלק לזמן קריאת הנתונים</b> ותכובה שוב." : ""}`,
     });
@@ -987,7 +995,7 @@ async function act(id, action) {
       const cur = (d.apps || []).find((x) => x.id === id);
       if (!cur) return;
       const s = job.steps[0];
-      if (cur.total) s.note = `${cur.running}/${cur.total} שירותים`;
+      if (cur.total) s.note = `${cur.running}/${cur.total} ${cur.total === 1 ? "שירות" : "שירותים"}`;
       const settled = action === "install" ? cur.running === cur.total && cur.total > 0 : cur.running === 0;
       if (settled && s.state === "active" && !job.following) { s.state = "done"; job.steps[1].state = "active"; }
       STATE.apps = d.apps; STATE.counts = d.counts || STATE.counts;
@@ -1302,7 +1310,7 @@ async function loadCatalogMeta() {
     }
     const ids = (d.entries || []).map((e) => e.id);
     $("#instsub").innerHTML = `קטלוג חתום: <b>${esc((d.meta || {}).signature || "")}</b> · ` +
-      `${ids.length} אפליקציות: ${esc(ids.join(", "))}`;
+      `${one(ids.length, "אפליקציה אחת", "אפליקציות")}: ${esc(ids.join(", "))}`;
   } catch { /* the store still works without a local catalog */ }
 }
 
@@ -1338,7 +1346,10 @@ function loadFailed(why) {
     $("#note").textContent = `הרענון האחרון נכשל — מוצג המצב הקודם · ${why}`;
     return;
   }
-  $("#sub").textContent = "טוען את רשימת האפליקציות…";
+  // The note above says a failed read with nothing loaded "says so plainly" — the header printed the
+  // opposite: "טוען את רשימת האפליקציות…" over a card that had already given up. A load that never
+  // ends is the one thing this screen may not promise over a failure (DGO-521).
+  $("#sub").textContent = "רשימת האפליקציות לא נטענה";
   $("#grid").innerHTML = `<div class="empty">רשימת האפליקציות עוד לא נטענה — שירות ניהול האפליקציות איטי או מופעל מחדש.
     <br><span style="font-size:12px">${esc(why)}</span></div>`;
 }
@@ -1375,7 +1386,7 @@ $("#instfile").addEventListener("change", (e) => {
   INSTALL_FILE = e.target.files[0] || null;
   if (INSTALL_FILE) {
     $("#instref").value = "";
-    instNote(`נבחר קובץ: <b>${esc(INSTALL_FILE.name)}</b> (${INSTALL_FILE.size} בתים). ` +
+    instNote(`נבחר קובץ: <b>${esc(INSTALL_FILE.name)}</b> (${one(INSTALL_FILE.size, "בייט אחד", "בתים")}). ` +
       `קובץ שהועלה אינו חתום — אלא אם הגיבוב שלו מופיע בקטלוג החתום, וזה ייבדק בשלב הבא.`);
   }
 });

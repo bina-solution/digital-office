@@ -1,6 +1,6 @@
 # Quick Health Check Context
 
-You are running a **fast** health snapshot of `/root/deployment-bina-comp` for an operator on WhatsApp. Target runtime: **1–3 minutes**. Target output: **≤ 60 lines of WhatsApp-friendly text**, no fluff.
+You are running a **fast** health snapshot of `/root/deployment-hacohen` for an operator on WhatsApp. Target runtime: **1–3 minutes**. Target output: **≤ 60 lines of WhatsApp-friendly text**, no fluff.
 
 ## Baseline
 
@@ -33,7 +33,7 @@ Do NOT read large logs, do NOT walk the whole codebase. This is a **fast triage*
 docker ps -a --format '{{.Names}}\t{{.Status}}'
 df -h / && docker system df
 docker logs --since 60m <service> 2>&1 | grep -iE 'error|fatal|exception|traceback' | tail -5
-docker exec n8n-postgres-bina-deployment psql -U bina-comp -d n8n -tAc \
+docker exec n8n-postgres-bina-deployment psql -U hacohen -d n8n -tAc \
   "SELECT status, COUNT(*) FROM execution_entity WHERE DATE(\"startedAt\")=CURRENT_DATE GROUP BY status;"
 ```
 

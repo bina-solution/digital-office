@@ -22,7 +22,7 @@
 set -u
 DK="docker -H unix:///run/bbox-docker.sock"
 CTR=n8n-shlomo-laptop
-OUT=/mnt/c/Users/user/Desktop/personalWorkspace/AutomateOs/deployment-bina-comp/data/_registry_backup
+OUT=/mnt/c/Users/user/Desktop/personalWorkspace/AutomateOs/deployment-hacohen/data/_registry_backup
 
 if [ "${1:-}" = "--auto" ]; then
   CUT=$($DK inspect -f '{{.State.StartedAt}}' "$CTR" | cut -c1-19 | tr 'T' ' ')
@@ -36,7 +36,7 @@ mkdir -p "$OUT"
 STAMP=$(date +%Y%m%d-%H%M%S)
 BK="$OUT/orphaned-execs-$STAMP.txt"
 
-$DK exec -i n8n-postgres-shlomo-laptop psql -U bina-comp -d n8n -tAc \
+$DK exec -i n8n-postgres-shlomo-laptop psql -U hacohen -d n8n -tAc \
  "SELECT id||','||\"workflowId\"||','||status||','||\"startedAt\"
   FROM execution_entity
   WHERE status IN ('waiting','running') AND \"startedAt\" < '$CUT'" | tr -d '\r' > "$BK"
@@ -44,7 +44,7 @@ N=$(grep -c . "$BK" || true)
 echo "  orphans found: $N   (backed up to ${BK##*/})"
 [ "${N:-0}" -eq 0 ] && { echo "  nothing to do"; exit 0; }
 
-$DK exec -i n8n-postgres-shlomo-laptop psql -U bina-comp -d n8n -v ON_ERROR_STOP=1 -tAf - <<SQL
+$DK exec -i n8n-postgres-shlomo-laptop psql -U hacohen -d n8n -v ON_ERROR_STOP=1 -tAf - <<SQL
 BEGIN;
 UPDATE execution_entity
    SET status = 'crashed', "stoppedAt" = coalesce("stoppedAt", now())

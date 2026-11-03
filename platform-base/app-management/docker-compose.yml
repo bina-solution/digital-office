@@ -40,7 +40,7 @@ services:
       # the compose project the stack runs under (container labels carry it); used to map
       # service -> container. reconcile applies with --project-directory <repo>, so the project
       # name is the repo dir basename.
-      - COMPOSE_PROJECT=${COMPOSE_PROJECT_NAME:-deployment-bina-comp}
+      - COMPOSE_PROJECT=${COMPOSE_PROJECT_NAME:-deployment-hacohen}
       # SAME PATH IN AND OUT. The repo is mounted at the absolute path it has on the host, not at
       # /repo, because this service RUNS COMPOSE (scripts/dc) to bring apps up. Compose resolves a
       # relative bind source against the compose file's directory and the DAEMON resolves the

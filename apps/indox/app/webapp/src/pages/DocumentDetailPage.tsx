@@ -346,7 +346,7 @@ function RestartFollow({
       <div className="muted small" style={{ marginTop: 10 }}>
         {live ? (
           <>
-            נצפה {secs} שניות מתוך {FOLLOW_BUDGET_MS / 1000}; המעקב נעצר כשהלשונית מוסתרת וממשיך
+            נצפה {secs === 1 ? 'שנייה אחת' : secs + ' שניות'} מתוך {FOLLOW_BUDGET_MS / 1000}; המעקב נעצר כשהלשונית מוסתרת וממשיך
             כשחוזרים אליה.
           </>
         ) : pickedUp ? (
@@ -708,7 +708,7 @@ function BsLinesPanel(
           <b>חילוץ המזהים חשוד:</b>{' '}
           {blank >= n / 2
             ? `רוב השורות (${blank}/${n}) בלי מזהה מסמך — כנראה עמודת המזהה לא זוהתה בפורמט של הספק הזה.`
-            : `רק ${distinct} מזהים שונים על פני ${n} שורות — אותו ערך חוזר לאורך העמודה, כנראה עוגן שגוי.`}{' '}
+            : `רק ${distinct === 1 ? 'מזהה אחד' : distinct + ' מזהים שונים'} על פני ${n === 1 ? 'שורה אחת' : n + ' שורות'} — אותו ערך חוזר לאורך העמודה, כנראה עוגן שגוי.`}{' '}
           הסכומים וההערות בדרך כלל נכונים; המזהים הם שדורשים תיקון מיפוי.
         </div>
       )}
@@ -1003,7 +1003,7 @@ export default function DocumentDetailPage() {
     setSaving(true);
     try {
       await api.patchDocument(repo!, id!, patch);
-      push('ok', `נשמרו ${Object.keys(patch).length} שדות`);
+      push('ok', `נשמרו ${Object.keys(patch).length === 1 ? 'שדה אחד' : Object.keys(patch).length + ' שדות'}`);
       setEdits({});
       refreshRow();
     } catch (e) {
@@ -1460,7 +1460,7 @@ export default function DocumentDetailPage() {
               stands between the operator and the first glance */}
           <details className="card doc-fold">
             <summary>
-              <h3>שדות המסמך <span className="muted small">({cfg.columns.length} עמודות · עריכה)</span></h3>
+              <h3>שדות המסמך <span className="muted small">({cfg.columns.length === 1 ? 'עמודה אחת' : cfg.columns.length + ' עמודות'} · עריכה)</span></h3>
             </summary>
             <div style={{ marginTop: 6 }}>
               {GROUP_ORDER.filter((g) => groups.has(g)).map((g) => {
@@ -1535,7 +1535,7 @@ export default function DocumentDetailPage() {
                   <div key={i} style={{ borderBottom: '1px solid var(--line)', paddingBottom: 8, marginBottom: 8 }}>
                     <div className="flex justify-between">
                       <span style={{ fontWeight: 600 }}>
-                        {h.result.error ? <span style={{ color: 'var(--red)' }}>נכשל</span> : `${h.result.ok}/${h.result.total} תואמים`}
+                        {h.result.error ? <span style={{ color: 'var(--red)' }}>נכשל</span> : `${h.result.ok}/${h.result.total} ${h.result.total === 1 ? 'תואם' : 'תואמים'}`}
                       </span>
                       <span className="muted small num">{fmtEpochSeconds(h.started)}</span>
                     </div>

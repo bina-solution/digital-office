@@ -19,7 +19,7 @@ const {
   previewOf, jidPhone, isGroupJid, isBroadcastJid, degradedList,
 } = require('../chatapi/adapters/baileys');
 
-const JID = 'person32@example.com';
+const JID = '972501112233@s.whatsapp.net';
 const GJID = '120363000000000000@g.us';
 
 /** The archive stores ISO-with-Z for message timestamps. */
@@ -29,7 +29,7 @@ const sqliteNow = (mins) => new Date(Date.now() - mins * 60000).toISOString().re
 
 describe('jid handling', () => {
   test('a phone number is read out of the jid, not out of a contact record', () => {
-    expect(jidPhone(JID)).toBe('050-000-0006');
+    expect(jidPhone(JID)).toBe('+972501112233');
     expect(jidPhone('')).toBe('');
   });
   test('groups and broadcasts are recognised by their domain', () => {
@@ -74,7 +74,7 @@ describe('conversationFrom', () => {
   test('a 1:1 is named by its contact and subtitled by the phone number', () => {
     const c = conversationFrom(chat, { last });
     expect(c).toMatchObject({
-      id: JID, name: 'משה כהן', handle: '050-000-0006', initials: 'מכ',
+      id: JID, name: 'משה כהן', handle: '+972501112233', initials: 'מכ',
       group: false, tag: '', unread: 2, pinned: false, mins: 26,
     });
   });
@@ -104,7 +104,7 @@ describe('conversationFrom', () => {
 
   test('a nameless contact is still named and still gets an avatar', () => {
     const c = conversationFrom({ ...chat, name: null, push_name: null }, { last });
-    expect(c.name).toBe('050-000-0006');
+    expect(c.name).toBe('+972501112233');
     expect(c.initials).toBe('33');            // the last two digits — never an empty circle
   });
 
@@ -171,25 +171,25 @@ describe('messageFrom', () => {
   });
 
   test('GROUP inbound carries sender + scolor so the thread can attribute the bubble', () => {
-    const m = messageFrom({ ...base, chat_jid: GJID, participant_jid: 'person33@example.com' }, { group: true });
-    expect(m.sender).toBe('050-000-0009');
+    const m = messageFrom({ ...base, chat_jid: GJID, participant_jid: '972509998877@s.whatsapp.net' }, { group: true });
+    expect(m.sender).toBe('+972509998877');
     expect(typeof m.scolor).toBe('string');
   });
 
   test('a known contact name beats the phone number in a group thread', () => {
-    const names = new Map([['person33@example.com', 'רחל לוי']]);
-    const m = messageFrom({ ...base, participant_jid: 'person33@example.com' }, { group: true, names });
+    const names = new Map([['972509998877@s.whatsapp.net', 'רחל לוי']]);
+    const m = messageFrom({ ...base, participant_jid: '972509998877@s.whatsapp.net' }, { group: true, names });
     expect(m.sender).toBe('רחל לוי');
   });
 
   test('a 1:1 inbound message carries NEITHER — the header already names the one other person', () => {
-    const m = messageFrom({ ...base, participant_jid: 'person33@example.com' }, { group: false });
+    const m = messageFrom({ ...base, participant_jid: '972509998877@s.whatsapp.net' }, { group: false });
     expect(m.sender).toBeUndefined();
     expect(m.scolor).toBeUndefined();
   });
 
   test('our own group message carries no sender either — attributing it to us would be wrong', () => {
-    const m = messageFrom({ ...base, from_me: 1, participant_jid: 'person34@example.com' }, { group: true });
+    const m = messageFrom({ ...base, from_me: 1, participant_jid: 'x@s.whatsapp.net' }, { group: true });
     expect(m.sender).toBeUndefined();
   });
 
@@ -267,13 +267,13 @@ const MSGS = {
     { message_id: 'm1', chat_jid: JID, from_me: 1, message_ts: iso(52), text: 'שולח הצעת מחיר' },
   ],
   [GJID]: [
-    { message_id: 'g2', chat_jid: GJID, from_me: 0, message_ts: iso(4), text: 'מצרפת את הקבצים', participant_jid: 'person33@example.com' },
+    { message_id: 'g2', chat_jid: GJID, from_me: 0, message_ts: iso(4), text: 'מצרפת את הקבצים', participant_jid: '972509998877@s.whatsapp.net' },
   ],
 };
 
 function deps({ sock = null, connected = false, qr = null, archive = null, send = null } = {}) {
   return {
-    globals: { appProperties: { sock, is_connected: connected, qr_text: qr, botNumber: connected ? '050-000-0010' : null } },
+    globals: { appProperties: { sock, is_connected: connected, qr_text: qr, botNumber: connected ? '972500000000' : null } },
     archive: archive || {
       listChats: async ({ type, limit = 100 } = {}) => CHATS.filter((c) => !type || c.type === type).slice(0, limit),
       searchMessages: async ({ chatJid, limit = 50 } = {}) => (MSGS[chatJid] || []).slice(0, limit),
@@ -323,11 +323,11 @@ describe('getConversation', () => {
   test('an unknown id is null, distinctly from an outage', async () => {
     // server.js answers 404 for one and 200-with-empty for the other; collapsing them reports a
     // missing chat as an outage and an outage as a missing chat
-    expect(await new BaileysBackend({}, deps()).getConversation('person35@example.com')).toBeNull();
+    expect(await new BaileysBackend({}, deps()).getConversation('nobody@s.whatsapp.net')).toBeNull();
   });
 
   test('a jid with messages but no chat row still opens — that is a number just replied to', async () => {
-    const fresh = 'person36@example.com';
+    const fresh = '972521234567@s.whatsapp.net';
     const base = deps().archive;
     const b = new BaileysBackend({}, deps({
       archive: { ...base, searchMessages: async ({ chatJid }) => (chatJid === fresh ? [{ message_id: 'x', chat_jid: fresh, from_me: 1, message_ts: iso(1), text: 'שלום' }] : []) },
@@ -335,7 +335,7 @@ describe('getConversation', () => {
     const c = await b.getConversation(fresh);
     expect(c.messages).toHaveLength(1);
     // a phone-number header beats a 404 on a chat you can see in the list
-    expect(c.contact.name).toBe('050-000-0011');
+    expect(c.contact.name).toBe('+972521234567');
   });
 });
 
@@ -396,7 +396,7 @@ describe('markRead', () => {
     const sock = { readMessages: jest.fn(async () => {}) };
     await new BaileysBackend({}, deps({ sock, connected: true })).markRead(GJID);
     expect(sock.readMessages).toHaveBeenCalledWith([
-      { remoteJid: GJID, id: 'g2', participant: 'person33@example.com' },
+      { remoteJid: GJID, id: 'g2', participant: '972509998877@s.whatsapp.net' },
     ]);
   });
 
@@ -431,7 +431,7 @@ describe('probe', () => {
     const p = await new BaileysBackend({}, deps({ sock: {}, connected: true })).probe();
     expect(p).toMatchObject({ ok: true, reachable: true, protocol: 'chat_wa_baileys', connected: true });
     expect(p.archive.chats).toBe(3);
-    expect(p.self.number).toBe('050-000-0010');
+    expect(p.self.number).toBe('+972500000000');
   });
 
   test('an unpaired socket is NOT ready, and says which button to press', async () => {

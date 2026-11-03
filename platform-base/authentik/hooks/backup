@@ -29,12 +29,12 @@ echo "ARTIFACT authentik.dump"
 echo "SKIPVOL authentik_postgres_data"
 
 q() { docker exec "${C}" psql -U "${U}" -d "${D}" -tAc "$1" 2>/dev/null | tr -d '\r' | tr -d ' '; }
-echo "FACT users $(q 'select count(*) from authentik_core_user;')"
-echo "FACT groups $(q 'select count(*) from authentik_core_group;')"
-echo "FACT tokens $(q 'select count(*) from authentik_core_token;')"
-echo "FACT providers $(q 'select count(*) from authentik_core_provider;')"
-echo "FACT applications $(q 'select count(*) from authentik_core_application;')"
+factq users "$(q 'select count(*) from authentik_core_user;')"
+factq groups "$(q 'select count(*) from authentik_core_group;')"
+factq tokens "$(q 'select count(*) from authentik_core_token;')"
+factq providers "$(q 'select count(*) from authentik_core_provider;')"
+factq applications "$(q 'select count(*) from authentik_core_application;')"
 # Password hashes, not just the count of people. A restore that recreated three users with fresh
 # hashes would pass a row count and fail every login.
-echo "FACT user_sha $(q "select md5(string_agg(username||coalesce(password,''), '|' order by username)) from authentik_core_user;")"
+factq user_sha "$(q "select coalesce(md5(string_agg(username||coalesce(password,''), '|' order by username)), 'empty') from authentik_core_user;")"
 exit 0

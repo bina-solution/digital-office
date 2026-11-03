@@ -1,0 +1,159 @@
+# content-library — the SEO content of DGO as an editorial plan (DGO-819, DGO-685), hand-written.
+#
+# One `library:` entry per item and language; applying the blueprint makes each a richtext slot
+# `content.<type>.<slug>.<lang>` (the plan — written or not yet), and a WRITTEN body,
+# `content/<type>/<slug>.<lang>.md` beside this file (front matter + markdown), a DRAFT version of
+# it — once per content of the file, never the active one (blueprints.seed_library). The voice, the
+# five types and the checklist are ai/context/seo/style-guide.md's; every fact about DGO is
+# ai/context/seo/facts.yaml's. `refs` names the work item each entry delivers (plans/seo.yaml keys:
+# seo-003 → DGO-662, seo-302…336 → DGO-692…726, seo-501… → DGO-749…, seo-601… → DGO-766…,
+# seo-701… → DGO-782…, seo-1001… → DGO-809…). Hebrew first: an `en` entry is added beside its `he`
+# one, same slug, once the Hebrew passed its review (DGO-664).
+#
+# Slugs are latin on purpose: they are slot keys (`[a-z0-9-]`) and URL paths (DGO-679), and a
+# Hebrew path is percent-encoded into something nobody can read or type.
+#
+# ספריית התוכן — the parent of every content type (article, project, tutorial, comparison, directory,
+# news, report, post, glossary).
+#
+# Why content lives here and not in the site: a piece of writing is an asset like a logo. It has
+# versions, one of them is the active one, and the active one is what every channel shows. The site
+# reads it from the bundle, social posts point at it, and the office agent can draft the next version.
+# So each piece is ONE SLOT, `content.<type>.<slug>-<lang>` (kind richtext). Its versions are the
+# drafts and revisions; meta carries the front matter (title, SEO fields, sources, FAQ, project facts).
+#
+# The pieces themselves are written as files under apps/digital-assets/content/<type>/<slug>.<lang>.md
+# (the writer's brief: content/BRIEF.md; the facts every piece may state: content/FACTS.md). They are
+# imported by `./bbox digital-assets content`, which applies the type's blueprint and creates each
+# piece's slot under it (the slot's source names the type). A blueprint therefore declares the TYPE —
+# its hub, its shape and its rules — and never lists the pieces: a new article needs no new image.
+#
+# Conventions every type follows:
+#   * `content.<type>.<slug>-he` / `-en` — Hebrew first; English is a separate slot, as names are.
+#   * `content.<type>.hub-he` — the opening text of the type's hub page on the site.
+#   * targets: website + google-search — the bundle the `sites` app serves, and what search shows.
+#
+# TWO DESIGNS MET HERE (the release merge, DGO-969). This file is both the PARENT of the nine type
+# blueprints (content-<type>.yaml, `bbox digital-assets content`, slots `content.<type>.<slug>-<lang>`)
+# and the EDITORIAL PLAN (`library:`, blueprints.seed_library, slots `content.<type>.<slug>.<lang>`).
+# The two name the same written piece with two different keys — the content lane picks one (DGO-819).
+
+id: content-library
+version: 1
+order: 6
+name: {he: ספריית התוכן, en: Content library}
+summary:
+  he: 'כל התוכן של DGO כתוכנית עריכה — מאמרים, מדריכים, פוסטים, חדשות ודוחות. כל פריט הוא משבצת, וכל גוף שנכתב נכנס אליה כטיוטה.'
+  en: 'All of DGO''s content as an editorial plan — articles, tutorials, posts, news and reports. Each item is a slot; each written body lands in it as a draft.'
+sources: [DGO-819, DGO-685, DGO-690, DGO-727, ai/context/seo/style-guide.md, apps/digital-assets/content/BRIEF.md,
+          apps/digital-assets/content/FACTS.md]
+
+slots:
+- key: content.library.byline-he
+  section: content
+  group: library
+  kind: text
+  lang: he
+  label:
+    he: שורת הכותב
+    en: Byline (Hebrew)
+  constraints:
+    note: the author line every piece carries when it names no other — «צוות בינה סולושנס»
+  targets:
+  - channel: website
+- key: content.library.hub-he
+  section: content
+  group: library
+  kind: richtext
+  lang: he
+  label:
+    he: פתיח ספריית התוכן
+    en: Content library — opening text
+  constraints:
+    note: 60–120 words — what the reader finds here, in the author's voice
+  targets:
+  - channel: website
+  - channel: google-search
+
+library:
+- {type: news, slug: dgo-1-open-source-agpl, lang: he, title: "DGO 1 בקוד פתוח ברישיון AGPL v3", category: news, refs: [DGO-662], words: 900}
+- {type: article, slug: n8n, lang: he, title: "n8n — אוטומציות לעסק בלי Zapier", category: open-source, refs: [DGO-692], words: 2000}
+- {type: article, slug: plane, lang: he, title: "Plane — ניהול פרויקטים במקום Jira ו-Monday", category: open-source, refs: [DGO-693], words: 2000}
+- {type: article, slug: supabase, lang: he, title: "Supabase — בסיס נתונים, אחסון ו-API במקום Firebase", category: open-source, refs: [DGO-694], words: 2000}
+- {type: article, slug: ollama, lang: he, title: "Ollama — מודלי שפה על המחשב שלך", category: open-source, refs: [DGO-695], words: 2000}
+- {type: article, slug: openhands, lang: he, title: "OpenHands — סוכן תוכנה שכותב ומריץ קוד", category: open-source, refs: [DGO-696], words: 2000}
+- {type: article, slug: deepseek-harness, lang: he, title: "DeepSeek Harness — הסביבה שמריצה את עזריה, סוכן הלשכה", category: open-source, refs: [DGO-697], words: 2000}
+- {type: article, slug: authentik, lang: he, title: "authentik — כניסה אחת לכל האפליקציות", category: open-source, refs: [DGO-698], words: 2000}
+- {type: article, slug: forgejo, lang: he, title: "Forgejo — מאגרי Git משלך במקום GitHub", category: open-source, refs: [DGO-699], words: 2000}
+- {type: article, slug: docker-mailserver, lang: he, title: "docker-mailserver — שרת מייל משלך", category: open-source, refs: [DGO-700], words: 2000}
+- {type: article, slug: postgresql, lang: he, title: "PostgreSQL — בסיס הנתונים שמתחת להכול", category: open-source, refs: [DGO-701], words: 2000}
+- {type: article, slug: traefik, lang: he, title: "Traefik — שער הכניסה ותעודות HTTPS", category: open-source, refs: [DGO-702], words: 2000}
+- {type: article, slug: portainer, lang: he, title: "Portainer — לראות ולנהל את הקונטיינרים", category: open-source, refs: [DGO-703], words: 2000}
+- {type: article, slug: glitchtip, lang: he, title: "GlitchTip — מעקב שגיאות במקום Sentry", category: open-source, refs: [DGO-704], words: 2000}
+- {type: article, slug: redis, lang: he, title: "Redis ו-RedisInsight — מטמון ותורים", category: open-source, refs: [DGO-705], words: 2000}
+- {type: article, slug: playwright-mcp, lang: he, title: "Playwright MCP — דפדפן שסוכני AI שולטים בו", category: open-source, refs: [DGO-706], words: 2000}
+- {type: article, slug: litellm, lang: he, title: "LiteLLM — שער אחד לכל מודלי ה-AI", category: open-source, refs: [DGO-707], words: 2000}
+- {type: article, slug: minio, lang: he, title: "MinIO — אחסון קבצים תואם S3", category: open-source, refs: [DGO-708], words: 2000}
+- {type: article, slug: wireguard, lang: he, title: "WireGuard — המנהרה שמחברת את הלשכות", category: open-source, refs: [DGO-709], words: 2000}
+- {type: article, slug: tesseract, lang: he, title: "Tesseract — OCR בעברית לחשבוניות ולמסמכים", category: open-source, refs: [DGO-710], words: 2000}
+- {type: article, slug: nextcloud, lang: he, title: "Nextcloud — קבצים ושיתוף במקום Google Drive ו-Dropbox", category: open-source, refs: [DGO-711], words: 2000}
+- {type: article, slug: immich, lang: he, title: "Immich — תמונות וסרטונים במקום Google Photos", category: open-source, refs: [DGO-712], words: 2000}
+- {type: article, slug: paperless-ngx, lang: he, title: "Paperless-ngx — ארכיון מסמכים סרוקים עם חיפוש", category: open-source, refs: [DGO-713], words: 2000}
+- {type: article, slug: stirling-pdf, lang: he, title: "Stirling-PDF — כל פעולות ה-PDF בלי להעלות קבצים לאתר זר", category: open-source, refs: [DGO-714], words: 2000}
+- {type: article, slug: vaultwarden, lang: he, title: "Vaultwarden — מנהל סיסמאות לעסק", category: open-source, refs: [DGO-715], words: 2000}
+- {type: article, slug: mattermost, lang: he, title: "Mattermost — צ׳אט לצוות במקום Slack", category: open-source, refs: [DGO-716], words: 2000}
+- {type: article, slug: chatwoot, lang: he, title: "Chatwoot — שירות לקוחות בכל הערוצים, כולל WhatsApp", category: open-source, refs: [DGO-717], words: 2000}
+- {type: article, slug: cal-com, lang: he, title: "Cal.com — זימון פגישות במקום Calendly", category: open-source, refs: [DGO-718], words: 2000}
+- {type: article, slug: vikunja, lang: he, title: "Vikunja — משימות ורשימות לצוות קטן", category: open-source, refs: [DGO-719], words: 2000}
+- {type: article, slug: metabase, lang: he, title: "Metabase — דשבורדים מהנתונים של העסק", category: open-source, refs: [DGO-720], words: 2000}
+- {type: article, slug: nocodb, lang: he, title: "NocoDB — טבלאות כמו Airtable על בסיס נתונים אמיתי", category: open-source, refs: [DGO-721], words: 2000}
+- {type: article, slug: plausible, lang: he, title: "Plausible — אנליטיקס לאתר בלי Google Analytics", category: open-source, refs: [DGO-722], words: 2000}
+- {type: article, slug: librechat, lang: he, title: "LibreChat — צ׳אט אחד לכל המודלים במקום ChatGPT", category: open-source, refs: [DGO-723], words: 2000}
+- {type: article, slug: searxng, lang: he, title: "SearXNG — מנוע חיפוש פרטי", category: open-source, refs: [DGO-724], words: 2000}
+- {type: article, slug: home-assistant, lang: he, title: "Home Assistant — משרד חכם", category: open-source, refs: [DGO-725], words: 2000}
+- {type: article, slug: odoo, lang: he, title: "Odoo — ERP ו-CRM לעסק", category: open-source, refs: [DGO-726], words: 2000}
+- {type: tutorial, slug: install-dgo-with-claude, lang: he, title: "להתקין DGO עם Claude: מה אומרים לו בדיוק, ואיך הוא צריך לפעול", category: guides, refs: [DGO-749], words: 1500}
+- {type: tutorial, slug: install-dgo-with-gemini-and-antigravity, lang: he, title: "להתקין DGO עם Gemini CLI ועם Google Antigravity", category: guides, refs: [DGO-750], words: 1500}
+- {type: tutorial, slug: install-dgo-with-openai, lang: he, title: "להתקין DGO עם OpenAI: Codex, ChatGPT ו-Dots", category: guides, refs: [DGO-751], words: 1500}
+- {type: tutorial, slug: install-dgo-with-coding-agents, lang: he, title: "להתקין DGO עם Cursor, GitHub Copilot ושאר סוכני הקוד", category: guides, refs: [DGO-752], words: 1500}
+- {type: tutorial, slug: dgo-on-google-cloud, lang: he, title: "DGO על Google Cloud, במכונה הקטנה שמספיקה", category: guides, refs: [DGO-754], words: 1500}
+- {type: tutorial, slug: dgo-on-aws-azure-oracle, lang: he, title: "DGO על AWS, Azure ו-Oracle — כולל האזורים בישראל", category: guides, refs: [DGO-755], words: 1500}
+- {type: tutorial, slug: dgo-on-a-cheap-vps, lang: he, title: "DGO על VPS זול: Hostinger, Hetzner, DigitalOcean, Contabo", category: guides, refs: [DGO-756], words: 1500}
+- {type: tutorial, slug: private-agents-in-the-office, lang: he, title: "סוכנים פרטיים בתוך הלשכה: עזריה ו-OpenHands", category: guides, refs: [DGO-759], words: 1500}
+- {type: tutorial, slug: agents-on-a-private-gpu-with-ollama, lang: he, title: "סוכנים על GPU פרטי עם Ollama: חומרה, מודלים ועברית", category: guides, refs: [DGO-760], words: 1500}
+- {type: tutorial, slug: install-dgo-without-an-agent, lang: he, title: "התקנה בלי סוכן: Mac, Windows ו-Linux, צעד אחר צעד", category: guides, refs: [DGO-761], words: 1500}
+- {type: tutorial, slug: the-app-store-one-click, lang: he, title: "חנות האפליקציות: איך מתקינים כל פרויקט בלחיצה", category: guides, refs: [DGO-762], words: 1500}
+- {type: article, slug: the-triangle, lang: he, title: "המשולש: להריץ קוד פתוח איפה שרוצים ולהגיע אליו מכל מקום", category: guides, refs: [DGO-757], words: 1500}
+- {type: article, slug: one-small-vps, lang: he, title: "VPS קטן אחד שמחבר את כל האפליקציות — הארכיטקטורה והעלות", category: guides, refs: [DGO-758], words: 1500}
+- {type: article, slug: which-computer-runs-an-office, lang: he, title: "איזה מחשב לקנות כדי להריץ לשכה", category: guides, refs: [DGO-763], words: 1500}
+- {type: article, slug: open-source-licenses-for-business, lang: he, title: "רישיונות קוד פתוח בעברית: AGPL, GPL, MIT ו-fair-code — מה מותר לעסק", category: guides, refs: [DGO-764], words: 1500}
+- {type: article, slug: glossary, lang: he, title: "מילון: 100 מונחים בעברית — קוד פתוח, אירוח עצמי וסוכני AI", category: guides, refs: [DGO-765], words: 1500}
+- {type: tutorial, slug: pay-bills-in-the-office-browser, lang: he, title: "לשלם חשבונות דרך הדפדפן של הלשכה", category: israel, refs: [DGO-766], words: 1500}
+- {type: article, slug: bookkeeping-with-dgo, lang: he, title: "הנהלת חשבונות עם DGO: חשבוניות, קבלות ומספר הקצאה", category: israel, refs: [DGO-767], words: 1500}
+- {type: tutorial, slug: incoming-documents-with-indox, lang: he, title: "אוטומציה מלאה למסמכים נכנסים עם INDOX, מקצה לקצה", category: israel, refs: [DGO-768], words: 1500}
+- {type: article, slug: advertise-from-dgo, lang: he, title: "לפרסם מתוך DGO: רשתות חברתיות, אתרים ומודעות", category: israel, refs: [DGO-769], words: 1500}
+- {type: tutorial, slug: project-management-with-plane, lang: he, title: "ניהול פרויקטים מההתחלה עד הסוף עם Plane שבלשכה", category: israel, refs: [DGO-770], words: 1500}
+- {type: tutorial, slug: supermarket-shopping-in-the-office-browser, lang: he, title: "קניות בסופר דרך הדפדפן של הלשכה: רמי לוי ושופרסל", category: israel, refs: [DGO-771], words: 1500}
+- {type: article, slug: government-digital-services, lang: he, title: "שירותי ממשלה דיגיטליים: מה עושים מהלשכה, ומה רק בסניף", category: israel, refs: [DGO-772], words: 1500}
+- {type: article, slug: business-banking-automation, lang: he, title: "בנקאות לעסק: דפי חשבון, תשלומים ואישורים — מה אפשר לאוטומט ומה אסור", category: israel, refs: [DGO-773], words: 1500}
+- {type: article, slug: opening-a-business-in-israel, lang: he, title: "לפתוח עסק בישראל: עוסק פטור, עוסק מורשה וחברה — ומה הלשכה מסדרת", category: israel, refs: [DGO-774], words: 1500}
+- {type: article, slug: what-software-costs-an-israeli-business, lang: he, title: "כמה עולה התוכנה של עסק ישראלי — ומה נשאר ממנה עם DGO", category: israel, refs: [DGO-775], words: 1500}
+- {type: article, slug: dgo-by-profession, lang: he, title: "DGO לפי מקצוע: רואי חשבון, עורכי דין, קליניקות, קבלנים, נדל״ן, עמותות וחנויות", category: israel, refs: [DGO-776], words: 1500}
+- {type: tutorial, slug: whatsapp-for-business, lang: he, title: "WhatsApp לעסק מתוך הלשכה", category: israel, refs: [DGO-777], words: 1500}
+- {type: tutorial, slug: gmail-and-google-drive-in-the-office, lang: he, title: "Gmail ו-Google Drive מחוברים ללשכה", category: israel, refs: [DGO-778], words: 1500}
+- {type: article, slug: privacy-amendment-13, lang: he, title: "פרטיות ותיקון 13: למה להחזיק את המידע של העסק אצלך", category: israel, refs: [DGO-779], words: 1500}
+- {type: article, slug: case-study-bina-solutions, lang: he, title: "סיפור מקרה: איך בינה סולושנס מנהלת את עצמה על DGO", category: israel, refs: [DGO-780], words: 1500}
+- {type: tutorial, slug: migrate-from-lovable, lang: he, title: "לעבור מ-Lovable ל-DGO", category: migrate, refs: [DGO-782], words: 1500}
+- {type: tutorial, slug: migrate-from-base44, lang: he, title: "לעבור מ-Base44 ל-DGO", category: migrate, refs: [DGO-783], words: 1500}
+- {type: article, slug: google-antigravity-and-dgo, lang: he, title: "לעבוד עם Google Antigravity ולהריץ את התוצאה ב-DGO", category: compare, refs: [DGO-784], words: 1500}
+- {type: tutorial, slug: migrate-from-app-builders, lang: he, title: "לעבור מ-Bolt, Replit, v0 ושאר בוני האפליקציות", category: migrate, refs: [DGO-785], words: 1500}
+- {type: article, slug: dgo-vs-openai-dots, lang: he, title: "DGO מול OpenAI Dots", category: compare, refs: [DGO-786], words: 1500}
+- {type: article, slug: dgo-vs-meta-muse, lang: he, title: "DGO מול Meta Muse לעסקים קטנים", category: compare, refs: [DGO-787], words: 1500}
+- {type: article, slug: dgo-vs-copilot-and-workspace, lang: he, title: "DGO מול Microsoft Copilot ומול Google Workspace עם Gemini", category: compare, refs: [DGO-788], words: 1500}
+- {type: article, slug: dgo-vs-umbrel-casaos-coolify-yunohost-cloudron, lang: he, title: "DGO מול Umbrel, CasaOS, Coolify, YunoHost ו-Cloudron", category: compare, refs: [DGO-789], words: 1500}
+- {type: article, slug: dgo-vs-israeli-cloud-software, lang: he, title: "DGO מול תוכנה ישראלית בענן: Monday, Priority, Morning", category: compare, refs: [DGO-790], words: 1500}
+- {type: report, slug: weekly-flagship-projects, lang: he, title: "דוח שבועי: מה חדש ב-35 פרויקטי הדגל", category: reports, refs: [DGO-809]}
+- {type: report, slug: monthly-200-projects, lang: he, title: "דוח חודשי על 200 הפרויקטים: מי עלה, מי נעצר, מי שינה רישיון", category: reports, refs: [DGO-810]}
+- {type: report, slug: regulation-and-law, lang: he, title: "רגולציה ומשפט: אוטומציה, AI, פרטיות, חשבוניות וחתימה", category: reports, refs: [DGO-811]}
+- {type: report, slug: monthly-hebrew-llm-benchmark, lang: he, title: "מדד חודשי: מודלי שפה בעברית — מקומיים ובענן", category: reports, refs: [DGO-813]}
+- {type: report, slug: monthly-seo, lang: he, title: "דוח SEO חודשי: אינדקס, חשיפות, ביטויים ודירוג", category: reports, refs: [DGO-816]}

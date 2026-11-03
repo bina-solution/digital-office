@@ -1,0 +1,168 @@
+name: android-guest
+
+# The Android engine's guest booted as a phone boots it (DGO-1071): the newest engine draft's guest disk
+# (android-engine.yml) under qemu-system-aarch64 with TCG — no KVM for an arm64 guest on this x86 runner,
+# and none for an app on a phone — through packaging/android/engine/try-guest.sh, until the console
+# answers on the edge the app opens (console.localhost:8080) or the wait runs out. Says how long each
+# stage took. Here and not on an office machine: the drafts are private (no office machine holds a
+# GitHub sign-in to fetch one), and the owner's rule keeps heavy work off the MacBook. Only on request: a
+# push to dgo-stable whose head commit says "[android-guest]".
+
+on:
+  push:
+    branches: [dgo-stable]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # GitHub shows a draft release only to a token that may push; nothing is written here
+  actions: read     # whether the engine built by the same push failed (the wait below ends on it)
+
+jobs:
+  boot:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[android-guest]')
+    concurrency:
+      group: android-guest-${{ github.ref }}
+      cancel-in-progress: true
+    # The Dell's runner (`portable-ssd`, DGO-1109): GitHub's hosted runners take no job while the account's
+    # billing is stopped (DGO-1116). try-guest.sh boots the guest in a throwaway container of its own, apart
+    # from the Dell's office; its CPUs, memory and heat are held below as the engine's guest build holds them.
+    runs-on: [self-hosted, portable, ssd]
+    timeout-minutes: 395   # try-guest.sh gives up first and prints the console; up to 45 that ops/prejob_waitfree.sh may hold it
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Room (a hosted runner's)
+        if: runner.environment == 'github-hosted'
+        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+      - name: Room
+        run: |
+          set -euo pipefail
+          df -h "${RUNNER_TEMP}" | tail -1; nproc; free -g | sed -n 2p
+          # the guest's parts and its disk unpacked beside them (sparse, 24 GB apparent, ~1 GB at first), and 20 GB
+          # left for the Dell's own office (as export-verify keeps): 30 GB free, or no boot — and while it boots,
+          # the guest is stopped when less than 20 are left (below)
+          room=$(( $(df -Pk "${RUNNER_TEMP}" | awk 'NR == 2 {print $4}') / 1048576 ))
+          [ "${room}" -ge 30 ] || { echo "::error::${room} GB free under ${RUNNER_TEMP}, and the guest's disk with the office's 20 needs 30"; exit 1; }
+
+      - name: gh, where the runner has none
+        run: |
+          set -euo pipefail
+          if command -v gh >/dev/null; then gh --version | head -1; exit 0; fi
+          v=2.62.0
+          sum=41c8b0698ad3003cb5c44bde672a1ffd5f818595abd80162fbf8cc999418446a   # gh_2.62.0_checksums.txt
+          d="${RUNNER_TOOL_CACHE:-${RUNNER_TEMP}}/gh/${v}"
+          if [ ! -x "${d}/bin/gh" ]; then
+            mkdir -p "${d}"
+            t="${RUNNER_TEMP}/gh.tgz"
+            curl -fsSL "https://github.com/cli/cli/releases/download/v${v}/gh_${v}_linux_amd64.tar.gz" -o "${t}"
+            echo "${sum}  ${t}" | sha256sum -c -
+            tar -xzf "${t}" -C "${d}" --strip-components=1
+            rm -f "${t}"
+          fi
+          echo "${d}/bin" >> "${GITHUB_PATH}"
+          "${d}/bin/gh" --version | head -1
+
+      # A push that also asks for the engine waits for the guest made from THIS commit (its draft is made
+      # with --target this commit, and the digest is uploaded after the parts, in a call of its own); any
+      # other run takes the newest engine draft that has a guest. One API call a round, every draft in it.
+      - name: The guest, from its engine draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MSG: ${{ github.event.head_commit.message }}
+        run: |
+          set -euo pipefail
+          # the boot below gets what the job has left after this wait (DGO_FROM)
+          echo "DGO_FROM=$(date +%s)" >> "${GITHUB_ENV}"
+          g="${RUNNER_TEMP}/guest"; mkdir -p "${g}"
+          # $1: a commit the draft must target, or "" for any
+          with_guest() {
+            WANT="$1" gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=50" --jq '[.[] | select(.draft
+              and (.tag_name | startswith("android-engine-")) and ($ENV.WANT == "" or .target_commitish == $ENV.WANT)
+              and ([.assets[] | select(.state == "uploaded") | .name] | index("dgo-guest-arm64.img.xz.sha256") != null))
+              | .tag_name][0] // empty' 2>/dev/null || true
+          }
+          t=""
+          case "${MSG}" in
+            *"[android-engine]"*)
+              s=$(date +%s)
+              # up to 3 h: the engine's guest job builds, pulls, unpacks and xz's every image the office runs
+              while [ $(( $(date +%s) - s )) -lt 10800 ]; do
+                t="$(with_guest "${GITHUB_SHA}")"; [ -z "${t}" ] || break
+                bad="$(gh run list --workflow android-engine.yml --commit "${GITHUB_SHA}" --json status,conclusion \
+                  --jq '[.[] | select(.status == "completed" and .conclusion != "success" and .conclusion != "skipped")] | length' 2>/dev/null || echo 0)"
+                [ "${bad}" = 0 ] || { echo "::error::the engine built from ${GITHUB_SHA::8} failed — no guest to boot"; exit 1; }
+                echo "[$(( $(date +%s) - s ))s] waiting for the guest built from ${GITHUB_SHA::8}"; sleep 120
+              done ;;
+            *) t="$(with_guest "")" ;;
+          esac
+          [ -n "${t}" ] || { echo "::error::no engine draft with a guest (for ${GITHUB_SHA::8} when this push asked for the engine)"; exit 1; }
+          gh release download "${t}" -p 'dgo-guest-arm64.img.xz.part*' -p dgo-guest-arm64.img.xz.sha256 -D "${g}" --clobber
+          # the digest is of the whole .xz: the parts joined in name order, as the app joins them
+          want="$(cut -d' ' -f1 "${g}/dgo-guest-arm64.img.xz.sha256")"
+          got="$(cat "${g}"/dgo-guest-arm64.img.xz.part* | sha256sum | cut -d' ' -f1)"
+          [ "${want}" = "${got}" ] || { echo "::error::the guest from ${t} does not match its digest"; exit 1; }
+          echo "the guest from ${t}: $(ls "${g}"/dgo-guest-arm64.img.xz.part* | wc -l) part(s), $(du -sh "${g}" | cut -f1), digest OK"
+
+      # GUEST_WAIT: what is left of 325 minutes from the wait's start — try-guest.sh gives up, and prints the
+      # console, inside the job's 350 (the steps before, its apt-get and up to 5 min for the guest's report
+      # are outside it), however long the engine took. As many vCPUs as the runner has cores:
+      # more MTTCG threads than cores only slows them
+      #
+      # On the Dell its office and Ollama stay up: 3 vCPUs and 4 GB — what a phone of 8 GB gives its machine
+      # (EngineService: half the phone, 2–6 GB) — once 8 GB are available, waiting up to an hour for them;
+      # the container held to 3 CPUs and 5.5 GB (the guest's 4, QEMU's translation cache and its own), as
+      # export-verify holds its box; at 92°C it drops to one CPU, under 80°C it has its three again, as the
+      # engine's guest build does (the Dell froze three times at 93–96°C under that build); and it is stopped
+      # when the disk has less than the office's 20 GB left.
+      - name: Booted under TCG, until the console answers
+        env:
+          HOSTED: ${{ runner.environment == 'github-hosted' && '1' || '' }}
+        run: |
+          set -uo pipefail
+          cpus="$(nproc)"
+          if [ -z "${HOSTED}" ]; then
+            docker rm -f dgo-try-guest >/dev/null 2>&1 || true   # a cancelled run's, or try-guest.sh cannot take the name
+            cpus=3; export GUEST_MEM=4096
+            export GUEST_DOCKER_ARGS="--cpus ${cpus} --cpu-shares 128 --memory 5632m --memory-swap 5632m"
+            s=$(date +%s)
+            while :; do
+              avail="$(awk '/^MemAvailable:/ {print int($2 / 1048576)}' /proc/meminfo)"; avail="${avail:-0}"
+              [ "${avail}" -ge 8 ] && break
+              [ $(( $(date +%s) - s )) -lt 3600 ] || { echo "::error::${avail} GB available after an hour's wait, and the guest needs 8"; exit 1; }
+              echo "[$(( $(date +%s) - s ))s] ${avail} GB available, waiting for 8"; sleep 30
+            done
+            heat() {
+              for z in /sys/class/thermal/thermal_zone*; do
+                if [ "$(cat "${z}/type" 2>/dev/null)" = x86_pkg_temp ]; then
+                  t="$(cat "${z}/temp" 2>/dev/null)" && [ -n "${t}" ] && { echo $(( t / 1000 )); return; }
+                fi
+              done
+              echo 0
+            }
+            ( slow=""
+              while sleep 60; do
+                left=$(( $(df -Pk "${RUNNER_TEMP}" | awk 'NR == 2 {print $4}') / 1048576 ))
+                if [ "${left}" -lt 20 ]; then
+                  echo "::error::${left} GB left on the disk, under the office's 20 — the guest stopped"
+                  docker rm -f dgo-try-guest >/dev/null 2>&1 || true
+                fi
+                c="$(heat)"
+                if [ "${c}" -ge 92 ] && [ -z "${slow}" ]; then
+                  docker update --cpus 1 dgo-try-guest >/dev/null 2>&1 && slow=1 && echo "heat: ${c}°C — the guest down to 1 CPU"
+                elif [ "${c}" -gt 0 ] && [ "${c}" -lt 80 ] && [ -n "${slow}" ]; then
+                  docker update --cpus "${cpus}" dgo-try-guest >/dev/null 2>&1 && slow="" && echo "heat: ${c}°C — the guest back to ${cpus} CPUs"
+                fi
+              done ) &
+            hpid=$!
+            # one group under `|| true`: under bash -e a failing kill in an EXIT trap would be the step's status
+            trap '{ pkill -P "${hpid}"; kill "${hpid}"; } 2>/dev/null || true' EXIT
+          fi
+          GUEST_WAIT=$(( 19500 - ($(date +%s) - DGO_FROM) )); export GUEST_WAIT
+          echo "${GUEST_WAIT} s for the boot, ${cpus} vCPUs, ${GUEST_MEM:-4096} MB"
+          GUEST_CPUS="${cpus}" bash packaging/android/engine/try-guest.sh "${RUNNER_TEMP}/guest"
+      - name: The guest's container and disk gone
+        if: always()
+        run: |
+          docker rm -f dgo-try-guest >/dev/null 2>&1 || true
+          rm -rf "${RUNNER_TEMP}/guest"

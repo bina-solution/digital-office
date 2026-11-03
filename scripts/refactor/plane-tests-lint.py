@@ -89,11 +89,24 @@ CI = REPO / ".github" / "workflows" / "ci-verify.yml"
 
 def discover(repo: pathlib.Path) -> list[pathlib.Path]:
     """The test files beside the planes of `repo`, sorted. An empty answer is a FAILURE of the gate
-    (`check`), never a pass: a discovery that finds nothing has measured nothing."""
+    (`check`), never a pass: a discovery that finds nothing has measured nothing.
+
+    `scripts/test_*.py` since 2026-11-03: layer 0's own decisions are tested there too — which linked
+    office's Plane a herd office may use (test_herd_home.py), and that a fresh .env shares no secret
+    with the template (test_ci_env_secrets.py) — and no lane ran them (the second reader of DGO-1220).
+    Python only: the shell suites beside them (test_follow.sh, test_heavy_slot.sh) need Linux's flock
+    and bash 4, and come in when a lane that has both runs them.
+
+    `apps/*/plugins/*/test/*` since 2026-10-13: an app's CLIENT PLUGINS keep their suites one level
+    deeper than the app (`apps/bina-ds/plugins/nav-collapse/test/client.test.mjs`), and the patterns
+    above stopped at the app — so two suites that say of themselves "this suite is what runs on every
+    change" ran nowhere, and a change to the link plugin of the office's own agent was covered by
+    nothing but memory (found while closing ui2-060)."""
     return sorted({f for pattern in ("platform/manager/test_*", "platform-base/*/test_*",
                                      "apps/*/test_*", "apps/*/*/test_*", "apps/*/tools/*selfcheck*",
+                                     "apps/*/plugins/*/test/*",
                                      "platform/manager/*selftest*", "apps/*/tests/*selftest*",
-                                     "scripts/ui-coverage/test_*")
+                                     "scripts/ui-coverage/test_*", "scripts/test_*.py")
                    for f in repo.glob(pattern) if f.is_file() and f.suffix in (".py", ".sh", ".mjs")})
 
 
@@ -131,7 +144,40 @@ def run(test: pathlib.Path, repo: pathlib.Path) -> tuple[str, str]:
     absent = re.search(r"No module named '?([A-Za-z0-9_.]+)'?", out)
     if absent:
         return "NOT RUN", f"needs the package `{absent.group(1).split('.')[0]}` (its own image has it)"
-    return "FAIL", last
+    # A test that asks a live office's service BY NAME (the seder door asks bina-ds) cannot be run off
+    # that office's network: the name does not resolve here. Only that — a refused LOOPBACK stays a FAIL
+    # on this path, because a test's own server dying of a bug says the same "Connection refused" (the
+    # reader of DGO-1040); such a server now prints why it died, and the rule above reads a missing package.
+    if re.search(NO_NAME, out):
+        return "NOT RUN", "it asks a live office's service by name, and that name does not resolve here"
+    return "FAIL", said_failure(out, last)[:110]
+
+
+#: A line that SAYS a test failed, in the words the repo's tests use: pytest's summary ("FAILED file::test
+#: - why"), and the PASS/FAIL group lines the self-tests print ("FAIL race", "FAIL  name"). Not the bare
+#: words error/assert/Traceback: a traceback's reason is its LAST line (the fallback), and pytest prints a
+#: failing test's whole source, passed asserts included (the reader of 94e4a6a8).
+FAIL_LINE = re.compile(r"^FAIL(ED)?\b")
+
+
+def said_failure(out: str, fallback: str) -> str:
+    """A failing run's own reason: its first line that says FAIL, with the indented line under it — not
+    its last line when that is a later group's PASS (chimney-services' test_engine failed in the 0.2.0
+    gates and the gate printed only "PASS plane", DGO-1040). With no such line, the fallback."""
+    lines = [ln.rstrip() for ln in out.splitlines() if ln.strip()]
+    depth = lambda s: len(s) - len(s.lstrip())   # noqa: E731 — the line under it is indented DEEPER
+    for i, ln in enumerate(lines):
+        if FAIL_LINE.match(ln.strip()):
+            nxt = lines[i + 1] if i + 1 < len(lines) else ""
+            under = nxt.strip() if nxt and depth(nxt) > depth(ln) else ""
+            return ln.strip() + (" — " + under if under else "")
+    return fallback
+
+
+#: A service name this machine cannot resolve — it lives on an office's network (glibc's and macOS's
+#: words, and node's, for the .mjs tests).
+NO_NAME = (r"Temporary failure in name resolution|Name or service not known|nodename nor servname provided"
+           r"|No address associated with hostname|getaddrinfo (ENOTFOUND|EAI_AGAIN)\b")
 
 
 def built_images(repo: pathlib.Path) -> dict[str, str] | None:
@@ -197,7 +243,9 @@ def verdict_in_image(returncode: int, out: str, image: str) -> tuple[str, str]:
         return "NOT RUN", f"its image ({image}) has no `{absent.group(1).split('.')[0]}` either"
     if re.search(r"Connection refused|Max retries exceeded|Failed to establish a new connection", out):
         return "NOT RUN", "not a unit test: it asks a running service on the loopback (a lane of its app's own)"
-    return "FAIL", f"in its image ({image}): {last}"
+    if re.search(NO_NAME, out):
+        return "NOT RUN", f"in its image ({image}): it asks a live office's service by name, which does not resolve here"
+    return "FAIL", f"in its image ({image}): {said_failure(out, last)[:90]}"
 
 
 def tracked_tar(repo: pathlib.Path, ctx: str, also: pathlib.Path) -> bytes | None:
@@ -337,6 +385,14 @@ def self_test() -> int:
         (plane / "test_fails.py").write_text('if __name__ == "__main__":\n    raise SystemExit(3)\n', encoding="utf-8")
         (plane / "test_needs.py").write_text('import a_package_no_machine_has\nif __name__ == "__main__":\n    pass\n',
                                              encoding="utf-8")
+        # a live office's service by name, which does not resolve here: not runnable — and a refused
+        # LOOPBACK, which is what a test's own crashed server also looks like: a FAIL (DGO-1040's reader)
+        (plane / "test_live_name.py").write_text(
+            'import sys\nif __name__ == "__main__":\n    print("URLError: <urlopen error [Errno -3] Temporary failure in name resolution>")\n'
+            '    sys.exit(1)\n', encoding="utf-8")
+        (plane / "test_loopback.py").write_text(
+            'import sys\nif __name__ == "__main__":\n    print("ConnectionError: [Errno 111] Connection refused")\n'
+            '    sys.exit(1)\n', encoding="utf-8")
         # …and the way an interpreter without pytest says it, which is not a traceback
         (plane / "test_no_runner.py").write_text(
             'import sys\nif __name__ == "__main__":\n'
@@ -362,10 +418,12 @@ def self_test() -> int:
             (tmp / "scripts" / where / name).write_text(body, encoding="utf-8")
         got = {t.name: run(t, tmp)[0] for t in discover(tmp)}
         want = {"test_fails.py": "FAIL", "test_needs.py": "NOT RUN", "test_no_runner.py": "NOT RUN",
+                "test_live_name.py": "NOT RUN", "test_loopback.py": "FAIL",
                 "test_passes.py": "PASS", "test_beside.py": "PASS", "test_below.py": "PASS", "ui-selfcheck.py": "PASS",
                 "catalog_selftest.py": "PASS", "connect-selftest.py": "PASS", "test_map_tool.py": "PASS"}
         ok = got == want and check(tmp, strict=False) == 1
         (plane / "test_fails.py").unlink()
+        (plane / "test_loopback.py").unlink()
         ok = ok and check(tmp, strict=False) == 0 and check(tmp, strict=True) == 1
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
@@ -380,10 +438,24 @@ def self_test() -> int:
         verdict_in_image(1, "E  assert 1 == 2\n1 failed", "console")[0] == "FAIL",
         verdict_in_image(1, "ModuleNotFoundError: No module named 'cv2'", "console")[0] == "NOT RUN",
         verdict_in_image(1, "requests.exceptions.ConnectionError: … Connection refused", "apitools")[0] == "NOT RUN",
+        verdict_in_image(1, "gaierror: nodename nor servname provided, or not known", "bina-ds")[0] == "NOT RUN",
+        verdict_in_image(1, "Error: getaddrinfo ENOTFOUND bina-ds", "n8n")[0] == "NOT RUN",   # node's words
+        verdict_in_image(1, "Error: getaddrinfo ENOTFOUNDS", "n8n")[0] == "FAIL",             # …only those
+        # a failing run is told by its first FAIL and the line under it, not by a later group's PASS
+        said_failure("PASS pricing\nFAIL race\n    exactly one wins: [10] []\nPASS plane\n", "PASS plane")
+        == "FAIL race — exactly one wins: [10] []",
+        said_failure("all good\nexit 3\n", "exit 3") == "exit 3",
+        # a crash keeps its exception (the last line), and a passed assert in pytest's listing is no reason
+        said_failure('Traceback (most recent call last):\n  File "x.py", line 4, in <module>\nValueError: bad config\n',
+                     "ValueError: bad config") == "ValueError: bad config",
+        said_failure("    assert f(1) == 2\n>   assert f(2) == 4\nE   assert 5 == 4\nFAILED t.py::test_f - assert 5 == 4\n",
+                     "1 failed in 0.1s") == "FAILED t.py::test_f - assert 5 == 4",
+        # an indented FAIL line takes no sibling PASS as its reason (connections' test_broker prints "  FAIL  x")
+        said_failure("  PASS  a\n  FAIL  b   got 3\n  PASS  c\n", "  PASS  c") == "FAIL  b   got 3",
     ]
     ok = ok and all(image)
     print("\nplane-tests-lint self-test: "
-          + ("10/10 outcomes told apart (planes, apps, self-tests, the map's tools); a failing test fails the gate, an unrunnable one "
+          + ("12/12 outcomes told apart (planes, apps, self-tests, the map's tools, a live name, a refused loopback); a failing test fails the gate, an unrunnable one "
              f"only under --strict; {sum(image)}/{len(image)} about a test's own image"
              if ok else "FAILED — got " + str(got) + " · image cases " + str(image)))
     return 0 if ok else 1

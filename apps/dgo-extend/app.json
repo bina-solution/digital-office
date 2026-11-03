@@ -5,6 +5,7 @@
     "en": "Office extension"
   },
   "layer": 3,
+  "core": true,
   "kind": "service",
   "version": "0.1.0",
   "summary": {
@@ -85,7 +86,9 @@
       "dgo_extend_state",
       "dgo_extend_peers",
       "dgo_identity",
-      "dgo_tunnel"
+      "dgo_tunnel",
+      "dgo_carry",
+      "dgo_doorlog"
     ],
     "on_uninstall": "prompt"
   },
@@ -105,6 +108,12 @@
       "console": [
         "dgo_extend_peers:/app/peers.d"
       ]
+    },
+    "env": {
+      "security": {
+        "SECURITY_DOOR_SOURCE": "http://dgo-extend:8983/api/link/access",
+        "SECURITY_LINK_SOURCE": "http://dgo-extend:8983/api/link"
+      }
     }
   },
   "cli": {

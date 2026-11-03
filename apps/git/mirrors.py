@@ -56,7 +56,7 @@ _LOCK = threading.Lock()
 
 INTERVAL = int(os.environ.get("GIT_MIRROR_INTERVAL", "3600") or 3600)
 # 2 GiB per mirror, and the number is MEASURED rather than chosen: the office's OWN repository
-# (solomonBoltin/deployment-bina-comp) is a 1.3 GB mirror clone, so a 1 GiB default silently refused
+# (solomonBoltin/deployment-hacohen) is a 1.3 GB mirror clone, so a 1 GiB default silently refused
 # the one repository most likely to be mirrored — a guard that excludes the intended use is not a
 # guard. The engine has ~15 GB free with ~40 containers on it, and the check runs BEFORE the push, so
 # an oversized mirror costs a clone and never a permanent byte.

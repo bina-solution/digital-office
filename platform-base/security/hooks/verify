@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+#: verify — the security app answers, its sensor writes, and the edge's log is being read
+# Run by `run_app_hooks verify` for every enabled app. Exit 0 = healthy; 1 = a part is down, said in one line.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+
+out="$(dcx exec -T security python3 -c '
+import json, urllib.request, sys
+d = json.load(urllib.request.urlopen("http://localhost:8995/api/summary?hours=1", timeout=10))
+h = d.get("health") or {}
+bad = [k for k in ("edge", "sensor") if (h.get(k) or {}).get("ok") is False]
+print(json.dumps({"mode": d.get("mode"), "requests_1h": (d.get("kpi") or {}).get("requests"), "down": bad}))
+sys.exit(1 if bad else 0)' 2>&1)"
+rc=$?
+say "[security] ${out}"
+exit ${rc}

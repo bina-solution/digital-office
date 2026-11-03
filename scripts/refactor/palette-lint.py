@@ -101,8 +101,9 @@ ALLOWED = [
     (r".", r"<link\b[^>]*\brel=[\"']icon[\"']", "the mark as an inline image: a data URI cannot name a token"),
     (r".", r"\.(qrwrap|cx-qr|qr-box)\b[^{}]*\{[^}]*background:#fff", "a QR code is read black on white, in every theme"),
     (r"^apps/telegram-tv/static/style\.css$", r"--film:#000;", "a film is shown on black, in a light office and in a dark one"),
+    (r"^apps/meet/start/flow/app\.css$", r"--film:#000;", "a recording is shown on black, in a light office and in a dark one"),
     (r"^apps/dgo-extend/static/connect\.js$", r"(fillStyle|style\.background) = \"#(fff|000)\"", "a QR code is drawn black on white, in every theme"),
-    (r"^apps/browser42/(browser-clipboard|extension/cursor)\.js$", None,
+    (r"^apps/browser42/(browser-clipboard|browser42-keyboard|extension/cursor)\.js$", None,
      "drawn inside the page the office's browser shows — somebody else's page, where no token exists"),
     (r"^apps/digital-assets/static/app\.js$", r"\b(facebook|instagram|youtube|github|discord|whatsapp|linkedin|tiktok|telegram|threads): '#",
      "a network's tile is the network's own colour — its mark, not the office's"),
@@ -115,6 +116,15 @@ ALLOWED = [
      "a colour FIELD's starting value is data: the control takes a literal and nothing else"),
     (r"^apps/bina-ds/plugins/brand-bina/lib/client\.js$", r"--dsw-specific-sidebar-fill:|^\s*const MARK = ",
      "written INTO another product's page (the agent harness): it carries no token block, and its dark ground is its own switch"),
+    # The same page, and the two values of ours that no token of it can name (2026-10-13). Every other
+    # colour these plugins draw is one of the harness's own alias tokens; these two are the material of
+    # a floating layer ON that page — a shadow, which the harness declares no token for at all (searched
+    # its bundled theme), and the dim behind our menu sheet, drawn over ITS screen, where the office's
+    # --scrim cannot be named because that page carries no block of ours.
+    (r"^apps/bina-ds/plugins/cost-meter/lib/client\.js$", r"box-shadow:var\(--dsw-shadow-lg",
+     "a floating panel's shadow on another product's page (the agent harness), which declares no shadow token to name"),
+    (r"^apps/bina-ds/plugins/nav-collapse/lib/client\.js$", r"\.bina-menu-scrim\{",
+     "the dim behind our menu sheet, over another product's page (the agent harness), which carries no block of ours"),
     (r"^apps/project-pln/(bootstrap\.(py|yaml)|plan\.py)$", None,
      "written INTO another product (Plane): the colours of its states and labels are its fields, and its own legend (ui2-040)"),
     (r"^apps/project-pln/patches/hebrew-strings\.py$", r"defaultStateName:`",
@@ -123,6 +133,24 @@ ALLOWED = [
     (r"^apps/social-list/platforms\.yaml$", r"^\s*color: \"#", "a network's tile is the network's own colour — its mark, not the office's"),
     (r"^apps/apitools/src/doc_gen/", None,
      "a business document: ink on paper, in a palette of its own until the owner decides otherwise (ui2-039)"),
+    # ── THE CAP BUILDER IS THE SHOP'S OWN PRODUCT (2026-10-30) ────────────────────────────────────
+    # The Fireplace Guys' cap builder carries the shop's own ground and ember brand — `color-scheme:dark`,
+    # `#14100d`, `#e8763f` — and its 25 coil finishes are hexes sampled from the SHOP'S PHYSICAL COLOUR
+    # CHIPS, read as swatch backgrounds and 3D material colours. Measured 2026-10-30 on fireplace: 200
+    # literals, 117 distinct values, of which only ~12 exist in the palette at all, and those are its
+    # DARK-ground values — so `var(--bg)` there is a repaint in a light office, not an identity.
+    # Repainting it is the owner's design decision, not a lint fix; until he makes it, this is a
+    # palette of its own, exactly like apitools' business document above. (Its first copy,
+    # `apps/services-2`, stays in the client's herd: the release line carries the builder only as
+    # chimney-services serves it — DGO-1037.)
+    (r"^apps/chimney-services/static/builder/", None,
+     "the same shop's cap builder, served by the services app: its drawings, material colours and brand"),
+    # Meet's web plugin is not a screen of ours: it is included INTO Jitsi's own page (index.html,
+    # after config.js), which carries no token block of ours — the alert banner and the live captions
+    # are drawn over another product's video, like the agent harness's plugins above.
+    (r"^apps/meet/web/plugin\.head\.html$", None,
+     "drawn INTO another product's page (Jitsi Meet): the microphone banner and the live captions over "
+     "its video, where no token block of ours exists"),
 ]
 
 BLOCK = re.compile(r"@(bina-[a-z-]+):start.*?@\1:end", re.S)

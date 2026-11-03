@@ -1,15 +1,15 @@
 # Release Runbook
 
-Minimal spec for releasing the deployment. Working branch = deployment main dir name (`deployment-bina-comp`); release target = `main`.
+Minimal spec for releasing the deployment. Working branch = deployment main dir name (`deployment-hacohen`); release target = `main`.
 
 ## Steps
 
-0. **Branch alignment** — verify the repo is on the `deployment-bina-comp` branch; if elsewhere, move with all changes. Back up the prior branch (keep `old branch locally). (`apitools` + `chat` are in-tree — one repo, no submodules to align.)
+0. **Branch alignment** — verify the repo is on the `deployment-hacohen` branch; if elsewhere, move with all changes. Back up the prior branch (keep `old branch locally). (`apitools` + `chat` are in-tree — one repo, no submodules to align.)
 1. **Full code review** → write report to `data/reports/before-release-report.md` (sections below).
 2. **Version bump** — homepage `+0.0.1` in `production/homepage/config/settings.yaml` (`title:`).
 3. **Ask** if ready to commit.
-4. **Commit all** — `git add -A && git commit` on `deployment-bina-comp`.
-5. **Open PR**: `deployment-bina-comp → main` (single repo).
+4. **Commit all** — `git add -A && git commit` on `deployment-hacohen`.
+5. **Open PR**: `deployment-hacohen → main` (single repo).
 6. **Provide PR links.**
 
 ## Secret handling (do before commit)

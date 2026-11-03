@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+#: ask "<text>" | - — one question to Claude in a new session, followed to the end of its turn:  ./bbox bina-claude ask "…"
+# The same call any agent makes: `bbox agent --app bina-claude new -F` (agent.v1, adapter/server.mjs).
+# Every other verb of a session is `./bbox agent --app bina-claude <list|send|follow|show|log|cancel> …`.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+case "${1:-}" in ""|-h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; [ -n "${1:-}" ]; exit $? ;; esac
+exec "${REPO_ROOT}/bbox" agent --app bina-claude new -F "$@"

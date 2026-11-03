@@ -462,6 +462,33 @@ var BinaNav = (function () {
       root.appendChild(foot);
     }
 
+    // 4b. THE FRAME AND THE WAY IN, owned here too — an adopter can no longer lose its menu.
+    //   · The size classes are CONTAINER queries (`.bnv-host` + `.appgrid`), and an app that
+    //     declares neither gets the desktop menu in every frame. Measured on the live office,
+    //     2026-10-12: `sites` and `domains` drew a 56px rail **127px tall** with the rest of the
+    //     menu nowhere, and `drive` parked its drawer off-canvas at x=404 of a 390px phone — three
+    //     apps whose navigation a phone could not reach at all. So the menu marks the element it was
+    //     given as the container, which is exactly what its own sizes answer.
+    //   · A page that placed no `[data-nav-toggle]` gets one from here: a 48px button in the corner
+    //     a phone leaves free, shown only in the compact frame (`html.bnv-float` + the stylesheet).
+    function ownFrame() {
+      // A frame that cannot be asked is not a frame to fail in: every step is guarded, and losing
+      // the fallback button is the most a limited host can cost.
+      try {
+        var parent = root.parentElement;
+        if (parent && parent.classList && typeof parent.closest === "function" && !parent.closest(".bnv-host")) {
+          parent.classList.add("bnv-host");
+        }
+        if (typeof document.querySelector !== "function") return;
+        if (document.querySelector("[data-nav-toggle]")) return;
+        var b = el("button", "bnv-burger is-float");
+        b.type = "button";
+        b.setAttribute("data-nav-toggle", "menu");
+        (document.body || document.documentElement).appendChild(b);
+        if (document.documentElement && document.documentElement.classList) document.documentElement.classList.add("bnv-float");
+      } catch (e) { /* the menu still draws: the button is the only thing that can be missing */ }
+    }
+
     // 5. the drawer: a scrim, the toggles, Escape — all owned here, none of it in the app
     var scrim = null;
     function ensureScrim() {
@@ -496,6 +523,9 @@ var BinaNav = (function () {
         }
       });
     }
+
+    ownFrame();
+    bindToggles();
 
     var api = {
       el: root,
@@ -686,12 +716,74 @@ var BinaNav = (function () {
     if (!root) return null;
     opts = opts || {};
     root.classList.add("bnv");
+    root.setAttribute("data-bnv-mounted", "1");
     if (typeof opts.sections === "string") return mountSections(root, opts);
     // the flat list an app passes when it has routes and nothing else: `{items, onPick}`
     if (!opts.sections && opts.items) opts = { id: opts.id, items: null, sections: [{ items: opts.items }], onPick: opts.onPick, rail: opts.rail, collapse: false, labels: opts.labels };
     return build(root, opts);
   }
 
-  return { mount: mount, svg: svg, icons: ICONS, labels: LABELS, navs: NAVS, forId: function (id) { return NAVS[id] || null; } };
+  // ── a menu nobody mounted is still this component's menu ────────────────────────────────────────
+  // WHAT WAS WRONG. Eight screens (sites, domains, drive, git, digital-assets, social-list,
+  // telegram-tv, …) carry the menu's MARKUP — rows they wrote themselves — and copied only the CSS
+  // block, never this script. So they had the component's looks and none of its behaviour: no
+  // container, no rail geometry at the sizes it declares, no drawer, and no button to open it. On a
+  // phone that is a 56px rail 127px tall and a menu that cannot be reached (measured on the live
+  // office 2026-10-12, from the owner's screenshot: «חייב פיתרון אחיד לניווט צד שמתפקד אותו דבר בכל
+  // האפלקציות»). The answer is not eight fixes: the script ADOPTS any `.bnv` on the page that was
+  // not mounted, gives it the container its sizes answer and the way in it lacks — one mechanism,
+  // the same in every app.
+  function adoptStatic(doc) {
+    var menus = doc.querySelectorAll(".bnv:not([data-bnv-mounted])");
+    for (var i = 0; i < menus.length; i++) {
+      var menu = menus[i];
+      try {
+        var parent = menu.parentElement;
+        if (parent && parent.classList && typeof parent.closest === "function" && !parent.closest(".bnv-host")) {
+          parent.classList.add("bnv-host");
+        }
+        // the drawer's own furniture, since no `build()` ran for this menu: a scrim, Escape, and a
+        // button — and picking a row shuts it, like every mounted menu does
+        var scrim = doc.querySelector(".bnv-scrim");
+        if (!scrim) {
+          scrim = el("button", "bnv-scrim");
+          scrim.type = "button";
+          scrim.setAttribute("aria-label", LABELS.close);
+          (doc.body || doc.documentElement).appendChild(scrim);
+        }
+        var shut = function () { menu.classList.remove("is-open"); scrim.classList.remove("is-open"); };
+        scrim.addEventListener("click", shut);
+        menu.addEventListener("click", function (ev) {
+          var row = ev.target && ev.target.closest && ev.target.closest(".bnv-item");
+          if (row) shut();
+        });
+        doc.addEventListener("keydown", function (ev) { if (ev.key === "Escape") shut(); });
+        menu.setAttribute("data-bnv-mounted", "static");
+        // …and the way in: the component's own 48px button, exactly as a page that placed none
+        if (typeof doc.querySelector === "function" && !doc.querySelector("[data-nav-toggle]")) {
+          var b = el("button", "bnv-burger is-float");
+          b.type = "button";
+          b.setAttribute("data-nav-toggle", "menu");
+          b.setAttribute("aria-label", LABELS.open);
+          b.innerHTML = svg("menu");
+          b.addEventListener("click", function () {
+            var open = !menu.classList.contains("is-open");
+            menu.classList.toggle("is-open", open);
+            scrim.classList.toggle("is-open", open);
+            b.setAttribute("aria-expanded", String(open));
+          });
+          (doc.body || doc.documentElement).appendChild(b);
+          if (doc.documentElement && doc.documentElement.classList) doc.documentElement.classList.add("bnv-float");
+        }
+      } catch (e) { /* one menu that cannot be adopted is not the other menus' problem */ }
+    }
+  }
+  if (typeof document !== "undefined" && typeof document.querySelectorAll === "function") {
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", function () { adoptStatic(document); });
+    else adoptStatic(document);
+  }
+
+  return { mount: mount, svg: svg, icons: ICONS, labels: LABELS, navs: NAVS, adopt: adoptStatic,
+           forId: function (id) { return NAVS[id] || null; } };
 })();
 /* @bina-nav-js:end */

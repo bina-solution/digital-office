@@ -274,6 +274,10 @@
     function reload() {
       loadList(function (items, active) { READ = !!items; ITEMS = items || []; ACTIVE = active; render(); });
     }
+    // …and when the APP moves the pointer itself — the chat's own «חיבור פעיל» window, where its side panel is folded
+    // away (wadmin.html selectConn) — the chip reads it again, so the two never name different connections. (Its menu
+    // is drawn again closed, and is closed: left «open», the chip's next press closed nothing and opened nothing.)
+    window.__simSwitcherReload = function () { open = false; reload(); };
 
     // ---- switch / connect (per app) ----
     function switchTo(a) {

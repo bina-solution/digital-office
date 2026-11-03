@@ -34,16 +34,16 @@ except Exception as e:
 }
 
 echo "=== SCANNED family ==="
-probe "to_sync  1stuMS.. srukot-lifney-shemot" 1stuMSjbnyUTCtbq6KIzooHCGXpEey_7P 20000 "$CUT"
-probe "synced   1YpapJ.. srukot-hitzliach"     1YpapJ3vJDYo_idP3aZiFJR_1WoEaCNhu 20000 "$CUT"
-probe "failed   1m25Rd.. srukot-nichshal(B)"   1m25RdFEkfv_5KjSqFGM8gpjupXWZuUW2 20000 "$CUT"
-probe "REGISTRY-failed 11rj5z.. acharei-shemot" 11rj5zDw2lhYnc8zMUxmYADKIJaPaunhb 20000 "$CUT"
+probe "to_sync  1stuMS.. srukot-lifney-shemot" 1REDACTEDdrivexxxxxxxxxxxxxxx0094 20000 "$CUT"
+probe "synced   1YpapJ.. srukot-hitzliach"     1REDACTEDdrivexxxxxxxxxxxxxxx0002 20000 "$CUT"
+probe "failed   1m25Rd.. srukot-nichshal(B)"   1REDACTEDdrivexxxxxxxxxxxxxxx0009 20000 "$CUT"
+probe "REGISTRY-failed 11rj5z.. acharei-shemot" 1REDACTEDdrivexxxxxxxxxxxxxxx0014 20000 "$CUT"
 echo
 echo "=== CHAT-EXPORT family ==="
-probe "to_sync  1DYzDE.. yetzu-chat-lifney"    1DYzDE5T3c2PGFOfNwnmCP3jjSqr2DiBx 20000 "$CUT"
-probe "synced   1xthre.. yetzu-chat-acharei"   1xthreeBl1VD-5uN9PFu9Zi-0IABQDwst 20000 "$CUT"
-probe "failed   1PYaVJ.. yetzu-chat-nichshal"  1PYaVJ4dKdOl1iGJlVKFT0pzJ_Rs2mYNL 20000 "$CUT"
+probe "to_sync  1DYzDE.. yetzu-chat-lifney"    1REDACTEDdrivexxxxxxxxxxxxxxx0098 20000 "$CUT"
+probe "synced   1xthre.. yetzu-chat-acharei"   1REDACTEDdrivexxxxxxxxxxxxxxx0093 20000 "$CUT"
+probe "failed   1PYaVJ.. yetzu-chat-nichshal"  1REDACTEDdrivexxxxxxxxxxxxxxx0015 20000 "$CUT"
 echo
 echo "=== unbounded (no window) totals, for headroom sizing ==="
-probe "synced   1YpapJ.. FULL"                 1YpapJ3vJDYo_idP3aZiFJR_1WoEaCNhu 20000 ""
-probe "synced   1xthre.. FULL"                 1xthreeBl1VD-5uN9PFu9Zi-0IABQDwst 20000 ""
+probe "synced   1YpapJ.. FULL"                 1REDACTEDdrivexxxxxxxxxxxxxxx0002 20000 ""
+probe "synced   1xthre.. FULL"                 1REDACTEDdrivexxxxxxxxxxxxxxx0093 20000 ""

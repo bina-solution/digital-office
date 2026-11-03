@@ -212,7 +212,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://apitools.bina-comp.bina-solutions.co.il/documentJsonQuery",
+        "url": "https://apitools.hacohen.bina-solutions.co.il/documentJsonQuery",
         "sendBody": true,
         "specifyBody": "=json",
         "bodyParameters": {
@@ -241,7 +241,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://apitools.bina-comp.bina-solutions.co.il/documentJsonQuery",
+        "url": "https://apitools.hacohen.bina-solutions.co.il/documentJsonQuery",
         "sendBody": true,
         "specifyBody": "=json",
         "bodyParameters": {
@@ -636,15 +636,7 @@
   "meta": {
     "templateCredsSetupCompleted": true
   },
-  "pinData": {
-    "When Executed by Another Workflow": [
-      {
-        "json": {
-          "LINK": "https://drive.google.com/file/d/1_geLTieVeqzyjtzyDOWHSrWb6dHlU9q8/view"
-        }
-      }
-    ]
-  },
+  "pinData": {},
   "versionId": "f325a6b9-216b-4ddb-a20e-2de2944f794f",
   "activeVersionId": "3ef8ac40-f49f-4edb-adff-a9ebea0c2b78",
   "versionCounter": 175,

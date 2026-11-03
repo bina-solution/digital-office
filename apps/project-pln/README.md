@@ -47,9 +47,66 @@ Three files change upstream's AIO image, and each change is a bug we would other
 
 `module.embed: false` and a dedicated host — Plane cannot be served under a subpath (root-absolute
 paths, static SPA with `VITE_*` baked at build time, upstream bug #8168). On this machine:
-**http://plane.localhost:8080**. It is `auth: "none"` because Plane CE has no OIDC: edge SSO would
-add a second login in front of Plane's own. Log in with email + password
-(`ENABLE_EMAIL_PASSWORD=1`), so no SMTP is needed on a first boot.
+**http://plane.localhost:8080**. Every host of the app is `auth: "sso"`: the edge's forwardAuth
+stands in front of Plane, so a browser that is not the office's never reaches it.
+
+### The office's sign-in IS Plane's sign-in (DGO-371)
+
+Plane CE has no OIDC, no SAML and no reverse-proxy header authentication — measured against
+v1.4.2, its `authentication/provider/oauth` package ships google/github/gitlab/gitea and `ENABLE_*`
+flags for those only — so "sign in once to the office" cannot be configured into Plane. It is given
+to it: `plane/middleware/office_identity.py` (a file of this app, installed by the `Dockerfile` and
+wired into `MIDDLEWARE` by `patches/sso-identity.py`) asks the office's own identity service —
+the same endpoint, and the same call, the edge's `authentik@file` forwardAuth makes — **who the
+browser is, using the browser's own cookie**, and signs that person into their Plane account. The
+sign-in form the owner met inside the console window is simply never reached.
+
+What it trusts is the point: **nothing on the request**. `X-authentik-username` / `-email` / `-jwt`
+are ignored, because every container on the office network can write them — and the JWT is HS256
+signed with the provider's own session secret (measured 2026-10-12), so it cannot be verified from
+outside either. Only the provider's answer to a request carrying the browser's cookie counts, and a
+forged header with no cookie gets the same 302 a stranger gets (`verify` asserts it).
+
+Who may be signed in is **declared**, not guessed: `bootstrap.yaml` → `sso:` names office identities
+(authentik username, e-mail or uid) and the Plane account each one IS (`plane: owner` = the account
+`.env` declares); `bootstrap.py` — i.e. `./bbox project-pln onboard`, on every `bbox run` — applies
+it to `/app/data/office-identity.json`, which the middleware re-reads when it changes. No file, or a
+name nobody declared → nothing is signed in, and Plane's own form stands, which is also what happens
+when `PLANE_SSO_OUTPOST` is not answering: this middleware never fails a request.
+
+### …and a LINKED office's sign-in is Plane's sign-in too (DGO-545)
+
+The same middleware answers a second door, for the browser that came from another office. Such a
+browser carries no cookie of THIS office's provider — it was authenticated by the other office, whose
+answer is not ours to verify — so its request arrives through the link's door, which replaces the
+peer's claims with this office's mapped user and **signs** what it writes with the pair's own secret
+(the credential plane's `dgo_link*`, the value the pairing exchanged: both ends hold it, nobody else
+does). The middleware checks that signature with its own copy of the same secret and signs the mapped
+person in — which is what lets «ניהול פרויקטים» open from a linked console with no form, and what lets
+that office's agent read and write work items here with no token:
+
+```
+x-dgo-identity: v1 <office> <user> <unix-seconds> <hex hmac-sha256 of "v1\n<office>\n<user>\n<ts>">
+```
+
+The signature is good for 300 s, and it is checked with `hmac.compare_digest` against the secret of
+the office the header names — a signature that does not verify, or names an office this office holds
+no link secret for, is not an identity and the request goes on exactly as it would have without this
+file. A **verified** door request is also exempt from CSRF (Django's own
+`_dont_enforce_csrf_checks`), and only such a request is: CSRF defends a cookie session from a foreign
+page, and no page can produce this signature — an agent on a linked office writing a work item is
+exactly the case that needs it. Both directions are asserted by `hooks/verify`
+(`project-pln-link-identity` and `project-pln-link-identity-forged`), and the writer of the header is
+`apps/dgo-extend/link-proxy.py` (contract and format: its README, «the door's signature»).
+
+Two consequences worth knowing:
+
+* Plane's own e-mail and password still work. It is a second door — the one a browser that is not
+  the office's meets, and the recovery path when the identity service is the thing that is broken —
+  and it is what `hooks/verify` still proves with the password from `.env`.
+* The session Plane is given lives as long as any other Plane session (a week). The office's door is
+  the door that OPENS the app; the app keeps the session it was given, rather than re-asking the
+  identity service on every request.
 
 ## Configuration
 
@@ -187,7 +244,21 @@ means the same thing in both places.
 ./bbox project-pln tasks done  DGO-12 --comment "what was done, where, the proof"
 ./bbox project-pln tasks comment DGO-12 "…"      # or: take, to assign it to me
 ./bbox project-pln tasks attach DGO-12 mockup.png notes.pdf   # a request's files, on its item
+./bbox project-pln tasks label MEET-15 נותח        # add labels by name; a missing one is created
+./bbox project-pln tasks link MEET-15 DGO-1003 FPG-2  # related both ways, across projects
 ```
+
+- **A meeting has three steps (DGO-1005).** The meetings app marks `הקלטה` when it records and `תומלל`
+  when the transcript is in. Whoever reads the meeting and turns it into work marks the third one,
+  **`נותח`** ("analyzed"), and relates the meeting to EVERY item it opened or decided (`tasks link`). The
+  owner's words, 2026-10-22: «a reference that you paid attention, and that you transformed it into
+  tasks that are connected … I should see the tickets open from that meet». `relates_to` is symmetric,
+  so the meeting's Relations list what came of it and each item names its meeting.
+  - In a plan file, an item opened from a meeting says so (`meeting: MEET-15`), and `plan` relates it
+    when it is applied. Already related: nothing is written. The meeting is read once a run however
+    many items it opened, a dry run says `would relate`, and a relation Plane refuses is a problem in
+    the RESULT, never the end of the apply.
+  - A meeting nobody processed stays at `תומלל`. That is the signal it still waits for a reader.
 
 - **`attach`** puts files on an item the way Plane's own screen does — Plane signs an upload form for
   each, the file goes to the object store through it, and the item is told it arrived — so it works
@@ -212,6 +283,24 @@ means the same thing in both places.
   `--json`, and one human line without it. `group` is the portable half of a state (`unstarted`,
   `started`, `completed`) — the Hebrew name is the owner's to change, the group is not.
 - **429 is waited out**, never failed: Plane's key is limited to 60 requests/minute.
+
+### A plan costs what it changes  (DGO-559)
+
+`./bbox project-pln plan office` (513 items) took 3–4 minutes a run, and an unchanged plan paid most
+of it: the four slow reads (the project list alone measured ~55 s under load) were asked on every run,
+an item of two lines compared "changed" wherever the payload carries `description_stripped` — it is
+Django's strip_tags, which glues adjacent blocks (`<p>A</p><p>B</p>` → "AB") where the applier put a
+space — and was PATCHed plus paced 1.1 s, and every module's whole item list was POSTed again because
+the v1 item payload names no module (the live split between the three is still to be measured on the
+office). Now `plan.py` reads the project list, states, labels and modules from the
+cache `tasks.py` keeps (`/tmp/plane-tasks-cache.json`, 30 min; a miss re-reads once, a write refreshes
+its kind), compares descriptions with whitespace removed, asks each module who is in it (one unpaced
+GET), and `--only <key>[,<key>…]` (or `PLANE_PLAN_ONLY`) applies just those items, each looked up by
+its identity instead of paging the project. The RESULT line gained `timing` (`reads`, `writes`,
+`seconds`) and `only`; the fields hooks/plan parses are unchanged. `test_plan.py` proves the counts
+against a fake Plane: `cd apps/project-pln && python -m pytest test_plan.py -q` — the second apply of
+an unchanged plan issues zero writes, one changed field is one PATCH, `--only` of one key is a handful
+of requests, and a dry run writes nothing.
 
 ## The Hebrew interface
 

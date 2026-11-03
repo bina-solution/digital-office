@@ -1,6 +1,6 @@
 # Deployment Review Context (mid-depth)
 
-Mid-depth deployment review of `/root/deployment-bina-comp` for an operator who wants a clear "what is the state and what should I touch" answer. Target runtime: **5–8 minutes**. Target output: **≤ 200 lines**, structured but compact. This is between the Sunday report (deep, ~12 min) and the quick health check (triage, ~2 min).
+Mid-depth deployment review of `/root/deployment-hacohen` for an operator who wants a clear "what is the state and what should I touch" answer. Target runtime: **5–8 minutes**. Target output: **≤ 200 lines**, structured but compact. This is between the Sunday report (deep, ~12 min) and the quick health check (triage, ~2 min).
 
 ## Baseline
 
@@ -41,7 +41,7 @@ docker system df -v | head -60
 docker inspect --format '{{.Name}} restarts={{.RestartCount}}' $(docker ps -aq) | sort -t= -k2 -n -r | head -10
 git -C /workspace status -s
 git -C /workspace log --oneline -10
-docker exec n8n-postgres-bina-deployment psql -U bina-comp -d n8n -tAc \
+docker exec n8n-postgres-bina-deployment psql -U hacohen -d n8n -tAc \
   "SELECT status, COUNT(*) FROM execution_entity WHERE \"startedAt\" > NOW() - INTERVAL '24 hours' GROUP BY status;"
 ```
 

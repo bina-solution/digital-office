@@ -269,8 +269,8 @@ def test_a_localhost_twin_with_a_port_is_still_http(monkeypatch):
 
 
 def test_a_real_domain_is_https(monkeypatch):
-    _env(monkeypatch, {"N8N_BASE_URL": "n8n.bina-comp.digital-office.co.il"})
-    assert app._public_origin("n8n", "n8n", None) == "https://n8n.bina-comp.digital-office.co.il"
+    _env(monkeypatch, {"N8N_BASE_URL": "n8n.hacohen.digital-office.co.il"})
+    assert app._public_origin("n8n", "n8n", None) == "https://n8n.hacohen.digital-office.co.il"
 
 
 def test_the_entry_own_env_wins_over_the_convention(monkeypatch):
@@ -279,8 +279,8 @@ def test_the_entry_own_env_wins_over_the_convention(monkeypatch):
 
 
 def test_no_env_at_all_falls_back_to_the_deployment_domain(monkeypatch):
-    _env(monkeypatch, {"DEPLOYMENT_DOMAIN": "bina-comp.digital-office.co.il"})
-    assert app._public_origin("glitchtip", "glitchtip", None) == "https://glitchtip.bina-comp.digital-office.co.il"
+    _env(monkeypatch, {"DEPLOYMENT_DOMAIN": "hacohen.digital-office.co.il"})
+    assert app._public_origin("glitchtip", "glitchtip", None) == "https://glitchtip.hacohen.digital-office.co.il"
     _env(monkeypatch, {})
     assert app._public_origin("glitchtip", "glitchtip", None) == "http://glitchtip.localhost"
 

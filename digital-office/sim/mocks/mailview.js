@@ -54,9 +54,9 @@
     { id: "local", provider: "local", protocol: "mail_imap_local", address: "office@" + MAIL_DOMAIN,
       label: "דואר מקומי", identity: "מקומי · מובנה", mode: "local", color: "var(--olive)", status: "ok", builtin: true,
       checked: 2, log: [{ mins: 2, level: "info", msg: "תיבה מקומית זמינה" }] },
-    { id: "gmail_office", provider: "gmail", protocol: "mail_gmail_oauth", label: "Gmail", identity: "person127@example.com", mode: "gmail", color: "#ea4335", status: "ok",
+    { id: "gmail_office", provider: "gmail", protocol: "mail_gmail_oauth", label: "Gmail", identity: "person105@example.com", mode: "gmail", color: "#ea4335", status: "ok",
       checked: 4, log: [{ mins: 4, level: "info", msg: "סנכרון הושלם — 12 הודעות חדשות" }, { mins: 1440, level: "info", msg: "אסימון הגישה חודש אוטומטית" }, { mins: 20160, level: "info", msg: "החשבון חובר בהצלחה" }] },
-    { id: "outlook_admin", provider: "outlook", protocol: "mail_imap_app_password", label: "Outlook", identity: "person133@example.com", mode: "outlook", color: "#0078d4", status: "warning",
+    { id: "outlook_admin", provider: "outlook", protocol: "mail_imap_app_password", label: "Outlook", identity: "person111@example.com", mode: "outlook", color: "#0078d4", status: "warning",
       reason: "אימות Microsoft יפוג בעוד 3 ימים — מומלץ לחדש את החיבור", checked: 33,
       log: [{ mins: 33, level: "warn", msg: "אסימון הגישה מתקרב לפקיעה (3 ימים)" }, { mins: 2880, level: "info", msg: "סנכרון הושלם — 4 הודעות" }, { mins: 43200, level: "info", msg: "החשבון חובר בהצלחה" }] },
   ];
@@ -138,7 +138,7 @@
         var proto = mm[1];
         var pr = MAIL_PROVIDERS.filter(function (p) { return p.provider === proto; })[0];
         setTimeout(function () {
-          if (proto === "mail_gmail_oauth") addMailAccount(proto, "Gmail", "person144@example.com");
+          if (proto === "mail_gmail_oauth") addMailAccount(proto, "Gmail", "person123@example.com");
           else addMailAccount(proto, pr ? pr.name : proto);
         }, 1400);
         return { closed: false, close: function () {}, focus: function () {}, blur: function () {} };
@@ -159,8 +159,8 @@
     return { EVENT: "ON_CREATE", KEY: key, LABEL: label, RULE: rule, TYPE: "ON_CREATE_EVENT", row_number: n, enabled: enabled !== false };
   }
   var ORGANIZER = { mail: { organizer: { mode: "default", rules: [
-    evRow(1, "SUPPLIER_MAIL", "ספקים", 'inList(email.from, ["person130@example.com", "person145@example.com", "person128@example.com", "person146@example.com"])'),
-    evRow(2, "CLIENT_MAIL", "לקוחות", 'inList(email.from, ["person147@example.com", "person148@example.com", "person149@example.com"])'),
+    evRow(1, "SUPPLIER_MAIL", "ספקים", 'inList(email.from, ["person108@example.com", "person124@example.com", "person106@example.com", "person125@example.com"])'),
+    evRow(2, "CLIENT_MAIL", "לקוחות", 'inList(email.from, ["person126@example.com", "person127@example.com", "person128@example.com"])'),
     evRow(3, "FINANCE", "כספים", 'containsAny(email.text, ["דוח תנועות", "מע״מ", "חשבונית מס"])'),
     evRow(4, "URGENT", "דחוף", 'containsAny(email.subject, ["דחוף", "בהול"])'),
     evRow(5, "NEWSLETTER", "-INBOX", 'containsAny(email.text, ["ביטול הרשמה", "unsubscribe"])', false),
@@ -244,7 +244,7 @@
     if (d.unread) labels.push("UNREAD");
     labels.push("ספקים");
     var msg = {
-      id: id, threadId: id, from: d.supplier + " <" + d.email + ">", to: "person127@example.com",
+      id: id, threadId: id, from: d.supplier + " <" + d.email + ">", to: "person105@example.com",
       subject: d.subject, date: d.date, labels: labels, hasAttachment: true,
       attachments: [{ filename: d.file, size: d.size }], snippet: d.snippet,
     };
@@ -274,32 +274,32 @@
     return function () { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
   }
   var GEN_SUPPLIERS = [
-    ["חברת חשמל לישראל", "person130@example.com", "חשבון חשמל", "חשבונית"],
-    ["בזק בינלאומי", "person145@example.com", "חשבונית אינטרנט וטלפוניה", "חשבונית"],
-    ["ישראל קרטון בע\"מ", "person128@example.com", "חשבונית מס", "חשבונית"],
-    ["ספק הענן בע\"מ", "person146@example.com", "קבלה על מנוי חודשי", "קבלה"],
-    ["מי אביבים", "person150@example.com", "חשבון מים", "חשבונית"],
-    ["דואר ישראל", "person151@example.com", "אישור משלוח", "קבלה"],
-    ["ספק משרדי — דפי הדפסה בע\"מ", "person152@example.com", "אישור הזמנה", "חשבונית"],
-    ["פלאפון", "person153@example.com", "חשבונית סלולר", "חשבונית"],
-    ["שכירות — נכסי הרצל", "person154@example.com", "חשבונית שכירות חודשית", "חשבונית"],
-    ["ביטוח לאומי", "person155@example.com", "אישור תשלום", "קבלה"],
-    ["בנק הפועלים", "person156@example.com", "דוח תנועות חשבון", "דוח בנק"],
-    ["בנק לאומי", "person157@example.com", "דוח תנועות חשבון", "דוח בנק"],
-    ["רשות המסים", "person158@example.com", "תזכורת הגשת דוח מע\"מ", "דוח"],
-    ["מכבי שירותי בריאות", "person159@example.com", "חשבונית שירותי בריאות", "חשבונית"],
-    ["אמזון AWS", "person160@example.com", "AWS Invoice", "חשבונית"],
-    ["Google Workspace", "payments-noreply@google.com", "Google Workspace Invoice", "חשבונית"]
+    ["חברת חשמל לישראל", "person108@example.com", "חשבון חשמל", "חשבונית"],
+    ["בזק בינלאומי", "person124@example.com", "חשבונית אינטרנט וטלפוניה", "חשבונית"],
+    ["ישראל קרטון בע\"מ", "person106@example.com", "חשבונית מס", "חשבונית"],
+    ["ספק הענן בע\"מ", "person125@example.com", "קבלה על מנוי חודשי", "קבלה"],
+    ["מי אביבים", "person129@example.com", "חשבון מים", "חשבונית"],
+    ["דואר ישראל", "person130-x@example.com", "אישור משלוח", "קבלה"],
+    ["ספק משרדי — דפי הדפסה בע\"מ", "person131@example.com", "אישור הזמנה", "חשבונית"],
+    ["פלאפון", "person132@example.com", "חשבונית סלולר", "חשבונית"],
+    ["שכירות — נכסי הרצל", "person133@example.com", "חשבונית שכירות חודשית", "חשבונית"],
+    ["ביטוח לאומי", "person134-x@example.com", "אישור תשלום", "קבלה"],
+    ["בנק הפועלים", "person135@example.com", "דוח תנועות חשבון", "דוח בנק"],
+    ["בנק לאומי", "person136@example.com", "דוח תנועות חשבון", "דוח בנק"],
+    ["רשות המסים", "person137-x@example.com", "תזכורת הגשת דוח מע\"מ", "דוח"],
+    ["מכבי שירותי בריאות", "person138@example.com", "חשבונית שירותי בריאות", "חשבונית"],
+    ["אמזון AWS", "person139@example.com", "AWS Invoice", "חשבונית"],
+    ["Google Workspace", "person140-x@example.com", "Google Workspace Invoice", "חשבונית"]
   ];
   var GEN_CLIENTS = [
-    ["טכנולוגיות אור בע\"מ", "person147@example.com", "דנה לוי"],
-    ["סבח סוכנויות", "person148@example.com", "מוחמד סבח"],
-    ["רו\"ח דנה כהן", "person149@example.com", "דנה כהן"],
-    ["עמית לוי — תמיכה טכנית", "person161@example.com", "עמית לוי"],
-    ["מרפאת שיניים ד\"ר שגב", "person162@example.com", "ד\"ר שגב"],
-    ["בית קפה ״ארומה רוטשילד״", "person163@example.com", "יוסי מזרחי"],
-    ["אולפני הקלטה נובה", "person164@example.com", "נועה ברק"],
-    ["מוסך מרכזי חיפה", "person165@example.com", "רמי אבוטבול"]
+    ["טכנולוגיות אור בע\"מ", "person126@example.com", "דנה לוי"],
+    ["סבח סוכנויות", "person127@example.com", "מוחמד סבח"],
+    ["רו\"ח דנה כהן", "person128@example.com", "דנה כהן"],
+    ["עמית לוי — תמיכה טכנית", "person141@example.com", "עמית לוי"],
+    ["מרפאת שיניים ד\"ר שגב", "person142@example.com", "ד\"ר שגב"],
+    ["בית קפה ״ארומה רוטשילד״", "person143@example.com", "יוסי מזרחי"],
+    ["אולפני הקלטה נובה", "person144@example.com", "נועה ברק"],
+    ["מוסך מרכזי חיפה", "person145@example.com", "רמי אבוטבול"]
   ];
   var GEN_THREADS = [
     ["בקשה להצעת מחיר", "נשמח לקבל הצעת מחיר מעודכנת לשירותי הנהלת חשבונות לשנה הקרובה."],
@@ -312,15 +312,15 @@
     ["אישור קבלת מסמכים", "קיבלנו, תודה. נעדכן לאחר הבדיקה."]
   ];
   var GEN_NEWSLETTER = [
-    ["חדשות המסים", "person166@example.com", "עדכוני חקיקה — מה השתנה החודש"],
-    ["Google Cloud", "cloud-noreply@google.com", "What's new in Google Cloud"],
-    ["לשכת רואי החשבון", "person167@example.com", "הודעות הלשכה לחברים"],
-    ["מרכז העסקים", "person168@example.com", "וובינר: התייעלות תפעולית לעסקים קטנים"]
+    ["חדשות המסים", "person146@example.com", "עדכוני חקיקה — מה השתנה החודש"],
+    ["Google Cloud", "person147-x@example.com", "What's new in Google Cloud"],
+    ["לשכת רואי החשבון", "person148@example.com", "הודעות הלשכה לחברים"],
+    ["מרכז העסקים", "person149@example.com", "וובינר: התייעלות תפעולית לעסקים קטנים"]
   ];
   var GEN_SPAM = [
-    ["Winner Notification", "prize@lotto-intl.biz", "You have WON $1,000,000 — claim now"],
-    ["פרסום", "sale@deals4u.biz", "מבצע בלעדי — 90% הנחה, היום בלבד!"],
-    ["Security", "person169@example.com", "Your account will be suspended"]
+    ["Winner Notification", "person150@example.com", "You have WON $1,000,000 — claim now"],
+    ["פרסום", "person151@example.com", "מבצע בלעדי — 90% הנחה, היום בלבד!"],
+    ["Security", "person152@example.com", "Your account will be suspended"]
   ];
   var GEN_ATT = [
     [".pdf", "application/pdf", 180000], [".pdf", "application/pdf", 940000],
@@ -365,7 +365,7 @@
         else if (sr < 0.80) labels.push("אינדוקס - לטיפול");
         else if (sr < 0.88) labels.push("אינדוקס - נכשל");
         msg = { id: id, threadId: id, acct: acct, from: sp[0] + " <" + sp[1] + ">",
-                to: "person127@example.com",
+                to: "person105@example.com",
                 subject: sp[2] + " " + num + " — " + HE_MONTH[d.getMonth()] + " " + d.getFullYear(),
                 date: date, labels: labels, hasAttachment: true,
                 attachments: [{ filename: sp[3] + "_" + num + att[0], size: att[2], mime: att[1] }],
@@ -385,8 +385,8 @@
           var mine = k % 2 === 1;                          // the office answers on odd turns
           out.push({
             id: kid, threadId: id, acct: acct, uidx: 0,
-            from: mine ? "בינה · מנהל <person127@example.com>" : cl[2] + " <" + cl[1] + ">",
-            to: mine ? cl[1] : "person127@example.com",
+            from: mine ? "בינה · מנהל <person105@example.com>" : cl[2] + " <" + cl[1] + ">",
+            to: mine ? cl[1] : "person105@example.com",
             subject: (k ? "Re: " : "") + th[0] + " — " + cl[0],
             date: kd.getFullYear() + "-" + pad2(kd.getMonth() + 1) + "-" + pad2(kd.getDate()) +
                   "T" + pad2(kd.getHours()) + ":" + pad2(kd.getMinutes()) + ":00",
@@ -402,7 +402,7 @@
       } else if (roll < 0.80) {                            // internal / system
         labels = ["INBOX"];
         msg = { id: id, threadId: id, acct: acct,
-                from: "מערכת בינה <person170@example.com>", to: "person127@example.com",
+                from: "מערכת בינה <person153@example.com>", to: "person105@example.com",
                 subject: "סיכום פעילות יומי — " + d.getDate() + " ב" + HE_MONTH[d.getMonth()],
                 date: date, labels: labels, hasAttachment: false,
                 snippet: "סונכרנו " + (5 + Math.floor(rnd() * 90)) + " מסמכים, " + Math.floor(rnd() * 4) + " נכשלו.",
@@ -410,7 +410,7 @@
       } else if (roll < 0.90) {                            // newsletters
         var nl = GEN_NEWSLETTER[Math.floor(rnd() * GEN_NEWSLETTER.length)];
         msg = { id: id, threadId: id, acct: acct, from: nl[0] + " <" + nl[1] + ">",
-                to: "person127@example.com", subject: nl[2], date: date,
+                to: "person105@example.com", subject: nl[2], date: date,
                 labels: ["INBOX"], hasAttachment: false,
                 snippet: "הרשמה לניוזלטר · ביטול הרשמה בתחתית ההודעה",
                 body_html: "<div style='font-family:sans-serif;padding:18px;line-height:1.7'><h3>" +
@@ -418,7 +418,7 @@
       } else if (roll < 0.955) {                           // sent (not part of a thread)
         var cl2 = GEN_CLIENTS[Math.floor(rnd() * GEN_CLIENTS.length)];
         msg = { id: id, threadId: id, acct: acct,
-                from: "בינה · מנהל <person127@example.com>", to: cl2[1],
+                from: "בינה · מנהל <person105@example.com>", to: cl2[1],
                 subject: "העברת מסמכים — " + cl2[0], date: date,
                 labels: ["SENT"], hasAttachment: true,
                 attachments: [{ filename: "ריכוז_מסמכים.zip", size: 4200000, mime: "application/zip" }],
@@ -426,12 +426,12 @@
       } else if (roll < 0.98) {                            // spam
         var sm = GEN_SPAM[Math.floor(rnd() * GEN_SPAM.length)];
         msg = { id: id, threadId: id, acct: acct, from: sm[0] + " <" + sm[1] + ">",
-                to: "person127@example.com", subject: sm[2], date: date,
+                to: "person105@example.com", subject: sm[2], date: date,
                 labels: ["SPAM"], hasAttachment: false, snippet: "הודעה שסווגה כספאם.",
                 body_text: sm[2] };
       } else {                                             // deleted
-        msg = { id: id, threadId: id, acct: acct, from: "ישן <person171@example.com>",
-                to: "person127@example.com", subject: "הודעה שנמחקה — " + d.getFullYear(),
+        msg = { id: id, threadId: id, acct: acct, from: "ישן <person154@example.com>",
+                to: "person105@example.com", subject: "הודעה שנמחקה — " + d.getFullYear(),
                 date: date, labels: ["TRASH"], hasAttachment: false, snippet: "נמחק.",
                 body_text: "הודעה שנמחקה." };
       }
@@ -451,7 +451,7 @@
   var MESSAGES = [
     {
       id: "m1", threadId: "m1",
-      from: "בנק הפועלים <person156@example.com>", to: "person127@example.com",
+      from: "בנק הפועלים <person135@example.com>", to: "person105@example.com",
       subject: "דוח תנועות חודשי מוכן לצפייה",
       date: "2026-07-21T07:15:00",
       labels: ["INBOX", "UNREAD", "כספים"],
@@ -461,7 +461,7 @@
     },
     {
       id: "m2", threadId: "m2",
-      from: "ישראל קרטון בע״מ <person128@example.com>", to: "person127@example.com",
+      from: "ישראל קרטון בע״מ <person106@example.com>", to: "person105@example.com",
       subject: "חשבונית מס 20458 - אספקת קרטונים לחודש יולי",
       date: "2026-07-21T09:42:00",
       labels: ["INBOX", "UNREAD", "ספקים"],
@@ -472,7 +472,7 @@
     },
     {
       id: "m3", threadId: "m3",
-      from: "רשות המסים <person172@example.com>", to: "person127@example.com",
+      from: "רשות המסים <person155-x-x@example.com>", to: "person105@example.com",
       subject: "תזכורת: הגשת דוח מע״מ לחודש יוני 2026",
       date: "2026-07-20T14:05:00",
       labels: ["INBOX", "UNREAD", "דחוף"],
@@ -482,7 +482,7 @@
     },
     {
       id: "m4", threadId: "m4",
-      from: "ספק הענן בע״מ <person129@example.com>", to: "person127@example.com",
+      from: "ספק הענן בע״מ <person107@example.com>", to: "person105@example.com",
       subject: "קבלה #88213 עבור מנוי ענן - יולי 2026",
       date: "2026-07-20T11:20:00",
       labels: ["INBOX", "ספקים"],
@@ -493,7 +493,7 @@
     },
     {
       id: "m5", threadId: "m5",
-      from: "חברת חשמל לישראל <person130@example.com>", to: "person127@example.com",
+      from: "חברת חשמל לישראל <person108@example.com>", to: "person105@example.com",
       subject: "חשבון חשמל - מספר לקוח 44521 - תקופה 6",
       date: "2026-07-19T16:48:00",
       labels: ["INBOX", "UNREAD"],
@@ -504,7 +504,7 @@
     },
     {
       id: "m6", threadId: "m6",
-      from: "בזק בינלאומי <person131@example.com>", to: "person127@example.com",
+      from: "בזק בינלאומי <person109@example.com>", to: "person105@example.com",
       subject: "חשבונית אינטרנט וטלפוניה - יולי 2026",
       date: "2026-07-19T10:03:00",
       labels: ["INBOX", "UNREAD"],
@@ -515,7 +515,7 @@
     },
     {
       id: "m7", threadId: "m7",
-      from: "רו״ח דנה כהן <person173@example.com>", to: "person127@example.com",
+      from: "רו״ח דנה כהן <person156@example.com>", to: "person105@example.com",
       subject: "בקשה למסמכים לצורך הגשת דוח שנתי",
       date: "2026-07-18T13:27:00",
       labels: ["INBOX", "UNREAD"],
@@ -525,7 +525,7 @@
     },
     {
       id: "m8", threadId: "th-100",
-      from: "דואר תעופה בע״מ <person174@example.com>", to: "person127@example.com",
+      from: "דואר תעופה בע״מ <person157@example.com>", to: "person105@example.com",
       subject: "בקשה להצעת מחיר - משלוח בינלאומי",
       date: "2026-07-17T09:00:00",
       labels: ["INBOX", "לקוחות"],
@@ -535,7 +535,7 @@
     },
     {
       id: "m9", threadId: "th-100",
-      from: "בינה פתרונות בע״מ <person127@example.com>", to: "person174@example.com",
+      from: "בינה פתרונות בע״מ <person105@example.com>", to: "person157@example.com",
       subject: "Re: בקשה להצעת מחיר - משלוח בינלאומי",
       date: "2026-07-17T15:30:00",
       labels: ["SENT", "SENT-COPY", "לקוחות"],
@@ -545,7 +545,7 @@
     },
     {
       id: "m10", threadId: "m10",
-      from: "ביטוח לאומי <person175@example.com>", to: "person127@example.com",
+      from: "ביטוח לאומי <person158@example.com>", to: "person105@example.com",
       subject: "אישור תשלום דמי ביטוח - יוני 2026",
       date: "2026-07-16T08:45:00",
       labels: ["INBOX"],
@@ -556,7 +556,7 @@
     },
     {
       id: "m11", threadId: "m11",
-      from: "בנק הפועלים - עסקים <person176@example.com>", to: "person127@example.com",
+      from: "בנק הפועלים - עסקים <person159@example.com>", to: "person105@example.com",
       subject: "דוח תנועות חשבון - יוני 2026",
       date: "2026-07-15T18:10:00",
       labels: ["INBOX"],
@@ -567,7 +567,7 @@
     },
     {
       id: "m12", threadId: "m12",
-      from: "Google Workspace <no-reply@google.com>", to: "person127@example.com",
+      from: "Google Workspace <person160-x@example.com>", to: "person105@example.com",
       subject: "[בדיקה] הודעת בדיקה — נא להתעלם",
       date: "2026-07-15T06:00:00",
       labels: ["INBOX", "UNREAD"],
@@ -578,7 +578,7 @@
     },
     {
       id: "m13", threadId: "m13",
-      from: "עמית לוי - תמיכה טכנית <person177@example.com>", to: "person127@example.com",
+      from: "עמית לוי - תמיכה טכנית <person161@example.com>", to: "person105@example.com",
       subject: "עדכון: תקלת שרת דואר תוקנה",
       date: "2026-07-14T12:00:00",
       labels: ["INBOX", "מעקב"],
@@ -588,7 +588,7 @@
     },
     {
       id: "m14", threadId: "m14",
-      from: "ספק משרדי - דפי הדפסה בע״מ <person178@example.com>", to: "person127@example.com",
+      from: "ספק משרדי - דפי הדפסה בע״מ <person162@example.com>", to: "person105@example.com",
       subject: "אישור הזמנה #5521 - ציוד משרדי",
       date: "2026-07-13T10:30:00",
       labels: ["INBOX", "UNREAD", "ספקים"],
@@ -612,13 +612,13 @@
   // Mail for the OTHER connected instances (so switching accounts shows a different mailbox). The
   // legacy messages above are the Gmail-office box; these belong to Outlook (admin) and the local box.
   MESSAGES.push(
-    { id: "ol1", threadId: "ol1", acct: "outlook_admin", from: "Microsoft 365 <person179@example.com>", to: "person133@example.com",
+    { id: "ol1", threadId: "ol1", acct: "outlook_admin", from: "Microsoft 365 <person163-x@example.com>", to: "person111@example.com",
       subject: "סיכום פעילות חשבון — יולי 2026", date: "2026-07-21T08:30:00", labels: ["INBOX", "UNREAD"], hasAttachment: false,
       snippet: "סיכום הפעילות החודשי של חשבון ה-Microsoft 365 שלך מוכן.", body_text: "שלום,\n\nסיכום הפעילות החודשי של חשבון ה-Microsoft 365 שלך מוכן לצפייה.\n\nMicrosoft 365" },
-    { id: "ol2", threadId: "ol2", acct: "outlook_admin", from: "לשכת עורכי הדין <person180@example.com>", to: "person133@example.com",
+    { id: "ol2", threadId: "ol2", acct: "outlook_admin", from: "לשכת עורכי הדין <person164@example.com>", to: "person111@example.com",
       subject: "עדכון רגולציה — חתימה דיגיטלית", date: "2026-07-20T12:10:00", labels: ["INBOX"], hasAttachment: true,
       attachments: [{ filename: "עדכון_רגולציה.pdf", size: 128000 }], snippet: "עדכון בנוגע לדרישות חתימה דיגיטלית למסמכים עסקיים.", body_text: "לקוח יקר,\n\nמצורף עדכון רגולציה בנוגע לחתימה דיגיטלית.\n\nבברכה" },
-    { id: "ol3", threadId: "ol3", acct: "outlook_admin", from: "Teams <person181@example.com>", to: "person133@example.com",
+    { id: "ol3", threadId: "ol3", acct: "outlook_admin", from: "Teams <person165@example.com>", to: "person111@example.com",
       subject: "פספסת שיחה מצוות הכספים", date: "2026-07-19T15:40:00", labels: ["INBOX", "UNREAD"], hasAttachment: false,
       snippet: "פספסת שיחה מצוות הכספים ב-Teams.", body_text: "פספסת שיחה מצוות הכספים ב-Microsoft Teams." },
     { id: "lo1", threadId: "lo1", acct: "local", from: "גיבוי מקומי <backup@localhost>", to: "מקומי",
@@ -641,7 +641,7 @@
     m5: { found: 1, docs: [{ STATUS: "NEEDS_REVIEW", NAME: "חשבון חשמל 44521", TYPE: "INVOICE", COMPANY_NAME: "חברת חשמל לישראל", DOC_TOTAL_AMOUNT: "1,205.60", DOC_ID:"44521", ERROR: JSON.stringify({ message: "מספר עוסק מורשה לא תואם לרשומה הקיימת במערכת" }) }] },
     // (the document system's OWN statuses and types: this said PROCESSING, PENDING, MISSING and BANK_REPORT — nobody's)
     m6: { found: 1, docs: [{ STATUS: "IN_PROGRESS", NAME: "חשבונית בזק יולי", TYPE: "INVOICE", COMPANY_NAME: "בזק בינלאומי", DOC_TOTAL_AMOUNT: "289.90", DOC_ID:"BZ-77410" }] },
-    m10: { found: 1, docs: [{ STATUS: "TO_EXTRACT", NAME: "אישור תשלום ביטוח לאומי", TYPE: "RECEIPT", COMPANY_NAME: "ביטוח לאומי", DOC_TOTAL_AMOUNT: "2,830.00", DOC_ID:"BTL-0626", LINK: "https://drive.google.com/drive/folders/bina-receipts-btl0626" }] },
+    m10: { found: 1, docs: [{ STATUS: "TO_EXTRACT", NAME: "אישור תשלום ביטוח לאומי", TYPE: "RECEIPT", COMPANY_NAME: "ביטוח לאומי", DOC_TOTAL_AMOUNT: "2,830.00", DOC_ID:"BTL-0626", LINK: "https://drive.google.com/drive/folders/1REDACTEDdrivexxx0092" }] },
     m11: { found: 1, docs: [{ STATUS: "COMPLETED", NAME: "דוח תנועות יוני", TYPE: "UNKNOWN", COMPANY_NAME: "בנק הפועלים", DOC_ID:"HAP-0626", LINK: "https://drive.google.com/drive/folders/bina-bank-hap0626" }] },
     m14: { found: 1, docs: [{ STATUS: "MISSING_TYPE", NAME: "אישור הזמנה 5521", TYPE: "", COMPANY_NAME: "ספק משרדי - דפי הדפסה בע\"מ", DOC_TOTAL_AMOUNT: "560.00", DOC_ID:"5521", ERROR: JSON.stringify({ message: "לא זוהה סוג מסמך תואם — נדרש סיווג ידני" }) }] }
   };

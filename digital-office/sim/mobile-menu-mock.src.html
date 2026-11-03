@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>התפריט מעל השיחה — הדמייה מהמסך של הבעלים</title>
+<!--
+  mobile-menu-mock — the rule of AGENTS.md § "A display change comes back as an interactive
+  simulation, and its screenshots", applied to בינה's phone navigation (agt-013 / DGO-551).
+
+  WHAT IS REAL HERE, AND WHAT IS MEASURED:
+    · "מה שהבעלים שלח" is the app area of his own 2026-10-13 20:52 screenshot, cropped to the rows
+      between the console's top bar and its dock by build-mobile-menu-mock.py (they are printed when
+      it runs). No drawing stands in for it.
+    · The sheet in the proposed state is the SAME crop's sidebar region, cut at the column where the
+      sidebar's own fill begins — so its width in the demo is a measurement of his pixels, in CSS px.
+    · The conversation behind it is the same app, the same profile, photographed LIVE with the menu
+      closed (ci-artifacts/mobile-nav-squeeze/opened.png) — the pixels the conversation really has
+      when nothing squeezes it.
+    · The palette is platform-base/bina-ui/theme-tokens.css, inlined verbatim by the builder.
+  Every number printed under the frame is read off THIS page's layout at run time
+  (`getBoundingClientRect`), never typed in.
+-->
+<style>
+/*{{TOKENS}}*/
+:root{
+  --o-olive:var(--bina-olive,#5b6b40);
+  --o-ink:#1c1f18;
+  --o-ground:#f9fafc;
+  --o-line:rgb(0 0 0 / .10);
+  --o-muted:#6b7280;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--o-ground);color:var(--o-ink);
+  font:15px/1.5 "Noto Sans Hebrew","Heebo",system-ui,-apple-system,"Segoe UI",sans-serif;
+  padding:22px 18px 40px}
+h1{font-size:20px;margin:0 0 4px}
+.sub{color:var(--o-muted);font-size:13.5px;margin:0 0 18px;max-width:70ch}
+.wrap{display:flex;gap:26px;align-items:flex-start;flex-wrap:wrap}
+/* ── the phone frame ─────────────────────────────────────────────────────────────────────────── */
+.phone{position:relative;width:{{frame_w}}px;height:{{frame_h}}px;border-radius:22px;overflow:hidden;
+  background:#fff;box-shadow:0 12px 34px rgb(20 24 16 / .22),0 0 0 8px #23261f,0 0 0 9.5px #3a3f34;
+  flex:0 0 auto}
+.layer{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:top center;
+  display:block}
+/* the sheet: the inline-start edge, the width his own screenshot gave it */
+.sheet{position:absolute;top:0;bottom:0;inset-inline-start:0;width:{{sheet_w}}px;z-index:3;
+  object-fit:cover;object-position:top right;display:block;
+  box-shadow:-10px 0 26px rgb(0 0 0 / .18)}
+.scrim{position:absolute;inset:0;z-index:2;background:rgb(0 0 0 / .34);opacity:0;
+  transition:opacity .22s ease;cursor:pointer}
+/* ── the three states ────────────────────────────────────────────────────────────────────────── */
+.phone[data-state="before"] .room,
+.phone[data-state="before"] .sheet,
+.phone[data-state="before"] .scrim{display:none}
+.phone[data-state="before"] .before{display:block}
+.phone[data-state="open"] .sheet{display:none}
+.phone[data-state="open"] .scrim{opacity:0;pointer-events:none}
+.phone[data-state="over"] .scrim{opacity:1}
+.before{display:none}
+/* ── controls and the readout ────────────────────────────────────────────────────────────────── */
+.panel{flex:1 1 320px;min-width:300px;max-width:520px}
+.btns{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+button{font:inherit;border-radius:999px;border:1px solid var(--o-line);background:#fff;color:var(--o-ink);
+  padding:9px 16px;cursor:pointer}
+button[aria-pressed="true"]{background:var(--o-olive);border-color:var(--o-olive);color:#fff}
+.hint{color:var(--o-muted);font-size:13px;margin:0 0 14px}
+.readout{margin:0;padding:14px 16px;border:1px solid var(--o-line);border-radius:14px;background:#fff;
+  font:12.5px/1.7 ui-monospace,SFMono-Regular,Menlo,monospace;direction:ltr;text-align:left;
+  white-space:pre-wrap}
+.readout b{color:var(--o-olive)}
+/* the state's own name, above the frame — inside the page, so it is Hebrew, right-to-left and real */
+.caption{font-size:16px;max-width:{{frame_w}}px;font-weight:600;margin:0 0 10px;color:var(--o-ink)}
+.caption span{font-weight:400;color:var(--o-muted)}
+</style>
+</head>
+<body>
+<h1>התפריט מעל השיחה — לא לצידה</h1>
+<p class="sub">
+  מימין (במסך הטלפון): מה שהבעלים שלח — התפריט פרוס על רוב הרוחב והשיחה נדחסת לרצועה שהכותרת שלה
+  נשברת מילה בכל שורה. בהדמייה: אותה תמונה, עם התפריט כגיליון מעל השיחה ברוחב מלא, ורקע מעומעם שאפשר
+  להקיש עליו כדי לסגור. הצילום של השיחה ברוחב מלא הוא צילום חי של אותה אפליקציה באותו פרופיל.
+</p>
+<div class="wrap">
+  <div>
+   <p class="caption" id="caption">התפריט מעל השיחה <span>— ההצעה</span></p>
+   <div class="phone" id="phone" data-state="over">
+    <img class="layer before" id="before" src="{{BEFORE}}" alt="המסך שהבעלים שלח">
+    <img class="layer room" id="room" src="{{ROOM}}" alt="השיחה ברוחב מלא — צילום חי">
+    <div class="scrim" id="scrim" title="סגירת התפריט"></div>
+    <img class="sheet" id="sheet" src="{{SHEET}}" alt="תפריט השיחות מתוך הצילום של הבעלים">
+   </div>
+  </div>
+  <div class="panel">
+    <div class="btns">
+      <button id="toBefore" type="button">מה שהבעלים שלח</button>
+      <button id="toOver" type="button" aria-pressed="true">התפריט מעל השיחה</button>
+      <button id="toOpen" type="button">השיחה לבדה</button>
+    </div>
+    <p class="hint">אפשר להקיש על האזור המעומעם (מחוץ לתפריט) — התפריט נסגר והשיחה נשארת ברוחב מלא.</p>
+    <pre class="readout" id="readout"></pre>
+  </div>
+</div>
+<script>
+const phone = document.getElementById('phone')
+const els = {before: document.getElementById('before'), room: document.getElementById('room'),
+             sheet: document.getElementById('sheet'), scrim: document.getElementById('scrim')}
+const buttons = {before: document.getElementById('toBefore'), over: document.getElementById('toOver'),
+                 open: document.getElementById('toOpen')}
+// the numbers the builder MEASURED off the owner's screenshot and off the capture profile
+const measured = {
+  frame_w: {{frame_w}}, frame_h: {{frame_h}}, sheet_w: {{sheet_w}}, strip_w: {{strip_w}},
+  owner_rows: "{{owner_rows}}", live_rows: "{{live_rows}}", owner_scale: {{owner_scale}},
+  owner_edge_px: {{owner_edge_px}},
+}
+
+function show (state) {
+  phone.dataset.state = state
+  for (const [name, b] of Object.entries(buttons)) b.setAttribute('aria-pressed', String(name === state))
+  document.getElementById('caption').innerHTML = {
+    before: 'מה שהבעלים שלח',
+    over: 'התפריט מעל השיחה',
+    open: 'השיחה לבדה',
+  }[state]
+  readout()
+}
+
+function readout () {
+  // every figure below is this page's own layout, read now — the phone, the sheet and the room
+  const frame = phone.getBoundingClientRect()
+  const sheet = els.sheet.getBoundingClientRect()
+  const room = els.room.getBoundingClientRect()
+  const state = phone.dataset.state
+  const sheetShown = state === 'over'
+  const lines = [
+    `state            ${state}`,
+    `phone frame      ${frame.width.toFixed(1)} × ${frame.height.toFixed(1)} css px`,
+    `menu (measured)  ${measured.sheet_w} css px  = device x ${measured.owner_edge_px}…1080 of his shot`,
+    `sheet drawn      ${sheetShown ? sheet.width.toFixed(1) : '0'} css px`,
+    `conversation     ${(sheetShown ? room.width : frame.width).toFixed(1)} css px`,
+    ``,
+    `his screenshot   app rows ${measured.owner_rows}, ${measured.owner_scale} device px per css px`,
+    `                 → the menu takes ${measured.sheet_w} and leaves the conversation ${measured.strip_w}`,
+    `live capture     app rows ${measured.live_rows}, conversation full width ${room.width.toFixed(1)} css px`,
+    `the change       the conversation goes from ${measured.strip_w} to ${frame.width.toFixed(1)} css px`,
+  ]
+  document.getElementById('readout').textContent = lines.join('\n')
+}
+
+els.scrim.addEventListener('click', () => show('open'))
+buttons.before.addEventListener('click', () => show('before'))
+buttons.over.addEventListener('click', () => show('over'))
+buttons.open.addEventListener('click', () => show('open'))
+window.addEventListener('resize', readout)
+show('over')
+</script>
+</body>
+</html>

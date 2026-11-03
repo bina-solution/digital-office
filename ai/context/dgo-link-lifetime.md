@@ -49,7 +49,7 @@ command — the platform notices and repairs itself.
 **Sure, with numbers.** The pair vps1 ↔ hp-laptop, after the 2026-10-12 repair:
 
 ```
-wg show wg3   listening port: 51830 · peer endpoint 203.0.113.11:60670
+wg show wg3   listening port: 51830 · peer endpoint 93.184.216.8:60670
               latest handshake: 36 s ago · transfer 56856 B received, 43988 B sent
 /api/link     state up · verdict {ok: true} · delivery {door listening, catalog ok}
               apps: ["plane"]  ·  handshake_age_s 114 · alive true
@@ -112,7 +112,7 @@ Measured consequences of that shape, from today's live pair:
 * **Ports.** The listener answers on the published `51830` (`DGO_WG_PUBLISH_BIND=0.0.0.0`,
   `DGO_WG_PUBLISH_PORT=51830`, ufw `51830/udp ALLOW`, `DOCKER-USER … RETURN udp dpt:51830`) — measured
   end to end at 16:0x: a WireGuard listener on that port completed a handshake against a dial to
-  `203.0.113.10:51830`. A **second** pair that this office must listen for would need its own
+  `93.184.216.5:51830`. A **second** pair that this office must listen for would need its own
   published UDP port (one wg socket per interface — the collision measured 2026-10-04); with the Mac,
   this office listens for *nobody* (the Mac can only dial), so one port is enough today.
 * **What each office gives.** `serve:` is ONE map for the whole office, not per peer (that limit is

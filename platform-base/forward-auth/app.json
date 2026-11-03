@@ -12,10 +12,32 @@
     "he": "שירות הזהות והכניסה כיום — בינארי Go יחיד שמחליף את authentik (core-006)",
     "en": "The identity and forward-auth service — one Go binary, replacing authentik (core-006)"
   },
-  "capabilities": [],
+  "capabilities": [
+    {
+      "name": "identity",
+      "type": "protocol",
+      "endpoint": "http://forward-auth:9078",
+      "required_ops": [
+        "forward-auth"
+      ]
+    }
+  ],
   "use": [],
-  "connections": [],
+  "connections": [
+    {
+      "id": "forward-auth-secret",
+      "required": true
+    }
+  ],
   "compose": "docker-compose.yml",
+  "routing": [
+    {
+      "host": "signin",
+      "port": 9078,
+      "auth": "none",
+      "service": "forward-auth"
+    }
+  ],
   "health": {
     "structural": "auto",
     "probe": {
@@ -24,7 +46,8 @@
     }
   },
   "data": {
+    "volumes": ["forward_auth_data"],
     "on_uninstall": "keep",
-    "note": "Stateless: its data is authentik's own database (read at the window, never written) and the users file, which is a file outside the repository. Nothing here to keep or lose."
+    "note": "Its one fact — who may sign in — is the users file in the forward_auth_data volume, written once at first-run setup (DGO-1090); during a migration it also reads authentik's own database, never writing it."
   }
 }

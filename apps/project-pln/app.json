@@ -47,7 +47,7 @@
           "plane_local_api_token"
         ],
         "group": "ניהול פרויקטים",
-        "now": "Nothing to type, and that is the point: these are INSTANCES of `plane_local_admin` (the owner's sign-in) and `plane_local_api_token` (the key the office itself uses against the API) in the credential plane. `hooks/onboard` creates both when it bootstraps the instance, and their values never leave the vault — the account screen lists them and reveals them one at a time, audit-logged, exactly like the local forge's token. Plane has no office-written UI of its own, so this screen IS where the password is read. Sign-in itself is at the app's own host (this is not SSO).",
+        "now": "Nothing to type, and that is the point: these are INSTANCES of `plane_local_admin` (the owner's sign-in) and `plane_local_api_token` (the key the office itself uses against the API) in the credential plane. `hooks/onboard` creates both when it bootstraps the instance, and their values never leave the vault — the account screen lists them and reveals them one at a time, audit-logged, exactly like the local forge's token. Plane has no office-written UI of its own, so this screen IS where the password is read. That password is now a SECOND way in, not the one the office meets: every host of this app is behind the office SSO, and the app's own middleware signs in the office user the identity service names (bootstrap.yaml → `sso:`), so opening Plane inside the office asks for nothing. It stays the door for a browser that is not the office's, and the recovery path when the identity service is not the answer.",
         "probe": {
           "type": "http",
           "url": "http://project-pln/api/instances/"
@@ -116,6 +116,11 @@
     }
   },
   "use": [
+    {
+      "capability": "identity",
+      "strength": "requires",
+      "after": true
+    },
     {
       "capability": "sql",
       "own_instance": true,

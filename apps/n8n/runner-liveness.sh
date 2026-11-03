@@ -78,7 +78,41 @@
 # on BOTH workers, and anything acting on that verdict would have restarted two healthy workers in
 # a loop forever. A verdict of "wedged" must be a MEASUREMENT, never the absence of evidence.
 #
-# COST: one `ps`, one `/proc` read, two `grep -c` passes. `sh` + busybox deliberately, not node:
+# THE THIRD MISS (2026-10-26, vps1): A RUNNER TYPE WHOSE LAUNCHER LOOP QUIT IS "NO RUNNER PROCESS"
+# ------------------------------------------------------------------------------------------------
+# For six days every Code node on vps1's two workers timed out at 120s, and this probe said
+# "OK no runner process" the whole time. The verdict table below calls a missing runner the healthy
+# resting state, and it is one -- unless the launcher has stopped launching. It had: at 15:53 a host
+# stall (Redis's own 4 MB RDB save took 84s, 7-9s the rest of that half hour) made the Node runner
+# reach its broker after its grant token had expired. n8n keeps that token in its cache for a fixed
+# 15s (GRANT_TOKEN_TTL in task-broker-auth.service.js, not configurable; Redis in queue mode), so the
+# broker answered 403. The launcher's next handshake was refused too, and the launcher retries only
+# "Task broker is down": any other handshake error ends that runner type's loop for good
+# (`Failed to execute launch command`), while the process, its static /healthz and this container
+# live on. Reproduced 2026-11-01 11:20 in a load-480 storm: worker-2's PYTHON loop quit that way.
+#
+# What survives a quit loop is visible from here: every runner type the launcher was started with
+# (`task-runner-launcher javascript python`) holds an ESTABLISHED connection to the broker while it
+# lives -- the launcher's own while it waits for its offer to be accepted, its runner's while that
+# runs. Measured on vps1's sidecars (each broker socket in /proc/net/tcp mapped to its owner through
+# /proc/*/fd): idle = 2 launcher sockets; a JS runner working = the runner's + python's launcher's.
+# A type whose loop quit holds none. So:
+#
+#   SLOTS = broker sockets held by the launcher + other processes holding one
+#   SLOTS < TYPES for BROKER_GRACE seconds while the broker answers /healthz, with no probe in
+#   between seeing SLOTS >= TYPES  -> DISCONNECTED, whatever the runner process is doing.
+#
+# Short dips are healthy (a handover between launcher and runner; a worker restart, whose
+# start_period is 180s), hence the grace; a broker that does not answer is the worker's fault and
+# never counts against this sidecar. The launcher also keeps short-lived HTTP keep-alive
+# sockets to the broker after it fetches a grant token, so a WORKING type can briefly fill in for a
+# dead one: a dead JS loop beside an idle python one sits at exactly 1 with nothing to mask it (the
+# 2026-10-26 outage, caught every time); a dead python loop beside a busy JS one is caught once
+# BROKER_GRACE passes without a keep-alive spike landing on a probe (worker-2, 2026-11-01: 74 of 90
+# one-second samples below 2).
+#
+# COST: one `ps`, /proc/net/tcp, one `ls` of the container's fd links, two `grep -c` passes, and a
+# `wget` of the broker's /healthz only while a type is missing. `sh` + busybox deliberately, not node:
 # the host is memory-constrained (6 cores / ~10 GiB with the estate resident) and worker-liveness.sh
 # measured the node form at 3.10s wall and 66.7 MB RSS per invocation versus ~0.01s and ~1 MB here.
 
@@ -92,6 +126,13 @@ LOG_GLOB=${RUNNER_LIVENESS_LOG_GLOB:-/n8n-data/n8nEventLog-worker*.log}
 STATE=${RUNNER_LIVENESS_STATE:-/tmp/runner-liveness.state}
 # Pattern identifying the runner process this sidecar owns.
 RUNNER_PAT=${RUNNER_LIVENESS_PROCESS:-task-runner-javascript}
+# The proc tree read for every process fact. Only test_runner_liveness.sh points it elsewhere.
+PROC=${RUNNER_LIVENESS_PROC:-/proc}
+BROKER_STATE=${RUNNER_LIVENESS_BROKER_STATE:-/tmp/runner-liveness.broker}
+# Above a worker's start_period (180s) plus the launcher's own six-strike runner check, so a broker
+# that is restarting, or a runner the launcher is replacing, is never a fault.
+BROKER_GRACE=${RUNNER_LIVENESS_BROKER_GRACE_SECONDS:-300}
+case "$BROKER_GRACE" in ''|*[!0-9]*) BROKER_GRACE=300 ;; esac
 
 IDLE=${N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT:-15}
 case "$IDLE" in ''|*[!0-9]*) IDLE=15 ;; esac
@@ -103,6 +144,81 @@ MIN_GRACE=$((IDLE + 120))
 
 NOW=$(date +%s)
 
+# --------------------------------------------------- does every runner type still hold the broker?
+# Before the runner-process verdicts on purpose: "no runner process" is exactly where the
+# 2026-10-26 fault hid. Every way of not knowing (no launcher in PID 1's argv, an unparseable broker
+# port, an unreadable /proc/net/tcp) skips this check and leaves the rest of the probe to decide.
+TYPES=$(tr '\0' '\n' < "$PROC/1/cmdline" 2>/dev/null \
+  | awk '/task-runner-launcher$/ {f = 1; n = 0; next} f && NF {n++} END {print n + 0}')
+case "${TYPES:-}" in ''|*[!0-9]*) TYPES=0 ;; esac
+BROKER_HP=${N8N_RUNNERS_TASK_BROKER_URI:-http://127.0.0.1:5679}
+BROKER_HP=${BROKER_HP#*://}; BROKER_HP=${BROKER_HP%%/*}
+BROKER_PORT=${BROKER_HP##*:}
+[ "$BROKER_PORT" = "$BROKER_HP" ] && BROKER_PORT=5679
+case "$BROKER_PORT" in ''|*[!0-9]*) BROKER_PORT='' ;; esac
+
+B_SKIP=''
+if [ "$TYPES" -eq 0 ] || [ -z "$BROKER_PORT" ] || [ ! -r "$PROC/net/tcp" ]; then
+  B_SKIP=unknown
+else
+  BHEX=$(printf ':%04X' "$BROKER_PORT")
+  # st 01 = ESTABLISHED; field 3 is the remote address, field 10 the socket inode.
+  INODES=" $(cat "$PROC/net/tcp" "$PROC/net/tcp6" 2>/dev/null \
+    | awk -v p="$BHEX" '$4 == "01" && substr($3, length($3) - 4) == p {print $10}' | tr '\n' ' ') "
+  NSOCK=$(echo $INODES | wc -w | tr -d ' ')
+  # The owner of each of them, from ONE `ls` of every fd directory: it prints a "<dir>:" header and
+  # then "... N -> socket:[inode]" per link. One pid per owned socket; "nopid" if a link came before
+  # any header (a single directory gets none), which makes the count blind below.
+  OWNERS=$(ls -l "$PROC"/[0-9]*/fd/ 2>/dev/null | awk -v want="$INODES" '
+    /:$/ { pid = $0; sub(/\/fd\/?:$/, "", pid); sub(/.*\//, "", pid); next }
+    / -> socket:\[/ { i = $NF; gsub(/[^0-9]/, "", i)
+                      if (index(want, " " i " ")) print (pid == "" ? "nopid" : pid) }')
+  LSOCK=0; RSOCK=0; RPROC=0
+  for p in $(echo "$OWNERS" | sort -u); do
+    [ "$p" = nopid ] && continue
+    n=$(echo "$OWNERS" | grep -cx "$p")
+    case "$(tr '\0' ' ' < "$PROC/$p/cmdline" 2>/dev/null)" in
+      *task-runner-launcher*) LSOCK=$((LSOCK + n)) ;;
+      *) RSOCK=$((RSOCK + n)); RPROC=$((RPROC + 1)) ;;
+    esac
+  done
+  SLOTS=$((LSOCK + RPROC))
+  if [ $((LSOCK + RSOCK)) -lt "$NSOCK" ]; then
+    # A broker socket nobody here can be shown to own (an fd directory this uid cannot read, a
+    # socket that closed between the two reads): the count would be the probe's blindness.
+    B_SKIP=blind
+  elif [ "$SLOTS" -ge "$TYPES" ]; then
+    rm -f "$BROKER_STATE" 2>/dev/null
+  elif ! wget -q -T 2 -O /dev/null "http://$BROKER_HP/healthz" 2>/dev/null; then
+    # The launcher holds nothing while the broker is down, and that is the worker's fault, not this
+    # sidecar's: a worker stopped, booting or wedged must not get its runner restarted on a loop.
+    B_SKIP=broker-down
+  else
+    # The clock belongs to this container's life: autoheal's restart keeps /tmp, so the clock carries
+    # PID 1's start time (field 22 of its stat) and a different one starts it again.
+    BOOT=$(sed 's/^.*) //' "$PROC/1/stat" 2>/dev/null | awk '{print $20}')
+    B_SINCE=''; B_BOOT=''
+    [ -f "$BROKER_STATE" ] && read -r B_SINCE B_BOOT _ < "$BROKER_STATE" 2>/dev/null
+    case "${B_SINCE:-}" in ''|*[!0-9]*) B_SINCE='' ;; esac
+    if [ -z "$B_SINCE" ] || [ "${B_BOOT:-}" != "${BOOT:-}" ]; then
+      B_SINCE=$NOW; echo "$NOW ${BOOT:-}" > "$BROKER_STATE" 2>/dev/null
+    fi
+    SHORT=$((NOW - B_SINCE))
+    [ "$SHORT" -lt 0 ] && SHORT=0
+    if [ "$SHORT" -ge "$BROKER_GRACE" ]; then
+      echo "runner-liveness: DISCONNECTED $SLOTS of $TYPES runner type(s) hold the task broker ($BROKER_HP, answering) for ${SHORT}s (launcher sockets=$LSOCK runner processes=$RPROC grace=${BROKER_GRACE}s) - a launcher loop that quit"
+      exit 1
+    fi
+  fi
+fi
+# A check that could not count says so, and starts its clock again next time, as every SKIP below
+# does -- except a blind one: blindness yields no verdict, and a keep-alive socket closing between
+# the two reads must not hand a quit loop a fresh grace.
+if [ -n "$B_SKIP" ]; then
+  echo "runner-liveness: broker check skipped ($B_SKIP)"
+  [ "$B_SKIP" = blind ] || rm -f "$BROKER_STATE" 2>/dev/null
+fi
+
 # --------------------------------------------------------------------------- is a runner alive?
 PID=$(ps -o pid,args 2>/dev/null | grep "$RUNNER_PAT" | grep -v grep | head -1 | awk '{print $1}')
 case "${PID:-}" in ''|*[!0-9]*) PID='' ;; esac
@@ -113,7 +229,7 @@ if [ -z "$PID" ]; then
   exit 0
 fi
 
-STAT=/proc/$PID/stat
+STAT=$PROC/$PID/stat
 if [ ! -r "$STAT" ]; then
   echo "runner-liveness: SKIP cannot read $STAT - failing open"
   rm -f "$STATE" 2>/dev/null

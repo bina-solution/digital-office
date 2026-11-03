@@ -58,17 +58,69 @@ running "authentik-server-${DN}" && exit 0
 # costs a larger ceiling on a wait that usually returns early — never a false ready.
 proj="${COMPOSE_PROJECT_NAME:-$(basename "${REPO_ROOT}" | tr '[:upper:]' '[:lower:]')}"
 if docker volume inspect "${proj}_authentik_postgres_data" >/dev/null 2>&1; then
-  wt=300    # warm: state already exists, nothing to migrate
-  say "[authentik] starting identity first — waiting up to ${wt}s for the SSO sentinel…"
+  wt=300 cap=600     # warm: state already exists, nothing to migrate
+  say "[authentik] starting identity first — waiting for the SSO sentinel while authentik works (${cap}s at most)…"
 else
-  wt=600    # cold: first bring-up, migrations + blueprints + outpost sync all have to happen
-  say "[authentik] cold start detected (no existing state) — allowing ${wt}s to initialise"
+  wt=600 cap=3600    # cold: first bring-up, migrations + blueprints + outpost sync all have to happen
+  say "[authentik] cold start detected (no existing state) — waiting while it initialises (${cap}s at most)"
 fi
 
 # OUR OWN services, named from inside the app that owns them. `redis` is deliberately NOT listed
 # even though authentik runs on it (DB index 1): compose starts it regardless through this app's
 # own `depends_on: redis: condition: service_healthy`, and naming a shared service here would be
 # this app reaching outside itself — the same mistake bbox was making, one level down.
-dcx up -d --wait --wait-timeout "${wt}" \
-    authentik-postgres authentik-server authentik-worker authentik-bootstrap \
-  || say "${cy}[authentik] SSO not ready within ${wt}s — the stack wait still gates on it; check 'bbox logs authentik-bootstrap'${c0}"
+#
+# THE WAIT FOLLOWS PROGRESS, NOT A NUMBER (DGO-1038). A first start's length is the machine's: 316 s on
+# the HP's empty database, ~70 minutes in the 0.2.0 drill beside a busy office — and `up --wait` gave
+# up at the first container that turned unhealthy while it was only still migrating. So the services
+# are started, and the wait goes on while authentik WORKS: its three containers' CPU, read every 15 s,
+# is the one signal that moves through the long silent phases (Django loading, a schema's migrations
+# printed nothing for 15 minutes at a time). It stops on the sentinel turning healthy (done), on
+# ${wt}s with authentik idle and not ready (stalled), on a container restarting twice (a crash loop),
+# or at the ceiling — BBOX_AUTH_MAX, by default 3600 s cold and 600 s warm — so it never holds `bbox run`
+# for good.
+t0="$(date +%s)"
+dcx up -d authentik-postgres authentik-server authentik-worker authentik-bootstrap \
+  || { say "${cy}[authentik] its services did not start (above) — the stack wait still gates on it${c0}"; exit 0; }
+ak=("authentik-server-${DN}" "authentik-worker-${DN}" "authentik-bootstrap-${DN}")
+ceiling="${BBOX_AUTH_MAX:-${cap}}"
+busy_at="${t0}"
+restarts() { docker inspect -f '{{.RestartCount}} {{.Name}}' "${ak[@]}" 2>/dev/null; }
+# the CPU-seconds the containers' processes have used, as `docker top … times` shows the ones alive
+# now. NOT `docker stats`: an idle authentik still runs a healthcheck every 10–30 s (the sentinel's
+# probe asks the server for every gated host), a sample often lands on one, and "idle" never held — a
+# stuck sentinel kept `bbox run` to the ceiling (the reader of 0be66c47). A probe lives a second; the
+# migrating or applying process accumulates, and only GROWTH is read: 2 CPU-s per 15 s is work. Only
+# processes alive 60 s or more count — longer than any probe may live (HEALTHCHECK_TIMEOUT is 10 s, 20–30 s
+# on the small-machine profiles; the reader of 10f20254) — so a probe caught mid-run adds nothing, and a
+# new migrating process is counted from its first minute on. `docker top` wants a PID column. Measured
+# on the MacBook's own idle authentik, probes running: +0 CPU-s per 15 s, four reads.
+cpu_s() { local c; for c in "${ak[@]}"; do docker top "${c}" -eo pid,etimes,times 2>/dev/null | awk 'NR > 1 && $2 >= 60 { s += $3 } END { print s + 0 }'; done \
+            | awk '{ t += $1 } END { print t + 0 }'; }
+r0="$(restarts)"; cpu0="$(cpu_s)"
+while :; do
+  now="$(date +%s)"
+  if [ "$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "authentik-bootstrap-${DN}" 2>/dev/null)" = healthy ]; then
+    say "[authentik] SSO ready after $(( now - t0 ))s"
+    exit 0
+  fi
+  cpu="$(cpu_s)"
+  # 0 is no reading (a `docker top` that failed this once), not a fall: keep the last good value, or the
+  # next read would count a container's whole lifetime as fresh work
+  if [ "${cpu}" -gt 0 ]; then
+    [ $(( cpu - cpu0 )) -ge 2 ] && busy_at="${now}"
+    cpu0="${cpu}"
+  fi
+  r="$(restarts)"
+  looped="$(printf '%s\n%s\n' "${r0}" "${r}" | awk '{ n[$2] = (seen[$2]++ ? $1 - n[$2] : $1) } END { for (k in n) if (seen[k] > 1 && n[k] >= 2) { sub(/^\//, "", k); print k } }' | head -1)"
+  why=""
+  if [ -n "${looped}" ]; then why="${looped} restarted twice (a crash loop)"
+  elif [ $(( now - busy_at )) -ge "${wt}" ]; then why="authentik was idle ${wt}s and not ready"
+  elif [ $(( now - t0 )) -ge "${ceiling}" ]; then why="the ${ceiling}s ceiling (BBOX_AUTH_MAX)"
+  fi
+  if [ -n "${why}" ]; then
+    say "${cy}[authentik] SSO not ready after $(( now - t0 ))s: ${why} — the stack wait still gates on it; check 'bbox logs authentik-bootstrap'${c0}"
+    exit 0
+  fi
+  sleep 15
+done

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """copy-button-selfcheck — does a message's copy button still copy inside a CROSS-ORIGIN frame?
 
-    python3 apps/bina-ds/tools/copy-button-selfcheck.py [--app http://bina.localhost:3080] [--ip 1.2.3.4]
+    python3 apps/bina-ds/tools/copy-button-selfcheck.py [--app http://bina.localhost:3080] [--ip 93.184.216.7]
                                                         [--container bina-ds-<office>]
 
 The owner, 2026-10-09 14:50, with the toolbar's own tooltip „העתקה" showing under a message:

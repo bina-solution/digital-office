@@ -81,3 +81,13 @@ def test_the_engines_own_words_travel_beside_the_sentence_not_in_it():
     """a hash that fails is an engine's fault with an English reason: kept, as the detail"""
     payload = spoken("a password that cannot be hashed", ASKS[4][1], 500)
     assert payload["detail"].startswith("doveadm pw failed")
+
+
+def test_a_name_that_ends_in_a_line_break_is_refused_and_writes_nothing(monkeypatch):
+    # DGO-621: the ADDRESS is stripped before the name is cut out of it, so "x\n@acme.test" kept its
+    # line break to the check — and `$` matched before it: the account was written as two lines, `x`
+    # and `@acme.test|<hash>`. Hashing works here, so only the name can refuse it (the fixture holds
+    # the file to its first bytes).
+    monkeypatch.setattr(mailboxd, "_hash", lambda _pw: "{SHA512-CRYPT}three")
+    spoken("an address whose name ends in a line break",
+           lambda: mailboxd.create_mailbox({"address": "x\n@acme.test", "password": PW}), 400)

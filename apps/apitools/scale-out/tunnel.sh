@@ -39,12 +39,12 @@
 # hand-rolled ssh with a subset of the legs.
 set -u
 
-KEY=${PORTABLE_KEY:-/home/shlomo/.ssh/portable_key}
-HOST=${PORTABLE_HOST:-shlomy@192.168.16.103}
+KEY=${PORTABLE_KEY:?set PORTABLE_KEY to the ssh key of the machine to scale out to}
+HOST=${PORTABLE_HOST:?set PORTABLE_HOST=<user>@<host> of the machine to scale out to}
 GW=${BRIDGE_GW:-172.18.0.1}
 RPORT=${DB_RPORT:-19118}
 DOCKER_SOCK=${DOCKER_SOCK:-unix:///run/bbox-docker.sock}
-DB_CONTAINER=${DB_CONTAINER:-supabase-db-shlomo-laptop}
+DB_CONTAINER=${DB_CONTAINER:?set DB_CONTAINER to the supabase-db container of this office}
 
 log() { echo "$(date -Is) $*"; }
 

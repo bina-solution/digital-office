@@ -91,7 +91,7 @@ facts() {
   # systemd is what runs Docker here, and it is off unless /etc/wsl.conf enables it.
   say "WSL=$([ -n "${WSL_DISTRO_NAME:-}" ] && echo "${WSL_DISTRO_NAME}" || echo no)"
   say "SYSTEMD=$( [ "$(cat /proc/1/comm 2>/dev/null)" = "systemd" ] && echo yes || echo "no (PID 1 is $(cat /proc/1/comm 2>/dev/null || echo unknown))")"
-  for p in /opt/digital-office /root/deployment-bina-comp "$HOME/deployment-bina-comp"; do
+  for p in /opt/digital-office /root/deployment-hacohen "$HOME/deployment-hacohen"; do
     [ -e "$p" ] || continue
     say "PATH_FS[$p]=$(stat -f -c %T "$p" 2>/dev/null || echo unknown)"
   done
@@ -172,9 +172,11 @@ fi
 
 touch /root/.ssh/authorized_keys
 chmod 600 /root/.ssh/authorized_keys
-if grep -qF "$(printf '%s' "$KEY" | awk '{print $2}')" /root/.ssh/authorized_keys 2>/dev/null; then
+if awk -v b="$(printf '%s' "$KEY" | awk '{print $2}')" '$2 == b {f = 1} END {exit !f}' /root/.ssh/authorized_keys 2>/dev/null; then
   say "# the office key is already authorized"
 else
+  # a last line with no newline would swallow the key as its comment (DGO-1231, apps/computers/share.py)
+  [ -z "$(tail -c1 /root/.ssh/authorized_keys)" ] || echo >> /root/.ssh/authorized_keys
   printf '%s\n' "$KEY" >> /root/.ssh/authorized_keys
   say "# the office key was added to /root/.ssh/authorized_keys"
 fi

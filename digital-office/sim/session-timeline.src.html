@@ -1,0 +1,275 @@
+<!doctype html>
+<!--
+  session-timeline — what one agent session did, round by round, with the money on the same axis.
+
+  Built by `digital-office/sim/build-session-timeline.py`: the rounds are read out of the session's own
+  durable log, and every figure in the money column is computed IN THIS PAGE by the office's own
+  `lib/pricing.js` + `lib/cost.js` (inlined by the builder, loaded as Blob modules) — so the timeline
+  and the product cannot disagree about what an hour cost.
+
+  It is a build artifact under the gitignored ci-artifacts/: it carries a copy of the palette block.
+-->
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <title>ציר הזמן של השיחה</title>
+  <link rel="stylesheet" href="../../platform-base/bina-ui/theme-tokens.css" />
+  <style>
+    body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font); }
+    .wrap { max-width: 1180px; margin: 0 auto; padding: 20px 20px 60px; }
+    h1 { font-size: 19px; margin: 0 0 4px; }
+    .sub { color: var(--muted); font-size: 12.5px; line-height: 1.7; }
+    .totals { display: flex; gap: 10px; flex-wrap: wrap; margin: 14px 0 6px; }
+    .tile { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); padding: 10px 14px; min-width: 118px; }
+    .tile b { display: block; font-size: 19px; }
+    .tile span { font-size: 11.5px; color: var(--muted); }
+    .rate { font-size: 12px; color: var(--muted); display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+    .rate input { width: 62px; padding: 3px 6px; border: 1px solid var(--border); border-radius: 8px; background: transparent; color: inherit; font: inherit; }
+    /* ── the hour ruler: the same axis the platform's own chart shows, with the work under it ───── */
+    .hours { display: flex; align-items: flex-end; gap: 4px; height: 108px; margin: 18px 0 4px; border-bottom: 1px solid var(--border); direction: ltr; }
+    .hour { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; cursor: pointer; }
+    .hour i { display: block; width: 100%; background: var(--accent, #6f8f4a); border-radius: 4px 4px 0 0; min-height: 2px; opacity: .75; }
+    .hour.on i { opacity: 1; }
+    .hour.focus i { background: #d9a441; }
+    .hour span { font-size: 9.5px; color: var(--muted); margin-top: 4px; height: 12px; }
+    .hours-legend { font-size: 11.5px; color: var(--muted); margin-bottom: 14px; }
+    /* ── filters ──────────────────────────────────────────────────────────────────────────────── */
+    .filters { display: flex; gap: 7px; flex-wrap: wrap; margin: 12px 0 16px; position: sticky; top: 0; background: var(--bg); padding: 8px 0; z-index: 3; border-bottom: 1px solid var(--border); }
+    button { font: inherit; font-size: 12.5px; padding: 5px 11px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--ink); cursor: pointer; }
+    button.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+    button.focus { border-color: #d9a441; color: #d9a441; }
+    /* ── one round ────────────────────────────────────────────────────────────────────────────── */
+    .round { border: 1px solid var(--border); border-inline-start: 3px solid var(--border); border-radius: 12px; background: var(--surface); padding: 12px 14px; margin-bottom: 10px; }
+    .round.morning { border-inline-start-color: #d9a441; }
+    .round.hide { display: none; }
+    .rhead { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+    .rhead .t { font-weight: 700; font-size: 15px; }
+    .rhead .no { font-size: 11.5px; color: var(--muted); }
+    .rhead .money { font-size: 15px; font-weight: 700; margin-inline-start: auto; }
+    .rhead .tok { font-size: 11.5px; color: var(--muted); }
+    .goal { font-size: 11.5px; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 2px 9px; }
+    .badges { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0 6px; }
+    .badge { font-size: 11.5px; border: 1px solid var(--border); border-radius: 8px; padding: 2px 7px; color: var(--muted); }
+    .badge.pass { color: #6f8f4a; border-color: #6f8f4a55; }
+    .badge.fail { color: #c4553f; border-color: #c4553f55; }
+    .badge.closed { color: var(--ink); border-color: var(--ink); }
+    .conclusion { font-size: 13.5px; line-height: 1.8; margin: 6px 0 4px; }
+    .prose { unicode-bidi: plaintext; white-space: pre-wrap; }
+    .prose b { font-weight: 700; }
+    .prose code { direction: ltr; }
+    .prose .h { font-weight: 700; color: var(--ink); }
+    details { margin-top: 6px; }
+    summary { font-size: 12px; color: var(--muted); cursor: pointer; }
+    details p, details ul { font-size: 12.5px; line-height: 1.7; margin: 6px 0; }
+    details ul { padding-inline-start: 18px; }
+    code { font-size: 11.5px; background: var(--surface-2); border-radius: 5px; padding: 1px 5px; direction: ltr; display: inline-block; }
+    .none { color: var(--muted); font-size: 12.5px; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1 id="title">ציר הזמן של השיחה</h1>
+  <div class="sub" id="sub"></div>
+  <div class="totals" id="totals"></div>
+  <div class="rate">
+    <span>מטבע ושער:</span><input type="text" id="currency" value="₪" />
+    <span>לדולר</span><input type="number" id="rate" value="3.7" step="0.1" />
+    <span id="pricenote"></span>
+  </div>
+
+  <div class="hours" id="hours"></div>
+  <div class="hours-legend">כל עמודה = שעה. העמודה הצהובה היא 07:00 — העבודה שביקשת להתמקד בה. לחיצה על שעה מסננת את הסבבים שלה.</div>
+
+  <div class="filters" id="filters"></div>
+  <div id="rounds"></div>
+</div>
+
+<script type="application/json" id="timeline">__TIMELINE_JSON__</script>
+<script type="text/plain" id="pricing-src">__PRICING_SRC__</script>
+<script type="text/plain" id="cost-src">__COST_SRC__</script>
+
+<script type="module">
+  // The office's own price book and arithmetic, here as Blob modules — the page types no price.
+  const blob = (text, map) => URL.createObjectURL(new Blob([map(text)], { type: 'text/javascript' }));
+  const pricingUrl = blob(document.getElementById('pricing-src').textContent, (t) => t);
+  const costUrl = blob(document.getElementById('cost-src').textContent, (t) => t.replace('./pricing.js', pricingUrl));
+  const { fold, initial, view } = await import(costUrl);
+
+  const DATA = JSON.parse(document.getElementById('timeline').textContent);
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  /** The agent's own text carries light markdown; keep the emphasis, drop the markers, and let each
+   *  line take its own direction (`unicode-bidi: plaintext`) so Hebrew + code mix stays readable. */
+  const prose = (text) => esc(text)
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
+    .replace(/^#{1,4}\s*(.+)$/gm, '<span class="h">$1</span>')
+    .replace(/^\s*[-*]\s+/gm, '• ');
+  const fmtTokens = (n) => n >= 1e9 ? (n / 1e9).toFixed(2) + 'B' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(0) + 'k' : String(n);
+  const hourOf = (ms) => new Date(ms).toLocaleString('he-IL', { hour: '2-digit', hour12: false, timeZone: 'Asia/Jerusalem' });
+  const clockOf = (ms) => new Date(ms).toLocaleString('he-IL', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Jerusalem' });
+  const dayOf = (ms) => new Date(ms).toLocaleString('he-IL', { day: '2-digit', month: '2-digit', timeZone: 'Asia/Jerusalem' });
+
+  function settings() { return { currency: $('currency').value.trim() || '₪', usdRate: Number($('rate').value) || 1, peakPricing: true }; }
+  function priceOf(round) {
+    const usage = round.usage;
+    const state = fold(initial(), {
+      type: 'assistant/message', time: round.t1,
+      data: { turn: round.n, step: 1, usage, message: { source: { provider: 'deepseek', model: 'deepseek-flash' } } },
+    });
+    return view(state, settings());
+  }
+
+  const FLAGS = [
+    { id: 'all', label: 'הכול' },
+    { id: 'thought', label: 'מחשבות הסוכן' },
+    { id: 'conclusion', label: 'מסקנות' },
+    { id: 'change', label: 'שינויים' },
+    { id: 'gate', label: 'שערים' },
+    { id: 'image', label: 'צילומי מסך' },
+    { id: 'closed', label: 'פריטים שנסגרו' },
+    { id: 'cmd', label: 'מה רץ' },
+    { id: 'owner', label: 'הודעות הבעלים' },
+    { id: 'morning', label: '06:00–08:00 בלבד' },
+  ];
+  const state = { flag: 'all', hour: null };
+
+  function flagsOf(round) {
+    const f = new Set();
+    if (round.thought) f.add('thought');
+    if (round.conclusion) f.add('conclusion');
+    if (round.changes.length) f.add('change');
+    if (round.gates.length) f.add('gate');
+    if (round.images.length) f.add('image');
+    if (round.closed.length) f.add('closed');
+    if (round.cmds.length) f.add('cmd');
+    if (round.events.some((e) => e.kind === 'owner')) f.add('owner');
+    return f;
+  }
+
+  function render() {
+    const money = settings().currency;
+    let usd = 0, tokens = 0, steps = 0, changes = 0, gateRuns = 0, images = 0, closed = 0;
+    const perHour = new Map();
+    const cards = [];
+
+    for (const round of DATA.rounds) {
+      const published = priceOf(round);
+      round._money = published.amount;
+      round._tokens = published.totalTokens;
+      usd += published.usd; tokens += published.totalTokens; steps += round.steps;
+      changes += round.changes.length; gateRuns += round.gates.length;
+      images += round.images.length + round.delivered.length; closed += round.closed.length;
+      const h = hourOf(round.t0);
+      if (!perHour.has(h)) perHour.set(h, { money: 0, rounds: 0 });
+      perHour.get(h).money += published.amount;
+      perHour.get(h).rounds += 1;
+      cards.push(round);
+    }
+
+    $('title').textContent = 'ציר הזמן · ' + (DATA.meta.title || DATA.meta.id);
+    $('sub').innerHTML = 'שיחה <code>' + esc(DATA.meta.id) + '</code> · חלון: ' + dayOf(Date.parse(DATA.meta.window.from)) + ' ' + clockOf(Date.parse(DATA.meta.window.from)) +
+      ' → ' + dayOf(Date.parse(DATA.meta.window.to)) + ' ' + clockOf(Date.parse(DATA.meta.window.to)) + ' (שעון ישראל). כל מספר כאן נקרא מהלוג של השיחה עצמה, והעלות מחושבת בקוד של הלשכה.';
+
+    const total = { rounds: DATA.rounds.length, steps, tokens, usd, changes, gateRuns, images, closed };
+    $('totals').innerHTML = [
+      [total.rounds + ' / ' + steps, 'סבבים / צעדי API'],
+      [fmtTokens(tokens), 'טוקנים'],
+      [money + (total.usd * (Number($('rate').value) || 1)).toFixed(2), 'עלות בחלון'],
+      ['$' + total.usd.toFixed(2), 'בדולר'],
+      [total.changes, 'שינויי קבצים'],
+      [total.gateRuns, ('הרצות שער')],
+      [total.images, 'צילומים ותוצרים'],
+      [total.closed, 'פריטים שנסגרו'],
+    ].map(([v, k]) => '<div class="tile"><b>' + v + '</b><span>' + k + '</span></div>').join('');
+    $('pricenote').textContent = 'התמחור לפי ' + 'apps/bina-ds/plugins/cost-meter/lib/pricing.js' + ' (שיא/לא־שיא לפי חתם הזמן של כל סבב)';
+
+    const hours = [...perHour.keys()].sort();
+    const maxHour = Math.max(...[...perHour.values()].map((v) => v.money), 0.0001);
+    $('hours').innerHTML = hours.map((h) => {
+      const v = perHour.get(h);
+      const height = Math.max(2, (v.money / maxHour) * 84);
+      return '<div class="hour' + (h === state.hour ? ' on' : '') + (h.slice(0, 2) === '07' ? ' focus' : '') + '" data-hour="' + h + '" title="' + h + ' · ' + money + v.money.toFixed(2) + ' · ' + v.rounds + ' סבבים">' +
+        '<i style="height:' + height.toFixed(1) + 'px"></i><span>' + h.slice(0, 2) + '</span></div>';
+    }).join('');
+
+    $('rounds').innerHTML = cards.map((round) => {
+      const f = flagsOf(round);
+      const badges = [];
+      if (f.has('change')) badges.push('<span class="badge">✏️ ' + round.changes.length + ' קבצים</span>');
+      for (const g of round.gates.slice(0, 4)) badges.push('<span class="badge ' + (g.endsWith('PASS') ? 'pass' : 'fail') + '">' + esc(g) + '</span>');
+      if (round.images.length) badges.push('<span class="badge">📷 ' + round.images.length + '</span>');
+      if (round.delivered.length) badges.push('<span class="badge">📦 ' + round.delivered.length + '</span>');
+      for (const ref of round.closed.slice(0, 4)) badges.push('<span class="badge closed">נסגר · ' + esc(ref) + '</span>');
+      if (round.errors) badges.push('<span class="badge fail">' + round.errors + ' כשלי פקודה</span>');
+      if (f.has('owner')) badges.push('<span class="badge">הודעת בעלים</span>');
+      const details = [];
+      if (round.thought) details.push('<details><summary>מה הסוכן חשב (תחילת החשיבה)</summary><p class="prose">' + prose(round.thought) + '</p></details>');
+      if (round.changes.length) details.push('<details><summary>מה שונה (' + round.changes.length + ')</summary><ul>' + round.changes.map((c) => '<li><code>' + esc(c) + '</code></li>').join('') + '</ul></details>');
+      if (round.cmds.length) details.push('<details><summary>מה רץ (' + round.cmds.length + ')</summary><ul>' + round.cmds.map((c) => '<li>' + esc(c) + '</li>').join('') + '</ul></details>');
+      const extras = round.images.concat(round.delivered);
+      if (extras.length) details.push('<details><summary>צילומים ותוצרים (' + extras.length + ')</summary><ul>' + extras.map((c) => '<li><code>' + esc(c.split('/').slice(-2).join('/')) + '</code></li>').join('') + '</ul></details>');
+      const evs = round.events.filter((e) => e.kind !== 'owner');
+      if (evs.length) details.push('<details><summary>מטרות, רשימות וקומפקשן (' + evs.length + ')</summary><ul>' + evs.map((e) => '<li>' + esc(e.kind) + ': ' + esc(e.text) + '</li>').join('') + '</ul></details>');
+      const morning = hourOf(round.t0).slice(0, 2) === '07';
+      const open = morning ? ' open' : '';
+      return '<article class="round' + (morning ? ' morning' : '') + '" data-hour="' + hourOf(round.t0) + '" data-flags="' + [...f].join(',') + '">' +
+        '<div class="rhead"><span class="t">' + clockOf(round.t0) + '</span><span class="no">סבב ' + round.n + ' · ' + round.steps + ' צעדים · ' + (round.source === 'goal' ? 'סבב מטרה' : 'מהבעלים') + '</span>' +
+        '<span class="money">' + money + round._money.toFixed(2) + '</span><span class="tok">' + fmtTokens(round._tokens) + ' טוקנים</span></div>' +
+        (round.goal ? '<div class="goal">' + esc(round.goal.slice(0, 110)) + '</div>' : '') +
+        (badges.length ? '<div class="badges">' + badges.join('') + '</div>' : '') +
+        (round.conclusion ? '<p class="conclusion prose">' + prose(round.conclusion) + '</p>' : '<p class="none">— ללא מסקנה כתובה בסבב הזה —</p>') +
+        details.join('') + '</article>';
+    }).join('');
+
+    applyFilter();
+  }
+
+  function applyFilter() {
+    let shown = 0;
+    document.querySelectorAll('.round').forEach((el) => {
+      const flags = (el.dataset.flags || '').split(',');
+      let ok = true;
+      if (state.flag === 'morning') ok = el.dataset.hour.slice(0, 2) === '07' || el.dataset.hour.slice(0, 2) === '06';
+      else if (state.flag !== 'all') ok = flags.includes(state.flag);
+      if (state.hour) ok = ok && el.dataset.hour === state.hour;
+      el.classList.toggle('hide', !ok);
+      if (ok) shown += 1;
+      if (ok && state.flag === 'morning') el.querySelectorAll('details').forEach((d) => { d.open = true; });
+    });
+    $('filters').querySelectorAll('button').forEach((b) => {
+      b.classList.toggle('on', b.dataset.flag === state.flag || (b.dataset.hour && b.dataset.hour === state.hour));
+      b.classList.toggle('focus', b.dataset.flag === 'morning');
+    });
+    return shown;
+  }
+
+  $('filters').innerHTML = FLAGS.map((f) => '<button data-flag="' + f.id + '"' + (f.id === 'morning' ? ' class="focus"' : '') + '>' + f.label + '</button>').join('') +
+    '<button data-clear="1">נקה שעה</button><button data-expand="1">פתח הכול</button><button data-collapse="1">סגור הכול</button>';
+  $('filters').addEventListener('click', (event) => {
+    const b = event.target.closest('button');
+    if (!b) return;
+    if (b.dataset.flag) { state.flag = b.dataset.flag; state.hour = null; }
+    if (b.dataset.clear) state.hour = null;
+    if (b.dataset.expand) document.querySelectorAll('details').forEach((d) => { d.open = true; });
+    if (b.dataset.collapse) document.querySelectorAll('details').forEach((d) => { d.open = false; });
+    render();
+  });
+  $('hours').addEventListener('click', (event) => {
+    const h = event.target.closest('.hour');
+    if (!h) return;
+    state.hour = state.hour === h.dataset.hour ? null : h.dataset.hour;
+    state.flag = 'all';
+    render();
+    window.scrollTo({ top: $('filters').offsetTop - 8, behavior: 'smooth' });
+  });
+  for (const id of ['currency', 'rate']) $(id).addEventListener('input', render);
+  // A shot has to be able to name the view it shows: ?flag=morning / ?flag=closed / ?hour=07
+  const q = new URLSearchParams(location.search);
+  if (q.get('flag')) state.flag = q.get('flag');
+  if (q.get('hour')) state.hour = q.get('hour');
+  render();
+  if (q.get('scroll')) window.scrollTo(0, Number(q.get('scroll')) || 0);
+</script>
+</body>
+</html>

@@ -28,7 +28,7 @@
       "credentials": {
         "googleDriveOAuth2Api": {
           "id": "KirWFwoFdEFmnN0R",
-          "name": "Google Drive person17@example.com"
+          "name": "Google Drive person17.x@example.com"
         }
       }
     },
@@ -365,16 +365,7 @@
   },
   "staticData": null,
   "meta": null,
-  "pinData": {
-    "Start": [
-      {
-        "json": {
-          "COMPANY_NAME": "סטנקו",
-          "SHORT_DOC_ID": 30353
-        }
-      }
-    ]
-  },
+  "pinData": {},
   "versionId": "650b606f-e0a9-4a4b-9d48-ee2a8b0e9165",
   "activeVersionId": "650b606f-e0a9-4a4b-9d48-ee2a8b0e9165",
   "versionCounter": 70,

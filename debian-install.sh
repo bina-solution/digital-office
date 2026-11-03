@@ -69,11 +69,35 @@ install_git() {
 DOCKER_MAJOR=28
 DOCKER_VER=5:28.5.2
 COMPOSE_VER=2.40.3
+
+# /etc/docker/daemon.json — the engine settings this platform needs on EVERY host, written once,
+# only when absent (an operator's own daemon.json is never overwritten).
+#   live-restore: containers keep running across a dockerd restart/upgrade. Measured 2026-09-29 on a
+#     customer laptop (WSL2): without it one `systemctl restart docker` = ~6 min of the whole office
+#     down (stop timed out after 3m22s, start took 2m41s) and one container never came back.
+#     `bbox` itself restarts the daemon when it provisions the project socket, so this is the one
+#     setting that turns that into a non-event.
+#   log-opts: a bounded json-file log per container, so a chatty service cannot fill the disk.
+configure_docker_daemon() {
+  local f=/etc/docker/daemon.json
+  if [ -s "$f" ]; then
+    grep -q '"live-restore"' "$f" || echo "Note: $f exists without live-restore — add \"live-restore\": true to it (see debian-install.sh)."
+    return 0
+  fi
+  log "Writing $f (live-restore, bounded logs)"
+  $SUDO install -m 0755 -d /etc/docker
+  printf '%s\n' '{' '  "live-restore": true,' '  "log-driver": "json-file",' '  "log-opts": { "max-size": "20m", "max-file": "3" }' '}' | $SUDO tee "$f" >/dev/null
+}
 install_docker() {
   log "Checking for Docker"
   if command -v docker &> /dev/null; then
     local have
-    have="$(docker version --format '{{.Server.Version}}' 2>/dev/null || docker --version | sed -E 's/[^0-9]*([0-9.]+).*/\1/')"
+    # The server's version when a daemon answers, else the client's. Not one `a || b` substitution: with
+    # no daemon (no systemd), `docker version --format` prints an EMPTY LINE and fails, the fallback's
+    # output landed after it, and "\n28.5.2" was refused as not 28.x (the 0.2.0 drill, DGO-1040).
+    have="$($SUDO docker version --format '{{.Server.Version}}' 2>/dev/null)" || have=""
+    have="${have//[$'\n\r ']/}"
+    [ -n "${have}" ] || have="$(docker --version | sed -E 's/[^0-9]*([0-9.]+).*/\1/')"
     if [ "${have%%.*}" != "${DOCKER_MAJOR}" ]; then
       echo "Error: Docker ${have} is installed; this platform needs Docker ${DOCKER_MAJOR}.x." >&2
       echo "       Re-run with BBOX_REPLACE_DOCKER=1 to replace it (containers stop; volumes are kept)." >&2
@@ -92,26 +116,58 @@ install_docker() {
   # The distro decides the repository path AND the package suffix (debian vs ubuntu).
   local distro codename
   distro="$(. /etc/os-release && echo "$ID")"
-  codename="$(. /etc/os-release && echo "$VERSION_CODENAME")"
+  codename="${BBOX_DOCKER_CODENAME:-$(. /etc/os-release && echo "$VERSION_CODENAME")}"
   case "$distro" in debian|ubuntu) ;; *) echo "Error: unsupported distro '$distro' (debian or ubuntu)" >&2; exit 1 ;; esac
 
   $SUDO install -m 0755 -d /etc/apt/keyrings
   $SUDO curl -fsSL "https://download.docker.com/linux/${distro}/gpg" -o /etc/apt/keyrings/docker.asc
   $SUDO chmod a+r /etc/apt/keyrings/docker.asc
-  echo \
-    "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/${distro} \
-    ${codename} stable" | \
-    $SUDO tee /etc/apt/sources.list.d/docker.list > /dev/null
-  $SUDO apt-get update
 
-  # Resolve the exact package versions for THIS distro/codename from the repo itself, rather than
-  # hand-writing a suffix per release ("5:28.5.2-1~debian.12~bookworm", "…~ubuntu.24.04~noble").
-  local v c
-  v="$(apt-cache madison docker-ce | awk '{print $3}' | grep -F "${DOCKER_VER}-" | head -1)"
-  c="$(apt-cache madison docker-compose-plugin | awk '{print $3}' | grep -F "${COMPOSE_VER}-" | head -1)"
-  [ -n "$v" ] || { echo "Error: docker-ce ${DOCKER_VER} is not published for ${distro} ${codename}" >&2; exit 1; }
-  [ -n "$c" ] || { echo "Error: docker-compose-plugin ${COMPOSE_VER} is not published for ${distro} ${codename}" >&2; exit 1; }
+  # Docker only starts publishing to a new Ubuntu/Debian release from whatever version is current at
+  # that time. Ubuntu 26.04 (resolute) therefore carries 29.x ONLY — and 29 is exactly the engine
+  # this platform cannot run on (see CLAUDE.md, "Docker 29 does not work, and fails silently").
+  # A fresh WSL install today gives you 26.04. So when the pinned version is missing for this
+  # codename, fall back to the previous LTS channel, whose packages install and run unchanged
+  # (same arch, same libc family). BBOX_DOCKER_CODENAME overrides the choice outright.
+  local fallback=""
+  case "$distro" in ubuntu) fallback=noble ;; debian) fallback=bookworm ;; esac
+  local v c try
+  for try in "${codename}" "${fallback}"; do
+    [ -n "${try}" ] || continue
+    echo \
+      "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/${distro} \
+      ${try} stable" | \
+      $SUDO tee /etc/apt/sources.list.d/docker.list > /dev/null
+    # A codename Docker has not published at ALL has no Release file: `apt-get update` exits 100,
+    # and under `set -e` that killed the script before the fallback channel was ever tried.
+    if ! $SUDO apt-get update; then
+      v=; c=
+      [ "${try}" = "${fallback}" ] && break
+      echo "the docker ${try} channel is unavailable — trying the ${fallback} channel"
+      continue
+    fi
 
+    # Resolve the exact package versions for THIS distro/codename from the repo itself, rather than
+    # hand-writing a suffix per release ("5:28.5.2-1~debian.12~bookworm", "…~ubuntu.24.04~noble").
+    # `|| true`: under `set -e -o pipefail` a grep with no match fails the substitution, and the
+    # assignment inherits that status — the script died here silently, before the Error line below
+    # could ever print (observed on Ubuntu 26.04, where the pin is genuinely absent).
+    v="$(apt-cache madison docker-ce | awk '{print $3}' | grep -F "${DOCKER_VER}-" | head -1 || true)"
+    c="$(apt-cache madison docker-compose-plugin | awk '{print $3}' | grep -F "${COMPOSE_VER}-" | head -1 || true)"
+    if [ -n "$v" ] && [ -n "$c" ]; then
+      [ "${try}" = "${codename}" ] || echo "Note: docker-ce ${DOCKER_VER#5:} is not published for ${distro} ${codename}; using the ${try} channel instead."
+      break
+    fi
+    [ "${try}" = "${fallback}" ] && break
+    echo "docker-ce ${DOCKER_VER#5:} not published for ${distro} ${codename} — trying the ${fallback} channel"
+  done
+  [ -n "$v" ] || { echo "Error: docker-ce ${DOCKER_VER} is not published for ${distro} ${codename} (nor ${fallback})" >&2; exit 1; }
+  [ -n "$c" ] || { echo "Error: docker-compose-plugin ${COMPOSE_VER} is not published for ${distro} ${codename} (nor ${fallback})" >&2; exit 1; }
+
+  # Before the install, not after: docker-ce's postinst STARTS dockerd, `enable --now` does not restart
+  # it, and log-opts are not reloadable — written afterwards, neither setting would apply until the
+  # next daemon restart. The package ships no daemon.json, so there is nothing to overwrite.
+  configure_docker_daemon
   $SUDO apt-mark unhold docker-ce docker-ce-cli docker-compose-plugin >/dev/null 2>&1 || true
   $SUDO apt-get install -y --allow-downgrades "docker-ce=${v}" "docker-ce-cli=${v}" containerd.io \
     docker-buildx-plugin "docker-compose-plugin=${c}"
@@ -167,9 +223,18 @@ install_gemini_cli() {
 # --- Step 5: Setup Docker Network ---
 setup_docker_network() {
   log "Setting up Docker network"
-  if ! docker network inspect traefik-network &>/dev/null; then
+  # A machine with no systemd (a container, a cloud sandbox, WSL without systemd) has no daemon yet:
+  # `systemctl enable --now docker` above fails quietly there, on purpose, and `bbox run` is what starts
+  # the engine (need_docker) and creates this network (ensure_network). Measured 2026-10-30 (DGO-1040,
+  # a fresh Ubuntu 24.04 without systemd): this step was the one that failed the whole install, rc=1.
+  # $SUDO as the other docker calls: a non-root run is not in the docker group until its next login.
+  if ! $SUDO docker info >/dev/null 2>&1; then
+    log "No Docker daemon answers yet — 'bbox run' starts it where systemd does not, and creates traefik-network."
+    return 0
+  fi
+  if ! $SUDO docker network inspect traefik-network &>/dev/null; then
     log "Creating 'traefik-network' Docker network..."
-    docker network create traefik-network
+    $SUDO docker network create traefik-network
     log "'traefik-network' created successfully."
   else
     log "'traefik-network' already exists. Skipping creation."

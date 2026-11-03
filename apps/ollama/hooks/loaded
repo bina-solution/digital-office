@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+#: loaded — the models in memory now, their size and how long they stay (reads):  ./bbox ollama loaded
+# Runs the release's own client inside the container (`ollama ps`, the same answer as GET /api/ps).
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+dcx exec -T ollama ollama ps

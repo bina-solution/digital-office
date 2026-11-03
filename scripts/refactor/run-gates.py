@@ -62,6 +62,7 @@ N8N_SET = [
     "noop-success-lint",
     "n8n-loop-order-lint",
     "legacy-ref-lint",
+    "tracked-secret-lint",      # G92 - no private key or provider token in a tracked file (.env.ex's 4 declared until DGO-1220)
     # G42 direct-db-write-lint / G43 single-identity-lint RETIRED 2026-08-07 — they mandated
     # `indoxDataGateway01` / `indoxIdentity01`, an agent-invented design the owner rejected and
     # which was disarmed. See GATES.md.
@@ -160,6 +161,22 @@ N8N_SET = [
                                 #       is computed (a call-graph walk to the write sinks, plus every
                                 #       write verb), and an exemption is a written justification that
                                 #       FAILS when stale. Static and office-free, ~1 s.
+    "counted-plural-lint",      # G89 - a count of one is said as one («1 קונטיינרים» DGO-526,
+                                #       «1 פריטים» DGO-530): a Hebrew plural glued to a count. The rule
+                                #       is already in the tree (apps/mail/mailview/static/app.js) and
+                                #       this is what keeps the rest of it there. Reads a screen's own
+                                #       file, a blueprint's jsCode and a compiled front-end's sources;
+                                #       comments, vendored files and ALL-CAPS constants are not read,
+                                #       and a scan that finds no file fails. The console's 13 sites
+                                #       were fixed the day it landed; the other 44 are a BASELINE that
+                                #       may only fall (`--update-baseline`, and a count that fell
+                                #       without being recorded fails too). Static and office-free, ~2 s.
+    "deploy-forward-lint",      # G90 - an office never deploys a tree that drops what it already
+                                #       runs (DGO-1016: a converge put vps1 eight days back and 418
+                                #       commits went, the cost meter among them). Every script that
+                                #       moves a checkout carries the never-back guard; dcx asks the
+                                #       machine's ledger before a build or recreate; both are run for
+                                #       real over a temporary repository. Office-free, ~3 s.
 ]
 
 # Gates that REQUIRE A LIVE STACK. They are not in N8N_SET because a stackless lane would fail
@@ -332,15 +349,13 @@ KNOWN_RED = {
     # GATES.md but measured GREEN on 2026-08-06 — left off this list so they stay enforced.
     # G44 dead-activation-lint went green the same day (whatsappSendDoc01 deactivated).
     #
-    # G83 embed-route-lint is RED DELIBERATELY and it is a MIGRATION, not a wrong gate: the owner
-    # asked on 2026-10-12 that the console URL be the state of the office in EVERY app — and, when
-    # the first cut asked the apps to carry an office protocol, that it be «בלי סריקות וקוד מורכב»:
-    # the console's tail IS the app's own URL (identity, under the app's mount) and the shell reads
-    # the frame's own navigations. The mechanism is shipped (console `watchFrameRoute`, measured in
-    # ci-artifacts/route-contract/navigate-probe.py); what is left is the apps whose screens are not
-    # in their URL at all — and this gate IS that list (seven the day it was re-aimed, one of them
-    # allowed by name). It leaves this roster when the last one routes.
-    "embed-route-lint",
+    # G83 embed-route-lint sat here for a few hours on 2026-10-12 as a MIGRATION, not a wrong gate: the
+    # owner asked that the console URL be the state of the office in EVERY app, and the gate was the
+    # list of what was left. Seven rounds later it went GREEN and left this roster — which is what the
+    # roster is for: 15 embedded apps, 13 keeping their screen in their own URL (drive, computers,
+    # alerts, my-docs, connections, dgo-extend, any-concurrency converted that night) and 2 named
+    # allowances (`hello-bina` answers one fixed sentence; `machine` is a live dashboard with nothing
+    # to select), each with its reason inside the gate.
 }
 
 # Scripts under scripts/refactor/ that are not gates (libraries, generators, self-tests).
@@ -467,14 +482,41 @@ def run_one(stem: str, live: bool = False) -> subprocess.CompletedProcess:
 
 
 def self_test() -> int:
-    """Prove the harness reads a real exit status on THIS host."""
+    """Prove the harness reads a real exit status on THIS host, and that it CATCHES a reused number."""
     p = subprocess.run([sys.executable, "-c", "import sys; sys.exit(3)"],
                        capture_output=True, text=True)
     ok = p.returncode == 3
     print(f"  [{'ok ' if ok else 'FAIL'}] subprocess reports a real exit status "
           f"(expected 3, got {p.returncode})")
-    print("\nrun-gates self-test: " + ("1/1 passed" if ok else "0/1 passed — "
-          "subprocess status is unreliable here too; do not trust any gate result"))
+    # THE NUMBERING CHECK, PROVEN — not promised. `run-gates.py` exited 1 with every gate green for
+    # as long as `counted-plural-lint` and `identity-header-lint` both declared G86 (fixed 2026-10-26
+    # by moving the former to G89), and the check that says so is derived from the filesystem, so it
+    # can be proven here without the real tree: two scripts that declare one number must come back
+    # named, each of them, under that number.
+    import shutil
+    import tempfile
+    tmp = pathlib.Path(tempfile.mkdtemp())
+    try:
+        for stem in ("alpha-lint", "beta-lint"):
+            (tmp / f"{stem}.py").write_text(f'"""{stem} — gate G86: a fake, for this self-test."""\n',
+                                            encoding="utf-8")
+        global GATE_DIR
+        saved, GATE_DIR = GATE_DIR, tmp
+        try:
+            dupes = duplicate_numbers()
+            (tmp / "beta-lint.py").write_text(
+                '"""beta-lint — gate G99: the same script, a number of its own."""\n', encoding="utf-8")
+            dupes_after = duplicate_numbers()
+        finally:
+            GATE_DIR = saved
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    d_ok = dupes == {"G86": ["alpha-lint", "beta-lint"]} and dupes_after == {}
+    print(f"  [{'ok ' if d_ok else 'FAIL'}] two gates declaring one number are named, both of them "
+          f"({dupes}), and one number each is silent ({dupes_after})")
+    ok = ok and d_ok
+    print("\nrun-gates self-test: " + ("2/2 passed" if ok else "FAILED — "
+          "subprocess status is unreliable here too, or the numbering check stopped catching"))
     return 0 if ok else 1
 
 

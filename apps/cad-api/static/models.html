@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Models — FreeCAD</title>
+<link rel="stylesheet" href="/static/cad.css?v=2">
+</head>
+<body>
+<header class="top">
+  <h1>The models</h1>
+  <span class="sub">every cap built in FreeCAD, each at its own address</span>
+  <a href="/" class="sub">The caps' price models</a>
+</header>
+<main>
+  <p class="lead">Each model is the cap part by part: the sheet-metal pieces with their bends and flats, the mesh, every rivet
+    and screw, its parts list and its build sheet. Open one to turn it in 3D, print its build sheet or download its files.
+    Its address is the link to send.</p>
+  <div class="grid" id="models"><p class="src">Loading the models…</p></div>
+</main>
+<script type="module">
+  import { modelsPage } from '/static/models.js?v=1';
+  modelsPage(document.getElementById('models'));
+</script>
+</body>
+</html>

@@ -21,7 +21,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 . "${REPO_ROOT}/scripts/lib.sh"   # read_env, DN, N8N_CONTAINER, PG_CONTAINER
 N8N="${N8N_CONTAINER}"; PG="${PG_CONTAINER}"
-PGUSER="$(read_env POSTGRES_USER)"; PGUSER="${PGUSER:-bina-comp}"
+PGUSER="$(read_env POSTGRES_USER)"; PGUSER="${PGUSER:-hacohen}"
 PGDB="$(read_env POSTGRES_DB)"; PGDB="${PGDB:-n8n}"
 log(){ echo "[load-dump] $*"; }
 

@@ -407,10 +407,19 @@
    font — the shortest tag that still names an office — and it leaves the label 107px, its full
    width. The percentage half keeps a WIDE rail from giving the office an unbounded share; `flex:0 8`
    then resolves what is left in the label's favour. `.is-remote` and not every meta on purpose: a
-   count has no office to name, and its fixed slot is what makes a column of them line up. */
+   count has no office to name, and its fixed slot is what makes a column of them line up.
+
+   …and it reads the way its WORDS do. An office's name is a Latin one («claude-cloud»), and in the
+   row's right-to-left direction this box cut it on the side it starts: «…laude-cloud» was drawn on
+   six screens of the live office (2026-11-02 — drive, mail, concurrency, alerts, connections, apps),
+   the same row every time. `direction:ltr` puts the cut on the name's own end, and `plaintext` takes
+   the box's direction from its first strong character, so an office named in Hebrew keeps its
+   beginning too. The `5em` cap stays as measured: it is what leaves the app's name its full width,
+   and a name cut at its END is what the row's tooltip (`remoteTip`) is for. */
 .bnv-item.is-remote .bnv-meta{
   flex:0 8 auto;min-width:0;max-inline-size:min(40%,5em);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  direction:ltr;unicode-bidi:plaintext;
 }
 /* trailing slot: a badge, a dot, a chevron. `nowrap` so it can never wrap into a second line. */
 .bnv-tail{flex:none;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;color:var(--bnv-ink-2);font-size:12px}
@@ -526,6 +535,19 @@
 .bnv-burger:hover{background:color-mix(in srgb, currentColor 8%, transparent)}
 .bnv-burger:focus-visible{outline:2px solid currentColor;outline-offset:-2px}
 .bnv-burger svg{width:20px;height:20px}
+/* The burger the BASE draws for a page that placed none (the script adds `html.bnv-float` once it
+   has): the same 44/48px target, parked in the corner a phone leaves free and ABOVE the scrim, so
+   the one button both opens the menu and shuts it. Its own test is the window and not a container —
+   the button lives on `body`, outside the menu's container, and a container query cannot see it.
+   Measured 2026-10-12: without this, `sites`, `domains` and `drive` had no way into their menu on a
+   phone at all. */
+.bnv-burger.is-float{
+  display:none;position:fixed;z-index:56;
+  inset-block-end:calc(12px + env(safe-area-inset-bottom, 0px));inset-inline-start:12px;
+  width:48px;height:48px;border-radius:50%;
+  background:var(--surface);color:var(--ink);border:1px solid var(--line);box-shadow:var(--elev-2);
+}
+@media (max-width:599px){ html.bnv-float .bnv-burger.is-float{display:inline-flex} }
 .bnv-scrim{
   position:fixed;inset:0;z-index:55;border:0;padding:0;
   background:var(--scrim);   /* the palette's own: mixed from the menu's ink it was a WHITE veil wherever that ink is light */
@@ -866,7 +888,8 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font
 @media (prefers-reduced-motion:reduce){.dot.checking{animation:none}}
 
 /* ── guided connect wizard (§4b): provider → method → provide → verify → done ── */
-.modal.wide{width:min(600px,94vw);max-height:88vh;overflow:auto}
+/* width only — the bound and the scrolling body come from the shared dialog block */
+.modal.wide{width:min(600px,94vw)}
 .cw-steps{display:flex;flex-wrap:wrap;gap:5px;margin:2px 0 14px}
 .cw-step{padding:3px 9px;border-radius:999px;background:var(--bg);border:1px solid var(--line);color:var(--muted);font-size:11px;white-space:nowrap}
 .cw-step.cur{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-d);font-weight:700}
@@ -932,10 +955,29 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font
 .btn:hover{background:var(--accent-d)}
 .btn.ghost{background:transparent;border:1px solid var(--line);color:var(--ink)}
 .btn.sm{padding:5px 10px;font-size:12px}
-.modal-ov{position:fixed;inset:0;background:var(--scrim);display:flex;align-items:center;justify-content:center;z-index:50}
-.modal{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px;width:min(360px,92vw);box-shadow:var(--elev-4)}
-.modal-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+/* @bina-modal:start */
+/* A dialog is bounded by its window and its title never leaves it. The card used to scroll WHOLE —
+   the title and the way out went with the content, so in a window shorter than the card they began
+   outside it with nothing to scroll (DGO-518 the console's own dialogs, DGO-519 INDOX's). Two
+   surfaces had already worked this out on their own and three had not, so the rule is here once.
+   `--mp` is the card's own padding said once: the header takes it with it and sticks that far ABOVE
+   the content edge, which is where a padded scroller measures `top` from. The action row stays at
+   the form's end on purpose — stuck to the bottom it could be pressed with the refusal it explains
+   out of sight above it.
+   WIDTH IS NOT HERE. Each surface sizes its own dialogs and they differ (420px, 460px, 600px,
+   760px), so a surface sets it AFTER this block, where the cascade lets it win. `16px` is the radius
+   every surface that has one already uses; `--radius` is an app's own token and the console has
+   none, so the shared value is the number, not a variable that would resolve to nothing there. */
+.modal-ov{position:fixed;inset:0;background:var(--scrim);display:flex;align-items:center;justify-content:center;z-index:50;padding:18px}
+.modal{--mp:22px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:var(--mp);
+       max-height:92vh;overflow:auto;box-shadow:var(--shadow-lg)}
+.modal-h{display:flex;align-items:center;justify-content:space-between;gap:12px;position:sticky;top:calc(-1*var(--mp));z-index:1;
+         margin:calc(-1*var(--mp)) calc(-1*var(--mp)) 4px;padding:var(--mp) var(--mp) 10px;background:var(--surface)}
 .modal-h h3{margin:0;font-size:16px}
+@media (max-height:399px){.modal-ov{padding:8px}.modal{--mp:14px}}
+/* @bina-modal:end */
+/* the shared block carries no width on purpose: this surface sizes its own dialogs */
+.modal{width:min(360px,92vw)}
 /* the page's own sign-in ran out (app.js signedOut): over everything, the desktop's layers included */
 .modal-ov.signed-out{z-index:10000}
 .signed-out .modal{display:grid;gap:12px}
@@ -1043,9 +1085,12 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font
 .sw-ic .ic-svg{width:30px;height:30px}
 .sw-nm{font-size:13px;font-weight:700;text-align:center;max-width:100%;overflow:hidden;
        text-overflow:ellipsis;white-space:nowrap}
-.sw-x{position:absolute;top:6px;inset-inline-start:6px;width:26px;height:26px;border-radius:50%;
+/* 32x32, the same control as `.sw-close` above it: at 26x26 this was the one target on the drawer a
+   thumb could miss (DGO-529 measured it at 26 and the floor is 30). Two closes in one surface do not
+   need two sizes. */
+.sw-x{position:absolute;top:6px;inset-inline-start:6px;width:32px;height:32px;border-radius:50%;
       border:0;background:var(--surface-2);color:var(--muted);cursor:pointer;display:grid;place-items:center}
-.sw-x .ic-svg{width:13px;height:13px}
+.sw-x .ic-svg{width:16px;height:16px}
 
 /* ── the phone launcher ──────────────────────────────────────────────────────────
    The rail is hidden below 640px, and a bottom bar of four items cannot reach sixteen apps.

@@ -1,0 +1,30 @@
+# מילון — the terms a reader searches for («מה זה …»): open source, self-hosting, AI agents, licences,
+# networks, Israeli business words. One piece per batch of entries, 40–90 words per entry. Shape and
+# rules: content/BRIEF.md (`type: glossary`).
+# Each piece: `content.glossary.<slug>-<lang>`, created under this blueprint by the content importer.
+id: content-glossary
+version: 1
+order: 19
+extends:
+- content-library
+name:
+  he: מילון
+  en: Glossary
+summary:
+  he: מונחי קוד פתוח, אירוח עצמי, סוכני AI ועסקים בישראל — הגדרה קצרה וברורה לכל אחד, וקישור לעמוד שמרחיב.
+  en: Terms of open source, self-hosting, AI agents and Israeli business — a short, clear definition of
+    each, and a link to the page that goes deeper.
+slots:
+- key: content.glossary.hub-he
+  section: content
+  group: glossary
+  kind: richtext
+  lang: he
+  label:
+    he: פתיח המילון
+    en: Glossary — opening text
+  constraints:
+    note: 40–90 words — the glossary's opening
+  targets:
+  - channel: website
+  - channel: google-search

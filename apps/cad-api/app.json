@@ -1,0 +1,56 @@
+{
+  "id": "cad-api",
+  "title": {
+    "he": "מודלים פרמטריים",
+    "en": "Parametric models"
+  },
+  "summary": {
+    "he": "הכובעים כמודלים דיגיטליים: מידות העבודה פנימה — חלקים לחיתוך, גיליונות, כתב כמויות, עלות וקובץ תלת-ממד",
+    "en": "Caps as digital replicas: a job's sizes in — the pieces to cut, the sheets, the bill of materials, the cost and the 3D file"
+  },
+  "layer": 3,
+  "kind": "service",
+  "version": "0.2.0",
+  "compose": "docker-compose.yml",
+  "capabilities": [],
+  "use": [],
+  "connections": [],
+  "health": {
+    "structural": "auto",
+    "probe": {
+      "http": "http://cad-api:8996/healthz",
+      "interval": "30s"
+    }
+  },
+  "resources": {
+    "cpus": "1",
+    "memory": "768M"
+  },
+  "routing": [
+    {
+      "host": "cad-api",
+      "port": 8996,
+      "service": "cad-api",
+      "auth": "sso",
+      "emit_labels": true,
+      "sso": {
+        "slug": "cad-api",
+        "display_name": "CAD API",
+        "default_host": "cad-api.localhost",
+        "base_url_env": "CAD_API_BASE_URL",
+        "local_twin": true
+      }
+    }
+  ],
+  "data": {
+    "volumes": [
+      "cad_projects"
+    ],
+    "on_uninstall": "keep",
+    "note": "cad_projects holds the models this api writes (STEP / glTF), shared with the cad app's FreeCAD when both run."
+  },
+  "agent": {
+    "context": "AGENT.md",
+    "order": 73
+  }
+}

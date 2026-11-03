@@ -26,14 +26,17 @@ WG_DIR=/etc/wireguard
 # REPLACED, not merged. `nft -f` ADDS the rules of a chain that already exists, so applying the same
 # document twice made every rule appear twice — measured 2026-10-01 on the MacBook, where `from_tunnel`
 # held two copies of its `drop` and a `serve` accept that a later render REMOVED would have survived.
-# firewall.py's contract is that the whole table is replaced on every apply, so the old table goes
-# first. The window between the two commands is the price of not using `destroy table`, which the
-# nftables this image installs does not know.
+# firewall.py's contract is that the whole table is replaced on every apply — and it is replaced in ONE
+# transaction. Deleting the old table in a command of its own and loading the new one second left the
+# office with NO allow-list whenever nft refused the new rules (a served port outside 1–65535 did; in a
+# scratch network namespace, nftables 1.0.2: 2 rules in force → 0 after the refused load). nft applies a
+# file all or nothing, so the prelude (create-if-missing, then delete) travels with the new table: a
+# refused ruleset leaves the one that was in force, and no `destroy table` is needed (DGO-603).
 apply_firewall() {
   [ -s /tunnel/nftables.rules ] || return 0
-  nft delete table inet dgo 2>/dev/null || true
-  nft -f /tunnel/nftables.rules && log "firewall applied" \
-    || log "nftables refused the rules — no allow-list is in force"
+  { printf 'table inet dgo {}\ndelete table inet dgo\n'; cat /tunnel/nftables.rules; } > /tmp/dgo.nft
+  nft -f /tmp/dgo.nft && log "firewall applied" \
+    || log "nftables refused the new rules — the allow-list that was in force stays in force"
 }
 
 # The pairs this container is asked to hold: one name per rendered file, `wg<slot>`. A plan written
@@ -188,6 +191,10 @@ scan_peer() {
   # crediting the address that came after it (a stamp has one-second resolution).
   wg set "$iface" peer "$peer" persistent-keepalive 1 2>/dev/null || true
   for ip in $(sed -n 's/^cand //p' "$req"); do
+    # A pair that LEFT the plan (unpaired, or paired again on another slot) is not searched for any
+    # more: the loop that applies plans waits for this one, so a new pair sat behind a five-minute scan
+    # of the interface it was about to retire (measured 2026-10-19 on the MacBook: wg4 → wg5).
+    pair_conf "$iface" >/dev/null 2>&1 || { log "scan $want: $iface left the plan — stopped"; break; }
     tried=$((tried + 1))
     t_set="$(date +%s)"
     wg set "$iface" peer "$peer" endpoint "$ip:$port" 2>/dev/null || break

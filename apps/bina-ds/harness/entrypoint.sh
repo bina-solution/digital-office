@@ -113,17 +113,65 @@ if [ -n "${BINA_DS_BOOT_NOTICE:-}" ]; then
       | curl -fsS -m 10 -H 'Content-Type: application/json' --data-binary @- http://notifications:8977/api/notifications >/dev/null 2>&1 || true ) &
 fi
 
-# The office pulse: the 5-minute reminder that outlives a turn (apps/bina-ds/pulse.sh). The owner's
-# standing ask, 2026-10-09: "set yourself a reminder every 5 minutes to verify that development is
-# progressing as well as possible … keep working until everything is perfect". It is this container's
-# own timer — loopback API, this container's token, nothing leaves — so it survives exactly what killed
-# the first attempt (a turn cut mid-work when this container was recreated). BINA_DS_PULSE=0 disables.
-PULSE="${DSH_OFFICE_ROOT:-/workspace/office}/apps/bina-ds/pulse.sh"
-if [ "${BINA_DS_PULSE:-1}" != "0" ] && [ -f "${PULSE}" ]; then
-  setsid nohup bash "${PULSE}" >> "${DSH_HOME}/pulse.log" 2>&1 &
+# NO CONTAINER-SIDE TIMER LIVES HERE. The office's 5-minute pulse was a shell loop in this container
+# (apps/bina-ds/pulse.sh — deleted 2026-10-14, DGO-562). The owner's ruling that day: «use n8n
+# automation blueprinted inside bina-ds app. And remove pulse and all of this mod bullshit, keep clean
+# and official». So the schedule is DECLARED as a workflow under apps/bina-ds/blueprint/n8n/ and runs
+# in the office's n8n; what this container owns is one narrow, declared door for it to call
+# (`POST /v1/seder/<cycle>` on the adapter below), which needs no secret and fires a cycle at most once
+# a day. Nothing in this container polls, sleeps or wakes on a timer.
+
+# ── THE HARNESS RUNS AS A CHILD, SO ITS EXIT LEAVES A RECORD ─────────────────────────────────────
+# This used to end with `exec`, which made the harness PID 1: when that process exited — for any
+# reason, including a clean exit 0 — Docker's `unless-stopped` policy restarted the SAME container,
+# every conversation mid-tool-call died with an outcome the harness could not record, and NOTHING was
+# written down anywhere. Measured twice on 2026-10-14: 01:44:55Z the container came back with
+# `RestartCount=1`, `ExitCode=0`, no shutdown line at all (two sessions and the two executors the
+# day's שחרית had just spawned were killed); and the owner reported the same shape again at 04:44
+# local. The evidence for that day had to be reconstructed from the sessions' own logs after the fact,
+# because neither the container log nor the app's log carried a word about it.
+#
+# What changes: the harness is started as a CHILD and waited on. Its exit — a code, or the signal that
+# ended it — is appended to a file **on the volume**, the one place that survives the same container
+# being restarted, and the NEXT boot reads that file and says what happened: a log line always, and a
+# notification when the exit was not clean. The restart itself is deliberately NOT suppressed: the
+# office must come back. What was missing was the record, not the recovery.
+#
+# The trap forwards SIGTERM/SIGINT to the child, so `docker stop` still reads as a deliberate stop and
+# not as a crash — a stop must never be reported to the owner as "בינה קרסה".
+EXIT_LOG="${DSH_HOME}/harness-exit.log"
+if [ -s "${EXIT_LOG}" ]; then
+  last="$(tail -n 1 "${EXIT_LOG}")"
+  echo "entrypoint: the previous harness process ended — ${last}" >&2
+  case "${last}" in
+    *"exit=0"*) : ;;   # a clean exit is still worth the line above, and is not worth a notification
+    *)
+      ( sleep 8; python3 -c 'import json, sys; print(json.dumps({"source": "bina-ds", "source_id": "harness-exit", "level": "warning", "title": "בינה יצאה מעצמה והלשכה הופעלה מחדש", "body": sys.argv[1], "link": "/#/m/bina"}, ensure_ascii=False))' "התהליך של בינה הסתיים מעצמו והמכולה הופעלה מחדש. הרשומה: ${last}" \
+          | curl -fsS -m 10 -H 'Content-Type: application/json' --data-binary @- http://notifications:8977/api/notifications >/dev/null 2>&1 || true ) &
+      ;;
+  esac
 fi
+: >"${EXIT_LOG}"          # this boot's own record; whatever was there has just been read
 
 cd /opt/bina/harness/profile
 set -- node_modules/.bin/dsh --profile "${DSH_PROFILE}" --no-open --port "${DSH_PORT}"
 for h in ${DSH_TRUSTED_HOSTS:-}; do set -- "$@" --trusted-host "$h"; done
-exec "$@"
+"$@" &
+harness_pid=$!
+# The office's own time on every line (the door learnt this the hard way: a UTC line beside local
+# ones reads as a different day).
+record_exit() {   # $1 = exit code, $2 = signal name or empty
+  printf '%s office=%s pid=%s %s\n' \
+    "$(date -u '+%FT%TZ')" "$(TZ="${TZ:-Asia/Jerusalem}" date '+%F %T')" "${harness_pid}" \
+    "${2:+signal=${2} }exit=$1" >>"${EXIT_LOG}" 2>/dev/null || true
+}
+trap 'kill -TERM "${harness_pid}" 2>/dev/null || true; wait "${harness_pid}" 2>/dev/null || true; record_exit 0 TERM; exit 0' TERM INT
+# `|| rc=$?` and not a bare `wait`: this script runs under `set -e`, so a child that exited non-zero
+# would end the shell at the `wait` — BEFORE the record line, which is the one thing this whole block
+# exists to write. Measured on the first run of this supervisor (2026-10-14): the crashing-harness case
+# produced an empty `harness-exit.log` and looked exactly like the silent death it is meant to fix.
+rc=0
+wait "${harness_pid}" || rc=$?
+trap - TERM INT
+record_exit "${rc}"
+exit "${rc}"

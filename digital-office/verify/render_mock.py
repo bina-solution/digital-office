@@ -3,7 +3,7 @@ from playwright.sync_api import sync_playwright
 import re, os
 html=open('platform-mockup.html').read()
 ids=re.findall(r'<section class="screen" data-screen="([^"]+)"', html)
-url='file:///home/user/deployment-bina-comp/digital-office/platform-mockup.html'
+url='file:///home/user/deployment-hacohen/digital-office/platform-mockup.html'
 os.makedirs('verify/out/mock',exist_ok=True)
 with sync_playwright() as p:
     b=p.chromium.launch(executable_path="/opt/pw-browsers/chromium-1194/chrome-linux/chrome")

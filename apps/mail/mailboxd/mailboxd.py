@@ -3,7 +3,7 @@
 
 Adding a mailbox is one line in `postfix-accounts.cf`:
 
-    person114@example.com|{SHA512-CRYPT}$6$…
+    person88@example.com|{SHA512-CRYPT}$6$…
 
 and that is the whole of "a new person in this company gets an address" — no DNS, no certificate,
 no restart, because the company's domain records already exist (ai/context/mail-multi-tenant.md).
@@ -56,13 +56,34 @@ docker-mailserver watches its config directory (`check-for-changes.sh`) and rege
 and Dovecot maps when a file changes. Appending a line is therefore live within seconds. That is
 what makes step 3 of onboarding — "add users from the UI" — true rather than "add users and then
 redeploy".
+
+── why a write is confirmed by logging in (DGO-1025) ─────────────────────────────────────────────
+"Live within seconds" has a hole, and a fresh install falls into it every time. docker-mailserver
+reads this file into Dovecot's userdb during its start-up (`_create_accounts`), and only once its
+start-up scripts are done does it take the checksum the change detector compares against
+(`_prepare_for_change_detection`). A line written between those two moments is in the baseline and
+not in the userdb, and the detector never sees a change. On a cold `bbox run` mailapi's profile
+bootstrap creates its mailboxes exactly then (measured 2026-10-22: userdb 12:50:27, admin and user2
+written 12:50:28.9 and 12:50:29.2, baseline 12:50:29), so dovecot answered `unknown user` for good
+and mailapi stayed unhealthy until somebody restarted the mail server.
+
+This process cannot restart the server (it has no docker socket, by design) and must not, so it
+does what the detector is waiting for: after every write it logs in as the account it just wrote,
+over the same IMAP mailapi uses. Accepted — done. Refused by a server that IS answering, once the
+detector has had its time — it rewrites one comment line at the end of the file (the server's parser
+skips comments; its checksum does not), which the detector sees as a change and regenerates from.
+A server that is not answering yet is waited for, never nudged. A delete cannot be proved by a login
+(the password is gone with the account), so it is nudged once, after the server answers — or at the end
+of the watch if it never does (`_settle_delete`).
 """
+import imaplib
 import json
 import os
 import re
 import shutil
 import subprocess
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import unquote, urlparse
 
@@ -72,6 +93,19 @@ CFG = os.environ.get("MAILBOXD_CFG", "/cfg")
 ACCOUNTS = os.path.join(CFG, "postfix-accounts.cf")
 MAILDIR_ROOT = os.environ.get("MAILBOXD_MAILDIR_ROOT", "/var/mail")
 PORT = int(os.environ.get("MAILBOXD_PORT", "8971"))
+# Where a written account is proved live — the SAME variables, with the same defaults, that mailapi's
+# local backend logs in with (apps/mail/mailapi/local_app.py), so the proof is the login that matters.
+IMAP_HOST = os.environ.get("LOCALMAIL_IMAP_HOST", "mailserver")
+IMAP_PORT = int(os.environ.get("LOCALMAIL_IMAP_PORT", "143"))
+IMAP_SSL = os.environ.get("LOCALMAIL_IMAP_SSL", "0") == "1"
+# How long a write is watched, how often it is tried, and how long the detector (it polls every 2 s)
+# is given before the file is nudged. A nudge is a content change, so it is never repeated faster.
+CONFIRM_FOR = int(os.environ.get("MAILBOXD_CONFIRM_S", "900"))
+CONFIRM_EVERY = 10
+SETTLE = 20
+# The one line this service writes that is not an account. The server's parser and _entries() both
+# skip comments; only the checksum notices it, which is all it is for.
+NUDGE_MARK = "# mailboxd: regenerate "
 
 MAIL_DOMAIN = (os.environ.get("MAIL_DOMAIN") or "local.test").strip().lower()
 # The account mailapi itself authenticates as. It is not a mailbox like the others: deleting it
@@ -95,7 +129,11 @@ PRIMARY = (_primary_raw if "@" in _primary_raw else "%s@%s" % (_primary_raw, MAI
 # business card, and `"weird\ name"@…` is a support call rather than a feature. Lowercase because
 # Dovecot's lookup is case-sensitive on the stored form while humans are not — accepting `User2`
 # would create a mailbox that never receives the mail addressed to `user2`.
-LOCAL_RE = re.compile(r"^[a-z0-9](?:[a-z0-9._-]{0,61}[a-z0-9])?$")
+# DGO-621: `\Z`, not `$` — `$` passed "x\n@<domain>", and its line in the accounts file became two.
+LOCAL_RE = re.compile(r"^[a-z0-9](?:[a-z0-9._-]{0,61}[a-z0-9])?\Z")
+#: Dovecot's own default `auth_username_chars`: a username holding any other character is refused, by
+#: LOGIN and by PLAIN alike, as a failed login — `billing+in@`, `o'brien@` as much as a Hebrew address.
+DOVECOT_USERNAME = re.compile(r"[A-Za-z0-9._@-]+\Z")
 MIN_PW = 8
 # What a refusal SAYS is read by a person: mailapi and mailview forward `error` word for word, and
 # the mail's screen shows it. So it is a sentence in the office's language — an address, a domain
@@ -184,6 +222,150 @@ def _hash(password):
     return p.stdout.strip()
 
 
+# ── is a write live? (DGO-1025, see the module docstring) ─────────────────────────────────────────
+def _login(address, password):
+    """True: the server accepts it. False: the server answers that it does not know these
+    credentials. None: anything else — no answer, or a refusal that is not about the account (a
+    server that wants TLS first, say), which a nudge cannot cure and so must not trigger.
+
+    Nothing escapes: a server that closes before its greeting (`IMAP4.abort`) or greets with BYE ended
+    the watch with a traceback, and so did any password that is not ASCII — imaplib's LOGIN sends
+    ASCII only, so such a password goes as SASL PLAIN in UTF-8 (the second reader of DGO-1025). So
+    does one holding CR or LF: LOGIN's quoted string cannot carry them, they cut the command short, the
+    server answers BAD — never proved (the reader of rel12). An address the server's default refuses
+    as a username is not watched at all (`_confirm`, `DOVECOT_USERNAME`). The timeout outlasts
+    Dovecot's auth penalty (up to 15 s, plus its failure delay): a refusal that arrives late is still a
+    refusal, not silence."""
+    try:
+        c = (imaplib.IMAP4_SSL if IMAP_SSL else imaplib.IMAP4)(IMAP_HOST, IMAP_PORT, timeout=30)
+    except Exception:
+        return None
+    try:
+        if (address + password).isascii() and "\r" not in password and "\n" not in password:
+            c.login(address, password)
+        else:
+            c.authenticate("PLAIN", lambda _challenge: ("\0%s\0%s" % (address, password)).encode("utf-8"))
+        return True
+    except imaplib.IMAP4.error as e:
+        return False if "AUTHENTICATIONFAILED" in str(e) else None
+    except Exception:
+        return None
+    finally:
+        try:
+            c.logout()
+        except Exception:
+            pass
+
+
+def _nudge():
+    """One content change the detector will see, and nothing the server will read: the marker line
+    is replaced (never added to), so however often this runs the file holds at most one of it."""
+    lines = [ln for ln in _read_lines() if not ln.startswith(NUDGE_MARK)]
+    while lines and not lines[-1].strip():
+        lines.pop()
+    lines.append("%s%d" % (NUDGE_MARK, time.time()))
+    _write_lines(lines)
+
+
+def _confirm(address, password, line):
+    """Watch one write until the server lets that account in. `line` is what was written: once the
+    file no longer holds it (deleted, or its password set again), this watch has nothing to prove.
+
+    An address the server's default refuses as a username (`DOVECOT_USERNAME`) is not watched: every
+    refusal here is a nudge — 45 rewrites of the accounts file in one watch, for an account no nudge can
+    make live (the readers of rel12: a Hebrew address, then `billing+in@` and `o'brien@`, which reach the
+    file through mailserver-init's own accounts and a rotation). It is said once, and left as written."""
+    if not DOVECOT_USERNAME.match(address):
+        print("mailboxd: %s holds a character the server's default refuses in a username, so this write "
+              "is not watched" % address.encode("ascii", "backslashreplace").decode(), flush=True)
+        return
+    start = last = time.monotonic()
+    while time.monotonic() - start < CONFIRM_FOR:
+        time.sleep(CONFIRM_EVERY)
+        ok = _login(address, password)
+        if ok:
+            print("mailboxd: %s logs in (%ds after the write)" % (address, time.monotonic() - start),
+                  flush=True)
+            return
+        if ok is None or time.monotonic() - last < SETTLE:
+            continue
+        with _lock:
+            if line not in _read_lines():
+                # deleted, or its password set again (a newer watch has it) — or lost to another
+                # writer, which is why it is said
+                print("mailboxd: %s — the written line is no longer in %s; this watch ends"
+                      % (address, ACCOUNTS), flush=True)
+                return
+            _nudge()
+        last = time.monotonic()
+        print("mailboxd: %s is refused by the server %ds after the write — the change detector "
+              "missed it; nudged %s" % (address, last - start, ACCOUNTS), flush=True)
+    print("mailboxd: %s still cannot log in %ds after the write" % (address, CONFIRM_FOR), flush=True)
+
+
+def _confirm_safely(address, password, line):
+    """A watch that fails says so — by the error's type only, nothing of what it held — and the write
+    it watched stays exactly as written."""
+    try:
+        _confirm(address, password, line)
+    except Exception as e:
+        print("mailboxd: %s — the watch stopped: %s" % (address, type(e).__name__), flush=True)
+
+
+def _watch(address, password, line):
+    threading.Thread(target=_confirm_safely, args=(address, password, line), daemon=True).start()
+
+
+def _answers():
+    """Whether the server greets at all — the IMAP door open, nothing asked of it."""
+    try:
+        c = (imaplib.IMAP4_SSL if IMAP_SSL else imaplib.IMAP4)(IMAP_HOST, IMAP_PORT, timeout=30)
+    except Exception:
+        return False
+    try:
+        c.logout()
+    except Exception:
+        pass
+    return True
+
+
+def _settle_delete(address):
+    """A DELETE written in the same start-up window stays in Dovecot's userdb — the person can still log
+    in — and no login can prove otherwise: this service never holds the password of an account it
+    removes, and the server refuses an unknown user and a wrong password alike. So it is made sure of
+    instead: once the server answers and the detector has had its time, the file is nudged ONCE, and the
+    detector regenerates from a file without the account. One regeneration per delete; deletes are rare.
+    A server silent for the whole watch is nudged all the same at its end: a delete's nudge changes only
+    the marker, and a server restarted later (not recreated) skips its setup and applies only a change it
+    sees (the reader of this change). A file that is gone, or holds no account, is never nudged: the nudge
+    would make a file of its marker alone."""
+    who = address.encode("ascii", "backslashreplace").decode()
+    start, answered = time.monotonic(), False
+    while time.monotonic() - start < CONFIRM_FOR:
+        if _answers():
+            answered = True
+            time.sleep(SETTLE)
+            break
+        time.sleep(CONFIRM_EVERY)
+    with _lock:
+        if not os.path.exists(ACCOUNTS) or not _entries():
+            print("mailboxd: %s was removed, and %s is gone or holds no account — not nudged" % (who, ACCOUNTS),
+                  flush=True)
+            return
+        _nudge()
+    print("mailboxd: %s was removed — nudged %s %s, so the server's userdb drops it whenever it read the "
+          "file" % (who, ACCOUNTS, "once the server answered" if answered
+                    else "after %ds of a silent server" % CONFIRM_FOR), flush=True)
+
+
+def _settle_delete_safely(address):
+    try:
+        _settle_delete(address)
+    except Exception as e:
+        print("mailboxd: %s — the delete's watch stopped: %s"
+              % (address.encode("ascii", "backslashreplace").decode(), type(e).__name__), flush=True)
+
+
 # ── operations ────────────────────────────────────────────────────────────────
 def list_mailboxes():
     out = []
@@ -236,6 +418,7 @@ def create_mailbox(body):
             lines.pop()
         lines.append("%s|%s" % (addr, h))
         _write_lines(lines)
+    _watch(addr, pw, lines[-1])
     return {"ok": True, "address": addr, "maildir": _maildir(addr)}, 201
 
 
@@ -276,6 +459,7 @@ def set_password(address, body):
         if not changed:                      # cannot happen (checked above), but never write a
             return {"error": NO_SUCH, "address": addr}, 404             # file we did not change
         _write_lines(out)
+    _watch(addr, pw, "%s|%s" % (addr, h))
     return {"ok": True, "address": addr}, 200
 
 
@@ -309,6 +493,7 @@ def delete_mailbox(address):
         if not removed:
             return {"error": NO_SUCH, "address": addr}, 404
         _write_lines(kept)
+    threading.Thread(target=_settle_delete_safely, args=(addr,), daemon=True).start()
     md = _maildir(addr)
     # THE MAIL IS NOT DELETED, and that is a decision, not an omission. Removing the account stops
     # delivery and stops login — which is what "remove this person" means — while the messages they

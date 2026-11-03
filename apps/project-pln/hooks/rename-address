@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+#: project-pln — the office moved to another domain: its people's addresses in Plane move with it
+#
+# rename-address — every Plane user whose address is <local>@<old domain> becomes <local>@<new domain>:
+# the SAME user (memberships, work items, history), never a new one; invitations still pending at the old
+# address follow, workspace and project alike. Then PLANE_OWNER_EMAIL in .env, decided from STATE: it
+# follows whenever no account holds the old address any more — moved now, moved by an earlier run cut short
+# before the key, or never created (the next onboard then makes it on the new domain, not the old). The
+# domains come from the environment (DGO_RENAME_FROM, DGO_RENAME_TO, DGO_RENAME_DRY_RUN), set by `bbox
+# rename-address [--dry-run] <old> <new>`, which runs this for every enabled app that has one (FPG-34).
+#
+# NOT bootstrap.py's PLANE_OWNER_TAKE_OVER: that hands the instance to another PERSON (a new user, the old
+# one released). Here the person is the same and only their domain moved. An address — or an invitation —
+# whose new form is already someone else's is refused and named: two people never become one. Plane being
+# DOWN is a failure, not "nothing to move". One transaction; the dry run measures inside it, rolls back, and
+# exits non-zero when the real run would refuse. Who is on which domain afterwards is noted (rename_note)
+# for the hooks after this one.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # say, colors, cn, running, dcx, read_env_value, env_set, rename_note
+SVC=project-pln
+OLD="$(printf '%s' "${DGO_RENAME_FROM:-}" | tr '[:upper:]' '[:lower:]')"
+NEW="$(printf '%s' "${DGO_RENAME_TO:-}" | tr '[:upper:]' '[:lower:]')"
+DRY="${DGO_RENAME_DRY_RUN:-0}"
+domain='^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$'
+if ! [[ "${OLD}" =~ ${domain} && "${NEW}" =~ ${domain} && "${OLD}" != "${NEW}" ]]; then
+  say "${cr}[project-pln] rename-address: DGO_RENAME_FROM and DGO_RENAME_TO must be two different domains${c0}"
+  exit 1
+fi
+if ! running "$(cn "${SVC}")"; then
+  say "${cr}[project-pln] rename-address: Plane is enabled here but not running — nothing was moved; run it and try again${c0}"
+  rename_note PLANE_OWNER_EMAIL failed
+  exit 1
+fi
+KEYVAL="$(read_env_value PLANE_OWNER_EMAIL)"
+
+OUT="$(dcx exec -T -e DGO_RENAME_FROM="${OLD}" -e DGO_RENAME_TO="${NEW}" -e DGO_RENAME_DRY_RUN="${DRY}" \
+  -e DGO_KEY_VALUE="${KEYVAL}" "${SVC}" python3 /app/backend/manage.py shell -c '
+import os
+from django.db import transaction
+from plane.db.models import User, WorkspaceMemberInvite, ProjectMemberInvite
+old, new = os.environ["DGO_RENAME_FROM"], os.environ["DGO_RENAME_TO"]
+key = (os.environ.get("DGO_KEY_VALUE") or "").strip().lower()
+moved, refused, invites = [], [], 0
+def to_new(email):
+    return email.rsplit("@", 1)[0] + "@" + new
+def locals_on(dom):
+    return sorted({e.rsplit("@", 1)[0].lower() for e in User.objects.filter(email__iendswith="@" + dom).values_list("email", flat=True)})
+with transaction.atomic():
+    for u in User.objects.select_for_update().filter(email__iendswith="@" + old):
+        target = to_new(u.email)
+        if User.objects.filter(email__iexact=target).exclude(pk=u.pk).exists():
+            refused.append(u.email.rsplit("@", 1)[0])
+            continue
+        u.email = target
+        u.save(update_fields=["email"])
+        moved.append(u.email.rsplit("@", 1)[0])
+    for model, scope in ((WorkspaceMemberInvite, "workspace"), (ProjectMemberInvite, "project")):
+        for inv in model.objects.select_for_update().filter(email__iendswith="@" + old):
+            target = to_new(inv.email)
+            if model.objects.filter(**{scope: getattr(inv, scope)}, email__iexact=target).exclude(pk=inv.pk).exists():
+                refused.append("invitation:" + inv.email.rsplit("@", 1)[0])
+                continue
+            inv.email = target
+            inv.save(update_fields=["email"])
+            invites += 1
+    follows = to_new(key) if key.endswith("@" + old) and not User.objects.filter(email__iexact=key).exists() else ""
+    present, behind = locals_on(new), locals_on(old)
+    if os.environ.get("DGO_RENAME_DRY_RUN") == "1":
+        transaction.set_rollback(True)
+print("MOVED=" + ",".join(moved))
+print("REFUSED=" + ",".join(refused))
+print("INVITES=%d" % invites)
+print("PRESENT=" + ",".join(present))
+print("BEHIND=" + ",".join(behind))
+print("FOLLOWS=" + follows)
+' 2>&1 | tr -d '\r')"
+RC=$?
+fact() { printf '%s\n' "${OUT}" | sed -n "s/^$1=//p" | tail -1; }
+moved="$(fact MOVED)"; refused="$(fact REFUSED)"; invites="$(fact INVITES)"; follows="$(fact FOLLOWS)"
+if [ "${RC}" -ne 0 ] || ! printf '%s\n' "${OUT}" | grep -q '^FOLLOWS='; then
+  say "${cr}[project-pln] rename-address FAILED — nothing in Plane was changed (one transaction)${c0}"
+  printf '%s\n' "${OUT}" | grep -v '^[A-Z]*=' | grep -iv 'password\|secret\|token' | tail -6 | sed 's/^/  /'
+  rename_note PLANE_OWNER_EMAIL failed
+  exit 1
+fi
+rename_note PLANE_OWNER_EMAIL present "$(fact PRESENT)"
+rename_note PLANE_OWNER_EMAIL behind "$(fact BEHIND)"
+if [ "${DRY}" = 1 ]; then
+  say "[project-pln] DRY RUN, nothing changed — would move to @${NEW}: ${moved:-none}; invitations: ${invites:-0}; PLANE_OWNER_EMAIL → ${follows:-unchanged}; refused: ${refused:-none}"
+  [ -z "${refused}" ]; exit $?
+fi
+say "[project-pln] addresses moved to @${NEW}: ${moved:-none}; invitations moved: ${invites:-0}"
+{ [ -n "${moved}" ] || [ "${invites:-0}" != 0 ] || [ -n "${follows}" ]; } && rename_note - changed
+if [ -n "${follows}" ]; then
+  env_set PLANE_OWNER_EMAIL "${follows}" && say "[project-pln] PLANE_OWNER_EMAIL now names ${follows}" \
+    || { say "${cr}[project-pln] PLANE_OWNER_EMAIL could not be written — run this again${c0}"; exit 1; }
+fi
+if [ -n "${refused}" ]; then
+  say "${cy}[project-pln] NOT moved — the new address is already someone else's: ${refused}${c0}"
+  exit 1
+fi
+exit 0

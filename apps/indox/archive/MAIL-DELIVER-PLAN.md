@@ -29,7 +29,7 @@
 Final row: `STATUS=COMPLETED`, `API_TOOLS_ID=42a6a69e2e528113c1da4008b0ec8887`,
 `BASE_EXTRACTION_COMPLETED=true`, `PER_TYPE_EXTRACTION_COMPLETED=true`,
 `TYPE=BALANCE_SHEET` (from `AI_TYPE`+`LOCAL_TYPE`, after extraction),
-`TYPE_BY_SOURCE=BALANCE_SHEET` (evidence), company 512774019 אוהב ציון. **109 seconds.**
+`TYPE_BY_SOURCE=BALANCE_SHEET` (evidence), company 500000971 אוהב ציון. **109 seconds.**
 
 **Key secondary finding: the apitools uploader is not broken.** Given a real `LINK` it produced an
 id on the first attempt. The 37/38 `wrong_input` failures are purely the ordering defect (§1), so
@@ -136,14 +136,14 @@ The BS lane already solved relay senders. Its own note:
 
 > intermediary senders print the SaaS letterhead and name the supplier only in the subject
 
-Chain, in order: `From` → **display-name unwrap** (`person46@example.com` hides the real address in
+Chain, in order: `From` → **display-name unwrap** (`person42-x@example.com` hides the real address in
 the display name) → **forwarded-chain extraction** (drop `no-reply`/`noreply`/`mailer-daemon`/
 `donotreply` and ignore-listed) → lookup in `company_name_by_mail` **by email, then by domain** →
 `companies[name].identifiers[0]`. It emits `senderCandidates` (ordered) and `sourceText`
 (subject + first 100 chars of body), computed **once per mail** and stamped onto **every**
 attachment, each keeping its own binary.
 
-This is exactly the `noreply@DocServer.app` → קבוצת נגב case. Estate-wide today: `SENDER` on
+This is exactly the `person43@example.com` → קבוצת נגב case. Estate-wide today: `SENDER` on
 **106 of 3,031** mail rows, `COMPANY_BY_SENDER` on **25 of 25,972**.
 
 ## 5. Target — ONE mail deliver lane

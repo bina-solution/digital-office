@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+#: a fresh office's owner: the one-time first-run link
+# prepare — forward-auth's bring-up bootstrap (DGO-1090). Invoked generically by `bbox run` for every
+# enabled app that has one; bbox does not name this app.
+#
+# On a FRESH office nobody has been made yet: forward-auth's volume (forward_auth_data) has no users
+# file. So this mints a one-time code, hands the service ONLY its SHA-256 — through the binary itself,
+# `forward-auth -first-run`, since a scratch image has no shell to write with — and prints the link that
+# makes the office's owner (platform-base/forward-auth/setup.go). The line goes to bbox's output: on
+# Android the VM's serial console, which only the app can read, and which the app opens as the office's
+# first screen; on a server, the terminal of whoever ran `bbox run`.
+#
+# The code itself is kept root-only on this machine until the owner exists, so every `bbox run` before
+# then prints the SAME link (a fresh code on each run would void the link a person is holding). Once the
+# service says the owner exists, the code is deleted and nothing is printed again.
+set -euo pipefail
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+dc="${REPO_ROOT}/scripts/dc"
+code_file=/var/lib/forward-auth.first-run
+old_users=/var/lib/forward-auth/users
+sudo=""
+[ "$(id -u)" = 0 ] || sudo=sudo
+
+# The image this commit builds: `bbox run` builds after the prepare hooks, and an older image has neither
+# -first-run nor its own /etc/forward-auth. Not where the images were built for this very commit
+# (BBOX_PREBUILT — the phone's guest, where a build would run under emulation).
+if [ -z "${BBOX_PREBUILT:-}" ]; then
+  if ! built="$("${dc}" build forward-auth 2>&1)"; then
+    echo "[forward-auth] could not build its image; the build's last lines:"
+    printf '%s\n' "${built}" | tail -n 5 | sed 's/^/[forward-auth]   /'
+    exit 1
+  fi
+fi
+
+# ask <flag>: the service's one-word answer (owner-exists, pending, imported) from its own volume; on a
+# miss, its last lines, so a failure says what happened.
+ask() {
+  local out word
+  out="$("${dc}" run --rm --no-deps -T forward-auth "$1" 2>&1 || true)"
+  word="$(printf '%s\n' "${out}" | tr -d '\r' | grep -xE 'owner-exists|pending|imported' | tail -n 1 || true)"
+  if [ -n "${word}" ]; then echo "${word}"; else printf 'none: %s\n' "$(printf '%s\n' "${out}" | tail -n 3 | tr '\n' ' ')"; fi
+}
+
+# A users file the migration prepared on this machine before the state moved into the volume comes in
+# once; the old file stays, renamed, beside where it was.
+if ${sudo} test -s "${old_users}"; then
+  old="$(${sudo} cat "${old_users}")"
+  said="$(printf '%s\n' "${old}" | ask -import-users)"
+  kept="${old_users}.$(date -u +%Y%m%dT%H%M%SZ)"
+  case "${said}" in
+    imported)
+      ${sudo} mv "${old_users}" "${kept}"
+      echo "[forward-auth] ${old_users} is in the service's volume now; the old file is kept as ${kept}" ;;
+    owner-exists)
+      ${sudo} mv "${old_users}" "${kept}"
+      echo "[forward-auth] the volume already has its users file; ${old_users} was NOT merged into it, and is kept as ${kept}" ;;
+    *)
+      # left where it is, and the office goes on to its first run: a link beats a service with no users
+      echo "[forward-auth] ${old_users} could not come into the service's volume (${said}); it stays where it is" ;;
+  esac
+fi
+
+if ! ${sudo} test -s "${code_file}"; then
+  ( umask 077; openssl rand -hex 24 | ${sudo} tee "${code_file}" >/dev/null )
+  ${sudo} chmod 600 "${code_file}"
+fi
+code="$(${sudo} cat "${code_file}")"
+
+said="$(printf '%s\n' "${code}" | ask -first-run)"
+case "${said}" in
+  owner-exists)
+    ${sudo} rm -f "${code_file}"
+    exit 0 ;;
+  pending) ;;
+  *)
+    echo "[forward-auth] could not prepare the first run — ${said}"
+    exit 1 ;;
+esac
+
+env_of() { sed -n "s/^[[:space:]]*$1=//p" "${REPO_ROOT}/.env" 2>/dev/null | tail -1; }
+proto="$(env_of AUTH_PROTOCOL)"
+signin="$(env_of FORWARD_AUTH_BASE_URL)"
+console="$(env_of CONSOLE_BASE_URL)"
+domain="$(env_of DEPLOYMENT_DOMAIN)"
+# .env.ex's values interpolate ${DEPLOYMENT_DOMAIN}; compose does that, this resolves the one it uses
+signin="${signin//\$\{DEPLOYMENT_DOMAIN\}/${domain:-localhost}}"
+console="${console//\$\{DEPLOYMENT_DOMAIN\}/${domain:-localhost}}"
+proto="${proto:-http}"
+echo "[forward-auth] first run: open ${proto}://${signin:-signin.localhost}/setup?code=${code}&rd=${proto}://${console:-console.localhost}/"
+echo "[forward-auth]   it makes this office's owner, once; the link works until then, and never after"

@@ -57,6 +57,55 @@ while [ "$#" -gt 0 ]; do
 done
 [ -n "${APP}" ] || { echo "usage: push-app <app> [wfId ...] [--all|--dry-run|--force|--prime]" >&2; exit 2; }
 
+# AN APP THIS OFFICE HAS SWITCHED OFF IS NOT PUSHED — refused here, before anything is compiled or
+# sent. Measured 2026-10-11 on the HP office: `bbox n8n push indox` created SIXTY-NINE workflows in
+# the live instance and activated sixty-one of them (the INDOX scheduler, every extractor, the sync
+# engines) for an app whose own state is `disabled` — and whose n8n is disabled too — so the office
+# was handed automations its declaration says are not part of it. `bbox n8n push all` never had this
+# hole: the compiler filters by enablement. The scoped verb asks "where are this app's blueprints",
+# which is a different question from "should they run here". An app ABSENT from the state file is not
+# declared off and pushes as before; platform.state.yaml is the one writer of enablement, and this
+# asks it rather than guessing.
+# …and where the app's workflows run is the entry's `workflows` (DGO-945): `here` imports the
+# workflows of an app that runs in a linked office; another office's name refuses them although the
+# app runs here (platform/manager/reconcile.py workflows_here).
+# …and a `disabled` entry is not refused when the compiler lists the app among those whose workflows
+# THIS office holds (`reconcile.py blueprints`, the list `push all` and convergence use): the workflow
+# engine's own follow the engine wherever it runs, and n8n is `state: disabled` on the HP and the Mac
+# while bina-ds pulls it in (DGO-1001).
+if [ -f "${REPO_ROOT}/platform.state.yaml" ]; then
+  _declared_off="$( cd "${REPO_ROOT}" && python3 -c 'import sys, yaml
+try:
+    apps = (yaml.safe_load(open(sys.argv[1], encoding="utf-8")) or {}).get("apps") or {}
+except Exception:
+    raise SystemExit            # unreadable state: never invent a refusal from it
+e = apps.get(sys.argv[2])
+w = str(e.get("workflows") or "").strip().lower() if isinstance(e, dict) else ""
+if w and w != "here":
+    print("elsewhere:" + w)
+elif not w and isinstance(e, dict) and (str(e.get("state") or "").strip().lower() in ("disabled", "archived")
+                                        or str(e.get("enabled")).strip().lower() == "false"):
+    print("1")       # every shape a state line switches an app off in, not `state: disabled` alone (DGO-998)' \
+    platform.state.yaml "${APP}" 2>/dev/null || true )"
+  if [ "${_declared_off}" = "1" ] && { ( cd "${REPO_ROOT}" && python3 platform/manager/reconcile.py blueprints 2>/dev/null ) \
+                                         | tr -d '\r' | cut -f1 | grep -Fxq "${APP}"; }; then
+    _declared_off=""
+  fi
+  if [ "${_declared_off}" = "1" ]; then
+    echo "Error: '${APP}' is disabled in platform.state.yaml — its workflows are not part of this office," >&2
+    echo "       and pushing them would create and activate them in the live n8n. Enable it first" >&2
+    echo "       (./bbox apps enable ${APP}), or declare 'workflows: here' on its entry when it runs in a" >&2
+    echo "       linked office and this office's n8n is to run its workflows." >&2
+    exit 1
+  fi
+  case "${_declared_off}" in
+    elsewhere:*)
+      echo "Error: '${APP}' declares 'workflows: ${_declared_off#elsewhere:}' — its workflows run in that office's n8n," >&2
+      echo "       not here; pushing them here would run them twice." >&2
+      exit 1 ;;
+  esac
+fi
+
 docker ps --format '{{.Names}}' | grep -Fxq "${N8N_CONTAINER}" || { echo "Error: '${N8N_CONTAINER}' not running — per-app push needs the live API. For instance birth use 'bbox n8n push all'." >&2; exit 1; }
 
 # Resolve the app's blueprint dir from its manifest (same resolver push uses).
@@ -133,6 +182,9 @@ if ls "${DIR}"/*.workflow.ts >/dev/null 2>&1; then
 fi
 for _f in "${DIR}"/*.json; do [ -e "${_f}" ] && cp -n "${_f}" "${GEN}/"; done
 ls "${GEN}"/*.json >/dev/null 2>&1 || { echo "Error: '${APP}' blueprint compiled to nothing (${_rel})." >&2; exit 1; }
+# An address of an app that runs in a LINKED office, not here, goes to that office's door (DGO-945).
+( cd "${REPO_ROOT}" && python3 scripts/link-endpoints-apply --stage "${GEN}" ) \
+  || { echo "Error: '${APP}': the linked offices' addresses could not be applied — nothing pushed." >&2; exit 1; }
 
 # sha-diff cache — only changed workflows are pushed (the legacy n8n-push's one good idea).
 CACHE_DIR="${N8N_DIR}/.push-cache"; mkdir -p "${CACHE_DIR}"
@@ -311,6 +363,46 @@ done
 
 if printf '%s\n' "${RESULT}" | grep -q '^FAIL'; then
   echo "[push-app] FAILED — see lines above; cache NOT updated for failed ids." >&2
+  exit 1
+fi
+
+# ── READ BACK what n8n holds now, against what was sent ─────────────────────────────────────────
+# A 2xx says the API accepted the PUT, not that the body n8n STORED is the body in the file. DGO-584:
+# a Code node whose jsCode the compiler had cut at a raw backtick went up as 1191 of its 2161 chars,
+# n8n said 200, this hook said "ok update+activate", and the workflow died at its first run. Compile
+# now refuses that file (tooling/wrap.mjs); this is the second net, at the far end of the wire: every
+# workflow this run stored — updated or created — is read back through the API and each Code node's
+# jsCode/pythonCode compared with what was sent, by length and sha256. A difference is a FAILURE that
+# names the node; the cache is not advanced, so the next push sends that workflow again.
+_stored="$(printf '%s\n' "${RESULT}" | awk '$1=="ok"{print $3}' | tr '\n' ' ')$(printf '%s\n' "${NEW_IDS}" | tr '\n' ' ')"
+READBACK="$(docker exec -e N8N_API_KEY="${API_KEY}" -e IDS="${_stored}" "${N8N_CONTAINER}" node -e '
+const fs=require("fs"), http=require("http"), crypto=require("crypto");
+const CODE=["jsCode","pythonCode"];
+const sha=(s)=>crypto.createHash("sha256").update(s,"utf8").digest("hex").slice(0,12);
+function get(p){return new Promise((res,rej)=>{http.get({host:"127.0.0.1",port:5678,path:"/api/v1"+p,headers:{"X-N8N-API-KEY":process.env.N8N_API_KEY}},x=>{let s="";x.on("data",c=>s+=c).on("end",()=>res({st:x.statusCode,body:s}))}).on("error",rej)});}
+(async()=>{
+  let bad=0;
+  for(const id of process.env.IDS.split(/\s+/).filter(Boolean)){
+    const sent=JSON.parse(fs.readFileSync("/tmp/push-app/"+id+".json","utf8"));
+    const r=await get("/workflows/"+id);
+    if(r.st!==200){console.log("MISMATCH "+id+": read back HTTP "+r.st+" "+r.body.slice(0,120));bad++;continue;}
+    const live=new Map((JSON.parse(r.body).nodes||[]).map(n=>[n.name,n]));
+    let fields=0, wrong=0;
+    for(const s of sent.nodes||[]) for(const k of CODE){
+      const want=(s.parameters||{})[k]; if(typeof want!=="string") continue;
+      fields++;
+      const have=((live.get(s.name)||{}).parameters||{})[k];
+      if(have===want) continue;
+      wrong++;
+      console.log("MISMATCH node "+s.name+" ("+id+"): sent "+want.length+" chars of "+k+" sha "+sha(want)+", stored "+(typeof have==="string"?have.length+" chars sha "+sha(have):"none"));
+    }
+    if(wrong) bad++; else console.log("ok read back "+id+" ("+fields+" code field(s) equal)");
+  }
+  process.exit(bad?1:0);
+})().catch(e=>{console.log("MISMATCH fatal "+e.message);process.exit(1)});' 2>&1)" && _rb=0 || _rb=$?
+printf '%s\n' "${READBACK}" | sed 's/^/[push-app]   /'
+if [ "${_rb}" != "0" ]; then
+  echo "[push-app] FAILED — n8n does not hold what was sent (MISMATCH above); cache NOT updated." >&2
   exit 1
 fi
 

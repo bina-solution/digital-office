@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+#: cleanup-options — what a cleanup could free, and which actions this office allows (runs none):  ./bbox machine cleanup-options
+# Pipes the app's own CLI (platform-base/machine/cli.py) into its container: no address, no key, no rebuild.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+dcx exec -T machine python - cleanup-options < "$(npath "${REPO_ROOT}")/platform-base/machine/cli.py"

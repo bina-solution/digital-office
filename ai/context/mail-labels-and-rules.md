@@ -177,7 +177,7 @@ INDOX's sync pipeline (`syncV3*`, keyed on `label:<TO_SYNC name>`) can find labe
    `ai/context/` (`mail-organizer-refactor.md`, `architecture-map.md`, `api-abstraction-refactor.md`,
    `incoming-documents-architecture-and-productization.md`, `indox-full-ioc-outline.md`,
    `incoming-documents-onboarding.md`, `gdrive-sync-pairs-refactor.md`) and
-   `ai/obsidian/Projects/deployment-bina-comp/n8n System Map.md`.
+   `ai/obsidian/Projects/deployment-hacohen/n8n System Map.md`.
    **Deliberately left untouched:** `next-7h/*.md` (dated point-in-time snapshots, e.g.
    `GOOGLE-API-AUDIT.md` is a 2026-06-21 audit — editing them would misrepresent history, the same
    reason git log/commit messages aren't rewritten); `ci-artifacts/n8n-blueprint-map.md` and

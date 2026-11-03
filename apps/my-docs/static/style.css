@@ -179,7 +179,7 @@ input:focus,select:focus{outline:2px solid var(--accent-soft);border-color:var(-
 .hero-card .hc-amount{font-size:38px;font-weight:800;line-height:1.1;margin-top:8px}
 .hero-card .hc-sub{font-size:13px;color:var(--side-mut);margin-top:12px}
 .hero-card .hc-sub b{color:var(--olive-ink);font-weight:700}
-.kpi-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.kpi-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
 .kpi{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px 18px;
   box-shadow:var(--shadow);display:flex;flex-direction:column;justify-content:center}
 .kpi .kv{font-size:23px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
@@ -273,7 +273,13 @@ body:has(.editor:not(.hidden)) #bina-tell{inset-block-end:84px}
 
 /* narrow: the name and «מסמך חדש» share the first line, the tabs are the second */
 @media (max-width:720px){.side{padding-inline:12px}.side nav{order:3;flex-basis:100%}
-  .drawer-b{grid-template-columns:1fr}#dPdf{height:52vh}.main{padding:18px}}
+  .drawer-b{grid-template-columns:1fr}#dPdf{height:52vh}.main{padding:18px}
+  /* THE DASHBOARD'S OWN TWO COLUMNS. The hero card and the strip of four numbers stood side by side at
+     every width, and a `1fr` track never shrinks below its content — so the pair held a 643px floor and
+     the screen was 63px wider than a 580px window and 263px wider than a 380px one (measured
+     2026-10-13: the windows suite reported the number and not the element, and the element was
+     `div.kpi-strip`). A narrow frame puts the hero on its own row and the numbers two by two. */
+  .dash-top{grid-template-columns:1fr}.kpi-strip{grid-template-columns:repeat(2,minmax(0,1fr))}}
 /* a NARROW frame — a phone, a small window: a line's description takes a line of its own and the numbers
    the next. In one row the numbers' columns are fixed and the description got what was left: 35px at 390 */
 @media (max-width:560px){table.lines,table.lines thead,table.lines tbody{display:block}

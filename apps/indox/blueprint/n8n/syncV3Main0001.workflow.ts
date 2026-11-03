@@ -41,13 +41,13 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 @workflow({
     /*__n8n__*/ description: "The sync pass for one tenant, called by indox01 (the only clock) with __instance. Under the reconcile mutex: ONE config read (indoxSyncOn + the registry + the age bound, straight off the tenant's settings table the way the drainer reads its own gate), build one unit per enabled v3 pipe (drive: one per pair), run DISCOVERY for each (waited), then hand the same units to RUN (not waited). Nothing else: no run-state stamping, no continue-pass loop, no diff — the queue lives in sync_ledger and is inspectable between the two stages.",
     /*__n8n__*/ isArchived: false,
-    /*__n8n__*/ connections: {"When Called":{"main":[[{"node":"Try Lock","type":"main","index":0}]]},"Try Lock":{"main":[[{"node":"Lock Acquired?","type":"main","index":0}]]},"Lock Acquired?":{"main":[[],[{"node":"Read Config","type":"main","index":0}]]},"Read Config":{"main":[[{"node":"Build Pipes","type":"main","index":0}]]},"Build Pipes":{"main":[[{"node":"Route Source","type":"main","index":0}]]},"Route Source":{"main":[[{"node":"Discover Drive Each","type":"main","index":0}],[{"node":"Discover Gmail Each","type":"main","index":0}],[{"node":"Unlock","type":"main","index":0}]]},"Discover Drive Each":{"main":[[{"node":"Run Each","type":"main","index":0}]]},"Discover Gmail Each":{"main":[[{"node":"Run Each","type":"main","index":0}]]},"Run Each":{"main":[[{"node":"Unlock","type":"main","index":0}]]}},
+    /*__n8n__*/ connections: {"When Called":{"main":[[{"node":"Try Lock","type":"main","index":0}]]},"Try Lock":{"main":[[{"node":"Lock Acquired?","type":"main","index":0}]]},"Lock Acquired?":{"main":[[],[{"node":"Read Config","type":"main","index":0}]]},"Read Config":{"main":[[{"node":"Build Pipes","type":"main","index":0}]]},"Build Pipes":{"main":[[{"node":"Route Source","type":"main","index":0}]]},"Route Source":{"main":[[{"node":"Discover Drive Each","type":"main","index":0}],[{"node":"Discover Gmail Each","type":"main","index":0}],[{"node":"Unlock","type":"main","index":0}]]},"Discover Drive Each":{"main":[[{"node":"Assert Discovered","type":"main","index":0}]]},"Discover Gmail Each":{"main":[[{"node":"Assert Discovered","type":"main","index":0}]]},"Assert Discovered":{"main":[[{"node":"Run Each","type":"main","index":0}]]},"Run Each":{"main":[[{"node":"Unlock","type":"main","index":0}]]}},
     /*__n8n__*/ tags: [{"updatedAt":"2026-08-16T14:20:49.737Z","createdAt":"2026-08-16T14:20:49.737Z","id":"93ff3a3f-6b78-5d0a-a4de-2948ea161953","name":"app:indox"},{"updatedAt":"2026-07-30T23:42:19.465Z","createdAt":"2026-07-30T23:42:19.465Z","id":"d84b71a8-a6dd-4cc4-9ec4-44d6af9c8f76","name":"indox"},{"updatedAt":"2026-07-30T23:42:19.465Z","createdAt":"2026-07-30T23:42:19.465Z","id":"a659438c-0898-428d-aebd-72033caaefe4","name":"sync-v3"},{"updatedAt":"2026-08-05T22:56:59.007Z","createdAt":"2026-08-05T22:56:59.007Z","id":"edad0600-cc86-4f33-b016-311b555b8f4e","name":"indox-app"},{"updatedAt":"2026-08-05T22:56:59.007Z","createdAt":"2026-08-05T22:56:59.007Z","id":"c7d4bdbd-9cb8-4595-90d4-b200420c3fd2","name":"role:sync"}],
     /*__n8n__*/ versionMetadata: {"name":null,"description":null},
     /*__n8n__*/ meta: {},
     /*__n8n__*/ pinData: {},
     /*__n8n__*/ staticData: {},
-    /*__n8n__*/ shared: [{"updatedAt":"2026-07-30T23:42:27.037Z","createdAt":"2026-07-30T23:42:27.037Z","role":"workflow:owner","workflowId":"syncV3Main0001","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <shlomo@local.dev>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
+    /*__n8n__*/ shared: [{"updatedAt":"2026-07-30T23:42:27.037Z","createdAt":"2026-07-30T23:42:27.037Z","role":"workflow:owner","workflowId":"syncV3Main0001","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
     id: 'syncV3Main0001',
     name: 'Sync Main',
     active: true,
@@ -291,6 +291,27 @@ return units;`,
     };
 
     @node({
+        id: 'smn-assert-discovered',
+        name: 'Assert Discovered',
+        /*__n8n__*/ notes: "The ONE reader of a failed discovery. Both Discover nodes continue on error so one bad pipe cannot kill the others, which leaves the failure sitting on the item — and RUN must not receive it, because a unit whose listing never happened has no rows in sync_ledger for syncRun01 to TAKE. So the error is read HERE and the pass throws into errorHandler01 instead of dispatching a unit that only LOOKS discovered. Unlock is then skipped and the lock falls through to its Redis TTL (600s), the backstop Try Lock names; the next tick re-discovers the whole registry, so nothing is lost — discovery writes the queue, it does not consume it.",
+        type: 'n8n-nodes-base.code',
+        version: 2,
+        position: [1430, 0],
+    })
+    AssertDiscovered = {
+        jsCode: `const failed=[]; const ok=[];
+for(const it of $input.all()){
+  const j=(it&&it.json)||{};
+  const err=j.error||j.errorMessage;
+  if(err){ failed.push(String(j.pipe||j.source||j.__instance||'<unit>')+': '+String(err).slice(0,160)); continue; }
+  ok.push(it);
+}
+try{ $execution.customData.set('discovered', String(ok.length)); $execution.customData.set('discovery_failed', String(failed.length)); }catch(e){}
+if(failed.length) throw new Error('discovery failed for '+failed.length+' unit(s) — refusing to run a unit whose queue was never discovered: '+failed.join(' | '));
+return ok;`,
+    };
+
+    @node({
         id: 'smn-run-each',
         name: 'Run Each',
         /*__n8n__*/ notes: "Not waited: each Run is its own execution and fans its deliveries out further. The pass returns as soon as every unit is dispatched; the mutex is released right after.",
@@ -361,8 +382,9 @@ return units;`,
         this.RouteSource.out(0).to(this.DiscoverDriveEach.in(0));
         this.RouteSource.out(1).to(this.DiscoverGmailEach.in(0));
         this.RouteSource.out(2).to(this.Unlock.in(0));
-        this.DiscoverDriveEach.out(0).to(this.RunEach.in(0));
-        this.DiscoverGmailEach.out(0).to(this.RunEach.in(0));
+        this.DiscoverDriveEach.out(0).to(this.AssertDiscovered.in(0));
+        this.DiscoverGmailEach.out(0).to(this.AssertDiscovered.in(0));
+        this.AssertDiscovered.out(0).to(this.RunEach.in(0));
         this.RunEach.out(0).to(this.Unlock.in(0));
     }
 }

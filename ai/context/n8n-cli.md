@@ -10,7 +10,7 @@
 
 Full access to the production n8n instance via `docker exec` (CLI/DB) and the REST API.
 Production-first, read-mostly. General compose ops: [deployment-context.txt](deployment-context.txt).
-Deep "what the workflows do" map: `obsidian/Projects/deployment-bina-comp/n8n System Map.md`.
+Deep "what the workflows do" map: `obsidian/Projects/deployment-hacohen/n8n System Map.md`.
 
 ## Safety rules
 1. Treat as production. Prefer REST API / CLI for changes; Postgres is read-only inspection.
@@ -23,9 +23,9 @@ Deep "what the workflows do" map: `obsidian/Projects/deployment-bina-comp/n8n Sy
 
 ## Environment
 ```bash
-DEPLOY_DIR=/root/deployment-bina-comp
-N8N_PUBLIC_URL=https://n8n.bina-comp.bina-solutions.co.il
-N8N_API_BASE=https://n8n.bina-comp.bina-solutions.co.il/api/v1
+DEPLOY_DIR=/root/deployment-hacohen
+N8N_PUBLIC_URL=https://n8n.hacohen.bina-solutions.co.il
+N8N_API_BASE=https://n8n.hacohen.bina-solutions.co.il/api/v1
 ```
 - Containers: `n8n-bina-deployment` (main/webhook), `n8n-worker-{1,2}-bina-deployment` (workers), `n8n-task-runners-bina-deployment` (code nodes), `n8n-postgres-bina-deployment` (PG17), `redis-bina-deployment`.
 - Workflow files mounted at **`/home/node/workflows`** ↔ host `production/n8n/workflows/`.
@@ -70,7 +70,7 @@ Full create→develop→activate→execute→delete cycle verified working:
 - **Create:** `POST /workflows` with `{name,nodes,connections,settings}` → returns `id` (created inactive).
 - **Develop:** `PUT /workflows/<id>` with the same minimal body (export to `/tmp/<id>-before.json` first). For node-only metadata, strip API-rejected fields.
 - **Activate / deactivate:** `POST /workflows/<id>/activate` | `/deactivate` (registers/removes the trigger's `webhook_entity` row). The public API has **no run/execute endpoint** and **no delete-via-CLI**.
-- **Execute:** trigger it — webhook workflow: `curl https://n8n.bina-comp.bina-solutions.co.il/webhook/<path>`; confirm via `GET /executions?workflowId=<id>` (`status:"success"`).
+- **Execute:** trigger it — webhook workflow: `curl https://n8n.hacohen.bina-solutions.co.il/webhook/<path>`; confirm via `GET /executions?workflowId=<id>` (`status:"success"`).
 - **Delete:** `DELETE /workflows/<id>` (deactivate first). Returns the deleted workflow.
 
 ## Known workflows & credential IDs (no secret material)
@@ -78,14 +78,14 @@ Full create→develop→activate→execute→delete cycle verified working:
 |---|---|---|
 | `QR6p46Wpmvo7z53c` | Chat agent (public) + Gmail/Drive/Sheets MCP clients | `e5616171-e3b5-4c39-81d4-67409f9fa60a/chat` |
 | `gmailMcpAgent01` | Gmail MCP Server | `gmail-enhanced` |
-| `gDriveMcpAgent01` | Google Drive MCP Server - agent.bina-comp | `gdrive-agent` |
-| `gSheetMcpAgent01` | Google Sheets MCP Server - agent.bina-comp | `gsheet-agent` |
+| `gDriveMcpAgent01` | Google Drive MCP Server - agent.hacohen | `gdrive-agent` |
+| `gSheetMcpAgent01` | Google Sheets MCP Server - agent.hacohen | `gsheet-agent` |
 
 | Credential ID | Purpose |
 |---|---|
 | `41BKgLp83YYyfEM3` | Gmail production credential |
 | `jft0CdgvgPNvaLNn` | Older Gmail credential; may be stale |
-| `KirWFwoFdEFmnN0R` / `e2knIZpw8YF0QBAB` | Google Drive / Sheets credential (agent.bina-comp) |
+| `KirWFwoFdEFmnN0R` / `e2knIZpw8YF0QBAB` | Google Drive / Sheets credential (agent.hacohen) |
 | `2qKUrcv37UXZbz7u` / `77wJNJ6sYrGsfH9B` | MCP server / agent client header auth |
 
 ## Versioning (repo ↔ live) — bbox only (as-code flip 2026-08-16)
@@ -101,13 +101,13 @@ verify (webhook/API/browser) → export live workflows to `production/n8n/workfl
 ### Read-only DB checks
 ```bash
 # state + webhooks
-docker exec n8n-postgres-bina-deployment psql -U bina-comp -d n8n -c "
+docker exec n8n-postgres-bina-deployment psql -U hacohen -d n8n -c "
 SELECT id,name,active,\"triggerCount\" FROM workflow_entity
 WHERE id IN ('QR6p46Wpmvo7z53c','gmailMcpAgent01','gDriveMcpAgent01','gSheetMcpAgent01') ORDER BY id;
 SELECT \"webhookPath\",method,\"workflowId\" FROM webhook_entity
 WHERE \"webhookPath\" IN ('gmail-enhanced','gdrive-agent','gsheet-agent','e5616171-e3b5-4c39-81d4-67409f9fa60a/chat') ORDER BY 1,2;"
 # running executions
-docker exec n8n-postgres-bina-deployment psql -U bina-comp -d n8n -c "
+docker exec n8n-postgres-bina-deployment psql -U hacohen -d n8n -c "
 SELECT id,\"workflowId\",status,mode,\"startedAt\",\"stoppedAt\" FROM execution_entity WHERE status='running' ORDER BY id::bigint DESC LIMIT 20;"
 # logs since a timestamp
 START=$(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -125,7 +125,7 @@ docker logs n8n-bina-deployment --since "$START" 2>&1 | grep -iE 'MCP error|Requ
 
 ## Verify (chat webhook)
 ```bash
-CHAT='https://n8n.bina-comp.bina-solutions.co.il/webhook/e5616171-e3b5-4c39-81d4-67409f9fa60a/chat'
+CHAT='https://n8n.hacohen.bina-solutions.co.il/webhook/e5616171-e3b5-4c39-81d4-67409f9fa60a/chat'
 curl -sS -m 180 -X POST "$CHAT" -H 'Content-Type: application/json' -d '{"sessionId":"verify","action":"sendMessage","chatInput":"<prompt>"}'
 ```
 Pass = quick response, logs show `Got request for AutomationValues_Query`, no `Request timed out`, small payload.

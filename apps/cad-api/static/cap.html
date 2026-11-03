@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cap — digital replica</title>
+<link rel="stylesheet" href="/static/cad.css?v=1">
+<script type="importmap">{ "imports": { "three": "/static/vendor/three.module.min.js" } }</script>
+</head>
+<body>
+<header class="top">
+  <h1 id="title">Cap</h1>
+  <span class="sub" id="group"></span>
+  <a href="/" class="sub">All caps</a>
+</header>
+<main>
+  <p class="lead" id="source"></p>
+  <div class="cap">
+    <div>
+      <div id="view"><div class="state" id="viewState">Building the model…</div></div>
+      <section class="block">
+        <h3>Pieces to cut</h3>
+        <table id="parts"></table>
+      </section>
+      <section class="block">
+        <h3>On the sheets</h3>
+        <div id="sheets"></div>
+      </section>
+    </div>
+    <div>
+      <div class="card">
+        <form class="params" id="form"></form>
+        <div class="actions">
+          <button class="primary" id="build" type="button">Build</button>
+          <button id="step" type="button">Download STEP</button>
+          <button id="glb" type="button">Download 3D (glb)</button>
+          <button id="link" type="button">Copy link</button>
+        </div>
+      </div>
+      <section class="block card">
+        <h3>Price</h3>
+        <div class="price" id="price"></div>
+        <p class="src" id="priceWhy"></p>
+        <table id="cost"></table>
+      </section>
+      <section class="block card">
+        <h3>Bill of materials</h3>
+        <table id="bom"></table>
+      </section>
+      <section class="block card">
+        <h3>For Alan: is this how the shop makes it?</h3>
+        <ul class="ask" id="notes"></ul>
+        <p class="err" id="errors"></p>
+      </section>
+    </div>
+  </div>
+</main>
+<script type="module">
+  import { capPage } from '/static/cad.js?v=1';
+  capPage();
+</script>
+</body>
+</html>

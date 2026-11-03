@@ -28,6 +28,9 @@ services:
     # from a private repo is private, so `docker login ghcr.io` on a machine that must pull.
     image: ghcr.io/solomonboltin/digital-office/git:${IMAGE_TAG:-latest}
     pull_policy: missing
+    # an init as PID 1 (docker's tini), not uvicorn: the hourly mirror sync runs git, whose helpers are orphaned
+    # to PID 1, and uvicorn never reaps them — one zombie per sync, 19 on the MacBook after 21 hours (2026-11-02)
+    init: true
     build:
       context: .
       dockerfile: Dockerfile

@@ -56,7 +56,7 @@ if (fromMigration !== fromFixture) {
 console.log('  copy-drift gate: migration and fixture definitions are identical');
 
 // ---------------------------------------------------------------- 1. the LIVE mapping
-const nodes = JSON.parse(psql('n8n-postgres-shlomo-laptop', 'bina-comp', 'n8n',
+const nodes = JSON.parse(psql('n8n-postgres-shlomo-laptop', 'hacohen', 'n8n',
   "SELECT nodes::text FROM workflow_entity WHERE id='indoxV2ActionsShip01'"));
 const mapNode = nodes.find((n) => n.name === 'Map Request');
 if (!mapNode) { console.error('FATAL: no Map Request node in the live indoxV2ActionsShip01'); process.exit(1); }

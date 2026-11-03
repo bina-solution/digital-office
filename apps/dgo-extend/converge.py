@@ -20,11 +20,14 @@ from __future__ import annotations
 
 import base64
 import catalog
+import hashlib
+import http.client
 import ipaddress
 import json
 import logging
 import os
 import re
+import secrets
 import shlex
 import socket
 import threading
@@ -50,13 +53,14 @@ CONNECTIONS_URL = os.environ.get("CONNECTIONS_URL", "http://connections:8990").r
 DOMAINS_URL = os.environ.get("DOMAINS_URL", "http://domains:8980").rstrip("/")
 q = shlex.quote
 
-STEPS = ["machine", "dns", "backup", "code", "engine", "env", "login", "state", "run",
+STEPS = ["machine", "dns", "backup", "code", "engine", "env", "login", "state", "run", "accounts",
          "link", "health", "publish"]
 #: Steps a caller may ask for BY NAME that are never part of a default converge: `unlink` takes a link
 #: away, and a default run that revoked a tunnel because someone forgot an argument would be the worst
 #: kind of helpful.
-EXTRA_STEPS = ["unlink"]
+EXTRA_STEPS = ["unlink", "offsite"]   # offsite: the daily backup off the server (FPG-26), asked by the watch
 STEP_TITLES = {
+    "offsite": "גיבוי מחוץ לשרת",
     "machine": "המחשב",
     "dns": "דומיין ו־DNS",
     "backup": "גיבוי לפני שדרוג",
@@ -66,6 +70,7 @@ STEP_TITLES = {
     "login": "פרטי כניסה",
     "state": "האפליקציות",
     "run": "הפעלה (bbox run)",
+    "accounts": "כתובות החשבונות",
     "link": "מנהרות וקישורים",
     "unlink": "ביטול קישור",
     "health": "בריאות",
@@ -97,18 +102,38 @@ def _http(method: str, url: str, body: dict | None = None, timeout: float = 30) 
             return {"_status": e.code, "error": str(e)}
 
 
-def exec_on(machine: str, command: str, timeout: int = 120) -> dict:
-    """Run a command ON the machine, through computers. Returns its dict verbatim."""
+def _http_auth(method: str, url: str, token: str, timeout: float = 30) -> dict:
+    """`_http` with a Bearer token, for a call over a link (`projection.pull_agents`). Never raises:
+    a peer that did not answer is `{"_status": 0, "error": …}`, an HTTP refusal its body + `_status`."""
+    req = urllib.request.Request(url, method=method, headers={"authorization": f"Bearer {token}"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            doc = json.loads(r.read() or b"{}")
+            return doc if isinstance(doc, dict) else {"_status": 0, "error": "the answer is not an object"}
+    except urllib.error.HTTPError as e:
+        try:
+            doc = json.loads(e.read() or b"{}")
+        except ValueError:
+            doc = {}
+        return {**(doc if isinstance(doc, dict) else {}), "_status": e.code}
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError) as e:
+        return {"_status": 0, "error": f"{type(e).__name__}: {e}"}
+
+
+def exec_on(machine: str, command: str, timeout: int = 120, stdin: str | None = None) -> dict:
+    """Run a command ON the machine, through computers. Returns its dict verbatim. `stdin` goes to the
+    command's standard input — the way a secret travels (never in the command, which is an argv)."""
     try:
         return _http("POST", f"{COMPUTERS_URL}/api/computers/{machine}/exec",
-                     {"command": command, "timeout": timeout}, timeout=timeout + 15)
+                     {"command": command, "timeout": timeout, **({"stdin": stdin} if stdin is not None else {})},
+                     timeout=timeout + 15)
     except (urllib.error.URLError, TimeoutError, OSError) as e:
         return {"code": 255, "stdout": "", "stderr": str(e), "state": "error",
                 "reason": "שירות המחשבים אינו זמין"}
 
 
-def must(machine: str, command: str, timeout: int = 120, what: str = "") -> str:
-    r = exec_on(machine, command, timeout)
+def must(machine: str, command: str, timeout: int = 120, what: str = "", stdin: str | None = None) -> str:
+    r = exec_on(machine, command, timeout, stdin)
     if r.get("code") != 0:
         err = (r.get("stderr") or r.get("stdout") or "").strip()[-1500:]
         # `what` is the headline the owner reads ("the backup step could not be started"); the
@@ -128,6 +153,23 @@ def machine_record(machine: str) -> dict:
         raise StepFailed(r.get("error") or "המחשב אינו ברשימת המחשבים של הלשכה",
                          "הוסף אותו באפליקציית מחשבים.")
     return r
+
+
+def machine_address(machine: str) -> str:
+    """The address the fleet HOLDS for a machine — its record, with no SSH round trip.
+
+    The link plane only needs where to dial. It asked `machine_record` (a FRESH probe: an SSH sign-in
+    as root on the machine) every time the plane was built, and the plane is read every minute by the
+    security app — one root sign-in on vps1 a minute, and for a peer with no machine declared a
+    `GET /api/computers//status` that answered 404 (measured 2026-10-21, DGO-903). A step that must
+    know the machine answers still calls `machine_record`."""
+    if not machine:
+        return ""
+    r = _http("GET", f"{COMPUTERS_URL}/api/computers?probe=0", timeout=15)
+    for c in (r or {}).get("computers") or []:
+        if c.get("id") == machine:
+            return (c.get("host") or "").strip()
+    return ""
 
 
 def vault_secret(cid: str) -> dict:
@@ -173,11 +215,22 @@ def start_detached(office: dict, name: str, script: str, secret: bool = False) -
     # worker-liveness.sh bind-mounted into a container running as `node` is a healthcheck that answers
     # `Permission denied` — which is how `bbox run` reported "n8n-worker-2 is unhealthy" on vps1 and
     # left the office half up (measured 2026-09-30).
-    cmd = (f"set -e\numask 077\nmkdir -p {d}\nrm -f {d}/{name}.rc\n"
-           f"echo {b64} | base64 -d > {d}/{name}.sh\n"
-           f"nohup setsid bash -c 'umask 022; bash {d}/{name}.sh > {d}/{name}.log 2>&1; "
-           f"echo $? > {d}/{name}.rc' </dev/null >/dev/null 2>&1 &\n")
-    must(office["machine"], cmd, 60, f"לא ניתן להפעיל את השלב {name} על המחשב")
+    detach = (f"nohup setsid bash -c 'umask 022; bash {d}/{name}.sh > {d}/{name}.log 2>&1; "
+              f"echo $? > {d}/{name}.rc' </dev/null >/dev/null 2>&1 &\n")
+    if secret:
+        # A SECRET script (a git token, the off-server key) travels on the command's STDIN: the command
+        # is an argv — this office's ssh, the far side's login shell `-c`, readable in /proc/<pid>/cmdline
+        # by any local user there. Its byte count is checked: a computers app that does not pass stdin yet
+        # would hand `cat` nothing, and an EMPTY script runs to a perfect exit code 0.
+        n = len(body.encode())
+        cmd = (f"set -e\numask 077\nmkdir -p {d}\nrm -f {d}/{name}.rc\ncat > {d}/{name}.sh\n"
+               f"[ \"$(wc -c < {d}/{name}.sh)\" -eq {n} ] || {{ rm -f {d}/{name}.sh; "
+               f"echo 'the script did not arrive whole on stdin' >&2; exit 3; }}\n" + detach)
+        must(office["machine"], cmd, 60, f"לא ניתן להפעיל את השלב {name} על המחשב", stdin=body)
+    else:
+        cmd = (f"set -e\numask 077\nmkdir -p {d}\nrm -f {d}/{name}.rc\n"
+               f"echo {b64} | base64 -d > {d}/{name}.sh\n" + detach)
+        must(office["machine"], cmd, 60, f"לא ניתן להפעיל את השלב {name} על המחשב")
     r = exec_on(office["machine"],
                 f"{{ test -f {d}/{name}.sh || test -f {d}/{name}.log || test -f {d}/{name}.rc; }} "
                 f"|| echo NOSCRIPT; "
@@ -386,12 +439,14 @@ done
 # no per-volume container start. A volume on a non-local driver has no such path and is reported
 # (never silently skipped): "the backup finished" must not mean "the volumes were left out".
 for v in $(docker volume ls -q); do
+  # the off-server copies (FPG-26) — an archive that held yesterday's archive would double every day
+  case "$v" in dgo-offsite*) echo "   vol $v — the off-server copy itself, left out"; continue ;; esac
   src=/var/lib/docker/volumes/$v/_data
   if [ ! -d "$src" ]; then echo "WARN: volume $v has no local path — NOT backed up"; continue; fi
   # tar exits 1 when a file changed while it was being read — the NORMAL outcome for a volume a
   # running postgres is writing to, and the archive is still usable. Treating 1 as failure dropped
   # the platform's own postgres volume from EVERY backup (measured 2026-09-29 on vps1:
-  # "WARN: tar failed for volume deployment-bina_comp_postgres_storage", 347 MB left out).
+  # "WARN: tar failed for volume deployment-hacohen_postgres_storage", 347 MB left out).
   # `|| rc=$?` and not a bare call: the script runs under `set -e`, so a tar that exits 1 (see
   # below) would abort the whole backup instead of being classified.
   rc=0
@@ -461,6 +516,14 @@ def step_backup(office: dict, ctx: dict, emit) -> dict:
     if have.get("code") != 0 or "present" not in (have.get("stdout") or ""):
         return {"summary": "אין לשכה קיימת בתיקייה — אין מה לגבות"}
     script = (BACKUP.replace("__PATH__", p).replace("__OID__", office["id"]))
+    # an off-server snapshot still running beside this one: each checked the free space alone, and both
+    # together could fill the machine's disk — it ends first (FPG-26)
+    if _detached_running(office, "offsite"):
+        emit("── הגיבוי היומי מחוץ לשרת עדיין רץ על המחשב — ממתין שיסתיים")
+        try:
+            wait_detached(office, "offsite", lambda ln: None, limit=5400, every=15)
+        except StepFailed:
+            pass                                   # its own failure is its own; the disk is free again either way
     start_detached(office, "backup", script)
     tail = wait_detached(office, "backup", emit, limit=5400, every=10)
     f = parse_facts(tail)
@@ -476,27 +539,402 @@ def step_backup(office: dict, ctx: dict, emit) -> dict:
             "bytes": f.get("BYTES"), "warnings": warns}
 
 
-def step_code(office: dict, ctx: dict, emit) -> dict:
-    src = office.get("source") or {}
-    repo, branch, commit = src.get("repo"), src.get("branch") or "", src.get("commit") or ""
-    if not repo or not commit:
-        raise StepFailed("להצהרה חסר מקור קוד (repo + commit)", "ערוך את הלשכה ובחר גרסה.")
-    f = ctx.get("facts") or {}
-    p = office["path"]
-    auth = _auth_header(office)
-    script = f"""
+# ── the backup that leaves the server (FPG-26) ─────────────────────────────────────────────────────
+#: A client's office is copied off its own machine every day: the same snapshot as the backup step
+#: (every postgres dumped, every volume, .env, the certificates), ENCRYPTED on the machine before it
+#: leaves — the snapshot holds the client's secrets and their customers' data — with a key that lives
+#: only in THIS office's vault (instance offsite_key-<office>; a restore needs it — the archive's .json
+#: names it and its fingerprint). The key reaches the machine on the carrying command's STDIN (never an
+#: argv: not this container's ssh, not the far side's `bash -c`, not openssl's), inside a detached script
+#: that deletes itself, and only openssl's own environment holds it. The encrypted file goes into the
+#: office's volume on the machine (the latest only), and the computers app's transfer copies that volume
+#: to THIS office's own machine, one volume per day, where its sha256 is checked against the machine's
+#: (openssl enc has no authenticated mode: the check at home is the integrity). OFFSITE_KEEP are kept.
+OFFSITE_VOLUME = "dgo-offsite"
+OFFSITE_KEEP = int(os.environ.get("DGO_OFFSITE_KEEP", "7"))
+OFFSITE_CIPHER, OFFSITE_ITER = "aes-256-cbc", 200000
+OFFSITE_ENCRYPT = r"""
+# ── the snapshot above, encrypted, into the office's volume the transfer carries home ─────────────
+[ -n "${D:-}" ] && [ -d "$D" ] || { echo "OFFSITE_SKIPPED=1"; exit 0; }
+set -o pipefail                                   # a tar that fails must fail the pipeline, not openssl's 0
+docker volume create __VOLUME__ >/dev/null
+OUT=$(docker volume inspect -f '{{.Mountpoint}}' __VOLUME__)
+F="__OID__-$STAMP.tar.enc"
+trap 'rm -rf "$D" "$OUT/$F.part" "$OUT/$F.json.part"' EXIT   # neither the plaintext nor half an archive stays
+# written whole under another name first: a run that fails leaves the last good archive in place
+tar cf - -C "$D" . | DGO_OFFSITE_KEY="$K" openssl enc -__CIPHER__ -md sha256 -pbkdf2 -iter __ITER__ -salt \
+  -pass env:DGO_OFFSITE_KEY -out "$OUT/$F.part"
+SHA=$(sha256sum "$OUT/$F.part" | cut -d' ' -f1)
+# how to open it, beside it: a restorer needs nothing but this and the key the vault names
+printf '{"file": "%s", "cipher": "__CIPHER__", "md": "sha256", "pbkdf2_iter": __ITER__, "key": "__KEYID__", "key_fingerprint": "__FP__", "sha256": "%s", "stamp": "%s"}\n' \
+  "$F" "$SHA" "$STAMP" > "$OUT/$F.json.part"
+mv "$OUT/$F.part" "$OUT/$F"
+mv "$OUT/$F.json.part" "$OUT/$F.json"
+find "$OUT" -mindepth 1 -maxdepth 1 \( -name '*.tar.enc' -o -name '*.json' -o -name '*.part' \) \
+  ! -name "$F" ! -name "$F.json" -delete
+rm -rf "$D"
+echo "OFFSITE_STAMP=$STAMP"
+echo "OFFSITE_FILE=$F"
+echo "OFFSITE_BYTES=$(stat -c %s "$OUT/$F")"
+echo "OFFSITE_SHA=$SHA"
+"""
+
+
+def offsite_volume(oid: str) -> str:
+    """The office's own volume on its machine — two offices on one machine never share one."""
+    return f"{OFFSITE_VOLUME}-{oid}"
+
+
+#: The snapshot's own directory: the office's id in it, so two offices on one machine never share one, and
+#: the leftover cleanup matches exactly that shape — never a restore drill's /root/offsite-restore, never a
+#: pre-upgrade backup, never another office's live snapshot.
+OFFSITE_SNAP = "/root/offsite-__OID__-$STAMP"
+OFFSITE_SNAP_GLOB = "offsite-__OID__-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9]"
+
+
+def cache_volumes() -> list[str]:
+    """The volumes the apps declare rebuildable (`data.cache` in their app.json: a pinned model, cached audio — never
+    anything the office cannot re-fetch or re-run), read from this office's checkout. The off-server copy leaves them
+    out (FPG-92: fireplace's 3.7 GB speech model was half of a 7.6 GB copy). Never fatal: none read, none left out."""
+    if not HOME_REPO:
+        return []
+    try:
+        out = must(LOCAL_MACHINE, f"cd {q(HOME_REPO)} && grep -l '\"cache\"' apps/*/app.json", 60)
+    except StepFailed:
+        return []
+    vols = []
+    for path in out.split():
+        app = path.split("/")[1] if path.count("/") == 2 else ""
+        if not re.fullmatch(r"[a-z0-9-]+", app):
+            continue
+        for v in ((_app_manifest(app).get("data") or {}).get("cache") or []):
+            if isinstance(v, str) and re.fullmatch(r"[a-z0-9_.-]+", v):
+                vols.append(v)
+    return sorted(set(vols))
+
+
+def offsite_script(path_q: str, oid: str, key: str, fingerprint: str, cache: list[str] | tuple = ()) -> str:
+    """The detached script: the backup step's snapshot under its own name, then encrypted into the volume. The
+    volumes in `cache` (cache_volumes(): rebuildable) are left out of this copy, by name — the pre-upgrade backup
+    still takes everything."""
+    if not re.fullmatch(r"[A-Za-z0-9_-]{32,}", key or ""):
+        # never «delete it and run again»: the key in the vault is the one the existing archives need
+        raise StepFailed("מפתח הגיבוי שבכספת אינו במבנה הצפוי",
+                         "אל תמחק אותו — הוא פותח את הגיבויים הקיימים. בדוק את offsite_key בכספת.")
+    snap = OFFSITE_SNAP.replace("__OID__", oid)
+    # the pre-upgrade backups' pruning is the UPGRADE's: a daily copy must not delete a restore point
+    body, cut, _ = BACKUP.partition("# Keep the disk bounded:")
+    snapshot = (body.replace("__PATH__", path_q).replace("__OID__", oid)
+                .replace("D=/root/backup-$STAMP-pre-upgrade", f"D={snap}")
+                # the snapshot AND its ciphertext, and the last good archive until the new one is whole
+                .replace("need_mb=$(( vol_mb * 125 / 100 ))", "need_mb=$(( vol_mb * 225 / 100 ))"))
+    skip = '  case "$v" in dgo-offsite*) echo "   vol $v — the off-server copy itself, left out"; continue ;; esac\n'
+    if not cut or f"D={snap}" not in snapshot or "vol_mb * 225 / 100" not in snapshot or skip not in snapshot:
+        raise StepFailed("תבנית הגיבוי השתנתה — הגיבוי מחוץ לשרת לא ירוץ", "", "")
+    names = [c for c in cache if re.fullmatch(r"[a-z0-9_.-]+", c)]
+    if names:   # a compose project prefixes its volumes (fireplace_apitools_asr_data): the name, or *_name
+        pat = "|".join(f"{c}|*_{c}" for c in names)
+        snapshot = snapshot.replace(skip, skip + f'  case "$v" in {pat}) echo "   vol $v — rebuildable (data.cache), '
+                                                 f'left out of the off-server copy"; continue ;; esac\n')
+    head = ("umask 077\n"
+            f"K='{key}'\n"                       # not exported: only openssl gets it, in its own environment
+            # a run killed outright (OOM, a reboot) ran no trap: its plaintext goes now
+            f"find /root -maxdepth 1 -name '{OFFSITE_SNAP_GLOB.replace('__OID__', oid)}' -mmin +180 "
+            "-exec rm -rf {} + 2>/dev/null || true\n"
+            f"trap 'rm -rf \"{snap.replace('$STAMP', '${STAMP:-none}')}\"' EXIT\n")
+    return (head + snapshot + OFFSITE_ENCRYPT.replace("__VOLUME__", offsite_volume(oid)).replace("__OID__", oid)
+            .replace("__CIPHER__", OFFSITE_CIPHER).replace("__ITER__", str(OFFSITE_ITER))
+            .replace("__KEYID__", f"offsite_key-{oid}").replace("__FP__", fingerprint))
+
+
+def _home_copies(oid: str) -> str:
+    """The shell that lists this office's copies here, one per line (the anchored name, never a prefix) —
+    and FAILS when docker does not answer: «no copies» read from a docker that failed would let a new key
+    be made over copies that need the old one."""
+    # grep's 1 is «none» (also under pipefail); its 2, and docker's failure, are failures
+    return (f"V=$(docker volume ls -q) || exit 1; printf '%s\\n' \"$V\" | "
+            f"{{ grep -E '^{OFFSITE_VOLUME}-{oid}-[0-9]{{8}}-[0-9]{{6}}$' || [ $? = 1 ]; }} | sort")
+
+
+def offsite_home(office: dict) -> str:
+    """Where an office's off-server copies are kept (FPG-92): the machine its declaration names (`offsite_to`, a
+    computers-app id — the herd's backup store), else DGO_OFFSITE_TO, else this home as before. A client whose copy
+    grew to gigabytes does not fit an 8 GB MacBook's engine; the herd puts the store on the HP/Dell."""
+    return str(office.get("offsite_to") or os.environ.get("DGO_OFFSITE_TO") or LOCAL_MACHINE)
+
+
+def _offsite_key(office: dict) -> tuple[str, str]:
+    """The office's off-server key and its fingerprint: read from this office's vault, made there once —
+    and NEVER made while copies encrypted with a key already exist here: a new key would leave every one
+    of them unreadable, and nobody would know until the day of a restore."""
+    iid = f"offsite_key-{office['id']}"
+    try:
+        got = _http("GET", f"{CONNECTIONS_URL}/api/instances/{iid}/secret", timeout=15)
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        got = {"_status": 0, "error": str(e)}            # unreachable: an answer of its own, never «missing»
+    if "_status" in got and got["_status"] != 404:
+        # the vault did not answer — that is not «the key is gone», and nothing may be made on it
+        raise StepFailed("הכספת לא ענתה — מפתח הגיבוי לא נקרא", "ודא שאפליקציית החיבורים רצה, והרץ שוב.",
+                         f"connections {got.get('_status')}: {str(got.get('error') or '')[:200]}")
+    key = (got.get("secret") or {}).get("key") or ""
+    if not key:
+        held = 0
+        for where in dict.fromkeys((offsite_home(office), LOCAL_MACHINE)):   # the store, and the home's older copies
+            have = must(where, _home_copies(office["id"]) + " | wc -l", 60, "לא ניתן לבדוק גיבויים קיימים")
+            held += int((have.strip() or "0").splitlines()[-1])
+        if held > 0:
+            raise StepFailed("מפתח הגיבוי חסר בכספת — אבל יש כאן גיבויים שהוצפנו בו",
+                             f"החזר את {iid} לכספת (מגיבוי של הכספת): בלעדיו אי אפשר לשחזר אותם. "
+                             "מפתח חדש לא נוצר.")
+        key = secrets.token_urlsafe(32)
+        r = _http("POST", f"{CONNECTIONS_URL}/api/instances",
+                  {"id": iid, "protocol": "offsite_key",
+                   "label": f"מפתח הגיבוי מחוץ לשרת · {office.get('label') or office['id']}",
+                   "account_hint": "a restore of this office's off-server backups needs it",
+                   "secret": {"key": key}})
+        if r.get("_status") and r["_status"] != 409:
+            raise StepFailed("לא ניתן לשמור את מפתח הגיבוי בכספת", "ודא שאפליקציית החיבורים רצה.",
+                             f"connections {r.get('_status')}")
+        key = (vault_secret(iid) or {}).get("key") or ""   # read back: what is stored is what encrypts
+        if not key:
+            raise StepFailed("מפתח הגיבוי לא נקרא חזרה מהכספת", "הרץ שוב.")
+    return key, hashlib.sha256(key.encode()).hexdigest()[:12]
+
+
+def _transfer_volume(frm: str, to: str, volume: str, dest_volume: str, emit, limit: int = 7200) -> dict:
+    """The computers app's verified volume copy, followed to its end. Raises on anything but `ok`. The
+    app moves ONE volume at a time: while another office's copy runs, this one waits its turn — the wait
+    and the copy each have `limit`, and a copy that runs out of it is CANCELLED, never left holding the
+    app's one slot (or writing into a volume this step is about to remove)."""
+    started, said = time.time(), None
+    while True:
+        r = _http("POST", f"{COMPUTERS_URL}/api/computers/{frm}/transfer",
+                  {"to": to, "volume": volume, "dest_volume": dest_volume, "restart": True}, timeout=60)
+        job = r.get("job") or {}
+        if job.get("id"):
+            break
+        if r.get("active") and time.time() - started < limit:
+            emit("   העברה אחרת רצה — ממתין לתורה")
+            time.sleep(30)
+            continue
+        raise StepFailed("העברת הגיבוי לא התחילה", "", str(r.get("error") or r)[:500])
+    started, misses = time.time(), 0
+    while True:
+        try:
+            out = _http("GET", f"{COMPUTERS_URL}/api/transfers/{job['id']}", timeout=30)
+            misses = 0
+        except _HTTP_MISS as e:
+            misses += 1                            # one lost answer is a blip; three are a copy nobody follows
+            if misses < 3:
+                time.sleep(10)
+                continue
+            raise _cancelled(job["id"], StepFailed("שירות המחשבים לא עונה באמצע העברת הגיבוי",
+                                                   "הרץ שוב — ייווצר גיבוי חדש.", str(e)[:300]))
+        if out.get("_status") == 404:              # the job lived in memory: the computers app restarted
+            raise StepFailed("שירות המחשבים הופעל מחדש באמצע העברת הגיבוי", "הרץ שוב — ייווצר גיבוי חדש.")
+        s = out.get("transfer") or {}
+        state = s.get("state")
+        if state == "ok":
+            return s
+        if state in ("error", "cancelled"):
+            raise StepFailed("העברת הגיבוי נכשלה", "הרץ שוב — ייווצר גיבוי חדש.", str(s.get("error") or state)[:500])
+        if time.time() - started > limit:
+            raise _cancelled(job["id"], StepFailed("העברת הגיבוי לא הסתיימה בזמן", "הרץ שוב — ייווצר גיבוי חדש.",
+                                                   f"{s.get('percent')}%"))
+        if s.get("percent") is not None and s.get("percent") != said:
+            said = s["percent"]
+            emit(f"   {said}%")
+        time.sleep(10)
+
+
+#: what a lost answer from the computers app can look like: no connection, a cut-off reply, a body not JSON
+_HTTP_MISS = (urllib.error.URLError, TimeoutError, OSError, http.client.HTTPException, ValueError)
+
+
+def _cancel_transfer(job_id: str, wait: int = 180) -> bool:
+    """Cancel a copy and FOLLOW it to its end (bounded). Whether it ended: a job past its streaming (verify,
+    extract) does not stop at once, and a cleanup beside it would have its extract recreate a volume
+    directory docker does not know."""
+    try:
+        _http("POST", f"{COMPUTERS_URL}/api/transfers/{job_id}/cancel", {}, timeout=30)
+    except _HTTP_MISS:
+        pass
+    until = time.time() + wait
+    while time.time() < until:
+        try:
+            out = _http("GET", f"{COMPUTERS_URL}/api/transfers/{job_id}", timeout=30)
+        except _HTTP_MISS:
+            out = {}
+        if out.get("_status") == 404 or (out.get("transfer") or {}).get("state") in ("ok", "error", "cancelled"):
+            return True
+        time.sleep(10)
+    return False
+
+
+def _cancelled(job_id: str, err: StepFailed) -> StepFailed:
+    """The failure to raise once the copy is cancelled — marked when the copy is STILL running, so the step
+    leaves its volume alone (retention removes it later, as a copy never verified)."""
+    err.copy_running = not _cancel_transfer(job_id)
+    return err
+
+
+def _detached_running(office: dict, name: str) -> bool:
+    """Whether the office's detached script `name` (offsite, backup) still runs on its machine — it can
+    outlive its run's wait. `[.]`: the pattern must not match this very command's shell, whose argv carries
+    its text."""
+    d = ctl_dir(office)
+    busy = exec_on(office["machine"], f"test -f {d}/{name}.log && ! test -f {d}/{name}.rc && "
+                                      f"pgrep -f '[.]digital-office/{office['id']}/{name}[.]sh' >/dev/null && echo BUSY", 30)
+    return "BUSY" in (busy.get("stdout") or "")
+
+
+def step_offsite(office: dict, ctx: dict, emit) -> dict:
+    p, oid = q(office["path"]), office["id"]
+    have = exec_on(office["machine"], f"test -s {p}/.env && command -v openssl >/dev/null && echo ready", 30)
+    if have.get("code") != 0 or "ready" not in (have.get("stdout") or ""):
+        raise StepFailed("אין במכונה לשכה מותקנת או openssl", "הרץ converge מלא קודם.")
+    # the snapshot is the WHOLE machine's (every postgres, every volume): with another office on it, this
+    # office's archive would carry that office's customers under this office's key — refused, not mixed
+    others = [d["id"] for d in _records(lambda d: str(d.get("kind") or "office") == "office"
+                                         and d.get("machine") == office.get("machine") and d.get("id") != oid)]
+    if others:
+        raise StepFailed("על המחשב הזה יש לשכה נוספת — הגיבוי מחוץ לשרת לוקח את כל המחשב",
+                         "גיבוי לפי לשכה על מחשב משותף עוד לא נבנה; העבר כל לשכה למחשב משלה.",
+                         ", ".join(others))
+    key, fp = _offsite_key(office)
+    # a pre-upgrade backup that outlived its converge ends first: each checked the free space alone
+    if _detached_running(office, "backup"):
+        emit("── גיבוי לפני עדכון עדיין רץ על המחשב — ממתין שיסתיים")
+        try:
+            wait_detached(office, "backup", lambda ln: None, limit=5400, every=15)
+        except StepFailed:
+            pass
+    # a backup an earlier run left running (it ran past that run's wait) is FOLLOWED, never doubled: a second
+    # script beside it would delete its half archive, and its exit code would read as the new one's
+    if _detached_running(office, "offsite"):
+        emit("── גיבוי מהרצה קודמת עדיין רץ על המחשב — עוקב אחריו")
+    else:
+        start_detached(office, "offsite", offsite_script(p, oid, key, fp, cache_volumes()), secret=True)
+    tail = wait_detached(office, "offsite", emit, limit=5400, every=10)
+    f = parse_facts(tail)
+    if f.get("BACKUP_SKIPPED") or f.get("OFFSITE_SKIPPED"):
+        raise StepFailed("הגיבוי מחוץ לשרת דולג — אין מקום פנוי בדיסק של המכונה", "",
+                         f.get("SKIP_REASON") or "")
+    # every fact the machine reports is checked for its exact shape before any of it reaches a command HERE:
+    # the log is written on the client's server, and its root must not be able to run a thing on this one
+    stamp, fname, sha = f.get("OFFSITE_STAMP", ""), f.get("OFFSITE_FILE", ""), f.get("OFFSITE_SHA", "")
+    nbytes = f.get("OFFSITE_BYTES", "") if re.fullmatch(r"[0-9]{1,15}", f.get("OFFSITE_BYTES", "")) else ""
+    if not (re.fullmatch(r"[0-9]{8}-[0-9]{6}", stamp) and fname == f"{oid}-{stamp}.tar.enc"
+            and re.fullmatch(r"[0-9a-f]{64}", sha)):
+        raise StepFailed("הגיבוי המוצפן לא נוצר", "ראה את הפלט.", tail[-1500:])
+    # what the snapshot could not take (a database whose dump failed, a volume with no path) is SAID
+    warns = [ln.strip() for ln in tail.splitlines() if ln.startswith("WARN")]
+    dest = f"{OFFSITE_VOLUME}-{oid}-{stamp}"
+    mount = f"$(docker volume inspect -f '{{{{.Mountpoint}}}}' {q(dest)})"
+    home = offsite_home(office)
+    # the store is asked for room BEFORE anything moves: the transfer stages the archive and then extracts it, so
+    # it needs twice the archive, and a copy that does not fit is refused by name (10-30: a 7.6 GB copy met a
+    # 14 GB-free engine that keeps five copies)
+    room = exec_on(home, "df -PB1 \"$(docker info -f '{{.DockerRootDir}}' 2>/dev/null || echo /var/lib/docker)\" "
+                         "| awk 'NR==2{print $4}'", 60)
+    free = (room.get("stdout") or "").strip()
+    if nbytes and re.fullmatch(r"[0-9]{1,15}", free) and int(free) < 2 * int(nbytes) + (1 << 30):
+        raise StepFailed("אין מקום במחסן הגיבויים לעותק הזה", "פנה מקום שם, או הגדר offsite_to למחשב אחר.",
+                         f"{home}: free {int(free) >> 20} MB, needs {(2 * int(nbytes) + (1 << 30)) >> 20} MB")
+    emit(f"── {fname} ({nbytes} bytes) → {home}: {dest}")
+    try:
+        _transfer_volume(office["machine"], home, offsite_volume(oid), dest, emit)
+        # what arrived was made by the client's machine: it holds EXACTLY the archive and its .json, as plain
+        # files, before anything here reads it — a link or a pipe from there must not lead a root command
+        # here anywhere (a .verified pointing at /etc/nologin, an archive that is /dev/zero)
+        # the integrity: the file that arrived is the file the machine encrypted — and only then is the copy
+        # marked as one (retention counts nothing else: a copy cut short by a crash HERE is no backup)
+        got = must(home,
+                   f"set -o pipefail; m={mount}; [ -n \"$m\" ] || exit 2; "
+                   f"odd=$(find \"$m\" -mindepth 1 \\( ! -type f -o ! \\( -name {q(fname)} -o -name {q(fname + '.json')} \\) \\) "
+                   f"-print -quit) || exit 2; [ -z \"$odd\" ] || {{ echo \"UNEXPECTED=$odd\"; exit 0; }}; "
+                   f"sha256sum \"$m\"/{q(fname)} | cut -d' ' -f1", 300, "לא ניתן לבדוק את הגיבוי שהגיע")
+        if "UNEXPECTED=" in got:
+            raise StepFailed("בגיבוי שהגיע יש משהו מלבד הארכיון", "הגיבוי לא נשמר. בדוק את השרת של הלקוח.",
+                             got.strip()[:300])
+        if got.strip() != sha:
+            raise StepFailed("הגיבוי שהגיע אינו זהה לגיבוי שהוצפן במכונה", "הרץ שוב — ייווצר גיבוי חדש.",
+                             f"sha256 {got.strip()[:12]} ≠ {sha[:12]}")
+        must(home, f"m={mount}; [ -n \"$m\" ] && rm -f \"$m\"/.verified && : > \"$m\"/.verified", 60,
+             "לא ניתן לסמן את הגיבוי שנבדק")
+    except Exception as e:
+        # a copy that did not arrive whole is no copy: neither its volume nor the transfer's staging stays,
+        # or empty volumes would count as backups and push real ones out — whatever cut it short (the
+        # computers app restarting answers a refused connection, not a StepFailed). A copy STILL running is
+        # left alone (removing its volume beside its extract leaves a directory docker does not know):
+        # never verified, the next run's retention removes it.
+        if getattr(e, "copy_running", False):
+            emit("── ההעברה עדיין רצה אחרי הביטול — העותק שלה לא נבדק, והניקוי הבא יסיר אותו")
+        else:
+            exec_on(home, f"docker volume rm {q(dest)} >/dev/null 2>&1; "
+                                   f"rm -f {q(f'/var/lib/bina-transfer/{offsite_volume(oid)}__{dest}.tar')}*", 60)
+        if isinstance(e, StepFailed):
+            raise
+        raise StepFailed("העברת הגיבוי נקטעה", "הרץ שוב — ייווצר גיבוי חדש.", f"{type(e).__name__}: {e}"[:500]) from e
+    # the copies here: OFFSITE_KEEP newest by name (the stamp sorts by time) among those VERIFIED; one that is
+    # not (a copy an older version or a crash left) is removed first. Each removal is named.
+    keep = must(home,
+                f"set -o pipefail; L=$({_home_copies(oid)}) || exit 1; "
+                f"for v in $L; do m=$(docker volume inspect -f '{{{{.Mountpoint}}}}' \"$v\"); "
+                f"[ -f \"$m\"/.verified ] && [ ! -L \"$m\"/.verified ] && echo \"$v\" || {{ docker volume rm \"$v\" >/dev/null && "
+                f"echo \"PRUNED=$v (unverified)\" >&2; }}; done | sort | head -n -{OFFSITE_KEEP} | while read -r v; do "
+                f"docker volume rm \"$v\" >/dev/null && echo \"PRUNED=$v\"; done; "
+                f"echo KEPT=$({_home_copies(oid)} | wc -l)", 180, "לא ניתן לנקות גיבויים ישנים")
+    kf = parse_facts(keep)
+    return {"summary": f"גיבוי מוצפן {nbytes} bytes → {dest} · נבדק · נשמרים {kf.get('KEPT', '?')}",
+            "file": fname, "bytes": nbytes, "sha256": sha,
+            "volume": dest, "store": home, "verified": True, "kept": kf.get("KEPT"), "warnings": warns,
+            "key": f"offsite_key-{oid}", "key_fingerprint": fp}
+
+
+def code_script(p: str, repo: str, branch: str, commit: str, auth: str = "",
+                allow_rollback: bool = False) -> str:
+    """The script the code step runs on the machine: clone or fetch, then put the checkout at `commit`.
+
+    A CONVERGE NEVER STEPS AN OFFICE BACK (DGO-1016). On 2026-10-16 14:14 UTC a converge from the
+    MacBook checked vps1 out at d24547e2, the commit its declaration had been saved with eight days
+    earlier, and rebuilt every service from it. The 418 commits vps1 was running left without a
+    word; among them the price of a conversation in Azaria's sessions (plugins/cost-meter), which
+    the owner had asked for and then found gone. The stash below keeps only UNCOMMITTED work, so
+    committed work was the one kind nothing protected.
+
+    So a checkout that already exists must be CONTAINED in the declared commit. A machine whose
+    HEAD is not an ancestor of it runs something the declaration would drop. The step then stops
+    and names what would go (exit 3, `ROLLBACK:` and `DROP:` lines). The declaration moves forward
+    to a commit that holds both, or says `source.allow_rollback: true` when going back is meant.
+    A fresh clone has nothing to lose and is never asked.
+    """
+    return f"""
 export GIT_TERMINAL_PROMPT=0
 if ! command -v git >/dev/null; then apt-get update -q && apt-get install -y -q git; fi
 # bbox's compiler (platform/manager/reconcile.py) needs python3 + PyYAML on the machine itself
 python3 -c 'import yaml' 2>/dev/null || {{ apt-get update -q && apt-get install -y -q python3 python3-yaml; }}
 P={q(p)}
+fresh=0
 if [ ! -d "$P/.git" ]; then
   mkdir -p "$(dirname "$P")"
   git {auth} clone --no-checkout {q(repo)} "$P"
+  fresh=1
 fi
 cd "$P"
 git {auth} fetch --quiet origin {q(branch) if branch else ''} || git {auth} fetch --quiet origin
 git cat-file -e {q(commit)}^{{commit}} 2>/dev/null || git {auth} fetch --quiet origin {q(commit)}
+# Never back (see code_script's docstring): what this machine runs must be inside the declared commit.
+# A clone that was never checked out (a first converge that stopped after `clone --no-checkout`) has an
+# empty index and runs nothing; its HEAD is only the remote's default branch.
+[ -n "$(git ls-files | head -1)" ] || fresh=1
+cur="$(git rev-parse -q --verify 'HEAD^{{commit}}' 2>/dev/null || true)"
+if [ "$fresh" = 0 ] && [ -n "$cur" ] && [ {1 if allow_rollback else 0} != 1 ] \\
+   && ! git merge-base --is-ancestor "$cur" {q(commit)}; then
+  git log --date=short --format='DROP: %h %ad %<(70,trunc)%s' -n 8 {q(commit)}..$cur
+  echo "ROLLBACK: $(git rev-list --count {q(commit)}..$cur) commits on this machine are not in {commit[:12]} (HEAD $(git rev-parse --short=12 "$cur"))"
+  exit 3
+fi
 # platform.state.yaml is DERIVED from the declaration on every converge (step: state), so a local
 # copy of it is never work to keep. Anything else changed by hand on the machine is kept in a stash.
 # The fallback matters after the split: an office whose file is no longer tracked has nothing for
@@ -507,10 +945,36 @@ if ! git diff --quiet || ! git diff --cached --quiet; then
   git stash push -m "dgo-extend: local changes before {commit[:12]}"
 fi
 git -c advice.detachedHead=false checkout --quiet --detach {q(commit)}
+# A release copy carries no platform.state.yaml (a new office starts from the product default), and
+# on a fresh clone the fallback above ran before the commit put any file in the tree — the state step
+# then found no file to write (fireplace, 2026-10-22). Now that the files are here, make it.
+[ -f platform.state.yaml ] || cp -a platform.state.default.yaml platform.state.yaml 2>/dev/null || true
 echo "HEAD=$(git rev-parse HEAD)"
 """
-    start_detached(office, "code", script, secret=bool(auth))
-    tail = wait_detached(office, "code", emit, limit=1800, every=5)
+
+
+def step_code(office: dict, ctx: dict, emit) -> dict:
+    src = office.get("source") or {}
+    repo, branch, commit = src.get("repo"), src.get("branch") or "", src.get("commit") or ""
+    if not repo or not commit:
+        raise StepFailed("להצהרה חסר מקור קוד (repo + commit)", "ערוך את הלשכה ובחר גרסה.")
+    p = office["path"]
+    auth = _auth_header(office)
+    script = code_script(p, repo, branch, commit, auth, bool(src.get("allow_rollback")))
+    try:
+        # Both can raise the refusal: a step that refuses at once is caught by start_detached's own
+        # read of the exit code (with the log's last 800 bytes, where ROLLBACK: is printed last).
+        start_detached(office, "code", script, secret=bool(auth))
+        tail = wait_detached(office, "code", emit, limit=1800, every=5)
+    except StepFailed as e:
+        dropped = re.search(r"ROLLBACK: (\d+)", e.detail or "")
+        if not dropped:
+            raise
+        raise StepFailed(f"הגרסה המוצהרת ({commit[:12]}) ישנה ממה שרץ על המחשב: {dropped.group(1)} שינויים "
+                         "שהלשכה כבר מריצה היו נעלמים. הקוד לא הוחלף, ושום שירות לא נבנה מחדש.",
+                         "בחר בהצהרה גרסה שמכילה את מה שרץ עכשיו (מיזוג), או סמן במפורש "
+                         "'לחזור לגרסה ישנה' (source.allow_rollback) אם זו הכוונה.",
+                         e.detail) from None
     head = re.search(r"HEAD=([0-9a-f]{40})", tail)
     stashed = re.search(r"STASHED: (.*)", tail)
     if not head or not head.group(1).startswith(commit[:7]):
@@ -536,14 +1000,160 @@ def step_engine(office: dict, ctx: dict, emit) -> dict:
     return {"summary": f"Docker {m.group(1) if m else '?'} הותקן"}
 
 
+#: Is this `.env` the installer's copy of `.env.ex`? `debian-install.sh` (`setup_env_variables`, run by
+#: the engine step, which comes BEFORE env) copies the template when there is no `.env`, so a fresh
+#: machine always reached step_env with a file: `fresh` was never true, `ci-env.sh` never ran, and the
+#: office came up on the template's published placeholder secrets and its home domain (fireplace,
+#: 2026-10-22: DEPLOYMENT_DOMAIN=hacohen.…, every password the one in .env.ex). A copy is recognised by
+#: its secrets — ALL of the template's literal ones still equal — because the URLs of a copy may
+#: already have been normalised by an earlier ENV_MERGE. `ci-env.sh` changes every one of them, so a
+#: generated `.env` can never read as a copy.
+TEMPLATE_CHECK = r"""
+import re
+def parse(path):
+    out = {}
+    for ln in open(path, encoding='utf-8', errors='replace').read().splitlines():
+        m = re.match(r'^([A-Z0-9_]+)=(.*)$', ln)
+        if m:
+            out[m.group(1)] = m.group(2).split(' #')[0].strip().strip("'\"")
+    return out
+env, ex = parse('.env'), parse('.env.ex')
+keys = [k for k, v in ex.items() if re.search(r'(PASSWORD|SECRET|_KEY|TOKEN)$', k) and v and '${' not in v]
+print('TEMPLATE=%d' % (1 if keys and all(env.get(k) == ex[k] for k in keys) else 0))
+"""
+
 ENV_MERGE = r"""
-import re, sys, datetime
+import os, re, sys, datetime, secrets, shutil
+# THE RENAME (FPG-33): an installed office moves to another domain (the owner, DGO-1032: fireplace from
+# thefireplaceguys.digital-office.co.il to fpg.digital-office.co.il). The declaration carries both names
+# (the record keeps `renamed_from` when its domain changes), and the rename happens only while this
+# .env still names exactly the previous one: any other domain is refused below, as before. ci-env.sh
+# wrote every host out in full (63 keys on fireplace), so every value naming the old domain as a whole
+# word (a host, a subdomain, a URL) gets the new one. An ADDRESS (`admin@<old>`) is not renamed: it is
+# the sign-in of an account that n8n, Plane, GlitchTip and authentik already hold, and the platform logs
+# in with it (connections → n8n, the vault's login): those keys are named in EMAILS_KEPT, and the
+# accounts move as a step of their own (the second reader). The file is copied aside first, replaced
+# whole, and only key names are printed.
+renamed, kept = [], []
+old_d, new_d = os.environ.get('DGO_RENAME_FROM', ''), os.environ.get('DGO_RENAME_TO', '')
+if old_d and new_d and old_d != new_d and not (new_d.endswith('.' + old_d) or old_d.endswith('.' + new_d)):
+    text = open('.env').read()
+    flat = {}
+    for ln in text.splitlines():
+        m = re.match(r'^([A-Z0-9_]+)=(.*)$', ln)
+        if m:
+            v = m.group(2).split(' #')[0].strip().strip("'\"")
+            flat[m.group(1)] = re.sub(r'\$\{([A-Z0-9_]+)\}', lambda x: flat.get(x.group(1), ''), v)
+    if flat.get('DEPLOYMENT_DOMAIN') == old_d:
+        # whole word: not inside a longer label, and not the start of a longer name (`old.example.net`)
+        whole = re.compile(r'(?<![A-Za-z0-9-])' + re.escape(old_d) + r'(?![A-Za-z0-9-]|\.[A-Za-z0-9])')
+        # …and `${DEPLOYMENT_DOMAIN}`, which follows the domain once it is renamed
+        composed = re.compile(r'\$\{DEPLOYMENT_DOMAIN(?::-[^}]*)?\}')
+
+        def is_address(v, start):
+            # the word the name sits in, back to the last separator: `admin@`, `noreply@mail.`,
+            # `mailto:admin@` are addresses; `https://u:CHANGE_ME@` is a URL's host
+            i = start
+            while i > 0 and v[i - 1] not in ' \t,;"\'<>()[]':
+                i -= 1
+            word = v[i:start]
+            return '@' in word and '://' not in word
+
+        out = []
+        for ln in text.split('\n'):
+            m = re.match(r'^([A-Z0-9_]+)=(.*)$', ln)
+            if m and m.group(1) == 'DEPLOYMENT_DOMAIN':
+                # written literally, whatever its form was: a composed `${COMPANY_SLUG}.…` names no
+                # domain to replace, and every composed value below resolves through this one
+                ln = 'DEPLOYMENT_DOMAIN=' + new_d
+                renamed.append(m.group(1))
+            elif m:
+                v, parts, last, host, addr = m.group(2), [], 0, False, False
+                for mm in sorted(list(whole.finditer(m.group(2))) + list(composed.finditer(m.group(2))),
+                                 key=lambda x: x.start()):
+                    if is_address(v, mm.start()):
+                        addr = True
+                        # an address written as `admin@${DEPLOYMENT_DOMAIN}` stays on the old name too
+                        parts += [v[last:mm.start()], old_d if mm.re is composed else mm.group(0)]
+                    elif mm.re is whole:
+                        host = True
+                        parts += [v[last:mm.start()], new_d]
+                    else:
+                        parts += [v[last:mm.start()], mm.group(0)]
+                    last = mm.end()
+                if host or addr:
+                    ln = m.group(1) + '=' + ''.join(parts) + v[last:]
+                if host:
+                    renamed.append(m.group(1))
+                if addr:
+                    kept.append(m.group(1))
+            out.append(ln)
+        # the file itself, wherever .env points (a packaged office links it to /etc/binaos/binaos.env, and
+        # replacing the link would leave the real file on the old domain for the next upgrade to restore)
+        real = os.path.realpath('.env')
+        tmp = real + '.rename-tmp'
+        if os.path.lexists(tmp):
+            os.remove(tmp)                 # a run cut short left it, with every secret in it
+        shutil.copy2(real, '.env.before-rename-' + datetime.datetime.now().strftime('%Y%m%d%H%M%S'))
+        # replaced whole: a write cut short (a full disk) must not leave half a .env behind; and 0600
+        # from its first byte, not after
+        with os.fdopen(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), 'w') as f:
+            f.write('\n'.join(out))
+        shutil.copymode(real, tmp)
+        os.replace(tmp, real)
+print('RENAMED=' + ','.join(renamed))
+print('EMAILS_KEPT=' + ','.join(kept))
 env = open('.env').read()
 have = {m.group(1) for m in re.finditer(r'^([A-Z0-9_]+)=', env, re.M)}
+# Secrets no generator writes (S26: nothing minted the vault's root key, and compose falls back to
+# its published default — `dev-root-key-not-for-production`, which the public export scrubs to
+# CHANGE_ME). Only while the office has no vault yet (DGO_MINT=1): an existing vault is encrypted with
+# the key it has, and a new one would lock it. A real value anywhere in the file is kept.
+minted = []
+if os.environ.get('DGO_MINT') == '1':
+    for key in ('CONNECTIONS_ROOT_KEY',):
+        found = [v.split(' #')[0].strip().strip("'\"") for v in re.findall(r'^%s=(.*)$' % key, env, re.M)]
+        if all(v in ('', 'CHANGE_ME', 'dev-root-key-not-for-production') for v in found):
+            env = re.sub(r'^%s=.*\n?' % key, '', env, flags=re.M)
+            env = env.rstrip('\n') + '\n%s=%s\n' % (key, secrets.token_urlsafe(32))
+            minted.append(key)
+            have.add(key)
+    # …and every own secret the template asks to be replaced. ci-env.sh randomises the keys it knows;
+    # the rest arrived as .env.ex has them (fireplace, 2026-10-22: MCP_AUTH_TOKEN=CHANGE_ME — the header
+    # n8n's MCP endpoints accept — and the SUPABASE_*_PASSWORD keygen keeps because they are not
+    # missing). A key of an OUTSIDE provider (…_API_KEY, or `your-…-here`) is left as it is: a random
+    # value there would read as configured.
+    lines = env.split('\n')
+    placeholder = re.compile(r'CHANGE_ME|change_me_to_(random|secure)\w*')
+    value_of = lambda ln: ln.split('=', 1)[1].split(' #')[0].strip().strip("'\"")
+    real = {ln.split('=', 1)[0] for ln in lines if re.match(r'^[A-Z0-9_]+=', ln)
+            and not placeholder.fullmatch(value_of(ln))}   # a real value anywhere keeps the key whole
+    fresh_values = {}                  # one value per key, written to EVERY line of it (compose reads the last)
+    root_minted = set(minted)
+    for i, ln in enumerate(lines):
+        m = re.match(r'^([A-Z0-9_]+)=(.*)$', ln)
+        if not m or m.group(1) in root_minted or m.group(1) in real or m.group(1).endswith('API_KEY') \
+                or not re.search(r'(PASSWORD|SECRET|TOKEN|_KEY)$', m.group(1)):
+            continue
+        value = value_of(ln)
+        if placeholder.fullmatch(value):
+            key = m.group(1)
+            if key not in fresh_values:
+                fresh_values[key] = secrets.token_hex(16 if '32_hex' in value else 24)
+                minted.append(key)
+            lines[i] = '%s=%s' % (key, fresh_values[key])
+    env = '\n'.join(lines)
+    if minted:
+        open('.env', 'w').write(env)
+print('MINTED=' + ','.join(minted))
 add = []
 for ln in open('.env.ex').read().splitlines():
     m = re.match(r'^([A-Z0-9_]+)=', ln)
-    if m and m.group(1) not in have:
+    # never the vault's key: with no line the vault runs under compose's default, and appending the
+    # template's CHANGE_ME would switch its key and lock it (hos-002's second reader); minting it is above.
+    # Nor DGO_IDENTITY: an office with no line asks authentik (traefik's compose default), and the
+    # template's forward-auth (release 0.3.0) would point its edge at a sign-in it does not run.
+    if m and m.group(1) not in have and m.group(1) not in ('CONNECTIONS_ROOT_KEY', 'DGO_IDENTITY'):
         add.append(ln); have.add(m.group(1))
 if add:
     with open('.env', 'a') as f:
@@ -593,30 +1203,243 @@ print('NAME=' + vals.get('DEPLOYMENT_NAME', ''))
 """
 
 
+#: The volumes whose contents a secret of .env unlocks: the vault (CONNECTIONS_ROOT_KEY) and the
+#: databases initialised with the passwords. Matched by SUFFIX, as hooks/migrate's find_volume does —
+#: the compose project's name is chosen in scripts/lib.sh (pinned, symlink-resolved, or a fallback for a
+#: folder name compose cannot use), and a guess at it here once read a live office as empty.
+DATA_VOLUMES = ("connections_vault", "supabase_db_data", "authentik_postgres_data")
+
+
+def _office_data(office: dict) -> int:
+    """How many of DATA_VOLUMES exist on the office's machine — 0 = nothing a new secret could lock.
+
+    Unknown is never 0: when docker cannot be asked (no answer, daemon down, no permission) the step
+    stops, because the two decisions this answers — replace a template .env, mint a vault key — are
+    exactly the ones that lock an office out of its own data when they are wrong."""
+    pattern = "(^|_)(%s)$" % "|".join(DATA_VOLUMES)
+    out = exec_on(office["machine"], f"n=$(docker volume ls --format '{{{{.Name}}}}') || exit 7; "
+                                     f"printf '%s\\n' \"$n\" | grep -cE {q(pattern)} || true", 30)
+    try:
+        if out.get("code") != 0:
+            raise ValueError(out.get("code"))
+        return int((out.get("stdout") or "").strip().splitlines()[-1])
+    except (ValueError, IndexError):
+        raise StepFailed("לא ניתן לדעת אם ללשכה כבר יש נתונים — docker volume ls לא ענה במחשב",
+                         "ודא ש-Docker רץ במחשב והרץ שוב. השלב לא יחליף סודות בלי לדעת.",
+                         (out.get("stderr") or "")[-800:])
+
+
 def step_env(office: dict, ctx: dict, emit) -> dict:
     p = q(office["path"])
     fresh = exec_on(office["machine"], f"test -s {p}/.env", 20).get("code") != 0
+    volumes = _office_data(office)
+    if not fresh:
+        check = base64.b64encode(TEMPLATE_CHECK.encode()).decode()
+        if parse_facts(must(office["machine"], f"cd {p} && echo {check} | base64 -d | python3 -", 60,
+                            "בדיקת עותק התבנית ב־.env נכשלה")).get("TEMPLATE") == "1":
+            if volumes:
+                # It RAN on the template's secrets: the databases were initialised with them, and new
+                # ones would lock every service out of its own data. That is a decision, not a step.
+                raise StepFailed("ה־.env הוא עותק של .env.ex, וללשכה כבר יש נתונים "
+                                 f"({volumes} volumes) — הסודות של התבנית כבר בשימוש",
+                                 "צריך החלטה: לסובב כל סוד יחד עם השירות שלו, או למחוק את הנתונים "
+                                 "ולהתקין מחדש. השלב לא ייצר סודות חדשים מעל נתונים קיימים.")
+            # kept, not deleted: it is the template and nothing else, but a file is never thrown away here
+            must(office["machine"], f"cd {p} && mv .env .env.installer-template.$(date +%Y%m%d%H%M%S)", 20,
+                 "העברת עותק התבנית הצידה נכשלה")
+            emit("ה־.env היה עותק של .env.ex שהמתקין העתיק — הועבר הצידה, ונוצר .env משל הלשכה")
+            fresh = True
+    if fresh and volumes:
+        # no .env, but the databases and the vault are there (a deleted file on a machine that ran):
+        # new passwords would be written over data initialised with the old ones
+        raise StepFailed(f"אין ‎.env במחשב, אבל ללשכה כבר יש נתונים ({volumes} volumes)",
+                         "שחזר את ה-.env מגיבוי. השלב לא ייצר סודות חדשים מעל נתונים קיימים.")
     if fresh:
         name = re.sub(r"[^a-z0-9]", "", office["id"].lower())[:20] or "office"
         must(office["machine"],
              f"cd {p} && OFFICE_DOMAIN={q(office['domain'])} CI_DEPLOYMENT_NAME={q(name)} "
              f"bash scripts/ci-env.sh", 300, "יצירת ה־.env נכשלה")
     b64 = base64.b64encode(ENV_MERGE.encode()).decode()
-    out = must(office["machine"], f"cd {p} && echo {b64} | base64 -d | python3 -", 60,
+    # a vault key is minted only while there is no vault or database to lock — which also covers the
+    # retry of a run that failed after ci-env.sh had written the file
+    mint = 0 if volumes else 1
+    # an office whose declared domain changed carries the one it had: the machine's .env is moved to the
+    # new one only while it still names exactly that one (FPG-33)
+    old = office.get("renamed_from") or ""
+    rename = (f"DGO_RENAME_FROM={q(old)} DGO_RENAME_TO={q(office['domain'])} "
+              if old and old != office["domain"] else "")
+    out = must(office["machine"], f"cd {p} && echo {b64} | base64 -d | {rename}DGO_MINT={mint} python3 -", 60,
                "בדיקת ה־.env נכשלה")
     f = parse_facts(out)
+    renamed = [k for k in (f.get("RENAMED") or "").split(",") if k]
+    kept = [k for k in (f.get("EMAILS_KEPT") or "").split(",") if k]
+    if renamed:
+        emit(f"הדומיין הוחלף מ־{old} ל־{office['domain']} ב־{len(renamed)} מפתחות "
+             f"(העותק הקודם נשמר במחשב כ־.env.before-rename-*)")
+    if kept:
+        emit("כתובות הכניסה של החשבונות נשארו על הדומיין הקודם (הן שמות המשתמש בתוך האפליקציות): " + ", ".join(kept))
     if f.get("DOMAIN") != office["domain"]:
         raise StepFailed(f"ה־.env על המחשב מוגדר לדומיין {f.get('DOMAIN')!r}, ההצהרה אומרת "
-                         f"{office['domain']!r}",
+                         f"{office['domain']!r}" + (f" (והדומיין הקודם בהצהרה הוא {old!r})" if old else ""),
                          "תקן את הדומיין בהצהרה, או את DEPLOYMENT_DOMAIN ב־.env שעל המחשב.")
+    if old:
+        # the machine is on the declared domain: the previous one has nothing left to say, and a later
+        # change starts from this one (the second reader)
+        # …and the accounts' addresses are the `accounts` step's, after `run` (FPG-34) — recorded whenever
+        # the machine is on the declared domain, not only when THIS run did the rename: a merge that
+        # failed after its rename, or a converge cut short here, would otherwise strand them (the reader).
+        # The verb is idempotent: with nothing left on the old domain it moves nothing.
+        _forget_rename(office, addresses_from=old)
     added = [k for k in (f.get("ADDED") or "").split(",") if k]
     norm = [k for k in (f.get("NORMALIZED") or "").split(",") if k]
+    minted = [k for k in (f.get("MINTED") or "").split(",") if k]
     if norm:
         emit("הומר לערך מפורש: " + ", ".join(norm) + f" = {office['domain']}")
+    if minted:
+        emit("סוד חדש נוצר במחשב (לא הודפס): " + ", ".join(minted))
     ctx["deployment_name"] = f.get("NAME")
     return {"summary": ("נוצר חדש · " if fresh else "קיים · ") +
+                       (f"הדומיין הוחלף ב־{len(renamed)} מפתחות · " if renamed else "") +
                        (f"נוספו {len(added)} מפתחות חדשים" if added else "שלם"),
-            "added": added}
+            "added": added, "minted": minted, "renamed": renamed, "emails_kept": kept}
+
+
+def _forget_rename(office: dict, addresses_from: str = "") -> None:
+    """The machine is on `office["domain"]` now: the record on disk says so. Read fresh, so an edit made
+    while the converge ran is not written over. Its domain unchanged since: `renamed_from` goes. Changed
+    meanwhile (o2 → o3 while the machine moved o1 → o2): the next rename starts from o2, where the machine
+    is — not from o1, which would strand it (the third reader). Saved by the app's own writer.
+
+    `addresses_from`: a domain the accounts' addresses may still be on, for the `accounts` step (FPG-34).
+    A LIST: a second rename before the accounts moved leaves some on the first domain and, where an app
+    moved meanwhile, some on the second — each is moved from (the reader)."""
+    office.pop("renamed_from", None)
+    import app as _app
+    try:
+        doc = _app.load(office["id"])
+    except (OSError, yaml.YAMLError):
+        return
+    if not isinstance(doc, dict):
+        return
+    if "renamed_from" not in doc and doc.get("domain") == office["domain"] and not addresses_from:
+        return
+    if doc.get("domain") == office["domain"]:
+        doc.pop("renamed_from", None)
+    else:
+        doc["renamed_from"] = office["domain"]
+    if addresses_from and addresses_from != office["domain"]:
+        have = _address_domains(doc)
+        if addresses_from not in have:
+            doc["addresses_from"] = have + [addresses_from]
+    _app.save(doc)
+
+
+def _address_domains(doc: dict) -> list[str]:
+    """The record's `addresses_from` as a list (a record of the first FPG-34 build held one string)."""
+    v = doc.get("addresses_from") or []
+    return [v] if isinstance(v, str) else [d for d in v if isinstance(d, str) and d]
+
+
+def rename_script(path_q: str, old: str, new: str) -> str:
+    """The detached script the `accounts` step runs on the machine (start_detached puts `set -e` above it).
+
+    `rc=0; … || rc=$?` and not `…; echo "RC=$?"`: under `set -e` the group exits at a failing bbox before
+    its echo, the RC line was lost exactly when an app refused, and a refusal stopped the whole converge
+    (the fifth reader). awk keeps the verdict pass (the first pass's «waiting» is expected and settled by
+    the second) and the facts — RC, CHANGED — and the run holds a lock, so a run left going after a timeout
+    and the next converge's never move addresses at once: the second says RC=busy and is tried again.
+    The lock lives with the engine's other job locks (data/.locks/, gitignored), and bbox runs with fd 9
+    CLOSED (`9>&-`): a dockerd it starts in the background would otherwise inherit the lock and hold it for
+    as long as it runs — every later run «busy», with nothing saying why (the sixth reader). A lock this
+    user cannot take (a data/.locks/ a root container made first; no `flock` on the machine) is skipped,
+    never fatal — exactly as heavy_admit treats the same directory (the seventh reader)."""
+    return (f"cd {path_q}\n"
+            "L=data/.locks/rename-address.lock\n"
+            "if command -v flock >/dev/null 2>&1 && mkdir -p data/.locks 2>/dev/null && touch \"$L\" 2>/dev/null; then\n"
+            "  exec 9>>\"$L\"\n"
+            "  if ! flock -n 9; then echo RC=busy; exit 0; fi\n"
+            "fi\n"
+            f"{{ rc=0; ./bbox rename-address {q(old)} {q(new)} 9>&- 2>&1 || rc=$?; echo \"RC=$rc\"; }} "
+            "| awk '/rename-address: second pass/{p=1} p || /^RC=/ || /^CHANGED=/ || /rror/'\n")
+
+
+def step_accounts(office: dict, ctx: dict, emit) -> dict:
+    """The accounts follow the domain (FPG-34). The env step moved every HOST and left every ADDRESS
+    (`admin@<old>`): it is the sign-in of an account n8n, Plane, GlitchTip and authentik already hold,
+    and the platform signs in with it. Here, with the stack up, each app moves its own accounts and then
+    its own keys — `bbox rename-address <old> <new>` on the machine, every enabled app that has the hook —
+    and the vault's login is read again, so it names the address the account now has.
+
+    Runs only while the record says addresses may still be behind (`addresses_from`, set by the env step),
+    once per such domain, detached on the machine (two passes of every app's shell outlast one exec's
+    limit). Then `run` again when something was really written (the verb's CHANGED=1) — the apps that moved
+    took new keys even when another refused (connections signs in to n8n with N8N_OWNER_EMAIL, Plane's SSO map
+    names its owner) — and a domain is forgotten only once its move was whole AND any such run succeeded. The
+    vault's login is read again in every case.
+
+    An app that REFUSED (the new address is someone else's) or was down is a warning, not a failure: the
+    domain stays on the record and the next converge tries again, and `link`, `health` and `publish` still
+    run — one conflict waiting for a person must not stop the office converging (the third reader). So is
+    an office whose code has no such verb yet. The step fails only when the verb could not run at all, and
+    the first such error is the one raised."""
+    import app as _app
+    pending = [d for d in _address_domains(_app.load(office["id"]) or {}) if d != office["domain"]]
+    if not pending:
+        return {"summary": "אין כתובות חשבונות להעביר"}
+    p = q(office["path"])
+    probe = exec_on(office["machine"], f"grep -q 'rename-address)' {p}/bbox", 20).get("code")
+    if probe == 1:
+        return {"summary": "הקוד של הלשכה עוד לא יודע להעביר את כתובות החשבונות — נשאר ברשומה",
+                "warnings": ["הרץ את שלב code עם גרסה שיש בה את FPG-34; הכתובות יועברו בהרצה שאחריה"]}
+    if probe != 0:
+        raise StepFailed("לא ניתן לבדוק את קוד הלשכה במחשב", "ודא שהמחשב זמין ונסה את השלב שוב.")
+    partial, done, changed, warnings, err = [], [], False, [], None
+    try:
+        for i, frm in enumerate(pending):
+            name = f"accounts-{i}"
+            start_detached(office, name, rename_script(p, frm, office["domain"]))
+            facts = parse_facts(wait_detached(office, name, emit, limit=1800, every=10))
+            changed = changed or facts.get("CHANGED") == "1"       # before the verdict: what was written stands
+            if facts.get("RC") is None:
+                raise StepFailed(f"הפקודה להעברת הכתובות לא סיימה במחשב (מ־@{frm})",
+                                 "ודא שהמחשב זמין והלשכה שלמה, ונסה את השלב שוב.")
+            (done if facts["RC"] == "0" else partial).append(frm)
+    except StepFailed as e:
+        err = e
+    login = {"summary": "", "warnings": []}
+    try:
+        if changed:
+            emit("── הפעלה מחדש, כדי שהאפליקציות יקבלו את הכתובות שעברו")
+            step_run(office, ctx, emit)
+        if done:
+            # forgotten only once the containers took the moved keys (or nothing needed taking)
+            doc = _app.load(office["id"]) or {}
+            left = [d for d in _address_domains(doc) if d not in done]
+            if left:
+                doc["addresses_from"] = left
+            else:
+                doc.pop("addresses_from", None)
+            _app.save(doc)
+    except StepFailed as e:
+        if err is None:
+            err = e
+        else:
+            warnings.append(f"גם ההפעלה מחדש נכשלה: {e.reason}")
+            emit(f"אזהרה: גם ההפעלה מחדש נכשלה: {e.reason}")
+    finally:
+        try:
+            login = step_login(office, ctx, emit)
+        except StepFailed as e:              # never hides the error this step is already raising
+            login = {"summary": "", "warnings": [f"פרטי הכניסה לא רועננו: {e.reason}"]}
+        for w in login.get("warnings") or []:
+            emit(f"אזהרה: {w}")
+        warnings += list(login.get("warnings") or [])
+    if err is not None:
+        raise err
+    warnings += [f"לא כל הכתובות עברו מ־@{d} — נשאר ברשומה, וינוסה שוב בהרצה הבאה" for d in partial]
+    return {"summary": (f"כתובות החשבונות עברו מ־@{', @'.join(done)} ל־@{office['domain']}" if done else
+                        "כתובות החשבונות לא עברו במלואן") + (f" · נשאר לנסות: @{', @'.join(partial)}" if partial else ""),
+            "login": login.get("summary"), "warnings": warnings}
 
 
 STATE_SCRIPT = r"""
@@ -633,13 +1456,30 @@ declared_sets
 # nobody declared for it. Anything enabled on the machine and NOT named here is switched off.
 undeclared_off() {
 EXTRA=$(python3 - <<'PY'
-import yaml
+import json, os, yaml
 declared = set("__DECLARED__".split(","))
 s = yaml.safe_load(open("platform.state.yaml")) or {}
 apps = s.get("apps") or {}
 on = [k for k, v in apps.items()
       if (v or {}).get("enabled") is True or (v or {}).get("state") == "enabled"]
-print(",".join(sorted(k for k in on if k not in declared)))
+def platform(app):
+    # The platform itself is never "undeclared": `platform-base/` is layers 1-2, what every office gets
+    # (AGENTS.md), and an app's manifest may also say `system: true` or layer 0/1. Such an app stays on
+    # whatever a declaration leaves out; switching one off is a declaration's explicit `disabled`. A
+    # declaration that named only the business apps switched off traefik, authentik, postgres, redis,
+    # console and connections on fireplace (2026-10-22, "7 enabled · 15 switched off"), and the
+    # compiler then refused to render.
+    if os.path.isfile(os.path.join("platform-base", app, "app.json")):
+        return True
+    p = os.path.join("apps", app, "app.json")
+    if not os.path.isfile(p):
+        return False
+    try:
+        m = json.load(open(p, encoding="utf-8"))
+    except (OSError, ValueError):
+        return True                              # unreadable: keep it on, never guess it off
+    return bool(m.get("system")) or m.get("layer") in (0, 1)
+print(",".join(sorted(k for k in on if k not in declared and not platform(k))))
 PY
 )
 # COMMA-separated on purpose (the OFF= line below is one fact, not a list of shell words), so the
@@ -658,9 +1498,18 @@ echo "OFF=$EXTRA"
 # still holding memory on a 2-core box and still answering on its own host (measured 2026-09-30).
 # Only the app's OWN services are touched — `reconcile services` returns the dependency CLOSURE, and
 # stopping that would take postgres, redis and authentik down with the app.
+#
+# ...and only THIS OFFICE'S containers. A compose service name is not unique on an engine: a machine
+# that already runs another stack (the WB Corp VPS carries the old layout of this same repo, whose
+# services are also called n8n / ollama / portainer / redisinsight) would have had its production
+# containers stopped by an office that merely declares those apps off. Found by reading this script
+# before its first run there, 2026-10-05 — the working-directory label is what ties a container to
+# the checkout this step is running in.
+HERE="$(pwd)"; HERE_P="$(pwd -P)"
 stop_app() {
   for s in $(python3 platform/manager/reconcile.py compose-services --app "$1" 2>/dev/null); do
-    ids=$(docker ps -q --filter "label=com.docker.compose.service=$s" 2>/dev/null)
+    ids=$( { docker ps -q --filter "label=com.docker.compose.service=$s" --filter "label=com.docker.compose.project.working_dir=$HERE" 2>/dev/null;
+             docker ps -q --filter "label=com.docker.compose.service=$s" --filter "label=com.docker.compose.project.working_dir=$HERE_P" 2>/dev/null; } | sort -u | tr '\n' ' ')
     if [ -n "$ids" ]; then docker stop $ids >/dev/null 2>&1 && echo "STOPPED=$1 $s"; fi
   done
 }
@@ -779,8 +1628,12 @@ def step_run(office: dict, ctx: dict, emit) -> dict:
     # (`bbox`'s own comment). Measured 2026-10-01 on vps1 (2 cores): a recreated authentik bootstrap
     # needs ~6–8 minutes, so the 300 s default failed the step — and skipped `link` and `health` —
     # over a stack that came up whole two minutes later. The office's own value still wins.
+    # A declaration that goes back ON PURPOSE (source.allow_rollback) says so to the machine's own
+    # ledger too; otherwise dcx refuses every build of the older tree the code step just checked out
+    # (DGO-1016, G90), and the office would be left with a checkout that is not what runs.
+    back = "BBOX_ALLOW_ROLLBACK=1 " if (office.get("source") or {}).get("allow_rollback") else ""
     start_detached(office, "run",
-                   f"cd {q(office['path'])}\nBBOX_WAIT_TIMEOUT=${{BBOX_WAIT_TIMEOUT:-900}} ./bbox run\n")
+                   f"cd {q(office['path'])}\n{back}BBOX_WAIT_TIMEOUT=${{BBOX_WAIT_TIMEOUT:-900}} ./bbox run\n")
     wait_detached(office, "run", emit, limit=3 * 3600, every=15)
     # `bbox run`'s exit code is not the answer. A failing `docker compose up` (an image it cannot
     # pull, a name conflict, a port already taken) is printed and the CLI still finishes 0, so this
@@ -791,8 +1644,13 @@ def step_run(office: dict, ctx: dict, emit) -> dict:
     d = ctl_dir(office)
     bad = exec_on(office["machine"],
                   f"grep -aE 'Error response from daemon|docker: Error|failed to solve|"
-                  f"ERROR: for |is already in use by container' {d}/run.log 2>/dev/null | head -8", 60)
+                  f"ERROR: for |is already in use by container|deploy: REFUSED' {d}/run.log 2>/dev/null"
+                  f" | head -8", 60)
     fails = [ln.strip() for ln in (bad.get("stdout") or "").splitlines() if ln.strip()]
+    if any("deploy: REFUSED" in ln for ln in fails):
+        raise StepFailed("הבנייה נדחתה: הקוד על המחשב לא מכיל את מה שהלשכה כבר מריצה, ושום שירות לא הוחלף",
+                         "העבר את ההצהרה לגרסה שמכילה את שניהם, או סמן במפורש 'לחזור לגרסה ישנה' "
+                         "(source.allow_rollback).", "\n".join(fails)[-1500:])
     if fails:
         raise StepFailed("ההרצה נעצרה על שגיאת Docker — הלשכה לא הורמה במלואה",
                          "השגיאות למטה. תקן את ההצהרה (למשל אפליקציה שאי אפשר להרים במכונה הזו) והרץ שוב.",
@@ -807,6 +1665,27 @@ echo "healthy=$(grep -c '(healthy)' /tmp/.dgo-extend-ps)"
 echo "unhealthy=$(grep -c 'unhealthy' /tmp/.dgo-extend-ps)"
 echo "restarting=$(grep -c 'Restarting' /tmp/.dgo-extend-ps)"
 echo "bad=$(grep -E 'unhealthy|Restarting' /tmp/.dgo-extend-ps | cut -d'|' -f1 | tr '\n' ' ')"
+# the office's compose project as compose reads it: the containers above can all be healthy while every
+# `dc` fails (rel10 on fireplace: one app's manifest named no compose file), and then nothing can be run,
+# rebuilt or onboarded. Stderr is kept in memory (a fixed file in /tmp is another user's, or stale), and
+# the line kept is compose's — or dc's own error — never compose's warnings or bbox's notices. It must
+# never carry a value: an env file it cannot parse is named by file and line only, and any quoted text
+# holding `=` is blanked (compose quotes a malformed `.env` line whole). A valid project with NO services
+# is compose reading nothing at all (no compiled files) — said too.
+if cerr="$(./scripts/dc config -q 2>&1 >/dev/null)"; then
+  # empty only when compose ANSWERED with no services — a second call that failed (an .env being
+  # rewritten between the two) is not "no compiled files"
+  if svcs="$(./scripts/dc config --services 2>/dev/null)"; then
+    if [ -n "$(printf '%s' "$svcs" | tr -d '[:space:]')" ]; then echo "compose=ok"; else echo "compose=empty"; fi
+  else echo "compose=ok"; fi
+else
+  echo "compose=invalid"
+  line="$(printf '%s\n' "$cerr" | awk '!/^time=/ && !(/^\[bbox\] / && !/^\[bbox\] error/) && NF { print; exit }')"
+  case "$line" in   # a file compose could not parse — «failed to read|load X: line N: …» — by file and line only
+    *": line "[0-9]*) line="$(printf '%s' "$line" | sed -E 's/^(.*): line ([0-9]+).*$/\1: line \2 — malformed/')" ;;
+  esac
+  echo "compose_error=$(printf '%s' "$line" | sed -E 's/(unterminated quoted value).*/\1 …/; s/"[^"]*=[^"]*"?/"…"/g' | cut -c1-200)"
+fi
 """
 
 
@@ -918,6 +1797,18 @@ def step_health(office: dict, ctx: dict, emit) -> dict:
                     "app_answered": app_answered, "off_by_declaration": off_by_declaration}
     if f.get("unhealthy") not in ("0", None) or f.get("restarting") not in ("0", None):
         warn.append(f"קונטיינרים לא בריאים: {f.get('bad')}")
+    cerr = f.get("compose_error") or ""
+    if f.get("compose") == "invalid" and cerr.startswith(("dc:", "[bbox] error")):
+        raise StepFailed("dc במכונה מסרב לרוץ — כל פקודת dc נכשלת",
+                         "הקונטיינרים שרצים ממשיכים. השורה אומרת מה חסר במכונה (‎.env, ‏compose); "
+                         "אם צעד אחר כותב את ‎.env ברגע זה — הרץ שוב בעוד דקה.", cerr)
+    if f.get("compose") == "invalid":
+        raise StepFailed("פרויקט ה־compose של הלשכה אינו תקין — כל פקודת dc במכונה נכשלת",
+                         "הקונטיינרים שרצים ממשיכים, אבל אי אפשר להריץ, לבנות או להפעיל דבר עד שיתוקן. "
+                         "תקן את ההצהרה שהשורה הזו מונה, ושחרר גרסה.", cerr)
+    if f.get("compose") == "empty":
+        raise StepFailed("פרויקט ה־compose של הלשכה ריק — dc אינו רואה אף שירות",
+                         "הקבצים המהודרים חסרים (‎.generated); ‏`./bbox run` מהדר אותם מחדש.")
     if not f.get("head", "").startswith(commit[:7]):
         raise StepFailed("הגרסה שרצה אינה הגרסה המוצהרת", "הרץ שוב.")
     if not ok_edge:
@@ -931,7 +1822,11 @@ def step_health(office: dict, ctx: dict, emit) -> dict:
                      + ")" if (http_only or app_answered or off_by_declaration) else "")
                   if declared_hosts else "")
     return {"summary": f"{f.get('healthy')}/{f.get('total')} בריאים · console עונה {code}" + hosts_line,
-            "containers": f, "warnings": warn, "notes": notes, "edge": code}
+            "containers": f, "warnings": warn, "notes": notes, "edge": code,
+            # the same facts as data, for a reader that is not this screen (the watch's weekly report
+            # is written in the client's language from these — never from the Hebrew sentences above)
+            "dead_hosts": [d.split(" → ")[0] for d in dead], "answering": answering if declared_hosts else None,
+            "expected": expected if declared_hosts else None}
 
 
 def _probe_http(host: str, timeout: int = 10):
@@ -1322,15 +2217,18 @@ iptables -C INPUT -i wg0 -j ACCEPT 2>/dev/null || \
   iptables -I INPUT -i wg0 -j ACCEPT 2>/dev/null || true
 mkdir -p /etc/wireguard && chmod 700 /etc/wireguard
 # The firewall rides on the interface's own lifecycle (PostUp/PreDown), so whatever brings wg0 up —
-# this script, or systemd at boot — brings its rules with it. DELETE-THEN-APPLY and not `nft -f` alone:
-# `nft -f` MERGES with whatever is loaded, so a second converge appended a second copy of every rule
-# (measured on vps1, 2026-10-01) — the trap `tunnel-entrypoint.sh` answers the same way.
-install -m 600 nftables.rules /etc/wireguard/dgo.nft
+# this script, or systemd at boot — brings its rules with it. REPLACED, in one transaction: `nft -f`
+# MERGES with whatever is loaded (a second converge appended a second copy of every rule, measured on
+# vps1, 2026-10-01), and a delete in a command of its own left NO allow-list whenever nft refused the
+# new rules. So the file carries its own prelude — create-if-missing, delete, then the table — and nft
+# applies it all or nothing: a refused ruleset leaves the one in force (DGO-603, as tunnel-entrypoint.sh).
+( printf 'table inet dgo {}\\ndelete table inet dgo\\n'; cat nftables.rules ) > dgo.nft
+install -m 600 dgo.nft /etc/wireguard/dgo.nft
 python3 - <<'PY' > /etc/wireguard/wg0.conf
 import json, re
 priv = json.load(open("identity.json", encoding="utf-8"))["wg"]["private"]
 conf = open("wg0.conf", encoding="utf-8").read().replace("@PRIVATE@", priv)
-hooks = ("PostUp = nft delete table inet dgo 2>/dev/null || true; nft -f /etc/wireguard/dgo.nft\\n"
+hooks = ("PostUp = nft -f /etc/wireguard/dgo.nft\\n"
          "PreDown = nft delete table inet dgo 2>/dev/null || true")
 conf = re.sub(r"^(PrivateKey\\s*=.*)$", lambda m: m.group(1) + "\\n" + hooks, conf, count=1, flags=re.M)
 print(conf)
@@ -1589,6 +2487,23 @@ def _set_home_serve(serve: dict) -> dict:
                 if narrowed:
                     clean["only"] = narrowed
             continue
+        if k == "shared":
+            # The third reserved key: what OTHER offices gave this one, handed on (`catalog.shared_for`).
+            # Kept as written — "*" or a list of origins, the two forms an older office reads without
+            # refusing the far plan — validated at the API that writes it. Empty clears it.
+            if v == catalog.WILDCARD:
+                clean["shared"] = v
+            elif isinstance(v, list) and v:
+                clean["shared"] = [str(o).strip().lower() for o in v if isinstance(o, str) and o.strip()]
+            continue
+        if k == "services":
+            # The fourth: the doors with no tile this office gives (DGO-945) — alias → {to, paths},
+            # held to `catalog.clean_services`, the rule the API that writes it refuses by. A map that
+            # is not one gives no door at all rather than a door wider than was written. Empty clears it.
+            doors, _why = catalog.clean_services(v)
+            if doors:
+                clean["services"] = doors
+            continue
         if k == catalog.WILDCARD:
             # "Every app" (`catalog.publishable`) — kept as the bare key it is: it has no port, and
             # `int(None)` here would have refused the one declaration the owner asked for.
@@ -1624,6 +2539,16 @@ def _set_home_serve(serve: dict) -> dict:
     kept = (doc.get("serve") or {}).get("only") if isinstance(doc.get("serve"), dict) else None
     if "only" not in (serve or {}) and isinstance(kept, dict) and kept:
         clean["only"] = kept
+    # …nor un-sharing: handing on what other offices gave is changed only by an explicit `shared`.
+    kept = (doc.get("serve") or {}).get("shared") if isinstance(doc.get("serve"), dict) else None
+    if "shared" not in (serve or {}) and kept:
+        clean["shared"] = kept
+    # …nor closing a door: the screen's "give everything" names no `services` either. An EMPTY
+    # declaration is the other thing — "give nothing" (`pair_api.give("none")`) — and closes them too:
+    # the screen must never say "nothing" over a door that is open (second reader, DGO-945).
+    kept = (doc.get("serve") or {}).get("services") if isinstance(doc.get("serve"), dict) else None
+    if serve and "services" not in serve and kept:
+        clean["services"] = kept
     doc["serve"] = clean
     doc.setdefault("id", "local")
     _write_home(doc)
@@ -1716,6 +2641,12 @@ def _serve_block(office: dict, home: dict) -> list[dict]:
     its name.
     """
     link = _link_of(office, home.get("id") or "local")
+    if not link:
+        # No link declared between the two offices: nothing is served. The `use` default below is for
+        # a link that names no direction — read for NO link, it mirrored to `serve`, and a new office
+        # that links to nobody (fireplace, 2026-10-22) was handed this office's apps: a bina tile, at
+        # an address of a pair it is not in, in the console of a client who must not see us.
+        return []
     # `both` serves as well (see `_mirror`): testing for `serve` alone wrote an EMPTY block on a
     # bidirectional link, and the peer's compiler took its route, tile and alias away (measured
     # 2026-10-01 on vps1, the first converge after the link was made bidirectional).
@@ -1724,13 +2655,18 @@ def _serve_block(office: dict, home: dict) -> list[dict]:
     served = home.get("serve") or {}
     if not served:
         return []
-    slot = int((home.get("tunnel") or {}).get("slot") or 0)
+    try:
+        slot = _pair_slot(office, home)              # this pair's /24, where this office is `.1`
+    except (TypeError, ValueError):
+        slot = 0
     if not slot:
         return []
     domain = (home.get("domain") or "localhost").strip() or "localhost"
     default_to = _local_sso_user()
     entries = []
-    for app, spec in sorted(served.items()):
+    # The apps, never the declaration's reserved keys (`catalog.app_specs`): `exclude` is a list and
+    # `shared` may be "*", and either read as a port is an `int()` that takes the converge down.
+    for app, spec in sorted(catalog.app_specs(served).items()):
         spec = spec if isinstance(spec, dict) else {"port": spec}
         man = _app_manifest(app)
         routes = man.get("routing") or []
@@ -2037,7 +2973,8 @@ def _mirror(direction: str) -> str:
     return "use" if d == "serve" else "serve"
 
 
-def _served_ports_local(office: dict, slot: int | None = None) -> dict:
+def _served_ports_local(office: dict, slot: int | None = None, registry: dict | None = None,
+                        peer: str = "") -> dict:
     """The ports a `serve` link opens HERE, from the apps this office's own record names.
 
     ONE door per link (DGO-32), plus the catalog and any app's agent API: an office whose registry
@@ -2048,8 +2985,16 @@ def _served_ports_local(office: dict, slot: int | None = None) -> dict:
 
     An office that serves nothing returns an empty map: the firewall, the delivery plan and the peer's
     projection all read this one function, so "nothing served" cannot mean three different things.
+
+    `registry` — the registry of the office whose doors these are (this office's compiled one, or a
+    peer's FETCHED catalog): the served map is then ENRICHED with the agent door each served app declares
+    (`catalog.serve_with_agents`, DGO-570) — the very map the link proxy listens by. Without it the
+    firewall opened only an agent port written into `serve:` by hand, while the proxy listened on the
+    registry's: browser42's 8931 on hp-laptop listened behind a firewall that dropped it, and no linked
+    office could drive the HP's browser (measured 2026-10-22, DGO-1002).
     """
-    served = catalog.with_control(office.get("serve"))
+    served = catalog.with_control(catalog.serve_with_agents(registry, office.get("serve"))
+                                  if registry is not None else office.get("serve"))
     if not served:
         return {}
     import linkproxy
@@ -2059,12 +3004,28 @@ def _served_ports_local(office: dict, slot: int | None = None) -> dict:
                          "הרץ קודם קישור (`bbox dgo link`) כדי שהזוג יקבל /24 משלו.")
     out = {linkproxy.DOOR_APP: linkproxy.door_port(pair),
            "dgo-extend": int(catalog.CATALOG_PORT)}
+    # WHAT THAT PEER IS GIVEN, the way the proxy narrows it (`linkproxy.build_multi`'s `given`): an office
+    # named in `serve.only` gets an agent door only for an app on its list — the door and the catalog
+    # stay. The firewall's accept has no destination, so a port opened here for a peer the proxy does not
+    # serve would reach another pair's listener through this peer's own tunnel.
+    only = catalog.only_for(office.get("serve"), peer)
     for app, spec in served.items():
-        if app == "dgo-extend":
+        if app == "dgo-extend" or (only is not None and app not in only):
             continue
         if isinstance(spec, dict) and spec.get("agent_api_port"):
             out[f"{app}:agent"] = int(spec["agent_api_port"])
     return out
+
+
+def _pair_slot(office: dict, home: dict) -> int:
+    """The /24 of THIS pair: the office record's own `tunnel.slot`, or the home's for a record that
+    declares none (the first converged link, vps1, predates per-pair slots and shares the home's).
+
+    With one interface per pair (`pairs/wg<slot>.conf`) every pair needs its own /24. Taking the home's
+    slot for every converged office gave the second one vps1's (fireplace, 2026-10-22: declared 6,
+    saved as 2, and the renderer refused "two pairs on the same slot (2)")."""
+    own = (office.get("tunnel") or {}).get("slot")
+    return int(own or (home.get("tunnel") or {}).get("slot"))
 
 
 def _render_local_tunnel(emit) -> dict:
@@ -2078,9 +3039,18 @@ def _render_local_tunnel(emit) -> dict:
     """
     import app as _app
     doc = _app.render_tunnel()
-    rendered = doc.get("rendered") if isinstance(doc, dict) else None
-    if rendered is None or (isinstance(doc, dict) and doc.get("error")):
-        raise StepFailed(str((doc or {}).get("error") or "רינדור המנהרה נכשל"),
+    if not isinstance(doc, dict):
+        # the renderer answers its refusals as the HTTP route does (a JSONResponse): read the sentence
+        # out of it, or the step crashed on `.get` and the refusal itself was never shown (fireplace,
+        # 2026-10-22: "'JSONResponse' object has no attribute 'get'")
+        try:
+            doc = json.loads(bytes(getattr(doc, "body", b"") or b"{}").decode("utf-8", "replace")) or {}
+        except ValueError:
+            doc = {}
+        doc.setdefault("error", "רינדור המנהרה נכשל")
+    rendered = doc.get("rendered")
+    if rendered is None or doc.get("error"):
+        raise StepFailed(str(doc.get("error") or "רינדור המנהרה נכשל"),
                          "בדוק את רשומות הלשכות המקושרות ואת הזהויות שלהן.")
     emit("המנהרה של הלשכה הזאת רונדרה (%d זוגות)" % len(doc.get("pairs") or []))
     return doc
@@ -2133,10 +3103,18 @@ def step_link(office: dict, ctx: dict, emit) -> dict:
     if not link:
         return {"summary": "אין קישור מוצהר ללשכה הזאת — אין מנהרה להעלות", "links": []}
     direction = netmod.link_direction(link)
-    slot = int((home.get("tunnel") or {}).get("slot"))
+    slot = _pair_slot(office, home)
+    # Refused BEFORE anything is written: this step saves the slot into the record, and a colliding
+    # slot saved once is read as the record's own from then on (fireplace, 2026-10-22).
+    import app as _app
+    holder = next((o["id"] for o in _app.all_declarations() if o.get("id") != office["id"]
+                   and int((o.get("tunnel") or {}).get("slot") or 0) == slot), None)
+    if holder:
+        raise StepFailed(f"ה-slot {slot} כבר של הזוג עם {holder} — לכל זוג /24 משלו",
+                         "הצהר על tunnel.slot פנוי ללשכה הזאת (1–254) והרץ שוב.")
     declared_endpoint = (office.get("tunnel") or {}).get("endpoint") or office.get("domain") or ""
     # The address to DIAL comes from the fleet first: `computers` already knows where that machine is
-    # (`host: 203.0.113.10`), it is the same fact the SSH connection uses, and it does not depend on a
+    # (`host: 93.184.216.5`), it is the same fact the SSH connection uses, and it does not depend on a
     # resolver inside a container (the platform's containers cannot resolve public names — measured).
     try:
         peer_endpoint = (machine_record(office["machine"]).get("host") or "").strip()
@@ -2164,7 +3142,10 @@ def step_link(office: dict, ctx: dict, emit) -> dict:
     # socket bridge were up, and its tunnel firewall still dropped every SYN from 10.79.2.1.
     far_serve = (_remote_serve_map(office, emit) if direction in ("serve", "both") else {}) \
         or (office.get("serve") or {})
-    for_home = {home["id"]: _served_ports_local({**office, "serve": far_serve}, slot)}
+    import app as _app
+    for_home = {home["id"]: _served_ports_local({**office, "serve": far_serve}, slot,
+                                                catalog.load_all(_app.STATE_DIR).get(office.get("id")) or {},
+                                                peer=home["id"])}
     # The FAR side is rendered here because only this end holds both identities; OUR side is rendered
     # by `app.render_tunnel` below, through the one renderer that owns the per-pair layout (and that
     # renders every pair, not just this one).
@@ -2247,20 +3228,7 @@ def step_link(office: dict, ctx: dict, emit) -> dict:
         raise StepFailed(f"המנהרה לא מעבירה תנועה: {my_addr} לא ענה לפינג מן המכונה המרוחקת",
                          "בדוק UDP 51820 בכניסה למכונה המרוחקת ואת ה-Endpoint בהצהרה.",
                          remote_wg.strip())
-    # And the DELIVERY, measured from the far machine (DGO-24): the tunnel passing a ping says
-    # nothing about whether a served port reaches the app behind it, and "the container is up" is not
-    # a link. Retried like the ping because the proxy re-reads its plan on a timer; reported rather
-    # than fatal, because the tunnel is up either way and the phase gate is where delivery must be
-    # green.
-    delivery = {}
-    for app, port in sorted(_served_ports_local(home, slot).items()):
-        probe = must(office["machine"],
-                     f"for i in $(seq 1 8); do timeout 3 bash -c 'echo > /dev/tcp/{my_addr}/{port}' "
-                     f"2>/dev/null && {{ echo OPEN; break; }}; sleep 4; done; echo END", 90)
-        delivery[app] = {"port": port, "open": "OPEN" in probe}
-    if delivery:
-        got = sum(1 for d in delivery.values() if d["open"])
-        emit(f"אספקה: {got}/{len(delivery)} פורטים פתוחים מן המכונה המרוחקת")
+    delivery = _home_delivery(office, home, direction, slot, my_addr, emit)   # the far record's own, never mirrored
     # And what the far office needs to USE a served agent API (DGO-32). The port is only half the
     # door: `agent.v1` authenticates every call with the app's own action token, and the office that
     # consumes it has no way to read a container that runs here. So the SERVING office hands the
@@ -2275,8 +3243,41 @@ def step_link(office: dict, ctx: dict, emit) -> dict:
                        "peer": peer_addr, "wg": remote_wg.strip()}]}
 
 
+def _home_delivery(office: dict, home: dict, direction: str, slot: int, my_addr: str, emit) -> dict:
+    """The DELIVERY of the home's served ports, measured from the far machine (DGO-24): the tunnel
+    passing a ping says nothing about whether a served port reaches the app behind it, and "the container
+    is up" is not a link. Retried like the ping because the proxy re-reads its plan on a timer; reported
+    rather than fatal, because the tunnel is up either way and the phase gate is where delivery must be
+    green. Only for a far office that USES the home (`use`/`both`): on a `serve` link nothing of the
+    home's is opened to it by design, and «0/3 open» stood beside DGO-1018's 502 as if it were broken."""
+    if direction not in ("use", "both"):
+        return {}
+    delivery = {}
+    import app as _app
+    for app, port in sorted(_served_ports_local(home, slot, catalog.load_registry(_app.REGISTRY_DIR),
+                                                peer=office["id"]).items()):
+        probe = must(office["machine"],
+                     f"for i in $(seq 1 8); do timeout 3 bash -c 'echo > /dev/tcp/{my_addr}/{port}' "
+                     f"2>/dev/null && {{ echo OPEN; break; }}; sleep 4; done; echo END", 90)
+        delivery[app] = {"port": port, "open": "OPEN" in probe}
+    if delivery:
+        got = sum(1 for d in delivery.values() if d["open"])
+        emit(f"אספקה: {got}/{len(delivery)} פורטים פתוחים מן המכונה המרוחקת")
+    return delivery
+
+
 #: Where the far office's link proxy reads its plan: its own tunnel volume, mounted in its dgo-extend.
+#: Written here only for a far office too old to have `SHIPPED_DIR` (see `_remote_delivery`).
 FAR_PLAN = "/tunnel/link-proxy.json"
+
+#: Run in the far office's dgo-extend: does it take shipped plans as inputs, and then render its one
+#: plan now (its own pairs + every shipped plan) instead of at its next projection pass.
+FAR_SHIPPED = ("import linkproxy;"
+               "print('SHIPPED=' + str(getattr(linkproxy, 'SHIPPED_DIR', '')))")
+FAR_RENDER = ("import app;"
+              "p = app.render_link_proxy();"
+              "print('RULES=%d' % len(p.get('rules') or []));"
+              "print('REFUSED=' + str(p.get('refused') or p.get('shipped_refused') or ''))")
 
 #: Run on the far machine, in its dgo-extend container: one request per rendered `use` rule, through
 #: the link proxy BY NAME (`dgo-net`, the service whose namespace the proxy shares) — the same door the
@@ -2419,11 +3420,19 @@ def serve(door):
             time.sleep(10)
     srv.listen(64)
     log("listening %s:%s → %s" % (door["bind"], door["port"], path))
+    clients = set(door.get("clients") or [])
     while True:
         try:
-            client, _addr = srv.accept()
+            client, addr = srv.accept()
         except OSError:
             break
+        # Only the PEER dials this address through the tunnel, from its own end of the pair (the
+        # rule's `clients`). A container on this machine reaches it over the docker bridge too, and
+        # the door behind writes the peer's office on whatever it carries (DGO-1127). Staged: said
+        # here first, refused once the log shows the peer never arrives from anywhere else.
+        if clients and addr and addr[0] not in clients:
+            log("%s:%s: a caller at %s is not this door's peer (%s) — would be refused"
+                % (door["bind"], door["port"], addr[0], ", ".join(sorted(clients))))
         threading.Thread(target=handle, args=(client, path), daemon=True).start()
 
 
@@ -2479,7 +3488,8 @@ def _remote_doors(office: dict, plan: dict, emit) -> dict:
             continue
         doors.append({"bind": str(rule.get("host_bind") or ""),
                       "port": int(rule["port"]),
-                      "socket": Path(bind[len("unix:"):]).stem})
+                      "socket": Path(bind[len("unix:"):]).stem,
+                      "clients": [str(c) for c in (rule.get("clients") or [])]})
     files = {"link-door.py": REMOTE_DOOR,
              "doors.json": json.dumps(doors, indent=2) + "\n",
              "dgo-link-door.service": DOOR_UNIT.format(path=office["path"])}
@@ -2530,7 +3540,9 @@ def _far_probe_host(office: dict, emit) -> str:
     manifest declares (`sso.default_host`) — the same fact its catalog publishes.
     """
     served = _remote_serve_map(office, emit)
-    app_id = next((a for a in sorted(served) if a not in ("exclude", "dgo-extend", catalog.WILDCARD)), "")
+    # The apps, never the declaration's reserved keys (`catalog.app_specs`): `shared: "*"` read as an
+    # app id skipped the probe without a word (second reader, 2026-10-19).
+    app_id = next((a for a in sorted(catalog.app_specs(served)) if a not in ("dgo-extend", catalog.WILDCARD)), "")
     if not app_id:
         # `serve: {"*": {}}` names no app of its own — and the wildcard KEY was taken for one, so the
         # probe asked for a host nobody declared and reported every working door as down (measured
@@ -2570,10 +3582,13 @@ def _remote_delivery(office: dict, home: dict, direction: str, slot: int, emit) 
         is a UNIX SOCKET plus the address it stands for, and a small service on the machine carries it
         (`REMOTE_DOOR`).
 
-    Written through the far office's OWN dgo-extend container, the one writer of its tunnel volume,
-    atomically (a proxy polling the file never reads half a plan), and stamped `rendered_by` so that
-    office's own renderer leaves a plan it did not make alone. Reported, never fatal: the tunnel is up
-    either way, and the summary says which door answers.
+    Written through the far office's OWN dgo-extend container, atomically, stamped `rendered_by`, into
+    that office's INPUT directory (`linkproxy.SHIPPED_DIR/<this office>.json`) — never into the plan it
+    renders: the far office writes that one itself, from its own pairs AND this file, and is asked to
+    do it now. It used to be written over the rendered plan, which held only while the far office
+    declared no pair of its own (vps1 paired with hp-laptop on 2026-10-12, and from then on its own
+    render erased this plan within a minute of every converge). Reported, never fatal: the tunnel is
+    up either way, and the summary says which door answers.
     """
     import catalog
     import linkproxy
@@ -2584,9 +3599,16 @@ def _remote_delivery(office: dict, home: dict, direction: str, slot: int, emit) 
     far_serve = _remote_serve_map(office, emit) if serves else {}
     far_home = {"id": office["id"], "tunnel": {"slot": slot}, "serve": far_serve}
     as_peer = {"id": home["id"], "links": [{"office": office["id"], "direction": _mirror(direction)}]}
+    # The far office's agent doors come from the catalog it PUBLISHES, the same facts its firewall
+    # half is rendered from (`step_link`, DGO-1009): without them a far office that serves `*` got a
+    # firewall that opened its agent ports and, here, no door behind them (DGO-1018).
+    far_registry = None
+    if serves:
+        import app as _app
+        far_registry = catalog.load_all(_app.STATE_DIR).get(office.get("id")) or None
     try:
         plan = linkproxy.build(far_home, [as_peer], {home["id"]: served}, side=2, halves=halves,
-                               host_doors=serves)
+                               host_doors=serves, registry=far_registry)
     except linkproxy.LinkProxyError as e:
         emit(f"אזהרה: תוכנית האספקה של {office['id']} סורבה ({e})")
         return {"ok": False, "refused": str(e)}
@@ -2596,10 +3618,19 @@ def _remote_delivery(office: dict, home: dict, direction: str, slot: int, emit) 
         emit(f"אזהרה: אין קונטיינר dgo-extend פעיל ב-{office['id']} — תוכנית האספקה לא נכתבה")
         return {"ok": False, "reason": "no dgo-extend container on the far machine"}
     b64 = base64.b64encode((json.dumps(plan, indent=2) + "\n").encode()).decode()
+    inputs = _fact_line(must(office["machine"], f"docker exec {q(container)} python3 -c {q(FAR_SHIPPED)}",
+                             60, f"קריאת גרסת dgo-extend ב-{office['id']} נכשלה"), "SHIPPED")
+    target = f"/tunnel/{inputs}/{home['id']}.json" if inputs else FAR_PLAN
     must(office["machine"],
          f"echo {q(b64)} | base64 -d | docker exec -i {q(container)} sh -c "
-         + q(f"cat > {FAR_PLAN}.new && mv {FAR_PLAN}.new {FAR_PLAN}"),
+         + q(f"mkdir -p {os.path.dirname(target)} && cat > {target}.new && mv {target}.new {target}"),
          60, f"כתיבת תוכנית האספקה ב-{office['id']} נכשלה")
+    if inputs:
+        out = must(office["machine"], f"docker exec {q(container)} python3 -c {q(FAR_RENDER)}", 120,
+                   f"רינדור תוכנית האספקה ב-{office['id']} נכשל")
+        refused = _fact_line(out, "REFUSED")
+        emit(f"אספקה ב-{office['id']}: {_fact_line(out, 'RULES') or 0} כללים בתוכנית שלה"
+             + (f" — סירוב: {refused}" if refused else ""))
     doors = _remote_doors(office, plan, emit)
     rules = plan.get("rules") or []
     if not rules:
@@ -2647,6 +3678,30 @@ def _remote_container(office: dict, prefix: str) -> str:
     return lines[0] if lines else ""
 
 
+def own_container_id() -> str:
+    """This container's id, as the vault's caller check reads it (platform-base/connections/identity.py):
+    Docker mounts /var/lib/docker/containers/<id>/… into every container, so mountinfo names it."""
+    for path, marker in (("/proc/self/mountinfo", "/containers/"), ("/proc/self/cgroup", "/docker/")):
+        try:
+            with open(path, encoding="utf-8", errors="replace") as f:
+                for line in f:
+                    i = line.find(marker)
+                    while i != -1:
+                        cand = line[i + len(marker):i + len(marker) + 64]
+                        if len(cand) == 64 and all(c in "0123456789abcdef" for c in cand):
+                            return cand
+                        i = line.find(marker, i + 1)
+        except OSError:
+            continue
+    return ""
+
+
+def vault_agent_token(app: str) -> str:
+    """One app's agent token, read by THIS office's vault (`links.agent_token`). Raises `links.LinkError`."""
+    import links as linkmod
+    return linkmod.agent_token(app, own_container_id())
+
+
 def _local_agent_token(app: str) -> str:
     """One app's own action token, read from its container HERE — the same trust as `docker exec`.
 
@@ -2659,7 +3714,18 @@ def _local_agent_token(app: str) -> str:
     label and no `AGENT_TOKEN_FILE` — and `docker ps -q … | head -1` picked it, so the handoff
     reported "reading the action token failed" while the app was running and healthy (measured
     2026-10-01 19:2x on this office, right after a self-update).
+
+    The vault first (`links.agent_token`, DGO-1127): it reads the same file with the docker socket it
+    already holds, and ssh to this office's own machine does not exist where there is no sshd (the
+    HP). ssh stays as the second way, for a vault that predates the route.
     """
+    import links as linkmod
+    try:
+        tok = vault_agent_token(app)
+        if len(tok) >= 32:
+            return tok
+    except linkmod.LinkError as e:
+        log.info("the vault did not read %s's agent token (%s) — asking the machine", app, e)
     script = (f"for c in $(docker ps -q --filter label=com.docker.compose.service={q(app)}); do "
               f"f=$(docker exec \"$c\" printenv AGENT_TOKEN_FILE 2>/dev/null || true); "
               f"if [ -n \"$f\" ]; then docker exec \"$c\" cat \"$f\" && exit 0; fi; done; "
@@ -2722,10 +3788,13 @@ def _handoff_agents(office: dict, home: dict, direction: str, emit) -> dict:
     """
     if _mirror(direction) not in ("serve", "both"):
         return {}
-    slot = int((home.get("tunnel") or {}).get("slot") or 0)
+    try:
+        slot = _pair_slot(office, home)              # this pair's /24 — not the home's first one
+    except (TypeError, ValueError):
+        slot = 0
     address = f"10.79.{slot}.1" if slot else ""
     out: dict = {}
-    for app, spec in sorted((home.get("serve") or {}).items()):
+    for app, spec in sorted(catalog.app_specs(home.get("serve") or {}).items()):
         agent_port = spec.get("agent_api_port") if isinstance(spec, dict) else None
         if not agent_port:
             agent_port = _agent_port(_app_manifest(app))
@@ -2808,5 +3877,6 @@ def step_unlink(office: dict, ctx: dict, emit) -> dict:
 # advertises the step came up crash-looping instead of converging.
 RUNNERS = {"machine": step_machine, "dns": step_dns, "backup": step_backup, "code": step_code,
            "engine": step_engine, "env": step_env, "state": step_state, "run": step_run,
-           "link": step_link, "unlink": step_unlink,
+           "accounts": step_accounts,
+           "link": step_link, "unlink": step_unlink, "offsite": step_offsite,
            "health": step_health, "login": step_login, "publish": step_publish}

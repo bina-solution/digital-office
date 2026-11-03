@@ -71,6 +71,21 @@ startups for the general skeleton (Supabase, Linear, Raycast, Arc/Dia, PostHog, 
 Assistant, Tailscale, Plausible, Vercel); Israeli business and restaurant requirements; and every
 network's profile/post specs, API coverage and terms of service (`../social-list/research/`).
 
+### The content library (2026-10-20, DGO-819)
+
+`blueprints/content-library.yaml` is hand-written, like the two website blueprints: DGO's SEO content
+as an editorial plan — 81 items (the release news, the 35 flagship articles, tutorials, Israel guides,
+comparisons and the recurring reports), each tied to its work item by `refs`. Applying it makes one
+richtext slot per item and language, `content.<type>.<slug>.<lang>` (type: article, tutorial, post,
+news, report). A body that has been written lives beside the blueprints,
+`blueprints/content/<type>/<slug>.<lang>.md` (YAML front matter: title, excerpt, seo_title,
+seo_description, tags, faq, sources… — then markdown), and applying adds it as a **draft version**:
+once per content of the file (`meta.file_sha`), an edited file becomes a new draft beside the old,
+and nothing is ever made active — publishing stays the owner's choice. The voice and the checklist
+are `ai/context/seo/style-guide.md`; every fact about DGO is `ai/context/seo/facts.yaml`. Rendering a
+body on the websites is DGO-685's next step (the site kit escapes text today).
+`python3 apps/digital-assets/tests/test_library.py`.
+
 ## Implementation kinds (social-list)
 
 | kind | when | what the owner does |

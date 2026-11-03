@@ -1,0 +1,214 @@
+#!/usr/bin/env bash
+#: mint the meeting secrets into .env and open the video bridge's UDP port on a public office
+# prepare — apps/meet's bring-up step, run by `bbox run` and by the apps screen's install before the
+# containers start (bbox does not know this app exists). Idempotent: a value already in .env is kept.
+#
+#   MEET_JWT_SECRET, MEET_JICOFO_PASSWORD, MEET_JVB_PASSWORD, MEET_JIBRI_XMPP_PASSWORD,
+#   MEET_JIBRI_RECORDER_PASSWORD, MEET_TURN_SECRET, MEET_RECORDER_WATCH_SECRET
+#       minted once (Python's secrets). prosody refuses to start without them, by name.
+#   MEET_JVB_BIND=0.0.0.0, MEET_JVB_ADVERTISE_IPS=<the meeting host's public IPv4>
+#       on an office with a public domain. The bridge's UDP port is the one media path and cannot
+#       go through the edge; published on loopback it reaches nobody. The address the bridge tells
+#       browsers to send media to is the meeting host's own DNS record (public addresses only), so
+#       the office's declaration (its domain) decides it, and follows it when it moves.
+#   MEET_JVB_ADVERTISE_IPS=127.0.0.1 on a .localhost office: the port is published on loopback
+#       there, and a browser on the same machine (WSL, the Mac's engine) cannot reach a container's
+#       own address.
+#   An address this hook derived is marked MEET_JVB_ADVERTISE_AUTO=1 and re-derived on every run;
+#   one an operator wrote (no mark) is never touched, and neither is an operator's MEET_JVB_BIND.
+#   MEET_PLANE_API_URL=<where this office's workflow reaches Plane> — every recording becomes a work
+#       item (DGO-834). Found the way `bbox project-pln` finds it (apps/project-pln/where.sh): the
+#       linked office that publishes project-pln, through the link (http://<alias>.<office>:<link
+#       port>, from .generated/registry): the link door signs the call in, so n8n holds no key.
+#       Marked MEET_PLANE_API_AUTO=1 and re-derived on every run, the same rule as the bridge's
+#       address; with no such office it is emptied, and the workflow says it has nowhere to write.
+#       This office's own project-pln is not used: it asks for its API key, which n8n does not hold.
+set -euo pipefail
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+ENV_FILE="${REPO_ROOT}/.env"
+[ -f "$ENV_FILE" ] || { echo "[meet] no .env yet — nothing to prepare"; exit 0; }
+
+python3 - "$ENV_FILE" <<'PY'
+import ipaddress, os, re, secrets, socket, sys
+
+path = sys.argv[1]
+with open(path, encoding="utf-8", newline="") as f:
+    text = f.read()
+nl = "\r\n" if "\r\n" in text else "\n"
+
+
+def raw(name):
+    """The LAST assignment wins (compose's rule); quotes and a trailing comment are not the value."""
+    val = None
+    for ln in text.split(nl):
+        m = re.match(rf"^\s*{re.escape(name)}\s*=(.*)$", ln)
+        if m:
+            val = m.group(1).split(" #", 1)[0].strip().strip("'\"")
+    return val
+
+
+REF = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?:(:?-)([^}]*))?\}|\$([A-Za-z_][A-Za-z0-9_]*)")
+
+
+def value(name, depth=0):
+    """The value compose would see: ${X}, ${X:-default}, ${X-default} and $X resolved from this file
+    (then the environment), as .env.ex itself writes DEPLOYMENT_DOMAIN=${COMPANY_SLUG}.${…}."""
+    val = raw(name)
+    if val is None and name in os.environ:
+        val = os.environ[name]
+    if val is None or depth > 8:
+        return val
+
+    def sub(m):
+        ref = m.group(1) or m.group(4)
+        got = value(ref, depth + 1)
+        if m.group(2) == ":-" and not got:
+            return m.group(3) or ""
+        if m.group(2) == "-" and got is None:
+            return m.group(3) or ""
+        return got or ""
+    return REF.sub(sub, val)
+
+
+def put(body, name, val):
+    lines = body.split(nl)
+    last = max((i for i, ln in enumerate(lines) if re.match(rf"^\s*{re.escape(name)}\s*=", ln)), default=-1)
+    if last >= 0:
+        lines[last] = f"{name}={val}"
+        return nl.join(lines)
+    return body.rstrip("\r\n") + nl + f"{name}={val}" + nl
+
+
+new = text
+said = []
+SECRETS = (("MEET_JWT_SECRET", 32), ("MEET_JICOFO_PASSWORD", 24), ("MEET_JVB_PASSWORD", 24),
+           ("MEET_JIBRI_XMPP_PASSWORD", 24), ("MEET_JIBRI_RECORDER_PASSWORD", 24), ("MEET_TURN_SECRET", 32),
+           # the recorder's watchdog → prosody's door and meet-start's (jibri/watch.py, 2026-10-26)
+           ("MEET_RECORDER_WATCH_SECRET", 24))
+if all(value(n) is None for n, _ in SECRETS):
+    new = new.rstrip("\r\n") + nl + nl + "# Written by apps/meet/hooks/prepare: the video meetings' own secrets (minted once)." + nl
+for name, size in SECRETS:
+    if not value(name):
+        new = put(new, name, secrets.token_hex(size))
+        said.append(f"minted {name}")
+
+domain = (value("DEPLOYMENT_DOMAIN") or "localhost").strip().rstrip(".")
+local = domain == "localhost" or domain.endswith(".localhost")
+ours = not raw("MEET_JVB_ADVERTISE_IPS") or raw("MEET_JVB_ADVERTISE_AUTO") == "1"
+want = None
+if local:
+    want = "127.0.0.1"
+else:
+    host = (value("MEET_BASE_URL") or f"meet.{domain}").split("://")[-1].split("/")[0].split(":")[0]
+    if not raw("MEET_JVB_BIND"):
+        new = put(new, "MEET_JVB_BIND", "0.0.0.0")
+        said.append("the video bridge's UDP port is published on every interface")
+    if ours:
+        try:
+            found = {a[4][0] for a in socket.getaddrinfo(host, None, socket.AF_INET)}
+        except OSError as e:
+            found = set()
+            print(f"[meet] {host} does not resolve ({e}); the bridge advertises no public address until it "
+                  f"does (or set MEET_JVB_ADVERTISE_IPS in .env)")
+        public = sorted(ip for ip in found if ipaddress.ip_address(ip).is_global)
+        if found and not public:
+            print(f"[meet] {host} resolves to {', '.join(sorted(found))}, none of it public — set "
+                  f"MEET_JVB_ADVERTISE_IPS in .env to the server's own address")
+        want = ",".join(public) or None
+if ours and want and (raw("MEET_JVB_ADVERTISE_IPS") != want or raw("MEET_JVB_ADVERTISE_AUTO") != "1"):
+    new = put(put(new, "MEET_JVB_ADVERTISE_IPS", want), "MEET_JVB_ADVERTISE_AUTO", "1")
+    said.append(f"the bridge advertises {want}")
+
+# Where the recordings' work items go: the office's Plane, as apps/project-pln/where.sh finds it — the
+# copy the herd names (scripts/herd_home.py), never the first linked office that publishes one, which
+# sorts the client's office (fireplace) before ours. Measured on vps1 (2026-10-21):
+# remote.hp-laptop.plane.json → http://plane.hp-laptop:9003 answers n8n with no key (the door signs it in).
+import importlib.util, json
+root = os.path.dirname(path)
+try:
+    _spec = importlib.util.spec_from_file_location("herd_home", os.path.join(root, "scripts", "herd_home.py"))
+    herd_home = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(herd_home)
+    ours, plane, why = herd_home.home("project-pln", raw("DGO_OFFICE_ID"), os.path.join(root, ".generated", "registry"),
+                                      os.path.join(root, "apps", "computers", "herd.yaml"))
+    # On one of the herd's offices while the office that runs Plane does not publish it (mid-update, a dropped
+    # link), the address is left as it is: it comes back with that office, and the recordings meanwhile wait.
+    wait = bool(ours and why)
+except Exception as e:                       # a bring-up step never dies on this read: the secrets above still land
+    plane, why, wait = "", f"which office's Plane to use could not be read ({e}); MEET_PLANE_API_URL is left as it is", True
+plane = plane or None
+if why:
+    print(f"[meet] {why}")
+plane_ours = not raw("MEET_PLANE_API_URL") or raw("MEET_PLANE_API_AUTO") == "1"
+if plane_ours and plane and (raw("MEET_PLANE_API_URL") != plane or raw("MEET_PLANE_API_AUTO") != "1"):
+    new = put(put(new, "MEET_PLANE_API_URL", plane), "MEET_PLANE_API_AUTO", "1")
+    said.append(f"recordings become work items in the Plane at {plane}")
+elif plane_ours and not plane and not wait and raw("MEET_PLANE_API_URL"):
+    new = put(new, "MEET_PLANE_API_URL", "")
+    said.append((why or "no linked office publishes Plane any more") + ": recordings are not filed as work items")
+
+# Which n8n meet-start runs the recordings' workflow in (DGO-945): this office's, unless Meet's entry
+# in platform.state.yaml says its workflows run in another office (`workflows: <office>`, read by the
+# compiler as workflows_here) — then that office's webhook receiver, through the link: a door with no
+# tile that office gives this one by name (`serve.services.workflow-hooks`, apps/n8n/app.json), read
+# from the compiler's own `remote:` block (`reconcile.py remote-get`), at
+# http://workflow-hooks.<office>:<its link door>. The same office is the one meet-start lets in
+# through the link (MEET_WORKFLOWS_OFFICE): its workflow reads the recordings and writes their items.
+import subprocess
+LOCAL_HOOK = "http://n8n-webhook:5678/webhook/meet-recordings"
+where, unread = None, False
+# Read as the compiler reads it (reconcile.workflows_here, which needs PyYAML too): the YAML entry,
+# stripped and lowercased — `HP-Laptop`, a quoted value or a block-style entry all name one office.
+try:
+    import yaml
+    with open(os.path.join(root, "platform.state.yaml"), encoding="utf-8") as fh:
+        state = yaml.safe_load(fh) or {}
+    entry = (state.get("apps") or {}).get("meet") if isinstance(state, dict) else None
+    w = str(entry.get("workflows") or "").strip().lower() if isinstance(entry, dict) else ""
+    where = w if w and w != "here" else None
+    # …and only an office's name goes into .env: anything else (a line break, a space) is said and
+    # left out, never written as a second line or as a value no office can match
+    if where and not re.fullmatch(r"[a-z][a-z0-9-]{1,30}", where):
+        print(f"[meet] Meet's `workflows: {where!r}` is not an office's name — meet-start is not pointed at it")
+        unread = True
+except Exception as e:                       # noqa: BLE001 — a bring-up step never dies on this read
+    # A read that failed is not "the workflows run here": what meet-start was told stays as it is,
+    # so a passing hiccup does not cut the office that runs them off (a 403) until the next run.
+    print(f"[meet] platform.state.yaml could not be read for Meet's `workflows:` ({type(e).__name__}) — "
+          f"MEET_WORKFLOW_HOOK and MEET_WORKFLOWS_OFFICE are left as they are")
+    unread = True
+hook = LOCAL_HOOK
+if where and not unread:
+    hook = None
+    try:
+        got = subprocess.run([sys.executable, os.path.join(root, "platform", "manager", "reconcile.py"),
+                              "remote-get"], capture_output=True, text=True, timeout=120)
+        block = json.loads(got.stdout or "[]") if got.returncode == 0 else []
+        entry = next((e for e in block if isinstance(e, dict) and e.get("office") == where), {})
+        door = next((d for d in entry.get("services") or []
+                     if isinstance(d, dict) and d.get("app") == "n8n" and d.get("alias") == "workflow-hooks"), None)
+        if door:
+            hook = f"http://workflow-hooks.{where}:{int(entry.get('link_port') or door.get('port'))}/webhook/meet-recordings"
+    except (OSError, ValueError, TypeError, subprocess.SubprocessError):
+        pass
+    if not hook:
+        print(f"[meet] Meet's workflows run in {where}, which gives this office no webhook receiver "
+              f"(serve.services.workflow-hooks) — meet-start calls nothing, and {where}'s own clock runs the workflow")
+        hook = ""
+hook_ours = not unread and (raw("MEET_WORKFLOW_HOOK") is None or raw("MEET_WORKFLOW_HOOK_AUTO") == "1")
+if hook_ours and (raw("MEET_WORKFLOW_HOOK") != hook or raw("MEET_WORKFLOW_HOOK_AUTO") != "1") \
+        and not (raw("MEET_WORKFLOW_HOOK") is None and hook == LOCAL_HOOK):
+    new = put(put(new, "MEET_WORKFLOW_HOOK", hook), "MEET_WORKFLOW_HOOK_AUTO", "1")
+    said.append(f"meet-start runs the recordings' workflow at {hook or '(nowhere: the clock of ' + where + ')'}")
+# Always derived, never an operator's: who may come in through the link is the declaration's answer.
+if not unread and (raw("MEET_WORKFLOWS_OFFICE") or "") != (where or "") \
+        and not (raw("MEET_WORKFLOWS_OFFICE") is None and not where):
+    new = put(new, "MEET_WORKFLOWS_OFFICE", where or "")
+    said.append(f"through the link, meet-start answers {where or 'no office'} (the office its workflows run in)")
+
+if new != text:
+    with open(path, "w", encoding="utf-8", newline="") as f:
+        f.write(new)
+for line in said:
+    print(f"[meet] {line} (.env)")
+PY

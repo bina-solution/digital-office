@@ -17,8 +17,8 @@ in chat.
 
 ## 2. The problem being solved
 
-The owner runs `deployment-bina-comp`: a multi-app Docker Compose deployment on a
-remote VPS, fronted by Traefik, exposing many apps publicly (`*.bina-comp.bina-solutions.co.il`).
+The owner runs `deployment-hacohen`: a multi-app Docker Compose deployment on a
+remote VPS, fronted by Traefik, exposing many apps publicly (`*.hacohen.bina-solutions.co.il`).
 Today it is developed by hand: VS Code + GitHub Copilot over Remote-SSH, looping
 sessions until goals are met.
 
@@ -42,7 +42,7 @@ A user sends a message to the bot on Telegram:
 
 And more ambitiously:
 
-> **User:** "clone this website into clone2.bina-comp.bina-solutions..."
+> **User:** "clone this website into clone2.hacohen.bina-solutions..."
 >
 > **Bot:** *(spins a long-running session, streams a progress thread, delivers
 > a completion report)*
@@ -53,7 +53,7 @@ Hard requirements baked into that experience:
   the whole stack live — bot, agent platform, models all auto-configured from
   `.env` (DeepSeek API key, Claude). **No manual WebUI clicks** to register
   models or settings. If a step needs a human, it is a bug.
-- **Full deployment access.** The agent edits the real `./deployment-bina-comp`
+- **Full deployment access.** The agent edits the real `./deployment-hacohen`
   tree and runs the **host VPS terminal** — exactly like Copilot-over-SSH does
   today — so it can develop new services, bump versions, investigate n8n via
   CLI, add open-source services, even modify the dispatcher and bot themselves.
@@ -74,7 +74,7 @@ Telegram / WhatsApp
 │  (bina-deployment)   │     and use OpenHands as its main tool. It keeps a
 │  + its own WebUI     │     live monitor thread per session it spawns, so the
 └──────────┬───────────┘     end user is guaranteed updates + a final response.
-           │ bridge token (dispatcher-bina-comp-bridge-token-2026)
+           │ bridge token (dispatcher-hacohen-bridge-token-2026)
            ▼
 ┌──────────────────────┐
 │  OpenHands platform  │  Session/conversation engine, WebUI, browser tool,
@@ -95,12 +95,12 @@ TLS), `n8n-bina-deployment` (workflow automation, driveable by the agent),
 `docker-proxy-bina-deployment`, `agent-runner-bina-deployment` (legacy — being
 retired in favor of dispatcher+OpenHands).
 
-Repos involved: `deployment-bina-comp` (branch `COPILOT`) is the deployment;
+Repos involved: `deployment-hacohen` (branch `COPILOT`) is the deployment;
 `chat` is the WhatsApp bot (in-tree, source of good agent
 features to port — e.g. `agent_chat.js`); `apitools` is a sibling project.
 
 Routing convention: every app is reverse-proxied through the main compose and
-exposed at `<app>.bina-comp.bina-solutions.co.il`.
+exposed at `<app>.hacohen.bina-solutions.co.il`.
 
 ## 5. Key design decisions
 

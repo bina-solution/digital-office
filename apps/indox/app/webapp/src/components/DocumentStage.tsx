@@ -1,6 +1,7 @@
 import {
   useCallback, useEffect, useMemo, useRef, useState, type CSSProperties,
 } from 'react';
+import { ltr } from '../bidi';
 import { Ic } from './DataGrid';
 import { IC } from '../icons';
 
@@ -149,8 +150,8 @@ export default function DocumentStage({
       shortNote: 'הסימון שהמנוע צייר על המסמך.',
       fallbackNote: 'לא הופק סימון חילוץ למסמך זה — זו תצוגה מקדימה של הקובץ בלבד.',
       note: (s) => (s === 'fallback'
-        ? 'לא הופק סימון חילוץ (documentDraw) למסמך זה — זו תצוגה מקדימה של הקובץ בלבד, ללא עוגן/ערך מסומנים.'
-        : 'הסימון מצויר על ידי apitools עצמו (/documentDraw): עוגן ירוק, ערך כחול — לכל שדה השאילתה שלו, קריאה אחת לערך.'),
+        ? `לא הופק סימון חילוץ ${ltr('(documentDraw)')} למסמך זה — זו תצוגה מקדימה של הקובץ בלבד, ללא עוגן/ערך מסומנים.`
+        : `הסימון מצויר על ידי apitools עצמו ${ltr('(/documentDraw)')}: עוגן ירוק, ערך כחול — לכל שדה השאילתה שלו, קריאה אחת לערך.`),
     },
     {
       key: 'tokens',

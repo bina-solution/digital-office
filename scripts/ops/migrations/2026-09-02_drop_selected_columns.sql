@@ -10,7 +10,7 @@
 -- (v_indox_doubles, amt_restart, amt_shape, resend_set, sane_plan). They go with the columns.
 --
 -- Run per tenant schema:
---   psql -U postgres -d postgres -v schema=indox_bina_comp -f 2026-09-02_drop_selected_columns.sql
+--   psql -U postgres -d postgres -v schema=indox_hacohen -f 2026-09-02_drop_selected_columns.sql
 
 \set ON_ERROR_STOP on
 set search_path to :"schema", public;

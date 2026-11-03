@@ -1,0 +1,57 @@
+{
+  "about": "The known speech of `./bbox meet verify --call` (apps/meet/qa/verify_call.py, FPG-87): what the synthetic host says, and the words each of the office's two recognisers must write for it. One rendition = 1 s of silence, the Hebrew (he.ogg), 0.7 s, the English (spoken by flite inside the test container), 0.7 s; it is repeated for --speak seconds, then the microphone gives digital silence (the silent-mic guard's case 3). A word is found when the transcript, without niqqud and punctuation, CONTAINS it (a Hebrew prefix may be glued on).",
+  "hebrew": {
+    "file": "he.ogg",
+    "source": "FLEURS he_il (Google, CC BY 4.0): two read sentences, cut from the 2026-10-27 load test's he12.wav",
+    "text": [
+      "כל דבר ביקום עשוי מחומר. כל חומר עשוי מחלקיקים זעירים הנקראים אטומים.",
+      "השוקו החם בסטנדרט בלגי. מיצי פירות יקרים אך מעולים."
+    ],
+    "words": [
+      "ביקום",
+      "חומר",
+      "חלקיקים",
+      "אטומים",
+      "בסטנדרט",
+      "בלגי",
+      "פירות"
+    ],
+    "need": 4,
+    "translations": [
+      "universe",
+      "matter",
+      "particles",
+      "atoms",
+      "cocoa",
+      "chocolate",
+      "belgian",
+      "fruit",
+      "juice"
+    ],
+    "measured": "2026-10-29 20:05Z on fpg-vps, each sentence alone: ivrit (he) wrote 7/7 words; whisper (auto) wrote the first sentence in Hebrew and the second in ARABIC letters (a short clip's language guess) — so whisper's Hebrew is reported, not required."
+  },
+  "english": {
+    "tts": "flite, voice slt (ffmpeg's lavfi flite filter in the jibri image)",
+    "text": "This is the fireplace office call check. The D G O fee is paid with Zelle. Chimney cap, recording, fireplace.",
+    "words": [
+      "fireplace",
+      "office",
+      "check",
+      "chimney",
+      "recording"
+    ],
+    "need": 3,
+    "measured": "2026-10-29 20:05Z: whisper (auto) wrote «This is the fireplace office call check, the DGO fee is paid with Zelle, chimney cap, recording, fireplace.»; ivrit (he) wrote «… the DGOP is paid with the Zelt Shimny Kapp recording, fireplace.» — the live captions' FPG-471 failure, reproduced."
+  },
+  "terms": {
+    "about": "The office's words the live captions (ivrit, language he) must spell the office's way (FPG-471): found = the right spelling is there and none of the wrong ones (DGOF: the live captions' own form, measured 2026-10-29).",
+    "DGO fee": {
+      "wrong": [
+        "DGOP",
+        "DGO P",
+        "DGO-P",
+        "DGOF"
+      ]
+    }
+  }
+}

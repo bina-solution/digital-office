@@ -28,6 +28,10 @@
   ],
   "connections": [],
   "compose": "docker-compose.yml",
+  "agent": {
+    "context": "AGENT.md",
+    "order": 6
+  },
   "routing": [
     {
       "host": "apps",

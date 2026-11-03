@@ -9,12 +9,18 @@ and :443 and L4-forward to the Traefik host, which routes by Host header
 *.localhost app — no per-host config. Pure stdlib; no extra dependency.
 
 Usage: localhost-forward.py <traefik-host> [port ...]   (default ports: 80 443)
+       FORWARD_LISTEN=<addr>[,<addr>…] — listen there instead of on loopback
 """
 import asyncio
+import os
 import sys
 
 TARGET = sys.argv[1]
 PORTS = [int(p) for p in sys.argv[2:]] or [80, 443]
+#: Where it listens: both loopback families, unless FORWARD_LISTEN names the addresses — the
+#: browser container's second use, carrying its loopback-only CDP, broker, noVNC and hand-off to
+#: browser42's own network and no other (DGO-983).
+LISTEN = [h for h in os.environ.get("FORWARD_LISTEN", "127.0.0.1,::1").split(",") if h]
 
 
 async def _pipe(reader, writer):
@@ -46,14 +52,14 @@ async def _serve(port):
             _pipe(target_reader, client_writer),
         )
 
-    # host=["127.0.0.1", "::1"] binds both loopback families (Chrome may use either).
-    server = await asyncio.start_server(on_client, host=["127.0.0.1", "::1"], port=port)
+    # By default both loopback families (Chrome may use either).
+    server = await asyncio.start_server(on_client, host=LISTEN, port=port)
     return server
 
 
 async def main():
     servers = [await _serve(p) for p in PORTS]
-    print(f"[localhost-forward] *.localhost -> {TARGET} on loopback {PORTS}", flush=True)
+    print(f"[localhost-forward] {PORTS} on {LISTEN} -> {TARGET}", flush=True)
     await asyncio.gather(*(s.serve_forever() for s in servers))
 
 

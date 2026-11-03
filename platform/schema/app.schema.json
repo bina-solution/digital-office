@@ -75,6 +75,11 @@
       "default": false,
       "description": "true = cannot be disabled or uninstalled (the platform itself). Layer 1 is normally system:true."
     },
+    "core": {
+      "type": "boolean",
+      "default": false,
+      "description": "true = an app the product ships in the core office (platform.state.core.yaml), switched on before anybody chose one: it does not count as the sign that an office has been set up, so a fresh core office still gets the install wizard (DGO-1090). Unlike system, it can be disabled."
+    },
     "engine": {
       "type": "object",
       "description": "The PRIVATE engine this app runs, and the profiles (identities) declared on it. app.json is the ONLY place profiles are declared: the app's bootstrap reconciler creates each one on start, mints its credential, and creates its connection instance in the same operation. Adding an entry here is how a deployment gets another working account; see ai/context/app-engine-pattern.md.",
@@ -161,6 +166,11 @@
               "type": "string"
             },
             "description": "Ops adapters MAY implement; consumers must negotiate (unequal-feature-set problem)."
+          },
+          "link": {
+            "type": "boolean",
+            "default": false,
+            "description": "true = offered to LINKED offices too, as a door with no tile (DGO-945): the catalog publishes it under the capability's name, a linked office reaches it at `http://<name>.<office>:<door>`, and a workflow that office imports has this endpoint rewritten to that door when the providing app does not run there. Needs `endpoint`."
           }
         }
       }
@@ -359,6 +369,15 @@
             },
             "description": "Path prefixes exempt from auth (e.g. /webhook, /healthz) — Cloudron proxyAuth '!' semantics."
           },
+          "on_demand": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["idle"],
+            "properties": {
+              "idle": {"type": "string", "pattern": "^[1-9][0-9]*[smh]$", "description": "How long its network may be quiet before autoheal stops it: \"30m\", \"2h\" (at least 5 minutes)."}
+            },
+            "description": "This route's app runs only while it is used (DGO-1270): autoheal stops it after `idle` with no traffic, and the waker (app-management) keeps its address answering — opening it starts it again. For an app whose entrance is a person (a desktop app), never for one other services call."
+          },
           "emit_labels": {
             "type": "boolean",
             "default": true,
@@ -385,6 +404,11 @@
                 "type": "boolean",
                 "default": true,
                 "description": "true = same-origin embed under /a/<id>/ (adds the APP_BASES entry)."
+              },
+              "tile": {
+                "type": "boolean",
+                "default": true,
+                "description": "false = the app keeps its /a/<alias>/ door (its API, for the console and for apps that read it) and its place in the office's catalog (a linked office still reaches it through the link), but the launcher shows NO tile for it — here or as a linked office's tile — because its screen lives in another app. machine (2026-10-21, DGO-890): its resource view moved into computers."
               },
               "external": {
                 "type": "boolean",
@@ -675,6 +699,14 @@
         "backup": {
           "type": "string",
           "description": "Hook producing a restorable archive before purge."
+        },
+        "cache": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9_.-]+$"
+          },
+          "description": "Volumes (of `volumes`) that hold only what the office can re-fetch or re-run — a pinned model, cached audio. The off-server copy leaves them out (FPG-92); the pre-upgrade backup still takes them."
         }
       }
     },
@@ -733,6 +765,17 @@
           "description": "Where this app's brief sits in the rendered file. Defaults to 100."
         }
       }
+    },
+    "agent_api_port": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535,
+      "description": "The port of this app's agent door, stated by the app that owns it. An app is served to a linked office as a tile (its `routing` port) and, if it takes commands from a CLI, as a second door — `reconcile` publishes that second door as `agent_api_port` in `.generated/registry/office.apps.json`, the serving office's link delivers it to the service that answers it (`agent_api_service`), and the CLI speaks to it there. It is DERIVED from `capabilities[]` (the first endpoint that is not the UI port), which is right while the adapter is one of the capabilities and wrong when it is not: browser42's one capability is its MCP on 8931, and its agent door is the task runner on 8766 (`/v1/task`), so the derived door was a port nothing answers on (lnk-037/DGO-570). State it only when the app knows better than the derivation; when stated it wins, and an app that states neither gets no door rather than a guessed one."
+    },
+    "agent_api_service": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{1,62}$",
+      "description": "The compose service that ANSWERS this app's agent door (its `agent_api_port`, stated or derived), when it is not the service that serves the UI. A linked office reaches the agent door through the serving office's link, which delivers it to this service; without it the link delivers to the UI's service, and an app whose API is a container of its own answered 502 to every far CLI (browser42: the UI is browser42-caddy, the task runner is browser42-task-runner; DGO-1018). It is stated, never inferred from a capability's endpoint: an API with no authentication of its own must not be handed to a linked office by inference. Sharing an app then shares its screen, its API and its CLI, with nothing declared by hand in any office."
     },
     "contributes": {
       "type": "object",

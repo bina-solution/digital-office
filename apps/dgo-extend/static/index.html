@@ -201,19 +201,30 @@ body{background:var(--bg);color:var(--ink);font-family:var(--font);font-size:14p
 .field .hint{font-size:11.5px;color:var(--muted)}
 .grid2{display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px}
 @media (max-width:760px){.grid2{grid-template-columns:1fr}}
+/* @bina-modal:start */
+/* A dialog is bounded by its window and its title never leaves it. The card used to scroll WHOLE —
+   the title and the way out went with the content, so in a window shorter than the card they began
+   outside it with nothing to scroll (DGO-518 the console's own dialogs, DGO-519 INDOX's). Two
+   surfaces had already worked this out on their own and three had not, so the rule is here once.
+   `--mp` is the card's own padding said once: the header takes it with it and sticks that far ABOVE
+   the content edge, which is where a padded scroller measures `top` from. The action row stays at
+   the form's end on purpose — stuck to the bottom it could be pressed with the refusal it explains
+   out of sight above it.
+   WIDTH IS NOT HERE. Each surface sizes its own dialogs and they differ (420px, 460px, 600px,
+   760px), so a surface sets it AFTER this block, where the cascade lets it win. `16px` is the radius
+   every surface that has one already uses; `--radius` is an app's own token and the console has
+   none, so the shared value is the number, not a variable that would resolve to nothing there. */
 .modal-ov{position:fixed;inset:0;background:var(--scrim);display:flex;align-items:center;justify-content:center;z-index:50;padding:18px}
-.modal{--mp:22px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:var(--mp);
-       width:min(760px,94vw);max-height:92vh;overflow:auto;box-shadow:var(--shadow-lg)}
-.modal.narrow{width:min(460px,94vw)}
-/* a dialog's title and its way out stay in sight while what it holds scrolls under them: a form taller
-   than its window ended at its last field with neither. --mp is the card's padding, said once: the
-   header takes it with it and sticks that far ABOVE the content edge - which is where a padded scroller
-   measures `top` from. (The action row stays at the form's end: stuck to the bottom it could be pressed
-   with the refusal it causes out of sight above it.) */
+.modal{--mp:22px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:var(--mp);
+       max-height:92vh;overflow:auto;box-shadow:var(--shadow-lg)}
 .modal-h{display:flex;align-items:center;justify-content:space-between;gap:12px;position:sticky;top:calc(-1*var(--mp));z-index:1;
          margin:calc(-1*var(--mp)) calc(-1*var(--mp)) 4px;padding:var(--mp) var(--mp) 10px;background:var(--surface)}
-@media (max-height:399px){.modal-ov{padding:8px}.modal{--mp:14px}}
 .modal-h h3{margin:0;font-size:16px}
+@media (max-height:399px){.modal-ov{padding:8px}.modal{--mp:14px}}
+/* @bina-modal:end */
+/* the shared block carries no width on purpose: this surface sizes its own dialogs */
+.modal{width:min(760px,94vw)}
+.modal.narrow{width:min(460px,94vw)}
 .hidden{display:none!important}
 /* what a command printed is the kit's display: olive with its ink — and plum when it failed */
 pre.out{background:var(--olive);color:var(--olive-ink);border-radius:10px;padding:12px 14px;font-family:var(--mono);font-size:12.5px;
@@ -384,6 +395,22 @@ button.pg-live{cursor:pointer}
 @media (max-height:699px) and (max-width:430px){
   .pg-head:not([data-view]):has(.pg-actions) h1{display:none}
   .pg-actions{margin-inline-start:0}
+  /* THE HEADING IS ONE LINE, AND THE ROW OF ACTIONS SCROLLS INSIDE IT. With the title kept (the rule
+     above keeps it when it names a view) the row wrapped instead: on the sites screen at 380×224 the
+     buttons took three lines and the heading ended at 125px of the window's 224 — most of the smallest
+     window given to chrome (measured 2026-10-13, the windows suite). The title keeps its width, the row
+     takes what is left and scrolls sideways — the idiom this office already uses for a row of tools in
+     a short frame. A button does not wrap its own label either: with the row held to one line two
+     controls grew to 64px and 46px and the heading was still 73px. */
+  .pg-head{flex-wrap:nowrap;margin-bottom:6px;padding-bottom:6px}
+  .pg-head>:first-child{flex:none}
+  .pg-actions{flex:1 1 auto;min-width:0;justify-content:flex-end}
+  .pg-actions{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;max-width:100%}
+  .pg-actions::-webkit-scrollbar{display:none}
+  .pg-actions .btn,.pg-actions button,.pg-actions a.btn,.pg-actions select{white-space:nowrap}
+  /* …and the row's own status line ellipsises instead of stacking: `span.live` («2 אתרים · הכל עונה»)
+     was 59px WIDE and 83px TALL — the row's height was one line of text wrapping letter by letter. */
+  .pg-actions .live{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
   /* …and a line that reports (`data-live`) shares that line with them, as far as it fits */
   .pg-head:has(.pg-sub[data-live]){flex-wrap:nowrap}
   .pg-head>:first-child:has(.pg-sub[data-live]){flex:1 1 0;min-width:0}
@@ -430,6 +457,50 @@ button.pg-live{cursor:pointer}
 .ocard[data-office-hue]{border-inline-start:4px solid var(--office-hue)}
 .ocard h4 .office-animal{display:inline-flex;align-items:center;vertical-align:-3px;margin-inline-end:7px}
 .ocard h4 .office-animal svg{width:17px;height:17px;display:block}
+/* THE HERDS (DGO-1003): the offices grouped by the company they belong to — this office's own herd
+   first, then each external herd. A screen with one herd draws no heading at all. */
+.herd{margin:4px 0 18px}
+.herd+.herd{border-top:1px solid var(--line);padding-top:14px}
+.herd-h{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin:0 0 10px}
+.herd-h h4{margin:0;font-size:15px;font-weight:700;color:var(--ink)}
+/* THE DGO MAP (DGO-1006): one view of the whole network. The list's cards step aside while it shows
+   (`body.mapmode`); the herds are panels — ours on the quiet ground, an external one dashed in sky, the
+   colour of "a link that only informs" — each office a node to open, and the side panel says where
+   it runs, how it is linked and what is inside each app it gives. */
+body:not(.mapmode) #mapCard{display:none}
+body.mapmode .listview,body.mapmode #joinCard{display:none!important}
+.map{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start}
+.map-herds{flex:999 1 620px;min-width:0;display:flex;flex-direction:column;gap:14px}
+.hpanel{border:1px solid var(--line);border-radius:16px;padding:14px;background:var(--surface-2);display:flex;flex-direction:column;gap:10px}
+.hpanel.ext{background:var(--surface);border:1.5px dashed var(--sky-line)}
+.hpanel-h{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px}
+.hpanel-h h4{margin:0;font-size:16px;font-weight:800}
+.hlink{font-size:12px;border-radius:9px;padding:6px 10px;background:var(--olive-soft);color:var(--olive-d);border:1px solid var(--olive-line)}
+.hpanel.ext .hlink{background:var(--sky-soft);color:var(--sky-d);border:1px dashed var(--sky-d)}
+.ogrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+.onode{text-align:start;cursor:pointer;display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:14px;background:var(--surface);border:1px solid var(--line);font:inherit;color:inherit;min-height:44px}
+.onode.home{border:1.5px solid var(--olive-line)}
+.onode[data-office-hue]{border-inline-start:4px solid var(--office-hue)}
+.onode[aria-pressed="true"]{border:2px solid var(--olive);box-shadow:var(--shadow)}
+.onode[aria-pressed="true"][data-office-hue]{border-inline-start:4px solid var(--office-hue)}
+.onode .top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.onode .nm{font-size:15px;font-weight:800;display:inline-flex;align-items:center;gap:7px;min-width:0}
+.onode .office-animal{display:inline-flex;align-items:center}
+.onode .office-animal svg{width:17px;height:17px;display:block}
+.onode .ln{font-size:12px;border-radius:7px;padding:4px 8px;background:var(--surface-2);color:var(--muted)}
+.onode .ln.ok{background:var(--olive-soft);color:var(--olive-d)}
+.onode .ft{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:8px}
+.map-side{flex:1 1 360px;min-width:0;border:1px solid var(--line);border-radius:16px;padding:16px;background:var(--surface);box-shadow:var(--shadow);display:flex;flex-direction:column;gap:12px}
+.map-side h4{margin:0;font-size:16px;font-weight:800}
+.map-side h5{margin:0;font-size:13px;font-weight:800}
+.achips{display:flex;flex-wrap:wrap;gap:6px}
+.achip{cursor:pointer;min-height:32px;box-sizing:border-box;padding:4px 12px;border-radius:var(--radius-pill);font:inherit;font-size:12.5px;background:var(--surface);color:var(--ink);border:1px solid var(--line);display:inline-flex;align-items:center;gap:6px;text-decoration:none}
+.achip svg{width:14px;height:14px}
+.achip[aria-pressed="true"]{background:var(--olive);color:var(--olive-ink);border-color:var(--olive)}
+.appbox{border:1px solid var(--olive-line);background:var(--olive-soft);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.appbox .meta{margin-top:0}
+.hops{display:flex;flex-direction:column;gap:6px;font-size:12px}
+.hops .hop{border:1px dashed var(--line);border-radius:9px;padding:6px 10px;background:var(--surface-2)}
 </style>
 </head>
 <body>
@@ -444,6 +515,7 @@ button.pg-live{cursor:pointer}
            joined, but the host has to be able to start it from here too — a screen reachable only
            by typing its URL is a screen nobody uses. -->
       <a class="btn sm" id="btnConnect" href="connect" title="פותח את מסך הצימוד: הצגת קוד, סריקה או הדבקה">צימוד לשכה</a>
+      <button class="btn ghost sm" id="btnMap" type="button" title="מפת ה-DGOs: העדרים, הלשכות בכל עדר, הקישורים ומה כל לשכה נותנת">מפת ה-DGOs</button>
       <button class="btn ghost sm" id="btnRefresh" type="button" title="קריאה מחודשת של מצב הלשכות עכשיו"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7M21 4v4h-4"/></svg>רענון</button>
       <button class="btn ghost sm" id="btnAdd" type="button" title="מצהיר על לשכה חדשה על מחשב שמחובר באפליקציית מחשבים">התקנת לשכה על מחשב</button>
     </div>
@@ -452,7 +524,7 @@ button.pg-live{cursor:pointer}
   <!-- WHO THIS OFFICE IS to another office: its name, its id, the fingerprint the other operator
        compares, where its tunnel is dialed. All of it is this app's own record, so it is drawn even
        on an office that cannot read its own machine. The version sits under it, when it is known. -->
-  <div class="card">
+  <div class="card listview">
     <h3><span>הלשכה הזאת</span>
       <span class="cardacts">
         <button class="btn ghost sm" id="btnRename" type="button" title="קובע את השם שבו הלשכה הזאת מופיעה בלשכות שמחוברות אליה">שינוי שם</button>
@@ -461,9 +533,27 @@ button.pg-live{cursor:pointer}
     <div id="self"><div class="small muted">טוען…</div></div>
     <div id="home"></div>
   </div>
-  <div class="card">
+  <!-- JOINING BY DECLARATION (join_api.py): offices that cannot be reached join THIS one through its
+       link door — with an invite, or by asking and waiting for the approval given here — and an office
+       that declared DGO_JOIN says here how its own join stands. Hidden where neither applies. -->
+  <div class="card hidden" id="joinCard">
+    <h3><span>הצטרפות לפי הצהרה</span>
+      <span class="cardacts">
+        <button class="btn ghost sm hidden" id="btnInvite" type="button" title="יוצר קוד הזמנה: לשכה שמצהירה עליו מצטרפת לכאן בעצמה, בלי אף מסך">הזמנת לשכה</button>
+      </span></h3>
+    <div id="join"></div>
+  </div>
+  <div class="card listview">
     <h3><span>הלשכות</span></h3>
     <div id="list"><div class="spin">טוען…</div></div>
+  </div>
+  <!-- THE DGO MAP (DGO-1006): every herd, the offices of each, the links and their direction, where each
+       office runs and what it gives — at the path map/<office>/<app>, an address that survives a reload. -->
+  <div class="card" id="mapCard">
+    <h3><span>מפת ה-DGOs</span>
+      <span class="cardacts"><span class="small muted" id="mapAt"></span>
+        <button class="btn ghost sm" id="btnMapList" type="button" title="חזרה לרשימת הלשכות">לרשימה</button></span></h3>
+    <div id="map"><div class="spin">טוען…</div></div>
   </div>
 </div>
 
@@ -533,6 +623,40 @@ button.pg-live{cursor:pointer}
     <div id="giveErr"></div>
     <div class="rowacts"><button class="btn" id="btnGiveSave" type="button">שמירה</button>
       <button class="btn ghost" data-close type="button">ביטול</button></div>
+  </div>
+</div>
+
+<!-- AN INVITE: one code that lets ONE office join by itself. Shown once, in this dialog only. -->
+<div class="modal-ov hidden" id="inviteDlg">
+  <div class="modal">
+    <div class="modal-h"><h3>הזמנת לשכה</h3><span class="link" data-close>סגירה</span></div>
+    <div class="pg-note">לשכה שמצהירה על הקוד הזה (<span class="tok">DGO_JOIN=…</span> בסביבה או ב-<span class="tok">.env</span> שלה) מצטרפת לכאן בעצמה, דרך דלת הקישור, בלי אף מסך. הקוד הוא מפתח: מי שמחזיק בו מצטרף בשם שנקבע כאן, עד שהוא פג או מבוטל.</div>
+    <div id="inviteForm">
+      <div class="field"><label for="iOffice">מזהה הלשכה המוזמנת</label><input id="iOffice" class="mono" placeholder="claude-cloud" autocomplete="off"></div>
+      <div class="field"><label for="iDirection">כיוון</label>
+        <select id="iDirection">
+          <option value="both">שתיהן רואות זו את זו</option>
+          <option value="use">הלשכה הזאת רואה את שלה</option>
+          <option value="serve">היא רואה את הלשכה הזאת</option>
+        </select></div>
+      <div class="field"><label for="iTtl">תוקף</label>
+        <select id="iTtl">
+          <option value="86400">יום</option>
+          <option value="604800" selected>שבוע</option>
+          <option value="2592000">30 יום</option>
+          <option value="0">ללא הגבלה</option>
+        </select></div>
+      <div class="field"><label><input type="checkbox" id="iReusable"> רב-פעמית — מכונה שנולדת מחדש (sandbox) מצטרפת שוב באותו שם</label></div>
+      <div id="inviteErr"></div>
+      <div class="rowacts"><button class="btn" id="btnInviteMake" type="button">יצירת הזמנה</button>
+        <button class="btn ghost" data-close type="button">ביטול</button></div>
+    </div>
+    <div id="inviteOut" class="hidden">
+      <div class="callout warn"><b>הקוד מוצג פעם אחת בלבד.</b> העתיקו אותו עכשיו לסביבה של הלשכה המוזמנת. אפשר לבטל אותו בכל עת מהרשימה.</div>
+      <textarea id="inviteText" class="mono" rows="5" readonly dir="ltr" style="width:100%"></textarea>
+      <div class="rowacts"><button class="btn" id="btnInviteCopy" type="button">העתקה</button>
+        <button class="btn ghost" data-close type="button">סגירה</button></div>
+    </div>
   </div>
 </div>
 

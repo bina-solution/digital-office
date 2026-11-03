@@ -8,7 +8,7 @@
 -- `sync_pipe_state` (run journal — a pass is now visible as the ledger's own timestamps).
 --
 -- Run per tenant schema:
---   psql -U postgres -d postgres -v schema=indox_bina_comp -f 2026-09-02_sync_item_counts.sql
+--   psql -U postgres -d postgres -v schema=indox_hacohen -f 2026-09-02_sync_item_counts.sql
 
 \set ON_ERROR_STOP on
 set search_path to :"schema", public;

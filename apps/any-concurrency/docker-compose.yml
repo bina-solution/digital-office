@@ -107,7 +107,7 @@ services:
     - traefik.http.routers.any-concurrency-https.rule=Host(`${ANY_CONCURRENCY_BASE_URL}`)
     - traefik.http.routers.any-concurrency-https.entrypoints=websecure
     - traefik.http.routers.any-concurrency-https.tls=true
-    - traefik.http.routers.any-concurrency-https.tls.certresolver=myresolver
+    - traefik.http.routers.any-concurrency-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
     - traefik.http.routers.any-concurrency-https.service=any-concurrency
     - traefik.http.routers.any-concurrency-https.middlewares=authentik@file
     - traefik.http.services.any-concurrency.loadbalancer.server.port=8080

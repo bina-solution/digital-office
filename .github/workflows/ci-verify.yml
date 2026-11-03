@@ -37,8 +37,8 @@ jobs:
     # Both premises are gone: the lane now runs on the portable runner (4 cores / 15 GB — more
     # capable than the 2-vCPU VPS) where minutes are free, so it runs unconditionally again.
     # Re-add an `if:` here if you ever need to gate it; it is no longer a cost decision.
-    runs-on: [self-hosted, portable]
-    timeout-minutes: 50
+    runs-on: [self-hosted, portable, ssd]
+    timeout-minutes: 95   # 50 for the job + up to 45 that ops/prejob_waitfree.sh may hold it (memory, heat, a fresh boot)
     env:
       # Everything except apitools (headless OCR backend, no UI) and the redundant
       # n8n-worker-2 replica (+its runner) — dropped to free runner CPU/RAM so
@@ -97,22 +97,26 @@ jobs:
           # reviewable trim — see the comment on it in this job's env.
           bash scripts/ci/derive-services.sh
 
-      - name: Bring up stack (authentik-first, then the rest)
+      - name: Bring up stack (identity first, then the rest)
         run: |
           set -euo pipefail
           chmod +x bbox scripts/* 2>/dev/null || true   # bbox is the deployment CLI used below
           # traefik-network is declared external (created out-of-band on the host).
           . ./scripts/lib.sh && ensure_network   # one implementation (scripts/lib.sh)
-          # Cold CI runner: authentik migrations + blueprint + embedded-outpost sync take a while,
-          # so give `bbox run --wait` a generous ceiling (same gate local uses, just more headroom).
+          # A cold CI runner builds every first-party image, so give `bbox run --wait` a generous
+          # ceiling (same gate local uses, just more headroom).
           export BBOX_WAIT_TIMEOUT=600
-          # Phase 1 — authentik + redis ALONE. Authentik's migrations + serial blueprint application
-          # are CPU-heavy; giving them uncontended cores here (instead of racing the whole stack)
-          # cuts init from ~20 min to a few. `bbox run` --waits until the authentik-bootstrap SENTINEL
-          # is HEALTHY = SSO truly ready (blueprint applied AND the embedded outpost serving every
-          # gated host). Replaces the old proxyprovider DB-count poll, which only proved rows-written
-          # (L2), not outpost-serving (L3) — the gap that caused transient *.localhost 404s.
-          ./bbox run authentik-postgres authentik-server authentik-worker authentik-bootstrap redis
+          # Phase 1 — the identity service ALONE, so every gated host has its sign-in before the rest
+          # comes up: the one ci-env.sh wrote, which follows the state this lane runs (r030-005).
+          # forward-auth is one Go binary with no migrations. authentik + redis get uncontended cores
+          # for their migrations and serial blueprints (init ~20 min racing the stack, a few alone), and
+          # `bbox run` --waits for the authentik-bootstrap SENTINEL: blueprint applied AND the embedded
+          # outpost serving every gated host — the gap that caused transient *.localhost 404s.
+          if grep -q '^DGO_IDENTITY=forward-auth$' .env; then
+            ./bbox run forward-auth
+          else
+            ./bbox run authentik-postgres authentik-server authentik-worker authentik-bootstrap redis
+          fi
           # Phase 2 — everything else (build the custom images now); --wait gates the rest too.
           ./bbox run --build $SERVICES
           ./bbox run $SERVICES   # reconcile any "created" stragglers
@@ -186,7 +190,7 @@ jobs:
   # These are cheap, need no stack, and exist so the app-ownership model cannot
   # silently decay back into a second home for services.
   platform-invariants:
-    runs-on: [self-hosted, portable]
+    runs-on: [self-hosted, portable, ssd]
     steps:
       - uses: actions/checkout@v4
       - run: bash scripts/ci/pip-ensure.sh yaml:pyyaml
@@ -275,7 +279,7 @@ jobs:
       # quota), so an over-subscribed sum is not decoration: on the 4-vCPU macOS engine 47 vCPU of
       # caps meant every container contended at once with every agent idle (load 145, 2026-09-30).
       - name: G65 — declared CPU caps fit the machine the profile describes
-        run: python3 scripts/refactor/cpu-budget-lint.py --profile ci-small
+        run: python3 scripts/refactor/cpu-budget-lint.py --self-test && python3 scripts/refactor/cpu-budget-lint.py --profile ci-small
       # G36 — a provider list call that fetches ONE page and never follows nextPageToken reports
       # everything past that page as ABSENT, with no error. On 2026-08-05 that hid 43,326 of the
       # client's 78,651 Drive documents; folders holding 17,066 files reported exactly 460.
@@ -496,6 +500,16 @@ jobs:
       # provider or silently drops one side of a conflict produces a stack nobody asked for.
       - name: G17 — the compiler's resolver refuses what it must
         run: python3 -m pytest platform/manager/test_resolve.py -q
+      # G91 — PROJECT-PLN, the one writer of every work item. An unchanged plan applied twice writes
+      # nothing, a report keeps the owner's quotes and Hebrew as written and never rewrites the file,
+      # a linked office's id is a name. Each file runs as a script (no pytest; report.py needs PyYAML)
+      # and exits non-zero on a failure; all three run, so one failure does not hide another.
+      - name: G91 — project-pln writes Plane once, and files the owner's words as they are
+        run: |
+          bash scripts/ci/pip-ensure.sh yaml:pyyaml
+          rc=0
+          for t in test_plan test_report test_office_identity; do python3 "apps/project-pln/$t.py" || rc=1; done
+          exit $rc
       # G72 — the tests that live beside a plane are RUN. G14, G16 and G17 above are three of ten
       # such files; the other seven ran when their author remembered to, and what they hold are
       # decisions no running stack shows on demand — when the sign-in hook restarts the server and
@@ -584,9 +598,8 @@ jobs:
       # G83 — the console URL is the state of the office, in EVERY app: copy it, open it in another
       # tab, send it to someone, land on that screen. No protocol in it: the console's tail IS the
       # app's own URL under its mount, and the shell reads the frame's own navigations (one standard
-      # `navigate` listener, no polling). The gate asks each embedded app to keep its screen in its
-      # own URL. WIRED WHILE RED: the migration is the owner's request of 2026-10-12, tracked as
-      # ui2-044, and the gate itself is the list of what is left.
+      # `navigate` listener, no polling). GREEN since 2026-10-12 — 15 embedded apps: 13 keeping their
+      # screen in their own URL, 2 allowed by name with their reasons inside the gate.
       - name: G83 — every app the shell frames keeps its screen in its own URL
         run: python3 scripts/refactor/embed-route-lint.py --self-test && python3 scripts/refactor/embed-route-lint.py
       # G86 — AGENTS.md rule 8's enumerator for the `X-authentik-*` identity-header family, and step 0
@@ -625,10 +638,44 @@ jobs:
       # could not have seen the rest. The routes are read from `app.py` with `ast`; the class is
       # computed — a call-graph walk to the file's write sinks, plus every write verb, so a new route
       # is always a candidate — and a route that does not refuse the link is a finding unless it
-      # carries a written justification that fails when stale. GREEN with one (`catalog/preview`,
-      # which writes nothing); `--strict` counts that one as a finding.
+      # carries a written justification that fails when stale. GREEN with none since DGO-604, when
+      # `catalog/preview`, the one justified route, came to refuse the link too.
       - name: G85 — every state-writing route of the app plane refuses a caller that came over a link
         run: python3 scripts/refactor/link-write-guard-lint.py --self-test && python3 scripts/refactor/link-write-guard-lint.py
+      # G87 — a webhook trigger's pinned test data (`pinData`) is the request it captured, headers
+      # included. Three INDOX workflows exported from an older n8n kept the caller's `authorization:
+      # Basic …` there — a working webhook password, in this repo and in the public one from 2026-10-19
+      # until the export's second reader found it (DGO-975 → DGO-980). It reads every tracked n8n
+      # workflow (`*.json` exports and `*.workflow.ts` blueprints, 242 on 2026-10-22) and fails on a
+      # credential header — authorization, cookie, set-cookie, x-api-key and their kin — pinned with a
+      # value; n8n's own redaction object passes. It never prints a value. `--fix` strips them, and
+      # `bbox n8n pull` / `pull-app` strip the same list when they export.
+      - name: G87 — no committed n8n workflow pins a credential its trigger captured
+        run: python3 scripts/refactor/pinned-credential-lint.py --self-test && python3 scripts/refactor/pinned-credential-lint.py
+      # G88 — a here-document's text is not text. `bbox help` prints out of one unquoted `cat <<EOF`
+      # (it must expand ${c1}/${c0}/${DN}), and a line of that help text written the way a person
+      # writes a filename — ITSELF declares a `hooks/update` — was a COMMAND SUBSTITUTION: every
+      # `bbox help` ran it (`./bbox: line 478: hooks/update: No such file or directory`, measured
+      # 2026-10-24), and an app's own hooks/update is exactly what that sentence is about. It reads
+      # `bbox`, the shell files of `scripts/`, and under `platform-base/` and `apps/` every `*.sh`
+      # AND every file with no extension whose shebang names a shell — 206 files on 2026-10-25, up
+      # from 100, the 106 new ones being where the defect was born (`apps/n8n/hooks/pull` returned
+      # two findings the older scope never looked at). It reports an unescaped backtick or `$(` in
+      # an unquoted body and a
+      # here-document that is never terminated, and FAILS on a scan that finds no file.
+      - name: G88 — an unquoted here-document's text is never executed
+        run: python3 scripts/refactor/heredoc-substitution-lint.py --self-test && python3 scripts/refactor/heredoc-substitution-lint.py
+      # G89 — a count of one is said as one: «1 קונטיינרים» in an alert (DGO-526), «1 פריטים» in INDOX's
+      # sync screen (DGO-530). In gates.sh's GATES and SELF_TESTED since b7692756 and never here, so CI
+      # ran neither it nor its self-test, and `gates.sh --verify-ci` said the registry had drifted (DGO-1086).
+      - name: G89 — a count of one is said as one
+        run: python3 scripts/refactor/counted-plural-lint.py --self-test && python3 scripts/refactor/counted-plural-lint.py
+      # G92 — no tracked file carries a private key or a provider's token. The public export scrubs what it
+      # publishes; the PRIVATE repo, which every office's checkout reads, was asked by nothing, and on this
+      # gate's first run it held an OpenSSH private key in ai/context/ (DGO-1223). The export's own definition
+      # of a secret over every tracked text file; prints `path:line kind`, never a value.
+      - name: G92 — no tracked file carries a private key or a provider's token
+        run: python3 scripts/refactor/tracked-secret-lint.py --self-test && python3 scripts/refactor/tracked-secret-lint.py
       # G18 — a healthcheck must probe the APP, not itself. chat probed a
       # node:22-slim image with `curl`, which that image does not have, so every check died with
       # "exec: curl: executable file not found" and the container reported unhealthy forever while

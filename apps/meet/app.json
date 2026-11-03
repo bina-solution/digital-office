@@ -1,0 +1,115 @@
+{
+  "id": "meet",
+  "title": {
+    "he": "פגישות וידאו",
+    "en": "Video meetings"
+  },
+  "layer": 3,
+  "kind": "service",
+  "version": "0.1.0",
+  "summary": {
+    "he": "שיחות וידאו של המשרד — Jitsi Meet בעברית, מהדפדפן ומהנייד; מארחים נכנסים בחשבון המשרד, אורחים בקישור",
+    "en": "The office's video meetings — Jitsi Meet in Hebrew, from a browser or a phone; hosts sign in with the office account, guests join by link"
+  },
+  "capabilities": [
+    {
+      "name": "recordings",
+      "type": "protocol",
+      "endpoint": "http://meet-start:8001",
+      "link": true,
+      "required_ops": [
+        "list",
+        "fetch",
+        "to-plane"
+      ]
+    }
+  ],
+  "use": [
+    {
+      "capability": "identity",
+      "strength": "requires",
+      "after": true
+    },
+    {
+      "capability": "workflow",
+      "strength": "requires",
+      "after": true
+    },
+    {
+      "capability": "speech",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
+    },
+    {
+      "capability": "notify",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
+    }
+  ],
+  "blueprints": {
+    "n8n": "blueprint/n8n"
+  },
+  "connections": [],
+  "compose": "docker-compose.yml",
+  "routing": [
+    {
+      "host": "meet",
+      "port": 8000,
+      "auth": "none"
+    },
+    {
+      "host": "meet-start",
+      "port": 8080,
+      "service": "meet-start",
+      "name": "meet-start",
+      "auth": "sso",
+      "url_env": "MEET_START_BASE_URL",
+      "module": {
+        "group": "עסק",
+        "icon": "monitor",
+        "embed": true,
+        "alias": "meet",
+        "id": "meet",
+        "external": true,
+        "name": "פגישות וידאו",
+        "desc": "פגישה חדשה, קישור לאורחים, Jitsi Meet",
+        "order": 36,
+        "url": "http://meet-start:8080",
+        "url_env": "MEET_START_URL"
+      },
+      "sso": {
+        "slug": "meet-start",
+        "display_name": "Video meetings",
+        "default_host": "meet-start.localhost",
+        "base_url_env": "MEET_START_BASE_URL",
+        "local_twin": true
+      }
+    }
+  ],
+  "progress_deadline_seconds": 900,
+  "health": {
+    "structural": "auto",
+    "probe": {
+      "http": "http://meet-start:8080/healthz",
+      "interval": "30s"
+    }
+  },
+  "data": {
+    "volumes": [
+      "meet_prosody_data",
+      "meet_recordings"
+    ],
+    "on_uninstall": "keep",
+    "note": "meet_recordings is the office's record of its meetings: recordings/<session>/<room>_<time>.mp4 and metadata.json (the room, who was there), written by the recorder and listed in the tile. meet_prosody_data is the XMPP server's accounts (re-registered from .env on every start)."
+  },
+  "resources": {
+    "cpus": "4.35",
+    "memory": "3472M"
+  },
+  "agent": {
+    "context": "AGENT.md",
+    "order": 60
+  }
+}

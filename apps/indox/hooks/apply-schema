@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # apply-schema — apply INDOX's schema INTO ONE INSTANCE SCHEMA.
 #
-#   apps/indox/hooks/apply-schema <instance-id>       # e.g. bina-comp
+#   apps/indox/hooks/apply-schema <instance-id>       # e.g. hacohen
 #   apps/indox/hooks/apply-schema --all               # every enabled instance
 #   apps/indox/hooks/apply-schema <id> --dry-run      # print the plan, touch nothing
 #

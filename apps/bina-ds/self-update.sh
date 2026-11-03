@@ -53,8 +53,34 @@ MAX_WAIT="${BINA_DS_SELF_UPDATE_MAX_WAIT:-3600}"
 # so the bound costs a turn's tail instead of its work. Between rounds nothing is cut; at the bound
 # the clock decides, loudly, and the log says so. 0 = never (a deployment that wants to wait).
 FORCE_AFTER="${BINA_DS_SELF_UPDATE_FORCE_AFTER:-10800}"
+# BBOX_UPDATE_NOW=1 — this is an EXPLICIT update (`bbox update bina-ds`, from the host or from inside),
+# so it does not hold for the deployment's own bound. It is PATIENT, not instant: the bound drops to
+# EXPLICIT_PATIENCE (5 min), which is long enough for a running turn to reach its end (measured across
+# the office's own turns: one round is tens of seconds, and the gap between rounds is under a second)
+# and short enough that an explicit update is not left waiting on a goal loop that never idles.
+#
+# IT USED TO APPLY AT THE FIRST CHECK (FORCE_AFTER=1), and that cut a live turn every single time —
+# 2026-10-14 09:23: the explicit update of 09:22:27 landed at 09:23:19 while a conversation was mid-turn
+# (`turn/end … "reason":{"kind":"interrupted"}` in session-07dd93c1, at its 7th step, with no work
+# written); resume_sessions brought the CONVERSATION back at 09:25:31, but the turn itself was thrown
+# away. "The conversations come back" is not a licence to interrupt one when waiting a few seconds
+# would have avoided it — the patience window is what buys that. BBOX_UPDATE_NOW still forces the
+# apply when the clock runs out, and an explicit FORCE_AFTER=0 ("never wait for quiet") still wins.
+if [ "${BBOX_UPDATE_NOW:-}" = 1 ]; then
+  EXPLICIT_PATIENCE="${BINA_DS_SELF_UPDATE_PATIENCE:-300}"
+  if [ "${FORCE_AFTER}" -eq 0 ]; then
+    :
+  elif [ "${FORCE_AFTER}" -gt "${EXPLICIT_PATIENCE}" ]; then
+    FORCE_AFTER="${EXPLICIT_PATIENCE}"
+  fi
+fi
 
-log() { mkdir -p "${LOG_DIR}" 2>/dev/null || true; printf '%s %s\n' "$(date '+%F %T')" "$*" | tee -a "${LOG}" >&2; }
+# ONE CLOCK IN THE FILE, EVEN WHEN THE CALLER IS THE HOST. `date` prints in the CALLER's timezone, so
+# the host-side update of 2026-10-13 wrote `13:17:50` into a file whose neighbours read `16:17:23` —
+# the same run, three hours apart, which is exactly what the paragraph below (the "one clock, one
+# format" note) exists to prevent. The office's zone is the compose default and only .env may set it.
+LOG_TZ="${LOG_TZ:-$(read_env TZ 2>/dev/null || true)}"; LOG_TZ="${LOG_TZ:-Asia/Jerusalem}"
+log() { mkdir -p "${LOG_DIR}" 2>/dev/null || true; printf '%s %s\n' "$(TZ="${LOG_TZ}" date '+%F %T')" "$*" | tee -a "${LOG}" >&2; }
 die() { log "error: $*"; exit 1; }
 # `env -u TZ`: compose interpolates `${TZ:-…}` from the CALLER's environment before .env, and both
 # callers here run inside a container whose TZ is whatever the PREVIOUS generation was started with.
@@ -77,7 +103,17 @@ dc_logged() {
 }
 
 # The live bina-ds container (compose knows the project; the name carries DEPLOYMENT_NAME).
-current_container() { dc ps -a -q "${SERVICE}" 2>/dev/null | head -n1; }
+# The RUNNING container of the service, and only failing that any container of it: a `-a` list can
+# hold a `Created` leftover with EMPTY port bindings, and the port check then reads that container as
+# publishing nothing — which is how a port the replaced container itself holds came to be reported as
+# foreign (2026-10-13 12:04, the refusal that named `bina-ds-staging`, the very container being
+# replaced, and that this line exists to make impossible).
+current_container() {
+  local c
+  c="$(dc ps -q "${SERVICE}" 2>/dev/null | head -n1 || true)"
+  [ -n "${c}" ] || c="$(dc ps -a -q "${SERVICE}" 2>/dev/null | head -n1 || true)"
+  printf '%s\n' "${c}"
+}
 
 # One upsert-style notification (same source_id → the same row is updated, never piled up).
 notify() {
@@ -90,6 +126,34 @@ level, title, body = sys.argv[1:4]
 print(json.dumps({"source": "bina-ds", "source_id": "self-update", "level": level,
                   "title": title, "body": body, "link": "/#/m/bina"}, ensure_ascii=False))
 PY
+}
+
+# THE DOOR CHECKS ITSELF BEFORE IT USES ITSELF. `tools/update-path-selfcheck.py` is the check for
+# exactly this file's contract — that a host-side update still reaches this door, that BBOX_UPDATE_NOW
+# grants the patience window instead of replacing it, that the door records the turns it is about to
+# cut, and that its log stamps office time. It had no caller, which is what let the 2026-10-14 09:23
+# cut ship: the door applied at its first check, and the check that would have objected was never run
+# by anything. It runs from THIS checkout (the old image, one second), and a failure REFUSES the
+# apply — an update that waits is better than an update that throws a live turn away.
+#
+# Kept testable on purpose: `SELFCHECK_CMD` lets the offline check drive this function from a stub (a
+# guard nobody can run against a known-bad input is a guard nobody can trust). With no python3 and no
+# script present it passes — there is nothing to check, and blocking an update over a missing tool
+# would be a worse failure than the one it guards.
+selfcheck() {
+  local cmd
+  if [ -n "${SELFCHECK_CMD:-}" ]; then cmd="${SELFCHECK_CMD}"
+  elif [ -f "${REPO}/apps/bina-ds/tools/update-path-selfcheck.py" ]; then
+    cmd="python3 ${REPO}/apps/bina-ds/tools/update-path-selfcheck.py"
+  else return 0; fi
+  if ${cmd} >>"${LOG}" 2>&1; then
+    log "the self-update path passed its own self-check"
+    return 0
+  fi
+  log "refused: the self-update path failed its own self-check — not applying"
+  notify error "העדכון של בינה לא הוחל — הבדיקה העצמית של מסלול ההחלפה נכשלה" \
+    "הבדיקה שרצה לפני כל החלפה (apps/bina-ds/tools/update-path-selfcheck.py) נכשלה, ולכן ההחלפה לא בוצעה ובינה ממשיכה לרוץ כמו שהיא. פרטים: ${LOG#"${REPO}/"}"
+  return 1
 }
 
 wait_healthy() {   # → 0 healthy, 1 not healthy within HEALTH_TIMEOUT
@@ -179,6 +243,15 @@ PY
 )"
     [ -n "${holder}" ] || continue
     owner="$(docker ps --format '{{.Names}} {{.Ports}}' 2>/dev/null | grep -F ":${p##*:}->" | cut -d' ' -f1 | head -n1 || true)"
+    # A port held by the container we are about to REPLACE is not a reason to refuse: the replace frees
+    # it before the new container starts. This is not theoretical — 2026-10-13 12:04 the pre-flight
+    # refused a real swap naming the holder as `bina-ds-staging`, the very container being replaced, and
+    # the update then waited for a hand on the host. Compare the NAME, not the port string: a definition
+    # that only changed the bind address (0.0.0.0:3081 -> 127.0.0.1:3081) misses the `have` test above
+    # while the holder is still ourselves.
+    if [ -n "${owner}" ] && [ "${owner}" = "$(docker inspect -f '{{.Name}}' "${cid}" 2>/dev/null | sed 's|^/||')" ]; then
+      continue
+    fi
     found="${found}${found:+; }${p} held by ${holder}${owner:+ = container ${owner}}"
   done
   [ -n "${found}" ] && echo "${found}"
@@ -316,7 +389,7 @@ resume_sessions() {
   for id in ${ids}; do
     total=$(( total + 1 ))
     if ( cd "${REPO}" && ./bbox agent send "${id}" \
-         "העדכון של בינה הוחל והקונטיינר הוחלף בזמן שעבדת — המשך מהנקודה שבה היית, ואל תמתין לאישור. אם הייתה לך מטרה פעילה (goal): ההפעלה מחדש שחררה את ההמשך האוטומטי שלה, וצריך לחמש אותה מחדש — bbox agent goal ${id} resume — ואז להמשיך בלולאה." ) >>"${LOG}" 2>&1; then
+         "העדכון של בינה הוחל והקונטיינר הוחלף בזמן שעבדת — המשך מהנקודה שבה היית, ואל תמתין לאישור. אם הסבב שלך נחתך באמצע: יומן השיחה שלך, עם כל הצעד האחרון שנעשה, נמצא ב-\"/data/dsh/sessions/*/${id}/session.v3.jsonl.zstd\" (בפנים: zstd -dc <file> | tail -40) — קרא אותו לפני שאתה מניח מה כבר נעשה, ואל תחזור על עבודה שכבר נכתבה. אם הייתה לך מטרה פעילה (goal): ההפעלה מחדש שחררה את ההמשך האוטומטי שלה, וצריך לחמש אותה מחדש — bbox agent goal ${id} resume — ואז להמשיך בלולאה." ) >>"${LOG}" 2>&1; then
       sent=$(( sent + 1 )); log "resumed conversation ${id} after the restart"
     else
       log "could not resume conversation ${id} (bbox agent send failed)"
@@ -372,6 +445,10 @@ wait_quiet() {
     # paid back by resume_sessions.
     if [ "${FORCE_AFTER}" -gt 0 ] && [ "${waited}" -ge "${FORCE_AFTER}" ]; then
       log "office still busy after ${waited}s (${reason}) — FORCE_AFTER=${FORCE_AFTER}s says apply now; the conversations that are mid-turn come back through resume_sessions"
+      # WHAT IT COSTS, NAMED IN THE LOG BEFORE IT IS PAID. `resume_sessions` reports what came BACK;
+      # without this line nothing anywhere said which conversation a restart threw a turn away from —
+      # 2026-10-14 09:23 was read out of the session logs after the fact, not off the door's own file.
+      log "the apply will CUT the turns running now: $(live_sessions | tr '\n' ' ')"
       return 0
     fi
     if [ "${waited}" -ge "${MAX_WAIT}" ] && [ $(( waited - long_said )) -ge 1800 ]; then
@@ -397,7 +474,9 @@ wait_quiet() {
 # COMPOSE_GUARD_OFF: this dry run must not be handed off again by the guard in lib.sh.
 nothing_to_apply() {
   local sock="$1" plan; shift
+  PLAN_RECREATE=0                   # read by cmd_apply: only a plan that said Recreate promises a new container
   plan="$(BBOX_DOCKER_SOCK="${sock}" COMPOSE_GUARD_OFF=1 dc up -d --dry-run "$@" "${SERVICE}" 2>&1)" || return 1
+  if printf '%s\n' "${plan}" | grep -qE "bina-ds.* Recreate"; then PLAN_RECREATE=1; fi
   printf '%s\n' "${plan}" | grep -q "bina-ds.* Running" \
     && ! printf '%s\n' "${plan}" | grep -qE "bina-ds.* (Recreate|Create|Start|Restart)"
 }
@@ -466,6 +545,7 @@ EOF
 cmd_apply() {
   local prev="$1" verb="$2"; shift 2
   local ref cid rc=0 busy live
+  selfcheck || return 1
   # `create` from inside meant "apply the new container"; bina-ds was running, so it runs again.
   [ "${verb}" = create ] && verb=up
   sleep "${DELAY}"
@@ -475,6 +555,10 @@ cmd_apply() {
   # The wait can be long; whatever was pending may have been applied (or undone) meanwhile.
   if [ "${verb}" != restart ] && nothing_to_apply "${BBOX_DOCKER_SOCK}" "$@"; then
     log "nothing to apply any more: bina-ds already runs this build and configuration"
+    # SAID, like every other ending: wait_quiet posted «עדכון של בינה ממתין» (same source_id), and
+    # without this line that row stayed «pending» for ever — measured on hp-laptop 2026-10-21, last
+    # touched 10-13 18:17 and still the office's open self-update notice eight days later.
+    notify info "בינה כבר רצה על הגרסה הזאת" "העדכון שהמתין כבר הוחל בינתיים (או בוטל) — לא היה מה להחיל, ושום שיחה לא נקטעה."
     return 0
   fi
   # Checked again here, after the wait: a port free at launch may be taken an hour later. The old
@@ -505,6 +589,17 @@ cmd_apply() {
   else COMPOSE_GUARD_OFF=1 dc_logged "${verb}" -d "$@" "${SERVICE}" || rc=$?; fi
   [ "${rc}" -eq 0 ] || log "compose exited ${rc}"
   if wait_healthy; then
+    # Healthy is not applied. When the dry run said Recreate (`nothing_to_apply` sets PLAN_RECREATE),
+    # the container answering now must be a NEW one; the old id still answering is the replacement
+    # that did not happen (wbc-vps, 2026-10-07: two updates said «ok» while the office kept the old
+    # one). The container, not the image: a `.env` change recreates bina-ds on the same image. A plan
+    # of Start or Restart keeps the id, and a dry run that failed promised nothing — neither is asked.
+    if [ "${verb}" != restart ] && [ "${PLAN_RECREATE:-0}" = 1 ] && [ -n "${cid}" ] \
+       && [ "$(current_container)" = "${cid}" ]; then
+      log "FAILED: bina-ds is healthy, but it is still the container this update was to replace (${cid:0:12})"
+      notify error "העדכון של בינה לא הוחל" "בינה תקינה, אבל היא עדיין רצה בקונטיינר הקודם — ההחלפה לא בוצעה. פרטים: ${LOG#"${REPO}/"}"
+      return 1
+    fi
     log "ok: bina-ds healthy on image $(docker inspect -f '{{.Image}}' "$(current_container)" | cut -c8-19)"
     wait_api_ready "$(current_container)" || true    # the agent API is a sibling that can be seconds
     resume_sessions "${live}"                        # behind the harness the health check probes

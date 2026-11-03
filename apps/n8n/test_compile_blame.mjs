@@ -36,8 +36,11 @@ const dir = mkdtempSync(join(tmpdir(), 'blame-'));
 try {
   const src = join(dir, 'src'), out = join(dir, 'out');
   mkdirSync(src);
-  const broken = readFileSync(good, 'utf8').replace(/^export class /m, 'export clazz ');
-  ok(broken !== readFileSync(good, 'utf8'), 'the fixture blueprint has a class to break');
+  // Valid TypeScript that is no workflow class: a file that is not even TypeScript is refused
+  // earlier now, by wrap.mjs itself, with the parser's position (DGO-584) — never reaching the
+  // converter whose blame this test is about.
+  const broken = readFileSync(good, 'utf8').replace(/^@workflow\(/m, '@workflew(');
+  ok(broken !== readFileSync(good, 'utf8'), 'the fixture blueprint has a @workflow decorator to break');
   copyFileSync(good, join(src, 'gwaHealthCheck01.workflow.ts'));
   writeFileSync(join(src, 'aaaBroken01.workflow.ts'), broken);       // sorts BEFORE the good one
   writeFileSync(join(src, 'zzzBroken01.workflow.ts'), broken);       // ...and after it

@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+#: takeoff <family> k=v … [material= sheet=WxH qty= kerf=] [--json] — pieces, sheets and BOM:  ./bbox cad-api takeoff turtle L=35 W=32
+# Runs cad-api's own CLI (api/cli.py) inside its container: no address, no key.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+dcx exec -T cad-api python /app/cli.py takeoff "$@"

@@ -148,7 +148,7 @@ G9 fails the build if anything ever does.
 builder prune -af` → `bbox run`. 2026-07-22, ~16 min to a converged stack.
 
 ⚠️ **Use `./scripts/first-party-images --rmi`, not a name-prefix grep.** The first attempt at this
-swept `docker images | grep '^deployment-bina-comp-'`, which misses any service that overrides
+swept `docker images | grep '^deployment-hacohen-'`, which misses any service that overrides
 compose's default image name — `incoming-documents-local` and `my-docs-local` both do. So 13 of
 15 were rebuilt and indox and my-docs quietly reused day-old images. Both were subsequently
 deleted and rebuilt from source, and the sweep now asks compose what it builds.

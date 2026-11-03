@@ -1,0 +1,224 @@
+name: office-images
+
+# An office's own images, built off the office and handed back as FILES — for an office whose engine must not
+# build: the MacBook, the command center (the owner, 2026-10-31: «this mac stays the command center»). Its
+# engine is arm64 (Apple Silicon, a Lima/vz guest), so an image built for the Dell or vps1 (amd64) does not run
+# there (measured 2026-11-01, DGO-1099). Never pushed to a registry: no other office's `:latest` moves.
+#
+#   a push to mac-dgo whose head commit says "[office-images]" builds the MacBook's dgo-extend and dgo-carry;
+#   "[office-images: connections]" (services, space-separated) builds those instead
+#   (a hand-run dispatch needs the file on the default branch, which the office-branch rule leaves alone;
+#   `gh workflow run office-images.yml --ref … -f services=… -f platform=…` works once it is)
+#   gh release download office-images-<run number> -p '*.tar.gz' -p SHA256SUMS   # the draft this run makes
+#   (on the office) sha256sum -c SHA256SUMS; docker load -i <service>.tar.gz; ./scripts/dc up -d --no-build <services>
+#
+# It runs on the Dell's runner: GitHub's hosted runners start nothing while the account's payment is due
+# (DGO-1116). The Dell is amd64, so arm64 is emulated (QEMU user mode through binfmt_misc), with a handler
+# registered for this job only when the kernel has none, and taken off at its end — the guest builds
+# (packaging/android/engine/guest-box.sh) register and remove their own the same way. Each image is built by a
+# BuildKit builder of the job's own, named on every build, capped (2 CPUs, 5 GB: the Dell froze under load on
+# 11-01) and exported straight to a file: nothing is loaded into the Dell's Docker, so the Dell's own `:latest`
+# tags never point at an arm64 image.
+#
+# Services: dgo-extend and dgo-carry by name, and any other whose own compose service — in
+# apps/<service>/docker-compose.yml or platform-base/<service>/docker-compose.yml — names the image
+# `ghcr.io/solomonboltin/digital-office/<service>:…` and builds it plainly (context `.`, the Dockerfile, no
+# args, no target). A build that needs the office's values (args from .env, another Dockerfile, a target) is
+# refused here, not built wrong: a compose `up` without a build takes the file's image as it is
+# (`pull_policy: missing`).
+
+on:
+  push:
+    branches: [mac-dgo]
+  workflow_dispatch:
+    inputs:
+      services:
+        description: "compose services to build (dgo-extend, dgo-carry, connections, …)"
+        type: string
+        default: "dgo-extend dgo-carry"
+      platform:
+        description: "linux/arm64 (the MacBook) or linux/amd64"
+        type: string
+        default: "linux/arm64"
+
+permissions:
+  contents: write   # the draft release the images are attached to, and nothing else
+
+jobs:
+  build:
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || contains(github.event.head_commit.message, '[office-images]')
+      || contains(github.event.head_commit.message, '[office-images:')
+    runs-on: [self-hosted, portable, ssd]
+    timeout-minutes: 105   # 60 for the builds, up to 45 that ops/prejob_waitfree.sh may hold it
+    env:
+      MSG: ${{ github.event.head_commit.message }}
+      SERVICES_IN: ${{ inputs.services }}
+      PLATFORM: ${{ inputs.platform || 'linux/arm64' }}
+      REG: ghcr.io/solomonboltin/digital-office
+      BINFMT: tonistiigi/binfmt:qemu-v10.2.3@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Which services
+        run: |
+          set -euo pipefail
+          case "${PLATFORM}" in linux/arm64|linux/amd64) ;; *) echo "::error::platform ${PLATFORM} is not linux/arm64 or linux/amd64"; exit 1 ;; esac
+          s="${SERVICES_IN}"
+          if [ -z "${s}" ]; then
+            case "${MSG}" in   # a case, not a pipe: grep -q leaving early would be pipefail's 141, read as "no"
+              *'[office-images:'*)
+                # "[office-images: a b]" names them — and a list this cannot read is an error, not the default pair
+                s="$(printf '%s\n' "${MSG}" | sed -nE 's/.*\[office-images: *([a-z0-9][a-z0-9 -]*)\].*/\1/p' | head -1)" || true
+                [ -n "${s// /}" ] || { echo "::error::cannot read the services after «[office-images:»: lower-case names, space-separated"; exit 1; } ;;
+              *) s="dgo-extend dgo-carry" ;;
+            esac
+          fi
+          : > "${RUNNER_TEMP}/services.txt"
+          for x in $(printf '%s\n' ${s} | awk '!seen[$0]++'); do   # each service once
+            case "${x}" in
+              dgo-extend) echo "dgo-extend apps/dgo-extend Dockerfile dgo-extend" >> "${RUNNER_TEMP}/services.txt" ;;
+              dgo-carry)  echo "dgo-carry apps/dgo-extend/carrier Dockerfile dgo-carry" >> "${RUNNER_TEMP}/services.txt" ;;
+              *) python3 - "${x}" "${REG}" >> "${RUNNER_TEMP}/services.txt" <<'PY'
+          import pathlib, re, sys
+          name, reg = sys.argv[1], sys.argv[2]
+          if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", name):
+              sys.exit(f"::error::{name!r} is not a service name")
+          for root in ("apps", "platform-base"):
+              f = pathlib.Path(root, name, "docker-compose.yml")
+              if f.is_file():
+                  break
+          else:
+              sys.exit(f"::error::{name}: neither apps/{name} nor platform-base/{name} has a docker-compose.yml")
+          lines = f.read_text(encoding="utf-8").splitlines()
+          try:
+              at = lines.index(f"  {name}:")
+          except ValueError:
+              sys.exit(f"::error::{f} has no service {name}")
+          block = []
+          for l in lines[at + 1:]:
+              if re.match(r"^ {0,2}\S", l):          # the next service, or the next top-level key
+                  break
+              block.append(l)
+          code = [l for l in block if l.strip() and not l.lstrip().startswith("#")]
+          image = [l.split(":", 1)[1].strip() for l in code if re.match(r"^    image:", l)]
+          if not image or not image[0].startswith(f"{reg}/{name}:"):
+              sys.exit(f"::error::{f}: service {name} names {image[0] if image else 'no image'}, not {reg}/{name}:… — the office would not take this file's tag")
+          b = [i for i, l in enumerate(code) if re.match(r"^    build:\s*$", l)]
+          if not b:
+              sys.exit(f"::error::{f}: service {name} has no build: block")
+          keys = {}
+          for l in code[b[0] + 1:]:
+              m = re.match(r"^      (\S+):\s*(.*)$", l)
+              if not m:
+                  if re.match(r"^      ", l):
+                      sys.exit(f"::error::{f}: service {name}'s build has a nested value ({l.strip()}) — args or the like, which the office supplies")
+                  break
+              keys[m.group(1)] = m.group(2)
+          extra = sorted(set(keys) - {"context", "dockerfile"})
+          if extra or keys.get("context", ".") != "." or keys.get("dockerfile", "Dockerfile") != "Dockerfile":
+              sys.exit(f"::error::{f}: service {name} builds with {keys} — only a plain build (context ., the Dockerfile, no args or target) is built here")
+          print(name, f.parent.as_posix(), "Dockerfile", name)
+          PY
+                 ;;
+            esac
+          done
+          [ -s "${RUNNER_TEMP}/services.txt" ] || { echo "::error::no services to build"; exit 1; }
+          cat "${RUNNER_TEMP}/services.txt"
+
+      - name: The arm64 handler, for this job only
+        if: env.PLATFORM == 'linux/arm64'
+        run: |
+          set -euo pipefail
+          h=/proc/sys/fs/binfmt_misc/qemu-aarch64
+          if [ -e "${h}" ]; then
+            echo "the kernel already has an arm64 handler: used as it is, and left"
+          else
+            touch "${RUNNER_TEMP}/binfmt-added"   # before the install: a job cancelled inside it still takes it off
+            # an install that failed added nothing — not even a handler another registered meanwhile is this job's
+            docker run --rm --privileged "${BINFMT}" --install arm64 || { rm -f "${RUNNER_TEMP}/binfmt-added"; exit 1; }
+          fi
+          grep -qx enabled "${h}" || { echo "::error::the arm64 handler is disabled"; exit 1; }
+          grep -q '^flags: .*F' "${h}" || { echo "::error::the arm64 handler has no F flag: a container cannot reach its interpreter"; exit 1; }
+          grep -E '^(interpreter|flags)' "${h}"
+
+      - id: builder
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker-container
+          use: false
+          driver-opts: |
+            restart-policy=no
+            memory=5g
+            memory-swap=5g
+            cpu-period=100000
+            cpu-quota=200000
+
+      - name: Built, one service at a time, each to a file
+        env:
+          BUILDER: ${{ steps.builder.outputs.name }}
+        run: |
+          set -euo pipefail
+          [ -n "${BUILDER}" ] || { echo "::error::no builder of this job's own"; exit 1; }
+          mkdir -p "${RUNNER_TEMP}/out"
+          while read -r s ctx dockerfile image; do
+            tag="${REG}/${image}:latest"
+            docker buildx build --builder "${BUILDER}" --platform "${PLATFORM}" -t "${tag}" -f "${ctx}/${dockerfile}" \
+              --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+              --output "type=docker,dest=${RUNNER_TEMP}/out/${s}.tar" "${ctx}"
+            gzip -6 "${RUNNER_TEMP}/out/${s}.tar"
+            echo "${s}: ${tag} for ${PLATFORM}, $(du -h "${RUNNER_TEMP}/out/${s}.tar.gz" | cut -f1)"
+            [ "$(stat -c %s "${RUNNER_TEMP}/out/${s}.tar.gz")" -lt $((2 << 30)) ] || { echo "::error::${s}.tar.gz is over a release file's 2 GiB"; exit 1; }
+          done < "${RUNNER_TEMP}/services.txt"
+          (cd "${RUNNER_TEMP}/out" && sha256sum ./*.tar.gz | sed 's| \./| |' > SHA256SUMS && cat SHA256SUMS)
+
+      - name: The handler taken off
+        if: always() && env.PLATFORM == 'linux/arm64'
+        run: |
+          [ -f "${RUNNER_TEMP}/binfmt-added" ] || exit 0
+          docker run --rm --privileged "${BINFMT}" --uninstall qemu-aarch64 || true
+          rm -f "${RUNNER_TEMP}/binfmt-added"
+          [ ! -e /proc/sys/fs/binfmt_misc/qemu-aarch64 ] && echo "the arm64 handler is off again" \
+            || echo "::warning::the arm64 handler this job added is still registered"
+
+      - name: gh, where the runner has none
+        run: |
+          set -euo pipefail
+          if command -v gh >/dev/null; then gh --version | head -1; exit 0; fi
+          v=2.62.0
+          sum=41c8b0698ad3003cb5c44bde672a1ffd5f818595abd80162fbf8cc999418446a   # gh_2.62.0_checksums.txt
+          d="${RUNNER_TOOL_CACHE:-${RUNNER_TEMP}}/gh/${v}"
+          if [ ! -x "${d}/bin/gh" ]; then
+            mkdir -p "${d}"
+            t="${RUNNER_TEMP}/gh.tgz"
+            curl -fsSL "https://github.com/cli/cli/releases/download/v${v}/gh_${v}_linux_amd64.tar.gz" -o "${t}"
+            echo "${sum}  ${t}" | sha256sum -c -
+            tar -xzf "${t}" -C "${d}" --strip-components=1
+            rm -f "${t}"
+          fi
+          echo "${d}/bin" >> "${GITHUB_PATH}"
+          "${d}/bin/gh" --version | head -1
+
+      # a draft, not an artifact: the account's Actions storage is what the payment holds back (DGO-1116),
+      # and a draft is seen only by the repository's writers
+      - name: Attached to a draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          t="office-images-${{ github.run_number }}"
+          cd "${RUNNER_TEMP}/out"
+          if seen="$(gh release view "${t}" -R "${GITHUB_REPOSITORY}" 2>&1)"; then
+            gh release upload "${t}" ./*.tar.gz SHA256SUMS -R "${GITHUB_REPOSITORY}" --clobber
+          elif ! printf '%s' "${seen}" | grep -qi "not found"; then
+            echo "::error::could not tell whether draft ${t} exists: ${seen}"; exit 1
+          else
+            gh release create "${t}" ./*.tar.gz SHA256SUMS -R "${GITHUB_REPOSITORY}" --draft --prerelease \
+              --target "${GITHUB_SHA}" --title "Office images ${t#office-images-} for ${PLATFORM} (draft)" \
+              --notes "Built at ${GITHUB_SHA} for ${PLATFORM}: $(cut -d' ' -f3 SHA256SUMS | tr '\n' ' '). On the office: sha256sum -c SHA256SUMS; docker load -i <service>.tar.gz; ./scripts/dc up -d --no-build <services>."
+          fi
+          echo "draft ${t}: $(ls ./*.tar.gz | xargs -n1 basename | tr '\n' ' ')" | tee -a "${GITHUB_STEP_SUMMARY}"
+          rm -rf "${RUNNER_TEMP}/out"

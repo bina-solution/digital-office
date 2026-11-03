@@ -41,7 +41,7 @@ services:
       - traefik.http.routers.my-docs-https.rule=Host(`${MY_DOCS_BASE_URL}`)
       - traefik.http.routers.my-docs-https.entrypoints=websecure
       - traefik.http.routers.my-docs-https.tls=true
-      - traefik.http.routers.my-docs-https.tls.certresolver=myresolver
+      - traefik.http.routers.my-docs-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
       - traefik.http.routers.my-docs-https.service=my-docs
       - traefik.http.routers.my-docs-https.middlewares=authentik@file
       - traefik.http.services.my-docs.loadbalancer.server.port=8000

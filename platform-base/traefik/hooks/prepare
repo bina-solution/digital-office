@@ -33,7 +33,7 @@ fi
 #    refusing to start over it would be worse than the warning.
 email="$(sed -n 's/^[[:space:]]*TRAEFIK_ACME_EMAIL=//p' "${REPO_ROOT}/.env" 2>/dev/null | tail -1)"
 case "$email" in
-  ""|*@example.com|*@example.org|*@example.net|*@*.invalid|*@*.test|*@localhost|*@*.localhost|person195@example.com)
+  ""|*@example.com|*@example.org|*@example.net|*@*.invalid|*@*.test|*@localhost|*@*.localhost|person174.x@example.com)
     echo "[traefik] TRAEFIK_ACME_EMAIL=${email:-<unset>} is one Let's Encrypt REFUSES — no certificate"
     echo "[traefik]   will ever be issued and every https host will warn. Set a real address in .env." ;;
 esac

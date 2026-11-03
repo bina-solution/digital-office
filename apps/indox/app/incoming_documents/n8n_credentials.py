@@ -19,7 +19,7 @@ This module exposes a small, focused API:
 
 Convention used by the deployment: credential names embed the operating
 account's email so we can pick the right one in multi-account setups,
-e.g. `"Google Sheets person17@example.com"`. The caller passes the
+e.g. `"Google Sheets person17.x@example.com"`. The caller passes the
 email via env (`GSHEET_CREDS_EMAIL`, `SUPABASE_CREDS_NAME`, etc.).
 """
 from __future__ import annotations

@@ -14,9 +14,9 @@ import json, sys
 sys.stdout.reconfigure(newline="\n")
 
 cfg = json.load(sys.stdin)
-# The project prefix comes from compose itself rather than a hardcoded "deployment-bina-comp-":
+# The project prefix comes from compose itself rather than a hardcoded "deployment-hacohen-":
 # compose derives it from the project directory, so it differs on any clone in another folder.
-project = cfg.get("name") or "deployment-bina-comp"
+project = cfg.get("name") or "deployment-hacohen"
 for name, svc in (cfg.get("services") or {}).items():
     if svc.get("build"):
         print(svc.get("image") or f"{project}-{name}")

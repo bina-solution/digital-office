@@ -1,15 +1,15 @@
 {
   "id": "drive",
   "title": {
-    "he": "דרייב",
-    "en": "Drive"
+    "he": "קבצים",
+    "en": "Files"
   },
   "layer": 3,
   "kind": "adapter",
   "version": "1.0.0",
   "summary": {
-    "he": "שירות הדרייב — אחסון קבצים ומתאמי ספקים",
-    "en": "Drive platform service — storage + provider adapters"
+    "he": "כל הקבצים של העסק במקום אחד — מסמכים, תמונות, הקלטות, פגישות וסרטונים; כל אפליקציה וכל סוכן קוראים וכותבים כאן",
+    "en": "Every file of the business in one place — documents, photos, recordings, meetings and videos; every app and agent reads and writes here"
   },
   "capabilities": [
     {
@@ -89,6 +89,10 @@
     "n8n": "blueprint/n8n"
   },
   "compose": "docker-compose.yml",
+  "agent": {
+    "context": "AGENT.md",
+    "order": 15
+  },
   "broker": {
     "service": "drive",
     "blank_env": [
@@ -98,9 +102,10 @@
     "entrypoint": [
       "sh",
       "/inject.sh",
-      "sh",
+      "gunicorn",
       "-c",
-      "exec gunicorn -w 2 -b 0.0.0.0:8975 --timeout 120 --access-logfile - --access-logformat '{\"timestamp\":\"%(t)s\",\"client_ip\":\"%(h)s\",\"method\":\"%(m)s\",\"path\":\"%(U)s\",\"query\":\"%(q)s\",\"status\":%(s)s,\"response_bytes\":%(B)s,\"user_agent\":\"%(a)s\",\"duration_us\":%(D)s}' app:app"
+      "gunicorn.conf.py",
+      "app:app"
     ]
   },
   "routing": [
@@ -118,8 +123,8 @@
         "embed": true,
         "alias": "drive",
         "id": "drive",
-        "name": "דרייב",
-        "desc": "קבצים ומסמכים",
+        "name": "קבצים",
+        "desc": "מסמכים, תמונות, הקלטות וסרטונים",
         "order": 2,
         "service": "drive",
         "url_env": "DRIVE_URL",
@@ -128,9 +133,27 @@
       "sso": {
         "slug": "drive",
         "default_host": "drive.localhost",
-        "display_name": "Drive",
+        "display_name": "Files",
         "local_twin": true,
         "base_url_env": "DRIVE_BASE_URL"
+      }
+    },
+    {
+      "port": 8975,
+      "service": "drive",
+      "auth": "none",
+      "emit_labels": false,
+      "module": {
+        "group": "עסק",
+        "icon": "mic",
+        "embed": true,
+        "alias": "recorder",
+        "id": "recorder",
+        "name": "הקלטות",
+        "desc": "הקלטה בלחיצה — נשמרת ב«קבצים» ומגיעה לכל הסוכנים",
+        "order": 3,
+        "service": "drive",
+        "url": "http://drive:8975/rec/"
       }
     }
   ],

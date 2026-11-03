@@ -60,6 +60,22 @@ RUN python3 /app/patches/worker-scheduler.py
 # not stored a second time in the request log. A write's answer is kept.
 RUN python3 /app/patches/api-log-reads.py
 
+# ── the office's own sign-in, as Plane's sign-in (DGO-371) ──────────────────────────────────────
+# ONE middleware, and it is not a header reader: it asks the office's identity provider who the
+# browser is, with the browser's OWN cookie — the same call the edge's forwardAuth makes — and signs
+# that person into Plane, so no second (e-mail and password) form is met inside the office. Plane CE
+# has no OIDC/SAML/reverse-proxy auth to configure: this is the only way "one door" can be true for
+# a product that insists on its own. The map of office identity → Plane account is DECLARED in
+# bootstrap.yaml (`sso:`) and applied by bootstrap.py; with no map, nothing is signed in and Plane's
+# own form stands. The patch asserts its anchor, so upstream moving the middleware list fails the
+# build instead of shipping an image that asks the owner to sign in twice.
+COPY office_identity.py /app/backend/plane/middleware/office_identity.py
+RUN python3 /app/patches/sso-identity.py
+# …and the TOKEN api (`/api/v1/…` — what a CLI or an agent reads) is opened to that same PROVED
+# identity, and to nothing else: a linked office's agent holds no key of ours and reaches this
+# instance through the link's door, which signs who is calling. One fallback, one anchor, asserted.
+RUN python3 /app/patches/api-door-identity.py
+
 # ── Hebrew by default, at the SOURCE of the setting ─────────────────────────────────────────────
 # The UI language is a per-USER field stored server-side (`Profile.language`, default "en"), and the
 # app writes the profile's value into localStorage on every load. So a client-side default is not

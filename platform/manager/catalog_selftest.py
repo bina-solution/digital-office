@@ -9,11 +9,15 @@ security-relevant behaviour is asserted here, and every assertion is a REFUSAL �
 matters is not "a good index verifies", it is "a bad one does not".
 
 Runs entirely in a temp directory against a synthetic catalog. Touches no live state, needs no
-docker, needs no network.
+docker, needs no network — only git, since an artifact is git's tree.
 """
+import contextlib
+import io
 import json
+import os
 import pathlib
 import shutil
+import subprocess
 import sys
 import tempfile
 import zipfile
@@ -29,6 +33,11 @@ PASS, FAIL = [], []
 def check(name, cond, detail=""):
     (PASS if cond else FAIL).append(name)
     print(f"  {'PASS' if cond else 'FAIL'}  {name}" + (f"  — {detail}" if detail and not cond else ""))
+
+
+def cannot(name, why):
+    """A check this machine cannot make — said, and never counted as a pass."""
+    print(f"  ----  {name}  (not run here: {why})")
 
 
 def refuses(name, fn, needle=None):
@@ -67,6 +76,18 @@ def make_app(root, aid, host="demo", layer=3, extra=None):
                      f"services:\n  {aid}:\n    image: alpine:3\nnetworks:\n"
                      f"  traefik-network:\n    external: true\n")
     return d
+
+
+def git(repo, *args, stdin=None):
+    """git in a fixture repository, its output stripped."""
+    return subprocess.run(["git", "-C", str(repo), "-c", "core.autocrlf=false", *args], input=stdin,
+                          capture_output=True, check=True).stdout.decode("utf-8").strip()
+
+
+def members(zpath):
+    """name -> (permission bits, create_system) of every member of an artifact."""
+    with zipfile.ZipFile(zpath) as z:
+        return {i.filename: (i.external_attr >> 16 & 0o777, i.create_system) for i in z.infolist()}
 
 
 def main():
@@ -156,6 +177,11 @@ def main():
         # id / layer / route-host conflicts, checked by the compiler's own validate()
         dup = make_app(work / "dup", "indox", host="indox-x")
         rejects("an id already in the catalog is refused", dup, "id conflict")
+        # …and the same id with a line break after it is not a NEW id (DGO-615): `$` matched before
+        # the break, so no conflict was found and the install went on to name a directory with it.
+        broken = make_app(work / "broken", "demo-broken", host="demo-broken-xyz",
+                          extra={"id": "indox\n"})
+        rejects("an id that ends in a line break is refused", broken, "not a valid id")
         base = make_app(work / "base", "demo-base", host="demo-base", layer=1)
         rejects("a layer-1 app is refused (chassis is not installable)", base, "only layer-3")
         clash = make_app(work / "clash", "demo-clash", host="incoming-documents")
@@ -187,6 +213,114 @@ def main():
         check("a credential an app declares for itself is disclosed by its title and kind",
               own is not None and told.get("title") == own["title"] and told.get("kind") == own["kind"],
               f"{(own or {}).get('id')}: {told}")
+
+        print("\n6. the artifact is git's tree, the same on every OS (DGO-609)")
+        # An id and a version name the artifact's file: one that walks out of artifacts/ is refused
+        # by name, and the refused build writes nothing — where it used to write <out>/../x.zip.
+        around = work / "around"
+        walks = make_app(work / "walks", "demo-walks", host="demo-walks",
+                         extra={"version": "0/../../../x"})
+        refuses("a version that walks out of artifacts/ is refused, naming the app and why",
+                lambda: catalog.build(around / "cat", sign_it=False, source_dir=walks.parent),
+                "demo-walks: version '0/../../../x' is not SemVer")
+        walks_id = make_app(work / "walks-id", "demo-walks-id", host="demo-walks-id",
+                            extra={"id": "../../x"})
+        refuses("an id that walks out of artifacts/ is refused, naming the app and why",
+                lambda: catalog.build(around / "cat", sign_it=False, source_dir=walks_id.parent),
+                "demo-walks-id: id '../../x' is not an app id")
+        written = sorted(p.relative_to(work).as_posix() for p in around.rglob("*") if p.is_file())
+        check("…and a refused build writes no file, outside artifacts/ or in it", not written,
+              f"written: {written}")
+        semver = ["0.0.0", "1.2.3", "1.0.0-alpha.1", "1.0.0-0.3.7", "1.0.0-x-y.7", "1.0.0+20130313",
+                  "1.0.0-beta+exp.sha.5114f85", "10.20.30"]
+        not_semver = ["1.0", "01.0.0", "1.0.0-01", "1.0.0-", "1.0.0+", "v1.0.0", "1.0.0\n",
+                      "1.0.0-a..b", chr(0xFF11) + ".0.0", "0/../../../x", "1.0.0/x"]  # FULLWIDTH 1
+        check("SemVer is SemVer 2.0.0, ASCII digits, the whole string",
+              all(catalog.SEMVER.fullmatch(v) for v in semver)
+              and not any(catalog.SEMVER.fullmatch(v) for v in not_semver),
+              f"accepted {[v for v in not_semver if catalog.SEMVER.fullmatch(v)]!r}, refused "
+              f"{[v for v in semver if not catalog.SEMVER.fullmatch(v)]!r}")
+        ids = ["a", "indox", "google-workspace-agent", "2fa"]
+        not_ids = ["", "indox\n", "../x", "a/b", "a.b", "a\\b", "Indox", "-x", "a_b"]
+        check("an app id is lower-case letters, digits and hyphens, the whole string",
+              all(catalog.APP_ID.fullmatch(i) for i in ids)
+              and not any(catalog.APP_ID.fullmatch(i) for i in not_ids),
+              f"accepted {[i for i in not_ids if catalog.APP_ID.fullmatch(i)]!r}, refused "
+              f"{[i for i in ids if not catalog.APP_ID.fullmatch(i)]!r}")
+        # What git used to quote now reaches the packer: a name an unpacker reads otherwise is refused
+        fine = ["app.json", "a b/c.txt", 'say "hi".txt', "שלום.txt"]
+        odd = ["a\\b.txt", "a\nb.txt", "a\tb.txt", "a" + chr(0x7F), "x" + chr(0xDCFF) + ".txt"]
+        check("a member name is UTF-8, with no control character and no backslash",
+              all(catalog._portable(n) for n in fine) and not any(catalog._portable(n) for n in odd),
+              ascii([n for n in fine if not catalog._portable(n)]
+                    + [n for n in odd if catalog._portable(n)]))
+        # …and the build refuses one by name. Outside git os.walk hands it over as git would: a lone
+        # surrogate is a raw byte on POSIX and an unpaired UTF-16 unit on NTFS, so this runs anywhere.
+        bad = make_app(work / "bad", "demo-bad", host="demo-bad")
+        signing.write_lf(bad / ("x" + chr(0xDCFF) + ".txt"), "x")
+        refuses("a file name that is not UTF-8 is refused, naming the app and the file",
+                lambda: catalog.build(work / "cat4", sign_it=False, source_dir=bad.parent),
+                "demo-bad: " + repr("x" + chr(0xDCFF) + ".txt") + " cannot be named in an artifact")
+
+        if not shutil.which("git"):
+            check("git is on PATH (the artifact is git's tree)", False, "no git")
+        else:
+            repo, hebrew = work / "repo", "שלום.txt"    # a name git's core.quotepath quotes
+            app = make_app(repo / "apps", "demo-git", host="demo-git",
+                           extra={"blueprints": {"n8n": "blueprint/n8n"}})
+            for rel, body in {"tool.sh": "echo", "notes.txt": "n", hebrew: "x", "linked.txt": "x",
+                              "data": "../../.env", "blueprint/n8n/a.workflow.ts": "export {}",
+                              "blueprint/n8n/b.workflow.ts": "export {}",
+                              "blueprint/n8n/b.json": "{}", "blueprint/n8n/c.json": "{}",
+                              "blueprint/n8n/README.md": "x"}.items():
+                (app / rel).parent.mkdir(parents=True, exist_ok=True)
+                signing.write_lf(app / rel, body)
+            git(repo, "init", "-q")
+            git(repo, "config", "core.quotepath", "true")   # the default, whatever ~/.gitconfig says
+            git(repo, "add", "--", *(f"apps/demo-git/{r}" for r in (
+                "app.json", "docker-compose.yml", "tool.sh", "notes.txt", hebrew, "linked.txt",
+                "blueprint")))
+            git(repo, "update-index", "--chmod=+x", "apps/demo-git/tool.sh")
+            os.chmod(app / "notes.txt", 0o755)    # the disk says executable; git keeps 100644
+            # a link as git tracks it (mode 120000), and as a checkout without symlinks leaves it
+            blob = git(repo, "hash-object", "-w", "--stdin", stdin=b"../../.env")
+            git(repo, "update-index", "--add", "--cacheinfo", f"120000,{blob},apps/demo-git/data")
+            # a file git tracks that the working tree has since replaced by a link (git still says
+            # 100644) — where a link can be made: Windows asks a privilege for one
+            signing.write_lf(work / "outside.txt", "TOKEN=1\n")
+            (app / "linked.txt").unlink()
+            try:
+                os.symlink(work / "outside.txt", app / "linked.txt")
+                no_link = None
+            except OSError as e:
+                no_link = f"no symlink without a privilege ({e.__class__.__name__})"
+                signing.write_lf(app / "linked.txt", "x")
+            said = io.StringIO()
+            with contextlib.redirect_stderr(said):
+                out3, index3 = catalog.build(work / "cat3", sign_it=False, source_dir=repo / "apps")
+            e3 = index3["entries"][0]
+            got = members(out3 / "artifacts" / e3["artifact"]["name"])
+            check("a name git quotes (Hebrew) is packed, exactly as git names it",
+                  f"demo-git/{hebrew}" in got, ascii(sorted(got)))
+            check("each mode is git's, not the disk's (100755 -> 0755, 100644 -> 0644)",
+                  got.get("demo-git/tool.sh", (0,))[0] == 0o755
+                  and got.get("demo-git/notes.txt", (0,))[0] == 0o644, ascii(got))
+            check("every member is made by Unix (create_system 3), whichever OS packs it",
+                  {s for _, s in got.values()} == {3}, ascii(got))
+            check("a link git tracks is never packed", "demo-git/data" not in got, ascii(sorted(got)))
+            check("…and the build names it",
+                  "left out, links are never followed: demo-git/data" in said.getvalue(),
+                  ascii(said.getvalue()))
+            if no_link is None:
+                check("a link on disk where git has a file is not followed either, and is named",
+                      "demo-git/linked.txt" not in got and "demo-git/linked.txt" in said.getvalue(),
+                      ascii([sorted(got), said.getvalue()]))
+            else:
+                cannot("a link on disk where git has a file is not followed either", no_link)
+            check("workflows are the blueprint's ids: *.workflow.ts and *.json, one per stem",
+                  e3["automations"]["workflows"] == 3, ascii(e3["automations"]))
+            check("…and the disclosure says how many it imports",
+                  any("Imports 3 workflow(s)" in p["text"] for p in catalog.disclose(e3)["powers"]))
     finally:
         shutil.rmtree(work, ignore_errors=True)
 

@@ -39,7 +39,7 @@ account" screen is built from. Per domain: `POST /records`, `POST /op`, `GET /he
   `select[name=rectype_<n>]` AND `input[name=specs_<n>]`; `<n>` is the TYPE's index (six CNAME rows
   all carry `rectype_1`), so the row's ordinal is the only identity there is. Every other row with a
   type select is a TEMPLATE (the add-record form, the SRV priority/weight/port/target sub-rows).
-  Reading those positionally invented an apex A at 80.244.162.32 that no resolver ever answered —
+  Reading those positionally invented an apex A at 93.184.216.11 that no resolver ever answered —
   **24–36 records looked plausible; 30 are real**. The editor renders after the click, so the read
   POLLS for a completion predicate (a zone URL AND a record row) instead of sleeping once. The click
   may open a NEW TAB: count tabs first, close only the one you can prove you opened, leave the
@@ -70,11 +70,11 @@ account" screen is built from. Per domain: `POST /records`, `POST /op`, `GET /he
 
 ## Traps
 
-* **A panel write script must be `verified`.** The flow past the login was observed; the WRITE has
-  not been watched end to end, so portal `create/update/delete` refuse with `needs_verification`
-  until a human sees it work once (`allow_draft_write: true` is that consent). Which script operation
-  writes a record is the SCRIPT's business (`portal.WRITE_OPS`) — this panel uses one form for create
-  and update and defines no delete, and the refusal says exactly that.
+* **A panel write must be watched once.** InterNIC's create is code (`portal.ZONE_WRITERS`: zone read,
+  re-read on the server before the save — no read, no save — and read back after); update/delete are
+  `not_scripted`. An unwatched action refuses (`needs_verification`). The consent is a signed-in
+  person's tick in the drawer (the edge's header, DGO-1019); one success makes that writer version the
+  office's (`/data/portal-verified.json`). An agent never sends it.
 * **Money and irreversible ops need an exact confirmation**: `confirm: "<domain>:<op>"`, not `true`.
 * **`PUT /v1/domains/{d}/records` at GoDaddy replaces the WHOLE ZONE** — never issued here.
 * **WHOIS is a shared service**: each domain at most every `DOMAINS_WHOIS_HOURS` (12), one at a time.

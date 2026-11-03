@@ -32,7 +32,6 @@
 .bt-tools{display:contents}
 .bt-narrow .bt-toolbar{gap:8px;padding:10px 12px}
 .bt-narrow .bt-search{order:-2;flex:1 1 140px;min-width:0}
-.bt-narrow .bt-toolbar > .bt-add{order:-1}
 .bt-narrow .bt-toolbar > .bt-more{display:inline-flex}
 .bt-narrow .bt-tools{display:none}
 .bt-narrow .bt-tools.open{display:flex;flex-wrap:wrap;gap:8px;flex-basis:100%}
@@ -159,25 +158,17 @@ revogr-filter-panel .multi-filter-list .trash-button:hover{color:var(--red)}
 /* the grid's drawn marks (`ico_` in bina-table.js); the pager's are turned where the page reads right to left */
 .bt-ico{width:14px;height:14px;flex:none;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
 [dir="rtl"] .bt-pgbtn .bt-ico{transform:scaleX(-1)}
-.bt-add{display:inline-flex;align-items:center;gap:5px}
 .bt-pgbtn:hover:not(:disabled){background:var(--surface-2)}
 .bt-pgbtn:disabled{opacity:.4;cursor:default}
 .bt-pageinfo{color:var(--ink);font-size:12.5px;font-weight:600;padding:0 6px;white-space:nowrap}
 
 /* row selection */
-.bt-selbox{width:15px;height:15px;cursor:pointer}
 /* the checkbox/actions CELL: no padding, no ellipsis, dead-center (stray "…" fix) */
-.bina-table .bt-selcell{padding:0!important;display:flex;align-items:center;justify-content:center;
-                        text-overflow:clip;overflow:hidden}
 /* RevoGrid's corner watermark (MIT — attribution preserved in source/licenses) */
 .bina-table revogr-attribution{display:none}
-.bt-selcount{color:var(--accent-d);font-size:12.5px;font-weight:800;white-space:nowrap}
 /* The selection's controls and «בחר הכל» stand in ONE place of one size: both are laid in the same cell and
    the one that is not said is hidden, not removed. Removed, the three that replace the one took a new line of
    a toolbar that wraps, and the first tick moved every row 34px down under the finger (390px, 2026-10-10). */
-.bt-selzone{display:inline-grid}
-.bt-selzone > span{grid-area:1/1;display:inline-flex;align-items:center;gap:10px}
-.bt-selzone > .off{visibility:hidden}
 
 /* cell alignment (numeric end-aligned, ERP convention) */
 .bina-table .bt-align-end{text-align:end;font-variant-numeric:tabular-nums}

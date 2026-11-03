@@ -1,0 +1,172 @@
+# bina-claude — "בינה קלוד": the official Claude Code CLI inside the office, one container (DGO-1074).
+#
+# Three faces on one sign-in (HOME on the volume, so ~/.claude survives every recreate):
+#   UI  — ttyd on :7681, a web terminal on one tmux session running `claude`, framed by the console at
+#         /a/bina-claude/ (app.json: the index and the /ws websocket, both stripped of the mount prefix).
+#   API — the agent.v1 adapter on :3091 (adapter/server.mjs), published on the docker HOST's loopback only,
+#         the door `bbox agent --app bina-claude …` uses — the same shape as bina-ds's :3081.
+#   CLI — `./bbox bina-claude login|status|ask|attach` (hooks/), and `claude` itself in the terminal.
+#
+# Like bina-ds, it has the office's hands: the checkout at its host path and the engine's socket, so
+# Claude runs `./bbox agent …` to reach Azaria and the rest of the office (owner, 2026-10-31: «Claude will
+# be able to use Bina DS's agents … via the CLI»).
+services:
+  bina-claude:
+    image: ghcr.io/solomonboltin/digital-office/bina-claude:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        COMPOSE_VERSION: ${BBOX_COMPOSE_VERSION:-2.40.3}
+    container_name: bina-claude-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: bina-claude
+    restart: unless-stopped
+    # ttyd and the adapter's turns spawn children ttyd never reaps (bina-ds's compose file says why).
+    init: true
+    environment:
+      - HOME=/data/home
+      - BINA_CLAUDE_STATE=/data/bina-claude
+      - BINA_CLAUDE_ADAPTER_PORT=3091
+      - AGENT_TOKEN_FILE=/data/bina-claude/api-token
+      # bypassPermissions for the API's turns: the office agent operates the deployment and nobody can
+      # answer an approval prompt over agent.v1 (bina-ds's danger-full-access, owner 2026-09-17).
+      # Claude Code allows it as root only inside a declared sandbox — this container is one.
+      - BINA_CLAUDE_PERMISSION_MODE=${BINA_CLAUDE_PERMISSION_MODE:-bypassPermissions}
+      - IS_SANDBOX=1
+      - BINA_CLAUDE_MODEL=${BINA_CLAUDE_MODEL:-}
+      - BINA_CLAUDE_MAX_TURNS=${BINA_CLAUDE_MAX_TURNS:-2}
+      # The version is the image's (Dockerfile ARG); a running office never updates itself.
+      - DISABLE_AUTOUPDATER=1
+      # NOT CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: it switches Remote Control off, and Remote Control
+      # is how this office's sessions reach claude.ai/code and the Claude apps (README, «Claude's own UI»).
+      # The sign-in is the owner's claude.ai account (/login in the terminal). Claude Code prefers an API
+      # key in the environment over that login, so the office's ANTHROPIC_API_KEY is deliberately NOT
+      # forwarded: it would silently bill the API instead of the account. A key for this app alone is
+      # an explicit choice in .env.
+      - ANTHROPIC_API_KEY=${BINA_CLAUDE_ANTHROPIC_API_KEY:-}
+      - TZ=${TZ:-Asia/Jerusalem}
+      - BBOX_REPO_HOST=${BBOX_REPO_HOST:-/workspace/office}
+      - BBOX_DOCKER_SOCK=/var/run/docker.sock
+      - BBOX_HOST_DOCKER_SOCK=${BBOX_DOCKER_SOCK:-/var/run/docker.sock}
+      - BBOX_HOST_TZ=${TZ:-UTC}
+      - DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-bina-deployment}
+      - DEPLOYMENT_DOMAIN=${DEPLOYMENT_DOMAIN:-localhost}
+    volumes:
+      - bina_claude_home:/data
+      - type: bind
+        source: ${BBOX_REPO_HOST:-../../}
+        target: ${BBOX_REPO_HOST:-/workspace/office}
+      - ${BBOX_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock
+    # Never 0.0.0.0: the token is the only gate on the agent door (bina-ds's compose file says why).
+    ports:
+      - "${BINA_CLAUDE_AGENT_BIND:-127.0.0.1}:${BINA_CLAUDE_AGENT_PORT:-3091}:3091"
+    networks:
+      - traefik-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3091/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-8s}
+      retries: 5
+      start_period: 30s
+    # Idle it is ttyd + node (~80 MB); a turn is a Claude Code process of ~250 MB, BINA_CLAUDE_MAX_TURNS at once.
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1536m
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+  # The official Claude Desktop app (Dockerfile.desktop), streamed to the console's «בינה קלוד» tile —
+  # the owner, 2026-10-31: «I want the full native software … served like I serve browser 42». Its home
+  # is /data/desktop on the SAME volume, so every session it keeps on disk is readable by the CLI
+  # (`./bbox bina-claude sessions`). Nothing is published; the stream is reached through the edge only.
+  bina-claude-desktop:
+    image: ghcr.io/solomonboltin/digital-office/bina-claude-desktop:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    build:
+      context: .
+      dockerfile: Dockerfile.desktop
+    container_name: bina-claude-desktop-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: bina-claude-desktop
+    restart: unless-stopped
+    # The base image's own init (s6) is PID 1; docker's init would sit in front of it.
+    environment:
+      - PUID=1000
+      - PGID=1000
+      # nginx on the container's loopback (Dockerfile.desktop); the front door, gate.mjs, holds :3000.
+      - CUSTOM_PORT=3100
+      - CUSTOM_HTTPS_PORT=3101
+      - TZ=${TZ:-Asia/Jerusalem}
+      - TITLE=Claude
+      - SELKIES_UI_TITLE=Claude
+      - SELKIES_UI_SHOW_LOGO=false
+      # X11 (Xvfb + Openbox), not the Wayland compositor: the road Electron apps are known to walk.
+      - PIXELFLUX_WAYLAND=false
+      # The app fills the screen without window borders, as an installed app's window would.
+      - NO_DECOR=true
+      # Served at the ROOT. The Selkies client derives every route, its websocket included, from the page's
+      # own path (`getRoutePrefix()`, selkies-web-core lib/util.js), so one server answers both ways it
+      # is opened: in this office's console at /a/bina-claude/ (the console strips the prefix, app.json)
+      # and in a LINKED office's console at the root of the shared host (bina-claude.<office>.console.<domain>),
+      # which a fixed SUBFOLDER would 404.
+      - SUBFOLDER=/
+      # Who may frame it: this console (same origin), plus every linked office's console that shows this
+      # office's tile. Comma-separated (Selkies' own format); per office in .env, the whole value in DOUBLE
+      # quotes — unquoted, .env's parser takes the leading 'self' as quoting and drops its quotes, and a bare
+      # `self` is a host name, not this origin (measured on the HP, 2026-11-03). On the HP:
+      # BINA_CLAUDE_FRAME_ANCESTORS="'self',http://console.localhost:8080,https://console.staging.digital-office.co.il"
+      - SELKIES_FRAME_ANCESTORS=${BINA_CLAUDE_FRAME_ANCESTORS:-'self'}
+      # No basic auth of its own: SSO at the edge is the gate, as for every app here.
+      - PASSWORD=
+      - SELKIES_ENABLE_RESIZE=true
+      - SELKIES_SCALING_DPI=${BINA_CLAUDE_DESKTOP_DPI:-96}
+      # CPU only: H.264 (x264) first, JPEG as the fallback; 30 fps is plenty for a chat app.
+      - SELKIES_ENCODER=h264enc,jpeg
+      - SELKIES_FRAMERATE=${BINA_CLAUDE_DESKTOP_FPS:-30}
+      - SELKIES_ENABLE_CLIPBOARD=true
+      - BBOX_REPO_HOST=${BBOX_REPO_HOST:-/workspace/office}
+      - DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-bina-deployment}
+    volumes:
+      # HOME (/config) is the volume's `desktop` folder — the CLI container sees it as /data/desktop.
+      # bina-claude's entrypoint creates the folder (a subpath must exist before it is mounted).
+      - type: volume
+        source: bina_claude_home
+        target: /config
+        volume:
+          subpath: desktop
+      - type: bind
+        source: ${BBOX_REPO_HOST:-../../}
+        target: ${BBOX_REPO_HOST:-/workspace/office}
+    depends_on:
+      bina-claude:
+        condition: service_started
+    # Chromium's renderers share memory through /dev/shm; docker's 64 MB default crashes tabs.
+    shm_size: 1gb
+    networks:
+      - traefik-network
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "-o", "/dev/null", "http://127.0.0.1:3000/"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-8s}
+      retries: 5
+      start_period: 60s
+    # An Electron app (~400-600 MB in use) + the display. Limits, not reservations.
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2g
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+volumes:
+  bina_claude_home:
+networks:
+  traefik-network:
+    external: true

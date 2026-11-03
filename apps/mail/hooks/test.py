@@ -222,7 +222,7 @@ def test_mail_connection():
 def fetch_summary(eid):
     dn = env("DEPLOYMENT_NAME", "shlomo-laptop")
     o = subprocess.run(["docker", "exec", f"n8n-postgres-{dn}", "psql", "-U",
-                        env("POSTGRES_USER", "bina-comp"), "-d", "n8n", "-t", "-A", "-c",
+                        env("POSTGRES_USER", "hacohen"), "-d", "n8n", "-t", "-A", "-c",
                         f'SELECT data FROM execution_data WHERE "executionId"={int(eid)};'],
                        capture_output=True)
     raw = o.stdout.decode("utf-8", errors="replace").strip()

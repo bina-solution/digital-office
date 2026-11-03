@@ -166,7 +166,12 @@ def main():
     # containers after every `up` (docker update), and compose is handed only the caps this machine
     # cannot create. A profile without a CPU envelope renders nothing (G65 then fails in CI).
     import subprocess
-    gen = os.path.join(ROOT, '.generated'); os.makedirs(gen, exist_ok=True)
+    # `.generated/` is NOT made here. It is the compiler's evidence that this checkout has compiled
+    # before (`reconcile.ensure_state` refuses to start such a checkout from the product default), and
+    # this step runs before the first compile on a fresh one (scripts/ci-env.sh): made here, every
+    # `git clone` + `bbox run` refused itself until somebody removed the empty directory by hand
+    # (DGO-1023, the cloud proof of 5f5b995b). The lint reads the state first, then makes it to write.
+    gen = os.path.join(ROOT, '.generated')
     rc = subprocess.call([sys.executable, os.path.join(ROOT, 'scripts', 'refactor', 'cpu-budget-lint.py'),
                           '--profile', name, '--render', os.path.join(gen, 'cpu-budget.yml')])
     if rc != 0:

@@ -103,30 +103,97 @@ def swallowing_subcalls(doc: dict) -> list[tuple[str, bool, list[str]]]:
     return out
 
 
+#: a node that STARTS an execution. n8n's own types spell it out — every trigger ends in
+#: `Trigger` except the webhook, and `start` is the retired manual one still found in the fleet.
+TRIGGER_TYPES = ("n8n-nodes-base.start", "n8n-nodes-base.webhook")
+TRIGGER_SUFFIX = "trigger"
+
+
+def is_trigger(node: dict) -> bool:
+    t = str(node.get("type") or "")
+    return t.lower().endswith(TRIGGER_SUFFIX) or t in TRIGGER_TYPES
+
+
+def reachable(doc: dict) -> set[str]:
+    """The nodes that can RUN: everything downstream of a trigger, and nothing else.
+
+    A node no edge reaches and no trigger starts is dead code, and a dead node reads nothing —
+    which is exactly how this gate was fooled on 2026-10-10: three readers were added to fix
+    findings, the gate went green, and all three sat with no inbound edge at all. The blueprint's
+    `/*__n8n__*/ connections` marker is the AUTHORITATIVE graph (`apps/n8n/tooling/wrap.mjs`:
+    "the marker line is the AUTHORITATIVE graph and the generated links() DSL is a read-only
+    view"), so a `@links()` edit with no marker edit is a silent no-op — the same false-clean, one
+    level down. Counting only reachable readers makes that impossible to repeat.
+    """
+    conns = doc.get("connections") or {}
+    edges = [(name, c["node"]) for name, v in conns.items()
+             for br in ((v or {}).get("main") or []) for c in (br or [])]
+    inbound = {dst for _, dst in edges}
+    out: "dict[str, list[str]]" = {}
+    for src, dst in edges:
+        out.setdefault(src, []).append(dst)
+    seen: set[str] = set()
+    stack = [str(n.get("name")) for n in doc.get("nodes") or []
+             if is_trigger(n) and n.get("name") not in inbound]
+    while stack:
+        n = stack.pop()
+        if n in seen:
+            continue
+        seen.add(n)
+        stack.extend(out.get(n, []))
+    return seen
+
+
 def reads_failure(doc: dict) -> bool:
-    """Does ANY node in this workflow read `.error` / `.errorMessage` off an item?"""
+    """Does ANY node that can RUN read `.error` / `.errorMessage` off an item?"""
+    live = reachable(doc)
     blob = " ".join(json.dumps(n.get("parameters") or {}, ensure_ascii=False)
-                    for n in doc.get("nodes") or [])
+                    for n in doc.get("nodes") or [] if n.get("name") in live)
     return bool(ERR_READ.search(blob))
 
 
 SELF_TEST = [
     ("a swallowing sub-call in a workflow that never reads .error: must catch", 1, False,
-     {"nodes": [{"name": "Call X", "type": "n8n-nodes-base.executeWorkflow",
+     {"nodes": [{"name": "Tick", "type": "n8n-nodes-base.scheduleTrigger", "parameters": {}},
+                {"name": "Call X", "type": "n8n-nodes-base.executeWorkflow",
                  "onError": "continueRegularOutput", "parameters": {}}],
-      "connections": {}}),
+      "connections": {"Tick": {"main": [[{"node": "Call X", "type": "main", "index": 0}]]}}}),
     ("the same workflow once something reads .error: must allow", 1, True,
-     {"nodes": [{"name": "Call X", "type": "n8n-nodes-base.executeWorkflow",
+     {"nodes": [{"name": "Tick", "type": "n8n-nodes-base.scheduleTrigger", "parameters": {}},
+                {"name": "Call X", "type": "n8n-nodes-base.executeWorkflow",
                  "onError": "continueRegularOutput", "parameters": {}},
                 {"name": "Check", "type": "n8n-nodes-base.code",
                  "parameters": {"jsCode": "if($json.error) throw new Error($json.error);"}}],
-      "connections": {}}),
+      "connections": {"Tick": {"main": [[{"node": "Call X", "type": "main", "index": 0}]]},
+                      "Call X": {"main": [[{"node": "Check", "type": "main", "index": 0}]]}}}),
     ("bracket access counts as reading it too", 1, True,
-     {"nodes": [{"name": "Call X", "type": "n8n-nodes-base.executeWorkflow",
+     {"nodes": [{"name": "Tick", "type": "n8n-nodes-base.scheduleTrigger", "parameters": {}},
+                {"name": "Call X", "type": "n8n-nodes-base.executeWorkflow",
                  "onError": "continueRegularOutput", "parameters": {}},
                 {"name": "Check", "type": "n8n-nodes-base.code",
                  "parameters": {"jsCode": "const e = top['errorMessage'];"}}],
-      "connections": {}}),
+      "connections": {"Tick": {"main": [[{"node": "Call X", "type": "main", "index": 0}]]},
+                      "Call X": {"main": [[{"node": "Check", "type": "main", "index": 0}]]}}}),
+    # THE CASE THIS GATE WAS MISSING UNTIL 2026-10-10, and it was found the hard way: three
+    # readers written to fix three findings read `.error` and were wired ONLY in the read-only
+    # @links() DSL, so the compiled graph had no edge into them. Every one of them was counted as
+    # a reader and the gate reported less than it had a minute earlier. It reads nothing if it
+    # never runs.
+    ("a reader NOTHING REACHES is not a reader: must catch", 1, False,
+     {"nodes": [{"name": "Tick", "type": "n8n-nodes-base.scheduleTrigger", "parameters": {}},
+                {"name": "Call X", "type": "n8n-nodes-base.executeWorkflow",
+                 "onError": "continueRegularOutput", "parameters": {}},
+                {"name": "Check", "type": "n8n-nodes-base.code",
+                 "parameters": {"jsCode": "if($json.error) throw new Error($json.error);"}}],
+      "connections": {"Tick": {"main": [[{"node": "Call X", "type": "main", "index": 0}]]}}}),
+    ("…and the moment an edge reaches it, it counts: must allow", 1, True,
+     {"nodes": [{"name": "Tick", "type": "n8n-nodes-base.scheduleTrigger", "parameters": {}},
+                {"name": "Call X", "type": "n8n-nodes-base.executeWorkflow",
+                 "onError": "continueRegularOutput", "parameters": {}},
+                {"name": "Check", "type": "n8n-nodes-base.code",
+                 "parameters": {"jsCode": "if($json.error) throw new Error($json.error);"}}],
+      "connections": {"Tick": {"main": [[{"node": "Call X", "type": "main", "index": 0}]]},
+                      "Call X": {"main": [[{"node": "Check", "type": "main", "index": 0}]]}}}),
     ("a sub-call that STOPS on error is out of scope — the failure is already loud", 0, False,
      {"nodes": [{"name": "Call X", "type": "n8n-nodes-base.executeWorkflow", "parameters": {}}],
       "connections": {}}),

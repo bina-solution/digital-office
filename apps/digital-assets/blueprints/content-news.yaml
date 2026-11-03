@@ -1,0 +1,28 @@
+# חדשות — one event, 400–800 words: a DGO release, a big release of a project the office runs, a change
+# in the law that touches the reader. Shape and rules: content/BRIEF.md (`type: news`).
+# Each piece: `content.news.<slug>-<lang>`, created under this blueprint by the content importer.
+id: content-news
+version: 1
+order: 16
+extends:
+- content-library
+name:
+  he: חדשות
+  en: News
+summary:
+  he: אירוע אחד בכל ידיעה — מה קרה, מתי, למה זה חשוב לכם ומה עושים עם זה.
+  en: One event per item — what happened, when, why it matters to you, and what to do about it.
+slots:
+- key: content.news.hub-he
+  section: content
+  group: news
+  kind: richtext
+  lang: he
+  label:
+    he: פתיח עמוד החדשות
+    en: News hub — opening text
+  constraints:
+    note: 60–120 words — the hub of the news
+  targets:
+  - channel: website
+  - channel: google-search

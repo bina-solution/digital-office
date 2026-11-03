@@ -127,6 +127,18 @@ provision:
 - mode: system
   script: |
     #!/bin/bash
+    # The kernel's memory floor and its background compaction. Measured 2026-11-02 17:28 (load 108 on
+    # 4 vCPUs, every health probe timing out, the console's own address a 404): `kcompactd` at 84% of a
+    # core and 46% of all CPU in the kernel, with 88 MB free against a floor of 45 MB and
+    # `vm.compaction_proactiveness=20` — the kernel compacting memory in the background, endlessly, for
+    # a stack that asks for no huge pages at all (AnonHugePages 0, compact_stall 0). The same disease the
+    # HP's WSL had (DGO-625: `vm.min_free_kbytes=262144`); here a smaller floor, for a 4.9 GB guest.
+    set -eux -o pipefail
+    printf 'vm.compaction_proactiveness = 0\nvm.min_free_kbytes = 131072\n' > /etc/sysctl.d/90-bbox-memory.conf
+    sysctl -p /etc/sysctl.d/90-bbox-memory.conf
+- mode: system
+  script: |
+    #!/bin/bash
     # Docker CE 28.5.2, PINNED. Docker 29 raises the daemon's hard API floor to 1.40 and caps
     # DOCKER_MIN_API_VERSION there, so traefik v3.3 (client API 1.24) discovers ZERO routers and
     # every *.localhost 404s while traefik reports healthy (CLAUDE.md § "Docker 29 does not work").

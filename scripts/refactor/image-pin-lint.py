@@ -69,7 +69,7 @@ FLOATING = {"latest", "stable", "main", "master", "edge", "dev", "nightly", "rel
 
 # Images built by THIS repo and referenced by a local tag rather than a build: context.
 # They are the commit's output, so a tag is the right reference — there is no upstream to drift.
-FIRST_PARTY_PREFIXES = ("deployment-bina-comp-",)
+FIRST_PARTY_PREFIXES = ("deployment-hacohen-",)
 FIRST_PARTY_SUFFIXES = ("-local:latest",)
 
 

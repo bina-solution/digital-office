@@ -1,7 +1,7 @@
 # QA Run Results
 
 **Date:** 2026-05-13  
-**URL:** https://any-concurrency.bina-comp.bina-solutions.co.il/  
+**URL:** https://any-concurrency.hacohen.bina-solutions.co.il/  
 **Executed by:** GitHub Copilot via Playwright MCP  
 **Result:** ✅ 35/35 PASS
 
@@ -113,7 +113,7 @@
 
 | Item | Value |
 |---|---|
-| Live URL | https://any-concurrency.bina-comp.bina-solutions.co.il/ |
+| Live URL | https://any-concurrency.hacohen.bina-solutions.co.il/ |
 | Container | any-concurrency-bina-deployment |
 | Traefik container | traefik-bina-deployment (auto-discovered) |
 | Spans in ring | ~4800 at test time |

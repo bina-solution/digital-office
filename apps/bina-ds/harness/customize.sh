@@ -70,6 +70,47 @@ fs.writeFileSync(file, s.replace(anchor, patched))
 console.log('customize: patched (page-owns-host) ' + file)
 JS
 
+# ── the app's own bundles load from under the console's path prefix ───────────────────────────
+# The console frames this app under `/a/bina/` and injects `<base href="/a/bina/">`, and the
+# platform's contract for an embedded app is relative URLs (platform-base/console/app.py). The
+# harness keeps its boot manifest in a global (`__DSH_BOOT__`) whose every entry addresses its
+# bundle at the ROOT — `/plugins/??@scope/pkg/client.js,@scope/other/client.js&rev=<hash>` — and a
+# root-absolute URL IGNORES `<base>`: the browser asked the CONSOLE's origin for it, the console's
+# own SPA fallback answered 200 `text/html` for a `<script>`, and the page reported "Failed to load
+# plugins" with every entry listed (measured 2026-10-11 in a fresh capture, `ui-map`, bina tile:
+# `/a/bina/plugins/??…` → 200 JS, `/plugins/??…` → 200 HTML, 6251 bytes of the console's index).
+# So the load hook resolves the URL against the page's own base PATH — `/` when the harness IS the
+# origin, which is every non-framed case, where this is a no-op. Same exactly-once discipline.
+HOSTBUNDLE="$(find "$ROOT/node_modules/.pnpm" -path '*/node_modules/@deepseek-ai/dsh-client-modules/lib/client.js' | head -1)"
+[ -n "$HOSTBUNDLE" ] || { echo "customize: dsh-client-modules client.js not found under $ROOT" >&2; exit 1; }
+node - "$HOSTBUNDLE" <<'JS'
+const fs = require('node:fs')
+const [file] = process.argv.slice(2)
+const anchor = [
+  '\t\tconst defaultLoadBundle = (url) => new Promise((resolve, reject) => {',
+  '\t\t\tconst el = document.createElement("script");',
+  '\t\t\tel.async = true;',
+  '\t\t\tel.src = url;',
+].join('\n')
+const helper = [
+  '\t\t// bina-ds customization: an embedded app is served under a PATH PREFIX (`/a/bina/`), while',
+  '\t\t// the boot manifest addresses its bundles at the root. Resolve against the page\'s base path',
+  '\t\t// — "/" at the harness\'s own origin, so nothing changes where it owns the origin.',
+  '\t\tconst mountedUrl = (url) => {',
+  '\t\t\ttry {',
+  '\t\t\t\tconst path = new URL(document.baseURI || document.location.href).pathname.replace(/\\/+$/, "");',
+  '\t\t\t\treturn path !== "" && url.startsWith("/") && !url.startsWith("//") ? path + url : url;',
+  '\t\t\t} catch { return url; }',
+  '\t\t};',
+].join('\n')
+const patched = [helper, anchor.replace('el.src = url;', 'el.src = mountedUrl(url);')].join('\n')
+const s = fs.readFileSync(file, 'utf8')
+const count = s.split(anchor).length - 1
+if (count !== 1) { console.error(`customize: defaultLoadBundle anchor matched ${count} times in ${file}`); process.exit(1) }
+fs.writeFileSync(file, s.replace(anchor, patched))
+console.log('customize: patched (prefixed bundle urls) ' + file)
+JS
+
 # ── the copy button copies from inside a frame ────────────────────────────────────────────────
 # The owner, 2026-10-09 14:50, with the tooltip „העתקה" showing under a message: «העתקה לא עובד».
 # The window was HIS office's בינה framed by ANOTHER office's console (the title carries the
@@ -94,4 +135,33 @@ const count = s.split(anchor).length - 1
 if (count !== 1) { console.error(`customize: writeClipboard anchor matched ${count} times in ${file}`); process.exit(1) }
 fs.writeFileSync(file, s.replace(anchor, patched))
 console.log('customize: patched (clipboard fallback) ' + file)
+JS
+
+# ── the interface opens in the office's language, whatever the browser asks for ───────────────
+# The Hebrew pack adds the `he` language; which language is ACTIVE is this same plugin's durable
+# setting, and nothing ever wrote it — so the client resolved `detectBrowserLocale(navigator.languages)
+# ?? "en"` (`lib/client.js`, `resolveInitialLocale`) and a phone whose own language is not Hebrew got
+# the stock English screen inside the owner's own office (DGO-550, measured 2026-10-13: «Into the
+# Unknown», «Describe what you want to build…», «Open sidebar», while every one of those strings had a
+# Hebrew value in the dictionaries the pack ships, and `settings.yaml` carried no `locale` section).
+#
+# The registration carries the office's composition DEFAULT — `base` — and the settings provider
+# resolves schema defaults, then `base`, then the OWNER's layer. So Hebrew is what the interface
+# opens in, and an explicit choice in Settings → שפה still wins in every direction: the language row
+# writes the user layer through `setLocale` (which writes even when the value already matches, so a
+# person who picks Hebrew keeps it at the top of that stack too). One line, exactly-once like the
+# rest of this file; the harness version bump that moves it fails the build instead of shipping an
+# agent that opens in the wrong language.
+LOCALEHOST="$(find "$ROOT/node_modules/.pnpm" -path '*/node_modules/@deepseek-ai/dsh-client-locale/lib/index.js' | head -1)"
+[ -n "$LOCALEHOST" ] || { echo "customize: dsh-client-locale not found under $ROOT" >&2; exit 1; }
+node - "$LOCALEHOST" <<'JS'
+const fs = require('node:fs')
+const [file] = process.argv.slice(2)
+const anchor = 'settingsCtx.settings.register(LOCALE_SETTINGS_NAMESPACE, LocaleSettingsSchema);'
+const patched = 'settingsCtx.settings.register(LOCALE_SETTINGS_NAMESPACE, LocaleSettingsSchema, { base: { preference: "he" } });'
+const s = fs.readFileSync(file, 'utf8')
+const count = s.split(anchor).length - 1
+if (count !== 1) { console.error(`customize: locale registration anchor matched ${count} times in ${file}`); process.exit(1) }
+fs.writeFileSync(file, s.replace(anchor, patched))
+console.log('customize: patched (office language default) ' + file)
 JS

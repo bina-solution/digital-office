@@ -1,7 +1,7 @@
 import { workflow, node, links } from '@n8n-as-code/transformer';
 
 // <workflow-map>
-// Workflow : Google Drive MCP Server - agent.bina-comp
+// Workflow : Google Drive MCP Server - agent.hacohen
 // Nodes   : 17  |  Connections: 9
 //
 // NODE INDEX
@@ -55,15 +55,15 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
     /*__n8n__*/ meta: null,
     /*__n8n__*/ pinData: null,
     /*__n8n__*/ staticData: null,
-    /*__n8n__*/ shared: [{"updatedAt":"2026-06-29T10:06:58.177Z","createdAt":"2026-06-29T10:06:58.177Z","role":"workflow:owner","workflowId":"gDriveMcpAgent01","projectId":"Wx6WPGz1tIrghF2r","project":{"updatedAt":"2026-06-29T10:06:28.586Z","createdAt":"2026-06-29T10:02:30.215Z","id":"Wx6WPGz1tIrghF2r","name":"Shlomo Laptop <shlomo@local.dev>","type":"personal","icon":null,"description":null,"creatorId":"147f2398-75f7-4139-8132-7c477ee5cdfd"}}],
+    /*__n8n__*/ shared: [{"updatedAt":"2026-06-29T10:06:58.177Z","createdAt":"2026-06-29T10:06:58.177Z","role":"workflow:owner","workflowId":"gDriveMcpAgent01","projectId":"Wx6WPGz1tIrghF2r","project":{"updatedAt":"2026-06-29T10:06:28.586Z","createdAt":"2026-06-29T10:02:30.215Z","id":"Wx6WPGz1tIrghF2r","name":"Shlomo Laptop <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"147f2398-75f7-4139-8132-7c477ee5cdfd"}}],
     id: 'gDriveMcpAgent01',
-    name: 'Google Drive MCP Server - agent.bina-comp',
+    name: 'Google Drive MCP Server - agent.hacohen',
     active: true,
     isArchived: false,
     tags: ['gwa-app', 'lifecycle:test'],
     settings: { executionOrder: 'v1', callerPolicy: 'workflowsFromSameOwner', availableInMCP: false },
 })
-export class GoogleDriveMcpServerAgentBinaCompWorkflow {
+export class GoogleDriveMcpServerAgentHacohenWorkflow {
     // =====================================================================
     // CONFIGURATION DES NOEUDS
     // =====================================================================

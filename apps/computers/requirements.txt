@@ -1,3 +1,7 @@
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 requests==2.32.3
+# the asyncio client the share door needs on BOTH sides — the door in app.py (/share/<token>) and
+# door_client.py, ssh's ProxyCommand. `websockets.asyncio` exists from 13 and uvicorn[standard] asks
+# only for >=10.4, which is a floor rather than a promise, so the version that carries the API is said.
+websockets>=13,<18

@@ -28,7 +28,7 @@ const URL_RE = /https?:\/\/[^\s<>"']+/i;
  * Below this length a plain statement is "chatter" — "ok", "תודה", "👍". The sim used 24 characters
  * and it is a good line: long enough that a real request clears it, short enough that acknowledgements
  * do not. It is a heuristic and is named as one; `accepts.chatter` is the escape hatch for bots (like
- * bina-comp-bot) where a two-character message IS the payload.
+ * hacohen-bot) where a two-character message IS the payload.
  */
 const CHATTER_MAX_CHARS = 24;
 

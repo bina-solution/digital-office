@@ -118,7 +118,12 @@ def _iter_py() -> list[Path]:
         if not base.is_dir():
             continue
         for p in base.rglob("*.py"):
-            if set(p.parts) & SKIP_PARTS:
+            # RELATIVE to ROOT, never the absolute path: `p.parts` carries whatever directory the
+            # checkout happens to live in, so a SKIP_PART that collides with one of those names
+            # skipped EVERY file and this gate reddened with "scanned 0" on a real tree. Measured
+            # 2026-10-25 in /opt/digital-office/fireplace, where "digital-office" is a SKIP_PART
+            # (the dev-only UI workbench) and every absolute path begins with it.
+            if set(p.relative_to(ROOT).parts) & SKIP_PARTS:
                 continue
             out.append(p)
     return sorted(out)

@@ -3,6 +3,12 @@
 // connections credential plane.
 const $ = s => document.querySelector(s);
 const el = (t, c, h) => { const e = document.createElement(t); if (c) e.className = c; if (h != null) e.innerHTML = h; return e; };
+/* ONE IS SAID AS ONE (DGO-530, and the plural items behind it): a count of one is its own sentence —
+   «1 אפליקציות מותקנות» is not Hebrew — and any other count is the number as the office writes
+   numbers, with the plural. The rule is written out in apps/mail/mailview/static/app.js; this is the
+   console's copy of it, because each of these scripts carries what it needs. */
+const num = n => Number(n).toLocaleString("he-IL");
+const one = (n, single, many) => (Number(n) === 1 ? single : `${num(n)} ${many}`);
 
 // ── the tile icons: ONE set for every surface that lists apps — a copy of
 // platform-base/bina-ui/bina-icons.js, kept byte-identical by gate G27. mIcon() wraps a glyph.
@@ -13,10 +19,12 @@ const BINA_ICONS = {
   book:      '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>',
   'file-text': '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/>',
   folder:    '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>',
+  clipboard: '<path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/>',
   mail:      '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/>',
   inbox:     '<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
   message:   '<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z"/>',
   activity:  '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
+  mic:       '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/>',   // the recorder «הקלטות» (CHAT-81)
   bell:      '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
   server:    '<rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/>',
   monitor:   '<rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>',
@@ -344,7 +352,14 @@ async function ownHostState(m) {
 // load of the path the tile names (`enter`), which this office's edge answers with its sign-in and
 // then with this page again, at the tile's own route. Once a minute per host and one trip per page:
 // a host that still asks after that gets the card, whose button is the same trip.
-function leaveFor(url) { location.assign(url); }
+// …and a trip with nowhere to go is not a trip. On a console whose own hostname has nothing under it
+// (noNestedHost, above) the name this trip would load cannot exist from here: `<alias>.<office>.console:8000`
+// is a DNS failure, not a sign-in — measured 2026-11-02 on the live `console` run, where opening a
+// linked office's tile was a top-level load of `bina.hp-laptop.console:8000` and the browser drew
+// «This site can't be reached» in place of the whole shell. The trip is refused HERE, once, so every
+// caller of it (the shell's own host, a desktop window) is covered by one answer, and `openOwnHost`
+// then draws the card that says the name does not exist from this address.
+function leaveFor(url) { if (NO_NESTED_HOST) return; location.assign(url); }
 function enterUrl(m) {
   const at = (parseModuleHash() || [])[1] === m.id ? location.hash.slice(1) : "/m/" + m.id;
   return externalUrl(m) + m.enter + at;
@@ -365,10 +380,50 @@ async function openOwnHost(m, url) {
   const state = await ownHostState(m);
   const cur = parseModuleHash();
   if (!cur || cur[1] !== m.id) return;          // the person moved on while the host was asked
-  if (state === "signin" && enterOwnHost(m)) return;
+  if (state === "signin" && enterOwnHost(m)) {
+    // …but a trip that `leaveFor` refused (NO_NESTED_HOST) went nowhere, and a shell left standing on
+    // the screen it had is not an answer: say the name does not exist from this address, with nothing
+    // to press (the same card a measured `address` already draws).
+    if (NO_NESTED_HOST) renderExternalNotice(m, url, "address");
+    return;
+  }
   OWN_HOST_WAITING = state === "signin" ? m.id : "";
   if (state === "ok") return showEmbed(url);
   renderExternalNotice(m, url, state);
+}
+
+// ON A REAL DOMAIN the order is the other way round, and it has to be. There the nested host shares a
+// SITE with the identity provider, so a frame signs itself in silently while the provider's own
+// session is alive — asking first would interrupt a person for nothing. What it does NOT share is the
+// SESSION: every host behind the edge has its own proxy outpost cookie, host-only (`measured
+// 2026-10-12`: `authentik_proxy_8M9zLX1H` on the console's host, `authentik_proxy_qt2aADxS` on the
+// app's), so the frame's sign-in is the LOGIN PAGE whenever that session has run out — and that page
+// answers `X-Frame-Options: DENY`, which a browser renders as its own error page: a flat grey, one
+// grey icon, no sentence, no button (the owner's phone, 2026-10-12 23:59 — the identical dead end
+// `issues/a-linked-office-tile-fails-blank-and-no-surface-says-why.yaml` ends for the hops the link
+// measures). Nothing here can see INSIDE such a frame: it is cross-origin by construction, so
+// `externalFallback` returns "cross-origin: it loaded" for an error page as readily as for an app.
+// The HOST, though, can be asked — and by then it has had its chance: a host that took the browser
+// answers the path its tile names (`signed_in`), and a host still sending an unsigned browser to a
+// sign-in redirects. Redirects twice, and the shell draws the card it already owns, whose button is
+// the top-level trip through the sign-in and back. `again` is for a window on the desktop, which
+// draws its own card; the shell's frame gets `renderExternalNotice`.
+function watchOwnHost(m, url, again) {
+  if (!m.signed_in) return;
+  let left = 2;                                 // one retry: a redirect chain mid-flight is not a verdict
+  const ask = async () => {
+    if (!again) {                               // the shell's one content frame
+      const cur = parseModuleHash();
+      if (!cur || cur[1] !== m.id) return;      // the person moved on while the host was asked
+      if ($("#embedwrap").classList.contains("hidden")) return;   // a card is already standing there
+    }
+    if ((await ownHostState(m)) !== "signin") return;   // the host took the browser: the frame is the app
+    if (--left > 0) return setTimeout(ask, 2500);
+    OWN_HOST_WAITING = m.id;
+    if (again) return again();
+    renderExternalNotice(m, url, "signin");
+  };
+  setTimeout(ask, 3000);
 }
 
 // ── a tab that stays open ───────────────────────────────────────────────────────────────────────
@@ -435,8 +490,14 @@ async function freshen(navigating, returned) {
   }
   if (navigating) return;
   if (window.BinaDesktop && BinaDesktop.isOn()) return BinaDesktop.askOwnHosts();
+  // …and the tile in view whose app lives on its own host, on EVERY console: it is the same question
+  // `openOwnHost` and `watchOwnHost` ask, and its answer is what decides between the frame and the
+  // card. Asked on the console's own clock (`measured 2026-10-12`: a sign-in that ran out under a
+  // page left open for the evening turned the tile into a grey frame, and a page left open is the
+  // normal case on a phone). On a real domain the old guard skipped this — the assumption above,
+  // that a shared domain is a shared session, is what it rested on.
   const m = inView();
-  if (!m || !m.signed_in || !NO_NESTED_HOST) return;
+  if (!m || !m.signed_in) return;
   if (((await ownHostState(m)) === "signin") !== (OWN_HOST_WAITING === m.id)) route();
 }
 document.addEventListener("visibilitychange", () => { if (!document.hidden) freshen(false, true); });
@@ -468,7 +529,7 @@ function renderExternalNotice(m, url, need) {
   $("#content").innerHTML = externalNotice(m, url, need);
 }
 // The card itself — drawn in the shell's content and in a desktop window (desktop.js: askOwnHost).
-function externalNotice(m, url, need) {
+function externalNotice(m, url, need, why) {
   const r = remoteInfo(m);
   // An app of a linked office is introduced by its office; an app of this one needs no introduction.
   const where = r ? esc(r.label) + " · " : "";
@@ -499,6 +560,14 @@ function externalNotice(m, url, need) {
     if (r.off) action = `<div class="xn-acts"><button class="btn" type="button" onclick="askAnyway('${esc(m.id)}')"
        title="פותח את האפליקציה עכשיו, גם אם הלשכה סומנה כלא זמינה">נסה שוב</button>
        <a class="btn ghost" href="${esc(url)}" target="_blank" rel="noopener">פתיחה בחלון נפרד</a></div>`;
+  } else if (need === "refused") {
+    // #63: the app's own answer forbids showing it inside another page (X-Frame-Options or CSP
+    // frame-ancestors, asked by /api/frame-check) — so it opens in a tab of its own, and the window
+    // says so instead of staying empty.
+    sub = `${where}נפתחת בלשונית נפרדת`;
+    body = `${lead}אינה מאפשרת להציג אותה בתוך הלשכה, ולכן היא נפתחת בלשונית משלה.`
+      + (why ? `<br><code dir="ltr">${esc(why)}</code>` : "");
+    action = `<a class="btn" href="${esc(url)}" target="_blank" rel="noopener">פתיחה בלשונית</a>`;
   } else {
     sub = "האפליקציה לא נטענה בתוך הלשכה — אפשר לפתוח אותה בחלון נפרד";
     body = `${esc(m.desc || "")}<br><code dir="ltr">${esc(url)}</code>`;
@@ -560,8 +629,56 @@ function moduleMatches(m, typed) {
   const q = String(typed || "").trim().toLocaleLowerCase();
   if (!q) return true;
   const r = remoteInfo(m);
-  return [m.name, m.desc, m.id, r ? r.label : "", r ? r.office : ""]
-    .join(" ").toLocaleLowerCase().includes(q);
+  // …and its English name and description (`name_en`/`desc_en`, compiled from the manifest's own
+  // title and summary) and its alias: an office in Hebrew is still searched in English (OP-12).
+  const hay = [m.name, m.desc, m.id, m.alias, m.name_en, m.desc_en, r ? r.label : "", r ? r.office : ""]
+    .join(" ").toLocaleLowerCase();
+  if (hay.includes(q)) return true;
+  // Every typed WORD on its own, in any order — and a Hebrew word that differs only in its ending:
+  // the owner typed «שירותים» for «שירותי צ׳ימני» (FPG, C2 2:25:05; the construct form drops the ־ם).
+  // A typed word finds a word that begins with it, or a word of 4+ letters that it begins with.
+  const words = hay.split(/[\s·,.:;()\/\-–—]+/).filter(Boolean);
+  return q.split(/\s+/).every(w => words.some(x => x.startsWith(w) || (x.length >= 4 && w.startsWith(x))));
+}
+// EVERY INSTALLED APP IS FOUND (OP-12). The palette reads MODULES — the apps this console FRAMES — and
+// an app whose UI lives only on its own host (`embed: false`, e.g. the services apps) has no tile
+// there, while the apps screen lists it: «אני עושה חיפוש אני לא מוצא את האפליקציה של השירותים» (FPG,
+// C2 2:25:05). So the search also reads the apps screen's OWN list (app-management's /api/apps,
+// through this console's proxy — one answer to "what is installed") and opens such an app the way
+// that screen does (app-management openApp): a window on the desktop, a new tab anywhere else.
+let OTHER_APPS = { at: 0, list: [], p: null };
+function otherApps() {
+  if (OTHER_APPS.p) return OTHER_APPS.p;
+  if (Date.now() - OTHER_APPS.at < 60000) return Promise.resolve(OTHER_APPS.list);
+  OTHER_APPS.p = fetch("/a/app-management/api/apps").then(r => r.ok ? r.json() : null).catch(() => null)
+    .then(j => {
+      const known = new Set(MODULES.map(m => m.id));
+      const list = ((j && j.apps) || [])
+        .filter(a => a && a.enabled && a.launch && a.launch.url && !known.has(a.id) && !known.has(a.launch.module))
+        .map(a => ({ id: a.id, name: a.name || a.id, name_en: a.name_en || "", desc: a.summary || "",
+                     icon: a.icon || "app", url: a.launch.url, outside: true }));
+      OTHER_APPS = { at: j ? Date.now() : 0, list, p: null };
+      return list;
+    });
+  return OTHER_APPS.p;
+}
+function openOutside(a) {
+  const d = window.BinaDesktop;
+  if (d && d.isOn && d.isOn() && d.openExternal && d.openExternal({ id: a.id, name: a.name, url: a.url, icon: a.icon })) return;
+  window.open(a.url, "_blank", "noopener");
+}
+// MAY THIS URL BE SHOWN INSIDE THE OFFICE (#63)? A browser hides a refused frame's reason from the
+// page that framed it, so the console asks the app's own answer server-side (/api/frame-check:
+// X-Frame-Options and CSP frame-ancestors, judged against this console's origin). A refusal is kept
+// per origin for the session, so the next open goes straight to a tab. Anything but a clear
+// "refused" (no answer, a sign-in redirect) frames exactly as before.
+const FRAME_SAID = {};
+function frameKnown(url) { try { return FRAME_SAID[new URL(url).origin] || null; } catch (e) { return null; } }
+function frameVerdict(url) {
+  let o; try { o = new URL(url).origin; } catch (e) { return Promise.resolve(null); }
+  if (FRAME_SAID[o]) return Promise.resolve(FRAME_SAID[o]);
+  return fetch("/api/frame-check?url=" + encodeURIComponent(url)).then(r => r.ok ? r.json() : null)
+    .catch(() => null).then(v => { if (v && v.verdict === "refused") FRAME_SAID[o] = v; return v; });
 }
 // `<title> · <office label>` — the tooltip every surface of the shell uses for a remote app, and the
 // one string the CLI/agent side can point at when asking "which of these two is the Mac's".
@@ -717,7 +834,7 @@ function renderHome() {
     <div class="home-head">
       <div class="home-clock num" id="homeClock"></div>
       <div class="home-brand"><b>הלשכה הדיגיטלית</b>
-        <small>${MODULES.length} אפליקציות מותקנות</small></div>
+        <small>${one(MODULES.length, "אפליקציה אחת מותקנת", "אפליקציות מותקנות")}</small></div>
     </div>
     ${groups.map((g) => `${g.name ? `<div class="home-group">${esc(g.name)}</div>` : ""}
       <div class="home-grid">${g.mods.map(tile).join("")}</div>`).join("")}
@@ -806,10 +923,6 @@ function toggleRail() {
 // button that just disappeared with the chrome: a state that hides its own control is a trap, and
 // this is the one place the shell could set one.
 const FOCUS_KEY = "do-focus";
-// How long the exit control keeps its words after full screen begins: long enough to be read and
-// remembered, short enough that it does not sit on an app's own corner for the rest of the session.
-const FOCUS_LABEL_MS = 5000;
-let focusLabelT = 0;
 const focusSaved = () => { try { return localStorage.getItem(FOCUS_KEY) === "1"; } catch (e) { return false; } };
 const focusOn = () => document.documentElement.classList.contains("focus");
 function applyFocus(on, opts) {
@@ -823,11 +936,24 @@ function applyFocus(on, opts) {
     b.title = label; b.setAttribute("aria-label", label);
   }
   if (save) { try { localStorage.setItem(FOCUS_KEY, on ? "1" : "0"); } catch (e) { /* private mode */ } }
-  clearTimeout(focusLabelT);
-  document.documentElement.classList.toggle("focus-armed", on);
-  if (on) focusLabelT = setTimeout(() => document.documentElement.classList.remove("focus-armed"), FOCUS_LABEL_MS);
+  focusToFrame(on);
   if (!on) leaveFullscreen();
 }
+// The embedded app's own navigation is the app's to hide — and it is the other half of the same
+// screen: on a phone the agent's rail is 57px of a 390px frame (15% of the width, always), and its
+// side panel opens over another 45–70%. So the shell DECLARES its state on the app's own document
+// (`data-shell-focus`), exactly as it already declares the theme there (`applyThemeTo`), and the
+// app's plugin reads it: one writer of one fact, and an app that knows nothing about it simply
+// ignores the attribute. Same-origin by construction — every app is proxied under /a/<name>/.
+function focusToFrame(on) {
+  const f = $("#frame");
+  if (!f) return;
+  try {
+    const d = f.contentDocument;
+    if (d && d.documentElement) d.documentElement.toggleAttribute("data-shell-focus", !!on);
+  } catch (e) { /* a frame not loaded yet, or a future cross-origin app: the shell's half still works */ }
+}
+
 function askFullscreen() {
   if (!document.fullscreenEnabled || !document.documentElement.requestFullscreen) return;
   document.documentElement.requestFullscreen().catch(() => { /* refused: focus mode is still on */ });
@@ -882,6 +1008,61 @@ function applyThemeTo(doc, t) {
 function themeIntoFrame() {
   const f = $("#frame");
   try { if (f && f.contentDocument) applyThemeTo(f.contentDocument, themeSaved()); } catch (e) {}
+  focusToFrame(focusOn());     // the fact, not a request: the app folds its own navigation with it
+}
+
+// ── a link inside an app that points INTO the office opens HERE ───────────────────────────────────
+// An app framed at `/a/<alias>/` is same-origin with this shell, so the shell can read its document —
+// and it must, because a link in it to another part of the office was leaving the office: the agent's
+// own answer carries a work-item link, the harness renders every absolute http(s) link with
+// `target="_blank"` (its own renderer, by design), and the click opened a SECOND TAB that then asked
+// for a sign-in — while the office was open, signed in, one click away (owner, 2026-10-09: «אין מצב
+// שכל פעם שאני שולח לי קישור למשימה זה יפתח בחלון נוסף וידרוש לוגין»).
+//
+// What opens here is a URL THIS OFFICE serves: this console's own route (`#/m/<id>…`) or a tile's
+// nested host (`<host>.<this console's host>`). Anything else — a site on the internet — is somebody
+// else's page; a new tab is right for it and this listener does nothing to it.
+//
+// `officeTarget` is the rule, whole and pure, so the test can hold it without a browser.
+function officeTarget(href, base, modules, here) {
+  let u, me;
+  try { u = new URL(href, base); me = new URL(base); } catch (e) { return null; }
+  if (u.origin !== me.origin) {
+    // a linked office's app lives on its own nested host, port-less match on the host name
+    if (u.hostname.endsWith("." + me.hostname)) {
+      const label = u.hostname.slice(0, -(me.hostname.length + 1));
+      const m = (modules || []).find(x => (x.host || x.id) === label);
+      if (m && m.external) return { module: m.id, path: u.pathname + u.search };
+    }
+    return null;
+  }
+  const route = /^#\/m\/([^/?#]+)([/?].*)?$/.exec(u.hash || "");
+  if (route) {
+    const m = (modules || []).find(x => x.id === route[1]);
+    if (m) return { module: m.id, path: route[2] || "" };
+    return null;
+  }
+  return null;
+}
+
+// …and the listener that uses it, on the APP's document (the frame is replaced on every navigation,
+// so the mark is put on the document, not on the shell).
+function officeLinksIntoFrame() {
+  const f = $("#frame");
+  let doc;
+  try { doc = f && f.contentDocument; } catch (e) { return; }   // cross-origin: not ours to read
+  if (!doc || doc.__officeLinks) return;
+  doc.__officeLinks = true;
+  doc.addEventListener("click", (e) => {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    const a = e.target && e.target.closest ? e.target.closest("a[href]") : null;
+    if (!a) return;
+    const t = officeTarget(a.getAttribute("href"), doc.baseURI || location.href, MODULES);
+    if (!t) return;
+    e.preventDefault();
+    e.stopPropagation();
+    location.hash = "#/m/" + t.module + (t.path || "");
+  }, true);
 }
 
 // ── ⌘K / Ctrl-K command palette ────────────────────────────────────────────────
@@ -894,9 +1075,10 @@ function openPalette() {
   ov.appendChild(box); document.body.appendChild(ov);
   ov.onclick = e => { if (e.target === ov) closePalette(); };
   const input = $("#palInput"), list = $("#palList");
-  let items = [], sel = 0;
+  let items = [], sel = 0, others = [];
   const render = () => {
-    items = MODULES.filter(m => moduleMatches(m, input.value));
+    items = MODULES.filter(m => moduleMatches(m, input.value))
+      .concat(others.filter(m => moduleMatches(m, input.value)));
     if (sel >= items.length) sel = Math.max(0, items.length - 1);
     list.innerHTML = items.map((m, i) => {
       const r = remoteInfo(m);
@@ -931,7 +1113,11 @@ function openPalette() {
   };
   const markSel = () => list.querySelectorAll(".pal-item").forEach(d =>
     d.classList.toggle("sel", +d.dataset.i === sel));
-  const go = i => { const m = items[i]; if (m) { closePalette(); location.hash = "#/m/" + m.id; } };
+  const go = i => {
+    const m = items[i]; if (!m) return;
+    closePalette();
+    if (m.outside) openOutside(m); else location.hash = "#/m/" + m.id;
+  };
   input.oninput = render;
   input.onkeydown = e => {
     if (e.key === "ArrowDown") { sel = Math.min(items.length - 1, sel + 1); markSel(); e.preventDefault(); }
@@ -940,6 +1126,8 @@ function openPalette() {
     else if (e.key === "Escape") closePalette();
   };
   render(); input.focus();
+  // the apps that are not framed here join the list when the apps screen's answer comes in
+  otherApps().then(l => { others = l; if (l.length && document.body.contains(list)) render(); });
 }
 function closePalette() { const o = document.querySelector(".pal-ov"); if (o) o.remove(); }
 window.addEventListener("keydown", e => {
@@ -1052,6 +1240,19 @@ function route() {
   if (renamed && MODULES.some(x => x.id === renamed)) {
     return location.replace("#/m/" + renamed + (dm[2] || ""));
   }
+  // A LINK THAT NAMES NOTHING IS SAID, NOT TELEPORTED. Until now an unknown id went to the office's
+  // FIRST tile (`location.replace("#/m/" + MODULES[0].id)`), so a link to an app this office does not
+  // run put the person in a different app, under a different address, with nothing explaining it —
+  // the same shape as the rename bug above (the owner got the agent where he asked for the work item),
+  // and the `layout` suite catches it as «the office has no tile of this name: its address became …».
+  // The address is KEPT and the screen says what it is.
+  // …and only once the registry is IN. `route()` also runs while the module list is still being
+  // fetched (the address is read at load, the tiles arrive a moment later), and an unknown id at that
+  // moment is not an unknown id at all — saying "no such screen" then covered EVERY screen on the
+  // office and made the live `layout` suite skip six of its modules and pass green (measured
+  // 2026-10-13). With nothing in the registry this falls through to the old behaviour, and the
+  // shell re-routes when the tiles arrive.
+  if (dm && MODULES.length) return renderNoSuchScreen(dm[1]);
   // Phone: the rail is hidden, so the bare hash opens the launcher instead of teleporting into
   // whichever app happens to be first in the registry.
   if (PHONE.matches && MODULES.length) return renderHome();
@@ -1070,24 +1271,17 @@ function joinEmbed(embed, rest) {
 // postMessage), and the shell mirrors it into the hash with replaceState — the address bar
 // is therefore ALWAYS a copyable deep link, with no history spam and no hashchange loop
 // (replaceState does not fire hashchange, so route() never re-runs on its own echo).
-window.addEventListener("message", (e) => {
-  if (e.origin !== location.origin) return;
-  const d = e.data;
-  if (!d || d.type !== "bina:route" || typeof d.path !== "string") return;
-  // Only the CURRENTLY EMBEDDED frame may write the address bar — same rule the
-  // reload-ack listener enforces. A late message from a swapped-out app, a nested
-  // frame or an opener must not relabel another module's URL.
-  const f = $("#frame");
-  if (!f || e.source !== f.contentWindow) return;
-  // shape: an inner route ("/x" or "?q="), never a fragment or a bare word
-  if (!/^[/?][^#]*$/.test(d.path)) return;
-  const cur = parseModuleHash();
-  if (!cur) return;
-  const m = MODULES.find(x => x.id === cur[1]);
-  if (!m || !m.embed) return;
-  const path = d.path === "/" ? "" : d.path;
-  history.replaceState(null, "", "#/m/" + cur[1] + path);
-});
+//
+// ── THE `bina:route` LISTENER THAT USED TO BE HERE (deleted 2026-10-13) ─────────────────────────
+// It listened for `{type:"bina:route", path}` from the embedded frame and wrote the address bar with
+// replaceState — the office protocol the owner retired: «אסור שזה תהיה תלוי בסריקות וקוד מורכב חייב
+// פשוט לנתב את כל מה שהקישור בפנימי של אפלקציות בברירת מחדל». The shell reads the frame's own URL
+// now (`watchFrameRoute` above, the standard Navigation API), so nothing has to be told. It went once
+// its last two carriers — `mailview` and `incoming` — were converted, deployed and measured, and once
+// no app in the tree sent it any more (verified repo-wide; `desktop.js`'s twin went with it).
+// The two apps that are not installed on this office, `digital-assets` and `social-list`, are
+// converted in SOURCE too; a build of them older than that would simply not report its route, and any
+// `bbox run`/`bbox update` rebuilds them from source.
 
 // Reachable only when /api/modules answered with nothing — a shell whose registry is empty or whose
 // backend is still starting. Better an honest empty state than a blank content pane.
@@ -1096,6 +1290,17 @@ function renderNoModules() {
   showContent();
   $("#content").innerHTML = `<div class="wcard"><h3>אין מסכים זמינים</h3>` +
     `<div class="sub">רשימת האפליקציות חזרה ריקה. ודאו שהשירותים פועלים, ורעננו את הדף.</div></div>`;
+}
+
+/* The address asks for a screen this office does not have — an app it does not run, or an id from
+   another office's tile. Said, with the address kept: the person asked for something specific, and a
+   screen that quietly shows a different app is how a link "does not work" (see the note in route()). */
+function renderNoSuchScreen(id) {
+  setActive(null); setViewTitle(null);
+  showContent();
+  $("#content").innerHTML = `<div class="wcard"><h3>אין מסך בשם הזה בלשכה הזאת</h3>` +
+    `<div class="sub">הכתובת מבקשת <bdi>${esc(id)}</bdi>, ולשכה הזאת לא מריצה אריח בשם הזה. ` +
+    `אפשר לבחור מסך מהסרגל — הכתובת נשארת כפי שהיא.</div></div>`;
 }
 
 function showContent() {
@@ -1119,7 +1324,7 @@ function showEmbed(url, service) {
   if (service) renderAccountBar(service, chip); else chip.innerHTML = "";
   // the app arrives with the shell's theme already applied — set it on load, not after, so the app
   // never paints light for a frame and then flips
-  f.onload = () => { themeIntoFrame(); watchFrameRoute(); };
+  f.onload = () => { themeIntoFrame(); watchFrameRoute(); officeLinksIntoFrame(); };
   f.src = url;
   watchFrameRoute();
 }
@@ -1148,8 +1353,10 @@ function showEmbed(url, service) {
 function watchFrameRoute() {
   const f = $("#frame");
   let w = null;
-  try { w = f.contentWindow; } catch (err) { return; }              // a frame that is not ours
-  if (!w || !w.location || !w.location.pathname) return;
+  try {                                                             // a frame that is not ours: a
+    w = f.contentWindow;                                            // tile redirected to its own host
+    if (!w || !w.location || !w.location.pathname) return;          // throws on reading pathname
+  } catch (err) { return; }
   const map = parseModuleHash();
   const m = map && MODULES.find(x => x.id === map[1]);
   if (!m || !m.embed) return;                                       // an external host: its own URL is its own
@@ -1160,7 +1367,13 @@ function watchFrameRoute() {
     const path = url.pathname.slice(mount.length);
     // The mount itself IS the root: `/a/bina/` must read as `#/m/bina`, never `#/m/bina/`, or the
     // address a person copies after a step is a different string from the one they arrived with.
-    return (path === "/" ? "" : path) + url.search + url.hash;
+    //
+    // The frame's FRAGMENT is deliberately NOT carried. An app that routes by hash (domains, sites)
+    // TRANSLATES the path it is handed into its own hash on load, so the path is the canonical form —
+    // and appending the fragment put a second `#` inside the console's tail
+    // (`#/m/sites/s/<id>/overview#/s/<id>/overview`, measured 2026-10-12), which the shell's own
+    // grammar (`#/m/<id>[/inner][?query]`) has no room for.
+    return (path === "/" ? "" : path) + url.search;
   };
   const reflect = (href) => {
     const route = inner(href);
@@ -1274,6 +1487,7 @@ function openModule(m, rest) {
     if (NO_NESTED_HOST && m.signed_in) return openOwnHost(m, url);
     showEmbed(url);
     setTimeout(() => externalFallback(m, url), 2500);   // card only when nothing rendered
+    watchOwnHost(m, url);                               // …and the host itself, once the frame had its chance
     return;
   }
   if (m.embed) openTouch(m.id, rest || "");
@@ -1679,7 +1893,7 @@ function healthPanel() {
   box.innerHTML =
     `<div class="modal-h"><h3>מצב החיבורים</h3><button class="ghost" id="mX">${mIcon("x")}</button></div>` +
     `<div class="cw-body">` +
-      `<div class="sub">${esc(svcName)} · ${conns.length} חשבונות · ${esc(summary)}</div>` +
+      `<div class="sub">${esc(svcName)} · ${one(conns.length, "חשבון אחד", "חשבונות")} · ${esc(summary)}</div>` +
       `<div class="hlist">${conns.map(card).join("")}</div>` +
       // The sim's panel carries a per-connection event log. No platform service serves one, and a
       // panel that invents a plausible history is worse than one that admits the gap — so this says

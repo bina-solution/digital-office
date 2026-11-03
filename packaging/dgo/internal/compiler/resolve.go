@@ -7,11 +7,16 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/solomonBoltin/deployment-bina-comp/packaging/dgo/internal/yamlish"
+	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/pyval"
+	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/yamlish"
 )
 
 // hard mirrors HARD: the strengths that pull a provider in.
 var hard = map[string]bool{"requires": true, "requisite": true, "binds_to": true}
+
+// Hard reports whether a use[] strength pulls its provider in — asked by the store's resolver
+// (internal/store) so the set stays one.
+func Hard(strength string) bool { return hard[strength] }
 
 // Diag is one resolver diagnostic: level "error" or "info", and the message reconcile.py prints.
 type Diag struct {
@@ -21,6 +26,12 @@ type Diag struct {
 // Resolve mirrors resolve(cat, state, roots): the ordered enabled ids and the diagnostics.
 // Strength, provider selection, ops negotiation, conflicts, ordering and cycles — the same rules in
 // the same words. roots seeds the closure instead of the state's enabled set (`services --for`).
+//
+// It reads each manifest as reconcile.py does, since required-by asks it without validating first:
+// an absent field takes Python's default and a present null does not (`strength: null` is no hard
+// strength), `ops` is set(ops or []) — "write" is five letters — and `after` and a binding count by
+// Python truth (`bindings: {sql: }` binds nothing). A field Python cannot iterate, an entry it cannot
+// index, a value it cannot hash is where reconcile.py dies, and where this returns the error.
 func Resolve(repo string, cat *Catalog, st *State, roots []string) ([]string, []Diag, error) {
 	var diags []Diag
 	enabled := map[string]bool{}
@@ -39,7 +50,11 @@ func Resolve(repo string, cat *Catalog, st *State, roots []string) ([]string, []
 			enabled[r] = true
 		}
 	} else {
-		enabled = EnabledIDs(st, cat)
+		ids, err := EnabledIDs(st, cat)
+		if err != nil {
+			return nil, nil, err
+		}
+		enabled = ids
 		for _, aid := range st.Apps.Keys() {
 			if _, ok := cat.Apps[aid]; !ok {
 				diags = append(diags, Diag{"info", fmt.Sprintf("%s: in state but not yet migrated to apps/ (legacy lane)", aid)})
@@ -47,13 +62,23 @@ func Resolve(repo string, cat *Catalog, st *State, roots []string) ([]string, []
 		}
 	}
 
-	// provider[cap] = app ids in catalog order
+	// provider[cap] = app ids in catalog order, each capability known as a Python dict knows its key
 	provider := map[string][]string{}
 	for _, aid := range cat.Order {
-		for _, c := range cat.Apps[aid].list("capabilities") {
-			if name, ok := c["name"].(string); ok {
-				provider[name] = append(provider[name], aid)
+		caps, err := cat.Apps[aid].entries("capabilities")
+		if err != nil {
+			return nil, nil, err
+		}
+		for i, c := range caps {
+			name, ok := c["name"]
+			if !ok {
+				return nil, nil, died("%s: capabilities[%d] has no name", aid, i)
 			}
+			key, ok := pyKey(name)
+			if !ok {
+				return nil, nil, died("%s: capabilities[%d].name is %s, which cannot name anything", aid, i, pyval.Repr(name))
+			}
+			provider[key] = append(provider[key], aid)
 		}
 	}
 
@@ -64,27 +89,29 @@ func Resolve(repo string, cat *Catalog, st *State, roots []string) ([]string, []
 			if m, ok := v.(*yamlish.Map); ok {
 				for _, k := range m.Keys() {
 					val, _ := m.Get(k)
-					legacyCaps[k] = yamlStr(val)
+					legacyCaps[k] = pyval.Str(val)
 				}
 			}
 		}
 	}
 
-	// admin-chosen capability → provider bindings
-	bindings := map[string]string{}
-	if bv, ok := st.Doc.Get("bindings"); ok {
-		if bm, ok := bv.(*yamlish.Map); ok {
-			for _, k := range bm.Keys() {
-				v, _ := bm.Get(k)
-				if m, ok := v.(*yamlish.Map); ok {
-					p, _ := m.Get("provider")
-					bindings[k] = yamlStr(p)
-				} else {
-					bindings[k] = yamlStr(v)
-				}
-			}
-		}
+	// admin-chosen capability → provider bindings: a mapping's `provider`, else the value itself,
+	// kept as Python keeps it — a falsy one is no binding, and the consumer's default_provider decides
+	bindings := map[string]any{}
+	bv, _ := st.Doc.Get("bindings")
+	bm, err := mapping(bv, stateName+": bindings")
+	if err != nil {
+		return nil, nil, err
 	}
+	for _, k := range bm.Keys() {
+		v, _ := bm.Get(k)
+		if m, ok := v.(*yamlish.Map); ok {
+			v, _ = m.Get("provider")
+		}
+		bindings[k] = v
+	}
+	// ...and the product's, for a capability the office's state binds nothing for (default_bindings)
+	product := defaultBindings(repo)
 
 	// transitively pull in providers of hard-used capabilities
 	want := map[string]bool{}
@@ -97,14 +124,27 @@ func Resolve(repo string, cat *Catalog, st *State, roots []string) ([]string, []
 	for len(frontier) > 0 {
 		aid := frontier[len(frontier)-1]
 		frontier = frontier[:len(frontier)-1]
-		for _, u := range cat.Apps[aid].list("use") {
-			if !hard[strOr(u, "strength", "requires")] {
+		uses, err := cat.Apps[aid].entries("use")
+		if err != nil {
+			return nil, nil, err
+		}
+		for i, u := range uses {
+			strength := pyGet(u, "strength", "requires")
+			if _, ok := pyKey(strength); !ok {
+				return nil, nil, died("%s: use[%d].strength is %s, which cannot be looked up", aid, i, pyval.Repr(strength))
+			}
+			if s, _ := strength.(string); !hard[s] {
 				continue
 			}
-			cap, _ := u["capability"].(string)
-			provs := provider[cap]
+			capv, key, err := useCapability(aid, i, u)
+			if err != nil {
+				return nil, nil, err
+			}
+			cap := pyval.Str(capv)
+			name, isText := capv.(string) // a dict of the state file or the bridge is keyed by text
+			provs := provider[key]
 			if len(provs) == 0 {
-				if legacy, ok := legacyCaps[cap]; ok {
+				if legacy, bridged := legacyCaps[name]; isText && bridged {
 					diags = append(diags, Diag{"info", fmt.Sprintf("%s: '%s' served by legacy '%s' (not yet migrated)", aid, cap, legacy)})
 				} else {
 					diags = append(diags, Diag{"error", fmt.Sprintf("%s: requires capability '%s' — no provider in catalog and not declared in platform/legacy-capabilities.yaml", aid, cap)})
@@ -112,56 +152,85 @@ func Resolve(repo string, cat *Catalog, st *State, roots []string) ([]string, []
 				continue
 			}
 			// ops negotiation: refuse a provider missing a required op
-			need := strList(u["ops"])
-			var ok []string
-			for _, p := range provs {
-				var have map[string]bool
-				for _, c := range cat.Apps[p].list("capabilities") {
-					if n, _ := c["name"].(string); n == cap {
-						have = map[string]bool{}
-						for _, o := range strList(c["required_ops"]) {
-							have[o] = true
-						}
-						for _, o := range strList(c["optional_ops"]) {
-							have[o] = true
-						}
-						break
-					}
-				}
-				var missing []string
-				for _, o := range need {
-					if !have[o] {
-						missing = append(missing, o)
-					}
-				}
-				if len(need) > 0 && len(missing) > 0 {
-					sort.Strings(missing)
-					diags = append(diags, Diag{"error", fmt.Sprintf("%s: provider '%s' lacks ops %s for '%s'", aid, p, pyList(missing), cap)})
-				} else {
-					ok = append(ok, p)
+			need := map[string]any{}
+			if ops := pyGet(u, "ops", nil); truthy(ops) {
+				var ok bool
+				if need, _, ok = pySet(ops); !ok {
+					return nil, nil, died("%s: use[%d].ops is %s, which is no set of ops", aid, i, pyval.Repr(ops))
 				}
 			}
-			// provider selection: a binding, then the consumer's default_provider, then the only one
+			var eligible []string
+			for _, p := range provs {
+				have, err := providedOps(cat.Apps[p], key)
+				if err != nil {
+					return nil, nil, err
+				}
+				var missing []any
+				for k, op := range need {
+					if _, has := have[k]; !has {
+						missing = append(missing, op)
+					}
+				}
+				if len(missing) == 0 {
+					eligible = append(eligible, p)
+					continue
+				}
+				sorted, ok := pySorted(missing)
+				if !ok {
+					return nil, nil, died("%s: use[%d]: ops %s cannot be sorted", aid, i, pyval.Repr(missing))
+				}
+				diags = append(diags, Diag{"error", fmt.Sprintf("%s: provider '%s' lacks ops %s for '%s'", aid, p, pyval.Repr(sorted), cap)})
+			}
+			// provider selection: a binding, then the consumer's default_provider, then the one eligible
+			// provider this office runs, then the product's binding (`product_bindings:` in
+			// platform.state.default.yaml) unless this office switched it off, then the only one
 			chosen := ""
-			if len(ok) == 1 {
-				chosen = ok[0]
-			} else if len(ok) > 1 {
-				bound := bindings[cap]
-				pref := strOr(u, "default_provider", "")
-				sortedOK := append([]string(nil), ok...)
+			if len(eligible) == 1 {
+				chosen = eligible[0]
+			} else if len(eligible) > 1 {
+				var bound, productBound any
+				if isText {
+					bound = bindings[name]
+					productBound = product[name]
+				}
+				pref := pyGet(u, "default_provider", nil)
+				sortedOK := append([]string(nil), eligible...)
 				sort.Strings(sortedOK)
 				switch {
-				case bound != "" && contains(ok, bound):
-					chosen = bound
+				case truthy(bound) && textIn(bound, eligible):
+					chosen = bound.(string)
 					diags = append(diags, Diag{"info", fmt.Sprintf("%s: bound to '%s' by platform.state.yaml", cap, chosen)})
-				case bound != "":
-					diags = append(diags, Diag{"error", fmt.Sprintf("%s: platform.state.yaml binds '%s', which is not an eligible provider (%s)", cap, bound, strings.Join(sortedOK, ", "))})
-				case pref != "" && contains(ok, pref):
-					chosen = pref
+				case truthy(bound):
+					diags = append(diags, Diag{"error", fmt.Sprintf("%s: platform.state.yaml binds '%s', which is not an eligible provider (%s)", cap, pyval.Str(bound), strings.Join(sortedOK, ", "))})
+				case truthy(pref) && textIn(pref, eligible):
+					chosen = pref.(string)
 					diags = append(diags, Diag{"info", fmt.Sprintf("%s: '%s' selected via %s's default_provider", cap, chosen, aid)})
 				default:
-					diags = append(diags, Diag{"error", fmt.Sprintf("%s: capability '%s' has %d eligible providers (%s) and no rule to choose — set `bindings.%s` in platform.state.yaml or `default_provider` on the use[] entry",
-						aid, cap, len(ok), strings.Join(sortedOK, ", "), cap)})
+					// what THIS office's state runs, and what it lists but switched off — the state's,
+					// never a lane's roots; a provider that names the capability twice is one provider
+					on, err := EnabledIDs(st, cat)
+					if err != nil {
+						return nil, nil, err
+					}
+					var running []string
+					for _, p := range sortedOK {
+						if on[p] && (len(running) == 0 || running[len(running)-1] != p) {
+							running = append(running, p)
+						}
+					}
+					prod, _ := productBound.(string)
+					_, listed := st.Apps.Get(prod)
+					switch {
+					case len(running) == 1:
+						chosen = running[0]
+						diags = append(diags, Diag{"info", fmt.Sprintf("%s: '%s' is the one eligible provider this office runs", cap, chosen)})
+					case truthy(productBound) && textIn(productBound, eligible) && (len(running) > 0 && contains(running, prod) || len(running) == 0 && !listed):
+						chosen = prod
+						diags = append(diags, Diag{"info", fmt.Sprintf("%s: bound to '%s' by %s (this office's %s binds none)", cap, chosen, defaultName, stateName)})
+					default:
+						diags = append(diags, Diag{"error", fmt.Sprintf("%s: capability '%s' has %d eligible providers (%s) and no rule to choose — set `bindings.%s` in platform.state.yaml or `default_provider` on the use[] entry",
+							aid, cap, len(eligible), strings.Join(sortedOK, ", "), cap)})
+					}
 				}
 			}
 			if chosen != "" && !want[chosen] {
@@ -175,44 +244,54 @@ func Resolve(repo string, cat *Catalog, st *State, roots []string) ([]string, []
 	// conflicts: "these two cannot both be enabled", reported naming both, never resolved by guessing
 	wantSorted := sortedKeys(want)
 	for _, aid := range wantSorted {
-		for _, u := range cat.Apps[aid].list("use") {
-			if strOr(u, "strength", "") != "conflicts" {
+		uses, err := cat.Apps[aid].entries("use")
+		if err != nil {
+			return nil, nil, err
+		}
+		for i, u := range uses {
+			if !pyEqual(pyGet(u, "strength", nil), "conflicts") {
 				continue
 			}
-			target, _ := u["capability"].(string)
+			target := pyGet(u, "capability", nil)
+			key, ok := pyKey(target)
+			if !ok {
+				return nil, nil, died("%s: use[%d].capability is %s, which cannot be looked up", aid, i, pyval.Repr(target))
+			}
 			hits := map[string]bool{}
-			if provs, isCap := provider[target]; isCap {
-				for _, p := range provs {
-					if want[p] {
-						hits[p] = true
-					}
+			for _, p := range provider[key] {
+				if want[p] {
+					hits[p] = true
 				}
 			}
-			if want[target] {
-				hits[target] = true
+			if name, isText := target.(string); isText && want[name] {
+				hits[name] = true
 			}
 			for _, other := range sortedKeys(hits) {
 				if other == aid {
 					continue
 				}
-				diags = append(diags, Diag{"error", fmt.Sprintf("conflict: '%s' and '%s' cannot both be enabled (%s declares conflicts with '%s') — disable one in platform.state.yaml", aid, other, aid, target)})
+				diags = append(diags, Diag{"error", fmt.Sprintf("conflict: '%s' and '%s' cannot both be enabled (%s declares conflicts with '%s') — disable one in platform.state.yaml", aid, other, aid, pyval.Str(target))})
 			}
 		}
 	}
 
 	// ordering graph: only `after` edges, and never through weak links
 	edges := map[string]map[string]bool{}
-	for aid := range want {
+	for _, aid := range wantSorted {
 		edges[aid] = map[string]bool{}
-		for _, u := range cat.Apps[aid].list("use") {
-			if after, ok := u["after"].(bool); ok && !after {
+		uses, err := cat.Apps[aid].entries("use")
+		if err != nil {
+			return nil, nil, err
+		}
+		for i, u := range uses {
+			if !truthy(pyGet(u, "after", true)) || pyEqual(pyGet(u, "dependency", "strong"), "weak") {
 				continue
 			}
-			if strOr(u, "dependency", "strong") == "weak" {
-				continue
+			_, key, err := useCapability(aid, i, u)
+			if err != nil {
+				return nil, nil, err
 			}
-			cap, _ := u["capability"].(string)
-			for _, p := range provider[cap] {
+			for _, p := range provider[key] {
 				if want[p] && p != aid {
 					edges[aid][p] = true
 				}
@@ -248,7 +327,85 @@ func Resolve(repo string, cat *Catalog, st *State, roots []string) ([]string, []
 	return order, diags, nil
 }
 
-func sortedKeys(m map[string]bool) []string {
+// useCapability is u["capability"] where the resolver indexes it, and the key a dict finds it by.
+func useCapability(aid string, i int, u map[string]any) (any, string, error) {
+	capv, ok := u["capability"]
+	if !ok {
+		return nil, "", died("%s: use[%d] has no capability", aid, i)
+	}
+	key, ok := pyKey(capv)
+	if !ok {
+		return nil, "", died("%s: use[%d].capability is %s, which cannot be looked up", aid, i, pyval.Repr(capv))
+	}
+	return capv, key, nil
+}
+
+// providedOps is set(required_ops) | set(optional_ops) of a provider's first capability entry of
+// that name, each set() of the field as Python builds it.
+func providedOps(p *App, key string) (map[string]any, error) {
+	caps, err := p.entries("capabilities")
+	if err != nil {
+		return nil, err
+	}
+	have := map[string]any{}
+	for _, c := range caps {
+		if k, _ := pyKey(c["name"]); k != key {
+			continue
+		}
+		for _, field := range []string{"required_ops", "optional_ops"} {
+			ops, _, ok := pySet(pyGet(c, field, []any{}))
+			if !ok {
+				return nil, died("%s: capability %s: %s is %s, which is no set of ops", p.ID, pyval.Repr(c["name"]), field, pyval.Repr(c[field]))
+			}
+			for k, op := range ops {
+				have[k] = op
+			}
+		}
+		break
+	}
+	return have, nil
+}
+
+// defaultBindings is default_bindings(): the product's capability → provider choices,
+// `product_bindings:` in platform.state.default.yaml (never `bindings:`, which a fresh install's copy
+// would make the office's own), each a mapping's `provider` or the value itself. A default file that
+// is missing, unreadable, not a mapping, or binds nothing answers an empty map, as Python answers {}.
+func defaultBindings(repo string) map[string]any {
+	out := map[string]any{}
+	text, err := readText(filepath.Join(repo, defaultName))
+	if err != nil {
+		return out
+	}
+	v, err := yamlish.Unmarshal([]byte(text))
+	if err != nil {
+		return out
+	}
+	doc, ok := v.(*yamlish.Map)
+	if !ok {
+		return out
+	}
+	bv, _ := doc.Get("product_bindings")
+	bm, ok := bv.(*yamlish.Map)
+	if !ok {
+		return out
+	}
+	for _, k := range bm.Keys() {
+		val, _ := bm.Get(k)
+		if m, ok := val.(*yamlish.Map); ok {
+			val, _ = m.Get("provider")
+		}
+		out[k] = val
+	}
+	return out
+}
+
+// textIn is `v in xs` for a list of text: only text can equal text.
+func textIn(v any, xs []string) bool {
+	s, ok := v.(string)
+	return ok && contains(xs, s)
+}
+
+func sortedKeys[V any](m map[string]V) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {
 		out = append(out, k)
@@ -273,21 +430,4 @@ func indexOf(xs []string, x string) int {
 		}
 	}
 	return -1
-}
-
-// yamlStr spells a YAML scalar the way Python's f-string would.
-func yamlStr(v any) string {
-	switch t := v.(type) {
-	case nil:
-		return "None"
-	case string:
-		return t
-	case bool:
-		if t {
-			return "True"
-		}
-		return "False"
-	default:
-		return fmt.Sprint(t)
-	}
 }

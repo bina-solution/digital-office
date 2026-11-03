@@ -48,7 +48,7 @@ const extractMention = (msg, botIds) => {
     // ── Strategy 2: Text fallback (@phone or @lid or @botName) ─────────
     const patterns = [new RegExp(`@${botPhone}\\b`, 'i')];
     if (botLid) patterns.push(new RegExp(`@${botLid}\\b`, 'i'));
-    // Also match Hebrew/display name mentions (e.g. @בוט בינה קומפ)
+    // Also match Hebrew/display name mentions (e.g. @בוט הכהנים)
     if (botIds.pushName) patterns.push(new RegExp(`@${botIds.pushName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i'));
     const hasTextMention = patterns.some(p => p.test(rawText));
 

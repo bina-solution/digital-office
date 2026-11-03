@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+#: probe <id> — one uptime check now (recorded; a change of state notifies, as the scheduler's would), and its last 24 h:  ./bbox sites probe <id>
+# Pipes the app's own CLI (apps/sites/cli.py) into its container: no address, no key, no rebuild.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+case "${1:-}" in -h|--help|"") sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+dcx exec -T sites python - probe "$@" < "$(npath "${REPO_ROOT}")/apps/sites/cli.py"

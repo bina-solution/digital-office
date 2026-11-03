@@ -620,7 +620,7 @@ panel at zero. BFF / webapp changes need the image rebuilt (`bbox run`). Migrati
 `psql -v schema=indox_<tenant> -f scripts/ops/migrations/<file>.sql` per tenant, then
 `notify pgrst, 'reload schema'`.
 
-### C3. The server (bina-comp-prod), lessons of this release
+### C3. The server (hacohen-prod), lessons of this release
 
 - The tenant schema was owned by `supabase_admin`; `postgres` (every hook's role) could not CREATE
   in it. `alter schema indox_<t> owner to postgres` before migrations.

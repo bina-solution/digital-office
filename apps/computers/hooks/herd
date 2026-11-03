@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+#: herd — every office of the herd against apps/computers/herd.yaml: what runs where, what should move, what is left over, what runs twice (DGO-915)
+#
+#   ./bbox computers herd           # the page
+#   ./bbox computers herd --json    # the same, as data
+#
+# It only reads. This office is read through its own engine (docker inspect, docker system df -v).
+# Each linked office is read through its door by the computers app, which holds the registry and
+# sits on the office network. The reads are that office's `machine` service, `/api/overview` and
+# `/api/storage` — the reads the Computers screen is allowed. The comparison is tools/herd_map.py.
+#
+# Exit codes: 0 when the herd matches the target, 1 when anything differs, 2 when it cannot read.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # say, colors, read_env
+case "${1:-}" in -h|--help) sed -n 's/^#: //p; s/^#   //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+
+TMP="$(mktemp -d)"
+trap 'rm -rf "${TMP}"' EXIT
+SELF="$(read_env DGO_OFFICE_ID)"
+SELF="${SELF:-local}"
+
+# This office: every container with its labels, every volume with its size and how many mount it.
+IDS="$(docker ps -aq 2>/dev/null | tr '\n' ' ')"
+if [ -n "${IDS// /}" ]; then
+  # shellcheck disable=SC2086 # one argument per container id
+  docker inspect ${IDS} >"${TMP}/inspect.json" 2>/dev/null || echo '[]' >"${TMP}/inspect.json"
+else
+  echo '[]' >"${TMP}/inspect.json"
+fi
+docker system df -v --format '{{json .}}' >"${TMP}/df.json" 2>/dev/null || echo '{}' >"${TMP}/df.json"
+
+# The linked offices, through the computers app. The container is discovered by name, because
+# DEPLOYMENT_NAME is not exported everywhere bbox runs (hooks/state in dgo-extend says why).
+C="$(docker ps --filter 'name=^computers-' --format '{{.Names}}' 2>/dev/null | head -1)"
+if [ -n "${C}" ]; then
+  docker exec "${C}" python3 -c '
+import json, os, sys
+sys.path.insert(0, "/app")
+from herd import Herd
+h = Herd(os.environ.get("COMPUTERS_REGISTRY", "/registry"), {}, "")
+out = {}
+for office, o in h.offices().items():
+    row = {"label": o.get("label") or office}
+    st, ov, why = h.get(office, "machine", "api/overview", timeout=60)
+    if st == 200 and isinstance(ov, dict):
+        row["overview"] = ov
+        st2, sto, _ = h.get(office, "machine", "api/storage", timeout=180)
+        if st2 == 200 and isinstance(sto, dict):
+            row["storage"] = sto
+    else:
+        st, ov, why2 = h.get(office, "security", "api/host/overview", timeout=60)
+        if st == 200 and isinstance(ov, dict):
+            row["overview"] = ov
+        else:
+            row["error"] = why or why2 or "not read"
+    out[office] = row
+print(json.dumps(out, ensure_ascii=False))
+' >"${TMP}/remote.json" 2>"${TMP}/remote.err" || echo '{}' >"${TMP}/remote.json"
+else
+  say "${cy}[computers] the computers app does not run here — only this office is read${c0}"
+  echo '{}' >"${TMP}/remote.json"
+fi
+
+python3 -c '
+import json, sys, time
+tmp, me = sys.argv[1], sys.argv[2]
+def load(name, empty):
+    try:
+        with open(f"{tmp}/{name}", encoding="utf-8") as fh:
+            return json.loads(fh.read() or "null") or empty
+    except (OSError, ValueError):
+        return empty
+offices = dict(load("remote.json", {}))
+offices[me] = {"local": True, "inspect": load("inspect.json", []), "df": load("df.json", {})}
+bundle = {"self": me, "read_at": time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime()), "offices": offices}
+with open(f"{tmp}/bundle.json", "w", encoding="utf-8") as fh:
+    json.dump(bundle, fh, ensure_ascii=False)
+' "$(npath "${TMP}")" "${SELF}" || { say "${cr}[computers] could not assemble what was read${c0}"; exit 2; }
+
+python3 "$(npath "${REPO_ROOT}")/apps/computers/tools/herd_map.py" "$(npath "${TMP}")/bundle.json" "$@"

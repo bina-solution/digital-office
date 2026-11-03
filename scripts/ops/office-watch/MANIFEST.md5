@@ -1,0 +1,7 @@
+714d03a6ebb877d3f7c5fdd3caf08473 *deploy.sh
+eafb40ba150d574efef83c803fcc107f *rollback.sh
+e9927a11e04703df3ed34689dbfa4eb8 *README.md
+c4532605b3c917347f01808f7fe9d218 *server/office-watch.py
+0d72a1db86421814430a0c6ddff99cdc *server/office-watch.service
+dc5858e5d8830bd2ab6c4ccfe3042627 *server/office-watch.timer
+bcfff4df0d52a1f6fc8bd52f89f12d0e *server/office-watch.default

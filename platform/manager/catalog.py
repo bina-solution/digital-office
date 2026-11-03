@@ -36,6 +36,7 @@ import json
 import os
 import pathlib
 import re
+import stat
 import subprocess
 import sys
 import tarfile
@@ -71,20 +72,50 @@ SKIP_PARTS = {"__pycache__", ".git", "node_modules", ".venv", ".pytest_cache"}
 SKIP_SUFFIX = (".pyc", ".pyo")
 SKIP_NAMES = {"portainer_password.txt", ".DS_Store", "Thumbs.db"}
 
+# An id and a version name the artifact's file, and a third-party manifest writes both. An app id is
+# the schema's character class for one, as the store's Go twin checks it (internal/store appID): no
+# separator, no dot, one case. The schema's length and leading letter are documentation to both
+# compilers' validators, which publish `a` (appinstall.ID_RE holds an install to them). A version is
+# SemVer 2.0.0, ASCII digits only (`\d` is any script's). Always fullmatch: `$` also matches before
+# a final "\n".
+APP_ID = re.compile(r"[a-z0-9][a-z0-9-]*")
+SEMVER = re.compile(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)"
+                    r"(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)"
+                    r"(?:\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?"
+                    r"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?")
+
 
 # ── artifact packaging ────────────────────────────────────────────────────────
 def _sources(app_dir):
-    """Files to package, repo-app-relative, sorted. `git ls-files` when possible: it is exactly
-    'what a fresh clone would contain', which is the same question fresh-clone-lint asks."""
+    """Files to package, repo-app-relative and sorted, each as (path, executable) — and the links
+    left out. `git ls-files` when possible: it is exactly 'what a fresh clone would contain', which
+    is the same question fresh-clone-lint asks, and git's index answers it the same on every OS:
+
+      * `-z` names every file exactly, in UTF-8. Without it git C-quotes each name its
+        core.quotepath quotes (every non-ASCII one, by default), the quoted name failed is_file(),
+        and the file was left out without a word — chat's four Hebrew PDFs, indox's two JPGs.
+        What git used to quote now arrives, so a name no unpacker reads the same is refused.
+      * `-s` gives the mode git recorded: 100755 is executable — the disk is not asked, Windows
+        says yes to every file — and 120000 is a link.
+
+    A link is never followed nor packed — one git tracks (Windows checks it out as a text file
+    naming its target, Linux as the link), or one the working tree holds where git has a file —
+    and is returned, to be named."""
     app_dir = pathlib.Path(app_dir)
+    modes = {}
     try:
-        out = subprocess.run(["git", "-C", str(app_dir), "ls-files"],
-                             capture_output=True, text=True, timeout=30)
-        rels = [l for l in out.stdout.splitlines() if l.strip()] if out.returncode == 0 else []
+        out = subprocess.run(["git", "-C", str(app_dir), "ls-files", "-s", "-z"],
+                             capture_output=True, timeout=30)
+        if out.returncode == 0:
+            for rec in out.stdout.split(b"\0"):
+                meta, _, rel = rec.partition(b"\t")
+                if rel.strip():
+                    name = rel.decode("utf-8", "surrogateescape")
+                    modes[name] = meta.split(b" ")[0].decode("ascii")
     except (OSError, subprocess.SubprocessError):
-        rels = []
+        modes = {}
+    rels = list(modes)
     if not rels:
-        rels = []
         for root, dirs, files in os.walk(app_dir):
             dirs[:] = sorted(d for d in dirs if d not in SKIP_PARTS)
             for f in files:
@@ -92,12 +123,45 @@ def _sources(app_dir):
                 if f in SKIP_NAMES or f.endswith(SKIP_SUFFIX):
                     continue
                 rels.append(p.relative_to(app_dir).as_posix())
-    keep = [r for r in sorted(set(rels))
-            if not (set(r.split("/")) & SKIP_PARTS)
-            and r.rsplit("/", 1)[-1] not in SKIP_NAMES
-            and not r.endswith(SKIP_SUFFIX)
-            and (app_dir / r).is_file()]
-    return keep
+    keep, links = [], []
+    for r in sorted(set(rels)):
+        if (set(r.split("/")) & SKIP_PARTS or r.rsplit("/", 1)[-1] in SKIP_NAMES
+                or r.endswith(SKIP_SUFFIX)):
+            continue
+        if modes.get(r) == "120000":
+            links.append(r)
+            continue
+        try:
+            st = (app_dir / r).lstat()
+        except OSError:
+            continue                        # tracked, but not in the working tree
+        if stat.S_ISDIR(st.st_mode):
+            continue                        # a submodule: not a file
+        if not stat.S_ISREG(st.st_mode):
+            links.append(r)                 # a link on disk, whatever git says
+            continue
+        if not _portable(r):
+            raise IndexError_(f"{app_dir.name}: {r!r} cannot be named in an artifact: not UTF-8, "
+                              f"or a control character or a backslash")
+        # Outside git the mode is the file system's own, which NTFS does not keep (Python's stat
+        # makes one up from the extension), so on Windows no walked file is executable. hooks/
+        # always is: a hook without its x-bit is not run, and git may not have it (browser42's).
+        if modes:
+            executable = modes[r] == "100755"
+        else:
+            executable = os.name != "nt" and bool(st.st_mode & 0o111)
+        keep.append((r, executable or r.startswith("hooks/")))
+    return keep, links
+
+
+def _portable(rel):
+    """A member name every unpacker reads the same, as the store's Go twin requires (portable()):
+    UTF-8, no control character, no backslash — which an unpacker on Windows takes for a separator."""
+    try:
+        rel.encode("utf-8")
+    except UnicodeEncodeError:
+        return False
+    return not any(ord(c) < 0x20 or ord(c) == 0x7F or c == "\\" for c in rel)
 
 
 def pack(app_dir, dest_zip, app_id=None):
@@ -106,22 +170,25 @@ def pack(app_dir, dest_zip, app_id=None):
     REPRODUCIBILITY IS THE POINT. The index carries the artifact's sha256, so if packing the same
     tree twice produced two hashes, "verify the hash" would only ever mean "verify it against the
     one copy I happen to have", and nobody could independently rebuild the artifact to check what
-    is in it. So: sorted entries, a fixed 1980-01-01 timestamp, fixed permissions."""
+    is in it. So: sorted entries, a fixed 1980-01-01 timestamp, fixed permissions — 0755 or 0644
+    as git records the file (_sources), never as the building machine reports it — and a fixed
+    create_system: Unix, whose permission bits external_attr carries (Python writes 0 on Windows,
+    3 elsewhere), so the same tree is the same bytes on every OS."""
     app_dir = pathlib.Path(app_dir)
     app_id = app_id or app_dir.name
     dest_zip = pathlib.Path(dest_zip)
     dest_zip.parent.mkdir(parents=True, exist_ok=True)
-    files = _sources(app_dir)
+    files, links = _sources(app_dir)
+    if links:
+        print(f"  left out, links are never followed: {', '.join(f'{app_id}/{r}' for r in links)}",
+              file=sys.stderr)
     with zipfile.ZipFile(dest_zip, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
-        for rel in files:
+        for rel, executable in files:
             info = zipfile.ZipInfo(f"{app_id}/{rel}", date_time=(1980, 1, 1, 0, 0, 0))
             info.compress_type = zipfile.ZIP_DEFLATED
-            src = app_dir / rel
-            # Preserve only the x-bit: a hook that loses it stops being runnable, and everything
-            # else about mode is machine noise that would break reproducibility.
-            executable = os.access(src, os.X_OK) or rel.startswith("hooks/")
+            info.create_system = 3
             info.external_attr = (0o755 if executable else 0o644) << 16
-            z.writestr(info, src.read_bytes())
+            z.writestr(info, (app_dir / rel).read_bytes())
     return dest_zip, len(files)
 
 
@@ -271,8 +338,15 @@ def entry_from_manifest(manifest, app_dir, artifact=None):
     n8n_dir = (bp.get("n8n") or "").strip()
     workflows = 0
     if n8n_dir:
-        d = pathlib.Path(app_dir) / n8n_dir
-        workflows = len(list(d.glob("*.json"))) if d.is_dir() else 0
+        # A workflow is its id, the file's stem: n8n-as-code's <id>.workflow.ts, or a legacy
+        # <id>.json beside them — one workflow when it is there in both forms (the identity
+        # apps/n8n/hooks/present counts by). Exact suffixes: glob() is case-blind on Windows.
+        try:
+            names = os.listdir(pathlib.Path(app_dir) / n8n_dir)
+        except OSError:
+            names = []
+        workflows = len({n[:-len(s)] for n in names for s in (".workflow.ts", ".json")
+                         if n.endswith(s)})
     e = {
         "id": manifest.get("id"),
         "version": manifest.get("version") or "0.0.0",
@@ -312,16 +386,29 @@ def build(out_dir=None, repo_name=None, base_url=None, sign_it=True,
     would advertise something the control plane refuses to install."""
     out = pathlib.Path(out_dir or DEFAULT_OUT)
     art_dir = out / "artifacts"
-    art_dir.mkdir(parents=True, exist_ok=True)
     src = pathlib.Path(source_dir or APPS)
 
-    entries = []
+    apps = []
     for m in sorted(src.glob("*/app.json")):
         manifest = json.loads(m.read_text(encoding="utf-8"))
         if manifest.get("layer") != 3:
             continue
         aid = manifest.get("id") or m.parent.name
         ver = manifest.get("version") or "0.0.0"
+        # Both name the artifact's file, so `../` in either wrote outside <out>/artifacts. Refused
+        # by name, before a byte is written.
+        if not (isinstance(aid, str) and APP_ID.fullmatch(aid)):
+            raise IndexError_(f"{m.parent.name}: id {aid!r} is not an app id — lower-case letters, "
+                              f"digits and hyphens; it names the artifact's file, so nothing was "
+                              f"written")
+        if not (isinstance(ver, str) and SEMVER.fullmatch(ver)):
+            raise IndexError_(f"{aid}: version {ver!r} is not SemVer — it names the artifact's "
+                              f"file, so nothing was written")
+        apps.append((m, manifest, aid, ver))
+
+    art_dir.mkdir(parents=True, exist_ok=True)
+    entries = []
+    for m, manifest, aid, ver in apps:
         name = f"{aid}-{ver}.zip"
         zpath, nfiles = pack(m.parent, art_dir / name, aid)
         art = {"name": name, "format": "zip", "files": nfiles,

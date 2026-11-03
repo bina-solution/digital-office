@@ -99,6 +99,14 @@ def test_a_request_with_only_this_offices_session_sends_no_cookie_at_all():
     assert not any(k.lower() == "cookie" for k in out)
 
 
+def test_forward_auths_session_and_state_do_not_cross_the_link_either():
+    # DGO-1090: on a forward-auth office the sign-in is dgo_session (and, mid sign-in, dgo_state)
+    out = app._as_remote({"Cookie": "dgo_session=SECRET; theme=dark; dgo_state=ALSO; dgo_sessionx=1"},
+                         {"user": "", "host": "", "from": []})
+
+    assert out["Cookie"] == "theme=dark; dgo_sessionx=1"    # only the exact names, nothing that merely starts so
+
+
 def test_the_browser_gets_the_tile_but_not_the_door():
     tile = {k: v for k, v in REMOTE_TILE.items() if k != "door"}
 
@@ -337,3 +345,117 @@ def test_a_linked_office_tile_carries_what_was_measured_about_its_office():
     assert "ok" not in REMOTE_TILE["remote"]                             # …and the registry's own entry is not written on
     assert "הלשכה שותקת." in card and 'http-equiv="refresh"' in card             # the link's words, as given
     assert "הלשכה ענתה (404)." in answered and "הלשכה שותקת." not in answered
+
+
+# ── #63: an app that refuses to be framed is said so, never a dead window ─────────────────────────
+def _verdict(headers, console="https://console.office.example", app_origin="https://svc.office.example"):
+    return app.frame_verdict(headers, console, app_origin)
+
+
+def test_x_frame_options_deny_is_refused_and_says_which_header():
+    v, why = _verdict({"X-Frame-Options": "DENY"})
+    assert v == "refused" and "X-Frame-Options: DENY" in why
+
+
+def test_sameorigin_is_refused_for_another_host_and_allowed_for_the_same_origin():
+    assert _verdict({"X-Frame-Options": "SAMEORIGIN"})[0] == "refused"
+    assert _verdict({"X-Frame-Options": "SAMEORIGIN"}, app_origin="https://console.office.example")[0] == "ok"
+
+
+def test_frame_ancestors_naming_the_console_wins_over_x_frame_options():
+    h = {"X-Frame-Options": "DENY",
+         "Content-Security-Policy": "default-src 'self'; frame-ancestors 'self' https://console.office.example"}
+    assert _verdict(h)[0] == "ok"
+
+
+def test_frame_ancestors_none_or_self_only_is_refused():
+    assert _verdict({"Content-Security-Policy": "frame-ancestors 'none'"})[0] == "refused"
+    assert _verdict({"Content-Security-Policy": "frame-ancestors 'self'"})[0] == "refused"
+
+
+def test_frame_ancestors_wildcards_and_schemes_match_like_a_browser():
+    assert _verdict({"Content-Security-Policy": "frame-ancestors https://*.office.example"})[0] == "ok"
+    assert _verdict({"Content-Security-Policy": "frame-ancestors https:"})[0] == "ok"
+    assert _verdict({"Content-Security-Policy": "frame-ancestors https://*.elsewhere.example"})[0] == "refused"
+    assert _verdict({"Content-Security-Policy": "frame-ancestors http://console.office.example"})[0] == "refused"
+
+
+def test_no_header_at_all_frames_as_before():
+    assert _verdict({}) == ("ok", "")
+
+
+def test_the_check_asks_only_hosts_of_this_offices_domain():
+    client = app.app.test_client()
+    r = client.get("/api/frame-check?url=http://169.254.169.254/latest", base_url="https://console.office.example")
+    assert r.status_code == 400 and r.get_json()["verdict"] == "unknown"
+    r = client.get("/api/frame-check?url=file:///etc/passwd", base_url="https://console.office.example")
+    assert r.status_code == 400
+
+
+def test_the_check_reports_a_refusing_app_and_an_unreachable_one_as_unknown():
+    class Resp:
+        def __init__(self, headers):
+            self.headers, self.status_code, self.url = headers, 200, "https://svc.office.example/"
+        def close(self):
+            pass
+    calls = []
+    def fake_get(url, **kw):
+        calls.append(url)
+        if "down" in url:
+            raise app.requests.ConnectionError("no route")
+        return Resp({"X-Frame-Options": "DENY"})
+    real = app.requests.get
+    app.requests.get = fake_get
+    app._frame_seen.clear()
+    try:
+        client = app.app.test_client()
+        r = client.get("/api/frame-check?url=https://svc.office.example/", base_url="https://console.office.example")
+        assert r.get_json()["verdict"] == "refused"
+        client.get("/api/frame-check?url=https://svc.office.example/", base_url="https://console.office.example")
+        assert len(calls) == 1                                  # asked once, then remembered
+        r = client.get("/api/frame-check?url=https://down.office.example/", base_url="https://console.office.example")
+        assert r.get_json()["verdict"] == "unknown"
+    finally:
+        app.requests.get = real
+
+
+def test_a_large_download_passes_through_in_bounded_pieces():
+    """DGO-1231: a meeting's mp4 (297 MB) served through /a/meet/recordings OOM-killed this worker at
+    its 256M limit, because `iter_content(chunk_size=None)` makes urllib3 read a body that has a
+    Content-Length in ONE `read(None)`. Measured with the real `requests` against a real server: the
+    first piece the proxy hands on is at most PASS_CHUNK, and the whole body still arrives intact."""
+    import http.server
+    import threading
+
+    body = bytes(range(256)) * (16 * 1024)                     # 4 MiB, sent with a Content-Length
+
+    class Upstream(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header("Content-Type", "video/mp4")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *a):
+            pass
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Upstream)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    real = app._app_bases
+    app._app_bases = lambda: {"rec": f"http://127.0.0.1:{server.server_address[1]}"}
+    try:
+        client = app.app.test_client()
+        first = client.get("/a/rec/meeting.mp4", headers={"Accept": "*/*"}, buffered=False)
+        pieces = iter(first.response)
+        head = next(pieces)
+        first.close()
+        whole = client.get("/a/rec/meeting.mp4", headers={"Accept": "*/*"})
+    finally:
+        app._app_bases = real
+        server.shutdown()
+        server.server_close()
+
+    assert first.status_code == 200 and 0 < len(head) <= 256 * 1024, f"first piece {len(head)} bytes"
+    assert len(head) <= app.PASS_CHUNK
+    assert whole.status_code == 200 and whole.get_data() == body

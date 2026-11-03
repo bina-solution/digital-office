@@ -325,7 +325,7 @@ of upstream sources, three tooling scripts and one GitHub Actions workflow; the 
 |---|---|---|
 | **Export** (Workspace settings → Exports) | **work items only** — all projects or one, CSV/XLSX/JSON, filters; ZIP behind a 7-day presigned URL. API: `POST /api/v1/workspaces/<slug>/export-issues/` | Cloud + Commercial + CE |
 | **Importers** (Jira, Linear, Asana, ClickUp, Notion, Confluence, CSV) | field-mapped import | **Cloud and Commercial only** — docs say so explicitly, and the CE code has no importer views/URLs/UI (only a legacy model with `github`/`jira` choices). Not available to us. |
-| **REST API** | the reliable surface: `GET /api/v1/workspaces/{slug}/projects/`, `.../work-items/` (+ comments, links, activities, attachments, relations, states, labels, cycles, modules), auth `X-API-Key: plane_api_…`, **rate limit 60/min per key** (`API_KEY_RATE_LIMIT`, returns `X-RateLimit-*`, 429 on excess) | Cloud + self-hosted |
+| **REST API** | the reliable surface: `GET /api/v1/workspaces/{slug}/projects/`, `.../work-items/` (+ comments, links, activities, attachments, relations, states, labels, cycles, modules), auth `X-API-Key: REDACTED`, **rate limit 60/min per key** (`API_KEY_RATE_LIMIT`, returns `X-RateLimit-*`, 429 on excess) | Cloud + self-hosted |
 | **`plane-migrate`** (PyPI, third-party) | projects across Cloud ↔ Commercial ↔ OSS: work-item types, states (by name), labels, members (by email), estimates, work items + relations + links + comments, modules, cycles, intake; resumable, delta re-runs | Any combination |
 | **Official SDKs / MCP** | `plane-sdk` (Python), `@makeplane/plane-node-sdk` (Node), official MCP server | Cloud + self-hosted |
 

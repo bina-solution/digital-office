@@ -91,7 +91,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
     /*__n8n__*/ meta: {},
     /*__n8n__*/ pinData: {},
     /*__n8n__*/ staticData: null,
-    /*__n8n__*/ shared: [{"updatedAt":"2026-07-30T23:42:27.037Z","createdAt":"2026-07-30T23:42:27.037Z","role":"workflow:owner","workflowId":"sv3Inject3x001","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <shlomo@local.dev>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
+    /*__n8n__*/ shared: [{"updatedAt":"2026-07-30T23:42:27.037Z","createdAt":"2026-07-30T23:42:27.037Z","role":"workflow:owner","workflowId":"sv3Inject3x001","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
     id: 'sv3Inject3x001',
     name: 'sv3 Inject 3x Every Registry Source',
     active: false,
@@ -226,7 +226,7 @@ for(const m of Object.keys(map).sort()){
   const c2=map[m]; const ids=((cos[c2]||{}).identifiers)||[];
   if(ids.length && !/no-?reply/i.test(m)){ sender=m; senderCo=c2; senderCid=String(ids[0]); break; }
 }
-if(!sender){ sender='unknown-sender@demo.indox'; senderCo=null; senderCid=null; }
+if(!sender){ sender='person79-x@example.com'; senderCo=null; senderCid=null; }
 const tok=String($execution.id||'0').replace(/\\D/g,'').slice(-5).padStart(5,'4');
 const out=[];
 for(const e of reg){
@@ -284,7 +284,7 @@ const body = p.bs
      customer:{name:(p.kind==='gmail'?(p.senderCo||p.co):p.co)}}
   : {doc_type:'INVOICE', doc_id:p.doc_id, doc_date:'06/07/2026',
      supplier:{name:p.co, company_id:p.cid, city:'תל אביב'},
-     customer:{name:'בינה קומפ שירותים', company_id:'515111111'},
+     customer:{name:'הכהן שירותים', company_id:'515111111'},
      lines:[{description:'אספקת שירותים', qty:2, unit_price:340.0}]};
 return [{json:{...p, _url:'http://apitools:8080/docGen?truth=1', _body:body}}];`,
     };
@@ -619,10 +619,19 @@ return [{json:{op:'addLabels', __instance:'test', params:{ids:[id], labelIds:[p.
 const per={};
 for(const p of plan) per[p.src]=(per[p.src]||0)+1;
 let main={}; try{ main=$('Sync').first().json||{}; }catch(e){ main={}; }
+// 'Sync' continues on error so one refused reconciler run cannot kill the injector — but its failure
+// then arrives as an ORDINARY item, and this node read main.units/main.status off it: a failed call
+// produced {units: undefined, status: null}, the summary below looked like a successful injection, and
+// the reason was gone (gate G53, 2026-10-11). Read it and put it IN the summary: this row is the whole
+// output of the injector, so a run that never reached the reconciler must say so where the summary is
+// read — 'cf-call-failed' with the sentence, never a null that reads as 'no status'.
+const syncErr = main.error || main.errorMessage ? String(main.error || main.errorMessage).slice(0, 200) : '';
 return [{json:{__instance:'test', injected:plan.length, per_source:per, tok:(plan[0]||{}).tok,
                registry_key:'sv3i_registry', sources:Object.keys(per).sort(),
                mail_connection:$('Config').first().json.connection_id,
-               main_units:main.units, main_status:main.status||main.code||null}}];`,
+               main_units:main.units,
+               main_status: syncErr ? 'sync-call-failed' : (main.status||main.code||null),
+               sync_error: syncErr || null}}];`,
     };
 
     @node({

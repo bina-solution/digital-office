@@ -38,7 +38,7 @@
     [/\/api\/svc\/[^/]+\/readyz/,  function(){ return {ready:true, ok:true}; }],
     [/\/api\/svc\/[^/]+\/manifest/,function(u){ var s=(u.match(/svc\/([^/]+)/)||[])[1]||""; return {name:s, service:s}; }],
     [/\/api\/svc\/(drive|localdrive)\/connections/, function(){ return {active:"local", connections:[{id:"local",protocol:"local",label:"אחסון מקומי",account_hint:"מקומי · מובנה",status:"ok"}]}; }],
-    [/\/api\/svc\/(mail|mailview)\/connections/,    function(){ return {active:"gmail", connections:[{id:"gmail",protocol:"gmail",label:"Gmail",account_hint:"person127@example.com",status:"ok"}]}; }],
+    [/\/api\/svc\/(mail|mailview)\/connections/,    function(){ return {active:"gmail", connections:[{id:"gmail",protocol:"gmail",label:"Gmail",account_hint:"person105@example.com",status:"ok"}]}; }],
     [/\/api\/svc\/[^/]+\/connections/, function(){ return {active:null, connections:[]}; }]
   ];
   // Shared harness (build.mjs MOCK_PRELUDE): route handlers return plain objects → auto-JSON; the

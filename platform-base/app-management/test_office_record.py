@@ -68,6 +68,20 @@ def test_a_core_app_alone_does_not_make_an_office_installed(plane):
     assert app.app.test_client().get("/api/office").get_json()["installed"] is False
 
 
+def test_the_core_offices_own_extensions_do_not_skip_the_wizard(plane, monkeypatch):
+    # DGO-1090: a fresh core office runs dgo-extend and computers (layer 3, `"core": true`) before anybody
+    # chose an app — the wizard is still its first screen; any other layer-3 app still means installed
+    monkeypatch.setattr(app, "_load_state", lambda: {"traefik": {"enabled": True}, "dgo-extend": {"enabled": True},
+                                                     "computers": {"enabled": True}})
+    monkeypatch.setattr(app, "_load_manifests", lambda: [{"id": "traefik", "_root": "platform-base"},
+                                                         {"id": "dgo-extend", "_root": "apps", "core": True},
+                                                         {"id": "computers", "_root": "apps", "core": True},
+                                                         {"id": "drive", "_root": "apps", "core": "yes"}])
+    assert app.app.test_client().get("/api/office").get_json()["installed"] is False
+    monkeypatch.setattr(app, "_load_state", lambda: {"dgo-extend": {"enabled": True}, "drive": {"enabled": True}})
+    assert app.app.test_client().get("/api/office").get_json()["installed"] is True  # "yes" is not true
+
+
 def test_a_fresh_office_is_not_installed_and_has_an_empty_record(plane):
     r = app.app.test_client().get("/api/office")
     assert r.status_code == 200

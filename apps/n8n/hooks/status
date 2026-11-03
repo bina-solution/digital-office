@@ -18,15 +18,23 @@ BRIEF=0; [ "${1:-}" = "--brief" ] && BRIEF=1
 running "${N8N}" || { echo "${cr}n8n not running${c0} (${N8N}) — 'bbox run'"; exit 1; }
 
 # --- counts ---
-# Count what push would actually stage: the ENABLED apps' blueprint dirs (reconcile.py is the
-# same source of truth the push hook uses — a disabled gallery app's workflows are deliberately
-# absent live and must not read as drift). Blueprints are CODE (*.workflow.ts) since the
+# Count what push would actually stage: the blueprint dirs of the apps whose workflows this office
+# holds — enabled ones, and the workflow engine wherever it runs (reconcile.py is the same source of
+# truth the push hook uses — a disabled gallery app's workflows are deliberately absent live and must
+# not read as drift). Blueprints are CODE (*.workflow.ts) since the
 # 2026-08-16 flip; legacy *.json is still counted so a mid-migration checkout reads true.
-WF_FILES=$( { ( cd "${REPO_ROOT}" && python3 platform/manager/reconcile.py blueprints 2>/dev/null | tr -d '\r' | cut -f2 ) \
+WF_IDS=$( { ( cd "${REPO_ROOT}" && python3 platform/manager/reconcile.py blueprints 2>/dev/null | tr -d '\r' | cut -f2 ) \
               | while IFS= read -r _rel; do
                   [ -n "${_rel}" ] && find "${REPO_ROOT}/${_rel}" -maxdepth 1 \( -name '*.workflow.ts' -o -name '*.json' \) 2>/dev/null
                 done; } \
-            | sed 's/\.workflow\.ts$//; s/\.json$//' | sort -u | wc -l | tr -d ' ')
+            | sed 's#.*/##; s/\.workflow\.ts$//; s/\.json$//' | sort -u)
+WF_FILES=$(printf '%s\n' "${WF_IDS}" | grep -c . || true)
+# ACTIVE workflows no enabled app owns: their triggers fire for an app that is off, or for nothing.
+# Measured on vps1 2026-10-21: INDOX disabled, yet its Gmail Actions Scanner — imported 2026-07-30
+# under an id no blueprint carries, so no unpush could find it — failed every 3 minutes for weeks.
+UNOWNED=""   # no blueprint read at all (a failing manifest) proves nothing about ownership
+[ -n "${WF_IDS}" ] && UNOWNED=$(pgq "select id||chr(9)||name from workflow_entity where active=true order by name;" \
+          | awk -F'\t' 'NR==FNR{own[$1]=1;next} NF && !($1 in own){print $2" ("$1")"}' <(printf '%s\n' "${WF_IDS}") -)
 WF_LIVE=$(pgq "select count(*) from workflow_entity;"); WF_LIVE=${WF_LIVE:-?}
 ACT_LIVE=$(pgq "select count(*) from workflow_entity where active=true;"); ACT_LIVE=${ACT_LIVE:-?}
 PUB_LIVE=$(pgq "select count(*) from workflow_entity where active=true and \"activeVersionId\" is not null;"); PUB_LIVE=${PUB_LIVE:-?}
@@ -76,7 +84,8 @@ if [ "${BRIEF}" = "1" ]; then
   keymark="${cg}key✓${c0}"; [ "${FP_ENV}" != "${FP_HAVE}" ] && keymark="${cy}key-drift${c0}"
   driftmark="${cg}clean${c0}"; [ "${DRIFT}" -gt 0 ] 2>/dev/null && driftmark="${cy}${DRIFT} uncommitted${c0}"
   syncmark="${cg}synced${c0}"; [ -n "${PULL_NEEDED}" ] && syncmark="${cy}pull needed$(printf '%s' "${PULL_NEEDED}" | grep -c .) app(s)${c0}"
-  echo "  n8n: ${WF_LIVE} wf (${ACT_LIVE} active/${PUB_LIVE} published) · ${CRED_LIVE} creds · ${keymark} · blueprint ${driftmark} · ${syncmark}"
+  ownmark=""; [ -n "${UNOWNED}" ] && ownmark=" · ${cy}$(printf '%s\n' "${UNOWNED}" | grep -c .) active for no enabled app${c0}"
+  echo "  n8n: ${WF_LIVE} wf (${ACT_LIVE} active/${PUB_LIVE} published) · ${CRED_LIVE} creds · ${keymark} · blueprint ${driftmark} · ${syncmark}${ownmark}"
   exit 0
 fi
 
@@ -84,6 +93,12 @@ echo "n8n status — ${DN}"
 echo "[workflows]"
 [ "${WF_FILES}" = "${WF_LIVE}" ] && ok "blueprint ${WF_FILES} == live ${WF_LIVE}" || warn "blueprint ${WF_FILES} vs live ${WF_LIVE} (drift)"
 [ "${ACT_LIVE}" = "${PUB_LIVE}" ] && ok "active=${ACT_LIVE}, all published (activeVersionId set)" || bad "active=${ACT_LIVE} but only ${PUB_LIVE} published — run 'bbox n8n push'"
+if [ -n "${UNOWNED}" ]; then
+  warn "$(printf '%s\n' "${UNOWNED}" | grep -c .) ACTIVE workflow(s) belong to no enabled app — they fire for an app that is off, or for nothing:"
+  printf '%s\n' "${UNOWNED}" | sed 's/^/      /'
+else
+  ok "every active workflow belongs to an enabled app"
+fi
 echo "[credentials]"
 ok "live=${CRED_LIVE}  ·  env-managed (credential_overrides)=${OVR}  ·  OAuth bootstrapped=$(pgq "select count(*) from credentials_entity where type like '%OAuth2%' or type='gmailOAuth2';")"
 echo "[encryption key]"

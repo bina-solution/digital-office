@@ -6,14 +6,14 @@
 # web surface (below) and four for mail (ai/context/mail-multi-tenant.md). Adding PEOPLE to the
 # company afterwards needs none at all — see LOCALMAIL_USER further down.
 #
-#   BUSINESS_NAME=Bina-comp
-#     └─ COMPANY_SLUG        = bina-comp                          (derived — see the note below)
-#        ├─ DEPLOYMENT_NAME  = bina-comp                          (container-name suffix)
-#        ├─ DEPLOYMENT_DOMAIN= bina-comp.digital-office.co.il     (every *_BASE_URL hangs off this)
-#        │  └─ console.bina-comp.digital-office.co.il, mail.bina-comp…, n8n.bina-comp…, auth.bina-comp…
-#        ├─ MAIL_DOMAIN      = bina-comp.digital-office.co.il     (= DEPLOYMENT_DOMAIN)
+#   BUSINESS_NAME=Hacohen
+#     └─ COMPANY_SLUG        = hacohen                          (derived — see the note below)
+#        ├─ DEPLOYMENT_NAME  = hacohen                          (container-name suffix)
+#        ├─ DEPLOYMENT_DOMAIN= hacohen.digital-office.co.il     (every *_BASE_URL hangs off this)
+#        │  └─ console.hacohen.digital-office.co.il, mail.hacohen…, n8n.hacohen…, auth.hacohen…
+#        ├─ MAIL_DOMAIN      = hacohen.digital-office.co.il     (= DEPLOYMENT_DOMAIN)
 #        │  └─ address       = person1@example.com
-#        └─ MAIL_DKIM_SELECTOR = bina-comp
+#        └─ MAIL_DKIM_SELECTOR = hacohen
 #
 # ── THE DNS RECORD THAT PUTS THE WEB SURFACE ONLINE ───────────────────────────────────────────
 #   A    *.<slug>.digital-office.co.il   ->   <this VPS's public IP>
@@ -39,7 +39,7 @@
 # {{HOMEPAGE_VAR_BUSINESS_NAME}}), the glitchtip org default, AND — through COMPANY_SLUG — every
 # hostname and the mail address. The ledger business profile (name/ID/VAT) is set separately in
 # the onboarding wizard.
-BUSINESS_NAME=Bina-comp
+BUSINESS_NAME=Hacohen
 
 # DERIVED — DO NOT HAND-EDIT the two values below. Compose cannot lowercase a string or replace
 # characters, so the slug is computed at RENDER time: `platform/manager/reconcile.py :: sync_identity`
@@ -48,7 +48,7 @@ BUSINESS_NAME=Bina-comp
 # A fresh clone therefore needs no manual step — nothing in this stack starts before a render.
 #
 # Rule: lowercase, any run of non-alphanumerics -> "-", trimmed of leading/trailing "-".
-#   "Bina-comp" -> bina-comp   "Bina Solutions" -> bina-solutions   "staging" -> staging
+#   "Hacohen" -> hacohen   "Bina Solutions" -> bina-solutions   "staging" -> staging
 #
 # They are LITERALS, not `${COMPANY_SLUG}`, because the shell and python helpers that read this
 # file parse it line-by-line (scripts/lib.sh `read_env`, which feeds every `<svc>-<DEPLOYMENT_NAME>`
@@ -58,11 +58,11 @@ BUSINESS_NAME=Bina-comp
 # directly under a marker. Delete the marker (or the line under it, as scripts/ci-env.sh does for
 # DEPLOYMENT_NAME) and that variable becomes a plain hand-set value that nothing overwrites.
 #@derived slug
-COMPANY_SLUG=bina-comp
-# The container-name suffix (`n8n-bina-comp`, `mailserver-bina-comp`). Same slug, so one company =
+COMPANY_SLUG=hacohen
+# The container-name suffix (`n8n-hacohen`, `mailserver-hacohen`). Same slug, so one company =
 # one name everywhere; CI strips this line and sets its own, which the marker rule then leaves be.
 #@derived slug
-DEPLOYMENT_NAME=bina-comp
+DEPLOYMENT_NAME=hacohen
 
 # The SHARED base domain this platform hosts companies under. One zone, one owner. A company that
 # later brings its own domain changes this one line (and then owns its own MX/SPF/DMARC/PTR).
@@ -71,8 +71,8 @@ COMPANY_BASE_DOMAIN=digital-office.co.il
 # ── Deployment domain — derived; every *_BASE_URL/*_HOST below derives from IT ──
 DEPLOYMENT_DOMAIN=${COMPANY_SLUG}.${COMPANY_BASE_DOMAIN}
 # Deliberately the SAME host as DEPLOYMENT_DOMAIN. It used to be `dev.${DEPLOYMENT_DOMAIN}`, which
-# put drive/chat one label deeper than the wildcard A record covers — `*.bina-comp.digital-office…`
-# does not match `drive.dev.bina-comp.digital-office…`, so those hosts resolved nowhere and no
+# put drive/chat one label deeper than the wildcard A record covers — `*.hacohen.digital-office…`
+# does not match `drive.dev.hacohen.digital-office…`, so those hosts resolved nowhere and no
 # certificate could be issued for them. Keep it equal unless you also publish a second wildcard.
 DEV_DOMAIN=${DEPLOYMENT_DOMAIN}
 
@@ -101,14 +101,24 @@ TRAEFIK_API_INSECURE=false # change to false in production
 #
 # example.com, example.org, example.net, .invalid, .test and .localhost are all refused the same way.
 TRAEFIK_ACME_EMAIL=admin@${DEPLOYMENT_DOMAIN}
+# The resolver every TLS route asks for its certificate. Left unset ON PURPOSE: bbox decides it per
+# office (scripts/lib.sh export_cert_resolver) — Let's Encrypt (`myresolver`) where DEPLOYMENT_DOMAIN
+# is a public name, NONE where it has no dot (`localhost`), because no authority issues for
+# `<app>.localhost` and that office's edge asked Let's Encrypt again on every reload (DGO-901).
+# Uncomment only to force it either way on this office.
+# TRAEFIK_CERTRESOLVER=myresolver
 
 
 # Portainer configuration
 PORTAINER_BASE_URL=portainer.${DEPLOYMENT_DOMAIN}
+# Portainer's admin password. Read by apps/portainer/hooks/prepare, which writes it into
+# portainer_password.txt. EMPTY = prepare mints a random one on first start, so a raw
+# `cp .env.ex .env` still yields a working Portainer instead of a crash-looping container.
+PORTAINER_ADMIN_PASSWORD=
 
 
 # N8N DB configuration
-POSTGRES_USER=bina-comp
+POSTGRES_USER=hacohen
 POSTGRES_PASSWORD=CHANGE_ME
 POSTGRES_DB=n8n
 N8N_DB_HOST=n8n-db.${DEPLOYMENT_DOMAIN}
@@ -125,15 +135,21 @@ N8N_USER_MANAGEMENT_JWT_SECRET=CHANGE_ME
 # Owner account for a FRESH instance. n8n has no native owner env var, so the push hook (bbox n8n push all)
 # bootstraps it via the REST setup endpoint when no owner exists yet (idempotent: skipped if one
 # already exists, e.g. after `n8n-push --full`). Password rules: 8-64 chars, >=1 number, >=1 capital.
-N8N_OWNER_EMAIL=shlomo@local.dev
+N8N_OWNER_EMAIL=person2@example.com
 N8N_OWNER_PASSWORD=CHANGE_ME
 N8N_OWNER_FIRSTNAME=Admin
 N8N_OWNER_LASTNAME=User
-N8N_SECURE_COOKIE=CHANGE_ME
+N8N_SECURE_COOKIE=true
 N8N_LOG_LEVEL=info
 N8N_WEBHOOK_TTL=1500
 # GlitchTip DSN for n8n error tracking (get from GlitchTip project settings)
 N8N_SENTRY_DSN=
+# Concurrency of the n8n worker and of the task runner beside it. These two are ONE invariant, not
+# two knobs: a worker's runner sidecar must offer at least as many slots as the worker's own
+# --concurrency, or lanes starve silently (apps/n8n/docker-compose.yml, "SLOT INVARIANT").
+# Empty = the compose defaults (worker 8; runner 15 on main, 8 on a worker). Change both together.
+N8N_WORKER_CONCURRENCY=
+N8N_RUNNERS_MAX_CONCURRENCY=
 
 # Sentry/GlitchTip configuration
 SENTRY_ENVIRONMENT=production
@@ -148,11 +164,23 @@ LIBRECHAT_SENTRY_DSN=
 # saves 4 containers + ~2GB image. Explicitly named services start regardless of this list.
 COMPOSE_PROFILES=
 
-# WhatsApp bot session/data dir on the host. Default = the live bina-comp-vps path; set this on
+# ── Machine profile and check timings ────────────────────────────────────────────────────────────
+# One name instead of a dozen scale knobs: platform/profiles/perf-profiles.yml holds the presets
+# (ci-small, laptop, vps-…, keyed by CPU count and RAM) and scripts/perf-profile-apply writes their
+# values into .env. Empty = no-op: the hand-set values above stay exactly as they are, which is what
+# a fresh clone wants.
+PERFORMANCE_PROFILE=
+# Container health-check timing, shared by every service of apps/meet as
+# `${HEALTHCHECK_INTERVAL:-30s}` / `${HEALTHCHECK_TIMEOUT:-10s}`. Empty = those defaults; raise them
+# on a slow machine whose Jitsi services need longer than a 10s probe before they answer.
+HEALTHCHECK_INTERVAL=
+HEALTHCHECK_TIMEOUT=
+
+# WhatsApp bot session/data dir on the host. Default = the live hacohen-vps path; set this on
 # any other machine (it is a bind mount, so a wrong path silently yields an empty data dir).
 # NOTE: a HOST path, not an app name — it is NOT renamed when the app is. It holds the
 # WhatsApp pairing session; repointing it silently loses the link and forces a new QR scan.
-WHATSAPP_DATA_DIR=/home/solomonboltin/whatsapp-bina-comp/data
+WHATSAPP_DATA_DIR=/home/solomonboltin/whatsapp-hacohanim/data
 
 # Chat configuration
 #
@@ -166,11 +194,29 @@ WHATSAPP_DATA_DIR=/home/solomonboltin/whatsapp-bina-comp/data
 CHAT_APP_BASE_URL=chat.${DEPLOYMENT_DOMAIN}
 CHAT_APP_PORT=3000
 # Chat basic-auth (n8n 'Chat Auth' cred, env-managed via blueprint credential_overrides)
+# chat's session-cookie key: minted per office by apps/chat/hooks/prepare when missing (DGO-1221) — empty here
+CHAT_SESSION_SECRET=
 CHAT_AUTH_USER=chat
 CHAT_AUTH_PASS=CHANGE_ME
 
 # API Tools configuration
 APITOOLS_BASE_URL=apitools.${DEPLOYMENT_DOMAIN}
+# apitools' scale knobs. Every one is optional and EMPTY is the operative default, which is what a
+# bare `cp .env.ex .env` has always run with:
+#   APITOOLS_CPUS / APITOOLS_MEM   compose limits (apps/apitools/docker-compose.yml: 0 = uncapped,
+#                                  4G memory); the pools are DERIVED from the memory limit
+#                                  (src/utils/autoscale.py), so moving one moves the other.
+#   APITOOLS_GUNICORN_WORKERS      empty = the image's own worker count.
+#   APITOOLS_MAX_CONCURRENT_OCR    empty = autoscale.ocr_slots_default()
+#   APITOOLS_MAX_CONCURRENT_JSON_QUERY  empty = autoscale.json_slots_default()
+#   APITOOLS_DB_HOST               the Supabase DB host; empty = supabase-db-<deployment>
+# Set them one at a time, or move them together through PERFORMANCE_PROFILE below.
+APITOOLS_CPUS=
+APITOOLS_MEM=
+APITOOLS_GUNICORN_WORKERS=
+APITOOLS_MAX_CONCURRENT_OCR=
+APITOOLS_MAX_CONCURRENT_JSON_QUERY=
+APITOOLS_DB_HOST=
 MY_DOCS_BASE_URL=my-docs.${DEPLOYMENT_DOMAIN}
 # drive's UI host. MUST be declared for the same reason as CONSOLE/CONNECTIONS below: the
 # authentik blueprint gates drive via `!Env [DRIVE_BASE_URL, drive.localhost]`, and an undeclared
@@ -190,6 +236,50 @@ DOMAINS_BASE_URL=domains.${DEPLOYMENT_DOMAIN}
 GIT_BASE_URL=git.${DEPLOYMENT_DOMAIN}
 HELLO_BINA_BASE_URL=hello-bina.${DEPLOYMENT_DOMAIN}
 DGO_EXTEND_BASE_URL=dgo-extend.${DEPLOYMENT_DOMAIN}
+# ── The office's own git branch (AGENTS.md rule 6) ─────────────────────────────────────────────
+# On the DGO line every office commits and pushes on ITS OWN branch, cut from `dgo`: mac-dgo,
+# hp-dgo, vps1-dgo, dell-dgo, claude-dgo — and takes the others' work only by merging dgo-stable.
+# The branch is declared here, per office. The guard `.claude/hooks/office-branch.py` (a Claude Code
+# hook on every `git` command) refuses a commit, a push or a branch switch that would break it, and
+# only WARNS while this stays empty. Set it on every office; never copy it between offices.
+DGO_BRANCH=
+# The branch this office FOLLOWS by itself (r030-201, scripts/follow.sh): a host timer that `bbox run`
+# installs merges its newest commit whose gates are green into DGO_BRANCH every 30 minutes, keeps it only
+# if every service stays healthy (else rolls back), and tells the owner only what failed. dgo-stable on
+# every office that serves the herd (vps1, the HP, the Dell); EMPTY on the MacBook, where live sessions
+# commit in the checkout. DGO_FOLLOW_GATES: the workflow whose success makes a commit takeable.
+DGO_FOLLOW=
+DGO_FOLLOW_GATES=gates-hosted.yml
+# ── The herd's hub relay (DGO-1097, apps/dgo-extend/carrier/relay.go) ─────────────────────────────
+# Off the LAN its peer is on (a laptop at a café), a pair on the TCP path meets its peer at the herd's
+# hub instead: both sides connect out to the hub's link door, which joins them and copies ciphertext —
+# WireGuard stays end to end, the hub holds no key and routes nothing. DGO_RELAY, on every office of the
+# herd but the hub: `wss://link.<the hub's domain>/relay`. DGO_RELAY_FOR, on the hub only: the offices
+# whose pairs its door joins, comma-separated — an id it holds a pair with, or `id=<WireGuard public key>`.
+DGO_RELAY=
+DGO_RELAY_FOR=
+# ── The agents this office lets a linked office drive (DGO-1127) ───────────────────────────────────
+# A linked office that is given an agent app (`bina-ds`, …) takes that agent's action token over the
+# link, so `bbox agent --office <this office>` works from there. It is handed over only for an agent
+# this office NAMES: in its `serve:` map by hand, or here — app ids or aliases, comma-separated, e.g.
+# `bina-ds`. Sharing everything (`*`) shares the agent's screen, never its token. Set it on the office
+# that SERVES the agent (the HP, for the MacBook to reach Azaria); empty = no agent token goes anywhere.
+DGO_SERVE_AGENTS=
+# ── The office's HERD (DGO-1003) ───────────────────────────────────────────────────────────────
+# The company this office belongs to — «Bina Solutions», «WBC», «The Fireplace Guys». Every office
+# says it about itself; it travels with the office's catalog, and DGO Extend on a linked office
+# groups the offices it sees by it (its own herd first, then each external herd). One line, 1–60
+# characters. Empty = none said: a linked office then counts this one as part of its own herd.
+DGO_HERD=
+# This office's OWN id in the herd — `local`, `vps1`, `hp-laptop`, `dell`… Read by apps/computers
+# (`os.environ.get("DGO_OFFICE_ID")` in app.py, and `hooks/herd` via read_env) and carried by DGO
+# Extend's identity. Empty = the office has no name of its own: the herd check cannot say which row
+# is this machine, and a far office sees an unnamed peer.
+DGO_OFFICE_ID=
+# The vault Obsidian serves (apps/obsidian): an ABSOLUTE host path (an owner's synced vault on a
+# laptop), never a bare name and never a `:` in it. Empty = the named volume `obsidian_vault` — a
+# server office's vault.
+OBSIDIAN_VAULT_HOST=
 SITES_BASE_URL=sites.${DEPLOYMENT_DOMAIN}
 SOCIAL_LIST_BASE_URL=social-list.${DEPLOYMENT_DOMAIN}
 TELEGRAM_TV_BASE_URL=telegram-tv.${DEPLOYMENT_DOMAIN}
@@ -230,6 +320,11 @@ NOTIFICATIONS_BASE_URL=alerts-svc.${DEPLOYMENT_DOMAIN}
 # CONNECTIONS_PUBLIC_URL=http://127.0.0.1:8990 (connections publishes that loopback callback so
 # Google can reach it directly, bypassing Traefik/Authentik).
 CONNECTIONS_PUBLIC_URL=https://${CONNECTIONS_BASE_URL}
+# Secret-zero of the vault: the ONE key that unlocks the encrypted connection store
+# (platform-base/connections/app.py, docker-compose.yml). Generate with: openssl rand -hex 32
+# An empty or CHANGE_ME value means the vault is unlocked with a placeholder — fine for a throwaway
+# box, never for a real deployment. Rotating it is NOT an edit: a new key cannot read the old vault.
+CONNECTIONS_ROOT_KEY=CHANGE_ME
 
 
 # ── MAIL SERVER (Postfix/Dovecot) — the deployment's own MAIL IDENTITY ────────────────────────
@@ -318,8 +413,12 @@ MAIL_BIND=127.0.0.1
 #
 # The PRIMARY is the company address: admin@<MAIL_DOMAIN> = admin@<slug>.digital-office.co.il.
 # The company lives in the DOMAIN, so the local part is the plain role name. Both halves are the
-# same slug, so `console.bina-comp.…` and `admin@bina-comp.…` cannot drift apart.
+# same slug, so `console.hacohen.…` and `admin@hacohen.…` cannot drift apart.
 LOCALMAIL_USER=admin
+# The primary mailbox's password (apps/mail/mailapi/local_app.py reads it; apps/mail/
+# connections.override.yml blanks it so the vault's copy wins in that profile). Generate with:
+# openssl rand -hex 16
+LOCALMAIL_PW=CHANGE_ME
 LOCALMAIL_EXTRA_USERS=
 
 
@@ -330,10 +429,19 @@ LOCALMAIL_EXTRA_USERS=
 # + a real app password below. Left at the placeholder, mode=gmail would fail auth and report
 # unhealthy on first boot — so the shipped default must be local.
 GMAIL_IMAP_MODE=local
+# ── TWO DEAD KNOBS, declared so this file matches what .env carries ──────────────────────────────
+# ORPHANS: nothing in apps/, platform-base/ or scripts/ READS either one. They are the remains of the
+# pre-2026-07 "pick the backend by env" toggle, closed STALE in
+# issues/archive/gmail-backend-toggle-via-env.yaml: the mail app now chooses its backend per
+# connection (apps/mail/mailapi/adapters.py) and indox reaches drive as a connection. The only
+# remaining writer is scripts/ci-env.sh, which still sets both for CI. They retire by deleting these
+# two lines together with the two in .env — an owner's item, not a config change.
+DRIVE_BACKEND=
+GMAIL_BACKEND=
 # app-password IMAP (no OAuth/Gmail-API quota) — only used when GMAIL_IMAP_MODE=gmail.
 # Capture the app password per ai/context/gmail-onboardin-imap-stmp.md; HOST/PORT default to
 # imap.gmail.com:993.
-GMAIL_IMAP_USER=person2@example.com
+GMAIL_IMAP_USER=person3@example.com
 GMAIL_IMAP_APP_PW=your-gmail-app-password
 # GMAIL_IMAP_HOST=imap.gmail.com
 # GMAIL_IMAP_PORT=993
@@ -353,8 +461,21 @@ REDISINSIGHT_BASE_URL=redisinsight.${DEPLOYMENT_DOMAIN}
 OLLAMA_BASE_URL=ollama.${DEPLOYMENT_DOMAIN}
 # In-network URL for n8n->ollama ('Ollama account' cred). Deploy ollama or point elsewhere.
 OLLAMA_INTERNAL_URL=http://ollama:11434
-OLLAMA_NUM_PARALLEL=2
-OLLAMA_MAX_LOADED_MODELS=2
+# One model in memory, one slot. Each slot holds its own context; a machine with memory to spare
+# sets 2, so the session-title request does not replace the conversation's cached prompt.
+OLLAMA_NUM_PARALLEL=1
+OLLAMA_MAX_LOADED_MODELS=1
+# The models this office's Ollama holds: pulled by the app itself on start (apps/ollama, DGO-825).
+# Each one that can call tools appears in the office agent's model picker.
+OLLAMA_PULL=
+OLLAMA_CONTEXT_LENGTH=32768
+OLLAMA_KEEP_ALIVE=10m
+# A machine that is there for its models: every core, most of its memory, a disk of its own.
+# OLLAMA_CPUS=4.0
+# OLLAMA_MEMORY=11G
+# OLLAMA_MODELS_DIR=/mnt/dgo-data/dgo/ollama
+# Its GPU, through Vulkan (AMD or Intel; /sys/class/drm/renderD*/device/vendor says which node):
+# OLLAMA_GPU_DEVICE=/dev/dri/renderD129
 
 # WhatsApp Evolution API
 WHSP2_EVOLUTION_BASE_URL=whsp2-evo.${DEPLOYMENT_DOMAIN}
@@ -367,7 +488,7 @@ WHSP2_APP_BASE_URL=whsp2.${DEPLOYMENT_DOMAIN}
 # root, that is the origin of the self-hosted instance. A blanket rename of one to the other fed the
 # cloud URL into the app as its own public origin — WEB_URL became "https://https://api.plane.so"
 # and CORS_ALLOWED_ORIGINS was rejected by Django with corsheaders.E014.
-PLANE_API_KEY=CHANGE_ME
+PLANE_API_KEY=your-plane-api-key-here
 PLANE_WORKSPACE_SLUG=your-workspace-slug
 PLANE_BASE_URL=https://api.plane.so
 
@@ -381,7 +502,7 @@ FIRECRAWL_BULL_AUTH_KEY=change_me_to_secure_key
 FIRECRAWL_VERSION=v1
 
 # Jina AI Reranker (for web search result ranking)
-JINA_API_KEY=CHANGE_ME
+JINA_API_KEY=your-jina-api-key-here
 
 # General configuration
 # TZ=Asia/Jerusalem   # optional: default is the HOST machine timezone
@@ -389,11 +510,11 @@ JINA_API_KEY=CHANGE_ME
 # Balance Sheet Webhook Auth (N8N "Incoming Documents" credential)
 BS_WEBHOOK_USER=admin
 BS_WEBHOOK_PASS=CHANGE_ME
-# 31.97.196.129: Production svm IP
-# 24.242.246.1 : willi home
-# 187.147.152.83 : random coffee shop
-# http://31.97.196.129/
-DBS_ALLOWED_IPS=217.132.156.41,203.0.113.10,213.137.71.16,31.97.196.129,24.242.246.1,187.147.152.83
+# 93.184.216.1: Production svm IP
+# 93.184.216.2 : willi home
+# 93.184.216.3 : random coffee shop
+# http://93.184.216.1/
+DBS_ALLOWED_IPS=93.184.216.4,93.184.216.5,93.184.216.6,93.184.216.1,93.184.216.2,93.184.216.3
 
 # ChatBase - Multi-account WhatsApp chat management
 CHATBASE_BASE_URL=chatbase.${DEPLOYMENT_DOMAIN}
@@ -432,7 +553,7 @@ GLITCHTIP_DB_PASSWORD=CHANGE_ME
 # SMTP format: smtp://user:password@smtp.example.com:587
 GLITCHTIP_EMAIL_URL=consolemail://
 # Derived like every other address on this deployment. It used to be a literal
-# person3@example.com, which is how the LIVE .env ended up sending alert mail
+# person4@example.com, which is how the LIVE .env ended up sending alert mail
 # from a domain the deployment no longer serves while DEPLOYMENT_DOMAIN said something else.
 GLITCHTIP_FROM_EMAIL=noreply@${DEPLOYMENT_DOMAIN}
 GLITCHTIP_MAX_EVENT_LIFE_DAYS=90
@@ -441,11 +562,13 @@ GLITCHTIP_ENABLE_ORG_CREATION=false
 # Declarative bootstrap (scripts/glitchtip-push): admin user + org + projects with
 # DETERMINISTIC DSNs are auto-created on bring-up. Set the *_SENTRY_DSN above from the
 # DSNs it prints (they're stable across `down -v` — derived from GLITCHTIP_SECRET_KEY).
-GLITCHTIP_ADMIN_EMAIL=ci@local.dev
-GLITCHTIP_ADMIN_PASSWORD=CHANGE_ME
+GLITCHTIP_ADMIN_EMAIL=person5@example.com
+# empty on purpose: `bbox glitchtip push` mints one into .env on first provisioning (DGO-980 —
+# the literal that stood here was published with this file)
+GLITCHTIP_ADMIN_PASSWORD=
 GLITCHTIP_ORG_NAME=${BUSINESS_NAME}
 # The org's URL slug — what the alerts poller (`notifications`) puts in every GlitchTip API path.
-# It was never declared here, so BOTH consumers fell through to a literal `bina-comp`
+# It was never declared here, so BOTH consumers fell through to a literal `hacohen`
 # (platform-base/notifications/docker-compose.yml and app.py): any other company's deployment
 # polled an org that does not exist, got 404, and showed an empty — not failing — alerts screen.
 # Same slug as everything else, so the org GlitchTip creates and the org we poll cannot diverge.
@@ -460,6 +583,24 @@ AUTHENTIK_BASE_URL=auth.${DEPLOYMENT_DOMAIN}
 #   AUTH_PROTOCOL=http
 # On the VPS / any public deploy, LEAVE BOTH UNSET — they default to
 # https://${AUTHENTIK_BASE_URL}, so prod is unchanged. (Never copy a local .env to prod.)
+# They ARE declared below, at exactly the value that fallback derives (authentik's compose default is
+# `${AUTH_EXTERNAL_URL:-${AUTHENTIK_BASE_URL:-auth.<domain>}}` and `${AUTH_PROTOCOL:-https}`), for two
+# reasons: this office sets both, and env-drift-lint.py WATCHES them by name — a stale
+# AUTH_EXTERNAL_URL is what sent SSO to the wrong authentik with nothing changed (2026-08-24).
+# A LOCAL box overrides both per the note above; a public deploy changes neither.
+AUTH_EXTERNAL_URL=auth.${DEPLOYMENT_DOMAIN}
+AUTH_PROTOCOL=https
+# forward-auth (platform-base/forward-auth, DGO-1090): the identity service in Go that replaces
+# authentik. Its own host — `auth` stays authentik's while both exist.
+FORWARD_AUTH_BASE_URL=signin.${DEPLOYMENT_DOMAIN}
+# Its cookie signing key: hex, 32 bytes or more (scripts/ci-env.sh writes one). Empty: it refuses to start.
+FORWARD_AUTH_SECRET=
+# Which identity service the edge asks: forward-auth (a fresh office, since release 0.3.0 — the one
+# platform.state.default.yaml and platform.state.core.yaml enable) or authentik (an office installed
+# before it, until its own switch). platform-base/traefik/config/authentik-forwardauth.yaml switches on
+# it, and the office's state must enable the same one. An office's .env WITHOUT this line is an
+# authentik office (traefik's compose default), so dgo-extend never appends it to one (converge.py).
+DGO_IDENTITY=forward-auth
 # Generate with: openssl rand -hex 50   (hex — NO line wraps, NO special chars)
 # ⚠️ Do NOT use `openssl rand -base64 60`: it WRAPS its output at column 64, and that
 # wrap-newline (a stray \r on Windows) gets captured INTO the value. A CR mid-key makes
@@ -483,12 +624,22 @@ GOOGLE_OAUTH_CLIENT_ID=
 GOOGLE_OAUTH_CLIENT_SECRET=
 
 
-CHANGE_ME
+# Homepage (Dashboard) configuration
 
 # Machine dashboard
 MACHINE_BASE_URL=machine.${DEPLOYMENT_DOMAIN}
 # Comma-separated allow-list. Leave empty to disable cleanup execution.
 MACHINE_CLEANUP_ALLOWED_ACTIONS=
+
+# Security («אבטחה», platform-base/security): who reaches the office and what it calls, with a built-in
+# fail2ban. Behind the office's sign-in like every app.
+SECURITY_BASE_URL=security.${DEPLOYMENT_DOMAIN}
+# GeoIP for the address maps: city (≈145 MB, DB-IP lite) | country (≈18 MB) | off
+SECURITY_GEO=city
+# 1 = a LINKED office may change bans and lists here (default: read-only over a link)
+SECURITY_REMOTE_CONTROL=0
+# a laptop office runs inside a VM whose gateway is the VM's NAT: name the LAN router here to see it
+SECURITY_ROUTER_HINTS=
 
 # browser42 — stealth browser + Playwright MCP + live view
 BROWSER42_BASE_URL=browser42.${DEPLOYMENT_DOMAIN}
@@ -500,6 +651,9 @@ BROWSER42_BASE_URL=browser42.${DEPLOYMENT_DOMAIN}
 # via `bbox_clamp_cpus_to_host` (it rewrites `*_CPUS=` keys in .env, which is why this one is a
 # key and not a literal).
 BROWSER42_CPUS=6
+# How many tabs the shared office browser holds (the anchor page + task tabs). One sign-in tab per
+# service needs more than the default; each tab costs memory inside the 1.8 GB the browser is given.
+BROWSER42_MAX_TABS=6
 # The same rule for n8n's database, which was the LAST literal CPU ceiling on the platform: as a
 # literal it could not be sized by a profile nor lowered by a host, so `bbox run` aborted the whole
 # bring-up on a 2-core machine ("range of CPUs is from 0.01 to 2.00") — measured 2026-09-30 when an
@@ -527,7 +681,7 @@ BINA_DS_AGENT_PORT=3081
 # noVNC password — OPTIONAL extra factor. Leave EMPTY (default) to disable VNC auth:
 # access is already gated by Authentik at the edge. Set a strong value to require it.
 BROWSER42_VNC_PASSWORD=
-CHANGE_ME
+# Bearer token required on /mcp. REQUIRED — generate with: openssl rand -hex 32
 BROWSER42_MCP_TOKEN=CHANGE_ME
 # Debug mode for the Playwright MCP. Set non-empty (e.g. 1) to enable: a full
 # per-action session log + Playwright trace are written to data/browser42/output/,
@@ -539,11 +693,11 @@ BROWSER42_DEBUG=
 # For cross-host restore, share it out-of-band and set it in the target host's .env.
 BROWSER42_STATE_PASSPHRASE=
 
-CHANGE_ME
+# Feature Validation API
 FV_BASE_URL=fv.${DEV_DOMAIN}
 FV_SCHEDULE_MINUTES=0
 # Generate from n8n UI: Settings → n8n API
-N8N_API_KEY=CHANGE_ME
+N8N_API_KEY=eyJhbGciOiJub25lIn0.eyJyZWRhY3RlZCI6dHJ1ZX0.REDACTED
 
 N8N_WEBHOOK_USER=cicd
 N8N_WEBHOOK_PASS=CHANGE_ME
@@ -561,20 +715,26 @@ SUPABASE_JWT_SECRET=CHANGE_ME
 # Generate with: openssl rand -hex 32
 SUPABASE_COOKIE_KEY=CHANGE_ME
 # Note: Generate JWT tokens for ANON_KEY and SERVICE_KEY using jwt.io or the provided script
-# ANON_KEY: Generate with HS256, payload: {"iss":"supabase","role":"anon"}
-# SERVICE_KEY: Generate with HS256, payload: {"iss":"supabase","role":"service_role"}
-SUPABASE_ANON_KEY=CHANGE_ME
-SUPABASE_SERVICE_KEY=CHANGE_ME
+# ANON_KEY: CHANGE_ME with HS256, payload: {"iss":"supabase","role":"anon"}
+# SERVICE_KEY: CHANGE_ME with HS256, payload: {"iss":"supabase","role":"service_role"}
+SUPABASE_ANON_KEY=eyJhbGciOiJub25lIn0.eyJyZWRhY3RlZCI6dHJ1ZX0.REDACTED
+SUPABASE_SERVICE_KEY=eyJhbGciOiJub25lIn0.eyJyZWRhY3RlZCI6dHJ1ZX0.REDACTED
 SUPABASE_BASE_URL=supabase.${DEV_DOMAIN}
 SUPABASE_STUDIO_BASE_URL=supabase-studio.${DEV_DOMAIN}
 SUPABASE_FILE_SIZE_LIMIT=52428800
 SUPABASE_STORAGE_BUCKET=default
+# The Supabase dashboard (Studio/kong) login password — apps/supabase/app.json declares it, and its
+# compose defaults it to CHANGE_ME. Generate with: openssl rand -hex 24
+SUPABASE_DASHBOARD_PASSWORD=CHANGE_ME
 
 # ── incoming-documents (Phase 3) ──────────────────────────────────────
 INCOMING_DOCS_ENABLED=true
 INCOMING_DOCS_API_PREFIX=/incomingDocuments
 INCOMING_DOCS_TOPIC_PREFIX=incoming-documents
 INCOMING_DOCS_BASE_URL=incoming-documents.${DEV_DOMAIN}
+# Where indox reaches Supabase FROM ITS OWN COMPOSE NETWORK (indox's SUPABASE_BASE_URL). Empty =
+# http://kong:8000. It is NOT the public supabase host above: this one never leaves the network.
+INCOMING_DOCS_SUPABASE_URL=
 
 # n8n credential lookup (Phase 3.1) — apitools reads + decrypts the
 # matching n8n credential at backend init time. Email/name substring
@@ -592,18 +752,18 @@ SUPABASE_CREDS_NAME=Supabase account
 # NOTE: distinct from GOOGLE_OAUTH_CLIENT_* above (those are reserved for Authentik).
 # Shared Google client for Sheets / Drive / Sheets-Trigger nodes
 N8N_GOOGLE_OAUTH_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
-N8N_GOOGLE_OAUTH_CLIENT_SECRET=CHANGE_ME
+N8N_GOOGLE_OAUTH_CLIENT_SECRET=your-google-client-secret
 # Gmail client (can be a separate Google project)
 N8N_GMAIL_OAUTH_CLIENT_ID=your-gmail-client-id.apps.googleusercontent.com
-N8N_GMAIL_OAUTH_CLIENT_SECRET=CHANGE_ME
+N8N_GMAIL_OAUTH_CLIENT_SECRET=your-gmail-client-secret
 
 # Anthropic API key — used by the proxy for Claude model passthrough.
 # When a claude-* model is requested, the proxy forwards directly to Anthropic.
 # Set this to a valid Anthropic key to enable Claude models.
-ANTHROPIC_API_KEY=CHANGE_ME
+ANTHROPIC_API_KEY='CHANGE_ME'
 
 # DeepSeek V4 Pro — used by anthropic-proxy for DeepSeek model routing
-DEEPSEEK_API_KEY=CHANGE_ME
+DEEPSEEK_API_KEY='CHANGE_ME'
 DEEPSEEK_BASE_URL='https://api.deepseek.com'
 # Generate with: openssl rand -hex 32
 AGENT_RUNNER_TOKEN=CHANGE_ME
@@ -627,7 +787,7 @@ DISPATCHER_TOKEN=CHANGE_ME
 # ── Development Projects ────────────────────────────────────────────────
 HELLO_BASE_URL=hello.${DEV_DOMAIN}
 CHESS_BASE_URL=chess.${DEV_DOMAIN}
-TELEGRAM_BOT_TOKEN=CHANGE_ME
+TELEGRAM_BOT_TOKEN=your-telegram-bot-token-here
 # errorHandler01's Telegram alert branch (n8n). Gated OFF by default: `apps/n8n/hooks/push`
 # (gate_telegram_notifier) only enables the node when this is exactly "true" AND TELEGRAM_BOT_TOKEN
 # above is set to a real token (not empty, not this placeholder) — either condition failing leaves
@@ -648,23 +808,23 @@ ERROR_REPORT_GLITCHTIP=false
 
 # ktivayehudit-clone2 static site
 KTIVAYEHUDIT_CLONE2_BASE_URL=ktivayehudit-clone2.${DEV_DOMAIN}
-GEMINI_API_KEY=CHANGE_ME
+GEMINI_API_KEY=your-google-ai-api-key
 
 # --- n8n adjacent-automation creds (env-managed via blueprint credential_overrides) ---
-# MCP_AUTH_TOKEN: header-auth token for the n8n MCP Server Triggers (generate: openssl rand -hex 24)
+# MCP_AUTH_TOKEN: CHANGE_ME token for the n8n MCP Server Triggers (generate: openssl rand -hex 24)
 MCP_AUTH_TOKEN=CHANGE_ME
 # Priority ERP basic-auth (httpBasicAuth creds). Leave blank if not using Priority.
 PRIORITY_USER=
 PRIORITY_PASS=
-CHANGE_ME
+PRIORITY_TEST_USER=
 PRIORITY_TEST_PASS=
-CHANGE_ME
+# Document AI service account (googleApi cred). privateKey single-line with 
  escapes.
 DOCUMENT_AI_SA_EMAIL=
 DOCUMENT_AI_SA_PRIVATE_KEY=
 
-CHANGE_ME
-GOOGLE_VISION_API_KEY=CHANGE_ME
+# --- aligned with .env (bbox verify dependencies parity) ---
+GOOGLE_VISION_API_KEY=your-google-vision-api-key
 SETTINGS_AUTH_USER=settings
 SETTINGS_AUTH_PASS=CHANGE_ME
 # Optional: override OAuth redirect base for local n8n creds (e.g. http://127.0.0.1:5678). Blank=use N8N_BASE_URL.
@@ -717,16 +877,16 @@ TRUST_EDGE_AUTH=true
 # connections when absent; set it here to pin one. Stable across restarts by design.
 CHAT_RELAY_KEY=
 
-CHANGE_ME
+# The three secrets this app carries its own services with. REQUIRED (`:?` in its compose):
 # the shipped defaults used to be the word "plane". Generated on a fresh machine by
 # scripts/ci-env.sh; rotate them while the instance is empty — that means recreating
 # plane-db and plane-mq, which are the only places these are stored.
 PLANE_DB_PASSWORD=
-CHANGE_ME
+# PLANE_MQ_PASSWORD is gone with RabbitMQ: Celery brokers on plane-redis now
 # (apps/project-pln/patches/redis-broker.py). A leftover key in an existing .env is simply ignored.
 PLANE_S3_SECRET_KEY=
 
-CHANGE_ME
+# The OWNER's login for this Plane. Plane ships no bootstrap: without these, a fresh instance
 # refuses every sign-in until somebody fills in the instance-admin form under /god-mode/ and then
 # creates a workspace by hand. apps/project-pln/hooks/onboard applies bootstrap.yaml instead
 # (declarative, idempotent, and it runs on every `bbox run`), and signs the owner in with these.
@@ -737,7 +897,7 @@ CHANGE_ME
 # Set it by hand only while the instance is still empty, and then run ./bbox run.
 PLANE_OWNER_EMAIL=
 PLANE_OWNER_PASSWORD=
-CHANGE_ME
+PLANE_OWNER_FIRSTNAME=
 PLANE_OWNER_LASTNAME=
 # One-off hand-over, for an instance that already has an administrator and should belong to someone
 # else: name that person in PLANE_OWNER_EMAIL, set this to 1, and run ./bbox project-pln onboard.
@@ -758,6 +918,28 @@ PROJECT_PLN_PROTOCOL=${AUTH_PROTOCOL}
 # `<PROJECT_PLN_PROTOCOL>://<PROJECT_PLN_BASE_URL>`, which is what the app derives when this is
 # empty (and which already carries the port on an engine whose edge is not on 80/443).
 PROJECT_PLN_PUBLIC_URL=
+
+# ── Video meetings (apps/meet, Jitsi Meet) ──────────────────────────────────────────────────────
+# Leave all of these empty: apps/meet/hooks/prepare mints the secrets on first bring-up and, on an
+# office with a public domain, publishes the video bridge's UDP port and advertises the meeting
+# host's own address (its DNS record). Set one only to override what it derives.
+#   MEET_BASE_URL / MEET_START_BASE_URL  the hosts (default meet.<domain>, meet-start.<domain>)
+#   MEET_JVB_PORT                        the bridge's UDP media port (default 10000)
+#   MEET_JVB_BIND                        where it is published (default loopback; 0.0.0.0 on a domain)
+#   MEET_JVB_ADVERTISE_IPS               what the bridge tells browsers (default: the meet host's IPv4)
+#   MEET_AUTO_RECORD                     every meeting a host opens is recorded from its start, from
+#                                        any client (default 1; 0 = only from the record button)
+#   MEET_SILENT_MIC_SECONDS              a microphone that is on and sends nothing this long is told
+#                                        to its owner and the room (default 20; 0 = off; DGO-959)
+#   MEET_QUIET_INITIATORS                sign-ins whose recordings never reach the transcript
+#                                        workflow — test calls (default qa-host)
+MEET_JWT_SECRET=
+MEET_JICOFO_PASSWORD=
+MEET_JVB_PASSWORD=
+MEET_JIBRI_XMPP_PASSWORD=
+MEET_JIBRI_RECORDER_PASSWORD=
+#   MEET_TURN_BASE_URL                   the TURN-over-TLS host (default meet-turn.<domain>, port 443)
+MEET_TURN_SECRET=
 # ── prebuilt images (DGO-41) ─────────────────────────────────────────────────────────────────────
 # Which tag of ghcr.io/solomonboltin/digital-office/<app> this deployment pulls when the CI-images
 # overlay is applied (`OVERLAYS=platform/profiles/ci-images.yml ./scripts/dc up -d --no-build`).

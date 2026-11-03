@@ -76,8 +76,8 @@ function runtimeWith(attachments) {
 test('a message is inbound for the OTHER participant, never the sender', async () => {
   // Both identities have the same bot attached. Only the non-sender may be dispatched to.
   const runtime = runtimeWith({
-    [inst(ADMIN)]: 'bina-comp-bot',
-    [inst(BOT_USER)]: 'bina-comp-bot',
+    [inst(ADMIN)]: 'hacohen-bot',
+    [inst(BOT_USER)]: 'hacohen-bot',
   });
   const r = await inbox.handleEvent(
     { kind: 'message', message_id: 'msg-1' },
@@ -88,7 +88,7 @@ test('a message is inbound for the OTHER participant, never the sender', async (
 });
 
 test('the bot answers AS its own identity, not as whoever is selected', async () => {
-  const runtime = runtimeWith({ [inst(BOT_USER)]: 'bina-comp-bot' });
+  const runtime = runtimeWith({ [inst(BOT_USER)]: 'hacohen-bot' });
   await inbox.handleEvent(
     { kind: 'message', message_id: 'msg-1' },
     { store, resolve: resolver(envelope()), runtime },
@@ -110,8 +110,8 @@ test('an identity with no bot stays silent', async () => {
 
 test('a group message reaches every other member that has a bot', async () => {
   const runtime = runtimeWith({
-    [inst('b1')]: 'bina-comp-bot',
-    [inst('b2')]: 'bina-comp-bot',
+    [inst('b1')]: 'hacohen-bot',
+    [inst('b2')]: 'hacohen-bot',
   });
   await inbox.handleEvent(
     { kind: 'message', message_id: 'msg-1' },
@@ -122,7 +122,7 @@ test('a group message reaches every other member that has a bot', async () => {
 });
 
 test('an event that is not a message is ignored', async () => {
-  const runtime = runtimeWith({ [inst(BOT_USER)]: 'bina-comp-bot' });
+  const runtime = runtimeWith({ [inst(BOT_USER)]: 'hacohen-bot' });
   expect(await inbox.handleEvent({ kind: 'typing' }, { store, resolve: resolver(envelope()), runtime }))
     .toEqual({ dispatched: [] });
   expect(await inbox.handleEvent(null, { store, resolve: resolver(envelope()), runtime }))
@@ -131,7 +131,7 @@ test('an event that is not a message is ignored', async () => {
 });
 
 test('a message that cannot be read reports why instead of throwing', async () => {
-  const runtime = runtimeWith({ [inst(BOT_USER)]: 'bina-comp-bot' });
+  const runtime = runtimeWith({ [inst(BOT_USER)]: 'hacohen-bot' });
   const r = await inbox.handleEvent(
     { kind: 'message', message_id: 'gone' },
     { store, resolve: resolver({ ok: false, error: 'no such message' }), runtime },
@@ -141,8 +141,8 @@ test('a message that cannot be read reports why instead of throwing', async () =
 
 test('one unresolvable identity does not stop the others being answered', async () => {
   const runtime = runtimeWith({
-    [inst('broken')]: 'bina-comp-bot',
-    [inst(BOT_USER)]: 'bina-comp-bot',
+    [inst('broken')]: 'hacohen-bot',
+    [inst(BOT_USER)]: 'hacohen-bot',
   });
   const env = envelope({ sender: ADMIN, members: [ADMIN, 'broken', BOT_USER] });
   const resolve = async (cid) => {
@@ -158,24 +158,24 @@ test('a BOT-produced message never triggers another bot', async () => {
   // so as soon as a second bot-bearing identity existed the two answered each other without end —
   // every reply is a new message, which is a new inbound event, which earns another reply.
   const runtime = runtimeWith({
-    [inst(ADMIN)]: 'bina-comp-bot',
-    [inst(BOT_USER)]: 'bina-comp-bot',
+    [inst(ADMIN)]: 'hacohen-bot',
+    [inst(BOT_USER)]: 'hacohen-bot',
   });
-  const env = { ...envelope({ sender: BOT_USER }), botId: 'bina-comp-bot' };
+  const env = { ...envelope({ sender: BOT_USER }), botId: 'hacohen-bot' };
   const r = await inbox.handleEvent(
     { kind: 'message', message_id: 'msg-1' },
     { store, resolve: resolver(env), runtime },
   );
   expect(runtime.calls).toHaveLength(0);
-  expect(r).toMatchObject({ dispatched: [], reason: 'produced by bot bina-comp-bot' });
+  expect(r).toMatchObject({ dispatched: [], reason: 'produced by bot hacohen-bot' });
 });
 
 test('a PERSON acting as an identity that has a bot is still dispatched on', async () => {
   // The reason the guard reads the message and not the sender: the admin has a bot attached by
   // default, and a sender-based rule would silence exactly the messages that must reach one.
   const runtime = runtimeWith({
-    [inst(ADMIN)]: 'bina-comp-bot',
-    [inst(BOT_USER)]: 'bina-comp-bot',
+    [inst(ADMIN)]: 'hacohen-bot',
+    [inst(BOT_USER)]: 'hacohen-bot',
   });
   const r = await inbox.handleEvent(
     { kind: 'message', message_id: 'msg-1' },

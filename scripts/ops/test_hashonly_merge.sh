@@ -5,7 +5,7 @@
 # the business key alone, skipped them, emitted nothing, and they were re-raised every sweep.
 # Also asserts the biz path still works, so the key-precedence change did not break the normal case.
 DK="docker -H unix:///run/bbox-docker.sock"
-ENVF=/mnt/c/Users/user/Desktop/personalWorkspace/AutomateOs/deployment-bina-comp/.env
+ENVF=/mnt/c/Users/user/Desktop/personalWorkspace/AutomateOs/deployment-hacohen/.env
 WU=$(grep -E '^BS_WEBHOOK_USER=' "$ENVF" | head -1 | cut -d= -f2-)
 WP=$(grep -E '^BS_WEBHOOK_PASS=' "$ENVF" | head -1 | cut -d= -f2-)
 P=zzho$(date +%H%M%S)

@@ -594,7 +594,7 @@ multi-account pattern:
   dotted chat wallpaper, grouped message bubbles with tails + day separators, an animated typing
   indicator before bot replies, read-tick previews in the list, and polished composer/micro-interactions.
   Fully theme-aware (light + dark).
-**Port (real source):** the live WhatsApp admin (`whatsapp-bina-comp`) is a single-account bot panel.
+**Port (real source):** the live WhatsApp admin (`whatsapp-hacohanim`) is a single-account bot panel.
 To ship this, generalize its backend to a multi-provider account model (local/Baileys/Telegram/Cloud
 adapters behind one interface), add a conversations+messages store and a per-account "active bot"
 assignment, and replace the admin page with this chat UI. The sim mock's endpoint shapes

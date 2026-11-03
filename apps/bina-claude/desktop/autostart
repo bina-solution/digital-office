@@ -1,0 +1,30 @@
+#!/bin/sh
+# /usr/local/bin/bina-claude-desktop — the Selkies session's one application: the official Claude Desktop
+# app (DGO-1074). openbox runs it (through ~/.config/openbox/autostart) as the image's user `abc`, with
+# HOME=/config — the app volume's `desktop` folder, which the CLI container reads as /data/desktop
+# (`./bbox bina-claude sessions`). POSIX sh: that is how the session runs it.
+
+# The keyring the app keeps its sign-in in. Its password is minted once into HOME and unlocks it at every
+# start, so the sign-in survives recreates (without an unlocked keyring the app asks again every launch).
+# The session bus is the one openbox-session was started under (dbus-launch in startwm.sh).
+[ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ] || eval "$(dbus-launch --sh-syntax)"
+KEYPW="${HOME}/.keyring-pass"
+[ -s "${KEYPW}" ] || ( umask 077; head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n' > "${KEYPW}" )
+eval "$(gnome-keyring-daemon --replace --unlock --components=secrets < "${KEYPW}" | sed 's/^/export /')"
+
+git config --global --get-all safe.directory 2>/dev/null | grep -qxF '*' || git config --global --add safe.directory '*'
+# The office's checkout under its short name — what Bina Claude's brief (~/.claude/CLAUDE.md, written by
+# the CLI container) and every agent call it — and the folder the app starts in (DGO-1275).
+OFFICE="${BBOX_REPO_HOST:-/workspace/office}"
+if [ "${OFFICE}" != /workspace/office ] && [ -d "${OFFICE}" ] && [ -w /workspace ]; then
+  ln -sfn "${OFFICE}" /workspace/office
+fi
+cd /workspace/office 2>/dev/null || cd "${OFFICE}" 2>/dev/null || cd "${HOME}"
+
+# Brought back whenever it exits (a sign-out, a crash, the window closed): this display has one purpose.
+# --no-sandbox: Chromium's sandbox needs user namespaces docker's default seccomp denies; the container is
+# the sandbox. No GPU here.
+while :; do
+  claude-desktop --no-sandbox --disable-gpu >>"${HOME}/.claude-desktop.log" 2>&1
+  sleep 3
+done

@@ -5,8 +5,10 @@ with a rollback per step: [`ai/context/core-go-forward-auth.md`](../../ai/contex
 This file is only *how to run it*.
 
 ```bash
-go test ./...        # 28 tests, no stack, no Docker, no network (auth_test.go +
-                     # compatibility_test.go — the migration's own proof)
+go test ./...        # 45 tests, no stack, no Docker, no network (auth_test.go +
+                     # compatibility_test.go — the migration's own proof — + handoff_test.go,
+                     # the review's F1–F4 with a host-scoped cookie jar walking two app hosts,
+                     # login CSRF, sign-out on every host, the limiter; + setup_test.go, first run)
 go build .           # one static binary; stdlib only, so there is no go.sum and nothing to fetch
 ```
 
@@ -89,9 +91,11 @@ GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -o dist/forward-auth-windows-am
 | `FORWARD_AUTH_SECRET` | **yes**, ≥ 32 bytes | — | the cookie signing key. There is no default: a service that starts without one signs every session with an empty key, and anyone on the office network can then mint a cookie naming the owner. |
 | `FORWARD_AUTH_EXTERNAL_URL` | **yes** | — | where a browser reaches this service (`http://auth.localhost`). Never derived from a request — a redirect target built from a header is an open redirect. `https://` here is also what turns the cookie `Secure`. |
 | `FORWARD_AUTH_ALLOWED_HOSTS` | **yes** | — | comma-separated. `.example.com` = every host **under** it; `example.com` = that exact host. It bounds every return-to URL. |
-| `FORWARD_AUTH_USERS_FILE` | no | `/etc/forward-auth/users` | read once, at boot |
-| `FORWARD_AUTH_LISTEN` | no | `:9000` | |
-| `FORWARD_AUTH_SESSION_TTL` | no | `12h` | |
+| `FORWARD_AUTH_USERS_FILE` | no | `/etc/forward-auth/users` | must load at boot; re-read when it changes (checked at most once a second), and a change that does not load leaves the last good file answering |
+| `FORWARD_AUTH_SETUP_FILE` | no | `/etc/forward-auth/setup` | a FRESH office's first-run code, as the hex SHA-256 of the code (never the code). While there is no users file, `/setup?code=<code>` makes the owner once and deletes this file; with neither file the service refuses to start (`setup.go`) |
+| `FORWARD_AUTH_LISTEN` | no | `:9000` | a TCP address, or `unix:<absolute path>`: a socket only its owner may open — the phone's native core, where loopback is shared by every app (DGO-1090). A socket a dead process left is replaced; one a live process answers on, and a file that is not a socket, are refused |
+| `FORWARD_AUTH_EDGE_TOKEN` | no | — | only on a phone's machine, behind its native core (DGO-1090): ≥ 32 bytes, made at each boot and given to the machine outside its network. It never travels: the core's edge signs each request it sends the machine (`X-DGO-Edge-At`, `-Nonce`, `-Sig`: HMAC-SHA256 over when, the nonce, method, host, URI and identity), and a request signed for itself, within a minute, once, is the core's edge's, which has asked the core's own forward-auth already: its `X-authentik-*` are taken as they came. `/edge-proof?nonce=` proves to the core that this machine holds it. Without a good signature — another app that reached the forwarded port — nothing of a request's identity is taken. |
+| `FORWARD_AUTH_SESSION_TTL` | no | `336h` | 14 days, authentik's own session length |
 | `FORWARD_AUTH_COOKIE_DOMAIN` | no | — | set only if the session must span subdomains |
 | `FORWARD_AUTH_LEGACY_SECRET` | no | — | authentik's `AUTHENTIK_SECRET_KEY`, during a migration only. The HMAC key is derived from it exactly as authentik does (`sha512(secret).hexdigest()`), so the value that moves is the one `.env` already names. **Both-or-neither with the next row.** |
 | `FORWARD_AUTH_LEGACY_SESSIONS` | no | — | path to the snapshot of authentik's live sessions: `<sid> <username> <expiry-unix>`, one per line. Read once, at boot; a session it does not name is refused, so a stale snapshot fails closed. |
@@ -100,11 +104,25 @@ GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -o dist/forward-auth-windows-am
 
 | path | what it answers |
 |---|---|
-| `GET /auth/traefik` | **traefik's forwardAuth contract.** `200` + the five `X-authentik-*` identity headers for a signed-in caller; `302` to `/login?rd=…` for an anonymous one; `400` when the return-to is a host this office does not serve. A caller's session may come from this service's cookie or, during a migration, from authentik's — the answer is identical either way. |
-| `GET`/`POST /login` | the sign-in form |
-| `GET /logout` | clears this browser's session cookie |
+| `GET /auth/traefik` | **traefik's forwardAuth contract.** `200` + the five `X-authentik-*` identity headers for a signed-in caller; `302` to `/login?rd=…` for an anonymous one; `400` when the return-to is a host this office does not serve. A caller's session may come from this service's cookie or, during a migration, from authentik's — the answer is identical either way. A request with no session but a good `dgo_code` for its host gets `302` to the same URL without the code, **with this host's own cookie** (the per-host hand-off, `handoff.go`: a `.localhost` browser never shares one cookie across hosts). |
+| `GET`/`POST /login` | the sign-in form. A right password, or a `GET` from a browser already signed in here, answers `303` to `rd` with a one-time `dgo_code` for `rd`'s host (60 s, single use, bound to the app host's `dgo_state` cookie by its hash `st`, so a code planted in another browser is refused). Five failures per address, or per name at an address, block that key for 60 s, doubling up to an hour, attempts counted while they run: `429` + `Retry-After`, the right password included (`limit.go`). A stranger's failures do not lock the owner out at his own address. Each sign-in, failure, block, hand-off and sign-out is one log line — the name and the address, never a password. |
+| `GET`/`POST /setup` | a fresh office only: with the first-run code, the form that makes the owner (a name, a password of 12+ characters), writes the users file atomically, spends the code and signs the browser in. Without the code, a page that says to open the device's link; once a user exists, `404`. |
+| `GET /logout` | clears this browser's session cookie, and refuses every session of this person minted before now on every host (each app host holds its own cookie) — in memory, so a restart forgets it |
 | `GET /whoami` | the caller's own identity as JSON, or `401 {"signed_in":false}`. **The whole admin surface** — see the design note for why there is no user-management API. |
 | `GET /healthz` | `ok`. Used by the image's `HEALTHCHECK` through the binary's own `-health` flag, because a `scratch` image has no `wget`. |
+
+## Known limits, said once
+
+* **An edge that forwards every client from one address** (a VM's or Docker's userland port-forward —
+  the phone's and the Mac's :8080) makes the per-address limit one limit for everybody behind it: a
+  stranger on the same network can block a name at that address for a while. The phone has one person
+  on it; on a shared network, prefer an edge that sees real client addresses.
+* **traefik's access log** records request URLs, so a `dgo_code` and the first-run `code` appear in it.
+  A `dgo_code` is single-use and good only in the browser that started its round trip; the first-run
+  code is printed to the same machine's console anyway. Whoever reads that log is root on the office.
+* **Sign-out is in memory**: a restart forgets it, and sessions it refused come back until they expire.
+  Rotating `FORWARD_AUTH_SECRET` ends every session for good.
+* **A service on the office's network** can call `forward-auth:9078` directly with any `X-Forwarded-For`.
 
 ## Wiring it into the edge
 

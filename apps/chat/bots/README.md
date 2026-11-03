@@ -4,7 +4,7 @@
 bots/
   chat_bot.js        the RUNTIME: discovery, attachment, dispatch
   intent.js          "does this message want an answer?" — the sim's rule, ported
-  bina-comp-bot/       one folder = one bot; index.js is its manifest
+  hacohen-bot/       one folder = one bot; index.js is its manifest
     index.js
     states.js  reply.js  media.js  daily_limit.js  agent_sessions.js
 ```
@@ -24,8 +24,8 @@ because the only thing it is allowed to know about the outside world is the two 
 
 ```js
 module.exports = {
-  id: 'bina-comp-bot',              // MUST equal the folder name (see "why" below)
-  name: 'בוט בינה קומפ',              // shown in the connection's bot picker
+  id: 'hacohen-bot',              // MUST equal the folder name (see "why" below)
+  name: 'בוט הכהנים',              // shown in the connection's bot picker
   desc: '…',                      // one line, shown under the name
   accepts: { groups: false, chatter: false },   // opt-in to noise; see the gate
   async onMessage(msg, ctx) { … },
@@ -91,18 +91,18 @@ bug report.
 
 **One bot per connection.** Two bots on one conversation means two answers to one question and no
 ordering rule makes that read as anything but a fault. A connection needing several behaviours is one
-bot with several branches — which is exactly what `bina-comp-bot` is.
+bot with several branches — which is exactly what `hacohen-bot` is.
 
 ```js
-runtime.attach('local-chat', 'bina-comp-bot');   // alias: setBot()
+runtime.attach('local-chat', 'hacohen-bot');   // alias: setBot()
 runtime.detach('local-chat');                  // == attach(cid, 'none')
-runtime.attachedTo('local-chat');              // -> 'bina-comp-bot'
-runtime.listBots();                            // [{id:'none',…}, {id:'bina-comp-bot',…}]
+runtime.attachedTo('local-chat');              // -> 'hacohen-bot'
+runtime.listBots();                            // [{id:'none',…}, {id:'hacohen-bot',…}]
 ```
 
 Defaults live in `DEFAULT_ATTACHMENTS` and are applied only to connections nobody has wired yet, so a
 reload never stomps an operator's choice. `local-chat` is this stage's stated default; `wa-baileys` is
-there too because bina-comp-bot is **live on a real phone number**, and a default that covered only
+there too because hacohen-bot is **live on a real phone number**, and a default that covered only
 `local-chat` would have switched the production number off silently on deploy.
 
 ## Writing a new bot

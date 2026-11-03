@@ -14,7 +14,10 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g,
   (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-const S = { computers: [], key: null, local: null, execId: null, authId: null, busy: false, at: 0 };
+// `herd`: every office's computer (api/herd) · `hd`: what each one's services said, by where ·
+// `sshOf`/`matched`: the SSH machine that IS a herd computer, folded into its row (one row per computer)
+const S = { computers: [], key: null, local: null, execId: null, authId: null, busy: false, at: 0,
+            herd: [], hd: {}, office: "", herdErr: "", sshOf: {}, matched: new Set(), view: "fleet", where: "", tab: "res" };
 
 const STATE = {
   ok: { cls: "ok", he: "מחובר" },
@@ -279,13 +282,188 @@ const ACTS = {
          d: "M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6" },
 };
 
+// ── the herd: one row per computer ──────────────────────────────────────────────────────────────
+const herdComputer = (where) => (S.herd || []).find((c) => c.where === where) || null;
+const sshOf = (where) => (S.sshOf || {})[where] || null;
+const norm = (s) => String(s == null ? "" : s).trim().toLowerCase();
+
+/** Which SSH machine IS which herd computer. The office's own machine is the built-in instance; a linked
+ *  office's computer is the SSH machine with its hostname (as its machine service reports it), or whose
+ *  label is the office's name or id. A machine matched here leaves the SSH list and lives in the herd row
+ *  — the owner's «every dgo shows his computer», once, not as a herd row and an SSH row of one machine. */
+function match() {
+  const ssh = S.computers || [];
+  S.sshOf = {};
+  S.matched = new Set();
+  const own = ssh.find((x) => x.builtin);
+  if (own) { S.sshOf.local = own; S.matched.add(own.id); }
+  for (const c of S.herd || []) {
+    if (c.local) continue;
+    const h = S.hd[c.where] || {}, hn = norm(h.ov && h.ov.host && h.ov.host.hostname);
+    const hit = ssh.find((x) => !x.builtin && !S.matched.has(x.id) &&
+      ((hn && norm(x.hostname) === hn) || norm(x.label) === norm(c.label) || norm(x.label) === norm(c.office)));
+    if (hit) { S.sshOf[c.where] = hit; S.matched.add(hit.id); }
+  }
+}
+
+async function loadHerd() {
+  const r = await api("api/herd");
+  if (r.ok && r.d && Array.isArray(r.d.computers)) {
+    S.herd = r.d.computers;
+    S.office = r.d.office || "";
+    S.herdErr = "";
+  } else {
+    S.herdErr = (r.d && r.d.error) || binaSaid(r.status);
+    if (!S.herd.length) S.herd = [{ where: "local", office: "", label: "המחשב הזה", local: true, gives: {} }];
+  }
+  match();
+  renderNav();
+  if (S.view === "fleet") render();
+  else paintHeader();                 // a page opened by its address names its computer once the herd is known
+  await pulse();
+}
+
+/** Every herd computer's figures (machine, or security's reading) and its network numbers, at once. */
+async function pulse() {
+  if (typeof Host === "undefined" || !(S.herd || []).length) return;
+  await Promise.all(S.herd.map(async (c) => {
+    await Host.overview(c.where, true);
+    if (!c.gives || c.gives.security) await Host.summary(c.where);
+  }));
+  match();
+  renderNav();
+  if (S.view === "fleet") { render(); setLive(true); }
+}
+
+function herdRow(c) {
+  const h = S.hd[c.where] || {}, d = h.ov, ssh = sshOf(c.where);
+  const answering = Boolean(d) && !h.err;
+  const meter = (label, v, sub) => `<div class="hcell"><div class="k">${label}</div>` +
+    (v == null || !answering ? '<div class="v muted">—</div>' : `<div class="v"><span class="num">${pct(v)}</span>${sub ? `<span class="small muted nw"> ${sub}</span>` : ""}</div>${bar(v)}`) + "</div>";
+  const disk = d && d.storage && d.storage.root;
+  const dk = (d && d.docker) || {};
+  const k = h.sum && h.sum.kpi;
+  const net = !k ? `<div class="v muted" title="${esc(h.sumErr || "")}">${c.gives && c.gives.security === false ? "אין אבטחה" : "—"}</div>`
+    : `<div class="v"><span class="num">${Number(k.requests || 0).toLocaleString("he-IL")}</span> <span class="small muted">נכנסו</span></div>` +
+      `<div class="small muted nw"><span class="num">${Number(k.out_dests || 0).toLocaleString("he-IL")}</span> יעדים יוצאים` +
+      `${(k.bans || 0) + (k.would_ban || 0) ? ` · <span class="num">${(k.bans || 0) + (k.would_ban || 0)}</span> חסימות` : ""}</div>`;
+  const st = ssh ? stateOf(ssh) : null;
+  const state = answering ? '<span class="pill ok">עונה</span>' : h.at || h.err
+    ? `<span class="pill bad" title="${esc(h.err || "")}">לא עונה</span>` : '<span class="pill unset">בודק…</span>';
+  return `<a class="hrow" href="c/${encodeURIComponent(c.where)}" data-where="${esc(c.where)}" title="פתיחת המחשב: משאבים, רשת, אחסון${ssh ? " וגישה" : ""}">
+    <div class="hname"><div class="ht"><b>${esc(c.label)}</b>${c.local ? '<span class="pill ok">הלשכה הזאת</span>' : `<span class="pill unset" title="לשכה ${esc(c.office)}">לשכה מקושרת</span>`}${state}</div>
+      <div class="small muted">${d ? `<bdi>${esc(d.host.hostname)}</bdi> · <bdi>${esc(d.host.os)}</bdi>` : (c.local ? "המחשב שמריץ את הלשכה" : `לשכה ${esc(c.office)}`)}</div></div>
+    ${meter("מעבד", d ? d.cpu.percent : null, d && d.cpu.cores ? `<span class="num">${d.cpu.cores}</span> ליבות` : "")}
+    ${meter("זיכרון", d ? d.memory.percent : null, d ? `<span class="num">${bytes(d.memory.total)}</span>` : "")}
+    ${meter("דיסק", disk ? disk.percent : null, disk ? `<span class="num">${bytes(disk.free)}</span> פנוי` : "")}
+    <div class="hcell"><div class="k">מכולות</div>${answering ? `<div class="v"><span class="num">${dk.containers_running || 0}/${dk.containers_total || 0}</span></div>` +
+      `<div class="small ${dk.containers_unhealthy ? "bad-t" : "muted"} nw">${dk.containers_unhealthy ? `${dk.containers_unhealthy} לא תקינות` : "כולן תקינות"}</div>` : '<div class="v muted">—</div>'}</div>
+    <div class="hcell"><div class="k">רשת · יממה</div>${net}</div>
+    <div class="hcell"><div class="k">SSH</div><div class="v">${st ? `<span class="pill ${st.cls}">${esc(st.he)}</span>` : '<span class="small muted">אין</span>'}</div></div>
+  </a>`;
+}
+
+function renderHerd() {
+  const mount = $("herdMount");
+  const herd = S.herd || [];
+  $("herdHint").textContent = herd.length > 1 ? `${herd.length} מחשבים · המחשב הזה ו־${herd.length - 1} לשכות מקושרות` : herd.length ? "המחשב הזה" : "";
+  if (!herd.length) { mount.innerHTML = `<div class="spin">${esc(S.herdErr || "טוען את מחשבי הלשכות…")}</div>`; return; }
+  mount.innerHTML = (S.herdErr ? alertBox("warn", "<b>רשימת הלשכות לא נקראה.</b> " + esc(S.herdErr)) : "") +
+    `<div class="herd">${herd.map(herdRow).join("")}</div>`;
+}
+
+// ── the navigator: one item per computer (the one navigator rule — bina-nav, never a menu of our own) ──
+let NAV = null, navSig = "";
+function renderNav() {
+  const host = $("sideNav");
+  if (!host || typeof BinaNav === "undefined") return;
+  const others = (S.computers || []).filter((x) => !S.matched.has(x.id)).length;
+  const items = (S.herd || []).map((c) => {
+    const h = S.hd[c.where] || {};
+    return { id: "c:" + c.where, label: c.label, icon: c.local ? "monitor" : "server", href: "c/" + encodeURIComponent(c.where),
+             title: c.local ? "המחשב שמריץ את הלשכה" : "המחשב של לשכה " + c.office, badge: h.err ? "!" : "" };
+  });
+  const sig = JSON.stringify([S.office, others, items]);
+  if (sig !== navSig) {
+    navSig = sig;
+    host.innerHTML = "";
+    host.classList.remove("bnv");
+    NAV = BinaNav.mount(host, {
+      id: "computers",
+      brand: { name: "מחשבים", sub: S.office ? "לשכה " + S.office : "", avatar: "מ", href: "./" },
+      sections: [{ items: [{ id: "all", label: "כל המחשבים", icon: "grid", href: "./" }] },
+                 { title: "מחשבי הלשכות", items }],
+      footer: { text: others ? `ועוד ${others} ${others === 1 ? "שרת" : "שרתים"} ב־SSH` : "" },
+    });
+    const t = $("navToggle");
+    if (t && !t.innerHTML.trim()) t.innerHTML = BinaNav.svg("menu");
+  }
+  if (NAV && NAV.setActive) NAV.setActive(S.view === "host" ? "c:" + S.where : "all");
+}
+
+// ── where we are: the fleet (`/`) or one computer (`/c/<where>/<tab>`), in the path ───────────────────
+const FLEET_SUB = "כל מחשבי הלשכות — המחשב הזה ומחשבי הלשכות המקושרות, עם המשאבים והרשת שלהם בזמן אמת; ושרתים נוספים ב־SSH.";
+function paintView() {
+  const parts = routeOf().split("/");
+  const isHost = parts[0] === "c" && Boolean(parts[1]);
+  S.view = isHost ? "host" : "fleet";
+  $("vFleet").classList.toggle("hidden", isHost);
+  $("vHost").classList.toggle("hidden", !isHost);
+  $("tabs").classList.toggle("hidden", !isHost);
+  $("btnAdd").classList.toggle("hidden", isHost);
+  if (isHost) {
+    S.where = decodeURIComponent(parts[1]);
+    S.tab = ["res", "net", "disk", "ssh"].indexOf(parts[2]) >= 0 ? parts[2] : "res";
+    // the network tab's window and the address opened over it: `net[/1h|/7d][/in|/out/<ip>]`
+    const rest = S.tab === "net" ? parts.slice(3) : [];
+    const win = /^(1h|24h|7d)$/.test(rest[0] || "") ? rest.shift() : "24h";
+    const detail = (rest[0] === "in" || rest[0] === "out") && rest[1] ? { dir: rest[0], ip: rest[1] } : null;
+    paintHeader();
+    if (typeof Host !== "undefined") Host.open(S.where, S.tab, { win, detail });
+  } else {
+    if (typeof Host !== "undefined") Host.close();
+    $("viewTitle").textContent = "מחשבים";
+    $("viewSub").textContent = FLEET_SUB;
+    render();
+    pulse();
+  }
+  renderNav();
+}
+function paintHeader() {
+  // a deep link can paint before the herd answered: this office's computer has its name already
+  const c = herdComputer(S.where) || (S.where === "local" ? { label: "המחשב הזה", local: true, office: S.office }
+                                                          : { label: S.where, office: S.where });
+  const h = S.hd[S.where] || {}, d = h.ov;
+  $("viewTitle").textContent = c.label;
+  $("viewSub").textContent = [d && d.host.hostname, d && d.host.os, c.local ? "הלשכה הזאת" : "לשכה " + c.office].filter(Boolean).join(" · ");
+  document.querySelectorAll("#tabs [data-tab]").forEach((b) => {
+    b.setAttribute("aria-selected", b.dataset.tab === S.tab ? "true" : "false");
+    b.classList.toggle("hidden", b.dataset.tab === "ssh" && !sshOf(S.where));
+  });
+}
+/** host.js calls this after every paint: the header names what it read, the live chip says when. */
+function onHostPainted(where) {
+  if (where !== S.where || S.view !== "host") return;
+  paintHeader();
+  const h = S.hd[where] || {};
+  // the network tab is the security app's answer; the others are the resource reading's
+  const at = S.tab === "net" ? h.nsumAt : h.at, err = S.tab === "net" ? h.nsumErr : h.err;
+  const el = $("live");
+  el.dataset.stale = at && !err && Date.now() - at < 75000 ? "0" : "1";
+  $("liveText").textContent = at ? (err ? "לא ענה · " : "עודכן ") + new Date(at).toLocaleTimeString("he-IL") : (err ? "לא ענה" : "אין תשובה מהמחשב");
+}
+
 // ── the table ───────────────────────────────────────────────────────────────────
 function render() {
-  const list = S.computers || [];
-  const count = (state) => list.filter((c) => c.state === state).length;
-  const ready = list.filter((c) => c.ok).length;
-  const cpu = list.reduce((n, c) => n + (c.ok && c.ncpu ? c.ncpu : 0), 0);
-  const ram = list.reduce((n, c) => n + (c.ok && c.memory && c.memory.total ? c.memory.total : 0), 0);
+  // the SSH list holds only the machines that are NOT a herd computer — those live in their herd row
+  const list = (S.computers || []).filter((c) => !S.matched.has(c.id));
+  const herd = S.herd || [];
+  const up = (c) => { const h = S.hd[c.where] || {}; return Boolean(h.ov) && !h.err; };
+  const ready = herd.filter(up).length + list.filter((c) => c.ok).length;
+  const cpu = herd.reduce((n, c) => n + (up(c) ? (S.hd[c.where].ov.cpu.cores || 0) : 0), 0) +
+              list.reduce((n, c) => n + (c.ok && c.ncpu ? c.ncpu : 0), 0);
+  const ram = herd.reduce((n, c) => n + (up(c) ? (S.hd[c.where].ov.memory.total || 0) : 0), 0) +
+              list.reduce((n, c) => n + (c.ok && c.memory && c.memory.total ? c.memory.total : 0), 0);
   // the office's tile: a state only when there is something in it (a zero is grey, with no bar)
   const figure = (id, n, state) => {
     const tile = $(id).parentNode;
@@ -294,10 +472,11 @@ function render() {
     if (n) tile.dataset.state = state; else delete tile.dataset.state;
   };
   figure("kOk", ready, "done");
-  figure("kWait", count("needs_action"), "person");
-  figure("kErr", count("error") + count("missing"), "failed");
-  $("kRes").innerHTML = ready ? `${cores(cpu)} · <bdi>${bytes(ram)}</bdi>` : `<span class="none">אין מחשב מחובר</span>`;
-  $("tblHint").textContent = list.length === 1 ? "מחשב אחד ברשימה" : list.length ? `${list.length} מחשבים ברשימה` : "";
+  figure("kWait", (S.computers || []).filter((c) => c.state === "needs_action").length, "person");
+  figure("kErr", herd.filter((c) => (S.hd[c.where] || {}).err).length + list.filter((c) => c.state === "error" || c.state === "missing").length, "failed");
+  $("kRes").innerHTML = ready ? `${cores(cpu)} · <bdi>${bytes(ram)}</bdi>` : `<span class="none">אין מחשב שעונה</span>`;
+  $("tblHint").textContent = list.length === 1 ? "שרת אחד" : list.length ? `${list.length} שרתים` : "";
+  renderHerd();
 
   const alerts = [];
   if (S.key && !S.key.public_key) {
@@ -312,11 +491,17 @@ function render() {
     alerts.push(alertBox("warn", "<b>יש מחשב שממתין לאישור המפתח.</b> " +
       "לחץ על „אישור המפתח” בשורה שלו — תוצג הפקודה המדויקת שמריצים בתוך המחשב."));
   }
+  const folded = Object.entries(S.sshOf || {}).filter(([, c]) => c.state === "needs_action");
+  if (folded.length) {
+    const c = herdComputer(folded[0][0]);
+    alerts.push(alertBox("warn", `<b>${esc((c && c.label) || folded[0][1].label)} ממתין לאישור מפתח ה־SSH של הלשכה.</b> ` +
+      "פתח אותו ובחר „גישה” — שם הפקודה המדויקת שמריצים בתוך המחשב."));
+  }
   $("alerts").innerHTML = alerts.join("");
 
   const mount = $("tableMount");
   if (!list.length && !S.vaultError) {
-    mount.innerHTML = `<div class="spin">אין מחשבים ברשימה עדיין.</div>`;
+    mount.innerHTML = `<div class="spin">אין שרתים נוספים. מחשב שמחובר ב־SSH ואינו לשכה מקושרת יופיע כאן.</div>`;
     return;
   }
   const rows = list.map((c) => {
@@ -389,9 +574,10 @@ async function load(probe) {
   S.computers = r.d.computers || [];
   S.key = r.d.office_key || {};
   S.at = Date.now();
+  match();
   render();
   renderKey();
-  setLive(true);
+  if (S.view === "fleet") setLive(true);
 }
 
 function setLive(fresh) {
@@ -410,7 +596,10 @@ async function probeOne(id) {
   const r = await api("api/computers/" + encodeURIComponent(id) + "/status?fresh=1");
   if (r.d && r.d.id) {
     S.computers = S.computers.map((c) => (c.id === id ? Object.assign({}, c, r.d) : c));
+    match();
     render();
+    // a machine folded into a computer's page is redrawn there too (its «גישה» tab)
+    if (S.view === "host" && S.tab === "ssh" && typeof Host !== "undefined") Host.tick();
   }
   return r;
 }
@@ -427,10 +616,58 @@ async function del(id) {
 
 function openModal(id) { $(id).classList.remove("hidden"); }
 function closeModal(id) { $(id).classList.add("hidden"); }
+
+/* ── the screen in the address bar (the console's route contract) ────────────────────────────────
+   The tail of the console's hash is this app's own URL — `#/m/computers/<id>` is `/a/computers/<id>`
+   — and the shell mirrors whatever this page's URL says, so nothing here talks to the console. One
+   screen of this app is worth an address: a MACHINE. "Look at this machine" — its command box, or
+   the key it is still waiting for — is what a person sends to a colleague, and the fleet table is
+   `/`. See ai/context/build-your-first-app.md § "the address is the state". */
+const MOUNT = new URL(document.baseURI).pathname.replace(/\/+$/, "");   // "" or "/a/computers"
+const routeOf = () => {
+  const p = location.pathname;
+  if (!MOUNT) return p === "/" ? "" : p.replace(/^\/+/, "");
+  if (p === MOUNT || p === MOUNT + "/") return "";
+  return p.startsWith(MOUNT + "/") ? decodeURIComponent(p.slice(MOUNT.length + 1)) : "";
+};
+const showRoute = (id, replace) => {
+  const next = MOUNT + "/" + (id ? String(id).split("/").map(encodeURIComponent).join("/") : "");
+  const now = location.pathname + location.search;
+  if (now !== next) history[replace ? "replaceState" : "pushState"]({}, "", next);
+};
+/** The one reader. The path names the screen — the fleet (`/`), a computer of the herd
+ *  (`/c/<where>/<tab>`), or an SSH machine whose dialog opens over the fleet (`/<id>`). */
+function applyDialog() {
+  const id = S.view === "fleet" ? routeOf() : "";
+  const c = id ? findComputer(id) : null;
+  if (c) { if (c.state === "needs_action") openAuth(id); else openExec(id); return; }
+  closeModal("execModal"); closeModal("authModal");
+}
+function applyRoute() { paintView(); applyDialog(); }
+/** Go somewhere in this app: write the address, then draw what it names. */
+function go(r) { showRoute(r); applyRoute(); }
+window.addEventListener("popstate", applyRoute);
+// A link inside this app is a move in this app: drawn in place, with the address written. A new
+// tab (a modifier, the middle button) is left to the browser — the server answers every path here.
+document.addEventListener("click", (e) => {
+  const a = e.target.closest && e.target.closest("a[href]");
+  if (!a || e.defaultPrevented || e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || a.target) return;
+  const u = new URL(a.getAttribute("href"), document.baseURI);
+  if (u.origin !== location.origin || !(u.pathname === MOUNT + "/" || u.pathname.startsWith(MOUNT + "/"))) return;
+  e.preventDefault();
+  go(decodeURIComponent(u.pathname.slice(MOUNT.length + 1)));
+});
+
 document.addEventListener("click", (e) => {
   const closer = e.target.closest("[data-close]");
-  if (closer) closeModal(closer.dataset.close);
-  if (e.target.classList && e.target.classList.contains("modal-ov")) e.target.classList.add("hidden");
+  if (closer) {
+    closeModal(closer.dataset.close);
+    if ((closer.dataset.close === "execModal" || closer.dataset.close === "authModal") && S.view === "fleet") showRoute("");
+  }
+  if (e.target.classList && e.target.classList.contains("modal-ov")) {
+    e.target.classList.add("hidden");
+    if ((e.target.id === "execModal" || e.target.id === "authModal") && S.view === "fleet") showRoute("");
+  }
   const act = e.target.closest("[data-act]");
   if (!act) return;
   const id = act.dataset.id;
@@ -473,6 +710,7 @@ function openExec(id) {
   $("execResult").innerHTML = "";
   $("fCmd").value = "";
   openModal("execModal");
+  if (S.view === "fleet") showRoute(String(id));
   $("fCmd").focus();
 }
 
@@ -516,6 +754,7 @@ async function openAuth(id) {
   $("authKey").textContent = "טוען…";
   $("authCmd").textContent = "";
   openModal("authModal");
+  if (S.view === "fleet") showRoute(String(id));
   const r = await postJson("api/computers/" + encodeURIComponent(id) + "/authorize-command");
   if (!r.ok) {
     $("authKey").textContent = "—";
@@ -558,7 +797,15 @@ async function add() {
 }
 
 // ── wiring ──────────────────────────────────────────────────────────────────────
-$("btnRefresh").onclick = () => { setLive(false); load(true); };
+$("btnRefresh").onclick = () => {
+  if (S.view === "host" && typeof Host !== "undefined") { Host.tick(); return; }
+  setLive(false);
+  load(true).then(pulse);
+};
+$("tabs").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-tab]");
+  if (b) go("c/" + encodeURIComponent(S.where) + "/" + b.dataset.tab);
+});
 $("btnAdd").onclick = () => { $("addErr").innerHTML = ""; openModal("addModal"); $("fHost").focus(); };
 $("btnAddGo").onclick = add;
 $("btnRun").onclick = run;
@@ -575,12 +822,16 @@ $("fCmd").addEventListener("keydown", (e) => {
   if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); run(); }
 });
 
-load(true);
+load(true).then(() => { loadHerd(); applyDialog(); });
 // the fleet is polled, not watched: one SSH round trip per machine per cycle (the server caches it
 // for 20s), and NOTHING while the tab is hidden — a background dashboard must not keep waking
-// remote machines.
+// remote machines. The herd's figures move faster (machine samples every ten seconds), and only
+// while the list is the screen: a computer's own page polls its own.
 setInterval(() => { if (!document.hidden) load(true); }, 30000);
+setInterval(() => { if (!document.hidden && S.view === "fleet") pulse(); }, 15000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) load(true); });
+// where we are is the address: after every script ran (host.js comes after this file)
+document.addEventListener("DOMContentLoaded", paintView);
 
 /* ── the machine's OWN security ────────────────────────────────────────────────────────────────────
  *

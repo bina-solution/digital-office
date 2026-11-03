@@ -81,24 +81,24 @@ echo "ARTIFACT n8n_storage.tar.gz"
 echo "SKIPVOL n8n_storage"
 
 # ── 3. the facts a restore must reproduce ───────────────────────────────────────────────────────
-echo "FACT workflows $(q 'select count(*) from workflow_entity;')"
-echo "FACT workflows_active $(q 'select count(*) from workflow_entity where active;')"
-echo "FACT credentials $(q 'select count(*) from credentials_entity;')"
-echo "FACT webhooks $(q 'select count(*) from webhook_entity;')"
-echo "FACT tags $(q 'select count(*) from tag_entity;')"
+factq workflows "$(q 'select count(*) from workflow_entity;')"
+factq workflows_active "$(q 'select count(*) from workflow_entity where active;')"
+factq credentials "$(q 'select count(*) from credentials_entity;')"
+factq webhooks "$(q 'select count(*) from webhook_entity;')"
+factq tags "$(q 'select count(*) from tag_entity;')"
 # `user` is a reserved word, so the identifier must reach psql double-quoted. Written with a bash
 # double-quoted string because inside SINGLE quotes the backslashes survive literally and psql gets
 # `\"user\"` — which it rejects, and `q` swallows stderr, so the FACT silently came out EMPTY. An
 # empty fact compares equal to nothing and would have made the owner-account check vacuous.
-echo "FACT users $(q "select count(*) from \"user\";")"
-echo "FACT settings $(q 'select count(*) from settings;')"
-[ "${MODE}" = "full" ] && echo "FACT executions $(q 'select count(*) from execution_entity;')"
+factq users "$(q "select count(*) from \"user\";")"
+factq settings "$(q 'select count(*) from settings;')"
+[ "${MODE}" = "full" ] && factq executions "$(q 'select count(*) from execution_entity;')"
 # A checksum over every credential's ciphertext. Row counts prove the rows arrived; this proves the
 # SECRETS arrived byte-identical, which is the half that a dump/restore across encryption keys
 # silently loses.
-echo "FACT credential_blob_sha $(q "select md5(string_agg(data, '' order by id)) from credentials_entity;")"
+factq credential_blob_sha "$(q "select coalesce(md5(string_agg(data, '' order by id)), 'empty') from credentials_entity;")"
 # 16-char sha256 prefix of the live key — the same fingerprint form hooks/push already compares
 # against blueprint.yml, so operators see one spelling of "the keys match", not two.
 KEY="$(docker exec "${N8N_CONTAINER}" printenv N8N_ENCRYPTION_KEY 2>/dev/null | tr -d '\r' || true)"
-[ -n "${KEY}" ] && echo "FACT encryption_key_fp $(printf '%s' "${KEY}" | sha256sum | cut -c1-16)"
+[ -n "${KEY}" ] && factq encryption_key_fp "$(printf '%s' "${KEY}" | sha256sum | cut -c1-16)"
 exit 0

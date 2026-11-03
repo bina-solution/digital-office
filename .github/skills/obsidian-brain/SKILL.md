@@ -6,14 +6,14 @@ description: "Read and write the persistent AI brain vault (Obsidian-compatible 
 
 # Obsidian Brain — Persistent AI Memory Vault
 
-The vault at `/root/deployment-bina-comp/ai/obsidian/` is the AI's cross-session brain.
+The vault at `/root/deployment-hacohen/ai/obsidian/` is the AI's cross-session brain.
 All memories, decisions, preferences, bugs, and session history live here as
 Markdown files.
 
 ## Vault Root
 
 ```
-VAULT=/root/deployment-bina-comp/ai/obsidian
+VAULT=/root/deployment-hacohen/ai/obsidian
 ```
 
 ## Session Bootstrap (mandatory — run at the start of EVERY session)
@@ -45,7 +45,7 @@ Example session log entry:
 
 ### 🔧 Fixed X in service Y
 - **Category:** #fix #service-name
-- **Project:** deployment-bina-comp
+- **Project:** deployment-hacohen
 - **What:** description
 - **Root cause:** ...
 - **Verified:** what was checked

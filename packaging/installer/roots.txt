@@ -1,0 +1,7 @@
+# The release roots: the PUBLIC halves of the owner's offline root keys, one base64 Ed25519 key per line
+# (bash packaging/build-binaries.sh --pubkey root-a.pem). Every dgo-install embeds this file — it is the
+# whole of what a stub trusts — and packaging/build-binaries.sh signs a release against nothing else.
+#
+# It names no root until the owner's key ceremony (D1, packaging/installer/README.md). Until then every
+# stub is a development build that installs nothing, and build-binaries.sh refuses to sign a release.
+# Changing it is a new generation of stubs: review it like the release key it stands for.

@@ -52,14 +52,18 @@ except OSError:
     GUI_IP = ""
 
 try:                                     # a GUI that does not answer is "not run", never a failure:
-    import urllib.request as _u          # this check is about behaviour, not about a running office
+    import urllib.error as _ue           # `urllib.request.error` does not exist: naming the handler
+    import urllib.request as _u          # through `_u` made THIS clause raise AttributeError for ANY
+    # failure, so a GUI that was simply down crashed instead of saying «not run» (measured 2026-10-13,
+    # the office's browser image with no scratch GUI container). The handler must be importable, and
+    # the check about behaviour, not about a running office.
     # Asked by ADDRESS with the app's own name in the Host header: the harness refuses any authority
     # it was not told about, and a name only this office's edge answers (`bina.localhost`) does not
     # resolve from inside the network — which is where this check runs.
     _u.urlopen(_u.Request(f"http://{GUI_IP or GUI_HOST}:{urlparse(GUI).port or 80}/",
                           headers={"Host": GUI_HOST, "X-authentik-username": "azaria"}),
                timeout=5).read(64)
-except _u.error.HTTPError as error:      # an HTTPError IS a response: read what it said
+except _ue.HTTPError as error:           # an HTTPError IS a response: read what it said
     # WHAT THE SERVER ACTUALLY SAID, not only the exception's name: a 502 from this edge names the
     # router, a 404 names the host — and `not run: … (HTTPError)` threw both away. Measured
     # 2026-10-10; gate G66 (unread-error-lint) is why the read is HERE, in the typed handler, and not
@@ -81,7 +85,16 @@ with sync_playwright() as p:
     args = ["--no-sandbox", "--disable-dev-shm-usage"]
     if RESOLVER:
         args.append(f"--host-resolver-rules={RESOLVER}")
-    b = p.chromium.launch(executable_path="/usr/bin/chromium", args=args)
+    # A BROWSER THAT IS NOT AT ONE HARD-CODED PATH IS STILL A BROWSER. `/usr/bin/chromium` is where
+    # one machine's image puts it; playwright keeps its own elsewhere (`/ms-playwright/…`) and, with
+    # neither, `launch()` is the thing that should say so. Naming a single path made this check CRASH
+    # — not "not run" — on every image that keeps chromium somewhere else (measured 2026-10-13 in the
+    # office's own browser image, where the chromium is playwright's), and a check that dies where it
+    # is run is a check nobody runs.
+    launch = {"args": args}
+    if os.path.exists("/usr/bin/chromium"):
+        launch["executable_path"] = "/usr/bin/chromium"
+    b = p.chromium.launch(**launch)
     ctx = b.new_context(viewport={"width": 1280, "height": 800},
                         extra_http_headers={"X-authentik-username": "azaria"})
     pg = ctx.new_page()
@@ -124,7 +137,7 @@ with sync_playwright() as p:
     # so it evaluates to the module the harness's loader would have registered), because the image a
     # container is running may predate it: what is proved here is that the plugin's source behaves,
     # and `grep` in the built image is what proves the image carries that same source.
-    desktop_moved = None
+    desktop_moved, own_moved = None, None
     plugin = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                           "..", "plugins", "office-links", "lib", "client.js")
     # The image a container runs may predate the plugin, so the source is injected by default;
@@ -187,6 +200,28 @@ with sync_playwright() as p:
                 desktop_moved = pg3.url.startswith(FRAME_TOP + "#/m/project-pln") and same_tab
                 print("framed office link → top url:", pg3.url[:90], "| pages:", len(ctx.pages), "was", n2)
                 pg3.screenshot(path=OUT + "/03-framed-after-click.png")
+
+                # ── …AND THE USUAL LINK: one to the console the person is ALREADY IN ─────────────
+                #
+                # This is the shape the office agent posts most of the time — a link to its own
+                # office's console — and it has this page's own origin, which the plugin used to skip
+                # as "the harness's routing": the harness's `target="_blank"` then opened a NEW TAB
+                # for a link to the office in front of them (the owner's complaint, ui2-060; measured
+                # 2026-10-13). A console route on the console's root is the desktop's, whoever wrote
+                # it. The link is planted with the SAME origin as the page and clicked for real.
+                before_own = len(ctx.pages)
+                app_frame[0].evaluate("""(href) => {
+                    const a = document.createElement('a');
+                    a.href = href; a.target = '_blank'; a.rel = 'noopener noreferrer';
+                    a.textContent = 'own console link'; a.id = 'qa-own';
+                    document.body.appendChild(a);
+                }""", GUI.rstrip("/") + "/#/m/machine")
+                app_frame[0].locator("#qa-own").click(timeout=8000)
+                pg3.wait_for_timeout(2500)
+                own_same_tab = len(ctx.pages) == before_own
+                own_moved = pg3.url.startswith(FRAME_TOP + "#/m/machine") and own_same_tab
+                print("own-console link → top url:", pg3.url[:90], "| pages:", len(ctx.pages))
+                pg3.screenshot(path=OUT + "/04-own-console-after-click.png")
         finally:
             srv.shutdown()
 
@@ -197,5 +232,7 @@ print("\noffice link stayed in the tab:", office_same_tab)
 print("external link opened a tab:", external_new_tab)
 print("a framed office link moved the DESKTOP (not the frame), to the reader's own console:",
       desktop_moved)
-failures = [office_same_tab, external_new_tab] + ([desktop_moved] if desktop_moved is not None else [])
+print("a link to the console the page is ALREADY IN moved the desktop, no new tab:", own_moved)
+failures = [office_same_tab, external_new_tab] + ([desktop_moved] if desktop_moved is not None else []) \
+    + ([own_moved] if own_moved is not None else [])
 sys.exit(0 if all(failures) else 1)

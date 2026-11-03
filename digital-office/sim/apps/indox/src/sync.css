@@ -1,0 +1,55 @@
+/* ── a sync source's card: its facts and its activity line — the LIVE page's, not a design of this fork's ──────
+   Taken as they are from apps/indox/app/webapp/src/sync.css (`.pipe-facts`, `.pipe-activity`), the sheet the
+   live sync page was rebuilt with after the owner rejected the card that read as two lines of small grey text
+   (2026-09-02). The simulation drew that rejected card until DGO-525: «תוויות … → … · נכשל: …» and
+   «כל 5 דק׳ · take 40 · הרצה אחרונה —». A change to these rules is made in the live sheet first and copied here.
+   Only what the fork's card carries is taken: its head, its bar and its footer are still the fork's own. */
+
+/* pipe cards: two-up when there is room, so seven pipes are four rows instead of seven ribbons */
+/* (the facts below are drawn for THIS card width: in the fork's three-up grid a card was 349px in a 1366px
+   laptop's frame, a mail fact's name had 130px, and «אינדוקס - חשבוניות - לטיפול» (156px) and «…- טופל» (145px)
+   both read «אינדוקס - חשבוניות - …» — cut at the very word that tells them apart.
+   ONE number differs from the live sheet, on purpose: 520, the written standard's (platform-ui-ux, law 4: "two-up
+   at ≥1100px via auto-fill minmax(520px)"). The live sheet's 540 puts two cards side by side only from a 1146px
+   frame: a 1366px laptop's console frame is 1128, and there it draws every card ONE to a row, 1076px wide — the
+   ribbons this rule exists to prevent (measured in the simulation, DGO-525). The live sheet is to take 520 too.) */
+.pipes{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,520px),1fr));gap:14px;align-items:start}
+
+/* facts: where it reads from and where it files to — key over value, hairline grid, one line each */
+/* three facts sit in one row (drive), four go 2×2 (mail) — never 3+1, never a lone cell; one column
+   when the card is narrow */
+.pipe-facts{display:grid;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.pipe-facts.c3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.pipe-facts.c4{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media (max-width:520px){.pipe-facts.c3,.pipe-facts.c4{grid-template-columns:minmax(0,1fr)}}
+.pipe-facts .f{background:var(--surface-2);padding:7px 11px;min-width:0}
+.pipe-facts .k{font-size:11px;color:var(--muted);font-weight:600;display:flex;align-items:center;gap:5px;white-space:nowrap}
+.pipe-facts .k .dg-ic{width:12px;height:12px}
+/* The value is the location's own NAME on one line and its ancestors on the next, NOT the joined
+   path in one clamped block: a 2-line clamp of "חשבוניות הכנסים/כרטסות ספקים - בבקשה להכניס לחודש"
+   ends inside the leaf, which is the only part that tells two siblings apart. The name is never
+   clamped away — the crumb is what gives up room. Full path + id in the tooltip. */
+.pipe-facts .v{font-size:12.5px;font-weight:600;margin-top:2px;color:var(--ink);min-width:0}
+.pipe-facts .v .nm{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.35}
+.pipe-facts .v .in{display:block;font-size:11px;font-weight:500;color:var(--muted);line-height:1.3;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pipe-facts .v .in::before{content:"‹ "}
+.pipe-facts .v.pin{color:var(--amber)}
+.pipe-facts .v.none,.pipe-facts .v.wait{color:var(--muted);font-weight:500}
+
+/* the activity line: at most four facts, one row, the table link at the far end */
+.pipe-activity{display:flex;align-items:center;gap:14px;flex-wrap:wrap;font-size:12.5px;color:var(--muted)}
+.pipe-activity .it{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.pipe-activity .it b{color:var(--ink);font-weight:600}
+.pipe-activity .it .dg-ic{width:13px;height:13px;opacity:.8}
+.pipe-activity .spacer{flex:1}
+.pipe-activity a.link,.pipe-activity .link{display:inline-flex;align-items:center;gap:4px;white-space:nowrap;font-size:12.5px}
+
+@media (max-width:640px){
+  .pipe-activity{gap:10px}
+}
+
+/* (the fork's own: the live card is a flex column with a 12px gap between its parts; the fork's card is a
+   block whose parts carry their own margins, so these two take the same room from it) */
+.card > .pipe-facts{margin:10px 0 12px}
+.card > .pipe-activity{margin-top:10px}

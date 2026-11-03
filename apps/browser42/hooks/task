@@ -1,16 +1,45 @@
 #!/usr/bin/env bash
-#: start <slug> <direct-url> [requirements-json] | inspect|status|verify|finish <slug> | goto|click|extract|screenshot <slug> <name> [full]|read <slug> [max-chars] | fill|press <slug> <handle> <value> | captcha <slug> [detect|click <index[,index]>|click @x:y] | goal <slug> <url> <topic> | watch <slug>
+#: [--office <office>] start <slug> <direct-url> [requirements-json] | inspect|status|verify|finish <slug> | await <slug> <conditions> [seconds] | goto|click|extract|screenshot <slug> <name> [full]|read <slug> [max-chars]|front <slug> | fill|press <slug> <handle> <value> | captcha <slug> [detect|click <index[,index]>|click @x:y] | goal <slug> <url> <topic> | watch <slug>
 # task — noninteractive Browser42 task protocol for delegated browsing. All output is one JSON
 # object. The browser container owns CDP, native-group allocation, retries, task state, evidence,
 # and acceptance checks; callers supply only a slug, direct URL, and declarative actions.
 # `watch` is host-side: it tails the durable events journal (no runner slot, no CDP).
+#
+# `--office <office>` addresses the browser of a LINKED office (lnk-037): the same verb, posted to
+# that office's own task runner through the link's door (`apps/browser42/remote-task.py`). The browser
+# is one and it lives in one office; the office that owns it keeps the single driver, its queue and
+# its evidence. Without the flag nothing changes — this office's own runner, over `docker exec`.
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 . "${REPO_ROOT}/scripts/lib.sh"
 
-if [ "${1:-}" = "watch" ]; then
-  SLUG="${2:?usage: bbox b42 task watch <slug>}"
+OFFICE=""
+ARGS=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --office)   OFFICE="${2:?usage: bbox b42 task --office <office> …}"; shift 2 ;;
+    --office=*) OFFICE="${1#--office=}"; shift ;;
+    *)          ARGS+=("$1"); shift ;;
+  esac
+done
+
+if [ -n "${OFFICE}" ]; then
+  [ ${#ARGS[@]} -gt 0 ] || die "usage: bbox b42 task --office <office> <verb> [args…]"
+  if [ "${ARGS[0]}" = "watch" ]; then
+    # The journal of a remote task lives on the machine that ran it; tailing ours would show a file
+    # that never grows. Say so rather than print an empty stream.
+    die "--office does not cover 'watch': the events journal of a task run on '${OFFICE}' is on ${OFFICE} (its own data/browser42/tasks/<slug>/events.jsonl)"
+  fi
+  exec python3 "$(npath "${SCRIPT_DIR}")/../remote-task.py" "${OFFICE}" "${ARGS[@]}"
+fi
+
+# Everything below reads ARGS, never "$@": the loop above has already shifted the positional
+# parameters to nothing, so "$@" here is empty (measured 2026-10-25 — every `bbox b42 task …` died
+# with `argv must be a nonempty string list` from the runner, and the local `watch` branch below was
+# unreachable for the same reason).
+if [ "${ARGS[0]:-}" = "watch" ]; then
+  SLUG="${ARGS[1]:?usage: bbox b42 task watch <slug>}"
   EVENTS="${REPO_ROOT}/data/browser42/tasks/${SLUG}/events.jsonl"
   TASK="${REPO_ROOT}/data/browser42/tasks/${SLUG}/task.json"
   [ -f "${TASK}" ] || die "task '${SLUG}' not found under data/browser42/tasks/"
@@ -22,4 +51,5 @@ fi
 
 RUNNER="$(docker ps --filter name=browser42-task-runner --format '{{.Names}}' | head -1)"
 [ -n "${RUNNER}" ] || die "browser42-task-runner not running — run 'bbox run' first"
-docker exec -i "${RUNNER}" python3 /task-client.py "$@"
+[ ${#ARGS[@]} -gt 0 ] || die "usage: bbox b42 task <verb> [args…]"
+docker exec -i "${RUNNER}" python3 /task-client.py "${ARGS[@]}"

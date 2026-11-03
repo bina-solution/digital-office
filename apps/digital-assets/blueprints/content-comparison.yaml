@@ -1,0 +1,30 @@
+# השוואות וחלופות — X against Y and "alternatives to X", 1,200–1,800 words: DGO against OpenAI Dots,
+# Meta Muse, Copilot, Umbrel, CasaOS, Coolify and Israeli SaaS; moving from Lovable, Base44, Antigravity,
+# Bolt, Replit and v0; one page per well-known SaaS with its open-source alternative.
+# Shape and rules: content/BRIEF.md (`type: comparison`).
+# Each piece: `content.comparison.<slug>-<lang>`, created under this blueprint by the content importer.
+id: content-comparison
+version: 1
+order: 14
+extends:
+- content-library
+name:
+  he: השוואות וחלופות
+  en: Comparisons and alternatives
+summary:
+  he: השוואות הוגנות ועמודי «חלופה ל-X» — מי מנצח איפה, כמה זה עולה, ואיך עוברים.
+  en: Fair comparisons and "alternative to X" pages — who wins where, what it costs, and how to move.
+slots:
+- key: content.comparison.hub-he
+  section: content
+  group: comparison
+  kind: richtext
+  lang: he
+  label:
+    he: פתיח עמוד ההשוואות
+    en: Comparisons hub — opening text
+  constraints:
+    note: 60–120 words — the hub of comparisons and alternatives
+  targets:
+  - channel: website
+  - channel: google-search

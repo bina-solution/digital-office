@@ -14,7 +14,7 @@ window.__ModuleLoader__.load({
 		//
 		// So: a click on a link to THIS office is turned into a navigation of the current tab, and
 		// every other link is left exactly as the harness drew it. The office is named by the page's
-		// OWN suffix — `bina.localhost` → `localhost`, `bina.bina-comp.…` → `bina-comp.…` — so any
+		// OWN suffix — `bina.localhost` → `localhost`, `bina.hacohen.…` → `hacohen.…` — so any
 		// sibling host of the office counts (console, plane, drive…) and nothing else does. A page
 		// reached by a bare name or an address from inside the office network (the container, an IP)
 		// has no suffix to compare, and there the `*.localhost` family is the office.
@@ -39,9 +39,32 @@ window.__ModuleLoader__.load({
 				return;
 			}
 			if (url.protocol !== "http:" && url.protocol !== "https:") return;
-			if (url.origin === location.origin) return;      // the harness's own routing, not ours
-			if (!isOfficeHost(url.hostname.toLowerCase())) return;
+			// SAME ORIGIN IS NOT AUTOMATICALLY THE HARNESS'S ROUTING. A link to the console the person
+			// is ALREADY in — which is the usual shape, because the office agent writes links to its
+			// own office: `https://console.<office>/#/m/project-pln/…` — has this page's origin, and
+			// the line that skipped it sent exactly those links to the harness's `target="_blank"`,
+			// i.e. a NEW TAB for a link to the office in front of them (measured 2026-10-13 in the
+			// console tile: `#/m/machine` opened `about:blank` + a tab, the desktop never moved).
+			// What is the harness's own is its OWN paths (below its mount): a console route on the
+			// console's root is the desktop's, whoever wrote it.
+			const consoleRoute = /^#\/m\//.test(url.hash || "");
+			// …AND A LINK TO THIS PAGE'S OWN CONSOLE IS THE OFFICE WHATEVER ITS HOST IS CALLED. The
+			// hostname rules below are for links to OTHER hosts; the console this page is embedded in
+			// may be reached by a name with no suffix at all (`console:8000` inside the office
+			// network — the plugin's own rule says a bare name or an address has no suffix to compare,
+			// and then only `*.localhost` counts). A route of that console is the desktop's.
+			const ownConsole = url.origin === location.origin && consoleRoute && !/^\/a\//.test(url.pathname);
+			if (url.origin === location.origin && !ownConsole) return;
+			if (!ownConsole && !isOfficeHost(url.hostname.toLowerCase())) return;
 			ev.preventDefault();
+			// …AND THE EVENT STOPS HERE. `preventDefault` alone is not enough: the harness draws a
+			// markdown link with a handler of its own, and a tab still opened INTERMITTENTLY while the
+			// desktop also moved (measured 2026-10-13 after the swap: `popups: ['about:blank',
+			// 'http://console:8000/#/m/machine']` on a run whose verdict read as a pass, because the
+			// probe was counting popups for the whole session — and the owner's requirement is exactly
+			// "no new tab"). This listener is on `window` in the CAPTURE phase, so stopping propagation
+			// here means nothing later — the renderer's own handler included — ever sees the click.
+			if (ev.stopPropagation) ev.stopPropagation();
 			// …and THE TOP WINDOW IS THE TAB. This page is normally a window inside the office
 			// desktop, so assigning here moved the FRAME and the desktop stayed where it was: the
 			// owner's «הכל באותו דסקטופ כשרק הקישור משתנה» did not happen (measured 2026-10-09,

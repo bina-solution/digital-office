@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+#: get — a file of «קבצים» by path, to a local file (or stdout):  ./bbox drive get "/הקלטות/x.m4a" [dest]
+# A destination that is a folder takes the file's own name. The bytes stream; any size.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+case "${1:-}" in ""|-h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+src="$1"; dest="${2:-}"
+if [ -z "${dest}" ]; then exec dcx exec -T drive python /app/cli.py get "${src}"; fi
+[ -d "${dest}" ] && dest="${dest%/}/$(basename "${src}")"
+dcx exec -T drive python /app/cli.py get "${src}" > "${dest}.part" && mv "${dest}.part" "${dest}" \
+  && say "${cg}[drive] ${src} → ${dest} ($(wc -c < "${dest}") bytes)${c0}"

@@ -27,13 +27,13 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 @workflow({
     /*__n8n__*/ description: null,
     /*__n8n__*/ isArchived: false,
-    /*__n8n__*/ connections: {"Tick":{"main":[[{"node":"Load Settings","type":"main","index":0}]]},"Load Settings":{"main":[[{"node":"Enumerate Connections","type":"main","index":0}]]},"Enumerate Connections":{"main":[[{"node":"Call Label Engine","type":"main","index":0},{"node":"Stamp Outline","type":"main","index":0}]]},"Call Label Engine":{"main":[[]]}},
+    /*__n8n__*/ connections: {"Tick":{"main":[[{"node":"Load Settings","type":"main","index":0}]]},"Load Settings":{"main":[[{"node":"Enumerate Connections","type":"main","index":0}]]},"Enumerate Connections":{"main":[[{"node":"Call Label Engine","type":"main","index":0},{"node":"Stamp Outline","type":"main","index":0}]]},"Call Label Engine":{"main":[[{"node":"Stamp Call Result","type":"main","index":0}]]}},
     /*__n8n__*/ tags: [{"name":"app:mail"}],
     /*__n8n__*/ versionMetadata: {"name":null,"description":null},
     /*__n8n__*/ meta: null,
     /*__n8n__*/ pinData: {},
     /*__n8n__*/ staticData: null,
-    /*__n8n__*/ shared: [{"updatedAt":"2026-08-28T01:16:53.218Z","createdAt":"2026-08-28T01:16:53.218Z","role":"workflow:owner","workflowId":"mail01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <shlomo@local.dev>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
+    /*__n8n__*/ shared: [{"updatedAt":"2026-08-28T01:16:53.218Z","createdAt":"2026-08-28T01:16:53.218Z","role":"workflow:owner","workflowId":"mail01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
     id: 'mail01',
     name: 'MAIL app scheduler (all automation, all connections)',
     active: true,
@@ -122,8 +122,8 @@ if (!processed_label) throw new Error('mail01: the organizer settings carry no P
   + ' — the completion marker is what keeps a handled mail out of the next search; restore the row.');
 const query = '-in:scheduled -label:' + processed_label.replace(/ /g, '-');
 
-// [reachable mailboxes only, one run per mailbox — measured 2026-09-02 11:15 on bina-comp-prod]
-// The registry held 10 connections: the client's Gmail, TWO entries for person2@example.com
+// [reachable mailboxes only, one run per mailbox — measured 2026-09-02 11:15 on hacohen-prod]
+// The registry held 10 connections: the client's Gmail, TWO entries for person3@example.com
 // (an env-configured one and an app-password one) and SEVEN local-mailserver test mailboxes whose
 // IMAP login fails on that host. Every tick dispatched all ten: the seven dead ones each ended in
 // the engine's bootstrap lane creating the PROCESSED label through a mailbox it cannot log into
@@ -225,6 +225,24 @@ return [...seen.values()].map(id => ({ json: { connection_id: id, query, limit: 
         },
     };
 
+    @node({
+        id: 'mail01-stamp-call',
+        name: 'Stamp Call Result',
+        /*__n8n__*/ notes: "The reader of 'Call Label Engine'. That node continues on error ON PURPOSE (the 2026-09-02 measurement: two of six mailboxes failed and the other four completed), so a DISPATCH failure is parked on the item and the tick still succeeds — which is right for the other mailboxes and wrong for the operator, because nothing said a mailbox never got its run. So the failure is read here and stamped into this execution's own metadata (readable at `execution_metadata`, the same place 'Stamp Outline' puts the tick's shape). It does not throw: making the tick fail because one mailbox is broken is the behaviour the fan-out exists to prevent.",
+        type: 'n8n-nodes-base.executionData',
+        version: 1,
+        position: [140, 0],
+    })
+    StampCallResult = {
+        dataToSave: {
+            values: [
+                { key: 'label_call_dispatched', value: '={{ $input.all().length }}' },
+                { key: 'label_call_failed', value: "={{ $input.all().filter(i => (i.json || {}).error || (i.json || {}).errorMessage).length }}" },
+                { key: 'label_call_errors', value: "={{ $input.all().map(i => (i.json || {}).error || (i.json || {}).errorMessage || '').filter(Boolean).slice(0, 3).join(' | ') }}" },
+            ],
+        },
+    };
+
     // =====================================================================
     // ROUTAGE ET CONNEXIONS
     // =====================================================================
@@ -255,5 +273,6 @@ return [...seen.values()].map(id => ({ json: { connection_id: id, query, limit: 
         this.LoadSettings.out(0).to(this.EnumerateConnections.in(0));
         this.EnumerateConnections.out(0).to(this.CallLabelEngine.in(0));
         this.EnumerateConnections.out(0).to(this.StampOutline.in(0));
+        this.CallLabelEngine.out(0).to(this.StampCallResult.in(0));
     }
 }

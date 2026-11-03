@@ -1,15 +1,18 @@
 # DGO-55 / DGO-56 — the comparative beauty score: what was measured, and what it says
 
 The protocol is [dgo55-56-proof-protocol.md](dgo55-56-proof-protocol.md); this file is its result.
-Every number below came from a real capture on 2026-10-09; where a half could not be measured, it
-says so and names the defect instead of inventing a score.
+Every number below came from a real capture; where a half could not be measured, it says so and names
+the defect instead of inventing a score. mailview's numbers are from 2026-10-09 (the staging office),
+bina-ds's from 2026-10-11 (this office) — the same instrument, `bbox ui-map` → `capture.py` →
+`score.py`, on two offices, and §1 says why.
 
 ## What was run, and where
 
 | half | where | command | views | result |
 |---|---|---|---|---|
-| **mailview** | the **staging office on srv908573** (`203.0.113.10`, the office that runs the mail stack: `mailview-staging`, `mailapi-staging`, `mailserver-staging`, `mailboxd-staging`) | `UI55_APPS=mailview bash scripts/ui-coverage/dgo55-score.sh` | **9/9 desktop, 9/9 mobile — all `CAPTURED ok`** | ✅ measured |
-| **bina-ds** | this office (hp-dgo), live | `UI55_APPS=bina bash scripts/ui-coverage/dgo55-score.sh` | **0/1 desktop** — `main FAILED embedded app near-empty (20 nodes)`, retried, still failed | ⛔ blocked by a real defect (§3) |
+| **mailview** | the **staging office on srv000001** (`93.184.216.5`, the office that runs the mail stack: `mailview-staging`, `mailapi-staging`, `mailserver-staging`, `mailboxd-staging`) | `UI55_APPS=mailview bash scripts/ui-coverage/dgo55-score.sh` | **9/9 desktop, 9/9 mobile — all `CAPTURED ok`** | ✅ measured |
+| **bina-ds** | this office (hp-dgo), live | `UI55_APPS="bina mailview" bash scripts/ui-coverage/dgo55-score.sh` (2026-10-11) | **1/1 desktop, 1/1 mobile — `CAPTURED ok`** (on 2026-10-09 the same run was 0/1, `embedded app near-empty (20 nodes)`) | ✅ measured — 95.5 / 95.5, with §3's bundle defect still inside the number |
+| **mailview** | this office | the same command | 0 views: the app is `disabled` here (`platform.state.yaml`) — no mail container exists to photograph | ⛔ not installed in this office |
 
 Why mail was measured on the VPS and not here: this office has `mail: {state: disabled, by: cli}` in
 `platform.state.yaml`, no mail container exists, and its mail images are five weeks old — the mail
@@ -70,35 +73,60 @@ that offers no scrollbar, while `overflow=0` — nothing spills past the page. S
 |---|---|---|---|---|
 | mailview | desktop | 82.2 | ❌ | ❌ clipping 48 %, touch 58 % |
 | mailview | phone 390 | 74.3 | ❌ | ❌ clipping **0 %**, touch 49 % |
-| bina-ds | both | — | — | not measurable: the capture sees the console's "no screen" card (§3) |
+| bina-ds | desktop | 95.5 | ✅ | ⚠️ `states` 5.5/10 — the page captured is not yet the agent (§3) |
+| bina-ds | phone 390 | 95.5 | ✅ | ⚠️ the same |
 
-So **DGO-56 is not met, and it is not a taste question**: two dimensions have names and counts. The
-smallest fix that moves the number is clipping at phone size (one dimension, 15 of 100, lost whole),
-then touch targets at 390 (44px is the coarse-pointer floor, 49 % today).
+So **DGO-56 is not met** for mailview, and it is not a taste question: two dimensions have names and
+counts. The smallest fix that moves the number is clipping at phone size (one dimension, 15 of 100,
+lost whole), then touch targets at 390 (44px is the coarse-pointer floor, 49 % today). bina-ds already
+clears both targets on paper — its one lost dimension is the bundle-loading defect of §3, and its
+number is to be re-taken after that build.
 
-## 3 — Why the bina-ds half could not be measured (the defect, with its evidence)
+## 3 — bina-ds: measurable since 2026-10-11, and what it scores (the defect that remains)
 
-The console embeds the office agent at `/a/bina/`; a browser that has never held the harness's own
-session cookie gets, from the harness itself:
+**The auth half is closed.** A fresh capture of the bina tile through the office edge now renders the
+agent's own shell (`main CAPTURED ok`, 1/1 views), where on 2026-10-09 the same capture photographed
+the console's "no screen" card. The edge signs `X-authentik-username`, the console forwards it to the
+app, and `DSH_TRUST_PROXY_AUTH_HEADER` accepts it — the fix the item asked for, and it holds without
+a human having opened `dsh web` first.
+
+Today's measurement (2026-10-11, `UI55_APPS="bina mailview" bash scripts/ui-coverage/dgo55-score.sh`):
+
+| profile | app | views | platform score | worst view | dimensions lost |
+|---|---|---|---|---|---|
+| desktop 1440×900 | bina | 1/1 | **95.5** | 95.5 | `states` 5.5/10 |
+| phone 390×844 | bina | 1/1 | **95.5** | 95.5 | `states` 5.5/10 |
+
+Every other dimension is full marks (layout 25/25, clipping 15/15, touch 10/10, type 15/15, contrast
+15/15, consistency 10/10). `states` is `10 × elements/120` and the captured page has **66 elements**
+— because the agent's client bundles never loaded (below). So 95.5 is the score of a page that is
+*not yet the agent*, and the number moves up when the bundles load, not because of styling.
+
+**The defect (measured, with both sides of the evidence).** The harness addresses its lazy client
+bundles at the ROOT of the origin it thinks it owns:
 
 ```
-$ curl -s http://console:8000/a/bina/
-401  dsh web authentication required; reopen the URL printed by dsh web.
+GET /a/bina/plugins/??@deepseek-ai/dsh-client-modules/client.js&rev=8c97ded2fa2b  → 200, 20876 B, JS
+GET    /plugins/??@deepseek-ai/dsh-client-modules/client.js&rev=8c97ded2fa2b     → 200,  6251 B, HTML
+      (the console's own SPA fallback — `Content-Disposition: inline; filename=index.html`)
 ```
 
-That is the app's own line, and `platform-base/console/app.py` (`_app_no_screen`, lines 600–614)
-already knows it and renders a card — "אין לה מסך להציג … היא לא זיהתה את הכניסה שלך" — instead of the
-agent. The ui-map's capture is exactly such a browser (a fresh context), so it photographs the card:
-`embedded app near-empty (20 nodes)`, 0/1 views. The owner's own browser works because he has, at
-some point, followed the URL `dsh web` printed; nothing in the office gives the console that identity
-on his behalf.
+A root-absolute URL ignores the injected `<base href="/a/bina/">`, so a `<script>` received the
+console's index page and the tile said **"Failed to load plugins"**, listing every entry
+(`ci-artifacts/screenshots-ui/bina__main.png`). The console's proxy is not at fault: the URL it
+serves carries the prefix — the *boot manifest inside the page* (`window.__DSH_BOOT__`, rows with
+`"url":"/plugins/??…"`) does not.
 
-**What closes it** (the work, not a wish): the console must be able to open its OWN agent without a
-human — the harness accepts a bearer token on its API (`apps/bina-ds/harness/customize.sh` patches its
-auth to `tokenMatches(authz.slice(7), apiToken)`) and the office holds that token at
-`/data/dsh/api-token`, so the console's proxy should sign in to its own agent with it (and the capture
-should either drive that door or be given the same session). Until then the bina half of DGO-55 is
-"not measured", never "no findings".
+**The fix** is in the app, where the contract is (`platform-base/console/app.py`: "apps must use
+RELATIVE URLs; root-absolute ones would otherwise escape"): the load hook resolves a bundle URL
+against the page's own base path — `/` whatsoever when the harness is the origin, so it is a no-op
+outside a frame. Patched by `apps/bina-ds/harness/customize.sh` (commit `cf221da1`, exactly-once
+anchor like the other three customizations). Proven as far as it can be before a rebuild: the anchor
+matches once, the bundle passes `node --check`, and the helper from the patched file resolves all
+four URL shapes in a real Chromium. **The live tile keeps the old bundle until the next bina-ds
+image build** (the composed bundle is held in memory; HMR does not recompose in this deployment), so
+that is where the two numbers above are to be re-measured — and where the `states` dimension is
+expected to stop being the only one lost.
 
 ## 4 — The harness/REPL half: the ui-map cannot compose its image from inside bina-ds
 
@@ -122,7 +150,7 @@ $ sleep 1; flock -n /tmp/z.lock true; echo $?    # 1 → still held, by an orpha
 
 `run_capture.sh`'s shard watchdogs are `( sleep 900; … ) &` — they outlive the capture on purpose, so
 a finished `bbox ui-map` kept the slot for up to 15 more minutes and the next heavy job waited on a
-process that no longer existed. Measured on both offices: on `srv908573` the mobile profile sat in
+process that no longer existed. Measured on both offices: on `srv000001` the mobile profile sat in
 `waiting for the heavy-job slot … held by: ui-map --profile desktop | pid 2817452` while that pid was
 gone and only `sleep 900` (ppid 1) held the fd; `kill` of that stray sleep released the slot and the
 queued capture started immediately. Fixed by `heavy_detach` (lib.sh) — called first thing in the

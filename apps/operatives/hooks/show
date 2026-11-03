@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+#: show <id> — one operative: where it runs, its inputs, its steps and how to know it worked
+# The Operative Collective (DGO-948): see apps/operatives/README.md.
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # npath
+exec python3 "$(npath "${REPO_ROOT}/apps/operatives")/ops.py" show "$@"

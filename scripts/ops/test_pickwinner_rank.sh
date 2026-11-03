@@ -4,7 +4,7 @@
 # row with THREE. Old order sorted completeness first, so OLD won and a deliverable document was
 # demoted. COMPLETED must now win regardless of flag count.
 DK="docker -H unix:///run/bbox-docker.sock"
-ENVF=/mnt/c/Users/user/Desktop/personalWorkspace/AutomateOs/deployment-bina-comp/.env
+ENVF=/mnt/c/Users/user/Desktop/personalWorkspace/AutomateOs/deployment-hacohen/.env
 WU=$(grep -E '^BS_WEBHOOK_USER=' "$ENVF" | head -1 | cut -d= -f2-)
 WP=$(grep -E '^BS_WEBHOOK_PASS=' "$ENVF" | head -1 | cut -d= -f2-)
 P=zzpw$(date +%H%M%S)

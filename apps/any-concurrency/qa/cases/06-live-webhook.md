@@ -1,6 +1,6 @@
 # QA — 06: Live WebSocket & Webhook Round-Trip
 
-URL: `https://any-concurrency.bina-comp.bina-solutions.co.il/`
+URL: `https://any-concurrency.hacohen.bina-solutions.co.il/`
 
 ---
 

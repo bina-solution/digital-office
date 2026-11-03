@@ -29,9 +29,10 @@ import urllib.request
 
 CONSOLE = os.environ.get("CONSOLE_INTERNAL_URL", "http://console:8000").rstrip("/")
 PEER_ALIAS = "data-management"                   # this service, as a linked office names it
-OFFICE = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
-ARCHIVE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,150}$")
-ARTIFACT = re.compile(r"^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$")
+# DGO-623: `\Z`, not `$` — `$` also matches before a final newline, and the router delivers `%0A` as one.
+OFFICE = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}\Z")
+ARCHIVE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,150}\Z")
+ARTIFACT = re.compile(r"^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*\Z")
 MANIFEST_LIMIT = 8 << 20                         # a manifest is a few KB; this is a ceiling, not a size
 
 

@@ -397,7 +397,7 @@ class OcrJsonQuery:
             # name_substring / id match_mode: resolve options by normalized substring over
             # the ISSUER region — REPLACES the fuzzy annotation match (which mis-matches a
             # recipient's name fragment). `region.exclude_below` cuts the recipient block;
-            # `exclude_near` drops a name hit adjacent to a recipient marker (e.g. בינה קומפ).
+            # `exclude_near` drops a name hit adjacent to a recipient marker (e.g. הכהנים).
             mm = query.get("match_mode")
             if mm in ("name_substring", "id"):
                 action_output = None
@@ -451,7 +451,7 @@ class OcrJsonQuery:
                         continue
                     # ktiv-insensitive: drop ו/י from both sides (הכול vs הכל, מטבעון vs
                     # מטבען). exclude_near must apply here too, in the ktiv-reduced space:
-                    # else a name adjacent to the recipient/home marker (e.g. 'מ.ש בינה קומפ
+                    # else a name adjacent to the recipient/home marker (e.g. 'מ.ש הכהנים
                     # חומרי בנין') leaks through this path.
                     on2 = re.sub('[וי]', '', on)
                     norm2 = re.sub('[וי]', '', norm)

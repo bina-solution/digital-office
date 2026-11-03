@@ -41,11 +41,19 @@ import base64
 from contextlib import contextmanager
 from pathlib import Path
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlparse
+from urllib.parse import quote, urlencode, urlparse
 from urllib.request import Request, urlopen
 
 from playwright.sync_api import sync_playwright
 from websockets.sync.client import connect as websocket_connect
+
+# The human hand-off — its link and its notice — is handoff.py's (mounted beside this file in every
+# browser42 container, DGO-571); this module only CARRIES it. Guarded: a container recreated from an
+# older compose has no /handoff.py, and the escape paths below must still refuse by name.
+try:
+    import handoff
+except ImportError:                                     # pragma: no cover
+    handoff = None
 
 CDP = os.environ.get("CDP", "http://browser42-browser:9222")
 BROKER = os.environ.get("BROKER", "ws://127.0.0.1:8765")
@@ -59,7 +67,11 @@ COLORS = ["cyan", "blue", "green", "orange", "pink", "purple", "red", "yellow"]
 ACTIVE_STATES = {"allocated", "active", "verifying"}
 FINAL_STATES = {"accepted", "rejected", "stalled", "finished"}
 TASK_PROTOCOL_VERSION = 1
-HARD_TAB_CAP = 6  # anchor page + up to 5 task tabs; mirrors the reaper MAX_TABS
+# anchor page + N task tabs. Was a hard 6, which made the office unable to hold one sign-in
+# tab per service (the owner asked for eight: Google, Zoho, Facebook, Instagram, Hostinger,
+# GitHub, Namecheap, Cloudflare) — and a cap an agent cannot raise is a cap that turns a
+# prepared sign-in screen into a refusal. Env-tunable, same knob the reaper reads.
+HARD_TAB_CAP = int(os.environ.get("BROWSER42_MAX_TABS") or "6")   # an empty value never crashes the import
 # any-concurrency span ingest (layer-2 service on the shared traefik network). Every CLI
 # command and every open tab is mirrored as a span so console.localhost > כל מקביל shows a
 # live lane per tab for as long as the tab is open, plus full command I/O.
@@ -464,6 +476,83 @@ def resolve_slug(name=None, return_source=False) -> tuple | str:
     return (slug, "minted") if return_source else slug
 
 
+def same_url(a: str, b: str) -> bool:
+    """Whether two URLs name the same page as Chrome writes it: scheme and host in lower case, the
+    host in punycode, no default port, an empty path as `/`, a non-ASCII path or query percent-encoded
+    with upper-case escapes."""
+    def enc(text: str, safe: str) -> str:
+        return re.sub(r"%[0-9a-fA-F]{2}", lambda m: m.group(0).upper(), quote(text, safe=safe))
+
+    def norm(u: str) -> tuple:
+        p = urlparse(u or "")
+        host = (p.hostname or "").lower()
+        try:
+            host = host.encode("idna").decode("ascii")
+        except UnicodeError:
+            pass
+        port = p.port if p.port and (p.scheme, p.port) not in {("http", 80), ("https", 443)} else None
+        path = enc(p.path or "/", "/%:@!$&'()*+,;=-._~")
+        return (p.scheme.lower(), host, port, path.rstrip("/") or "/", enc(p.query, "=&%/?:@!$'()*+,;-._~"))
+    try:
+        return norm(a) == norm(b)
+    except ValueError:
+        return False
+
+
+def page_targets(url: str):
+    """CDP ids of the page targets already on `url` before a start opens its own: the owner's tab,
+    a leftover, a tab Chrome restored when it woke from its idle sleep. Their error pages are not this
+    start's. Read twice, a second apart: the first read wakes a sleeping Chrome, whose restored tabs
+    appear just after. None when the list cannot be read: then no error page can be told apart."""
+    seen = set()
+    for attempt in range(2):
+        if attempt:
+            time.sleep(1)
+        try:
+            with urlopen(f"{CDP}/json/list", timeout=10) as response:
+                seen |= {t.get("id") for t in json.load(response) if t.get("type") == "page" and same_url(t.get("url", ""), url)}
+        except (OSError, ValueError):   # unreachable, an HTTP error, a timeout, not JSON: unknown, not empty
+            return None
+    return seen
+
+
+def load_error(b, url: str, ignore: set = frozenset()) -> str:
+    """The error of a tab that was opened for `url` and could not load it, or ''.
+
+    Chrome shows its own error page there (chrome-error://chromewebdata/), where no script runs, so
+    the extension cannot tag the tab and the ownership scan never finds it: a start on an unreachable
+    URL waited out its whole 240 s deadline and then reported an ownership failure that named neither
+    the URL nor the error (DGO-913, 2026-10-21: example.com, which the office's DNS answers NXDOMAIN).
+    The page's CDP target still carries the URL it tried, and the page its own error code. Targets in
+    `ignore` (those on `url` before this start, see page_targets) are someone else's; a page that
+    cannot be read is skipped, not taken for an answer."""
+    try:
+        pages = [pg for ctx in b.contexts for pg in ctx.pages]
+    except Exception:
+        return ""
+    for pg in pages:
+        try:
+            if not pg.url.startswith("chrome-error://"):
+                continue
+            session = pg.context.new_cdp_session(pg)
+            try:
+                info = session.send("Target.getTargetInfo").get("targetInfo", {})
+                if info.get("targetId") in ignore or not same_url(info.get("url", ""), url):
+                    continue
+                code = session.send("Runtime.evaluate", {
+                    "expression": "(document.querySelector('.error-code')||{}).textContent||''",
+                    "returnByValue": True}).get("result", {}).get("value")
+            finally:
+                try:
+                    session.detach()
+                except Exception:
+                    pass
+            return (code if isinstance(code, str) and code.strip() else "the browser's error page").strip()
+        except Exception:
+            continue
+    return ""
+
+
 def group_tabs(b, slug, timeout: int = 2000):
     """The group's tabs in the SHARED default context."""
     tag = PREFIX + slug
@@ -584,6 +673,20 @@ def cmd_open(slug, url=None):
         # --- URL provided: allocate a native Chrome Tab Group via the extension broker ---
         if not slug:
             raise ValueError("group requires an explicit slug")
+        # A slug that belongs to a TASK cannot host a standing session tab: the reaper closes any tab
+        # whose slug is a terminal task (`is_terminal_slug`), so the tab would vanish about 30 seconds
+        # later without a word. Measured 2026-10-14 — that is exactly what happened to a session
+        # opened on the WhatsApp pairing slug after its task timed out, and only measuring caught it.
+        # Refuse by name instead, and name the way out.
+        record = task_path(slug)
+        if record.exists():
+            try:
+                state = json.loads(record.read_text()).get("state", "?")
+            except Exception:                                  # noqa: BLE001 — a corrupt record is still a record
+                state = "?"
+            raise ValueError(
+                f"slug '{slug}' belongs to a task (state={state}); the reaper would close a session "
+                f"tab on it within ~30s. Use a different slug for the standing tab.")
         parsed = urlparse(url)
         if parsed.scheme not in {"http", "https"} or not parsed.netloc:
             raise ValueError("group requires a direct http(s) website URL")
@@ -805,6 +908,18 @@ CONN_SERVICE = os.environ.get("CONN_SERVICE", "browser42-task-runner")
 # app.json (connections[] + contributes.connection_providers), so adding a site is a declaration
 # there plus one row here, and there is no third place that could disagree.
 LOGIN_CREDENTIAL_PREFIX = "browser42-login-"
+# A site that asks for a ONE-TIME CODE has a second row, `browser42-totp-<site>` (kind `totp`): the
+# shared secret from «אימות דו-שלבי → אפליקציית אימות», declared in app.json beside the login. The
+# task runner never receives that secret — the plane mints the current code (GET /api/totp/<id>) and
+# the code is typed and forgotten. Without the row the refusal is NAMED (`needs_totp_secret`) and
+# carries the human handoff, instead of a generic `login_failed`.
+LOGIN_TOTP_PREFIX = "browser42-totp-"
+# Where a page asks for the code: the HTML standard's own token first, then the names the big sites
+# use (Google `totpPin`, GitHub `app_totp`, Facebook `approvals_code`), then the generic names.
+OTP_SELECTORS = ["input[autocomplete=one-time-code]", "input[name=totpPin]", "input#totpPin",
+                 "input[name=app_totp]", "input#app_totp", "input[name=approvals_code]",
+                 "input[name=otp]", "input[name=totp]", "input[name=code]",
+                 "input[name*=verification]"]
 # Per-site flow. Selector LISTS, tried in order: a login page is markup we do not own and it drifts,
 # so the first candidate that resolves wins, and a page where none of them resolves fails LOUDLY
 # with the list it tried — inventing a box to type a password into is the one unrecoverable mistake.
@@ -887,6 +1002,130 @@ def login_credential(site: str) -> tuple:
     return flow, user, password
 
 
+def handoff_link(slug: str) -> str:
+    """Where a human finishes what the office cannot: the console's live view of this browser.
+
+    Composed as the console composes its own address — AUTH_PROTOCOL + CONSOLE_BASE_URL, the two .env
+    facts reconcile.py renders the routers from. `slug` names the task the handoff is for; the view is
+    the ONE shared browser, so the address is the same for every task today. A shared `handoff.py`
+    with this exact signature is landing in parallel — when it does, this function goes and the
+    import takes its place."""
+    return (f"{os.environ.get('AUTH_PROTOCOL') or 'http'}://"
+            f"{os.environ.get('CONSOLE_BASE_URL') or 'console.localhost'}/a/browser42/view/")
+
+
+def totp_code(site: str, slug: str) -> str:
+    """The CURRENT one-time code for `site`, minted by the credential plane from the `totp` row this
+    app declares (`browser42-totp-<site>`). The secret never arrives here — only a code that is dead
+    within its period — and the code exists only as this return value.
+
+    A plane that holds no secret for the site is the one refusal a human must resolve, so it is
+    reported by NAME (`needs_totp_secret`) with the field to fill and the handoff link; every other
+    answer is `totp_refused`, as itself.
+    """
+    cid = LOGIN_TOTP_PREFIX + site
+    headers = {}
+    identity = _self_container_id()
+    if identity:
+        headers["X-Conn-Container"] = identity
+    url = f"{CONNECTIONS_URL}/api/totp/{cid}?{urlencode({'service': CONN_SERVICE})}"
+    try:
+        with urlopen(Request(url, headers=headers), timeout=20) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except HTTPError as error:
+        try:
+            said = json.loads(error.read().decode("utf-8", errors="replace") or "{}")
+        except ValueError:
+            said = {}
+        if not isinstance(said, dict):
+            said = {}
+        if error.code == 404 and said.get("field"):
+            raise BrowserTaskError(
+                "needs_totp_secret",
+                f"'{site}' asks for a one-time code and the credential plane holds no TOTP secret for "
+                f"it. Open חיבורים ומפתחות (/a/connections/) and fill '{cid}' → {said['field']} once — "
+                f"סוד ה-TOTP מתוך «אימות דו-שלבי → אפליקציית אימות» — or finish this sign-in by hand: "
+                f"{handoff_link(slug)}") from error
+        if error.code == 404:
+            # A 404 WITHOUT a field is the plane, not the owner: an image too old to serve /api/totp
+            # answers with HTML; a plane that has not rendered this app's declaration answers "not a
+            # totp connection". Neither is a missing secret, so neither says "fill the row".
+            raise BrowserTaskError(
+                "totp_unavailable",
+                (f"the credential plane knows no `totp` row '{cid}' — reconcile and restart connections "
+                 f"so this app's declaration lands ({said['error']})") if said.get("error") else
+                "the credential plane does not offer /api/totp yet — rebuild the connections image") from error
+        raise BrowserTaskError("totp_refused",
+                               f"connections refused to mint a code for {cid}: {error.code} "
+                               f"{str(said.get('error') or '')[:200]}") from error
+    except URLError as error:
+        raise BrowserTaskError("credential_unreachable",
+                               f"cannot reach the credential plane ({CONNECTIONS_URL}): {error.reason}") from error
+    code = str(payload.get("code") or "")
+    if not code:
+        raise BrowserTaskError("totp_refused", f"connections minted no code for {cid}")
+    return code
+
+
+def await_login_or_otp(page, logged_out: str, timeout_ms: int = 30000, grace_ms: int = 2500):
+    """After submit, wait for ONE of two outcomes and say which: the login form is gone (None), or a
+    one-time-code field is on screen (its selector).
+
+    Both are polled together because a second factor REPLACES the form: a wait for "password field
+    detached" alone read the code prompt as a successful sign-in. A code field is looked for only on
+    a page WITHOUT the password form — a login page's own `input[name=code]` must never receive a
+    one-time code — and a vanished form gets `grace_ms` for the prompt to render before it counts as in.
+    """
+    deadline = time.monotonic() + timeout_ms / 1000
+    gone_at = None
+    while True:
+        try:
+            gone = page.locator(logged_out).count() == 0
+        except Exception:                               # noqa: BLE001 — mid-navigation: ask again
+            gone = False
+        now = time.monotonic()
+        if gone:
+            for selector in OTP_SELECTORS:
+                try:
+                    if page.locator(selector).first.is_visible():
+                        return selector
+                except Exception:                       # noqa: BLE001 — unreadable mid-navigation: not a code field
+                    continue
+            gone_at = gone_at or now
+            if now - gone_at >= grace_ms / 1000:
+                return None
+        else:
+            gone_at = None
+        if now >= deadline:
+            raise TimeoutError(f"the login form is still on screen after {timeout_ms} ms")
+        time.sleep(0.4)
+
+
+def second_factor_outcome(page, field, logged_out: str, site: str, grace_ms: int = 6000) -> None:
+    """Decide whether the one-time code was ACCEPTED: returns on success, raises `totp_rejected`.
+
+    "The code field detached" is not acceptance — a rejected code is a form POST too, and the page
+    re-renders the same prompt with a fresh field. So after the detach the page is read again with
+    the login discipline: no password form and no code field for `grace_ms` is in; a code field back
+    on screen is the refusal (a wrong secret in connections, or this host's clock is off).
+    """
+    try:
+        field.wait_for(state="detached", timeout=30000)
+    except Exception as error:                          # noqa: BLE001 — the prompt never even submitted
+        raise BrowserTaskError("totp_rejected",
+                               f"'{site}' kept the one-time-code field on screen ({error})") from error
+    try:
+        again = await_login_or_otp(page, logged_out, grace_ms=grace_ms)
+    except Exception as error:                          # noqa: BLE001 — the password form is back
+        raise BrowserTaskError("login_failed",
+                               f"the login form for '{site}' is back on screen after the one-time code "
+                               f"({error})") from error
+    if again:
+        raise BrowserTaskError("totp_rejected",
+                               f"'{site}' asked for the one-time code again ({again}) — a wrong secret in "
+                               "connections, or this host's clock is off")
+
+
 def fill_first(page, selectors: list, value: str, what: str, timeout: int = 8000) -> str:
     """Type into the first selector that resolves, and name the one that worked."""
     last = None
@@ -933,6 +1172,7 @@ def task_start(slug: str, url: str, requirements: dict) -> dict:
     # re-pointing session.tabId at the popup, so verify's one_live_owned_tab then
     # compares a dead task.tab_id and rejects a perfectly good run (0805c AI lane:
     # 98 records, every other check green, rejected). Task tabs must stay exactly one.
+    others = page_targets(url)          # tabs already on this URL: their error pages are not this start's
     allocation = broker_command({"action": "allocate", "slug": slug, "label": slug, "color": color, "policy": "deny-popup", "url": url})
     try:
         # Ownership is EXTENSION-authoritative: ask the worker to claim the exact
@@ -954,6 +1194,7 @@ def task_start(slug: str, url: str, requirements: dict) -> dict:
         _, browser = reconnect()
         page = None
         last_count = -1
+        failed_since = None
         deadline = time.time() + 240
         while time.time() < deadline:
             try:
@@ -964,6 +1205,16 @@ def task_start(slug: str, url: str, requirements: dict) -> dict:
             if last_count == 1:
                 page = pages[0]
                 break
+            # a page that could not load is never tagged (see load_error): say so, with its error, once
+            # the error has stood 5 s (Chrome reloads an error page by itself, and a reload that loads
+            # is tagged by the claim above like any other)
+            failed = load_error(browser, url, others) if others is not None else ""
+            if not failed:
+                failed_since = None
+            elif failed_since is None:
+                failed_since = time.time()
+            elif time.time() - failed_since >= 5:
+                raise BrowserTaskError("page_load_failed", f"{url} did not load in the office browser: {failed}")
             try:
                 broker_command({"action": "claim", "slug": slug, "tabId": allocation.get("tabId")})
             except Exception:
@@ -1436,6 +1687,21 @@ def _captcha_tiles(task: dict, page, options, stamp: str) -> None:
             option["tile"] = saved["path"]
 
 
+def human_handoff(slug: str, body: str, since=None) -> str:
+    """A HUMAN must take over: the address the refusal carries, and the owner's notice with it.
+
+    Both are handoff.py's (the link wakes the browser and brings this slug's tab to the front); this
+    returns only the address to name in the message. `body` is the notice's Hebrew sentence; `since`
+    is the episode (the task's start): a refusal repeated in the same episode refreshes the notice
+    instead of surfacing it as new again.
+    """
+    if handoff is None:
+        return "/a/browser42/"
+    link = handoff.handoff_link(slug)
+    handoff.notify_human(slug, body, link, since=since)
+    return link
+
+
 def task_captcha(slug: str, sub: str, argument: str) -> dict:
     """captcha detect | click <index[,index…]> — read the challenge, or answer it like a hand.
 
@@ -1457,11 +1723,16 @@ def task_captcha(slug: str, sub: str, argument: str) -> dict:
         raise BrowserTaskError("captcha_unknown_sub",
                                "captcha takes 'detect' or 'click <index[,index…]>'")
     if sub == "click" and book["attempts"] >= CAPTCHA_MAX_ATTEMPTS:
+        # The hand-off names the WINDOW, not the whole screen (DGO-571): the link wakes the browser
+        # and brings this task's tab to the front, and the owner is told the same way, once.
+        link = human_handoff(slug, f"אימות אנושי (captcha) במשימה «{slug}» לא נפתר אחרי "
+                                   f"{CAPTCHA_MAX_ATTEMPTS} סבבים. פתח את הקישור: הדפדפן מתעורר "
+                                   f"והכרטיסייה של המשימה עולה קדימה.", since=task.get("created_at"))
         raise BrowserTaskError(
             "captcha_attempts_exhausted",
             f"{CAPTCHA_MAX_ATTEMPTS} rounds were already spent on '{slug}'. Stop clicking: hand the "
-            "challenge to the owner at http://browser42.localhost:8080/view/ — the challenge, the "
-            "page and the profile are his.",
+            f"challenge to the owner at {link} — it wakes the browser and puts this task's tab in "
+            "front; the challenge, the page and the profile are his.",
         )
     instruction = ""
     points = _captcha_points(str(argument)) if sub == "click" else []
@@ -1655,18 +1926,44 @@ READ_SCROLL_JS = """(top) => {
     }"""
 
 
-def _stitch(acc: str, chunk: str, window: int = 4000) -> str:
+def _same_reading(a: str, b: str) -> bool:
+    """Two readings of one whole document: each has 5 lines or more, and 90% of the shorter one's
+    lines are in the other. A slider, a clock or a counter changed in between."""
+    la = [line for line in a.splitlines() if line.strip()]
+    lb = [line for line in b.splitlines() if line.strip()]
+    if len(la) < 5 or len(lb) < 5:
+        return False
+    short, other = (la, set(lb)) if len(la) <= len(lb) else (lb, set(la))
+    return sum(line in other for line in short) >= 0.9 * len(short)
+
+
+def _stitch(acc: str, chunk: str, window: int = 4000, document: bool = False) -> str:
     """Append `chunk` to `acc`, keeping only the part of it that overlaps nothing.
 
     The steps of a walk see the same lines twice (the container is read at 80% steps, and a
     virtualised list re-renders its neighbourhood), so the join is by the largest overlap between the
     tail of what is already collected and the head of the new step — never by line equality, which
     would silently drop a legitimate repeated line.
+
+    A step already held whole adds nothing, and a step that holds everything so far replaces it.
+
+    When the container is the `document` itself (an ordinary page), every step reads ALL of it:
+    `innerText` is the whole text, not what is on screen. The overlap is looked for in the last
+    `window` characters only, so a page longer than that came back once per step, and `read` said it
+    was cut when the whole page had been read. bina-solutions.co.il came back six times (DGO-948,
+    2026-10-22). So there, a step that is the same reading (`_same_reading`) replaces what came
+    before: it is the newer view, lazily loaded parts included. Only there: an inner container, such
+    as a chat's virtualised list, can hold a pinned header in every step, and is joined by its overlap
+    as before.
     """
     if not acc:
         return chunk
-    if not chunk:
+    if not chunk or chunk in acc:
         return acc
+    if acc in chunk:
+        return chunk
+    if document and _same_reading(acc, chunk):
+        return chunk
     limit = min(len(acc), len(chunk), window)
     for size in range(limit, 0, -1):
         if acc.endswith(chunk[:size]):
@@ -1688,6 +1985,9 @@ def task_page_read(slug: str, max_chars: int) -> dict:
     _, _, page = task_connection(slug)
     limit = max(4000, min(int(max_chars or 120000), 600000))
     root = retry_safe(task, "reading", lambda: page.evaluate(READ_ROOT_JS)) or {}
+    # the page's own scroller is the document (READ_TEXT_JS then reads the whole page at every step),
+    # or no scroller at all (the document again, read once)
+    document = not root.get("found") or root.get("node") in ("html", "body")
     collected = ""
     steps = 0
     stopped = "bottom"
@@ -1696,7 +1996,7 @@ def task_page_read(slug: str, max_chars: int) -> dict:
         time.sleep(0.35)
     while steps < 80:
         chunk = retry_safe(task, "reading", lambda: page.evaluate(READ_TEXT_JS)) or ""
-        collected = _stitch(collected, chunk)
+        collected = _stitch(collected, chunk, document=document)
         steps += 1
         if len(collected) >= limit:
             collected = collected[:limit]
@@ -1731,7 +2031,8 @@ def task_login(slug: str, site: str) -> dict:
     The password is resolved from the credential plane INSIDE this function and typed straight into
     the page: it is not an argument, not a journal field, not a response field and not a log line.
     The response says which site, which selectors matched and whether the login form is gone — never
-    the account, never the value.
+    the account, never the value. A second factor is passed the same way: the plane mints the one-time
+    code for the site's declared `totp` row (`totp_code`) and it is typed here, never returned.
     """
     task = read_task(slug)
     if task["state"] not in ACTIVE_STATES:
@@ -1762,14 +2063,25 @@ def task_login(slug: str, site: str) -> dict:
     if not clicked:
         raise BrowserTaskError("login_selector_missing",
                                f"none of the submit selectors resolved: {flow['submit']} (last error: {last})")
-    # Signed in = the login form is GONE. A timeout here is reported without ever echoing a value.
+    # Signed in = the login form is GONE. A site with a second factor shows a one-time-code field
+    # INSTEAD: the plane mints the code for this site's `totp` row and it is typed here, never seen
+    # by the caller. Only a page that shows neither is a failure — reported without echoing a value.
     try:
-        page.locator(flow["logged_out"]).first.wait_for(state="detached", timeout=30000)
+        otp = await_login_or_otp(page, flow["logged_out"])
     except Exception as error:                          # noqa: BLE001 — one clear failure, not a guess
         raise BrowserTaskError(
             "login_failed",
             f"the login form for '{site}' is still on screen after submitting — check the credential "
-            f"in connections, or the site is asking for a second factor ({error})") from error
+            f"in connections, or the site asks for something this flow does not recognise ({error})") from error
+    second_factor = None
+    if otp:
+        code = totp_code(site, slug)
+        field = page.locator(otp).first
+        field.fill(code, timeout=8000)
+        del code                                         # nothing below may carry it
+        field.press("Enter", timeout=8000)
+        second_factor = "totp"
+        second_factor_outcome(page, field, flow["logged_out"], site)
     path = task_path(slug).parent / "screenshots" / f"login-{site}.png"
     path.parent.mkdir(parents=True, exist_ok=True)
     retry_safe(task, "capturing", lambda: page.screenshot(path=str(path), timeout=30000))
@@ -1779,7 +2091,8 @@ def task_login(slug: str, site: str) -> dict:
     })
     transition(task, "active", "acted", stage="acting", action=f"login:{site}", url=page.url)
     return {"ok": True, "slug": slug, "site": site, "already_logged_in": False, "url": page.url,
-            "selectors": {"user": used_user, "pass": used_pass, "submit": clicked}}
+            "second_factor": second_factor,
+            "selectors": {"user": used_user, "pass": used_pass, "submit": clicked, "otp": otp}}
 
 
 def task_verify(slug: str) -> dict:
@@ -2031,6 +2344,199 @@ if me is None:
 sys.stdout.flush(); os._exit(0)            # NOT b.close() — would kill shared state'''
 
 
+# ── the human handoff, measured on the PAGE ─────────────────────────────────────────────────────
+#
+# Not every sign-in leaves a cookie, and the ones that matter most to a person do not: WhatsApp Web
+# keeps its session in IndexedDB and its pairing screen never touches the cookie jar — so
+# `bbox b42 logins await whatsapp` REFUSES, by name (`not_a_cookie`), and it is right to. What IS
+# measurable there is the page itself: the app replaces its QR screen with the chat list the moment
+# the phone scans, and that is a fact this verb can watch instead of assuming.
+#
+# `wait` is a sleep; this is a CONDITION. Every poll asks the live page the same declarative question
+# and the answer is reported WITH what was seen, so a caller can tell "not yet" from "never will be" —
+# and a person scanning a QR code is not a stalled task: every round heartbeats.
+AWAIT_DEFAULT_SECONDS = 280
+#: …and so is the ceiling, which is NOT this module's to choose: the task runner ends a request at
+#: `BROWSER42_TASK_REQUEST_SECONDS` (300s) and kills the child, so a longer budget would be a wait
+#: that cannot report — measured 2026-10-14, a 1500s await died as `runner_timeout` at 300s. A longer
+#: handoff is a LOOP of calls (each one heartbeats while it waits, so the task is never stalled
+#: between them).
+AWAIT_MAX_SECONDS = 280
+#: On a SESSION tab the runner is not in the path at all (`bbox b42 await` execs this module
+#: directly in the browser container, like `groups`/`session` do), so the only ceiling is this
+#: one — and it exists because an unbounded wait cannot report either.
+AWAIT_SESSION_MAX_SECONDS = 3600
+AWAIT_POLL_SECONDS = 2
+AWAIT_HEARTBEAT_SECONDS = 15
+#: What `<kind>:<value>` may be. Deliberately a closed list — an arbitrary JS expression in argv is a
+#: driver, not a waiter, and every case here has a declarative form.
+AWAIT_KINDS = {
+    "selector": "a CSS selector is present AND visible",
+    "gone": "a CSS selector is absent or invisible",
+    "url": "the page's own URL contains this fragment",
+    "storage": "localStorage[key] holds a non-empty value",
+    "text": "the page's visible text contains this string",
+    "notext": "the page's visible text does NOT contain this string (\"the sign-in screen is gone\")",
+}
+
+
+def _await_probe(page, condition: str) -> dict:
+    """Ask the live page ONE condition. `met` + `seen` (what the page actually answered)."""
+    kind, _, value = condition.partition(":")
+    kind, value = kind.strip().lower(), value.strip()
+    if kind not in AWAIT_KINDS:
+        raise BrowserTaskError("unknown_condition",
+                               f"'{kind}' is not a condition; use one of {', '.join(sorted(AWAIT_KINDS))}"
+                               f" as <kind>:<value>, comma-separated for several")
+    if not value:
+        raise BrowserTaskError("empty_condition", f"'{kind}:' needs a value")
+    try:
+        if kind in ("selector", "gone"):
+            handle = page.locator(value)
+            count = handle.count()
+            visible = bool(count) and handle.first.is_visible()
+            met = visible if kind == "selector" else not visible
+            seen = f"{count} node(s), {'visible' if visible else 'not visible'}"
+        elif kind == "url":
+            met, seen = value in page.url, page.url
+        elif kind == "storage":
+            stored = page.evaluate("key => window.localStorage.getItem(key)", value)
+            met, seen = bool(stored), f"localStorage[{value}]={'set' if stored else 'empty'}"
+        else:                                                     # text / notext
+            body = page.evaluate("() => (document.body ? document.body.innerText : '').slice(0, 20000)")
+            found = value in body
+            met = found if kind == "text" else not found
+            seen = (f"{len(body)} chars of visible text, {'contains' if found else 'no'} "
+                    f"'{value[:40]}'")
+    except BrowserTaskError:
+        raise
+    except Exception as error:                                    # noqa: BLE001 — the page IS the answer
+        return {"met": False, "seen": f"{type(error).__name__}: {str(error)[:120]}"}
+    return {"met": met, "seen": seen}
+
+
+def touch_activity() -> None:
+    """Mark the browser as IN USE, the way every verb does (reaper.py counts idle from these).
+
+    A wait for a person is use: the tab he is about to look at must not be put to sleep under him.
+    Measured 2026-10-14 — the standing WhatsApp tab was nine minutes old when the office browser
+    slept (its marker went stale, no live task), the CDP session dropped with it and the tab came
+    back untagged, so the wait reported a tab that had never been closed. The wait now touches the
+    marker every round; best-effort, because the runner container may not carry /data at all.
+    """
+    try:
+        activity = Path("/data/.activity")
+        activity.mkdir(parents=True, exist_ok=True)
+        (activity / "agent").touch()
+    except OSError:
+        pass
+
+
+def _await_conditions(spec: str, seconds: str, ceiling: float) -> tuple:
+    """(conditions, budget) — one parser for both waiters, so a typo reads the same in each."""
+    conditions = [part.strip() for part in (spec or "").split(",") if part.strip()]
+    if not conditions:
+        raise BrowserTaskError("usage", "await needs at least one condition, e.g. `selector:#pane-side`")
+    try:
+        budget = float(seconds) if str(seconds).strip() else AWAIT_DEFAULT_SECONDS
+    except ValueError:
+        raise BrowserTaskError("usage", f"'{seconds}' is not a number of seconds") from None
+    if budget > ceiling:
+        raise BrowserTaskError(
+            "await_budget",
+            f"a single await holds at most {ceiling:g}s: "
+            + (f"the task runner ends a request at 300s (BROWSER42_TASK_REQUEST_SECONDS) and a killed "
+               f"request cannot report. A longer handoff is a loop of calls — call await again."
+               if ceiling == AWAIT_MAX_SECONDS else
+               "a longer handoff is a loop of calls — call await again for the next window."))
+    return conditions, max(1.0, budget)
+
+
+def _await_wait(page, conditions: list, budget: float, beat=None) -> dict:
+    """Poll the page until every condition holds. `beat(elapsed)` is how a task stays un-stalled.
+
+    A timeout is a REFUSAL carrying what the page last showed — never a silent success — because the
+    only thing worse than not knowing is believing a person finished when he did not.
+    """
+    started = time.time()
+    deadline = started + budget
+    last: dict = {}
+    beats = 0
+    while True:
+        touch_activity()
+        last = {condition: _await_probe(page, condition) for condition in conditions}
+        elapsed = round(time.time() - started, 1)
+        if all(probe["met"] for probe in last.values()):
+            if beat:
+                beat(elapsed, met=True)
+            return {"state": "met", "waited_s": elapsed, "conditions": conditions, "url": page.url,
+                    "observed": {c: probe["seen"] for c, probe in last.items()}}
+        if time.time() >= deadline:
+            raise BrowserTaskError(
+                "await_timeout",
+                f"{','.join(conditions)} did not hold within {budget:g}s — last seen: "
+                + "; ".join(f"{c} → {probe['seen']}" for c, probe in last.items())
+                + f" (url: {page.url})")
+        # The watchdog's activity clock reads the heartbeat: waiting for a person is work.
+        if beat and time.time() - started - beats * AWAIT_HEARTBEAT_SECONDS >= AWAIT_HEARTBEAT_SECONDS:
+            beats += 1
+            beat(elapsed, met=False)
+        time.sleep(AWAIT_POLL_SECONDS)
+
+
+def task_await(slug: str, spec: str, seconds: str = "") -> dict:
+    """`task await` — block until the PAGE says the human finished, then say what proved it.
+
+    The caller is an agent that handed a person a link; this is how it learns — by measurement — that
+    the person is done, instead of sleeping and hoping. Scoped to a TASK, so it is also bounded by the
+    task's own total budget (BROWSER42_TASK_TOTAL_SECONDS, 30 minutes): a handoff that may outlive
+    that belongs to `bbox b42 await` on a session tab, which has no such clock.
+    """
+    task = read_task(slug)
+    if task["state"] not in ACTIVE_STATES:
+        raise BrowserTaskError("task_not_active", f"task '{slug}' is not active ({task['state']})")
+    conditions, budget = _await_conditions(spec, seconds, AWAIT_MAX_SECONDS)
+    _, _, page = task_connection(slug)
+
+    def beat(elapsed: float, met: bool) -> None:
+        try:
+            transition(task, task["state"], "awaited" if met else "heartbeat", stage="awaiting",
+                       conditions=conditions, waited_s=elapsed, url=page.url)
+        except BrowserTaskError as error:
+            # A long wait must not lose to a `status`/`inspect` someone ran meanwhile: the revision
+            # moved, so re-read and carry the same measured answer on.
+            if error.code != "stale_task_revision":
+                raise
+            task.update(read_task(slug))
+            transition(task, task["state"], "awaited" if met else "heartbeat", stage="awaiting",
+                       conditions=conditions, waited_s=elapsed, url=page.url)
+
+    return {"ok": True, "slug": slug, **(_await_wait(page, conditions, budget, beat))}
+
+
+def cmd_await(slug: str, spec: str, seconds: str = "") -> None:
+    """`bbox b42 await <slug> <conditions> [seconds]` — the STANDING handoff (a session, not a task).
+
+    A task carries a total budget — `BROWSER42_TASK_TOTAL_SECONDS`, 1800s from its first activity —
+    and is killed with it; a person is not. Measured 2026-10-14: the WhatsApp handoff died at exactly
+    30 minutes (`task_timeout`) while the owner had not been reached yet. A SESSION tab has no such
+    clock (it lives until the reaper's GC), and this verb does not go through the task runner either,
+    so its wait can be an hour in one call. Same conditions, same measured answer, no task touched.
+    """
+    slug = canonical_slug(slug)
+    conditions, budget = _await_conditions(spec, seconds, AWAIT_SESSION_MAX_SECONDS)
+    _, browser = connect()
+    pages = group_tabs(browser, slug)
+    if len(pages) != 1:
+        raise BrowserTaskError(
+            "no_such_tab",
+            f"group '{slug}' owns {len(pages)} live tab(s). Either it was closed, or the office "
+            f"browser slept and the tab it reopened lost its tag (it is reopened by URL, without "
+            f"`window.name`). Open it again with `bbox b42 group {slug} <url>`.")
+    print(json.dumps({"ok": True, "slug": slug, **_await_wait(pages[0], conditions, budget)},
+                     ensure_ascii=False, sort_keys=True))
+
+
 def main():
     verb = sys.argv[1] if len(sys.argv) > 1 else ""
     # Any verb is "use": the idle sleeper (start-browser.sh §4k, reaper.py) counts idle time from
@@ -2050,6 +2556,12 @@ def main():
             cmd_list()
         elif verb == "close":
             cmd_close(sys.argv[2] if len(sys.argv) > 2 else None)
+        elif verb == "await":
+            # The STANDING human handoff: a session tab has no task, no watchdog and no task budget,
+            # so a wait for a person can be an hour in one call (see cmd_await).
+            cmd_await(sys.argv[2] if len(sys.argv) > 2 else "",
+                      sys.argv[3] if len(sys.argv) > 3 else "",
+                      sys.argv[4] if len(sys.argv) > 4 else "")
         elif verb == "gc":
             stale = int(sys.argv[3]) if len(sys.argv) > 3 and sys.argv[2] == "--stale" else 24
             cmd_gc(stale)
@@ -2087,6 +2599,14 @@ def main():
                 done(task_action(slug, {"op": "screenshot",
                                         "name": sys.argv[4] if len(sys.argv) > 4 else "final",
                                         "full_page": len(sys.argv) > 5 and sys.argv[5] == "full"}))
+            if command == "front":
+                # Bring THIS task's tab to the front of the shared window. Keyboard input from the
+                # outside (xdotool) goes to whatever tab is visible, while the task protocol acts on
+                # its own tab - so an agent that types by hand could type into the wrong page
+                # (measured 2026-10-09: a brief landed in a GitHub search box). Call `front` first.
+                _, _, page = task_connection(slug)
+                done({"ok": True, "slug": slug, "url": page.url,
+                      "front": retry_safe(read_task(slug), "acting", page.bring_to_front) is None})
             if command == "read":
                 # The whole page as text, in ONE answer, whatever the screen size (see task_page_read).
                 done(task_page_read(slug, int(sys.argv[4]) if len(sys.argv) > 4 else 120000))
@@ -2102,6 +2622,11 @@ def main():
                 done(task_finish(slug))
             if command == "status":
                 done(task_status(slug))
+            if command == "await":
+                # The human handoff, measured on the page (see task_await): a sign-in that leaves no
+                # cookie — a QR pairing — is answered here, not by the cookie jar.
+                done(task_await(slug, sys.argv[4] if len(sys.argv) > 4 else "",
+                                sys.argv[5] if len(sys.argv) > 5 else ""))
             if command == "heartbeat":
                 done(task_heartbeat(slug))
             if command == "goal":

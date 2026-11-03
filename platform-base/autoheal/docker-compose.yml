@@ -34,6 +34,27 @@ services:
       # A container this service may NOT restart (it never opted in), held unhealthy this long, is
       # reported once per episode and left alone. 20 minutes outlasts a cold start.
       - AUTOHEAL_WATCH_AFTER=${AUTOHEAL_WATCH_AFTER:-1200}
+      # The reviver (DGO-1163): a container of this office that declares restart unless-stopped/always
+      # and that DOCKER FAILED TO START (State.Error: authentik-server, 2026-11-02, Docker's restart
+      # failed under load and it never tried again — 43 minutes down) is STARTED, with a doubling
+      # backoff and a cap, and the owner is told each time. Docker restarts every plain crash itself;
+      # an exited container with no engine error was stopped on purpose and is never touched. Label a
+      # service binaos.autoheal.revive=false to keep it out.
+      - AUTOHEAL_REVIVE_GRACE=${AUTOHEAL_REVIVE_GRACE:-90}
+      - AUTOHEAL_REVIVE_BACKOFF=${AUTOHEAL_REVIVE_BACKOFF:-60}
+      - AUTOHEAL_REVIVE_MAX=${AUTOHEAL_REVIVE_MAX:-4}
+      # The overdue one-off (DGO-1231): a HAND-RUN container (no compose container number) with restart
+      # policy no, still running past its `binaos.max-age` label (seconds) or this default, is stopped
+      # and the owner told — a hung probe ran 8 h at a full core on FPG's 2-vCPU server. Only this
+      # office's project's ones, or ones that opted in with binaos.max-age; any other unlabelled one is
+      # only reported, another office's is left alone; `binaos.keep=true` keeps one.
+      - AUTOHEAL_ONEOFF_MAX_AGE=${AUTOHEAL_ONEOFF_MAX_AGE:-21600}
+      - AUTOHEAL_ONEOFF_EVERY=${AUTOHEAL_ONEOFF_EVERY:-300}
+      # Files left in a RAM-backed /tmp (DGO-1271): where the machine's /tmp is a tmpfs (Debian 13), what
+      # hand-run work leaves there sits in RAM and swap until it ages out after 10 days — 1.1 GB on FPG,
+      # 2026-11-02. Past this many MiB the owner is told once per episode, with the largest entries;
+      # nothing is deleted from here.
+      - AUTOHEAL_TMP_LIMIT_MB=${AUTOHEAL_TMP_LIMIT_MB:-512}
       - AUTOHEAL_DRY_RUN=${AUTOHEAL_DRY_RUN:-0}
       - NOTIFY_URL=${AUTOHEAL_NOTIFY_URL:-http://notifications:8977/api/notifications}
     volumes:
@@ -45,6 +66,11 @@ services:
       # it constrains the file node, not the protocol spoken over it. Where a filtering socket proxy
       # exists, point BBOX_DOCKER_SOCK at one.
       - ${BBOX_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock
+      # The machine's /tmp, read-only, for the look above: only sizes, names and ages are read, never a file's
+      # contents. No new reach WHILE the raw socket above is mounted (it is root on the host already). Point
+      # BBOX_DOCKER_SOCK at a filtering proxy and this line becomes reach of its own — a root container can
+      # still connect to the unix sockets under /tmp (an ssh-agent's) — so drop it then.
+      - /tmp:/host-tmp:ro
     networks:
       - traefik-network
     healthcheck:

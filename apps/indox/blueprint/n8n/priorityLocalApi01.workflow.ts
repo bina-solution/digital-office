@@ -33,7 +33,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
     /*__n8n__*/ meta: null,
     /*__n8n__*/ pinData: null,
     /*__n8n__*/ staticData: null,
-    /*__n8n__*/ shared: [{"updatedAt":"2026-08-22T18:24:09.534Z","createdAt":"2026-08-22T18:24:09.534Z","role":"workflow:owner","workflowId":"priorityLocalApi01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <shlomo@local.dev>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
+    /*__n8n__*/ shared: [{"updatedAt":"2026-08-22T18:24:09.534Z","createdAt":"2026-08-22T18:24:09.534Z","role":"workflow:owner","workflowId":"priorityLocalApi01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
     id: 'priorityLocalApi01',
     name: 'priority local api — SHIM_RECEIVE_SUPDOC stand-in',
     active: true,
@@ -113,7 +113,7 @@ return out;
     InsertRecord = {
         operation: 'executeQuery',
         query: `=-- [multi-instance 2026-08-28] This is the ERP STAND-IN, so its rows are per-instance like any
--- other: bina-comp's simulated Priority uploads must not land in levi's table. The instance rides
+-- other: hacohen's simulated Priority uploads must not land in levi's table. The instance rides
 -- the webhook payload (the caller is indoxV2ActionsInv01, which carries it on the row); absent,
 -- it resolves to public exactly as before.
 insert into {{ (() => { const i = String($json.__instance || ''); if (!/^[a-z][a-z0-9_]*$/.test(i)) { throw new Error('priorityLocalApi01: no valid __instance — public fallback removed at the 2026-08-31 cutover'); } return 'indox_' + i; })() }}.indox_priority_local

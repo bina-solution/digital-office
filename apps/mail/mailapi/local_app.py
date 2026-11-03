@@ -84,7 +84,7 @@ _u = os.environ.get("LOCALMAIL_USER", "indox")
 # which is right on a laptop and wrong on every real deployment — and wrong in the most confusing
 # possible way, because BOTH halves looked correct in isolation:
 #
-#   mailserver-init provisioned  person110@example.com   (it appends MAIL_DOMAIN)
+#   mailserver-init provisioned  person83@example.com   (it appends MAIL_DOMAIN)
 #   this backend logged in as    indox@local.test                          (it appended local.test)
 #
 # so a freshly deployed company got `[AUTHENTICATIONFAILED] Authentication failed` against a mailbox
@@ -499,7 +499,7 @@ class BadMessageId(ValueError):
     """`id`/`ids` was not a message id. Carries the offending value so the caller can be fixed.
 
     MEASURED 2026-08-06: the live pipeline called POST /labels/add with
-    {"id": "person52@example.com", "labelIds": ["אינדוקס - חשבונית נשמרה"]} — a MAILBOX ADDRESS
+    {"id": "person86@example.com", "labelIds": ["אינדוקס - חשבונית נשמרה"]} — a MAILBOX ADDRESS
     where a hex message id belongs (`incoming_documents.SOURCE_ID` holds the sender address on 2,298
     GMAIL rows). `int(addr, 16)` raised a bare ValueError, Flask answered 500 with its default HTML
     page ("the server is overloaded or there is an error in the application"), and the defect was

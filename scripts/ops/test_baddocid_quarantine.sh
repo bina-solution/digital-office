@@ -12,7 +12,7 @@
 #         raised at all -- and must NOT be merged either, since they are not duplicates.
 # Case B: an ordinary two-row business duplicate, untouched by the quarantine. Must still merge.
 DK="docker -H unix:///run/bbox-docker.sock"
-ENVF=/mnt/c/Users/user/Desktop/personalWorkspace/AutomateOs/deployment-bina-comp/.env
+ENVF=/mnt/c/Users/user/Desktop/personalWorkspace/AutomateOs/deployment-hacohen/.env
 WU=$(grep -E '^BS_WEBHOOK_USER=' "$ENVF" | head -1 | cut -d= -f2-)
 WP=$(grep -E '^BS_WEBHOOK_PASS=' "$ENVF" | head -1 | cut -d= -f2-)
 P=zzbd$(date +%H%M%S)

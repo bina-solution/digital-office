@@ -80,7 +80,7 @@ This replaces "placement" as the everyday model. Moving an app (`move.py`, phase
      `<alias>.<office>.console.<domain>` plus the `.localhost:<port>` twin → the link proxy → peer tunnel
      address:port, under THIS office's SSO (one authentik provider per host), the identity a request arrives
      with written by the door (`link-proxy.py`, `Door.rewrite`). **Measured 2026-10-01 17:50 (coordinator): two-label nesting works on vps1** — the DNS
-     wildcard answers at any depth (`bina.macbook.console.staging.digital-office.co.il` → 203.0.113.10), and
+     wildcard answers at any depth (`bina.macbook.console.staging.digital-office.co.il` → 93.184.216.5), and
      vps1's traefik issues Let's Encrypt certificates per exact host (CN = the host), so the file-provider
      router only needs `tls.certresolver: myresolver` and gets its own certificate on first request.
      **The link proxy is TCP** (`link-proxy.py` pumps sockets): websockets pass untouched, but it cannot
@@ -122,13 +122,70 @@ This replaces "placement" as the everyday model. Moving an app (`move.py`, phase
    through the link proxy for anything else.
 7. **API for Azaria.** Inside the engine every remote app is `http://<alias>.<office>:<port>` (step 3's
    alias). The office-operations skill documents it: local `http://bina:3081`, remote `http://bina.macbook:3081`.
+8. **A door with no tile (DGO-945).** Some things another office has to reach are not screens: the
+   Dell's transcriber, Meet's recordings door, the HP's webhook receiver.
+   - **A list of its own, everywhere.** A capability declared with `link: true` (schema
+     `capabilities[].link`) is a row of `services` in `office.apps.json`, named by the capability
+     (`reconcile._link_rows`), never a row of `apps`. It travels as the catalog's `services`, becomes
+     the remote entry's `services` (`projection._entry`, `serve.plan`), and only two readers take it:
+     the network alias (`render_aliases`) and the endpoint map. Nothing that draws a tile, an edge
+     route, a sign-in entry or an app list ever sees it, and an office on older code ignores the key.
+   - **Given by name, to the offices named.** The serving office publishes a door only when its
+     `serve:` names it, never under `*`:
+     `serve: {"services": {"workflow-hooks": {"to": ["vps1"], "paths": ["/webhook/meet-recordings"]}}}`.
+     `to` says who gets it (without it, `serve.only` narrows it like an app). `paths` is what the door
+     answers, each exactly (a path ending in `/` admits what is under it): anything else, a dot
+     segment, an escape or an absolute-form target is the door's own `no-app` before the service is
+     dialed. A path list with a bad path publishes no door at all (`catalog.publishable_services`,
+     `clean_services`; `link-proxy.py _path_allowed`). A head with a bare CR or LF inside a header
+     line is `bad-head` (400) on every route: an app would read it as two headers. Doors never ride in
+     on a re-shared section, "give nothing" closes them, and an office that gives only doors is never
+     widened to `*` by a pairing.
+   - **What reaches the service.** The peer's identity headers and its forwarding headers
+     (`X-Forwarded-For`, `Forwarded`, `X-Real-IP`, …) are removed, and the door writes the office the
+     request came from (`x-dgo-office`). A service can therefore decide by the caller: meet-start lets
+     the link in only for the office Meet's workflows run in (`MEET_WORKFLOWS_OFFICE`, one header,
+     the link proxy never among its workflow containers, so an address that does not resolve is a
+     403), and relays to Plane only the project list and project MEET.
+   - **An office that gives only a door** (vps1's recordings to the HP) still opens the link's door:
+     `serve_with_agents` carries `services` through, and `with_control` counts it.
+   - **Finding it.** A workflow imported into an office that does not run an app has that app's
+     addresses rewritten to the door (`reconcile.py link-endpoints` → `scripts/link-endpoints-apply`,
+     run by `bbox n8n push`); `bbox n8n pull` turns them back (`--inverse`), because the blueprint is
+     shared — by the doors' shape read from the manifests, never this minute's map, so a door that
+     moved or was withdrawn since the push goes back too. An app that runs here keeps its own name unless its state entry names the office its link
+     capabilities come from: `apitools: { state: enabled, by: user, linked: dell }` sends the HP's
+     transcription to the Dell while its OCR stays home (`reconcile.linked_from`). The calling office
+     states it; a serving office cannot take over the address of an app this office runs.
+   - **Choosing where.** The office whose n8n runs an app's workflows is declared on the app's state
+     entry: `workflows: here` on that office, `workflows: <office>` on the one that runs the app
+     (`reconcile.workflows_here`). `set-state` keeps both keys.
 
 ## Security (unchanged rules, one place each)
 
 Direction enforced on the RECEIVING side (`firewall.py` opens only catalogued ports, peer → us only);
 identity headers are never taken from a peer — the door removes every one and writes the catalog's
-mapped user (`link-proxy.py`); SSO of the office you are in protects every
-remote host; tokens live in the vault (`dgo_link-<office>`), never in a catalog or a URL.
+mapped user (`link-proxy.py`) **and signs what it writes** (`x-dgo-identity`: an HMAC of the office,
+that user and the moment, keyed by the pair's own secret from the vault, good for 300 s — DGO-545);
+SSO of the office you are in protects every remote host; tokens live in the vault
+(`dgo_link-<office>`), never in a catalog or a URL.
+
+**Why the signature exists (2026-10-13).** A bare `x-authentik-username` is worth nothing: any
+container on the office network can write one, which is why the office's own sign-in refused it
+(DGO-371) — and that refusal is exactly why a browser on a LINKED console, carrying the OTHER
+office's cookie and none of ours, was shown Plane's own sign-in form. The door proves instead, with a
+secret only the two offices hold; an app reads it with its own copy of that secret from its own vault
+(`apps/project-pln/office_identity.py` reads `dgo_link*` and signs the mapped person in), and a
+signature that does not verify is not an identity at all.
+
+**An agent of a linked office uses the other office's apps the way a person does: it calls the door,
+and it needs no key.** `./bbox project-pln tasks list` on an office that does not run Plane follows
+the compiled registry to the office that does (`apps/project-pln/where.sh` sets `PLANE_API_URL` to
+`<alias>.<office>:<door>`) and sends **no** `X-API-Key`: the door signs the request in as the identity
+the serving office declared for that office (one link, one identity — `serve:`'s `identity.to`). The
+token API accepts that proved identity and nothing else (`patches/api-door-identity.py`), so a
+browser's cookie still does not open `/api/v1/`. Measured on hp-laptop, 2026-10-13: a request through
+the door reads, creates, patches and deletes a work item with no token and no cookie.
 
 ## Acceptance (the owner's first use, then the general case)
 
@@ -274,7 +331,10 @@ file tools only and is **uncommitted and unrun**; the coordinator holds the push
   takes the peer's tunnel address from the block plus the app's second door (`agent_api_port`, or
   `api.port`, or the manifest's `office-agent` capability) → `http://<address>:<port>`. The vault
   instance is tried in order — what the catalog names, `dgo_link-serve-<office>-<app>-agent` (what
-  `converge._handoff_agents` writes), `dgo_link-<office>` (what this contract names) — and a miss lists
+  `converge._handoff_agents` pushes over ssh, and, since DGO-1127, what the consuming office pulls
+  itself over the link: `projection.pull_agents` → the serving office's `GET /api/link/agent/<alias>`,
+  proved with the pair's secret, the token read by that office's vault), `dgo_link-<office>` (what
+  this contract names) — and a miss lists
   every name it tried. A remote office's URL/token are cached under `<repo>::<office>`, never under the
   local agent's key, and a declared address always beats a cache.
 * `apps/dgo-extend/converge.py` — `SERVE_WRITER` **steps aside when a non-empty `remote:` is present**,

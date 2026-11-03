@@ -563,6 +563,80 @@ def c_door_waits():
                 f"{lp.CONNECT_TIMEOUT}s" if ok else f"the door cut a slow answer: {got[:80]!r} after {took:.1f}s")
 
 
+@check("DGO-890 · the door records every request another office made: which office, app, user, answer, bytes, time")
+def c_door_access_record():
+    """The owner, 2026-10-21: "dgo extend should log exactly the app its sharing between dgo as there
+    accesed". On real sockets, on loopback: one request that reaches an app and one for a name nothing is
+    served under — each must leave one line, with the app's own status and the bytes that crossed."""
+    import importlib.util
+    import json as _json
+    import socket
+    import tempfile
+    import threading
+    import time as _time
+    spec = importlib.util.spec_from_file_location("dgo_door_access", ROOT / "apps/dgo-extend/link-proxy.py")
+    lp = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(lp)
+    lp.log = lambda _m: None
+
+    app = socket.socket()
+    app.bind(("127.0.0.1", 0))
+    app.listen(4)
+
+    def answering():
+        while True:
+            try:
+                c, _ = app.accept()
+            except OSError:
+                return
+            c.recv(65536)
+            c.sendall(b"HTTP/1.1 201 Created\r\nContent-Length: 5\r\nConnection: close\r\n\r\nhello")
+            c.close()
+    threading.Thread(target=answering, daemon=True).start()
+
+    free = socket.socket()
+    free.bind(("127.0.0.1", 0))
+    port = free.getsockname()[1]
+    free.close()
+    with tempfile.TemporaryDirectory() as d:
+        lp.ACCESS_LOG = Path(d) / "door-access.jsonl"
+        door = lp.Door({"office": "hp-laptop", "app": "door", "kind": "door", "direction": "serve",
+                        "bind": "127.0.0.1", "port": port, "target": "unused"})
+        door.route = lambda host: ("127.0.0.1", app.getsockname()[1], "akadmin") if host.startswith("plane") else None
+        door.start()
+        door.ready.wait(5)
+        try:
+            for host in ("plane.localhost", "nothing.localhost"):
+                with socket.create_connection(("127.0.0.1", port), timeout=5) as c:
+                    c.sendall(f"GET /api/x?y=1 HTTP/1.1\r\nHost: {host}\r\nAccept: application/json\r\n\r\n".encode())
+                    while c.recv(4096):
+                        pass
+            deadline = _time.time() + 3
+            rows = []
+            while _time.time() < deadline:
+                try:
+                    rows = [_json.loads(x) for x in lp.ACCESS_LOG.read_text(encoding="utf-8").splitlines() if x.strip()]
+                except OSError:
+                    rows = []
+                if len(rows) >= 2:
+                    break
+                _time.sleep(0.05)
+        finally:
+            door._halt.set()
+            app.close()
+    served = next((r for r in rows if r.get("app") == "plane"), {})
+    refused = next((r for r in rows if r.get("app") == "nothing"), {})
+    problems = []
+    if not (served.get("office") == "hp-laptop" and served.get("user") == "akadmin" and served.get("status") == 201
+            and served.get("method") == "GET" and served.get("path") == "/api/x?y=1" and served.get("bytes_out", 0) > 0
+            and served.get("peer_ip") == "127.0.0.1"):
+        problems.append(f"the served request's record is wrong: {served}")
+    if not (refused.get("status") == 404 and refused.get("said") == "no-app"):
+        problems.append(f"the refused request's record is wrong: {refused}")
+    return not problems, ("two requests, two records: office, app, user, status, bytes and the peer's address"
+                          if not problems else "; ".join(problems))
+
+
 @check("DGO-32 · a rule that changes keeps its door: the port is released first, and a failed bind is retried")
 def c_proxy_reload():
     """The proxy follows the plan while it runs — on real sockets, on loopback.
@@ -715,7 +789,9 @@ def c_catalog_served():
                  "rules=(lp.read(os.environ.get('DGO_TUNNEL_DIR','/tunnel')).get('plan') or {}).get('rules') or [];"
                  "print('CAT='+json.dumps({"
                  "'apps':[x.get('alias') for x in cat.get('apps') or []],"
-                 "'agents':{str(x.get('alias')):x.get('agent_api_port') for x in cat.get('apps') or [] if x.get('agent_api_port')},"
+                 # the catalog publishes an agent door as `api: {port, auth}` (catalog.py), never as agent_api_port:
+                 # read there, this set was always empty and the check below could not fail (DGO-1030)
+                 "'agents':{str(x.get('alias')):(x.get('api') or {}).get('port') for x in cat.get('apps') or [] if (x.get('api') or {}).get('port')},"
                  "'opened':sorted({int(r.get('port') or 0) for r in rules if r.get('direction')=='serve'}),"
                  "'serve':sorted(k for k in serve if k != 'exclude')}))")
     if not raw:
@@ -740,7 +816,10 @@ def c_catalog_served():
     closed = {a: p for a, p in (doc.get("agents") or {}).items() if opened and int(p) not in opened}
     if closed:
         return False, (f"an agent API is published and nothing opens it: {closed} — the peer's CLI "
-                       f"is reset on that port (name the app in `serve:` with its agent_api_port)")
+                       f"is reset on that port. The catalog above is this container's own code, so "
+                       f"the link's plan on disk is what lags it: rendered before the last `serve:` "
+                       f"change, or refused (the converge log names a refusal). Nothing is declared "
+                       f"by hand")
     return True, (f"{len(published)} published app(s), all of them served "
                   f"({len(served)} declared); {len(doc.get('agents') or {})} agent API(s) published, "
                   f"each one opened")
@@ -1229,10 +1308,110 @@ def c_remote_live():
     return True, f"home {home.get('id')} · {summary}"
 
 
+def _first_doc(out: str):
+    """The JSON document a `--json` verb printed, or {}. `run` puts stderr AFTER stdout, so one warning
+    on stderr (a vault miss: "… the call goes out without a credential") followed the document and a
+    plain `json.loads` refused an answer that was there (the second reader of DGO-1018)."""
+    try:
+        return json.JSONDecoder().raw_decode(out.lstrip())[0]
+    except (ValueError, RecursionError):
+        return {}
+
+
+#: What browser42's task runner, and nothing else, answers a `status` with no slug (`task-runner.py`'s
+#: argument check): Caddy, the screen's service, says no such thing, and a door's own refusal neither.
+RUNNER_SAYS = "invalid argument count for task command"
+
+
+@check("DGO-1018 · a shared browser is driven from here, out of the box: its API and CLI reach its task runner")
+def c_shared_browser_drives():
+    """The owner's case (2026-10-22): «if I run two DGOs, one with a browser … I share DGO1's browser app
+    with DGO2 … it should just work … it should also share the CLI and the API». Asked of the LIVE link,
+    on the office that USES a shared browser:
+      · a linked office that shares browser42 with this one is found in `bbox remote`;
+      · its API door answers as the TASK RUNNER — the runner's /healthz names its service; Caddy, which
+        serves the screen, answers no such body — so the door delivers to whoever answers the API, not to
+        the screen's service (DGO-1018: it delivered to the screen's, and every far task got 502);
+      · the CLI reaches that runner: `bbox b42 task --office <peer> status` with NO slug is answered by
+        the runner's own argument check (RUNNER_SAYS), never by a door's error (`not_served`,
+        `no_agent_door`, `runner_unavailable`, `door_unanswered`). Never with a slug: the runner would
+        start its group manager, which marks the browser active, and a sleeping Chrome on the peer
+        would be woken at every gate run (`start-browser.sh`, the second reader of DGO-1018);
+      · the screen answers through the link's door.
+    An office no peer shares a browser with says so and passes: there is nothing to drive. A browser
+    hidden on this rail is not asked (its alias is gone here, POST /api/link/exclude), nor one on an
+    office the link plane reads as down (an asleep laptop is not a broken door — `c_remote_live`), and
+    the result names what it could not see. A listing it cannot read is a failure, never "no peer"."""
+    code, out = run(["./bbox", "remote", "--json"], 120)
+    if code != 0:
+        return False, (f"NOT BUILT — `bbox remote` could not read the link plane: "
+                       f"{(out.splitlines() or ['no output'])[-1][:140]}")
+    doc = _first_doc(out)
+    if not isinstance(doc, dict) or not isinstance(doc.get("offices"), list):
+        # `cmd_offices` always prints `offices`: without it the listing was not read, and reading it
+        # as "no linked office" passed with nothing asked (the third reader of DGO-1018).
+        return False, f"`bbox remote --json` printed no listing of linked offices: {out[:140]}"
+    shared, hidden, down, unseen = [], [], [], []
+    for item in doc["offices"]:
+        if not isinstance(item, dict):
+            continue
+        apps = [a for a in item.get("apps") or [] if isinstance(a, dict)]
+        if not apps:
+            unseen.append(str(item.get("office")))
+        for a in apps:
+            if str(a.get("app") or a.get("alias") or "") == "browser42":
+                pair = (str(item.get("office")), str(a.get("alias") or "browser42"))
+                (hidden if a.get("hidden") else down if item.get("state") == "down" else shared).append(pair)
+    unasked = "".join([f"; hidden on this rail, not asked: {', '.join(o for o, _ in hidden)}" if hidden else "",
+                       f"; down, not asked: {', '.join(o for o, _ in down)}" if down else "",
+                       f"; no catalog pulled from {', '.join(unseen)}" if unseen else ""])
+    if not shared:
+        return True, f"no linked office shares browser42 with this one — nothing to drive{unasked}"
+    problems = []
+    for peer, alias in shared:
+        code, out = run(["./bbox", "remote", peer, alias, "/healthz", "--api", "--json"], 90)
+        answer = _first_doc(out)
+        try:
+            body = json.loads(answer.get("body") or "{}") if isinstance(answer, dict) else {}
+        except (ValueError, TypeError):
+            body = {}
+        api_ok = isinstance(body, dict) and body.get("service") == "browser42-task-runner"
+        health_said = "" if api_ok else f"exit {code}: {out[-120:]}"
+        # The CLI is asked either way: an API door that answers /healthz as something else while the
+        # CLI still reaches the runner is a door declared BY HAND (`serve:` naming its own agent port —
+        # the HP's 8931 tick, which delivers only /v1/task), and the result says that, not just "red".
+        code, out = run(["./bbox", "b42", "task", "--office", peer, "status"], 180)
+        answer = _first_doc(out)
+        said = answer.get("error") if isinstance(answer, dict) else None
+        cli_ok = isinstance(said, dict) and said.get("message") == RUNNER_SAYS
+        if not api_ok and cli_ok:
+            problems.append(f"{peer}: its CLI reaches browser42's task runner, but its API door answers /healthz as "
+                            f"something else ({health_said}) — a door declared by hand in {peer}'s `serve:`, "
+                            f"with an agent port of its own, keeps its own target; without it the app's own door answers")
+        elif not api_ok:
+            problems.append(f"{peer}: browser42's API door must answer as its task runner, got {health_said}")
+        if not cli_ok:
+            problems.append(f"{peer}: a far `status` must be answered by its task runner, got "
+                            f"{(said or {}).get('code') if isinstance(said, dict) else out[-160:]}")
+        code, out = run(["./bbox", "remote", peer, alias, "/view/", "--json"], 90)
+        answer = _first_doc(out)
+        try:
+            status = int(answer.get("status") or 0) if isinstance(answer, dict) else 0
+        except (ValueError, TypeError):
+            status = 0
+        if status not in (200, 301, 302, 303, 307, 308):
+            problems.append(f"{peer}: browser42's screen must answer through the link's door, got "
+                            f"{status or out[-120:]}")
+    return (not problems), (f"browser42 shared by {', '.join(p for p, _ in shared)}: its API answers as the task "
+                            f"runner, the CLI reaches it, and its screen answers{unasked}" if not problems
+                            else "; ".join(problems) + unasked)
+
+
 PHASE3 = [c_serve_rules, c_serve_render, c_serve_tile, c_catalog_module, c_catalog_fixture,
           c_projection_module, c_remote_chain, c_apps_list_remote, c_remote_cli, c_remote_live,
+          c_shared_browser_drives,
           c_serve_identity_provider, c_serve_file, c_pairing, c_pair_contract, c_link_security,
           c_offer_public, c_live_tile,
-          c_door_route, c_door_service, c_door_identity, c_door_waits, c_proxy_reload, c_link_listener,
+          c_door_route, c_door_service, c_door_identity, c_door_waits, c_door_access_record, c_proxy_reload, c_link_listener,
           c_catalog_served, c_identity_seeded, c_agent_list, c_sleeping]
 

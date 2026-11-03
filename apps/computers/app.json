@@ -5,11 +5,12 @@
     "en": "Computers"
   },
   "layer": 3,
+  "core": true,
   "kind": "service",
   "version": "1.0.0",
   "summary": {
-    "he": "ניהול המחשבים של הלשכה — המכונה שמריצה אותה ושרתים שמחוברים ב־SSH",
-    "en": "The office's fleet of machines — the host that runs the deployment plus servers attached over SSH"
+    "he": "כל מחשבי הלשכות — משאבים ורשת בזמן אמת של המחשב הזה ושל כל לשכה מקושרת, ושרתים שמחוברים ב־SSH",
+    "en": "Every office's computer — live resources and network for this machine and every linked office's, plus servers attached over SSH"
   },
   "capabilities": [
     {
@@ -40,6 +41,18 @@
       "strength": "wants",
       "after": false,
       "dependency": "weak"
+    },
+    {
+      "capability": "host-metrics",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
+    },
+    {
+      "capability": "security",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
     }
   ],
   "connections": [],
@@ -49,6 +62,9 @@
       "host": "computers",
       "port": 8977,
       "auth": "sso",
+      "auth_exclude": [
+        "/share/"
+      ],
       "module": {
         "group": "תשתית",
         "icon": "monitor",
@@ -56,7 +72,7 @@
         "alias": "computers",
         "id": "computers",
         "name": "מחשבים",
-        "desc": "המכונה שמריצה את הלשכה ושרתים ב־SSH",
+        "desc": "כל מחשבי הלשכות — משאבים ורשת בזמן אמת, ושרתים ב־SSH",
         "order": 9,
         "service": "computers",
         "url_env": "COMPUTERS_URL",

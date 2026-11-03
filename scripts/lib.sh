@@ -58,6 +58,74 @@ read_env() {
   printf '%s' "$v"
 }
 
+# read_env_value KEY — read_env, then the value as the other readers of .env take it: a trailing ` # …`
+# comment and one pair of surrounding quotes dropped (the env step and compose do; read_env keeps both, so
+# `KEY="admin@old"` never compared equal to admin@old — FPG-34's third reader).
+read_env_value() {
+  local v q
+  v="$(read_env "$1")"
+  case "$v" in
+    \"*|\'*) q="${v:0:1}"; v="${v:1}"; v="${v%%"$q"*}" ;;   # quoted: up to its closing quote, ` #` inside kept
+    *) v="${v%% #*}" ;;                                     # bare: a trailing ` # comment` is not the value
+  esac
+  printf '%s' "$v"
+}
+
+# rename_note <KEY> present|behind <local>[,<local>…]  |  rename_note <KEY> failed|any  |  rename_note - changed
+# What one app's rename-address found, for connections in the SECOND pass of the same `bbox rename-address`
+# (the file is DGO_RENAME_LEDGER), keyed by the .env key whose account it is: `present` = that app's people
+# on the new domain now, `behind` = still on the old one, `failed` = the app could not be asked (down, an
+# error), `any` = the key has no account behind it (a sender, a contact) and simply follows, `changed` =
+# something was really written. A vault override of KEY then follows from that app's STATE, never from
+# equality with .env, and never on a half-written ledger (FPG-34's third and fourth readers). A no-op when
+# the verb did not start the ledger (a hook run on its own).
+rename_note() {
+  local key="${1:-}" what="${2:-}" list="${3:-}" one
+  [ -n "${DGO_RENAME_LEDGER:-}" ] && [ -n "${key}" ] || return 0
+  case "${what}" in
+    failed|any|changed) printf '%s %s -\n' "${key}" "${what}" >>"${DGO_RENAME_LEDGER}"; return 0 ;;
+  esac
+  [ -n "${list}" ] || return 0                   # an empty list adds nothing (and bash < 4.4 trips on it)
+  local -a ones=()
+  IFS=',' read -ra ones <<<"${list}"
+  for one in "${ones[@]}"; do
+    [ -n "${one}" ] && printf '%s %s %s\n' "${key}" "${what}" "$(printf '%s' "${one}" | tr '[:upper:]' '[:lower:]')" >>"${DGO_RENAME_LEDGER}"
+  done
+  return 0
+}
+
+# env_set KEY VALUE — every `KEY=` line of the office's .env becomes KEY=VALUE (one appended if none).
+# Written to the REAL file: a packaged office links .env to /etc/binaos/binaos.env, and `sed -i` replaced
+# the link with a plain copy — the real file, which the next upgrade links back, kept the old value
+# (FPG-34's second reader). Replaced whole (a temp file in the same directory, 0600 from its first byte,
+# the original's mode copied, then one rename), and the value travels in the environment, never through a
+# sed pattern or anybody's command line. Returns non-zero, having changed nothing, on a bad key or value.
+env_set() {
+  local key="${1:-}" value="${2-}"
+  [[ "${key}" =~ ^[A-Z][A-Z0-9_]*$ ]] || { echo "env_set: not a key: ${key}" >&2; return 1; }
+  case "${value}" in *$'\n'*|*$'\r'*) echo "env_set: ${key}: a value is one line" >&2; return 1 ;; esac
+  ENV_SET_KEY="${key}" ENV_SET_VALUE="${value}" python3 - "$(npath "${REPO_ROOT}/.env")" <<'PY'
+import os, re, shutil, sys, tempfile
+path = os.path.realpath(sys.argv[1])
+key, value = os.environ["ENV_SET_KEY"], os.environ["ENV_SET_VALUE"]
+with open(path, encoding="utf-8") as f:
+    lines = f.read().split("\n")
+own = re.compile("^" + re.escape(key) + "=")
+hit = False
+for i, ln in enumerate(lines):
+    if own.match(ln):
+        lines[i] = key + "=" + value
+        hit = True
+if not hit:
+    lines.insert(len(lines) - 1 if lines and lines[-1] == "" else len(lines), key + "=" + value)
+fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".env.set-")
+with os.fdopen(fd, "w", encoding="utf-8") as f:
+    f.write("\n".join(lines))
+shutil.copymode(path, tmp)
+os.replace(tmp, path)
+PY
+}
+
 DN="$(read_env DEPLOYMENT_NAME)"; DN="${DN:-bina-deployment}"
 
 # ── a credential helper the docker client is told to use and this machine cannot run ──────────
@@ -162,7 +230,7 @@ esac
 # file has been replaced underneath it, so `docker` answers from the other daemon and nothing says so.
 #
 # Measured on this laptop 2026-07-30, two engines up at once:
-#   distro's dockerd   60 images  39 running  32 volumes   ← every deployment-bina_comp_* volume
+#   distro's dockerd   60 images  39 running  32 volumes   ← every deployment-hacohen_* volume
 #                                                            (n8n_storage, supabase_db_data,
 #                                                             postgres_storage, connections_vault)
 #   Docker Desktop's    7 images   8 running   8 volumes   ← a half-built duplicate of
@@ -304,7 +372,7 @@ bbox_select_engine || true
 #
 # The fix sets a name ONLY when compose's own derivation would be empty. A Latin basename keeps
 # compose's derivation byte-for-byte — this must never re-point an existing deployment (the VPS's
-# `deployment-bina_comp_*` volumes are owned by the name compose derived from its directory), so on
+# `deployment-hacohen_*` volumes are owned by the name compose derived from its directory), so on
 # every host that worked before, nothing changes. An explicit COMPOSE_PROJECT_NAME still wins.
 #
 # The PHYSICAL path decides, not the spelling the caller used to get here: inside bina-ds the
@@ -421,21 +489,67 @@ export_host_tz() {
   grep -qE '^GENERIC_TIMEZONE=.+' "${REPO_ROOT}/.env" 2>/dev/null || export GENERIC_TIMEZONE="${z}"
 }
 
+# ── CERTIFICATES: Let's Encrypt only for an office that has a public name ─────────────────────
+# Every TLS router names the edge's ACME resolver as ${TRAEFIK_CERTRESOLVER-myresolver}. An office
+# whose DEPLOYMENT_DOMAIN has no dot (`localhost`: the Mac, WSL, a cloud sandbox) can never be issued
+# a certificate for `<app>.localhost`, and its ACME account is refused outright (`admin@localhost`
+# "needs at least one dot") — so its edge asked Let's Encrypt again on every configuration reload:
+# 236 refusals in six hours on the Mac, found by the security app's outbound list (2026-10-21,
+# DGO-901). There the resolver is EMPTY: a TLS route keeps traefik's own certificate — what it served
+# all along — and nothing leaves the machine. `.env` stays the override, as for the zone above.
+export_cert_resolver() {
+  export_apex_host
+  grep -qE '^TRAEFIK_CERTRESOLVER=' "${REPO_ROOT}/.env" 2>/dev/null && return 0
+  case "$(read_env DEPLOYMENT_DOMAIN)" in
+    *.*) ;;
+    *) export TRAEFIK_CERTRESOLVER="" ;;
+  esac
+}
+
+# ── THE BARE DOMAIN: an apex route, carried to compose only as its owner decided it ───────────────
+# An app may route the office's bare domain (its own compose labels, ${DGO_APEX_HOST:-apex.invalid}:
+# CLOSED by default). The app that owns those routers decides at bring-up, in its own hooks/prepare,
+# whether the bare domain points at this office, and writes the decision to data/.locks/apex-host
+# (runtime state, gitignored); layer 0 only carries it to every compose call — and only while it names
+# THIS office's domain: a decision left from before a rename is no decision. `.env` stays the override.
+# `unset` first: compose takes a shell variable over `.env` and over this file, so a value inherited
+# from an earlier decision (another domain, or one since closed) must never outlive it. A CLOSED apex
+# also gets an empty DGO_APEX_CERTRESOLVER: its router still matches `apex.invalid`, and traefik orders
+# a certificate for every Host() of a router with a resolver (vps1, 2026-11-01: 37 refused a day).
+export_apex_host() {
+  unset DGO_APEX_HOST DGO_APEX_CERTRESOLVER
+  if grep -qE '^DGO_APEX_HOST=' "${REPO_ROOT}/.env" 2>/dev/null; then
+    [ -n "$(read_env_value DGO_APEX_HOST)" ] || export DGO_APEX_CERTRESOLVER=""   # `=""` and `= # …` are empty to compose too
+    return 0
+  fi
+  local d v
+  d="$(read_env DEPLOYMENT_DOMAIN)"
+  v="$(cat "${REPO_ROOT}/data/.locks/apex-host" 2>/dev/null)" || true
+  if [ -n "${d}" ] && [ "${v}" = "${d}" ]; then export DGO_APEX_HOST="${d}"; else export DGO_APEX_CERTRESOLVER=""; fi
+  return 0
+}
+
 dcx() {
   [ -x "${BBOX_COMPOSE}" ] \
     || die "compose plugin missing at ${BBOX_COMPOSE} — run: bbox install debian (installs docker-compose-plugin)"
   export_host_tz
+  export_cert_resolver
   # What must be refused is handing a CONTAINER something that is not a socket — so it is asked of
   # the commands that create one. `config` needs no engine at all, and a lane without one runs it
   # (`scripts/dc config`, which comes through here now).
   if compose_is_recreate "$@"; then bbox_assert_engine_socket; fi
+  deploy_ledger_gate "$@" || return 1      # never a build or recreate that drops what runs here
   compose_admit "$@"
   local rc=0
   if compose_self_guard _dcx_run "$@"; then rc="${COMPOSE_GUARD_RC}"; else _dcx_run "$@" || rc=$?; fi
   # What `up` created holds its declared cap; the machine's budget is told to the kernel here
   # (never by a dry run, which is a question) — after whatever lives in a replaced container's
   # network has been put back in the one that replaced it.
-  [ "${rc}" -ne 0 ] || case " $* " in *" --dry-run "*) ;; *" up "*) netns_rejoin || rc=$?; cpu_caps_apply ;; esac
+  # Asked of the COMPOSE SUBCOMMAND (compose_is_up), never of the whole argument string: `dcx exec … tasks.py
+  # comment FPG-1 "…backed up both files…"` used to read as an `up`, so a task comment that said "up" put every
+  # container's CPU cap back to the budget and ran netns_rejoin (FPG-262, 2026-10-30).
+  if [ "${rc}" -eq 0 ] && compose_is_up "$@"; then filemount_refresh "$@"; netns_rejoin || rc=$?; cpu_caps_apply; fi
+  [ "${rc}" -ne 0 ] || deploy_ledger_record "$@"
   return "${rc}"
 }
 
@@ -459,10 +573,24 @@ dcx() {
 # The question has to be asked AS a bring-up asks it. The host's time zone is part of what dcx hands
 # compose (`export_host_tz`), so the raw runner without it compiles eleven services differently and
 # names all eleven — the same trap as a service brought up from a shell that never exported it.
+#
+# With a ceiling: on a clean machine whose base was only half up, the dry run was still waiting 300 s
+# later and `bbox status` never answered (the fresh-install run, DGO-1038). Past 60 s it says so on
+# stderr and RETURNS 3 — "could not tell", never a silent "nothing is stale": config-by-caller.sh (and
+# so `bbox baseline`'s one-identity check) read an empty answer as "would re-create: none" (its reader).
 stale_containers() {
-  ( export_host_tz
-    _dcx_run --dry-run up -d --no-build 2>&1 ) | sed 's/\x1b\[[0-9;]*[A-Za-z]//g' \
+  local out rc
+  out="$( ( export_host_tz; export_cert_resolver
+            _dcx_run_for 60 --dry-run up -d --no-build 2>&1; echo "__stale_rc=$?" ) )"
+  rc="$(printf '%s\n' "${out}" | sed -n 's/^__stale_rc=//p' | tail -1)"
+  printf '%s\n' "${out}" | sed 's/\x1b\[[0-9;]*[A-Za-z]//g' \
     | awk '$1 == "Container" && $NF == "Recreate" {print $2}' | sort -u || true
+  case "${rc}" in
+    124|137)   # timeout's TERM (124), or its KILL 5 s later for a compose that ignored the TERM (137)
+      echo "[bbox] stale check: compose's dry run did not answer in 60 s — what is stale is unknown" >&2
+      return 3 ;;
+  esac
+  return 0
 }
 
 # foreign_containers — containers that hold one of THIS stack's names under ANOTHER compose project,
@@ -479,7 +607,7 @@ stale_containers() {
 # and the labels are the engine's, so nothing here is a list. `bbox status` prints what this finds
 # and `bbox run` refuses to start over it — saying which project holds what — instead of colliding.
 foreign_containers() {
-  ( export_host_tz; _dcx_run config --format json 2>/dev/null ) | python3 -c '
+  ( export_host_tz; export_cert_resolver; _dcx_run config --format json 2>/dev/null ) | python3 -c '
 import json, subprocess, sys
 try:
     d = json.load(sys.stdin)
@@ -523,6 +651,80 @@ netns_rejoin() {
   say "recreating ${stale}— the container whose network it lives in was replaced"
   # shellcheck disable=SC2086 — a list of service names
   _dcx_run up -d --no-deps --force-recreate ${stale}
+}
+
+# filemount_refresh — a container that mounts a FILE read-only follows that file when it is replaced.
+#
+# A bind mount of one file binds the file that is there when the container STARTS. git writes a changed
+# file as a new one, so after a pull the container goes on with the old file — on Linux its old
+# content, through the Mac engine's shared folder no file at all — and compose sees nothing to do: the
+# definition did not move. Measured 2026-10-31 (DGO-1040): the 10-30 harvest replaced browser42's
+# group-manager.py and logins.py; the MacBook's task runner, up since 10-26, answered every `bbox b42
+# task` with "task command emitted invalid JSON" from then on (`/group-manager.py: No such file`
+# inside), the HP's the same, and the caddy in front of them still served the old Caddyfile. So after
+# every `up`, a running container with a read-only file mount whose file changed after the container
+# started is recreated (11 such mounts on the MacBook; that day 3 were stale, none spuriously named).
+# Read-only only: a file a service writes itself changes every time and would never settle. The time
+# is to the second, the engine's StartedAt is UTC. Says only what it recreated.
+#
+# Its bounds (the reader of 0e1abc1e): only services the `up` NAMED — every one for a bare `up` — so a
+# hook's `up -d <its service>` never recreates another app's container mid-meeting; only services the
+# compiled config declares (compose's `ps` lists orphans too, and `up <orphan>` is "no such service");
+# never the container this runs in (its own self-update door does that); and BEFORE netns_rejoin, so
+# whatever lives in a recreated container's namespace follows it. A recreate that fails is said, and
+# the `up` that succeeded stays a success.
+filemount_refresh() {
+  local -a named=() declared=()
+  local ids stale s keep self
+  while [ $# -gt 0 ]; do case "$1" in up) shift; break ;; *) shift ;; esac; done
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -t|--timeout|--wait-timeout|--scale|--pull|--exit-code-from|--attach|--no-attach) shift; [ $# -gt 0 ] && shift ;;
+      -*) shift ;;
+      *)  named+=("$1"); shift ;;
+    esac
+  done
+  ids="$(_dcx_run ps -q 2>/dev/null)" || return 0
+  [ -n "${ids}" ] || return 0
+  # shellcheck disable=SC2086 — a list of container ids
+  stale="$(docker inspect ${ids} 2>/dev/null | python3 -c '
+import datetime, json, os, sys
+try:
+    rows = json.load(sys.stdin)
+except ValueError:
+    sys.exit(0)
+for c in rows:
+    st = c.get("State") or {}
+    if not st.get("Running"):
+        continue
+    try:
+        started = datetime.datetime.fromisoformat(st.get("StartedAt", "")[:19]).replace(
+            tzinfo=datetime.timezone.utc).timestamp()
+    except ValueError:
+        continue
+    for m in c.get("Mounts") or []:
+        src = m.get("Source") or ""
+        if m.get("Type") == "bind" and not m.get("RW") and os.path.isfile(src) and os.stat(src).st_mtime > started + 1:
+            print((c.get("Config") or {}).get("Labels", {}).get("com.docker.compose.service", ""))
+            break' 2>/dev/null | sort -u)" || true
+  [ -n "${stale}" ] || return 0
+  # the compiled config only now, when something IS stale: every hook's `up -d <svc>` comes through here
+  while IFS= read -r s; do [ -n "${s}" ] && declared+=("${s}"); done < <(_dcx_run config --services 2>/dev/null || true)
+  [ "${#declared[@]}" -gt 0 ] || return 0
+  self="$(bbox_self_service 2>/dev/null || true)"
+  keep=""
+  while IFS= read -r s; do
+    [ -n "${s}" ] && [ "${s}" != "${self}" ] || continue
+    [[ " ${declared[*]} " == *" ${s} "* ]] || continue
+    [ "${#named[@]}" -eq 0 ] || [[ " ${named[*]} " == *" ${s} "* ]] || continue
+    keep="${keep}${s} "
+  done <<< "${stale}"
+  [ -n "${keep}" ] || return 0
+  say "recreating ${keep}— a file it mounts read-only was replaced after it started"
+  # shellcheck disable=SC2086 — a list of service names
+  _dcx_run up -d --no-deps --force-recreate ${keep} \
+    || say "${cy}could not recreate ${keep}— each still runs on the file it started with (above)${c0}"
+  return 0
 }
 
 # cpu_caps_apply — every running container gets the CPU quota the budget gives its service NOW.
@@ -580,7 +782,8 @@ heavy_admit() {
     sleep 10; waited=$(( waited + 10 ))
   done
   printf '%s | pid %s on %s | since %s\n' "${label}" "${BASHPID:-$$}" "$(hostname 2>/dev/null)" "$(date -u '+%F %T UTC')" > "${dir}/heavy.holder" 2>/dev/null || true
-  export BBOX_HEAVY_HELD=1 BBOX_HEAVY_FD="${fd}"
+  # BBOX_HEAVY_PID: the process that ADMITTED — the only one whose heavy_release may unlock (below)
+  export BBOX_HEAVY_HELD=1 BBOX_HEAVY_FD="${fd}" BBOX_HEAVY_PID="${BASHPID:-$$}"
 }
 
 # heavy_detach — call this at the TOP of any child that will outlive its heavy job (a watchdog, a
@@ -594,13 +797,44 @@ heavy_admit() {
 # they outlive the capture on purpose, so a finished `bbox ui-map` kept the slot for up to 15 more
 # minutes and the NEXT heavy job (a second profile, a build) sat in "waiting for the heavy-job slot —
 # held by: ui-map --profile desktop | pid …" naming a process that no longer existed. Measured on
-# both offices the same afternoon: on srv908573 `flock -n data/.locks/heavy` answered busy with only
+# both offices the same afternoon: on srv000001 `flock -n data/.locks/heavy` answered busy with only
 # `sleep 900` (ppid 1) holding the fd, and `kill` of that stray sleep freed the slot and let the
 # queued capture start. The rule this encodes: a child that outlives the job must not inherit its
 # slot — and the job that spawns it says so, here, rather than the waiter guessing.
 heavy_detach() {
   [ -n "${BBOX_HEAVY_FD:-}" ] || return 0
-  exec {BBOX_HEAVY_FD}>&- 2>/dev/null || true
+  # The braces matter: a bare `exec … 2>/dev/null` applies EVERY redirection to this shell for good,
+  # so the caller's stderr went to /dev/null with the fd — harmless in a watchdog child, but
+  # heavy_release runs this in `bbox run` itself, which then failed hooks without a reason (DGO-1024).
+  { exec {BBOX_HEAVY_FD}>&-; } 2>/dev/null || true
+}
+
+# heavy_release — give the slot back EARLY: the job's heavy part is over, and what it waits on next
+# is work ANOTHER process does under the same slot. `bbox run` → `ensure_converged` asks app-management
+# to converge, and its pushes restart n8n through `dcx` → heavy_admit, in the control plane's own
+# container (it mounts the checkout, so the same lock) — never a child of this run, so nothing is
+# inherited. The run held the slot while it waited, the push waited on the run: 20 minutes, a timeout,
+# and n8n at 0 of 4 workflows when `bbox run` said it was done (DGO-1024, the cloud proof of 5f5b995b).
+# A heavy step this job takes afterwards admits again, like any other job.
+#
+# UNLOCKED, not only closed. The lock belongs to the open file description, and every child this job
+# started under the slot holds a duplicate of it: closing the job's own copy left the slot held for
+# ~2 minutes after the POST opened (the cloud proof of 2be2e327). An explicit unlock through ANY
+# duplicate releases it for all of them (flock(2)) — which is also why heavy_detach, run by a child
+# while its job goes on, only closes.
+#
+# And for the same reason only the job that ADMITTED releases. A nested caller — `bbox baseline` runs
+# `bbox run` under its own slot — inherits the descriptor, and its unlock freed the PARENT's slot, so
+# every heavy step the baseline took afterwards ran unguarded beside other jobs (the second reader of
+# DGO-1024). A nested job's slot is its parent's: its release changes nothing, and it stays covered —
+# a nested run that gave up its pass-through waited on its own parent at its next build. `exec` keeps
+# the pid, so bbox's re-exec of itself still releases.
+heavy_release() {
+  [ -n "${BBOX_HEAVY_FD:-}" ] || return 0
+  [ "${BBOX_HEAVY_PID:-}" = "${BASHPID:-$$}" ] || return 0
+  { flock -u "${BBOX_HEAVY_FD}"; } 2>/dev/null || true
+  heavy_detach
+  unset BBOX_HEAVY_HELD BBOX_HEAVY_FD BBOX_HEAVY_PID
 }
 
 # heavy_slot_status — "free", or the holder line of the job that holds the slot RIGHT NOW.
@@ -655,6 +889,24 @@ compose_is_recreate() {
   return 1
 }
 
+# compose_is_up ARGS… — true when the compose SUBCOMMAND is `up` and it is not a dry run (a global
+# `--dry-run` before the subcommand, or one after it). Global flags before the subcommand are skipped like
+# compose_is_build. Free text after another subcommand (`exec … "back up the files"`) is never read.
+compose_is_up() {
+  local a sub=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --dry-run) return 1 ;;
+      -f|--file|-p|--project-name|--profile|--env-file|--project-directory|--ansi|--progress|--parallel) shift; [ $# -gt 0 ] && shift ;;
+      -*) shift ;;
+      *) sub="$1"; shift; break ;;
+    esac
+  done
+  [ "${sub}" = up ] || return 1
+  for a in "$@"; do [ "${a}" = --dry-run ] && return 1; done
+  return 0
+}
+
 # compose_admit ARGS… — the one admission line every compose entry point uses (dcx, scripts/dc):
 # a build takes the slot with the build memory floor, a recreate with the recreate floor
 # (BBOX_RECREATE_MIN_MB, default 400 MiB), anything else passes. Nested calls pass through on
@@ -663,6 +915,71 @@ compose_admit() {
   if compose_is_build "$@"; then heavy_admit "compose $*"
   elif compose_is_recreate "$@"; then heavy_admit "compose $*" "${BBOX_RECREATE_MIN_MB:-400}"
   fi
+  return 0
+}
+
+# ── A DEPLOY NEVER STEPS BACK: the ledger of what this checkout already runs (DGO-1016) ───────────
+# On 2026-10-16 vps1's checkout was put at a commit eight days older than the one it was running, and
+# every service was rebuilt from it. 418 commits went, among them the price of a conversation in
+# Azaria's sessions, which the owner then found gone. Nothing said a word. A commit cannot know what
+# ran before it, so the MACHINE keeps one line: the commit of the last `up` from this checkout
+# (data/.deploy/deployed, ignored, per machine). A build or a recreate from a HEAD that does not
+# CONTAIN that commit would drop work this office already runs. It is refused, and the refusal names
+# what would go. Going back on purpose: BBOX_ALLOW_ROLLBACK=1 on the same command (the ledger follows).
+# A checkout with no ledger (a fresh machine, a CI worktree) is never asked; its first `up` writes it.
+# The converge's code step holds the same rule on the machine it converges (apps/dgo-extend, code_script).
+DEPLOY_LEDGER="${REPO_ROOT}/data/.deploy/deployed"
+deploy_ledger_gate() {
+  compose_is_build "$@" || compose_is_recreate "$@" || return 0
+  case " $* " in *" --dry-run "*) return 0 ;; esac
+  [ -s "${DEPLOY_LEDGER}" ] || return 0
+  local was head n
+  was="$(head -n1 "${DEPLOY_LEDGER}" 2>/dev/null | cut -d' ' -f1)"
+  head="$(git -C "${REPO_ROOT}" rev-parse -q --verify 'HEAD^{commit}' 2>/dev/null)" || return 0
+  { [ -n "${was}" ] && [ "${was}" != "${head}" ]; } || return 0
+  if ! git -C "${REPO_ROOT}" cat-file -e "${was}^{commit}" 2>/dev/null; then
+    warn "deploy: the last deployed commit ${was:0:12} is not in this repository; cannot tell whether this build goes back" >&2
+    return 0
+  fi
+  git -C "${REPO_ROOT}" merge-base --is-ancestor "${was}" "${head}" && return 0
+  n="$(git -C "${REPO_ROOT}" rev-list --count "${head}..${was}")"
+  if [ "${BBOX_ALLOW_ROLLBACK:-0}" = 1 ]; then
+    warn "deploy: going back on purpose (BBOX_ALLOW_ROLLBACK=1): ${n} commit(s) of ${was:0:12} leave this office" >&2
+    return 0
+  fi
+  {
+    echo "${cr}deploy: REFUSED${c0} — this checkout (HEAD ${head:0:12}) does not contain ${was:0:12}, the commit this office last ran."
+    echo "  ${n} commit(s) that run here now would be dropped by this command:"
+    git -C "${REPO_ROOT}" log --date=short --format='    %h %ad %s' -n 15 "${head}..${was}"
+    [ "${n}" -gt 15 ] && echo "    … and $(( n - 15 )) more"
+    echo "  Move forward to a commit that holds both (merge), or go back on purpose:"
+    echo "  BBOX_ALLOW_ROLLBACK=1 <the same command>"
+  } >&2
+  return 1
+}
+# deploy_ledger_record ARGS… — after a compose command succeeded: an `up` (not a dry run) moves the
+# ledger to HEAD. The gate has already passed, so HEAD contains the old line or the move was meant.
+# The subcommand is parsed, as compose_is_recreate parses it: `exec svc … up` is not an `up`. The file
+# is left readable and writable by anyone, because the host user and the agent's container (root) both
+# deploy from one checkout, and a ledger one of them cannot move would refuse the other's next build.
+# Nothing here may fail a caller that runs under `set -e`.
+deploy_ledger_record() {
+  local a sub="" head d
+  for a in "$@"; do [ "${a}" = --dry-run ] && return 0; done
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -f|--file|-p|--project-name|--profile|--env-file|--project-directory|--ansi|--progress|--parallel) shift; [ $# -gt 0 ] && shift ;;
+      -*) shift ;;
+      *) sub="$1"; break ;;
+    esac
+  done
+  [ "${sub}" = up ] || return 0
+  head="$(git -C "${REPO_ROOT}" rev-parse -q --verify 'HEAD^{commit}' 2>/dev/null)" || return 0
+  d="$(dirname "${DEPLOY_LEDGER}")"
+  mkdir -p "${d}" 2>/dev/null || true
+  chmod a+rwx "${d}" 2>/dev/null || true          # only its owner can; the other writer's try is a no-op
+  { printf '%s %s\n' "${head}" "$(date -u '+%FT%TZ')" >"${DEPLOY_LEDGER}.tmp" \
+    && chmod a+rw "${DEPLOY_LEDGER}.tmp" && mv -f "${DEPLOY_LEDGER}.tmp" "${DEPLOY_LEDGER}"; } 2>/dev/null || true
   return 0
 }
 # BBOX_DOCKER_SOCK means two things that are one path on the host and two in a container: where the
@@ -674,6 +991,14 @@ compose_admit() {
 # the host's path when it is created (BBOX_HOST_DOCKER_SOCK, in its own compose file), and compose
 # — which talks to the engine through DOCKER_HOST — interpolates that.
 _dcx_run() { ( cd "${REPO_ROOT}" && BBOX_DOCKER_SOCK="${BBOX_HOST_DOCKER_SOCK:-${BBOX_DOCKER_SOCK}}" "${BBOX_COMPOSE}" $(compose_args) "$@" ); }
+# _dcx_run_for <seconds> <args…>: the same, with a ceiling (exit 124 past it) — for a QUESTION asked of
+# compose, which a status line must never wait on for good. Without `timeout` it is _dcx_run.
+_dcx_run_for() {
+  local s="$1"; shift
+  command -v timeout >/dev/null 2>&1 || { _dcx_run "$@"; return; }
+  # -k 5: compose takes SIGTERM as "cancel", and a hang that ignores the cancel is killed 5 s later
+  ( cd "${REPO_ROOT}" && BBOX_DOCKER_SOCK="${BBOX_HOST_DOCKER_SOCK:-${BBOX_DOCKER_SOCK}}" timeout -k 5 "${s}" "${BBOX_COMPOSE}" $(compose_args) "$@" )
+}
 
 # ── SELF-GUARD: a compose command that would replace the container it is running in ─────────────
 # The office agent's harness runs inside a container, and its shell runs ./bbox and ./scripts/dc
@@ -880,9 +1205,13 @@ running() { docker ps --format '{{.Names}}' | grep -Fxq "$1"; }            # run
 # bare `<svc>`, `<svc>-<DN>`, or a compose-prefixed `<svc>-<n>`. Robust to deployment-name drift
 # between a laptop (…-local-dev) and CI (…-<DN>). Empty output = not running.
 cn() {
-  local svc="$1" names; names="$(docker ps --format '{{.Names}}' 2>/dev/null)"
+  local svc="$1" names; names="$(docker ps --format '{{.Names}}' 2>/dev/null)" || names=""
   local n; for n in "${svc}-${DN}" "${svc}"; do printf '%s\n' "$names" | grep -Fxq "$n" && { echo "$n"; return; }; done
-  printf '%s\n' "$names" | grep -E "^${svc}(-[a-z0-9-]+)?$" | head -1
+  # `|| true`: empty IS the answer "not running", never a failure. Under `set -euo pipefail` the grep
+  # that matched nothing made `x="$(cn …)"` end its script without a word — `bbox run` exited 1 at
+  # ensure_converged, after a healthy bring-up, whenever the control plane was not in it (a targeted
+  # run; the DGO-1040 drill). 32 callers in 17 files: one reads the status, and checks -n as well.
+  printf '%s\n' "$names" | grep -E "^${svc}(-[a-z0-9-]+)?$" | head -1 || true
 }
 pgq()     { docker exec -e PGPASSWORD="$(read_env POSTGRES_PASSWORD)" "${PG_CONTAINER}" \
               psql -U "$(read_env POSTGRES_USER)" -d "$(read_env POSTGRES_DB)" -tAc "$1" 2>/dev/null | tr -d '\r'; }
@@ -914,6 +1243,8 @@ ensure_network() {
 # Verbs in use:
 #   prepare   before containers start                                          (`bbox run`)
 #   onboard   first-run seeding, after the stack is up and n8n is restored     (`bbox run`)
+#   refresh   the hosts this deployment declares changed — a server that serves a host SET is told
+#             to re-read it                                                        (`bbox run`)
 #
 # `onboard` runs unconditionally on every `bbox run` (not just the interactive `bbox onboarding`
 # flow) — each app's onboard hook is therefore responsible for being a safe no-op once its own
@@ -934,11 +1265,14 @@ ensure_network() {
 #                       is a string contract between two files, and it silently becomes a lie the
 #                       first time someone rewords the message or a hook writes to stderr.
 #
-# Callers therefore choose. Bring-up verbs (`prepare`, `onboard`) append `|| true`: a failed
-# bootstrap is loud but not fatal, which is the behaviour they always had. `bbox baseline` does NOT,
+# Callers therefore choose. Bring-up verbs (`prepare`, `onboard`, `refresh`) do not fail the run: a
+# failed bootstrap is loud, and `bbox run` says it again at its end (DGO-995). `bbox baseline` does NOT,
 # because reporting a green baseline over a failing app is the exact disease this repo is curing.
 run_app_hooks() {
-  local verb="${1:?usage: run_app_hooks <verb>}" root aid hook rc=0
+  local verb="${1:?usage: run_app_hooks <verb>}" root aid hook rc=0 apps="${BBOX_APPS_SNAPSHOT:-}"
+  # BBOX_APPS_SNAPSHOT: a caller that runs several passes reads the enabled apps ONCE (a rename: an app
+  # turned on between its passes must be neither half-run nor missed by its note)
+  [ -n "${apps}" ] || apps="$( cd "${REPO_ROOT}" && python3 platform/manager/reconcile.py enabled-apps 2>/dev/null )"
   while read -r root aid; do
     [ -n "${root}" ] && [ -n "${aid}" ] || continue
     hook="${REPO_ROOT}/${root}/${aid}/hooks/${verb}"
@@ -947,11 +1281,238 @@ run_app_hooks() {
     # bootstraps once never executed (traefik's acme.json mode among them) and nothing said a word.
     # G31 keeps the committed mode right; this is the checkout that lost its modes on the way.
     [ -x "${hook}" ] || { say "${cy}${aid}: ${verb} hook is not executable — NOT run (chmod +x ${root}/${aid}/hooks/${verb})${c0}"; rc=$((rc + 1)); continue; }
-    if ! bash "${hook}"; then
+    # </dev/null: the hook's stdin would otherwise be THIS loop's list of apps, and one hook that
+    # reads stdin (git's prepare does, through docker exec -i) swallowed the rest of it — every app
+    # after it was skipped in silence (measured 2026-10-20: meet and traefik never ran, DGO-824).
+    if ! bash "${hook}" </dev/null; then
       say "${cy}${aid}: ${verb} hook FAILED${c0}"
       rc=$((rc + 1))
     fi
-  done < <( cd "${REPO_ROOT}" && python3 platform/manager/reconcile.py enabled-apps 2>/dev/null )
+  done <<<"${apps}"
+  return "${rc}"
+}
+
+# _is_line <item> <lines> — whether one of the lines is exactly the item (no pipe: under pipefail a grep -q
+# that stops reading early can fail its printf, and a member would read as absent)
+_is_line() { case "
+$2
+" in *"
+$1
+"*) return 0 ;; esac; return 1; }
+
+# rename_address_passes <old> <new> <dry 0|1> — the office's people's addresses follow it to another domain
+# (FPG-34): every ENABLED app's hooks/rename-address, TWICE — every hook decides from state and is
+# idempotent, and one may need another's facts (a vault override follows only a person an app moved), so
+# the second pass is the one that counts. The facts go in a ledger (rename_note) that lives as long as this
+# call. Returns the second pass's count of apps that failed or refused; sets RENAME_CHANGED=1 when anything
+# was really written. `bbox rename-address` runs it (a replay of what waits has its own shape: _replay).
+rename_address_passes() {
+  local old="$1" new="$2" dry="${3:-0}" rc=0
+  RENAME_CHANGED=0
+  # the enabled apps, read ONCE for both passes and for the note after them (note_pending_renames)
+  BBOX_APPS_SNAPSHOT="$( cd "${REPO_ROOT}" && python3 platform/manager/reconcile.py enabled-apps 2>/dev/null )"
+  [ -n "${BBOX_APPS_SNAPSHOT}" ] || { say "${cr}rename-address: the enabled apps could not be read — nothing was moved${c0}"; return 1; }
+  DGO_RENAME_LEDGER="$(mktemp)" || return 1
+  export DGO_RENAME_FROM="${old}" DGO_RENAME_TO="${new}" DGO_RENAME_DRY_RUN="${dry}" DGO_RENAME_LEDGER
+  say "rename-address: first pass"
+  export DGO_RENAME_PASS=1
+  run_app_hooks rename-address || true
+  say "rename-address: second pass (what is still to do, and the verdict)"
+  export DGO_RENAME_PASS=CHANGE_ME
+  run_app_hooks rename-address || rc=$?
+  grep -q '^- changed' "${DGO_RENAME_LEDGER}" 2>/dev/null && RENAME_CHANGED=1
+  rm -f "${DGO_RENAME_LEDGER}"
+  unset DGO_RENAME_FROM DGO_RENAME_TO DGO_RENAME_DRY_RUN DGO_RENAME_LEDGER DGO_RENAME_PASS
+  return "${rc}"
+}
+
+# _rename_lock <wait-seconds> / _rename_unlock — one at a time: a rename (`bbox rename-address`) and a
+# replay of what waits (`bbox run`) never run their hooks together — two env_set on one .env would lose one
+# write, and an account and its key would disagree. data/.locks/rename.lock, taken INSIDE bbox (DGO Extend's
+# rename-address.lock is its own, held around the whole command by the caller). No flock (a Mac host, where
+# bbox re-runs itself in the engine anyway) or a lock dir nobody can write runs unlocked, and says so.
+_rename_lock() {
+  local dir="${REPO_ROOT}/data/.locks" fd
+  [ -n "${BBOX_RENAME_LOCK_FD:-}" ] && return 0
+  if ! command -v flock >/dev/null 2>&1; then
+    say "${cy}rename-address: no flock here — running without the rename lock${c0}"
+    return 0
+  fi
+  if ! { mkdir -p "${dir}" && exec {fd}>>"${dir}/rename.lock"; } 2>/dev/null; then
+    say "${cy}rename-address: ${dir}/rename.lock cannot be opened — running without the rename lock${c0}"
+    return 0
+  fi
+  flock -w "${1:-600}" "${fd}" || { exec {fd}>&-; return 1; }
+  BBOX_RENAME_LOCK_FD="${fd}"
+}
+_rename_unlock() {
+  [ -n "${BBOX_RENAME_LOCK_FD:-}" ] || return 0
+  # unlocked first, then closed: a child that inherited the descriptor must not keep holding it (DGO-1024)
+  flock -u "${BBOX_RENAME_LOCK_FD}" 2>/dev/null || true
+  exec {BBOX_RENAME_LOCK_FD}>&-
+  unset BBOX_RENAME_LOCK_FD
+}
+
+# An app that keeps addresses but is OFF when the office changes domain cannot move its accounts then —
+# its database is not running, and starting it is not the rename's to do — and its .env keys must not
+# move without them: a key naming an address no account holds makes a second account when the app comes
+# up (GlitchTip's push). So it is NOTED in data/.locks/rename-pending, ONE line per app:
+#   <app> <the office's domain now> <every domain its people may still be on>,…
+# and moved once it is on (run_pending_renames) — from each of those domains STRAIGHT to the office's
+# domain, never through the ones between, so a round trip (A→B, then B→A) is simply «from B to A». The
+# move is a rename's own shape, over every app that is on (the vault follows the people any app moves), so
+# the other apps move anyone of theirs still on that domain too — as `bbox rename-address` would.
+# note_pending_renames <old> <new> <dry 0|1>: the apps that are off, and any app that is on but still waits
+# (its people are on an older domain: it now owes the move to <new>). Says each; non-zero when the note
+# could not be written, or which apps are on could not be read (the caller keeps the rename as not done).
+# Runs under the caller's rename lock.
+note_pending_renames() {
+  local old="$1" new="$2" dry="${3:-0}" note="${REPO_ROOT}/data/.locks/rename-pending" on hook aid cur lines="" a apps
+  apps="${BBOX_APPS_SNAPSHOT:-}"
+  [ -n "${apps}" ] || apps="$( cd "${REPO_ROOT}" && python3 platform/manager/reconcile.py enabled-apps 2>/dev/null )"
+  # no list is not «every app is off»: that would note the running ones too, and replay them all
+  if [ -z "${apps}" ]; then
+    say "${cr}rename-address: which apps are on could not be read — nothing was noted${c0}"
+    return 1
+  fi
+  on="$(printf '%s\n' "${apps}" | awk '{print $2}')"
+  # a note that is there and cannot be read is a failure — never «nothing waits», which would drop its lines
+  cur=""
+  if [ -e "${note}" ] && ! cur="$(cat "${note}" 2>/dev/null)"; then
+    say "${cr}rename-address: ${note} cannot be read — the apps waiting in it would be forgotten; nothing was noted${c0}"
+    return 1
+  fi
+  # EVERY waiting line owes the move to <new> now, its people possibly also on <old> — whether its app is on,
+  # off, or its hook is gone for now (a line left on an older target would move them to a domain the office
+  # has left)
+  while read -r a _ _; do
+    [ -n "${a}" ] && say "rename-address: ${a} still waits for its addresses to move — they now go to @${new}"
+  done <<<"${cur}"
+  lines="$(printf '%s\n' "${cur}" | awk -v n="${new}" -v o="${old}" 'NF {print $1" "n" "$3","o}')"
+  for hook in "${REPO_ROOT}"/apps/*/hooks/rename-address "${REPO_ROOT}"/platform-base/*/hooks/rename-address; do
+    [ -e "${hook}" ] || continue
+    aid="$(basename "$(dirname "$(dirname "${hook}")")")"
+    ! _is_line "${aid}" "${on}" || continue
+    printf '%s\n' "${cur}" | awk -v a="${aid}" '$1 == a {f = 1} END {exit !f}' && continue   # said above
+    if [ "${dry}" = 1 ]; then
+      say "rename-address: ${aid} is off here — DRY RUN, its addresses would move when it is turned on"
+    else
+      say "rename-address: ${aid} is off here — its addresses move to @${new} when it is turned on (the next bbox run)"
+    fi
+    lines="${lines:+${lines}
+}${aid} ${new} ${old}"
+  done
+  [ -n "${lines}" ] && [ "${dry}" != 1 ] || return 0
+  # built whole, written whole: a write that fails (a full disk) is a failure, never a shorter note
+  if ! { mkdir -p "${REPO_ROOT}/data/.locks" && printf '%s\n' "${lines}" | _merge_note >"${note}.new" \
+         && mv -f "${note}.new" "${note}"; } 2>/dev/null; then
+    say "${cr}rename-address: the apps that are off could not be noted (${note}) — their addresses would NOT follow${c0}"
+    return 1
+  fi
+}
+
+# _merge_note — note lines on stdin, one per app out: the app's LAST target, every domain it was given in
+# the order first given, less the target; an app left with none is done and drops out
+_merge_note() {
+  awk '{ a = $1; if (!(a in t)) { o[++n] = a; l[a] = "" }; t[a] = $2
+         k = split($3, f, ","); for (i = 1; i <= k; i++) if (f[i] != "" && !((a, f[i]) in s)) { s[a, f[i]] = 1; l[a] = l[a] (l[a] == "" ? "" : ",") f[i] } }
+       END { for (j = 1; j <= n; j++) { a = o[j]; r = ""; k = split(l[a], f, ",")
+             for (i = 1; i <= k; i++) if (f[i] != t[a]) r = r (r == "" ? "" : ",") f[i]
+             if (r != "") print a " " t[a] " " r } }'
+}
+
+# _replay <from> <to> — one domain's people moved to the office's, in a rename's own shape, over every app
+# that is on (BBOX_APPS_SNAPSHOT): a first pass on a ledger that is then thrown away (a «failed» from a first
+# try must not make the vault wait on a person moved since), then the verdict pass TWICE on one fresh
+# ledger — whatever the order of the apps, the second time every app (the vault among them) reads the facts
+# every other app stated in the first. (A «failed» an app states in that first verdict pass stays in the
+# ledger: the vault waits on it, is noted, and the next run finishes it.) REPLAY_FAILED names the apps whose
+# last verdict failed; the return is how many — or 1 with none named when it could not start at all.
+_replay() {
+  local pass rc root aid h l1 l2
+  REPLAY_FAILED=""
+  l1="$(mktemp)" || return 1
+  l2="$(mktemp)" || { rm -f "${l1}"; return 1; }
+  export DGO_RENAME_FROM="$1" DGO_RENAME_TO="$2" DGO_RENAME_DRY_RUN=0
+  for pass in 1 2 3; do
+    if [ "${pass}" = 1 ]; then export DGO_RENAME_LEDGER="${l1}" DGO_RENAME_PASS=1
+    else export DGO_RENAME_LEDGER="${l2}" DGO_RENAME_PASS=2; fi
+    while read -r root aid; do
+      [ -n "${aid}" ] || continue
+      h="${REPO_ROOT}/${root}/${aid}/hooks/rename-address"
+      [ -e "${h}" ] || continue
+      rc=0
+      if [ -x "${h}" ]; then bash "${h}" </dev/null || rc=$?; else rc=126; fi
+      [ "${pass}" = 3 ] && [ "${rc}" != 0 ] && REPLAY_FAILED="${REPLAY_FAILED} ${aid}"
+    done <<<"${BBOX_APPS_SNAPSHOT:-}"
+  done
+  rm -f "${l1}" "${l2}"
+  unset DGO_RENAME_FROM DGO_RENAME_TO DGO_RENAME_DRY_RUN DGO_RENAME_LEDGER DGO_RENAME_PASS
+  set -- ${REPLAY_FAILED}
+  return "$#"
+}
+
+# run_pending_renames — the noted apps that are on now move, each from each of its domains to the office's.
+# Each distinct move (<from> → <to>) is replayed ONCE, whichever apps wait on it, and every app's own last
+# verdict decides for it: an app that moved drops that domain, one that did not keeps (or gets) a line of its
+# own — its trouble never holds another back, and the next run tries it again. Under the rename lock (a
+# minute's wait, then the next run). Non-zero when anything did not move.
+run_pending_renames() {
+  local note="${REPO_ROOT}/data/.locks/rename-pending" cur on aid to froms from hook out="" rc=0 f moves="" waits=""
+  [ -s "${note}" ] || return 0
+  _rename_lock "${BBOX_RENAME_REPLAY_WAIT:-60}" \
+    || { say "${cy}addresses wait for the office's new domain, and the rename lock could not be taken (a rename running?) — the next bbox run moves them${c0}"; return 1; }
+  if ! cur="$(cat "${note}")"; then _rename_unlock; return 1; fi
+  BBOX_APPS_SNAPSHOT="$( cd "${REPO_ROOT}" && python3 platform/manager/reconcile.py enabled-apps 2>/dev/null )"
+  on="$(printf '%s\n' "${BBOX_APPS_SNAPSHOT}" | awk '{print $2}')"
+  if [ -z "${on}" ]; then
+    say "${cy}addresses wait for the office's new domain, and the enabled apps could not be read — not moved${c0}"
+    unset BBOX_APPS_SNAPSHOT; _rename_unlock; return 1
+  fi
+  while read -r aid to froms; do
+    [ -n "${aid}" ] && [ -n "${to}" ] || continue
+    hook="${REPO_ROOT}/apps/${aid}/hooks/rename-address"
+    [ -e "${hook}" ] || hook="${REPO_ROOT}/platform-base/${aid}/hooks/rename-address"
+    if ! _is_line "${aid}" "${on}" || ! [ -e "${hook}" ]; then
+      out="${out}${aid} ${to} ${froms}"$'\n'           # still off (or its hook is gone): it keeps waiting
+      continue
+    fi
+    if ! [ -x "${hook}" ]; then
+      say "${cy}${aid}: its addresses wait for @${to}, but its rename-address hook is not executable${c0}"
+      out="${out}${aid} ${to} ${froms}"$'\n'; rc=1; continue
+    fi
+    say "rename-address: ${aid} was off when the office moved — its addresses on @${froms} go to @${to} now"
+    for from in $(printf '%s' "${froms}" | tr ',' ' '); do
+      [ "${from}" != "${to}" ] || continue
+      _is_line "${from} ${to}" "${moves}" || moves="${moves:+${moves}
+}${from} ${to}"
+      waits="${waits}${aid} ${to} ${from}"$'\n'
+    done
+  done <<<"${cur}"
+  while read -r from to; do
+    [ -n "${from}" ] || continue
+    _replay "${from}" "${to}" && continue
+    if [ -z "${REPLAY_FAILED}" ]; then
+      # it failed before any app ran (no temporary ledger): nobody moved — every app waiting on this move
+      # keeps it, never «moved» by default
+      say "${cy}rename-address: the move from @${from} could not start — the next bbox run tries again${c0}"
+      out="${out}$(printf '%s' "${waits}" | awk -v f="${from}" -v t="${to}" '$2 == t && $3 == f')"$'\n'; rc=1
+      continue
+    fi
+    for f in ${REPLAY_FAILED}; do
+      say "${cy}rename-address: ${f} did not finish its move from @${from} — the next bbox run tries again${c0}"
+      out="${out}${f} ${to} ${from}"$'\n'; rc=1
+    done
+  done <<<"${moves}"
+  out="$(printf '%s' "${out}" | _merge_note)"
+  if [ -z "${out}" ]; then
+    rm -f "${note}" || rc=1
+  elif ! { printf '%s\n' "${out}" >"${note}.new" && mv -f "${note}.new" "${note}"; } 2>/dev/null; then
+    say "${cy}the rename note could not be rewritten — it stays as it was, and the next run moves them again${c0}"
+    rc=1
+  fi
+  unset BBOX_APPS_SNAPSHOT
+  _rename_unlock
   return "${rc}"
 }
 
@@ -1123,7 +1684,16 @@ ccr_shadow_bases() {
       # straight at the copied CA file (NODE_EXTRA_CA_CERTS is additive over the built-in roots).
       printf 'FROM %s\nCOPY ccr-ca.crt %s\nENV NODE_EXTRA_CA_CERTS=%s SSL_CERT_FILE=%s npm_config_cafile=%s GIT_SSL_CAINFO=%s CURL_CA_BUNDLE=%s\nUSER node\n' "$b" "$RAW" "$RAW" "$RAW" "$RAW" "$RAW" "$RAW" > "${sdir}/Dockerfile"
     else
-      printf 'FROM %s\nCOPY ccr-ca.crt %s\n%s\nRUN command -v update-ca-certificates >/dev/null 2>&1 || (apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*); cat %s >> %s 2>/dev/null || true; update-ca-certificates 2>/dev/null || true\n%s\n' "$b" "$RAW" "$CCR_APT_HTTPS_RUN" "$RAW" "$CAP" "$ENVS" > "${sdir}/Dockerfile"
+      # A slim base may carry NO ca-certificates at all (node:24-bookworm-slim: no /etc/ssl, no
+      # update-ca-certificates). Installing it is then a circle — apt reaches deb.debian.org over
+      # https through the intercepting proxy and cannot verify the proxy's certificate without the
+      # very CA it is installing — so apt is handed the copied proxy CA for that one install
+      # (Acquire::https::CAInfo). And the step FAILS when no bundle came out of it: the old form
+      # ended in `|| true`, so a base with no bundle shadowed "successfully", every build FROM it
+      # pointed NODE_EXTRA_CA_CERTS at a file that did not exist, and bina-ds died in corepack with
+      # SELF_SIGNED_CERT_IN_CHAIN (measured 2026-10-15). update-ca-certificates folds
+      # /usr/local/share/ca-certificates/*.crt into the bundle itself, so the proxy CA is in it.
+      printf 'FROM %s\nCOPY ccr-ca.crt %s\n%s\nRUN set -e; mkdir -p /etc/ssl/certs; if ! command -v update-ca-certificates >/dev/null 2>&1; then apt-get -o Acquire::https::CAInfo=%s update && apt-get -o Acquire::https::CAInfo=%s install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*; fi; update-ca-certificates; test -s %s\n%s\n' "$b" "$RAW" "$CCR_APT_HTTPS_RUN" "$RAW" "$RAW" "$CAP" "$ENVS" > "${sdir}/Dockerfile"
     fi
     # shellcheck disable=SC2046,SC2086 — proxy flags are intentionally word-split; empty off-cloud.
     docker build $(ccr_proxy_build_flags) -q -t "$b" -f "${sdir}/Dockerfile" "${sdir}" >/dev/null 2>&1 && { n=$((n+1)); } || warn "shadow build failed for ${b}"
@@ -1192,6 +1762,7 @@ ccr_build_serial() {
   # same choice this function already makes for the proxy case, for the same reason
   # (`docker compose build` cannot set a build network, which is why this shells out).
   ccr_have_proxy_ca || bbox_container_dns_broken || return 0
+  deploy_ledger_gate build || return 1     # it builds without dcx, so it asks the ledger itself (G90)
   local svcs="$*" rc=0
   log "proxied env → building first-party images serially (host network, proxy-aware apt)${svcs:+: ${svcs}}"
   # Resolve each service's build context/dockerfile/image/args from the merged compose config once.
@@ -1215,7 +1786,7 @@ for s in sel:
         ctx = b.get("context", "."); df = b.get("dockerfile", "Dockerfile"); args = b.get("args", {}) or {}
     if isinstance(args, list):
         args = {k: v for a in args for k, _, v in [a.partition("=")]}
-    img = svc.get("image") or ("deployment-bina-comp-" + s)
+    img = svc.get("image") or ("deployment-hacohen-" + s)
     argflags = " ".join("--build-arg " + shlex.quote("%s=%s" % (k, v)) for k, v in args.items())
     print("\t".join([s, img, ctx, df, argflags]))
 PY
@@ -1251,4 +1822,68 @@ ${specs}
 EOF
   docker builder prune -f >/dev/null 2>&1 || true   # reclaim intermediate layers before bring-up
   return "$rc"
+}
+
+# stale_images — the RUNNING containers whose image is OLDER than the files it was built from, one
+# "service (age)" per line. The sibling of stale_containers above, and the answer to a different
+# question: a bring-up WITHOUT --build re-creates a container and runs the OLD code, so nothing in
+# the files or in `docker ps` shows the drift (eng-013, instance 3 — measured 2026-10-11: project-pln
+# 32.6h behind its sources, bina-ds 26.6h, computers 11.5h). Build contexts are read from the APP
+# composes, because the compiled .generated/compose.yml does not carry them (measured: 0 services
+# there, 36 in the apps).
+stale_images() {
+  ( cd "${REPO_ROOT}" && python3 - <<'PY'
+import datetime, os, pathlib, subprocess, glob
+try:
+    import yaml
+except Exception:
+    raise SystemExit(0)
+ctx_by_svc = {}
+for f in glob.glob('apps/*/docker-compose.yml') + glob.glob('platform-base/*/docker-compose.yml'):
+    try:
+        cfg = yaml.safe_load(open(f, encoding='utf-8')) or {}
+    except Exception:
+        continue
+    for svc, node in (cfg.get('services') or {}).items():
+        b = (node or {}).get('build')
+        c = b.get('context') if isinstance(b, dict) else (b if isinstance(b, str) else None)
+        if c:
+            ctx_by_svc.setdefault(svc, (pathlib.Path(f).parent / str(c)).resolve())
+out = subprocess.run(['docker', 'ps', '--format',
+                      '{{.Label "com.docker.compose.service"}}'], capture_output=True, text=True).stdout
+running = {s for s in out.split() if s}
+SUF = ('.py', '.js', '.mjs', '.ts', '.tsx', '.sh', '.json', '.css', '.html', '.go', '.yaml', '.yml')
+rows = []
+for svc, ctx in sorted(ctx_by_svc.items()):
+    if svc not in running or not ctx.is_dir():
+        continue
+    newest = 0.0
+    for root, dirs, files in os.walk(ctx):
+        dirs[:] = [d for d in dirs if d not in ('node_modules', '.git', '__pycache__', 'dist', 'build', 'vendor')]
+        for f in files:
+            if f.endswith(SUF) or f == 'Dockerfile':
+                try:
+                    newest = max(newest, os.path.getmtime(os.path.join(root, f)))
+                except OSError:
+                    pass
+    if not newest:
+        continue
+    name = subprocess.run(['docker', 'ps', '-q', '--filter', f'label=com.docker.compose.service={svc}',
+                           '--format', '{{.Names}}'], capture_output=True, text=True).stdout.split()
+    if not name:
+        continue
+    created = subprocess.run(['docker', 'inspect', '-f', '{{.Created}}', name[0]],
+                             capture_output=True, text=True).stdout.strip()
+    if not created:
+        continue
+    try:
+        img = datetime.datetime.fromisoformat(created.replace('Z', '+00:00')).timestamp()
+    except ValueError:
+        continue
+    if newest > img:
+        rows.append(f"{svc} ({round((newest - img) / 3600)}h)")
+if rows:
+    print(' '.join(rows))
+PY
+  )
 }

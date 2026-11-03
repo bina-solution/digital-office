@@ -1,4 +1,5 @@
-"""The transcription engine: one model, loaded on demand, released when nobody is talking.
+"""The transcription engines: two models, each loaded on demand, one in memory at a time, released
+when nobody is talking.
 
 Why this file is shaped the way it is (all of it measured on the office host, 2 vCPU, no GPU —
 see ai/context/local-asr-research.md):
@@ -16,10 +17,18 @@ The model is a PINNED artifact, not "whatever huggingface serves today": repo + 
 the environment, the downloaded tree carries a `.ready` marker naming the revision it was fetched
 at, and a marker that does not match triggers a re-fetch. That is the same discipline as the Docker
 pin, and it is what makes "the model changed" a decision rather than a drift.
+
+TWO MODELS, ONE IN MEMORY (DGO-955, the owner 2026-10-22: «לתמלל בשתי השפות … בשפה שהדברים נאמרו»).
+`ivrit` (the default) is ivrit.ai's Whisper, tuned on Hebrew: it is the Hebrew transcript, and it
+writes English speech badly (the owner: «דיברתי רוב הזמן באנגלית וקיבלתי תמלול די גרוע»). `whisper` is the same Whisper
+large-v3-turbo as OpenAI trained it: the English transcript, and any language as spoken. A job names
+the one it wants. Only one is ever loaded: loading one releases the other first, because the box
+that runs this has room for one (vps1: a 2.5 GB cap, ~1 GB free on the host).
 """
 
 from __future__ import annotations
 
+import ctypes
 import gc
 import logging
 import os
@@ -35,11 +44,61 @@ LOG = logging.getLogger("asr.engine")
 DEFAULT_REPO = "ivrit-ai/whisper-large-v3-turbo-ct2"
 # Pinned 2026-10-07 (huggingface.co/api/models/ivrit-ai/whisper-large-v3-turbo-ct2 -> sha).
 DEFAULT_REVISION = "72ad623a37947395efcc3933132353790e5a12f5"
+# OpenAI's Whisper large-v3-turbo, converted to CTranslate2 (the format faster-whisper loads).
+# Pinned 2026-10-22 (huggingface.co/api/models/deepdml/faster-whisper-large-v3-turbo-ct2 -> sha).
+WHISPER_REPO = "deepdml/faster-whisper-large-v3-turbo-ct2"
+WHISPER_REVISION = "4df90f75321148c3a29a9e2351b7ddf8f5b115a8"
 
 
 def _env(name: str, default: str) -> str:
     v = os.environ.get(name)
     return v if v not in (None, "") else default
+
+
+# glibc's own knobs (malloc.h); another C library has neither, and nothing is tuned there
+_M_TRIM_THRESHOLD, _M_MMAP_THRESHOLD = -1, -3
+
+
+def _glibc() -> Any:
+    try:
+        libc = ctypes.CDLL("libc.so.6")
+    except OSError:
+        return None
+    if not (hasattr(libc, "mallopt") and hasattr(libc, "malloc_trim")):
+        return None
+    libc.mallopt.argtypes = [ctypes.c_int, ctypes.c_int]
+    libc.malloc_trim.argtypes = [ctypes.c_size_t]
+    return libc
+
+
+_LIBC = _glibc()
+
+
+@contextmanager
+def _heap_for_a_load() -> Iterator[None]:
+    """While a model loads, every block from 128 KiB up is mapped on its own, so it goes back to the
+    system whole when it is freed; after the load, the most glibc's own moving thresholds reach (32 MiB
+    / 64 MiB), and what the load freed inside the heap (holes an earlier job left) goes back too.
+
+    Measured 2026-10-22 (DGO-955; the pinned models, faster-whisper 1.2.1, ctranslate2 4.8.3): CTranslate2
+    quantises fp16 to int8 in RAM, and glibc keeps the freed fp16 copy inside the process — 1.68 GB
+    resident after a load — and a model loaded after the other one was released lands on that
+    fragmented heap: 2.4 GB, and the worst over ivrit → Whisper → ivrit was 2.59 GB on three-minute
+    pieces, over vps1's 2.5 GB cap (malloc_trim alone: 2.35 GB). Like this, every load is ~0.95 GB
+    however many came before, and that worst is 1.66 GB, at the same speed (rtf 0.323 against 0.325).
+    The same knobs for the whole process (MALLOC_MMAP_THRESHOLD_) made the transcription 18-30 %
+    slower: the inference's own blocks are better kept in the heap."""
+    if _LIBC is None:
+        yield
+        return
+    _LIBC.mallopt(_M_MMAP_THRESHOLD, 128 * 1024)
+    _LIBC.mallopt(_M_TRIM_THRESHOLD, 128 * 1024)
+    try:
+        yield
+    finally:
+        _LIBC.mallopt(_M_MMAP_THRESHOLD, 32 * 1024 * 1024)
+        _LIBC.mallopt(_M_TRIM_THRESHOLD, 64 * 1024 * 1024)
+        _LIBC.malloc_trim(0)
 
 
 @dataclass
@@ -73,14 +132,16 @@ class EngineState:
 
 
 class Engine:
-    def __init__(self) -> None:
-        self.repo = _env("SPEECH_MODEL_REPO", DEFAULT_REPO)
-        self.revision = _env("SPEECH_MODEL_REVISION", DEFAULT_REVISION)
+    def __init__(self, name: str = "ivrit", env: str = "SPEECH_MODEL", repo: str = DEFAULT_REPO,
+                 revision: str = DEFAULT_REVISION) -> None:
+        self.name = name
+        self.repo = _env(env + "_REPO", repo)
+        self.revision = _env(env + "_REVISION", revision)
         self.model_root = _env("SPEECH_MODEL_DIR", "/data/models")
         self.compute_type = _env("SPEECH_COMPUTE_TYPE", "int8")
         self.cpu_threads = int(_env("SPEECH_CPU_THREADS", "1"))
         self.idle_unload_seconds = int(_env("SPEECH_IDLE_UNLOAD_SECONDS", "300"))
-        self._state = EngineState(repo=self.repo, revision=self.revision)
+        self._state = EngineState(repo=self.repo, revision=self.revision, detail={"name": name})
         # set once we have looked at the volume, so a health probe never walks 1.6 GB of files
         self._disk_checked = False
         self._model: Any = None
@@ -178,23 +239,26 @@ class Engine:
 
         path = self.ensure_model()
         t0 = time.time()
-        self._model = WhisperModel(
-            path,
-            device="cpu",
-            compute_type=self.compute_type,
-            cpu_threads=self.cpu_threads,
-            num_workers=1,
-        )
+        with _heap_for_a_load():
+            self._model = WhisperModel(
+                path,
+                device="cpu",
+                compute_type=self.compute_type,
+                cpu_threads=self.cpu_threads,
+                num_workers=1,
+            )
         self._state.load_seconds = round(time.time() - t0, 1)
         self._state.loads += 1
         LOG.info("model loaded in %.1fs (compute=%s threads=%d)", self._state.load_seconds, self.compute_type, self.cpu_threads)
 
     def unload(self, *, reason: str) -> None:
         with self._lock:
-            if self._model is None:
+            if self._model is None or self._in_use:
                 return
             self._model = None
             gc.collect()
+            if _LIBC is not None:
+                _LIBC.malloc_trim(0)   # what the transcription left in the heap goes back too
             self._state.state = "cached" if self.model_present() else "absent"
             LOG.info("model released (%s), now %s", reason, self._state.state)
 
@@ -208,6 +272,11 @@ class Engine:
     @contextmanager
     def session(self) -> Iterator["Engine"]:
         """Hold the model for the duration of one job; it cannot be unloaded meanwhile."""
+        if self._model is None:
+            # one model in memory: the other one goes first (outside this lock: no two locks held)
+            for other in ENGINES.values():
+                if other is not self:
+                    other.unload(reason=f"{self.name} is needed")
         with self._lock:
             self.loaded_just_now = self._model is None
             if self._model is None:
@@ -243,4 +312,8 @@ class Engine:
         return self._state.as_dict(idle_seconds=self.idle_unload_seconds)
 
 
-ENGINE = Engine()
+ENGINES = {
+    "ivrit": Engine("ivrit", "SPEECH_MODEL", DEFAULT_REPO, DEFAULT_REVISION),
+    "whisper": Engine("whisper", "SPEECH_WHISPER_MODEL", WHISPER_REPO, WHISPER_REVISION),
+}
+ENGINE = ENGINES["ivrit"]   # the default: a job that names no model is transcribed as Hebrew always was

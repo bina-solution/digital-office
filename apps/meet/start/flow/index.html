@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<base href="/">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ציר זמן הפגישה</title>
+<link rel="stylesheet" href="flow/app/app.css">
+</head>
+<body>
+<header class="top">
+  <div class="ttl"><a class="back" href="flow/">← כל הפגישות</a><h1 id="title">…</h1><div id="subtitle" class="muted"></div></div>
+  <div class="search"><input id="q" type="search" placeholder="חיפוש בכל מה שנאמר…" autocomplete="off"><span id="qn" class="muted"></span></div>
+</header>
+
+<section class="stage">
+  <div class="viewer">
+    <video id="video" preload="metadata" playsinline></video>
+    <div id="after" class="after hidden">אחרי סוף השיחה בווידאו — רק הקלטת הגיבוי של Shlomo (iPad)</div>
+    <div id="now" class="now"></div>
+  </div>
+  <aside class="side">
+    <nav class="tabs" id="tabs">
+      <button data-tab="tr" class="on">תמלול</button>
+      <button data-tab="topics">נושאים</button>
+      <button data-tab="decisions">החלטות</button>
+      <button data-tab="tasks">משימות</button>
+      <button data-tab="questions">שאלות פתוחות</button>
+      <button data-tab="likes">אהבו / דחו</button>
+      <button data-tab="ins">תובנות</button>
+      <button data-tab="sel">פרטים</button>
+    </nav>
+    <div class="panes">
+      <div class="pane on" id="p-tr"><label class="chk"><input type="checkbox" id="showOrig"> להציג מה כל מזהה שמע במקור</label><div id="trList" class="list"></div></div>
+      <div class="pane" id="p-topics"><div id="topicList" class="list"></div></div>
+      <div class="pane" id="p-decisions"><div id="decList" class="list"></div></div>
+      <div class="pane" id="p-tasks"><div id="taskList" class="list"></div></div>
+      <div class="pane" id="p-questions"><div id="qList" class="list"></div></div>
+      <div class="pane" id="p-likes"><div id="likeList" class="list"></div></div>
+      <div class="pane" id="p-ins"><div id="insList" class="list"></div></div>
+      <div class="pane" id="p-sel"><div id="selBox" class="sel muted">לחץ על פריט בציר הזמן.</div></div>
+    </div>
+  </aside>
+</section>
+
+<section class="transport" dir="ltr">
+  <button id="play" class="big" title="נגן / עצור (רווח)">▶</button>
+  <button id="back5" title="5 שניות אחורה (←)">−5</button>
+  <button id="fwd5" title="5 שניות קדימה (→)">+5</button>
+  <span class="clock"><b id="tnow">0:00:00</b> / <span id="tdur">0:00:00</span></span>
+  <select id="rate" title="מהירות"><option>0.75</option><option selected>1</option><option>1.25</option><option>1.5</option><option>2</option></select>
+  <span class="sep"></span>
+  <span class="lbl">קול:</span>
+  <span id="audioBtns"></span>
+  <span class="sep"></span>
+  <label class="chk"><input type="checkbox" id="follow" checked> לעקוב</label>
+  <span class="lbl">זום</span>
+  <input id="zoom" type="range" min="0" max="1000" value="0">
+  <button id="fit" title="כל הפגישה">⤢</button>
+</section>
+
+<section class="tl" dir="ltr">
+  <div class="heads" id="heads"></div>
+  <div class="lanes" id="lanes">
+    <div class="inner" id="inner">
+      <canvas id="ruler" class="ruler"></canvas>
+      <div id="laneBox"></div>
+      <div id="playhead" class="playhead"></div>
+    </div>
+  </div>
+</section>
+
+<div id="tip" class="tip hidden"></div>
+<script>window.FLOW_BASE = "flow/{{ROOM}}/";</script>
+<script src="flow/{{ROOM}}/data.js"></script>
+<script src="flow/app/app.js"></script>
+</body>
+</html>

@@ -3,7 +3,7 @@
 services:
   console:
     build: {context: ., dockerfile: Dockerfile}
-    image: deployment-bina-comp-console
+    image: deployment-hacohen-console
     container_name: console-${DEPLOYMENT_NAME:-bina-deployment}
     hostname: console
     restart: unless-stopped
@@ -39,7 +39,14 @@ services:
       timeout: ${HEALTHCHECK_TIMEOUT:-5s}
       retries: 5
       start_period: 8s
-    deploy: {resources: {limits: {cpus: '0.5', memory: 256M}}}
+    # THE FLOOR THIS SERVICE DECLARES FOR ITSELF (DGO-523). Every screen and every embedded app passes
+    # through this container, so a cap the budget scaled below what it declared is felt by a PERSON:
+    # measured 2026-10-10, at the profile's scaled 0.31 the kernel held it back in 37 of 68 periods
+    # during one walk of two windows (3.05s of wall clock against 1.40s of CPU used), a tile's first
+    # draw took 3.2-5.0s where a warm one took 0.9-1.2s, and the console added 351ms to a page it
+    # proxied. `reservations.cpus` is compose's own word for "at least this much", and G65 keeps it:
+    # the plan scales the OTHER caps a little further so the sum still fits the profile's budget.
+    deploy: {resources: {limits: {cpus: '0.5', memory: 256M}, reservations: {cpus: '0.5'}}}
     labels:
       - traefik.enable=true
       - traefik.docker.network=traefik-network
@@ -72,9 +79,37 @@ services:
       - traefik.http.routers.console-https.rule=Host(`${CONSOLE_BASE_URL:-console.${DEPLOYMENT_DOMAIN:-localhost}}`)
       - traefik.http.routers.console-https.entrypoints=websecure
       - traefik.http.routers.console-https.tls=true
-      - traefik.http.routers.console-https.tls.certresolver=myresolver
+      - traefik.http.routers.console-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
       - traefik.http.routers.console-https.service=console
       - traefik.http.routers.console-https.middlewares=authentik@file
+      # [2026-10-22] THE OFFICE'S BARE DOMAIN OPENS ITS CONSOLE. The owner typed https://fpg.digital-office.co.il
+      # on his phone — the address a person types — and got NET::ERR_CERT_AUTHORITY_INVALID: nothing routed
+      # the apex, so traefik answered it with its default certificate and a 404. Now the apex has its own
+      # Let's Encrypt certificate and redirects to the console, where SSO takes over. It serves nothing
+      # itself (`noop@internal`), so it needs no gate of its own. Priority 1: a site the office later
+      # publishes AT the apex (the sites app's public path) wins over this fallback. CLOSED by default —
+      # a name that cannot exist (RFC 2606 `.invalid`) — and opened only where this app's hooks/prepare
+      # decided the bare domain resolves to the console's own address (scripts/lib.sh carries that
+      # decision to compose): a certificate order for an apex that points elsewhere or nowhere (vps1's)
+      # would be refused on every reload, as DGO-901's were. A closed apex orders nothing either: traefik
+      # asks Let's Encrypt for every Host() of a router with a resolver, `apex.invalid` included (vps1,
+      # 2026-11-01: 37 refused orders in a day, one per reload), so lib.sh empties DGO_APEX_CERTRESOLVER
+      # while the apex is closed — the empty resolver of a local office (dsec-710) — and an open apex
+      # takes the office's own.
+      - traefik.http.routers.console-apex.rule=Host(`${DGO_APEX_HOST:-apex.invalid}`)
+      - traefik.http.routers.console-apex.entrypoints=websecure
+      - traefik.http.routers.console-apex.priority=1
+      - traefik.http.routers.console-apex.tls=true
+      - traefik.http.routers.console-apex.tls.certresolver=${DGO_APEX_CERTRESOLVER-${TRAEFIK_CERTRESOLVER-myresolver}}
+      - traefik.http.routers.console-apex.service=noop@internal
+      - traefik.http.routers.console-apex.middlewares=console-apex
+      - traefik.http.routers.console-apex-http.rule=Host(`${DGO_APEX_HOST:-apex.invalid}`)
+      - traefik.http.routers.console-apex-http.entrypoints=web
+      - traefik.http.routers.console-apex-http.priority=1
+      - traefik.http.routers.console-apex-http.service=noop@internal
+      - traefik.http.routers.console-apex-http.middlewares=console-apex
+      - traefik.http.middlewares.console-apex.redirectregex.regex=^https?://[^/]+/?(.*)$$
+      - traefik.http.middlewares.console-apex.redirectregex.replacement=https://${CONSOLE_BASE_URL:-console.${DEPLOYMENT_DOMAIN:-localhost}}/$${1}
     logging: {driver: json-file, options: {max-size: 5m, max-file: '3'}}
 networks:
   traefik-network: {external: true}

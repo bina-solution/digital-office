@@ -11,7 +11,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER:     n8n
-      POSTGRES_PASSWORD: n8npassword
+      POSTGRES_PASSWORD: CHANGE_ME
       POSTGRES_DB:       n8n
     volumes:
       - n8n_postgres_data:/var/lib/postgresql/data
@@ -35,7 +35,7 @@ services:
       DB_POSTGRESDB_HOST:         postgres
       DB_POSTGRESDB_PORT:         5432
       DB_POSTGRESDB_USER:         n8n
-      DB_POSTGRESDB_PASSWORD:     n8npassword
+      DB_POSTGRESDB_PASSWORD:     CHANGE_ME
       DB_POSTGRESDB_DATABASE:     n8n
       N8N_HOST:                   localhost
       WEBHOOK_URL:                http://localhost:5678
@@ -61,7 +61,7 @@ services:
       PG_HOST:     postgres
       PG_PORT:     5432
       PG_USER:     n8n
-      PG_PASS:     n8npassword
+      PG_PASS:     CHANGE_ME
       PG_DB:       n8n
       N8N_URL:     http://localhost:5678
       ENABLE_DOCKER:  "1"

@@ -97,6 +97,8 @@ COPY broker.py /usr/local/bin/browser42-broker.py
 COPY browser-navigation.js /usr/local/share/browser42/browser-navigation.js
 # One clipboard instead of two: the viewer-side bridge (KasmVNC's "clipboard seamless").
 COPY browser-clipboard.js /usr/local/share/browser42/browser-clipboard.js
+# The phone's keyboard: a tap on the screen focuses noVNC's keyboard input (DGO-575). Touch-only.
+COPY browser42-keyboard.js /usr/local/share/browser42/browser-keyboard.js
 COPY start-browser.sh /usr/local/bin/start-browser.sh
 COPY extension/ /extension/
 RUN chmod +x /usr/local/bin/start-browser.sh /usr/local/bin/localhost-forward.py /usr/local/bin/browser42-broker.py

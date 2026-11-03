@@ -26,8 +26,8 @@ set -uo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
 export DOCKER_HOST=${DOCKER_HOST:-unix:///run/bbox-docker.sock}
-KEY=${PORTABLE_KEY:-/home/shlomo/.ssh/portable_key}
-HOST=${PORTABLE_HOST:-shlomy@192.168.16.103}
+KEY=${PORTABLE_KEY:?set PORTABLE_KEY to the ssh key of the machine to scale out to}
+HOST=${PORTABLE_HOST:?set PORTABLE_HOST=<user>@<host> of the machine to scale out to}
 SSHO="-i $KEY -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15"
 APP=$(cd "$HERE/.." && pwd)
 
@@ -108,7 +108,7 @@ remote)
   ;;
 
 lb)
-  LBDIR=${LB_CFG_DIR:-/home/shlomo/apitools-lb}
+  LBDIR=${LB_CFG_DIR:?set LB_CFG_DIR to the load balancer config folder}
   mkdir -p "$LBDIR" 2>/dev/null
   # THE CONFIG FILE CAN BE ROOT-OWNED and this script does not run as root, so the write
   # silently fails and the `docker kill -s USR2` below then reloads the OLD config —

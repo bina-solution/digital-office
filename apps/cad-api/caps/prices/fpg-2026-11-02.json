@@ -1,0 +1,85 @@
+{
+  "id": "fpg-2026-11-02",
+  "shop": "The Fireplace Guys",
+  "valid_from": "2026-11-02",
+  "source": "Alan, MEET-41 (2026-10-30), unless the line says ASSUMED",
+  "sheets": {
+    "galvanized": {
+      "w": 48,
+      "h": 120,
+      "cents": 7000,
+      "source": "MEET-41 [23:32] «around 70»"
+    },
+    "prepainted": {
+      "w": 48,
+      "h": 120,
+      "cents": 9000,
+      "source": "ASSUMED: painted steel ~ galvanized + $20"
+    },
+    "paintgrip": {
+      "w": 48,
+      "h": 120,
+      "cents": 8000,
+      "source": "ASSUMED"
+    },
+    "galvalume": {
+      "w": 48,
+      "h": 120,
+      "cents": 8000,
+      "source": "ASSUMED"
+    },
+    "bonderized": {
+      "w": 48,
+      "h": 120,
+      "cents": 8000,
+      "source": "ASSUMED"
+    },
+    "stainless": {
+      "w": 48,
+      "h": 120,
+      "cents": 18000,
+      "source": "MEET-41 [23:38] «stainless 180 a sheet»"
+    },
+    "copper": {
+      "w": 36,
+      "h": 120,
+      "cents": 30000,
+      "source": "MEET-41 [16:13] «copper only three by ten», [23:42] ~$300"
+    }
+  },
+  "mesh": {
+    "cents_per_ft2": 250,
+    "source": "ASSUMED until the shop's mesh invoice: 3/4\" galvanized or stainless spark-arrestor mesh"
+  },
+  "rivet": {
+    "cents_each": 33,
+    "source": "MEET-41 [43:05] $40 a bag of ~120"
+  },
+  "tapcons": {
+    "cents_each": 35,
+    "source": "ASSUMED until the shop's invoice: Tapcon 1/4 x 1-3/4 hex washer, ~$26 a box of 75 (FPG-604)"
+  },
+  "screws": {
+    "cents_each": 12,
+    "source": "ASSUMED until the shop's invoice: #10 x 3/4 hex washer screw, ~$12 a box of 100 (FPG-604)"
+  },
+  "caulk": {
+    "cents_per_tube": 300,
+    "source": "MEET-41 [42:50] half a tube at $3"
+  },
+  "labour": {
+    "cents_per_hour": 2500,
+    "source": "MEET-41 [41:51] $200 a day of 8 hours"
+  },
+  "markup": {
+    "factor": 2.0,
+    "source": "MEET-41 [43:58] «what it costs me to make, I charge around double»"
+  },
+  "floor_cents": 0,
+  "sheet_charge": "by_metal",
+  "spot_welder": false,
+  "whole_sheet_metals": [
+    "copper"
+  ],
+  "sheet_charge_source": "Alan, MEET-41: copper leftovers sit [16:22] -> whole sheets; other offcuts become legs [42:28] and a 24x24 single flashing costs $60-70 [41:15] -> the share; the services app's whole-sheet metals rule"
+}

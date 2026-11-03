@@ -144,11 +144,13 @@ def _():
         "route shape changed -> emitted URLs would 404")
 
 
-@case("drive: parseUrl() removed")
+@case("drive: the URL parser renamed")
 def _():
+    # The router lives in the app's own core since the rebuild (js/core.js `parse()`/`pathOf()`);
+    # renaming either half must fail here, not silently emit addresses the app no longer reads.
     return expect_drift(
-        inv.x_localdrive, "apps/drive/static/app.js",
-        lambda s: s.replace("function parseUrl()", "function readUrl()"),
+        inv.x_localdrive, "apps/drive/static/js/core.js",
+        lambda s: s.replace("function parse()", "function readUrl()"),
         "route parser gone -> must fail")
 
 
@@ -171,6 +173,25 @@ def _():
         inv.x_single_view, "platform-base/machine/static/index.html",
         lambda s: s + '\n<a data-view="containers">containers</a>\n',
         "a 'single view' app that grew tabs must force a real extractor")
+
+
+@case("data-management: the PLACES table renamed (its places stop being read)")
+def _():
+    # The extractor reads the app's OWN route table, so the dangerous mutation is the one that
+    # leaves the router working and the table unreadable: the app would still have five addresses
+    # while the map silently went back to "one screen".
+    return expect_drift(
+        inv.x_data_management, "platform-base/data-management/static/index.html",
+        lambda s: s.replace("var PLACES = [", "var PLACESX = ["),
+        "an unreadable places table must fail, not shrink the map to nothing")
+
+
+@case("data-management: the place router removed (addresses are no longer screens)")
+def _():
+    return expect_drift(
+        inv.x_data_management, "platform-base/data-management/static/index.html",
+        lambda s: s.replace("function showRoute(place, replace)", "function goPlace(place, replace)"),
+        "a router the extractor does not recognise must fail rather than emit stale addresses")
 
 
 def main() -> int:

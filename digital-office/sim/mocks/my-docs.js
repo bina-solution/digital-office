@@ -19,18 +19,18 @@
   var BIZ = {
     id: 'default', onboarded: true, name: 'בינה פתרונות בע״מ', company_id: '514789234',
     business_type: 'murshe', street: 'הברזל 3', city: 'תל אביב', zip: '6971001',
-    phone: '03-6120000', fax: '', email: 'person116@example.com', logo_b64: '',
+    phone: '03-0000025', fax: '', email: 'person94@example.com', logo_b64: '',
     vat_pct: 18, vat_registered: true, default_series: 'A', doc_start: 0,
     bank_name: 'בנק הפועלים', bank_branch: '690', bank_account: '123-456789',
   };
 
   // ── customers (source: entities._TABLES.customers) ───────────────────────────────────────
   var CUSTOMERS = [
-    { id: 'cus_karton', name: 'ישראל קרטון בע״מ', company_id: '512345678', street: 'המלאכה 12', city: 'פתח תקווה', zip: '4917612', phone: '03-9231144', email: 'person182@example.com', notes: 'לקוח קבוע — שוטף+30', created_at: addMonths(new Date(), -9).toISOString() },
-    { id: 'cus_bakery', name: 'מאפיית הבוקר', company_id: '032456789', street: 'העצמאות 44', city: 'רמת גן', zip: '5252233', phone: '03-6754321', email: 'person183@example.com', notes: '', created_at: addMonths(new Date(), -7).toISOString() },
-    { id: 'cus_or', name: 'טכנולוגיות אור בע״מ', company_id: '515987654', street: 'החושלים 8', city: 'הרצליה', zip: '4672108', phone: '09-9541200', email: 'person184@example.com', notes: 'לקוח פרויקטים — ת.שלום מ.ר.ד', created_at: addMonths(new Date(), -11).toISOString() },
-    { id: 'cus_studio', name: 'סטודיו עיצוב פנים — רחל לוי', company_id: '027654321', street: 'שינקין 21', city: 'תל אביב', zip: '6522231', phone: '050-000-0017', email: 'person185@example.com', notes: '', created_at: addMonths(new Date(), -2).toISOString() },
-    { id: 'cus_musach', name: 'מוסך אבי ובניו', company_id: '300123456', street: 'התעשייה 5', city: 'חולון', zip: '5810201', phone: '03-5501122', email: 'person186@example.com', notes: '', created_at: addMonths(new Date(), -6).toISOString() },
+    { id: 'cus_karton', name: 'ישראל קרטון בע״מ', company_id: '512345678', street: 'המלאכה 12', city: 'פתח תקווה', zip: '4917612', phone: '03-0000026', email: 'person166@example.com', notes: 'לקוח קבוע — שוטף+30', created_at: addMonths(new Date(), -9).toISOString() },
+    { id: 'cus_bakery', name: 'מאפיית הבוקר', company_id: '030000027', street: 'העצמאות 44', city: 'רמת גן', zip: '5252233', phone: '03-0000028', email: 'person167@example.com', notes: '', created_at: addMonths(new Date(), -7).toISOString() },
+    { id: 'cus_or', name: 'טכנולוגיות אור בע״מ', company_id: '515987654', street: 'החושלים 8', city: 'הרצליה', zip: '4672108', phone: '09-0000029', email: 'person168@example.com', notes: 'לקוח פרויקטים — ת.שלום מ.ר.ד', created_at: addMonths(new Date(), -11).toISOString() },
+    { id: 'cus_studio', name: 'סטודיו עיצוב פנים — רחל לוי', company_id: '027654321', street: 'שינקין 21', city: 'תל אביב', zip: '6522231', phone: '050-0000030', email: 'person169@example.com', notes: '', created_at: addMonths(new Date(), -2).toISOString() },
+    { id: 'cus_musach', name: 'מוסך אבי ובניו', company_id: '300123456', street: 'התעשייה 5', city: 'חולון', zip: '5810201', phone: '03-0000031', email: 'person170@example.com', notes: '', created_at: addMonths(new Date(), -6).toISOString() },
   ];
 
   // ── items / catalog (source: entities._TABLES.items) ─────────────────────────────────────
@@ -338,21 +338,21 @@
     inv1.model.vat_pct = BIZ.vat_pct; inv1.model.doc_date = heDate(t1b); inv1.created_at = t1b.toISOString();
     Object.assign(inv1, totals(inv1.model));
     issueDoc(inv1.id, t1b);
-    transition(inv1.id, 'sent', 'send', 'person184@example.com');
+    transition(inv1.id, 'sent', 'send', 'person168@example.com');
     transition(inv1.id, 'paid', 'pay', 'העברה בנקאית');
 
     // 2) invoice, paid (ישראל קרטון)
     var t2 = addMonths(now, -6);
     var inv2 = createDoc({ doc_type: 'INVOICE', customer: party('cus_karton'), vat_pct: BIZ.vat_pct, issued_at_shipping: true,
       lines: lines([['אריזות קרטון (100 יח׳)', 40, 240, 'PKG-100']]) }, 'api', t2);
-    issueDoc(inv2.id, t2); transition(inv2.id, 'sent', 'send', 'person182@example.com');
+    issueDoc(inv2.id, t2); transition(inv2.id, 'sent', 'send', 'person166@example.com');
     transition(inv2.id, 'paid', 'pay', 'שיק');
 
     // 3) invoice, sent — awaiting payment (ישראל קרטון)
     var t3 = addMonths(now, -1);
     var inv3 = createDoc({ doc_type: 'INVOICE', customer: party('cus_karton'), vat_pct: BIZ.vat_pct, issued_at_shipping: true,
       lines: lines([['אריזות קרטון (100 יח׳)', 25, 240, 'PKG-100'], ['תחזוקה חודשית', 1, 600, 'MAINT-01']]) }, 'api', t3);
-    issueDoc(inv3.id, t3); transition(inv3.id, 'sent', 'send', 'person182@example.com');
+    issueDoc(inv3.id, t3); transition(inv3.id, 'sent', 'send', 'person166@example.com');
 
     // 4) invoice-receipt, paid (מאפיית הבוקר)
     var t4 = addMonths(now, -3);
@@ -380,7 +380,7 @@
     var inv4 = convertDoc(dn1.id, 'INVOICE', 'api');
     inv4.model.vat_pct = BIZ.vat_pct; inv4.model.doc_date = heDate(t6c); inv4.created_at = t6c.toISOString();
     Object.assign(inv4, totals(inv4.model));
-    issueDoc(inv4.id, t6c); transition(inv4.id, 'sent', 'send', 'person186@example.com');
+    issueDoc(inv4.id, t6c); transition(inv4.id, 'sent', 'send', 'person170@example.com');
 
     // 9) fresh drafts awaiting action (סטודיו עיצוב פנים — רחל לוי)
     var t7 = addDays(now, -14);
@@ -446,7 +446,7 @@
     try {
       // /api/me
       if (segs[0] === 'me') {
-        return J({ user: 'akadmin', email: 'person133@example.com', name: 'מיכל לוי', groups: ['staff'] });
+        return J({ user: 'akadmin', email: 'person111@example.com', name: 'מיכל לוי', groups: ['staff'] });
       }
       // /api/business
       if (segs[0] === 'business') {

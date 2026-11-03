@@ -10,7 +10,9 @@ from websockets.asyncio.server import serve
 extension = None
 pending = {}
 PROTOCOL_VERSION = 1
-SUPPORTED_ACTIONS = {"allocate", "close", "status", "list", "claim"}
+# `front` (DGO-571): the human hand-off brings ONE group's tab to the front of the shared window
+# (handoff.py → extension frontSession); never a new window.
+SUPPORTED_ACTIONS = {"allocate", "close", "status", "list", "claim", "front"}
 # How long the broker waits for the extension to answer one command. Must exceed
 # the slowest legitimate operation (allocate on an ad-heavy page: the ownership
 # wait in group-manager can run minutes). Real failures stay event-driven: when

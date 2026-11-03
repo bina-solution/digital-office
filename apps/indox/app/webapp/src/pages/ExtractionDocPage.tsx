@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ltr } from '../bidi';
 import { Link, useParams } from 'react-router-dom';
 import { useInstanceLink } from '../instancesContext';
 import DocumentStage from '../components/DocumentStage';
@@ -105,7 +106,7 @@ export default function ExtractionDocPage() {
         setDrawKey((k) => k + 1);
         loadHistory();
         if (r.error) push('bad', `החילוץ נכשל: ${r.error}`);
-        else push('ok', `החילוץ הסתיים${r.total > 0 ? ` — ${r.ok}/${r.total} תואמים` : ''}${r.elapsed_s != null ? ` · ${r.elapsed_s}s` : ''}`);
+        else push('ok', `החילוץ הסתיים${r.total > 0 ? ` — ${r.ok}/${r.total} ${r.total === 1 ? 'תואם' : 'תואמים'}` : ''}${r.elapsed_s != null ? ` · ${r.elapsed_s}s` : ''}`);
       } catch (e: unknown) {
         push('bad', `ההרצה נכשלה: ${e instanceof Error ? e.message : String(e)}`);
       } finally {
@@ -399,7 +400,7 @@ export default function ExtractionDocPage() {
                   </details>
                 ))}
             <div className="muted small" style={{ marginTop: 8 }}>
-              עריכת השאילתות נעשית בטבלת settings (מפתחות q_v3_*) — ללא שינוי בתהליכים.
+              עריכת השאילתות נעשית בטבלת settings (מפתחות {ltr('q_v3_*')}) — ללא שינוי בתהליכים.
             </div>
           </div>
         </div>

@@ -5,7 +5,12 @@
 # There is no `go mod download` step on purpose: the module is stdlib-only, so there is no go.sum
 # and nothing to fetch. That is not a style choice — it is what makes the build work on a machine
 # with no registry credentials, and what makes `GOOS=darwin go build` possible at all (see below).
-FROM golang:1.23-alpine AS build
+# The build stage runs on the BUILDING machine's own platform and cross-compiles to the image's
+# (TARGETOS/TARGETARCH, BuildKit's): an arm64 image made on an x86 machine — the Android guest,
+# android-engine.yml — compiles and tests natively, not under QEMU, where PBKDF2's 210 000 rounds a
+# sign-in ran the tests past go test's 10 minutes (run 41404405121). Built for its own platform, the same.
+FROM --platform=$BUILDPLATFORM golang:1.23-alpine AS build
+ARG TARGETOS TARGETARCH
 WORKDIR /src
 # go.mod first, sources second: an edit to a .go file does not invalidate the module layer.
 COPY go.mod ./
@@ -15,11 +20,16 @@ COPY *.go ./
 #     GOOS=darwin  GOARCH=arm64 CGO_ENABLED=0 go build -o forward-auth .
 #     GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -o forward-auth.exe .
 # -trimpath keeps build-host paths out of a binary that is copied into a production image.
-RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /out/forward-auth . \
- && CGO_ENABLED=0 go test ./...
+RUN CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" go build -trimpath -ldflags "-s -w" -o /out/forward-auth . \
+ && CGO_ENABLED=0 go test ./... \
+ && mkdir -m 700 /out/state
 
 FROM scratch
 COPY --from=build /out/forward-auth /forward-auth
+# The service's own directory, 700 and owned by the uid it runs as: a NEW named volume mounted here
+# (forward_auth_data) starts as a copy of it — ownership included — so the service can write the users
+# file at first-run setup and nobody else can list it (DGO-1090).
+COPY --from=build --chown=65534:65534 /out/state /etc/forward-auth
 # By NUMBER, not by name: scratch has no /etc/passwd to name a user in, and a service whose whole
 # job is deciding who may enter must not run as root. 65534 is `nobody`, the uid the kernel reserves.
 USER 65534:65534

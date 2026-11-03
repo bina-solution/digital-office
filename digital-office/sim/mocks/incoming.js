@@ -166,7 +166,7 @@
     { id: '512987654', name: 'אגן שיווק' },
     { id: '513765432', name: 'ישראל קרטון' },
     { id: '515443322', name: 'דגן תעשיות בע״מ' },
-    { id: '516554433', name: 'מ. פרידמן בע״מ' },
+    { id: '500001078', name: 'מ. פרידמן בע״מ' },
   ];
 
 
@@ -185,10 +185,10 @@
   function ILCG(seed) { var x = seed >>> 0; return function () { x = (x * 1664525 + 1013904223) >>> 0; return x / 4294967296; }; }
   var GEN_CO = [
     ['סבח סוכנויות בע״מ', '514236789'], ['אגן שיווק', '512987654'], ['ישראל קרטון', '513765432'],
-    ['דגן תעשיות בע״מ', '515443322'], ['מ. פרידמן בע״מ', '516554433'], ['חברת חשמל לישראל', '500001234'],
+    ['דגן תעשיות בע״מ', '515443322'], ['מ. פרידמן בע״מ', '500001078'], ['חברת חשמל לישראל', '500001234'],
     ['בזק בינלאומי', '520043215'], ['ספק הענן בע״מ', '514998877'], ['נכסי הרצל', '511223344'],
-    ['דפי הדפסה בע״מ', '513004455'], ['מי אביבים', '500778899'], ['פלאפון', '520011223'],
-    ['ביטוח לאומי', '500000001'], ['בנק הפועלים', '520000118'], ['בנק לאומי', '520018078'],
+    ['דפי הדפסה בע״מ', '513004455'], ['מי אביבים', '500001086'], ['פלאפון', '520011223'],
+    ['ביטוח לאומי', '500000001'], ['בנק הפועלים', '520000118'], ['בנק לאומי', '500001094'],
     ['אמזון AWS', '999000111'], ['Google Workspace', '999000222'], ['מוסך מרכזי חיפה', '514667788']
   ];
   var GEN_DTYPE = [
@@ -256,7 +256,7 @@
     { ID: 'SHP-33012', NAME: 'תעודת משלוח 33012 - ישראל קרטון', COMPANY_ID: '513765432', COMPANY_NAME: 'ישראל קרטון', SHORT_DOC_ID: '33012', TYPE: 'SHIPMENT', STATUS: 'NEEDS_REVIEW', REQUIRED_ACTION: 'בדיקת התאמת סכום', DOC_DATE: '2026-07-20', DOC_TOTAL_AMOUNT: 0, SOURCE_TYPE: 'GOOGLE_DRIVE_FILE', TIMESTAMP: isoAgo(3600000) },
     { ID: 'INV-58244', NAME: 'חשבונית 58244 - סבח סוכנויות', COMPANY_ID: '514236789', COMPANY_NAME: 'סבח סוכנויות בע״מ', SHORT_DOC_ID: '58244', TYPE: 'INVOICE', STATUS: 'IN_PROGRESS', REQUIRED_ACTION: null, DOC_DATE: '2026-07-21', DOC_TOTAL_AMOUNT: 8760.25, SOURCE_TYPE: 'GMAIL', TIMESTAMP: isoAgo(20 * 60000) },
     { ID: 'INV-58198', NAME: 'חשבונית 58198 - דגן תעשיות', COMPANY_ID: '515443322', COMPANY_NAME: 'דגן תעשיות בע״מ', SHORT_DOC_ID: '58198', TYPE: 'INVOICE', STATUS: 'EXTRACTION_FAILED', REQUIRED_ACTION: 'בדיקה ידנית - OCR נכשל', DOC_DATE: '2026-07-15', DOC_TOTAL_AMOUNT: 0, SOURCE_TYPE: 'GMAIL', TIMESTAMP: isoAgo(6 * 86400000) },
-    { ID: 'ORD-77355', NAME: 'הזמנה 77355 - מ. פרידמן', COMPANY_ID: '516554433', COMPANY_NAME: 'מ. פרידמן בע״מ', SHORT_DOC_ID: '77355', TYPE: 'ORDER', STATUS: 'COMPLETED', REQUIRED_ACTION: null, DOC_DATE: '2026-07-14', DOC_TOTAL_AMOUNT: 3120, SOURCE_TYPE: 'GOOGLE_DRIVE_FILE', TIMESTAMP: isoAgo(7 * 86400000) },
+    { ID: 'ORD-77355', NAME: 'הזמנה 77355 - מ. פרידמן', COMPANY_ID: '500001078', COMPANY_NAME: 'מ. פרידמן בע״מ', SHORT_DOC_ID: '77355', TYPE: 'ORDER', STATUS: 'COMPLETED', REQUIRED_ACTION: null, DOC_DATE: '2026-07-14', DOC_TOTAL_AMOUNT: 3120, SOURCE_TYPE: 'GOOGLE_DRIVE_FILE', TIMESTAMP: isoAgo(7 * 86400000) },
     { ID: 'SHP-33067', NAME: 'תעודת משלוח 33067 - אגן שיווק', COMPANY_ID: '512987654', COMPANY_NAME: 'אגן שיווק', SHORT_DOC_ID: '33067', TYPE: 'SHIPMENT', STATUS: 'NEEDS_REVIEW', REQUIRED_ACTION: 'חסר קישור להזמנה', DOC_DATE: '2026-07-19', DOC_TOTAL_AMOUNT: 0, SOURCE_TYPE: 'GOOGLE_DRIVE_FILE', TIMESTAMP: isoAgo(5 * 3600000) },
   ];
   // Pull the shared business spine's incoming supplier documents into this repo, so a supplier invoice
@@ -395,7 +395,7 @@
   }
 
   // ----------------------------------------------------------------- auth
-  var AUTH_ME = { authenticated: true, username: 'demo', email: 'demo@bina-comp.local', groups: ['admin'], is_admin: true };
+  var AUTH_ME = { authenticated: true, username: 'demo', email: 'demo@hacohen.local', groups: ['admin'], is_admin: true };
 
   // ---------------------------------------------------------------- dashboard
   function computeDashboard() {
@@ -433,50 +433,60 @@
 
   // ------------------------------------------------------------------- sync
   // Eight pipes across FOUR real connections (two mail accounts, two drives) — the shape a company
-  // pushing 3,000+ documents a month actually runs. Every `connection` id and every label/folder path
-  // below exists in the shared spine, i.e. in the Drive and Mail UIs.
+  // pushing 3,000+ documents a month actually runs. Every `connection` id, and every location a source's card names
+  // — its labels or its folders, and the drive folder a mailbox files into — is in that connection's own list in
+  // the shared spine (sim/business.js: what the editor offers, and what the card checks a stored location against).
+  // ONE is not, on purpose: gdrive-shipments' folder for what failed is gone from the drive, and its card pins it
+  // («לא נמצא ברשימה»), as the live card pins a stored location its connection no longer lists.
   //
   // `fallback_type` is the operator's most useful lever and is NOT a cosmetic tag: when extraction
   // cannot determine a document's type, the pipe's own location tells you what it must be — anything
   // dropped in נכנס/קבלות is a receipt. That is the real bs-gdrive-sync case, and it converts a whole
   // class of "סוג לא זוהה" failures into a one-click fix.
+  //
+  // Shaped as the LIVE registry is where a source's card reads it (DGO-525; apps/indox/blueprint/fixtures/
+  // sync_registry.example.json): a mailbox's pipe names the drive it files the attachments into
+  // (`drive_connection_id`) and the folder there (`dest_folder` — «הקבצים נשמרים אל»); a drive pipe's pair carries its
+  // folder for what failed (`failed_to`), and every drive pipe has folders of its OWN (the fixture's rule: shared
+  // ones were a live three-way collision); and every pair is served in both vocabularies, the editor's
+  // from/to/failed_to and the engine's to_sync/synced/failed — `normaliseEntry` below, the live service's fill.
   var REGISTRY = [
     { name: 'gmail-invoices', source: 'gmail', engine: 'n8n', processor_wf: 'ingest-gmail-invoices',
       connection: 'gmail_office', type_hint: 'INVOICE', fallback_type: 'INVOICE', enabled: true,
       batch: { take: 40, chunk: 10, timeout_min: 10, schedule_min: 5 },
       labels: { to_sync: 'אינדוקס - חשבוניות - לטיפול', synced: 'אינדוקס - חשבוניות - טופל', failed: 'אינדוקס - נכשל' },
-      claim_label: 'אינדוקס - חשבוניות - בעיבוד' },
+      claim_label: 'אינדוקס - חשבוניות - בעיבוד', drive_connection_id: 'acc_office', dest_folder: 'ארכיון/חשבוניות' },
     { name: 'gmail-receipts', source: 'gmail', engine: 'n8n', processor_wf: 'ingest-gmail-receipts',
       connection: 'gmail_office', type_hint: 'RECEIPT', fallback_type: 'RECEIPT', enabled: true,
       batch: { take: 40, chunk: 10, timeout_min: 10, schedule_min: 10 },
       labels: { to_sync: 'אינדוקס - קבלות - לטיפול', synced: 'אינדוקס - קבלות - טופל', failed: 'אינדוקס - נכשל' },
-      claim_label: 'אינדוקס - קבלות - בעיבוד' },
+      claim_label: 'אינדוקס - קבלות - בעיבוד', drive_connection_id: 'acc_office', dest_folder: 'ארכיון/קבלות' },
     { name: 'gmail-bank', source: 'gmail', engine: 'n8n', processor_wf: 'ingest-gmail-bank',
       // (no fixed type: the pipeline has no «BANK_REPORT» — a bank's statement is typed by detection, or not at all)
       connection: 'gmail_office', type_hint: null, fallback_type: null, enabled: true,
       batch: { take: 20, chunk: 5, timeout_min: 15, schedule_min: 60 },
       labels: { to_sync: 'אינדוקס - דוחות בנק - לטיפול', synced: 'אינדוקס - חשבוניות - טופל', failed: 'אינדוקס - נכשל' },
-      claim_label: 'אינדוקס - דוחות בנק - בעיבוד' },
+      claim_label: 'אינדוקס - דוחות בנק - בעיבוד', drive_connection_id: 'acc_office', dest_folder: 'כספים 2026' },
     { name: 'outlook-suppliers', source: 'gmail', engine: 'n8n', processor_wf: 'ingest-outlook-suppliers',
       connection: 'outlook_admin', type_hint: 'INVOICE', fallback_type: 'INVOICE', enabled: true,
       batch: { take: 25, chunk: 5, timeout_min: 12, schedule_min: 15 },
       labels: { to_sync: 'ספקים', synced: 'הנהלת חשבונות', failed: 'דוחות גיול' },
-      claim_label: 'ספקים/בעיבוד' },
+      claim_label: 'ספקים/בעיבוד', drive_connection_id: 'acc_office', dest_folder: 'ארכיון/חשבוניות' },
     // the real case: a folder that IS its type. Anything here is a receipt, detected or not.
     { name: 'bs-gdrive-sync', source: 'drive', engine: 'n8n', processor_wf: 'ingest-bs-gdrive',
       connection: 'acc_office', type_hint: 'RECEIPT', fallback_type: 'RECEIPT', enabled: true,
       batch: { take: 50, chunk: 10, timeout_min: 8, schedule_min: 10 },
-      pairs: [{ from: 'נכנס/קבלות', to: 'ארכיון/קבלות' }], dest_folder: 'ארכיון/קבלות',
-      failed_folder: 'ארכיון/נכשל' },
+      pairs: [{ from: 'נכנס/קבלות', to: 'ארכיון/קבלות', failed_to: 'ארכיון/קבלות - נכשל' }], dest_folder: 'ארכיון/קבלות' },
     { name: 'gdrive-invoices', source: 'drive', engine: 'n8n', processor_wf: 'ingest-gdrive-invoices',
       connection: 'acc_office', type_hint: 'INVOICE', fallback_type: 'INVOICE', enabled: true,
       batch: { take: 50, chunk: 10, timeout_min: 8, schedule_min: 10 },
-      pairs: [{ from: 'נכנס/חשבוניות', to: 'ארכיון/חשבוניות' }], dest_folder: 'ארכיון/חשבוניות',
-      failed_folder: 'ארכיון/נכשל' },
+      pairs: [{ from: 'נכנס/חשבוניות', to: 'ארכיון/חשבוניות', failed_to: 'ארכיון/חשבוניות - נכשל' }], dest_folder: 'ארכיון/חשבוניות' },
+    // (its folder for what failed was removed from the drive — the one stored location its connection does not list)
     { name: 'gdrive-shipments', source: 'drive', engine: 'n8n', processor_wf: 'ingest-gdrive-shipments',
       connection: 'acc_office', type_hint: 'SHIPMENT', fallback_type: 'SHIPMENT', enabled: true,
       batch: { take: 30, chunk: 10, timeout_min: 8, schedule_min: 20 },
-      pairs: [{ from: 'נכנס/תעודות משלוח', to: 'ארכיון/חשבוניות' }], dest_folder: 'ארכיון/חשבוניות' },
+      pairs: [{ from: 'נכנס/תעודות משלוח', to: 'ארכיון/תעודות משלוח', failed_to: 'ארכיון/תעודות משלוח - נכשל' }],
+      dest_folder: 'ארכיון/תעודות משלוח' },
     // parked on a connection the spine marks `error` — this is the pipe that strands items in an
     // unknown state, which is exactly the situation the board has to make obvious and recoverable.
     { name: 'dropbox-archive', source: 'drive', engine: 'n8n', processor_wf: 'ingest-dropbox',
@@ -599,13 +609,12 @@
         }
       });
       if (entry.enabled !== false) {
-        // scheduled pickup: the pipe claims its own backlog without anyone pressing Run
-        var waiting = list.filter(function (i) { return i.state === 'to_sync'; });
-        if (waiting.length && Math.random() < 0.5) {
-          waiting.slice(0, 1 + Math.floor(Math.random() * 2)).forEach(function (it) {
-            it.state = 'in_progress'; it.updated_at = nowIso();
-          });
-        }
+        // scheduled pickup: the pipe claims its own backlog without anyone pressing Run — on its OWN cadence, and that
+        // pass is its last run (runPipe stamps it). It took one or two items on every 6-second tick, whatever the
+        // cadence, and stamped nothing: a card said «כל 60 דק׳ · הרצה אחרונה לפני 40 דק׳» over a bar that moved every
+        // few seconds. (A pipe with no schedule of its own runs at the scheduler's 15, as the live card says.)
+        var every = ((entry.batch && entry.batch.schedule_min) || 15) * 60000;
+        if (!entry.last_run || Date.now() - new Date(entry.last_run).getTime() >= every) runPipe(inst, entry);
         if (Math.random() < 0.3) { list.push(mkItem(entry, 'to_sync')); }
       }
     });
@@ -620,6 +629,21 @@
     });
     entry.last_run = nowIso();
     return claimed;
+  }
+  /** A pair in BOTH its vocabularies, as the live service serves it (api/__init__.py `_normalise_entry` and its
+   *  `_PAIR_ALIASES`): the editor's from/to/failed_to and the engine's to_sync/synced/failed, each filled from the
+   *  other where it is missing — and NEVER over a value already set, so an editor has to set both (it does). */
+  var PAIR_ALIASES = [['from', 'to_sync'], ['to', 'synced'], ['failed_to', 'failed']];
+  function normaliseEntry(e) {
+    ((e && Array.isArray(e.pairs)) ? e.pairs : []).forEach(function (p) {
+      if (!p || typeof p !== 'object') return;
+      PAIR_ALIASES.forEach(function (ab) {
+        var a = p[ab[0]], b = p[ab[1]];
+        if (a && !b) p[ab[1]] = a;
+        else if (b && !a) p[ab[0]] = b;
+      });
+    });
+    return e;
   }
   function computeSyncStatus(inst, sync) {
     var per_sync = {}, waiting = 0, inprog = 0;
@@ -806,8 +830,8 @@
     { key: 'q_v3_routing', value: JSON.stringify(QUERIES.q_v3_routing) },
   ];
   var COMPANIES = [
-    { id: '1', 'שם חברה': 'סבח סוכנויות בע״מ', 'מזהה 1': '514236789', 'מזהה 2': '', 'מייל 1': 'person138@example.com', 'מייל 2': '', 'שם ספק מפריוריטי': 'SABAH', 'הוראות לAI לחילוץ דוח גיול': '', TRUSTED_SOURCE_TYPES: 'gmail,drive', extra: '', created_at: '2026-01-12' },
-    { id: '2', 'שם חברה': 'אגן שיווק', 'מזהה 1': '512987654', 'מזהה 2': '', 'מייל 1': 'person139@example.com', 'מייל 2': '', 'שם ספק מפריוריטי': 'AGAN', 'הוראות לAI לחילוץ דוח גיול': '', TRUSTED_SOURCE_TYPES: 'drive', extra: '', created_at: '2026-02-03' },
+    { id: '1', 'שם חברה': 'סבח סוכנויות בע״מ', 'מזהה 1': '514236789', 'מזהה 2': '', 'מייל 1': 'person116@example.com', 'מייל 2': '', 'שם ספק מפריוריטי': 'SABAH', 'הוראות לAI לחילוץ דוח גיול': '', TRUSTED_SOURCE_TYPES: 'gmail,drive', extra: '', created_at: '2026-01-12' },
+    { id: '2', 'שם חברה': 'אגן שיווק', 'מזהה 1': '512987654', 'מזהה 2': '', 'מייל 1': 'person117@example.com', 'מייל 2': '', 'שם ספק מפריוריטי': 'AGAN', 'הוראות לAI לחילוץ דוח גיול': '', TRUSTED_SOURCE_TYPES: 'drive', extra: '', created_at: '2026-02-03' },
     { id: '3', 'שם חברה': 'ישראל קרטון', 'מזהה 1': '513765432', 'מזהה 2': '', 'מייל 1': '', 'מייל 2': '', 'שם ספק מפריוריטי': '', 'הוראות לAI לחילוץ דוח גיול': '', TRUSTED_SOURCE_TYPES: 'drive', extra: '', created_at: '2026-03-21' },
   ];
   var TAG_RULES = [
@@ -894,7 +918,7 @@
       name: 'indox-agan-shivuk', backend: 'gsheet', primary_key: 'ID', columns: AGAN_COLUMNS,
       priority_sync_columns: ['STATUS'],
       active: true, poll_interval_seconds: 60,
-      gsheet: { sheet_name: 'INDOX_AGAN', spreadsheet_id: '1AgAnShIvUk_sim_sheet_id', spreadsheet_title: 'אגן שיווק — מסמכים נכנסים', gid: 0, editors: ['person139@example.com'] },
+      gsheet: { sheet_name: 'INDOX_AGAN', spreadsheet_id: '1REDACTEDdrivexxxxxx0091', spreadsheet_title: 'אגן שיווק — מסמכים נכנסים', gid: 0, editors: ['person117@example.com'] },
       created_at: isoAgo(11 * 86400000), updated_at: isoAgo(5 * 3600000),
     },
     docs: AGAN_DOCS, history: AGAN_HISTORY,
@@ -919,8 +943,8 @@
       { key: 'q_v3_routing', value: JSON.stringify(AGAN_QUERIES.q_v3_routing) },
     ],
     companies: [
-      { id: '1', 'שם חברה': 'אגן שיווק', 'מזהה 1': '512987654', 'מזהה 2': '', 'מייל 1': 'person139@example.com', 'מייל 2': '', 'שם ספק מפריוריטי': 'AGAN', 'הוראות לAI לחילוץ דוח גיול': '', TRUSTED_SOURCE_TYPES: 'drive', extra: '', created_at: '2026-02-03' },
-      { id: '2', 'שם חברה': 'ספקי אריזה בע״מ', 'מזהה 1': '517889900', 'מזהה 2': '', 'מייל 1': 'person140@example.com', 'מייל 2': '', 'שם ספק מפריוריטי': 'ARIZOT', 'הוראות לAI לחילוץ דוח גיול': '', TRUSTED_SOURCE_TYPES: 'drive', extra: '', created_at: '2026-05-14' },
+      { id: '1', 'שם חברה': 'אגן שיווק', 'מזהה 1': '512987654', 'מזהה 2': '', 'מייל 1': 'person117@example.com', 'מייל 2': '', 'שם ספק מפריוריטי': 'AGAN', 'הוראות לAI לחילוץ דוח גיול': '', TRUSTED_SOURCE_TYPES: 'drive', extra: '', created_at: '2026-02-03' },
+      { id: '2', 'שם חברה': 'ספקי אריזה בע״מ', 'מזהה 1': '517889900', 'מזהה 2': '', 'מייל 1': 'person118@example.com', 'מייל 2': '', 'שם ספק מפריוריטי': 'ARIZOT', 'הוראות לAI לחילוץ דוח גיול': '', TRUSTED_SOURCE_TYPES: 'drive', extra: '', created_at: '2026-05-14' },
     ],
     tagRules: [
       { id: '1', EVENT: 'on_ingest', KEY: 'TYPE', LABEL: 'סיווג הזמנת רכש', RULE: 'contains:הזמנת רכש->ORDER', TYPE: 'classify', 'VALIDATION STATUS': 'ok', 'VALIDATION ERRORS': '', created_at: '2026-02-05', row_number: 1, label_id: '' },
@@ -980,6 +1004,17 @@
     'drive-agan-orders': seedItems(INST_AGAN.registry[0], { to_sync: 4, in_progress: 1, synced: 61, failed: 1 }),
     'drive-agan-shipments': seedItems(INST_AGAN.registry[1], { to_sync: 2, in_progress: 0, synced: 28, failed: 0 }),
   };
+  // …every pipe served as the live service serves it (both vocabularies of a pair), and every pipe has RUN: its
+  // scheduler last took it up inside its own cadence, and takes it up again when the cadence comes round
+  // (advanceSync; a press of «הרץ עכשיו» stamps it too — runPipe). With no `last_run` each card said
+  // «הרצה אחרונה —» of a pipe whose items were moving.
+  [INST_SABACH, INST_AGAN].forEach(function (inst) {
+    inst.registry.forEach(function (e, i) {
+      normaliseEntry(e);
+      var every = (e.batch && e.batch.schedule_min) || 15;
+      e.last_run = isoAgo(Math.max(1, Math.round(every * (0.3 + 0.1 * (i % 5)))) * 60000);
+    });
+  });
 
   /* Volume, per instance. סבח is a decade-old client, אגן was onboarded eighteen months ago —
      switching between them has to change the SCALE of the table, not only the names in it. */
@@ -1046,7 +1081,7 @@
     var inst = mkInstance({
       id: id, label: spec.label || id, company: spec.company || spec.label || id,
       color: spec.color || '#56693f', status: 'ok', repo: repo,
-      docs: [], history: {}, registry: (spec.registry || []).slice(),
+      docs: [], history: {}, registry: (spec.registry || []).slice().map(normaliseEntry),
       settings: [
         { key: 'auto_sync_enabled', value: 'true' },
         { key: 'max_ocr_retries', value: '3' },
@@ -1267,6 +1302,7 @@
       };
       if (ent.source === 'gmail') { ent.labels = spec.labels || {}; ent.claim_label = spec.claim_label || ((ent.labels.to_sync || 'INDOX') + '/בעיבוד'); }
       else { ent.pairs = spec.pairs || []; ent.dest_folder = spec.dest_folder || ((ent.pairs[0] && ent.pairs[0].to) || ''); }
+      normaliseEntry(ent);
       ci.registry.push(ent);
       ci.items[ent.name] = [];
       return j({ success: true, entry: ent, registry: registryWithLive(ci) });
@@ -1287,7 +1323,7 @@
         ri.items[patch.name] = ri.items[rn] || []; delete ri.items[rn];
         (ri.items[patch.name] || []).forEach(function (it) { it.sync = patch.name; });
       }
-      Object.assign(ri.registry[idx], patch);
+      normaliseEntry(Object.assign(ri.registry[idx], patch));
       return j({ success: true, entry: ri.registry[idx], registry: registryWithLive(ri) });
     }
 

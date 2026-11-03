@@ -33,15 +33,15 @@ permissions:
   packages: write   # images job pushes to GHCR
 
 env:
-  REG: ghcr.io/solomonboltin/deployment-bina-comp
+  REG: ghcr.io/solomonboltin/deployment-hacohen
 
 jobs:
   # ── ensure content-addressed images exist in GHCR (build only on miss) ──
   images:
     # settable to 'devops-vps' (self-hosted DinD runner on bina-devops-vps) via repo
     # variable INDOX_E2E_RUNNER - e.g. while GitHub-hosted minutes are billing-blocked.
-    runs-on: [self-hosted, portable]
-    timeout-minutes: 45
+    runs-on: [self-hosted, portable, ssd]
+    timeout-minutes: 90   # 45 for the job + up to 45 that ops/prejob_waitfree.sh may hold it (memory, heat, a fresh boot)
     outputs:
       apitools_tag: ${{ steps.tags.outputs.apitools }}
       n8n_tag: ${{ steps.tags.outputs.n8n }}
@@ -114,10 +114,10 @@ jobs:
     needs: images
     # settable to 'devops-vps' (self-hosted DinD runner on bina-devops-vps) via repo
     # variable INDOX_E2E_RUNNER - e.g. while GitHub-hosted minutes are billing-blocked.
-    runs-on: [self-hosted, portable]
+    runs-on: [self-hosted, portable, ssd]
     # no on-runner builds anymore: setup ~5min + battery worst-case (fail-fast:
     # 360+480+900 = 29min) + dump margin
-    timeout-minutes: 60
+    timeout-minutes: 105   # 60 for the job + up to 45 that ops/prejob_waitfree.sh may hold it (memory, heat, a fresh boot)
     env:
       # SERVICES is DERIVED from the capability graph — see the "Derive SERVICES" step below.
       # It used to be hand-written here, which is a second source of truth for "what does this
@@ -160,8 +160,34 @@ jobs:
       # GitHub-hosted (always a fresh VM).
       - name: Reset docker state (persistent-runner fresh-machine semantics)
         run: |
-          docker rm -f $(docker ps -aq) 2>/dev/null || true
-          docker volume prune -af 2>/dev/null || docker volume prune -f || true
+          set -euo pipefail
+          # ── NEVER WIPE AN ENGINE THAT CARRIES SOMEBODY ELSE'S OFFICE ──────────────────────────
+          # This step is written for a runner whose dockerd exists ONLY for this CI (the comment
+          # below says so). On a SHARED engine it is a catastrophe with three parts: `docker rm -f
+          # $(docker ps -aq)` stops another deployment's containers, `volume prune -af` deletes its
+          # unused volumes — measurably one `docker volume prune` away from the POSNET office's
+          # WireGuard PRIVATE KEY, which is a dangling volume on this very engine (DGO-143) — and
+          # then this lane brings ITS office up on the same engine, which is the two-offices-one-
+          # engine confusion the whole platform warns about. `portable` is a self-hosted runner
+          # label, so a runner installed on an office machine reaches exactly this code.
+          #
+          # So: the wipe is scoped to THIS checkout's compose project, and a foreign project on the
+          # engine is a refusal that names it (before anything is removed).
+          proj="$(basename "$PWD" | tr '[:upper:]' '[:lower:]')"
+          foreign="$(docker ps -a --format '{{.Label "com.docker.compose.project"}}' \
+                     | grep -v -x -e "${proj}" -e "" | sort -u | tr '\n' ' ' || true)"
+          if [ -n "${foreign}" ]; then
+            echo "::error::refusing to reset this engine: it carries containers of another compose project (${foreign})." >&2
+            echo "This lane needs a runner with its OWN dockerd (the nested DinD the comment below assumes);" >&2
+            echo "on a shared engine this step would remove another office's containers and volumes." >&2
+            exit 1
+          fi
+          # The leftovers that poison the next bring-up belong to OUR project (n8n's encryption key,
+          # supabase's db init state) — so our project is the whole scope of this wipe.
+          docker rm -f $(docker ps -aq --filter "label=com.docker.compose.project=${proj}") 2>/dev/null || true
+          for v in $(docker volume ls -q --filter "label=com.docker.compose.project=${proj}"); do
+            docker volume rm -f "$v" 2>/dev/null || true
+          done
           docker network prune -f || true
 
       # apitools/docker-compose.yml is now part of this repo (no longer a submodule), so it's
@@ -372,12 +398,12 @@ jobs:
         if: failure()
         run: |
           # errored executions grouped: which workflows error-loop and how often
-          docker exec n8n-postgres-ci psql -U bina-comp -d n8n -t -A -c "
+          docker exec n8n-postgres-ci psql -U hacohen -d n8n -t -A -c "
             SELECT count(*)||'x  '||w.name FROM execution_entity e
             JOIN workflow_entity w ON w.id=e.\"workflowId\"
             WHERE e.status='error' GROUP BY w.name ORDER BY count(*) DESC LIMIT 15;" || true
           # last 10 errored executions with node + message (null-safe: coalesce EACH part)
-          docker exec n8n-postgres-ci psql -U bina-comp -d n8n -t -A -c "
+          docker exec n8n-postgres-ci psql -U hacohen -d n8n -t -A -c "
             SELECT e.id||' :: '||coalesce(w.name,'?')||' :: '||coalesce(substring(d.data from '\"lastNodeExecuted\",\"([^\"]+)\"'),'?')||' :: '||coalesce(substring(d.data from '\"message\",\"([^\"]{1,160})'),'?') FROM execution_entity e
             JOIN execution_data d ON d.\"executionId\"=e.id
             LEFT JOIN workflow_entity w ON w.id=e.\"workflowId\"
@@ -394,6 +420,12 @@ jobs:
         # (safe: on self-hosted the nested dockerd exists ONLY for this CI)
         run: |
           ./scripts/dc down -v --remove-orphans || {
-            docker rm -f $(docker ps -aq) 2>/dev/null || true
-            docker volume prune -af 2>/dev/null || docker volume prune -f || true
+            # …and the fallback is scoped to THIS checkout's project for the same reason the reset
+            # step above is (see its comment): `docker volume prune -af` on a shared engine deletes
+            # another office's unused volumes, one of which holds a WireGuard private key.
+            proj="$(basename "$PWD" | tr '[:upper:]' '[:lower:]')"
+            docker rm -f $(docker ps -aq --filter "label=com.docker.compose.project=${proj}") 2>/dev/null || true
+            for v in $(docker volume ls -q --filter "label=com.docker.compose.project=${proj}"); do
+              docker volume rm -f "$v" 2>/dev/null || true
+            done
           }

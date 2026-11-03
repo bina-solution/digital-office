@@ -1,4 +1,4 @@
-# GitHub Actions self-hosted runner for solomonBoltin/deployment-bina-comp — DinD-isolated.
+# GitHub Actions self-hosted runner for solomonBoltin/deployment-hacohen — DinD-isolated.
 # The CI stack (traefik/n8n/supabase/...) runs entirely inside the nested dockerd, so it
 # can never collide with this VPS's own traefik/n8n stacks or its ports, and the hard
 # cpus/mem caps below guarantee the website + existing services keep breathing.
@@ -30,7 +30,7 @@ services:
     depends_on: [dind]
     environment:
       RUNNER_SCOPE: repo
-      REPO_URL: https://github.com/solomonBoltin/deployment-bina-comp
+      REPO_URL: https://github.com/solomonBoltin/deployment-hacohen
       RUNNER_TOKEN: "__RUNNER_TOKEN__"
       RUNNER_NAME: devops-vps-dind
       LABELS: self-hosted,devops-vps

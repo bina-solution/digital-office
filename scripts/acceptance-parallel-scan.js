@@ -30,7 +30,7 @@ function buildUnits(reg) {
   const trg = "When Executed by Another Workflow";
   // fire all units concurrently (each /run returns an executionId immediately = async/parallel)
   const fires = units.map(u => req({ host: "localhost", port: 5678, path: "/rest/workflows/SyncScanUnit0001/run", method: "POST", headers: { "Content-Type": "application/json", Cookie: ck } },
-    JSON.stringify({ workflowData: wf, startNodes: [{ name: trg }], triggerToStartFrom: { name: trg }, pinData: { [trg]: [{ json: u }] } })
+    JSON.stringify({ workflowData: wf, startNodes: [{ name: trg }], triggerToStartFrom: { name: trg }, pinData: {} })
   ).then(r => `${u.sync_name}:${r.code}`));
   console.log("parallel-fired:", (await Promise.all(fires)).join("  "));
 })();

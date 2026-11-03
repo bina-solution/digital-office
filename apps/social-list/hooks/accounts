@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+#: accounts [platform] — every social account: its network and kind (API or browser):  ./bbox social-list accounts
+# Pipes the app's own CLI (apps/social-list/cli.py) into its container: no address, no key, no rebuild.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+dcx exec -T social-list python - accounts "$@" < "$(npath "${REPO_ROOT}")/apps/social-list/cli.py"

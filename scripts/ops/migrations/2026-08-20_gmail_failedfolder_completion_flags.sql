@@ -10,7 +10,7 @@
 --
 -- It is not academic. Switching those two reads to the dispatch log on 2026-08-20 immediately
 -- re-dispatched file_to_failed_folder on documents already filed, and Google Drive answered
--- "File not found: 1FwcEBh6VAbnxu84Ny2g2xH_Bw5-dT7iq" -- the move is NOT idempotent. Two
+-- "File not found: 1REDACTEDdrivexxxxxxxxxxxxxxx0006" -- the move is NOT idempotent. Two
 -- executions failed that way within minutes.
 --
 -- NAMING follows the convention on purpose. The four 'Build: Restart (clear completed flags)'

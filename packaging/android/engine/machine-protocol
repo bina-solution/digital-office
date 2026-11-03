@@ -1,0 +1,8 @@
+# What the phone's native core and its machine speak (ai/context/research/android-path.md, "the machine
+# on demand"), read by android-app.yml: a guest disk goes into an APK only when the commit it was built
+# from names the same number as the APK's own commit — a machine of another protocol never proves itself
+# to the core, and the owner's first container app would wait for it forever.
+#   1  the machine IS the office (DGO-1084): no core in front of it. Every commit before this file.
+#   2  the machine behind the core (DGO-1090): its edge token from fw_cfg, /edge-proof, every request
+#      signed by the core's edge (X-DGO-Edge-At/-Nonce/-Sig). A change to any of these is a new number.
+2

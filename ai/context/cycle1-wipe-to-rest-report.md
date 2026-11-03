@@ -11,7 +11,7 @@ Run on the local Windows/Docker-Desktop host, `DEPLOYMENT_NAME=shlomo-laptop`, `
 | **1. Full wipe** | ✅ | `down` + `docker volume rm` of every app/data/supabase/connections volume. **Preserved** browser42 `cloakprofile` (the Google login) — a full `down -v` would have destroyed it. |
 | **2. One-command deploy** | ⚠️ works, but **not one command** | Needed a secret-gen pre-step (see findings). After that: 44 containers up, 33 healthy; core (connections/console/n8n/supabase/authentik/apitools) all healthy; ledger `/business`→200 off freshly keygen'd supabase. |
 | **3. Install window** | ✅ | `console.localhost` business `onboarded=false` → app routes to `#/m/install`; renders RTL install wizard driven by the connections plane. |
-| **4. Fill onboarding** | ⛔ **blocked (external)** | Exact install blockers: `google-workspace-grant`, `gemini-key`, `gmail-app-password`, `whatsapp-baileys`. browser42 login intact (**person2@example.com**), but Google anti-abuse blocked automated Gemini-key creation ("The request is suspicious"). See findings 6–7. |
+| **4. Fill onboarding** | ⛔ **blocked (external)** | Exact install blockers: `google-workspace-grant`, `gemini-key`, `gmail-app-password`, `whatsapp-baileys`. browser42 login intact (**person3@example.com**), but Google anti-abuse blocked automated Gemini-key creation ("The request is suspicious"). See findings 6–7. |
 | **5. Inject 3× Drive+Gmail** | ✗ not reached | Depends on step 4 (Drive OAuth + Gmail app-pw). |
 | **6. Auto-sync** | ✗ not reached | — |
 | **7. INDOX page shows docs** | ✗ not reached | — |
@@ -69,4 +69,4 @@ Run on the local Windows/Docker-Desktop host, `DEPLOYMENT_NAME=shlomo-laptop`, `
 - Backup of the pre-wipe `.env` (149 real keys) is in the session scratchpad (`env-full-backup.bak`);
   restore + `docker compose … up -d` to return to the prior working stack.
 - Current stack = the fresh minimal-secrets deploy described above (live-Google backends, external creds
-  blank). browser42 still logged into person2@example.com.
+  blank). browser42 still logged into person3@example.com.

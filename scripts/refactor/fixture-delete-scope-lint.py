@@ -35,7 +35,7 @@ THE RULES
 
 Applied to every `delete ... from ... incoming_documents` inside `apps/*/blueprint/n8n/*.workflow.ts`
 — bare, `public.`-qualified, or qualified with ANY `indox_*` tenant schema (`indox_test.` is where
-Phase 4 moves the suites; a cleanup aimed at `indox_bina_comp.` is scanned too, not excused) —
+Phase 4 moves the suites; a cleanup aimed at `indox_hacohen.` is scanned too, not excused) —
 except (file, node) pairs named in the registry's `delete_allowlist`:
 
   F1  UNREGISTERED SCOPE. Every literal a marker-column predicate compares against must begin
@@ -116,7 +116,7 @@ BLUEPRINT_GLOB = "apps/*/blueprint/n8n/*.workflow.ts"
 #: census that recognised only `public.` would not turn red on that move — it would stop
 #: MATCHING, skip the statement, and keep printing PASS having scanned nothing, which is this
 #: file's own named failure mode (see the glob note above). The alternation deliberately accepts
-#: ANY `indox_*` schema, not just `indox_test`: a cleanup pointed at `indox_bina_comp.` must enter
+#: ANY `indox_*` schema, not just `indox_test`: a cleanup pointed at `indox_hacohen.` must enter
 #: the census and face F1–F4 like everything else, not slip past because the census only knew
 #: the schema its author was SUPPOSED to use. Quotes are tolerated the same way they are on the
 #: table name (`indox_test."incoming_documents"`, JSON-escaped `\"` included).
@@ -794,7 +794,7 @@ SELF_TEST = [
     # REAL tenant must face the same rules, not slip past a census that only knew the schema
     # the author was supposed to use.
     ("a cleanup pointed at ANOTHER tenant's schema is scanned, not slipped past",
-     "DELETE FROM indox_bina_comp.incoming_documents WHERE \"STATUS\" = 'OLD';", {"F4"}),
+     "DELETE FROM indox_hacohen.incoming_documents WHERE \"STATUS\" = 'OLD';", {"F4"}),
 
     # THE FALSE POSITIVE, VERBATIM. `indoxV2GDocTest01`'s "Batch Cleanup Prior" as it stands in
     # the tree. Every branch is registered (`gdx_`), so the honest verdict is clean — but the

@@ -1,0 +1,21 @@
+{
+  "id": "operatives",
+  "title": {
+    "he": "אוסף האופרטיבים",
+    "en": "Operative Collective"
+  },
+  "layer": 3,
+  "kind": "tool",
+  "version": "0.1.0",
+  "summary": {
+    "he": "כל הפעולות שהלשכה יודעת לעשות, כמתכון טקסט קצר אחד לכל פעולה — איפה היא רצה, ואיזו מהן בקשה צריכה",
+    "en": "Every action the office can do, as one short plain-text recipe each: where it runs, and the one a request needs"
+  },
+  "cli": {
+    "alias": "ops"
+  },
+  "agent": {
+    "context": "AGENT.md",
+    "order": 2
+  }
+}

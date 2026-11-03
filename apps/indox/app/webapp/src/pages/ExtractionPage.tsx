@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ltr } from '../bidi';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useInstanceLink } from '../instancesContext';
 import {
@@ -399,7 +400,7 @@ export default function ExtractionPage() {
           <h1>חילוץ מסמכים</h1>
           <div className="sub">
             הרצת חילוץ על מאגר הדגימה המקורקע (אמת־יסוד) דרך תהליכי ה-n8n —
-            קריאת apitools אחת לכל ערך; השאילתות נטענות מההגדרות (q_v3_*).
+            קריאת apitools אחת לכל ערך; השאילתות נטענות מההגדרות ({ltr('q_v3_*')}).
           </div>
         </div>
         <div className="actions">
@@ -423,7 +424,7 @@ export default function ExtractionPage() {
               className="btn blue"
               onClick={() => start([...selected])}
               disabled={running}
-              title={`הרצת חילוץ על ${selected.size} המסמכים שנבחרו — אחרי אישור`}
+              title={`הרצת חילוץ על ${selected.size === 1 ? 'המסמך הנבחר' : selected.size + ' המסמכים שנבחרו'} — אחרי אישור`}
             >
               <Ic p={IC.play} /> הרץ נבחרים ({selected.size})
             </button>
@@ -614,7 +615,7 @@ export default function ExtractionPage() {
           <span className="num small">{fmtTime(viewRun.started)}</span>
           <span className="tag">{SCOPE_LABEL[viewRun.scope || ''] || viewRun.scope || ''}</span>
           <span className="muted small">
-            {Object.keys(viewRun.results).length} מסמכים בהרצה זו
+            {Object.keys(viewRun.results).length === 1 ? 'מסמך אחד' : Object.keys(viewRun.results).length + ' מסמכים'} בהרצה זו
           </span>
           <button className="link" onClick={() => setViewRun(null)} style={{ marginInlineStart: 'auto' }}>
             חזרה לתוצאות האחרונות

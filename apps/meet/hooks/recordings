@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+#: recordings [N] — the newest N recordings (default 10): when, room, who, done:  ./bbox meet recordings 5
+# Runs the app's own CLI inside meet-start (apps/meet/start/cli.py), so it needs no address or key.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+dcx exec -T meet-start python /app/cli.py recordings "${1:-10}"

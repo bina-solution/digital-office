@@ -1,12 +1,12 @@
 # context/ — index
 
-Agent-facing context for deployment-bina-comp. Entry point is [../AGENTS.md](../AGENTS.md);
+Agent-facing context for deployment-hacohen. Entry point is [../../AGENTS.md](../../AGENTS.md), the one entry file every agent loads;
 this folder holds the deeper material. Each fact has **one home** (no duplication).
 
 ## Baseline & reference
 | File | What |
 |---|---|
-| `deployment-context.txt` | Current inventory: services, domains (prod `<svc>.bina-comp…` / dev `<svc>.dev.bina-comp…`), networks, auth posture, run commands. Read by the health/review/report job-prompts. |
+| `deployment-context.txt` | Current inventory: services, domains (prod `<svc>.hacohen…` / dev `<svc>.dev.hacohen…`), networks, auth posture, run commands. Read by the health/review/report job-prompts. |
 | `n8n-cli.md` | **The** n8n operate reference (tested, v2.0.3): CLI (safe/mutating/dangerous) + REST API lifecycle (create→develop→activate→execute→delete) + DB checks + workflow/credential IDs, MCP paths/gids, pull/push, lessons (OAuth, Sheets MCP timeouts). |
 | `agent-deployment-investigator.md` | Read-only investigator persona (allowed/forbidden, approach, output format). |
 | `local-ocr-research.md` | Local-OCR engine evaluation → PaddleOCR PP-OCRv5 (swap point in apitools). |
@@ -46,6 +46,7 @@ still-live n8n sync content moved into [n8n-cli.md](n8n-cli.md).
 | `browser42-agentic-browsing-lifetime-report.md` | Full native-group/subagent incident record, evidence, failure analysis, and phased cheap-model hardening plan. Observable event integrity is recorded in `browser42-agentic-browsing-observable-ledger.manifest.json`. |
 | `browser42-release-plan.md` | **Canonical Browser42 release plan** — current implementation scorecard, post-ledger cheap-agent assessment, dependency order, proof matrix, SLOs, and exact release gate. |
 | `browser42-groups.md` | **Session groups design** — how stable session slugs and tab ownership groups make simultaneous agents practical without cookie isolation. |
+| `office-browser-in-hp-and-the-human-handoff.md` | **The owner's plan for the office's useful browser** (2026-10-14): the browser lives in the HP office and is signed in to Google/WhatsApp/GitHub so the agent works alone; when a human step is unavoidable (first sign-in, 2FA, captcha, QR) the owner gets ONE link to the exact window, openable from anywhere. What is measured today, what is missing, and the ordered work — DGO-567 (app-057…059, ui2-076, lnk-035, own-032). |
 | `release.md` | release checklist/notes. |
 
 ## Agent-runner job-prompts (functional — agent-runner loads `context/<job>-context.txt` by name)
@@ -77,6 +78,7 @@ still-live n8n sync content moved into [n8n-cli.md](n8n-cli.md).
 ## Plans / notes
 | File | What |
 |---|---|
+| `herd-from-anywhere.md` | **Every office reaches every office, wherever the laptop is** (the owner, 2026-11-01, from a coffee shop): what held and what died off the home LAN; step 1, landed (`hub: vps1`, `bbox via`, project-pln's fallback through the hub); the lasting design — the hub's door splices ciphertext of declared pairs (phase 5, end-to-end WireGuard, no routing at vps1), path selection and the upgrade back to direct, the roaming fix, an outbox, herd-wide compute, regional relays at scale. Plan `herd-anywhere` (DGO-1094…1103). |
 | `digital-office-network-plan.md` | **The** plan for the `network` app, rev 2 (2026-09-29): a remote office behind NAT reachable at a public edge host, gateway-issued QR enrollment, per-office app sets declared through the existing `offices` app, and the `sites` → `site-runtime` split. §16 is the open-decisions table for the owner. Partially supersedes `NETWORK-APP-AND-NATIVE-SCALING-PLAN.md`. |
 | `digital-office-network-architecture.md` | The independent English review of that plan — 24 findings (6 high / 13 medium / 5 low) with the amendment each forces, final user stories with acceptance criteria, orchestration (sequences, state machines, single-writer ownership), 9 diagrams (Mermaid + SVG in `diagrams/`). |
 | `NETWORK-APP-AND-NATIVE-SCALING-PLAN.md` | 2026-08-11, **partially superseded** (see its own header): §1/§2/§5 — the seven measured incidents and the WireGuard-over-`ssh -R` decision — remain authoritative; its catch-all-router and node-issued-enrollment parts are replaced. |
@@ -92,3 +94,23 @@ still-live n8n sync content moved into [n8n-cli.md](n8n-cli.md).
 - General compose command cookbook → `deployment-context.txt` (superseded the old `deployment` skill).
 - Running `dc`/captures from inside the agent container (the bind-mount trap that empties
   `.generated/registry` while `healthz` stays green) → `running-dc-from-the-agent-container.md`.
+
+## Architecture review (2026-10-14, DGO-593)
+| File | What |
+|---|---|
+| `dgo-architecture-2026.md` | **The architecture review the owner asked for**: the ten challenges as the last 100 work items state them, the 54 stated design decisions mapped to keep / move / retire (every one with `file:line`), the measured reality of the release machinery, the 2026 state of the art per dimension (pattern, precedents, networking, identity, API+CLI, UI, OS, omni-binary, registry, data), the recommended architecture judged against the owner's bar (minimal dependencies · max secure · zero duplication · minimal coupling · simplicity · generality · zero feature loss · minimal bytes), a 12-step plan with acceptance, rollback and budget, and the eight decisions only the owner can make. |
+| `research/archmap-layer0-compiler-state-cli.md` · `research/archmap-link-identity-edge.md` · `research/archmap-ui-apps-data.md` | The three read-only decision maps of the source (branch `hp-dgo` @ `7347f738`): pipeline, every stated decision with its reason and rejected alternative, invariants, failure classes, smells with evidence. |
+| `research/packaging-state.md` | The release machinery measured: Go tests run natively, binary sizes per target, what a double-clicked installer does today, plan-vs-reality per part, code risks. |
+| `research/architecture-2026.md` · `research/bootstrapper-signing-size.md` · `research/omni-binary-and-registry.md` · `research/package-registry.md` · `research/android-path.md` | The five research briefs — every claim with a source URL and date — on platform-OS precedents and patterns, the signed bootstrapper (size floor measured), the single-binary base and the registry at apps.net.digital-office.co.il, the package format, and what Android can and cannot run. |
+| `research/challenges-from-the-100-items.md` | The challenge inventory as DGO-491…591 state it: today's implementation, what the items measured, the gap against the owner's bar. |
+
+## Leading the work, and the agents' context (2026-10-15)
+| File | What |
+|---|---|
+| `take-the-lead.md` | The plan from A to Z for whoever takes the lead (DGO-635). It covers the state, the safety rules, the recipes, the 12 steps, the workstreams, the backlog and the owner's decisions. §J says Azaria executes, Claude directs, and what the DeepSeek budget is. |
+| `azaria-context-architecture.md` | How an agent's context is built (DGO-646): 12 proven principles with their sources, Azaria's measured context, the five layers with their budgets, and the measures. |
+| `running-the-stack.md` | `bbox run`, the three environments, Docker 29, cloud sandboxes and `digital-office/`. These are the operating sections of the former `CLAUDE.md`, word for word. |
+| `agent-context-cost-2026-10-13.md` | What one Azaria session cost, and why: ≈23K tokens before the first word, 650K at the end, ₪3.78. |
+| `session-timeline-2026-10-14.md` | The 10-14/15 session as a worked example (DGO-644): every owner message, the direction taken at each, the behaviours worth copying, and the mistakes with the rule each one left. |
+| `fresh-office-cloud-sandbox-2026-10-15.md` | A fresh office in a Claude cloud sandbox: three runs, three fixes, and the pairing of an office that cannot be dialed. Taken from the branch `ccr-7412490e-ocnhhd`. |
+| `new-company-office-playbook.md` | Setting up a new company's office, phase by phase, from what The Fireplace Guys' setup taught us (2026-10-22…30, DGO-1037): what to do, what went wrong, what the product does now, the owner's decisions and the gaps still open. No client data. |

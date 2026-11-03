@@ -18,7 +18,7 @@ cd "${REPO_ROOT}"
 
 # Docker prefix every volume with the compose PROJECT name, so the names to look for are
 # `<project>_offices_state` — not `offices_state`. Resolved by suffix rather than assumed: the same
-# office is `digital-office_…` on a MacBook and `deployment-bina_comp_…` on a server, and a migration
+# office is `digital-office_…` on a MacBook and `deployment-hacohen_…` on a server, and a migration
 # that assumes one of them silently does nothing on the other (measured: the first version of this
 # hook reported "done" and copied nothing).
 SUFFIX_STATE="offices_state"; SUFFIX_PEERS="offices_peers"

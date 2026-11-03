@@ -1,0 +1,76 @@
+name: gates-hosted
+
+# Every gate (scripts/ci/gates.sh) on the DELL's runner (`portable-ssd`, labels self-hosted + portable) — the
+# owner, 2026-11-01: «don't wait for GitHub, run everything yourself … we have all the compute at home, there is no
+# reason to pay». GitHub's hosted runners stopped taking jobs that day (billing), and a job on our own runner is not
+# billed. The workflow keeps its name, gates-hosted, because every session watches its runs by that name. Before
+# (2026-10-31): GitHub's hosted runner, «this mac stays the command center», with the Dell's runner paused.
+# The same proof the release probes ran on the MacBook's engine: python 3.12 with PyYAML, node for the .mjs
+# tests (else G72 reads them NOT RUN), the n8n tooling's own packages for its compile gate. Only on request:
+# a push to mac-dgo or dgo-stable whose head commit says "[gates]".
+
+on:
+  push:
+    branches: [mac-dgo, dgo-stable]
+
+permissions:
+  contents: read
+
+jobs:
+  gates:
+    if: contains(github.event.head_commit.message, '[gates]')
+    runs-on: [self-hosted, portable]
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: What the gates read with
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet pyyaml
+          npm ci --prefix apps/n8n/tooling --no-audit --no-fund
+          python3 --version; node --version
+
+      - name: Every gate
+        run: |
+          set -euo pipefail
+          echo "gates at $(git rev-parse --short HEAD)"
+          NODE_BIN="$(command -v node)" bash scripts/ci/gates.sh
+
+  # The link's TCP path and the hub's relay (apps/dgo-extend/carrier). Its tests ran only inside its image
+  # build, and go-test.yml runs on the Dell's runner (paused since 2026-10-21, DGO-830) over other modules:
+  # a change to the carrier had no gate at all (measured 2026-11-01, DGO-1097). Standard library only.
+  carrier:
+    if: contains(github.event.head_commit.message, '[gates]')
+    runs-on: [self-hosted, portable]
+    timeout-minutes: 60   # 15 for the job + up to 45 that ops/prejob_waitfree.sh may hold it (memory, heat, a fresh boot)
+    defaults:
+      run:
+        working-directory: apps/dgo-extend/carrier
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache: false
+
+      - name: vet, gofmt and test — the carrier
+        run: |
+          set -euo pipefail
+          go vet ./...
+          unformatted="$(gofmt -l .)"
+          if [ -n "${unformatted}" ]; then echo "::error::not gofmt-formatted: ${unformatted}"; gofmt -d .; exit 1; fi
+          CGO_ENABLED=0 go test -count=1 -timeout 10m ./...

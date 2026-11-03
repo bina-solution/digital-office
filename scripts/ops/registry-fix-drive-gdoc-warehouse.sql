@@ -14,19 +14,19 @@
 -- ============================================================================
 -- 1. FOLDER RESOLUTION — both ids resolved by walking the tree, not by name-guessing.
 --
---   SOURCE  1stuMSjbnyUTCtbq6KIzooHCGXpEey_7P  'סרוקות- לפני שמות'
---   DEST    1YpapJ3vJDYo_idP3aZiFJR_1WoEaCNhu  'סרוקות הצליח'
---   both under parent 1zTQxUKtm1h7GUcGdb3ltSY0HjEsINzEV
+--   SOURCE  1REDACTEDdrivexxxxxxxxxxxxxxx0094  'סרוקות- לפני שמות'
+--   DEST    1REDACTEDdrivexxxxxxxxxxxxxxx0002  'סרוקות הצליח'
+--   both under parent 1REDACTEDdrivexxxxxxxxxxxxxxx0095
 --                     ('סרוקות / ווטסאפ ראשי - אוטומציות')
 --
 -- They are SIBLINGS in the naming pipeline's own before/succeeded/failed tri-state,
 -- which is what makes source->destination coherent:
---     1stuMSjbnyUTCtbq6KIzooHCGXpEey_7P  'סרוקות- לפני שמות'          <- before names
---     1YpapJ3vJDYo_idP3aZiFJR_1WoEaCNhu  'סרוקות הצליח'               <- succeeded
---     1m25RdFEkfv_5KjSqFGM8gpjupXWZuUW2  'סרוקות- נכשל (בוריס)'       <- failed
---     1bR2EDqDUtLMSiHKQkL25DacK0ptzH_40  'סרוקות- שינוי ידני (בוריס)'
---     11rj5zDw2lhYnc8zMUxmYADKIJaPaunhb  'אחרי שמות, סרוקות בוריס נכשל'
---     1GsIcPPh4wzpue7FH3Omeast9I-_aZBFX  'כשלון נוסף לבדיקה'
+--     1REDACTEDdrivexxxxxxxxxxxxxxx0094  'סרוקות- לפני שמות'          <- before names
+--     1REDACTEDdrivexxxxxxxxxxxxxxx0002  'סרוקות הצליח'               <- succeeded
+--     1REDACTEDdrivexxxxxxxxxxxxxxx0009  'סרוקות- נכשל (בוריס)'       <- failed
+--     1REDACTEDdrivexxxxxxxxxxxxxxx0011  'סרוקות- שינוי ידני (בוריס)'
+--     1REDACTEDdrivexxxxxxxxxxxxxxx0014  'אחרי שמות, סרוקות בוריס נכשל'
+--     1REDACTEDdrivexxxxxxxxxxxxxxx0096  'כשלון נוסף לבדיקה'
 --
 -- SPELLING NOTE: the real folder name carries a hyphen bound to the first word —
 -- 'סרוקות- לפני שמות', not 'סרוקות לפני שמות'. Matched on the substring 'לפני' across
@@ -40,11 +40,11 @@
 -- ============================================================================
 -- 2. *** THE RULE-OUT CHECK: 'סרוקות- לפני שמות' IS **NOT** 1Lmhka14. ***
 --
---   proposed to_sync  1stuMSjbnyUTCtbq6KIzooHCGXpEey_7P  'סרוקות- לפני שמות'
---   current  to_sync  1Lmhka14VGQMVGr4VQFRpF1YDEdOUnUhM  'סרוקות מהמחסן 2026'
+--   proposed to_sync  1REDACTEDdrivexxxxxxxxxxxxxxx0094  'סרוקות- לפני שמות'
+--   current  to_sync  1REDACTEDdrivexxxxxxxxxxxxxxx0003  'סרוקות מהמחסן 2026'
 --
 -- Different ids, different names, and different PARENTS — 1Lmhka14 sits under
--- 1258rEdcULbnIFBMyDLowqAP4yjou9PbD (alongside 'סרוקות שנים קודמות'), a separate
+-- 1REDACTEDdrivexxxxxxxxxxxxxxx0097 (alongside 'סרוקות שנים קודמות'), a separate
 -- lineage from the naming-pipeline parent above. So the source was NOT already
 -- correct, and this edit IS needed.
 --
@@ -114,7 +114,7 @@
 -- any reader that does not go through the BFF (e.g. SyncScanner00001's raw SQL read).
 --
 -- Side effect, intended: this also clears the three-way alias on
--- 1HoBifHSHmzk4cuaw6L98lwwTfQvyIdvH — warehouse stops sharing a `synced` folder with
+-- 1REDACTEDdrivexxxxxxxxxxxxxxx0001 — warehouse stops sharing a `synced` folder with
 -- drive-bs (and with the BalanceSheetDestFolder1 / ProcessedDocumentsFolder settings).
 --
 -- BEGIN;
@@ -123,10 +123,10 @@
 --      select jsonb_agg(
 --               case when e->>'name' = 'drive-gdoc-warehouse'
 --                    then jsonb_set(jsonb_set(jsonb_set(jsonb_set(e,
---                           '{pairs,0,to_sync}', '"1stuMSjbnyUTCtbq6KIzooHCGXpEey_7P"'),
---                           '{pairs,0,from}',    '"1stuMSjbnyUTCtbq6KIzooHCGXpEey_7P"'),
---                           '{pairs,0,synced}',  '"1YpapJ3vJDYo_idP3aZiFJR_1WoEaCNhu"'),
---                           '{pairs,0,to}',      '"1YpapJ3vJDYo_idP3aZiFJR_1WoEaCNhu"')
+--                           '{pairs,0,to_sync}', '"1REDACTEDdrivexxxxxxxxxxxxxxx0094"'),
+--                           '{pairs,0,from}',    '"1REDACTEDdrivexxxxxxxxxxxxxxx0094"'),
+--                           '{pairs,0,synced}',  '"1REDACTEDdrivexxxxxxxxxxxxxxx0002"'),
+--                           '{pairs,0,to}',      '"1REDACTEDdrivexxxxxxxxxxxxxxx0002"')
 --                    else e end
 --             order by ord)
 --      from jsonb_array_elements(s.value::jsonb) with ordinality t(e, ord)

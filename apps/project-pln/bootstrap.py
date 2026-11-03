@@ -222,7 +222,7 @@ password = need("PLANE_OWNER_PASSWORD")
 # RESOLVED HERE, BEFORE THE GUARD BELOW ASKS WHOSE INSTANCE THIS IS. It used to be resolved after it,
 # so the guard judged the address the hook passed and everything below then acted for another one.
 # hp-laptop, 2026-10-06: `.env` had just been set to the instance's real administrator, the credential
-# plane's container still carried the line it was created with (`ci@local.dev`, the CI placeholder
+# plane's container still carried the line it was created with (`person5@example.com`, the CI placeholder
 # the hook itself refuses) — the guard saw the real owner and passed, and the applier revived the
 # placeholder's administrator row and handed it the declared workspace, reporting success. The
 # guard exists for exactly that ("a second owner is not something a bring-up hook gets to decide"):
@@ -346,6 +346,49 @@ else:
         kept.append("profile(" + ",".join(fixed) + ")")
     else:
         kept.append("profile")
+
+# ── the office's own sign-in, as Plane's sign-in (DGO-371) ──────────────────────────────────────
+# WHICH office identity IS which Plane account — declared in `bootstrap.yaml` (`sso:`) and written
+# here as the file the middleware reads (`plane/middleware/office_identity.py`). It is APPLIED
+# state, not a second declaration: the file is rewritten from the spec on every bring-up, so
+# deleting the block closes the door again, and `plane: owner` resolves to the account this file has
+# just established — the owner's address never has to be written twice.
+#
+# Not a secret and not a credential: it is a mapping between two names of one person, which is why
+# it lives in the app's own volume beside plane.env rather than in the credential plane.
+SSO_MAP = need("PLANE_SSO_MAP") or "/app/data/office-identity.json"
+sso_users: list[dict] = []
+for entry in ((cfg.get("sso") or {}).get("users") or []):
+    if not isinstance(entry, dict):
+        problems.append("bootstrap.yaml: an sso.users entry is not a mapping — skipped")
+        continue
+    names = entry.get("authentik") or []
+    if isinstance(names, str):
+        names = [names]
+    names = [str(n).strip() for n in names if str(n).strip()]
+    who = str(entry.get("plane") or "").strip()
+    if who in ("", "owner"):
+        who = user.email                                 # the owner this run established
+    if not names or not who:
+        problems.append(f"bootstrap.yaml: sso.users entry {entry!r} names no office identity or no "
+                        f"Plane account — skipped")
+        continue
+    if User.objects.filter(email__iexact=who).first() is None:
+        problems.append(f"bootstrap.yaml: sso maps an office identity to '{who}', which is not a "
+                        f"Plane account on this instance — not written")
+        continue
+    sso_users.append({"plane": who, "authentik": names})
+try:
+    with open(SSO_MAP, "w", encoding="utf-8") as handle:
+        json.dump({"users": sso_users, "source": "apps/project-pln/bootstrap.yaml"},
+                  handle, ensure_ascii=False, indent=1)
+        handle.write("\n")
+    kept.append(f"sso_identity({len(sso_users)})")
+    if sso_users:
+        log(f"office sign-in: {len(sso_users)} declared office identity(ies) sign into Plane "
+            f"without Plane's own password")
+except OSError as e:
+    problems.append(f"could not write {SSO_MAP}: {e} — the office's own sign-in stays off")
 
 # The admin row is the ONE row here that cannot simply be re-created: its unique key is
 # `(instance, user)` with NO `deleted_at` in it, so Plane's soft-deleted residue (the `objects`

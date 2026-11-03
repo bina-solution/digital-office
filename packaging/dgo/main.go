@@ -29,19 +29,20 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/solomonBoltin/deployment-bina-comp/packaging/dgo/internal/compiler"
+	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/compiler"
+	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/console"
+	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/edge"
+	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/engine"
+	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/native"
+	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/serve"
+	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/store"
 )
 
 var version = "dev" // -ldflags "-X main.version=…"
 
 // compilerVerbs is the compiler's contract (reconcile.py main(), measured in the plan's §6): every
-// one is answered by delegating to the Python compiler with the arguments untouched.
-var compilerVerbs = []string{
-	"plan", "render", "up", "validate", "compose-files", "services", "required-by",
-	"compose-services", "blueprints", "generations", "rollback", "apply", "enabled-apps",
-	"set-state", "capability-provider", "serve-plan", "remote-get", "remote-set",
-	"office-get", "office-set",
-}
+// one not answered natively is delegated to the Python compiler with the arguments untouched.
+var compilerVerbs = compiler.Verbs
 
 // roots are the two directories an app lives in — the directory is the layer.
 var roots = []string{"apps", "platform-base"}
@@ -55,15 +56,41 @@ type invocation struct {
 }
 
 // nativeVerbs are the compiler verbs answered in-process (packaging/dgo/internal/compiler), each
-// diff-tested against reconcile.py. DGO_COMPILER=python delegates them to Python again — the plan's
-// per-verb rollback, so a wrong answer is one environment variable away from the old one.
-var nativeVerbs = map[string]func(root string) func(io.Writer, io.Writer) int{
-	"enabled-apps": func(root string) func(io.Writer, io.Writer) int {
-		return func(out, err io.Writer) int { return compiler.EnabledApps(root, out, err) }
+// diff-tested against reconcile.py, each given the arguments after its name to read as reconcile.py
+// reads them. DGO_COMPILER=python delegates them to Python again — the plan's per-verb rollback, so
+// a wrong answer is one environment variable away from the old one.
+var nativeVerbs = map[string]func(root string, args []string, stdout, stderr io.Writer) int{
+	"enabled-apps":        compiler.EnabledAppsCmd,
+	"validate":            compiler.ValidateCmd,
+	"services":            compiler.ServicesCmd,
+	"required-by":         compiler.RequiredByCmd,
+	"compose-services":    compiler.ComposeServicesCmd,
+	"capability-provider": compiler.CapabilityProviderCmd,
+	"blueprints":          compiler.BlueprintsCmd,
+	"generations":         compiler.GenerationsCmd,
+	"office-get":          compiler.OfficeGetCmd,
+	"remote-get":          compiler.RemoteGetCmd,
+	"render":              compiler.RenderCmd,
+	"compose-files":       compiler.ComposeFilesCmd,
+	"serve-plan":          compiler.ServePlanCmd,
+	"set-state":           compiler.SetStateCmd,
+	"office-set": func(root string, args []string, out, err io.Writer) int {
+		return compiler.OfficeSetCmd(root, args, os.Stdin, out, err)
 	},
-	"validate": func(root string) func(io.Writer, io.Writer) int {
-		return func(out, err io.Writer) int { return compiler.ValidateVerb(root, out, err) }
+	"remote-set": func(root string, args []string, out, err io.Writer) int {
+		return compiler.RemoteSetCmd(root, args, os.Stdin, out, err)
 	},
+}
+
+// children are the office's own long-running processes, `dgo be-child <name>` (the architecture's
+// §5.1): native on every OS, each with its own rollback inside it, resolved by child() — which main()
+// asks before it looks for a checkout. `be-child` is no app id, no cli.alias and no bbox verb, so it
+// shadows nothing (TestBeChildShadowsNoAppAndNoBboxVerb, TestBeChildRunsTheConsoleServerAndShadowsNoApp).
+var children = map[string]func(root string, args []string, stderr io.Writer) int{
+	"console": console.Main, // the shell's files and file-only routes; DGO_CONSOLE=container hands them all back
+	"control": serve.Main,   // app-management's routes; BBOX_CONTROL_PLANE=container hands them all back
+	"edge":    edge.Main,    // the edge where there is no traefik: by host, gated through forward-auth (DGO-1090)
+	"native":  native.Main,  // the phone's core in one process: edge, console, control, on its own sockets (DGO-1090)
 }
 
 func main() {
@@ -71,9 +98,28 @@ func main() {
 		fmt.Println("dgo " + version)
 		return
 	}
+	if len(os.Args) > 1 && os.Args[1] == "be-child" {
+		// before the checkout is looked for: the office's own processes start without one (the
+		// console's rollback must reach its container from anywhere), and are given it when there is
+		// one — and before plan(), so no OS hands them to bbox
+		root, _ := findRoot(mustCwd(), executableDir())
+		if dir := os.Getenv("DGO_OFFICE_ROOT"); root == "" && dir != "" {
+			// no checkout: a phone's office root, when the app names one (DGO-1090) — and why not, when
+			// the one it names is refused, before the child's own refusal of no root at all
+			var err error
+			if root, err = officeRoot(dir); err != nil {
+				fmt.Fprintln(os.Stderr, "dgo: DGO_OFFICE_ROOT:", err)
+			}
+		}
+		inv, err := child(root, os.Args[2:])
+		if err != nil {
+			fatal(err.Error())
+		}
+		os.Exit(inv.native(os.Stdout, os.Stderr))
+	}
 	root, err := findRoot(mustCwd(), executableDir())
 	if err != nil {
-		fatal(err.Error())
+		fatal(noCheckout(runtime.GOOS, err))
 	}
 	if len(os.Args) < 2 || os.Args[1] == "help" || os.Args[1] == "-h" || os.Args[1] == "--help" {
 		fmt.Print(help(root))
@@ -87,6 +133,15 @@ func main() {
 }
 
 // ── the checkout ──────────────────────────────────────────────────────────────────────────────────
+
+// noCheckout is what dgo says with no checkout around it — and on a phone, where the office runs
+// instead: dgo for android/arm64 is met there first, in an app, before any checkout (DGO-1069).
+func noCheckout(goos string, err error) string {
+	if goos == "android" {
+		return err.Error() + "\n\n" + engine.OnAndroid
+	}
+	return err.Error()
+}
 
 // findRoot walks up from each start directory to the checkout that holds the compiler and bbox.
 // Both must be there: a stray copy of one file is not an office.
@@ -108,13 +163,28 @@ func findRoot(starts ...string) (string, error) {
 
 // ── the verbs ─────────────────────────────────────────────────────────────────────────────────────
 
-// plan turns a command line into what to run. Order: a compiler verb, then an app (by id or by its
-// `cli.alias`) with one of its hook verbs, then bbox — which is also where a name nobody knows ends
-// up, because bbox's own help is the one that lists it.
+// plan turns a command line into what to run. Order: a native compiler verb, the office's own
+// processes (be-child), the store (index), `engine doctor|plan`, a compiler verb delegated to
+// reconcile.py, then — on Windows — the bbox.cmd hand-off, then an app (by id or by its `cli.alias`)
+// with one of its hook verbs, then bbox — which is also where a name nobody knows ends up, because
+// bbox's own help is the one that lists it.
 func plan(root string, args []string, goos string) (invocation, error) {
 	verb := args[0]
-	if mk, ok := nativeVerbs[verb]; ok && os.Getenv("DGO_COMPILER") != "python" && len(args) == 1 {
-		return invocation{native: mk(root), why: "compiler verb, native (DGO_COMPILER=python delegates it)"}, nil
+	if fn, ok := nativeVerbs[verb]; ok && os.Getenv("DGO_COMPILER") != "python" {
+		native := func(out, err io.Writer) int { return fn(root, args[1:], out, err) }
+		return invocation{native: native, why: "compiler verb, native (DGO_COMPILER=python delegates it)"}, nil
+	}
+	if verb == "be-child" { // before the WSL hand-off below: the office's own processes run on the host
+		return child(root, args[1:])
+	}
+	if sv, ok := store.Verbs[verb]; ok { // the store (internal/store): native on every OS, before the WSL hand-off
+		return invocation{native: func(out, errw io.Writer) int { return sv(root, args[1:], out, errw) }, why: "store verb, native"}, nil
+	}
+	// `engine doctor|plan` read the engine natively, on every OS — so before the Windows hand-off below.
+	// Every other `engine` verb (start, stop, shell …) stays bbox's; DGO_ENGINE=bbox hands these two back.
+	if verb == "engine" && len(args) == 2 && engine.Owns(args[1]) && os.Getenv("DGO_ENGINE") != "bbox" {
+		return invocation{native: func(out, _ io.Writer) int { return engine.Main(root, args[1], engine.Real(), out) },
+			why: "engine verb, native (DGO_ENGINE=bbox hands it to bbox)"}, nil
 	}
 	for _, v := range compilerVerbs {
 		if verb == v {
@@ -288,6 +358,7 @@ func help(root string) string {
 	sort.Strings(native)
 	fmt.Fprintf(&b, "the compiler (native: %s; the rest delegated to platform/manager/reconcile.py until step 2 is done):\n  dgo ", strings.Join(native, ", "))
 	b.WriteString(strings.Join(compilerVerbs, " | "))
+	b.WriteString("\n\nthe app store's signed index (native):\n  dgo index build | verify | install --dry-run")
 	b.WriteString("\n\napps (each verb is a file in the app's hooks/):\n")
 	for _, r := range roots {
 		entries, _ := os.ReadDir(filepath.Join(root, r))
@@ -307,8 +378,34 @@ func help(root string) string {
 			fmt.Fprintf(&b, "  dgo %-28s %s\n", tok, strings.Join(verbs, " "))
 		}
 	}
+	fmt.Fprintf(&b, "\nthe office's own processes: dgo be-child %s\n", childNames())
 	b.WriteString("\neverything else (run, status, apps, …) is handed to bbox until dgo absorbs it: dgo run\n")
 	return b.String()
+}
+
+// child resolves `dgo be-child <name> <args…>`: the process, run in this one with its own flags, and
+// root ("" outside a checkout) handed to it.
+func child(root string, args []string) (invocation, error) {
+	name := ""
+	if len(args) > 0 {
+		name = args[0]
+	}
+	run, ok := children[name]
+	if !ok {
+		return invocation{}, fmt.Errorf("dgo be-child %s: no such process (the office's own: %s)", name, childNames())
+	}
+	return invocation{native: func(_, stderr io.Writer) int { return run(root, args[1:], stderr) },
+		why: "the office's own process " + name}, nil
+}
+
+// childNames lists the processes `dgo be-child` runs, sorted.
+func childNames() string {
+	names := make([]string, 0, len(children))
+	for n := range children {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	return strings.Join(names, " | ")
 }
 
 func mustCwd() string {
@@ -325,6 +422,33 @@ func executableDir() string {
 		return ""
 	}
 	return filepath.Dir(p)
+}
+
+// officeRoot is a phone's office root (DGO-1090; ai/context/research/android-path.md): a directory the
+// app unpacks into its own storage with the core's state file and the core apps' manifests — no
+// compiler, no bbox — marked by `.dgo-office-root`. Only `be-child` looks for one, and only where no
+// checkout was found: a stray marker inside a checkout never wins, and the CLI's verbs, which need the
+// compiler, never run against a root that has none. What it holds is what this office answers, so a
+// root others may write to is none, and its two files must be regular ones (a FIFO would hang every
+// read). The error says why dir is not such a root.
+func officeRoot(dir string) (string, error) {
+	if !filepath.IsAbs(dir) {
+		return "", fmt.Errorf("%q is not an absolute path", dir)
+	}
+	dir = filepath.Clean(dir) // the catalog's messages name its files relative to it, as Python's do
+	st, err := os.Stat(dir)
+	if err != nil || !st.IsDir() {
+		return "", fmt.Errorf("%s is not a directory", dir)
+	}
+	if runtime.GOOS != "windows" && st.Mode().Perm()&0o022 != 0 {
+		return "", fmt.Errorf("%s may be written by others than its owner (%v)", dir, st.Mode().Perm())
+	}
+	for _, f := range []string{".dgo-office-root", "platform.state.yaml"} {
+		if st, err := os.Stat(filepath.Join(dir, f)); err != nil || !st.Mode().IsRegular() {
+			return "", fmt.Errorf("%s holds no %s (a regular file)", dir, f)
+		}
+	}
+	return dir, nil
 }
 
 func isFile(p string) bool { st, err := os.Stat(p); return err == nil && !st.IsDir() }

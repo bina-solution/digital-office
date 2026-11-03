@@ -37,12 +37,12 @@ out to be the most important axis:
 
 | # | Folder name | Folder ID | Files | Wired into `sync_registry`? |
 |---|---|---|---|---|
-| A1 | סרוקות- נכשל (בוריס) | `1m25RdFEkfv_5KjSqFGM8gpjupXWZuUW2` | **2,001** | No |
-| A2 | טיפול מהמייל, נכשל (בוריס) | `1aOSsB0rbVbAOM34iqL_mOKtk6csYBGW_` | **1,447** | No |
-| A3 | סרוקות- שינוי ידני (בוריס) | `1bR2EDqDUtLMSiHKQkL25DacK0ptzH_40` | **1,967** | No |
-| A4 | מייל - טופל ידנית (בוריס) | `1wvSieNfGjbAHzB-PTI8NwKgUKSaS4w-W` | **124** | No |
-| A5 | סרוקות שבוריס לא הצליח לתת שם | `122uDKW3HMwv3OwuShJ1foAn2LcAq9OoV` | **16** | No |
-| A6 | אחרי שמות, סרוקות בוריס נכשל | `11rj5zDw2lhYnc8zMUxmYADKIJaPaunhb` | **0** | No |
+| A1 | סרוקות- נכשל (בוריס) | `1REDACTEDdrivexxxxxxxxxxxxxxx0009` | **2,001** | No |
+| A2 | טיפול מהמייל, נכשל (בוריס) | `1REDACTEDdrivexxxxxxxxxxxxxxx0010` | **1,447** | No |
+| A3 | סרוקות- שינוי ידני (בוריס) | `1REDACTEDdrivexxxxxxxxxxxxxxx0011` | **1,967** | No |
+| A4 | מייל - טופל ידנית (בוריס) | `1REDACTEDdrivexxxxxxxxxxxxxxx0012` | **124** | No |
+| A5 | סרוקות שבוריס לא הצליח לתת שם | `1REDACTEDdrivexxxxxxxxxxxxxxx0013` | **16** | No |
+| A6 | אחרי שמות, סרוקות בוריס נכשל | `1REDACTEDdrivexxxxxxxxxxxxxxx0014` | **0** | No |
 | | **Group A total** | | **5,555** | **0 of 6 wired** |
 
 All 6 have `parents=None` in the Drive API response — top-level items in the service account's shared
@@ -65,45 +65,45 @@ sync-v3 destination:
 
 | Folder name | Folder ID | Files | Registry status |
 |---|---|---|---|
-| **יצוא צט 2026 נכשל** | `1PYaVJ4dKdOl1iGJlVKFT0pzJ_Rs2mYNL` | **713** | **LIVE** — `drive-gdoc-tzat` pipe's `failed` destination, confirmed via `sync_registry` JSON |
-| יצוא צט 12.25 - נכשל | `1OhkT-2VQ0HVT6tZnJ5y18ijdn_GWXoGK` | 41 | not wired |
-| יצוא צט חודש 10 - נכשל | `1myaXou-ksvNvftjhneVlv1J0Hsa_li7J` | 31 | not wired |
-| יצוא צט 09.25 נכשל | `1RnAGXbRWmBluh-p-JMhJI-GaxdCKxGqL` | 167 | not wired |
-| טיפול מהמייל, נכשל 2 | `1QcsN9RtGJNujVNtTXDBIC5nfG8imQ8TP` | 179 | not wired |
-| צט נכשל 08.25 | `1PBIChcX06DmAaEf9D3xEmpIv5H-c1DAK` | 64 | not wired |
-| צט 07.25 נכשל | `1W72ujka8tNYzLZ476wnROFIWTHi8mfBO` | 42 | not wired |
-| יצוא צט יוני נכשל- שילה 26.25 | `1LMbwgH1xgFN8XzKSzHabYFXCNpVjCj3S` | 35 | not wired |
-| יצוא צט יוני יצהר נכשל- 06.25 | `1itiXbaGJKak036mqdmcUUbjgmQCoCRcE` | 13 | not wired |
-| יוצא צט יוני- נכשל-קרית 06.25 | `1HizNTbHRcKMkd7m3i3fjr4NP1vmZ56W5` | 33 | not wired |
-| יוצא צט מאי 05.25 - נכשל | `1HYL_E2T0xE-cDZajblZliAxxAoJcXo66` | 132 | not wired |
-| צט אפריל 04.25 נכשל | `18KLUWN-Kp4ekmeZISVAdUO5DeEym1y3R` | 97 | not wired |
-| יצוא צט 03.25 נכשלים | `1ZLY2QM0zOtlP6qk-nEL39Jq8AU9oNUmi` | 107 | not wired |
-| יצוא צט 02.25 נכשל | `1gSh5CQazcb8keiWKEaS_pnrHZfADS32K` | 100 | not wired |
-| יוצא צט 01.25 נכשל | `1iQDB1_4oUOrdb4FuiI0a4eZrapMOKS8Q` | 99 | not wired |
-| נכשל- יצוא צט | `1qc-4yEgT9BAtXOxVmeRsoMT_cadoTrv0` | 109 | not wired |
-| אחרי- יצוא צט פעם שניה עם בוריס עד 31.12.24 | `1OXsFTNhvvCD8_yLwjCyG_iL_-_f1xFO1` | 613 | not wired |
-| יצוא צט פעם שניה עם בוריס עד 31.12.24 | `1ZOzmeLtOIAKNCf6SpfZq0JGlXo7-iw7n` | 0 | not wired |
-| נכשל- צט נחמן 1 | `1TFYlUmgcr8oZK9zaA9_jV-WvJIm8G_s3` | 78 | not wired |
-| נכשל- צט נחמן 2 | `159qxtXQQcjUutjxOU-EOyUiguW2ULT7j` | 191 | not wired |
-| נכשל- צט נחמן 3 | `1a2DDDfGllaROHiMxcjBPqiMYWq5wVf8B` | 194 | not wired |
-| נכשל- צט נחמן 4 | `1BKRcx1OFXKYWVR2lJD0MEY78lM0T5omM` | 194 | not wired |
-| נכשל- צט נחמן 5 | `1YYGoYxLNjnY1-N657lrvNi9RmtrlR85z` | 83 | not wired |
-| יצא צט תעודות - נכשל | `1jBcjGC3S5ZGteNe_2S6B7RcKTKk-3gez` | 635 | not wired |
-| יצוא צט תעודות- נכשל 2 | `1gujNd8rnkyTGko17_3ClI7NF4rT9KFKB` | 205 | not wired |
-| יצא צט תעודות- מעורבב טובים ונכשלים | `1OIyGfnmwPIhQDfrz47senT1HDKdrHpVt` | 0 | not wired |
-| נכשל פעם שלישית | `1jDqqo-CDJuMhSZn-pcTBoKrkNg_ITHbl` | 15 | not wired |
-| טמבור נכשל | `1njpOuMbmFYXrzwH6BYqEdGimtDXTlhTm` | 0 | not wired |
-| טמבור נכשל פעם שניה | `1wXD6fXg582Nux079PBwo8dfc68hW8rCj` | 0 | not wired |
-| מוקלדות שירות- נתינת שמות נכשלה | `11zMyuI3Xu7QS4vMcee5NbLYiDBI0GFEg` | 223 | not wired |
+| **יצוא צט 2026 נכשל** | `1REDACTEDdrivexxxxxxxxxxxxxxx0015` | **713** | **LIVE** — `drive-gdoc-tzat` pipe's `failed` destination, confirmed via `sync_registry` JSON |
+| יצוא צט 12.25 - נכשל | `1REDACTEDdrivexxxxxxxxxxxxxxx0016` | 41 | not wired |
+| יצוא צט חודש 10 - נכשל | `1REDACTEDdrivexxxxxxxxxxxxxxx0017` | 31 | not wired |
+| יצוא צט 09.25 נכשל | `1REDACTEDdrivexxxxxxxxxxxxxxx0018` | 167 | not wired |
+| טיפול מהמייל, נכשל 2 | `1REDACTEDdrivexxxxxxxxxxxxxxx0019` | 179 | not wired |
+| צט נכשל 08.25 | `1REDACTEDdrivexxxxxxxxxxxxxxx0020` | 64 | not wired |
+| צט 07.25 נכשל | `1REDACTEDdrivexxxxxxxxxxxxxxx0021` | 42 | not wired |
+| יצוא צט יוני נכשל- שילה 26.25 | `1REDACTEDdrivexxxxxxxxxxxxxxx0022` | 35 | not wired |
+| יצוא צט יוני יצהר נכשל- 06.25 | `1REDACTEDdrivexxxxxxxxxxxxxxx0023` | 13 | not wired |
+| יוצא צט יוני- נכשל-קרית 06.25 | `1REDACTEDdrivexxxxxxxxxxxxxxx0024` | 33 | not wired |
+| יוצא צט מאי 05.25 - נכשל | `1REDACTEDdrivexxxxxxxxxxxxxxx0025` | 132 | not wired |
+| צט אפריל 04.25 נכשל | `1REDACTEDdrivexxxxxxxxxxxxxxx0026` | 97 | not wired |
+| יצוא צט 03.25 נכשלים | `1REDACTEDdrivexxxxxxxxxxxxxxx0027` | 107 | not wired |
+| יצוא צט 02.25 נכשל | `1REDACTEDdrivexxxxxxxxxxxxxxx0028` | 100 | not wired |
+| יוצא צט 01.25 נכשל | `1REDACTEDdrivexxxxxxxxxxxxxxx0029` | 99 | not wired |
+| נכשל- יצוא צט | `1REDACTEDdrivexxxxxxxxxxxxxxx0030` | 109 | not wired |
+| אחרי- יצוא צט פעם שניה עם בוריס עד 31.12.24 | `1REDACTEDdrivexxxxxxxxxxxxxxx0031` | 613 | not wired |
+| יצוא צט פעם שניה עם בוריס עד 31.12.24 | `1REDACTEDdrivexxxxxxxxxxxxxxx0032` | 0 | not wired |
+| נכשל- צט נחמן 1 | `1REDACTEDdrivexxxxxxxxxxxxxxx0033` | 78 | not wired |
+| נכשל- צט נחמן 2 | `1REDACTEDdrivexxxxxxxxxxxxxxx0034` | 191 | not wired |
+| נכשל- צט נחמן 3 | `1REDACTEDdrivexxxxxxxxxxxxxxx0035` | 194 | not wired |
+| נכשל- צט נחמן 4 | `1REDACTEDdrivexxxxxxxxxxxxxxx0036` | 194 | not wired |
+| נכשל- צט נחמן 5 | `1REDACTEDdrivexxxxxxxxxxxxxxx0037` | 83 | not wired |
+| יצא צט תעודות - נכשל | `1REDACTEDdrivexxxxxxxxxxxxxxx0038` | 635 | not wired |
+| יצוא צט תעודות- נכשל 2 | `1REDACTEDdrivexxxxxxxxxxxxxxx0039` | 205 | not wired |
+| יצא צט תעודות- מעורבב טובים ונכשלים | `1REDACTEDdrivexxxxxxxxxxxxxxx0040` | 0 | not wired |
+| נכשל פעם שלישית | `1REDACTEDdrivexxxxxxxxxxxxxxx0041` | 15 | not wired |
+| טמבור נכשל | `1REDACTEDdrivexxxxxxxxxxxxxxx0042` | 0 | not wired |
+| טמבור נכשל פעם שניה | `1REDACTEDdrivexxxxxxxxxxxxxxx0043` | 0 | not wired |
+| מוקלדות שירות- נתינת שמות נכשלה | `1REDACTEDdrivexxxxxxxxxxxxxxx0044` | 223 | not wired |
 | | **Group B total (30 folders)** | | **4,393** | **1 of 30 wired** |
 
 ### Group C — dated historical Boris archives (explicitly pre-backlog)
 
 | Folder name | Folder ID | Files |
 |---|---|---|
-| בוריס חשבוניות 2023 | `1OAw7WSCHbvhPk68hk1cu8U-aWk57x1qV` | 15 |
-| חשבוניות בוריס 05.02.2024 | `1JfEQYAAHHspKkS10x5aENyAwe9bRMk0S` | 67 |
-| בוריס חשבונית 30.1.24 | `1RzM25jSifUfrui56qsIpi0hprFNT5jjC` | 120 |
+| בוריס חשבוניות 2023 | `1REDACTEDdrivexxxxxxxxxxxxxxx0045` | 15 |
+| חשבוניות בוריס 05.02.2024 | `1REDACTEDdrivexxxxxxxxxxxxxxx0046` | 67 |
+| בוריס חשבונית 30.1.24 | `1REDACTEDdrivexxxxxxxxxxxxxxx0047` | 120 |
 | **Group C total** | | **202** |
 
 ### Group D — the current live registry `failed` destinations (for completeness)
@@ -112,8 +112,8 @@ sync-v3 destination:
 
 | Pipe | `failed` folder ID | Resolves in `/api/folders`? | Files (via direct `/api/files`) |
 |---|---|---|---|
-| `drive-gdoc-tzat` | `1PYaVJ4dKdOl1iGJlVKFT0pzJ_Rs2mYNL` | Yes — this is Group B's "יצוא צט 2026 נכשל" | **713** (already counted in Group B) |
-| `drive-gdoc` (×3 pairs), `drive-bs`, `drive-gdoc-warehouse` | `1FwcEBh6VAbnxu84Ny2g2xH_Bw5-dT7iq` (all 5 share the **same** ID) | No — same "200-OK-but-absent-from-enumeration" quirk documented in the earlier sweep's O5/O7 | **0** — empty right now |
+| `drive-gdoc-tzat` | `1REDACTEDdrivexxxxxxxxxxxxxxx0015` | Yes — this is Group B's "יצוא צט 2026 נכשל" | **713** (already counted in Group B) |
+| `drive-gdoc` (×3 pairs), `drive-bs`, `drive-gdoc-warehouse` | `1REDACTEDdrivexxxxxxxxxxxxxxx0006` (all 5 share the **same** ID) | No — same "200-OK-but-absent-from-enumeration" quirk documented in the earlier sweep's O5/O7 | **0** — empty right now |
 
 **Grand total across everything name-matched: 41 folders, 10,150 files.** The owner's own earlier
 estimate of "~6,067" corresponds closely to Group A + the historical Group C (5,555 + 202 = 5,757) or to

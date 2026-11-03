@@ -2,3 +2,5 @@ flask>=3.0
 gunicorn>=21.2
 requests>=2.31
 sentry-sdk>=2.0
+# Web Push (push.py) — the same sender the services app runs on this office
+pywebpush==2.5.0

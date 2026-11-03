@@ -40,6 +40,17 @@
 - id: ui-brand-official
   disabled: true
 
+# The agent's own navigation, folded away COMPLETELY (owner, 2026-10-12: «כרגע זה משתמש במסך יקר
+# בלי אפשרות לקפל»). On a narrow frame the harness collapses its sidebar to a 56px rail and has no
+# state below that, because the rail IS the way back — so on a 390px phone 15% of the width is spent
+# on a menu nobody is using, on every screen. This plugin owns one state of its own
+# (`html[data-bina-compact]`: the two side columns are not drawn, with a 44px handle as the way back)
+# and folds with the console's own full screen, which declares itself on this document as
+# `data-shell-focus` — the same writer-of-one-fact shape as the theme.
+- insert:
+    - id: nav-collapse
+      name: '@bina/dsh-client-ui-nav-collapse'
+
 # ── the conversation in the address bar ───────────────────────────────────────────────────────
 # The one office app that could not be linked to a screen: the console URL was `#/m/bina` whatever
 # conversation was open, because the harness's browser half has no URL routing and keeps its

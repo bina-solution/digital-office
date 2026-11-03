@@ -4,7 +4,7 @@
 the Python service, DDL, settings, gates, CI, fixtures, and apitools confirmed by direct read. One
 webapp-detail item remains open, tracked in §6. Everything below is cited to a live `file:line` or a
 live query result run against `supabase-db-shlomo-laptop`/`n8n-postgres-shlomo-laptop` (the local dev
-stack, per `ai/context/EXTRACTION-REFACTOR-PLAN.md` §0.1 — not bina-comp-vps).**
+stack, per `ai/context/EXTRACTION-REFACTOR-PLAN.md` §0.1 — not hacohen-vps).**
 
 **Scope boundary (do not duplicate).** `ai/context/EXTRACTION-REFACTOR-PLAN.md` owns the extraction
 design: the `AI_*`/`LOCAL_*`/`SELECTED_*`/`SELECTION_*` column ledger, the two-phase

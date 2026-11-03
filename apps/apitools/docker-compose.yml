@@ -128,13 +128,13 @@ services:
     - traefik.http.routers.apitools-https.entrypoints=websecure
     - traefik.http.routers.apitools-https.tls=true
     - traefik.http.routers.apitools-https.service=apitools
-    - traefik.http.routers.apitools-https.tls.certresolver=myresolver
+    - traefik.http.routers.apitools-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
     - traefik.http.routers.apitools-https.middlewares=authentik@file,apitools-retry@docker
     - traefik.http.routers.apitools-http.middlewares=authentik@file,apitools-retry@docker
     # SSO on the -local twin too. app.json declares auth:sso for this host and apitools has no auth of
     # its own, yet this router carried only the retry middleware — and traefik routes ANY request whose
     # Host header says apitools.localhost, including one sent to the production IP: measured
-    # 2026-09-30 22:22, `curl -H 'Host: apitools.localhost' http://203.0.113.10/` → 200 (issue
+    # 2026-09-30 22:22, `curl -H 'Host: apitools.localhost' http://93.184.216.5/` → 200 (issue
     # apitools-served-without-sso-to-a-spoofed-host-header). Nothing legitimate used the edge host
     # without SSO: every internal caller uses http://apitools:8080.
     - traefik.http.routers.apitools-local.middlewares=authentik@file,apitools-retry@docker
@@ -143,14 +143,15 @@ services:
     - traefik.http.services.apitools.loadbalancer.server.port=8080
     - traefik.http.services.apitools.loadbalancer.healthcheck.path=/
     - traefik.http.services.apitools.loadbalancer.healthcheck.port=8082
-    - traefik.http.services.apitools.loadbalancer.healthcheck.interval=30s
-    - traefik.http.services.apitools.loadbalancer.healthcheck.timeout=10s
+    # the office's probe knobs, as platform-base/authentik's (a single slow answer must not 503 the app)
+    - traefik.http.services.apitools.loadbalancer.healthcheck.interval=${HEALTHCHECK_INTERVAL:-30s}
+    - traefik.http.services.apitools.loadbalancer.healthcheck.timeout=${HEALTHCHECK_TIMEOUT:-10s}
     - traefik.http.services.apitools.loadbalancer.responseforwarding.flushinterval=100ms
 
   # ── HORIZONTAL SCALE-OUT: NOW DEPLOYED, ON THE PORTABLE BOX ────────────────────────────
   # (2026-08-11, later the same night) The scale-out below was built — not as a second LOCAL
   # container, which the measurements at the end of this note still correctly rule out, but as
-  # a second instance on the idle portable laptop (192.168.16.103, 4 cores / 15 GB, load 0.00).
+  # a second instance on an idle portable laptop on the LAN (4 cores / 15 GB, load 0.00).
   # Everything lives in ./scale-out/ : `up.sh remote`, `up.sh lb`, `tunnel.sh`, `haproxy.cfg`.
   # Roll back with `./scale-out/up.sh down` — that drops the LB's DNS record and 100% of
   # traffic returns here, with no change to any caller.
@@ -233,6 +234,121 @@ services:
   # And the reason that is not merely a deferral: the two knobs below (OCR weight tiers, and
   # the MIN_EFFECTIVE_DPI floor that was defeating the megapixel ceiling) make the box LESS
   # loaded, not more. Fixing what each request costs outranks buying more places to pay it.
+  # ── SPEECH: the office's Hebrew transcriber, in its own cgroup ─────────────────────────
+  # Restored 2026-10-21 (DGO-834) from origin/backup/vps1-stash-20261008: this block and the
+  # `speech` capability lived only in that stash, so vps1's apitools-asr ran as an orphan that no
+  # compose file declared. The block is the stash's, word for word, plus SPEECH_JOB_TIMEOUT_SECONDS.
+  # The `speech` capability (app.json) is served HERE, not by the apitools web container, and the
+  # split is a memory decision with an operational consequence — the same one apps/sites documents
+  # for sites-render. The ivrit.ai Whisper model is ~1.0 GB resident and peaks at ~2.5 GB while
+  # CTranslate2 quantises it on load (both measured on this host, 2026-10-07), and one transcription
+  # holds a core for minutes. Inside the apitools cgroup it would evict OCR workers; apart it can be
+  # capped, idled to ~60 MB, and released after SPEECH_IDLE_UNLOAD_SECONDS of silence.
+  #
+  # NO TRAEFIK LABELS ON PURPOSE. This service has no public door: it is reachable only on
+  # traefik-network as `apitools-asr:8987`, exactly like sites-render. Office callers address it
+  # directly; nobody outside can.
+  #
+  # The model is PINNED (repo + revision) and cached in apitools_asr_data, so a restart never
+  # re-downloads and an inference never touches the network. Nothing here reads another app's
+  # volume, and no input is a URL the caller supplies (no SSRF surface).
+  apitools-asr:
+    build:
+      context: .
+      dockerfile: Dockerfile.asr
+    container_name: apitools-asr-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: apitools-asr
+    restart: unless-stopped
+    environment:
+    - PORT=8987
+    - LOG_LEVEL=${SPEECH_LOG_LEVEL:-INFO}
+    # pinned 2026-10-07: huggingface.co/api/models/ivrit-ai/whisper-large-v3-turbo-ct2 -> sha
+    - SPEECH_MODEL_REPO=${SPEECH_MODEL_REPO:-ivrit-ai/whisper-large-v3-turbo-ct2}
+    - SPEECH_MODEL_REVISION=${SPEECH_MODEL_REVISION:-72ad623a37947395efcc3933132353790e5a12f5}
+    # …and OpenAI's own Whisper beside it, for English and any language as spoken (DGO-955: every
+    # meeting is transcribed by both). One is in memory at a time. Pinned 2026-10-22:
+    # huggingface.co/api/models/deepdml/faster-whisper-large-v3-turbo-ct2 -> sha
+    - SPEECH_WHISPER_MODEL_REPO=${SPEECH_WHISPER_MODEL_REPO:-deepdml/faster-whisper-large-v3-turbo-ct2}
+    - SPEECH_WHISPER_MODEL_REVISION=${SPEECH_WHISPER_MODEL_REVISION:-4df90f75321148c3a29a9e2351b7ddf8f5b115a8}
+    - SPEECH_MODEL_DIR=${SPEECH_MODEL_DIR:-/data/models}
+    # int8 is not a default anywhere else: the `ivrit` package itself falls back to float32 on CPU,
+    # which costs ~3x the RAM and loses the whole point of a one-thread worker on this box.
+    - SPEECH_COMPUTE_TYPE=${SPEECH_COMPUTE_TYPE:-int8}
+    - SPEECH_CPU_THREADS=${SPEECH_CPU_THREADS:-1}
+    - SPEECH_IDLE_UNLOAD_SECONDS=${SPEECH_IDLE_UNLOAD_SECONDS:-300}
+    - SPEECH_SYNC_MAX_SECONDS=${SPEECH_SYNC_MAX_SECONDS:-120}
+    - SPEECH_SYNC_TIMEOUT_SECONDS=${SPEECH_SYNC_TIMEOUT_SECONDS:-1800}
+    - SPEECH_MAX_QUEUE=${SPEECH_MAX_QUEUE:-8}
+    - SPEECH_MAX_DURATION_SECONDS=${SPEECH_MAX_DURATION_SECONDS:-14400}
+    # A job may run as long as the longest audio it accepts takes on one core (4 h of audio at up to
+    # ~1.35x real time here): the engine's own default (2 h) would kill every meeting over ~1.5 h on
+    # this box, after it spent the 2 h (DGO-834).
+    - SPEECH_JOB_TIMEOUT_SECONDS=${SPEECH_JOB_TIMEOUT_SECONDS:-21600}
+    - SPEECH_MAX_UPLOAD_BYTES=${SPEECH_MAX_UPLOAD_BYTES:-3221225472}
+    - SPEECH_UPLOAD_TTL_SECONDS=${SPEECH_UPLOAD_TTL_SECONDS:-604800}
+    - SPEECH_JOB_TTL_SECONDS=${SPEECH_JOB_TTL_SECONDS:-2592000}
+    - SPEECH_BEAM_SIZE=${SPEECH_BEAM_SIZE:-5}
+    - SPEECH_DEFAULT_LANGUAGE=${SPEECH_DEFAULT_LANGUAGE:-he}
+    - SPEECH_PREFETCH=${SPEECH_PREFETCH:-0}
+    volumes:
+    - apitools_asr_data:/data
+    networks:
+    - traefik-network
+    healthcheck:
+      # python, not curl (gate G18: python:3.12-slim has no curl). /healthz answers 200 while the
+      # model is RELEASED too — an idle worker is a healthy state, and a probe that said otherwise
+      # would put this container into an autoheal restart loop for being idle.
+      test:
+      - CMD
+      - python
+      - -c
+      - import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://localhost:8987/healthz',timeout=8).status==200 else 1)
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 20s
+    # 2, the least Docker takes (cgroup weight 1, against 100 for a container that declares none):
+    # the transcriber runs on CPU nobody else wants, and so NEVER while a meeting is being recorded.
+    # fireplace, 2026-10-26: fpg103's two passes started the second fpg104 began and ran under the
+    # whole 48-minute call, on a 2-vCPU box whose recorder was already throttled (apps/meet). A
+    # transcript can wait; a recording cannot be made again. (It was 256, half of apitools' 512, so
+    # that the document pipeline and the database won; they still do, by more.)
+    cpu_shares: 2
+    # NO SWAP for the transcriber (FPG-272): memory + swap = the memory limit itself. Compose's default lets a
+    # container swap as much again as its limit, and on fireplace (8 GB RAM, 4 GB swap — full at idle, 2026-11-02)
+    # the meeting's captions pushed the whole box into swap on 11-01: one 30-s segment took 271 s, the machine
+    # stalled 3.5 min and the recorder's mp4 lost its index (MEET-48). Past its limit the transcriber is now
+    # killed in its own cgroup (a caption segment lost, the container restarted) and the recorder never pages.
+    memswap_limit: ${SPEECH_MEM:-2.5G}
+    deploy:
+      resources:
+        limits:
+          cpus: ${SPEECH_CPUS:-1.0}
+          # 2.5G, not 2G, and the number is measured rather than chosen: with the model resident the
+          # container sits at 1.11 GiB, but CTranslate2 holds BOTH the fp16 and the int8 copy while
+          # it quantises on load, and the cgroup peak over a real job was 1.94 GiB — 68 MB of
+          # headroom under a 2G cap is one long file away from an OOM kill that would look like
+          # "transcription randomly fails". Pre-quantising the model to int8 on disk (P2 in
+          # ai/context/speech-platform-plan.md) removes the double copy and lets this come back down.
+          memory: ${SPEECH_MEM:-2.5G}
+        reservations:
+          # A whole core, held by the CPU budget (G65 keeps a declared floor at its value): at the
+          # 0.32 vCPU the scale handed it on fireplace, one pass over a 48-minute meeting took 95
+          # minutes. At weight 1 (cpu_shares above) the core costs nobody anything they want.
+          cpus: '1.0'
+          memory: 64M
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '3'
+
+volumes:
+  # the pinned model (~1.6 GB), the content-addressed uploads and one JSON record per job. Losing
+  # this volume loses cached audio and transcripts — never anything this office cannot re-fetch
+  # (the model is a pinned artifact) or re-run.
+  apitools_asr_data:
+
 networks:
   traefik-network:
     external: true

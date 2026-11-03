@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+#: handoff <slug> — the ONE address for a person: the browser awake, that group's tab in front, the strip visible
+# handoff — print the absolute address a human opens when the office browser needs a hand on <slug>.
+#
+#   bbox b42 handoff whatsapp-pair
+#   → {"ok": true, "slug": "whatsapp-pair", "url": "http://console.localhost:8080/a/browser42/handoff/whatsapp-pair", …}
+#
+# Opening the address (apps/browser42/handoff.py, behind Caddy's /handoff/* and the console's
+# /a/browser42/handoff passthrough) wakes the browser, brings that group's tab to the front through
+# the extension broker (the same window, never a new one), leaves compact presentation so the tab strip
+# and the group's name are visible, and lands on the live view. The same address is what the captcha
+# refusal (`captcha_attempts_exhausted`) and the watchdog's notice carry — every hand-off says one thing.
+# noVNC shows a whole screen: the promise is "the right tab in front", never "only that page".
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # say, die, colors, DOCKER_HOST
+
+BROWSER="$(docker ps --filter name=browser42-browser --format '{{.Names}}' | head -1)"
+[ -n "${BROWSER}" ] || die "browser42-browser not running — run 'bbox run' first"
+docker exec -i "${BROWSER}" python3 /handoff.py link "$@"

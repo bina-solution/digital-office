@@ -62,11 +62,19 @@ USAGE (host wrapper: ./bbox b42 logins <verb> [args])
     materialize          plane → Chrome only
     harvest              Chrome → plane only
     export <site>        force one named site's Chrome login into its declared catalog row
+    sessions [--json]    which services this browser is SIGNED IN TO right now (cookie names and
+                         expiries only — never a value), including the sessions that have no password
+    await <service|host> [seconds]
+                         the human handoff, measured: wait until a live session for that service
+                         exists and say what proved it. Exit 0 = connected, 2 = it did not happen
+                         inside the budget. This is what makes "I signed in on the phone" a
+                         measurement instead of an assumption.
     run-queued           what start-browser.sh calls at boot; same as sync
 """
 
 from __future__ import annotations
 
+import datetime
 import hashlib
 import hmac
 import json
@@ -89,6 +97,11 @@ STATE_FILE = os.path.join(DATA, "browser-logins.json")
 CONNECTIONS_URL = os.environ.get("CONNECTIONS_URL", "http://connections:8990").rstrip("/")
 CREDENTIAL_PREFIX = "browser42-login-"
 CUSTOM_PREFIX = "browser-login-"
+#: How long `await` waits for a person before it reports that it did not happen, and how often it
+#: looks. Five minutes of polling every two seconds is a sign-in with a 2FA code on a phone; the
+#: caller can say otherwise as the second argument.
+DEFAULT_AWAIT_SECONDS = 300
+POLL_SECONDS = 2
 # Named sites get a DECLARED catalog row (visible in the app store's own catalog, with a probe and a
 # wizard). Anything else lands as a custom credential — same screen, same labelled fields, no edit to
 # any app.json. The named path exists for the site the office ships support for out of the box.
@@ -370,6 +383,208 @@ def fingerprint(state: dict, value: str) -> str:
                     hashlib.sha256).hexdigest()[:32]
 
 
+# ── signed in, not just "a password exists" ─────────────────────────────────────────────────────
+#
+# Chrome's password store answers "is there a PASSWORD for this site", and that is not the question
+# this browser is ever asked. It is the office's SHARED browser: what matters is which services it
+# is SIGned IN TO — and the two facts disagree in both directions. A saved password outlives the
+# session it was saved for (a logged-out browser still holds it), and a live session often has no
+# password at all: an SSO sign-in, a QR pairing, a device token. Measured 2026-10-14 (DGO-575/
+# DGO-567): the profile held 6 saved logins, all of them `.localhost`, while the only real sessions
+# in it were claude.ai, GitHub's `logged_in` flag (no session) and the office's own SSO.
+#
+# So the answer is read from the cookie jar — NAME-ONLY. A cookie's name and expiry say "there is a
+# live session for this host" while none of its value leaves the container, which is the same rule
+# the rest of this module keeps for passwords.
+#
+# A service whose session is NOT a cookie says so instead of claiming "not connected": WhatsApp Web
+# keeps its session in IndexedDB (DGO-573), and a wrong "no" is worse than a "not a cookie" — it
+# sends the owner to redo a sign-in that already worked.
+COOKIE_DB = os.path.join(PROFILE, "Default", "Cookies")
+# In UTC, explicitly: a naive 1601-01-01 is read in the container's LOCAL time, and bbox hands every
+# container the host's zone — in Israel 1601 is local mean time, +2:25:12, so every "is this cookie
+# still live" was off by 8,712 seconds (test_now_is_in_this_century, red on any machine not in UTC).
+_WEBKIT_EPOCH = datetime.datetime(1601, 1, 1, tzinfo=datetime.timezone.utc)
+
+#: The cookie that exists only AFTER a real sign-in, per service. `spot` is the negative marker —
+#: the one a service sets when it is showing you the sign-in/account chooser instead.
+SERVICES = {
+    "claude":    {"title": "Claude", "host": "claude.ai", "proof": ["sessionKey", "sessionKeyV3"]},
+    "google":    {"title": "Google", "host": "google.com", "proof": ["SID", "__Secure-1PSID"],
+                  "spot": ["__Host-GAPS", "ACCOUNT_CHOOSER"]},
+    "github":    {"title": "GitHub", "host": "github.com", "proof": ["user_session"]},
+    "facebook":  {"title": "Facebook", "host": "facebook.com", "proof": ["c_user"]},
+    "instagram": {"title": "Instagram", "host": "instagram.com", "proof": ["sessionid"]},
+    "x":         {"title": "X", "host": "x.com", "proof": ["auth_token"]},
+    "linkedin":  {"title": "LinkedIn", "host": "linkedin.com", "proof": ["li_at"]},
+    "slack":     {"title": "Slack", "host": "slack.com", "proof": ["d"]},
+    "whatsapp":  {"title": "WhatsApp", "host": "web.whatsapp.com", "proof": [],
+                  # Paired 2026-10-14, and this jar still cannot see it: the session is IndexedDB.
+                  # The answer lives on the page — `bbox b42 await <slug> 'storage:last-wid-md'`
+                  # (or `selector:#pane-side`) — which is what DGO-573 added and what `task await`
+                  # /`bbox b42 await` are for.
+                  "note": "session is IndexedDB, not a cookie — measure it on the page: "
+                          "bbox b42 await <slug> 'storage:last-wid-md' (DGO-573)"},
+}
+
+#: Name fragments that mark a cookie as a SESSION rather than a preference. Used only for the hosts
+#: no service row covers, so a new site shows up as "something is signed in here" without a code
+#: change — the same reason no per-site table governs the password side. The lookbehind is
+#: load-bearing: without it "_uetsid" (a Bing tracker) matches `sid` and every ad cookie reads as a
+#: session — measured on canva.com, 2026-10-14.
+_SESSION_NAME = re.compile(r"(session|sessid|(?<![A-Za-z])sid|token|auth|login|jwt)", re.I)
+
+#: …and what matches one of those fragments WITHOUT being a session. The words are deliberately
+#: narrow and named: `authentik_csrf` is a protection token, not an identity, and it is what made a
+#: logged-OUT office host read as signed in (the test file pins it). A CSRF/anti-bot name is never
+#: an answer to "is this browser signed in".
+_NOT_A_SESSION = re.compile(r"(csrf|xsrf|anti.?bot|recaptcha|_uetsid|g_state|__cf)", re.I)
+
+
+def _looks_like_a_session(name: str) -> bool:
+    return bool(_SESSION_NAME.search(name)) and not _NOT_A_SESSION.search(name)
+
+
+def _cookie_rows() -> list:
+    """Every cookie in the profile, as (host, name, expires, persistent) — copied first.
+
+    Chrome holds this database open, so it is read through a copy (the same reason `_login_db_copy`
+    exists for the password store); a -wal sidecar is copied with it or a cookie written seconds ago
+    is invisible.
+    """
+    if not os.path.exists(COOKIE_DB):
+        fail("no_cookie_store", f"no cookie store at {COOKIE_DB} — is the browser profile there?")
+    tmp = _copy_sqlite(COOKIE_DB)
+    try:
+        con = sqlite3.connect(tmp)
+        try:
+            return list(con.execute("SELECT host_key, name, expires_utc, is_persistent,"
+                                    " last_update_utc FROM cookies"))
+        finally:
+            con.close()
+    except sqlite3.DatabaseError as err:
+        fail("cookie_store_unreadable", f"{COOKIE_DB}: {err}")
+    finally:
+        _drop_sqlite_copy(tmp)
+
+
+def _copy_sqlite(path: str) -> str:
+    handle, tmp = tempfile.mkstemp(suffix=".sqlite")
+    os.close(handle)
+    shutil.copy2(path, tmp)
+    for sidecar in ("-wal", "-journal"):
+        if os.path.exists(path + sidecar):
+            shutil.copy2(path + sidecar, tmp + sidecar[1:])
+    return tmp
+
+
+def _drop_sqlite_copy(tmp: str) -> None:
+    for leftover in (tmp, tmp + "wal", tmp + "journal"):
+        try:
+            os.unlink(leftover)
+        except OSError:
+            pass
+
+
+def _when(webkit_utc: int) -> str:
+    if not webkit_utc:
+        return ""
+    try:
+        return (_WEBKIT_EPOCH + datetime.timedelta(microseconds=int(webkit_utc))).strftime("%Y-%m-%d %H:%M")
+    except (ValueError, OverflowError):
+        return ""
+
+
+def _host_cookies(rows: list, host: str) -> list:
+    """Cookies that apply to a host: its own, plus those set on a parent domain.
+
+    `.claude.ai` and `claude.ai` are two rows for the same site, and a sign-in may put its cookie on
+    either — asking for the exact host is how a session that IS there gets reported as missing.
+    """
+    return [r for r in rows if r[0].lstrip(".") == host or r[0].lstrip(".").endswith("." + host)]
+
+
+def _now_us() -> int:
+    """WebKit epoch (1601) microseconds — the unit both Chrome stores stamp rows in.
+
+    The sign is load-bearing and was wrong on the first run: `_WEBKIT_EPOCH.timestamp()` is the
+    UNIX timestamp OF 1601, i.e. a NEGATIVE number, so "now" is `time.time()` MINUS it. Adding it
+    produced a "now" in the year 1657 and every expired cookie read as live — which is how a
+    logged-out console row would have been reported as a live session.
+    """
+    return int((time.time() - _WEBKIT_EPOCH.timestamp()) * 1_000_000)
+
+
+def _live(row: tuple, now_us: int) -> bool:
+    _host, _name, expires, persistent, _updated = row
+    if not persistent:
+        return True                      # a session cookie lives exactly as long as the browser does
+    return bool(expires) and int(expires) > now_us
+
+
+def service_sessions(rows: list) -> list:
+    """One row per KNOWN service: is there a live session, and which cookie proves it."""
+    now_us = _now_us()
+    report = []
+    for key, spec in SERVICES.items():
+        all_of = _host_cookies(rows, spec["host"])
+        live = [r for r in all_of if _live(r, now_us)]
+        names = {r[1] for r in live}
+        proof = [p for p in spec["proof"] if p in names]
+        row = {
+            "service": key, "title": spec["title"], "host": spec["host"],
+            "state": ("connected" if proof else
+                      "not_connected" if spec["proof"] else "not_a_cookie"),
+            "proof": proof,
+            "spot": [s for s in spec.get("spot", []) if s in {r[1] for r in all_of}],
+            "cookies": len({r[1] for r in all_of}),
+            "last_update": max([_when(r[4]) for r in all_of] or [""]),
+            "expires": max([_when(r[2]) for r in all_of if r[2]] or [""]),
+        }
+        if spec.get("note"):
+            row["note"] = spec["note"]
+        report.append(row)
+    return report
+
+
+def other_sessions(rows: list) -> list:
+    """Hosts no service row covers that are holding something that looks like a session."""
+    known = {s["host"] for s in SERVICES.values()}
+    now_us = _now_us()
+    hosts: dict = {}
+    for row in rows:
+        host, name = row[0].lstrip("."), row[1]
+        if any(host == k or host.endswith("." + k) for k in known):
+            continue
+        if not _looks_like_a_session(name) or not _live(row, now_us):
+            continue
+        entry = hosts.setdefault(host, {"host": host, "cookies": [], "last_update": ""})
+        entry["cookies"].append(name)
+        entry["last_update"] = max(entry["last_update"], _when(row[4]))
+    for entry in hosts.values():
+        entry["cookies"] = sorted(set(entry["cookies"]))
+    return sorted(hosts.values(), key=lambda e: e["last_update"], reverse=True)
+
+
+def session_of(which: str, rows: list) -> dict:
+    """One service by its short name, or any host typed as a host — the waiter takes both.
+
+    A host the caller named has no declared proof cookie, so what comes back is what was MEASURED —
+    a live session-looking cookie, or none — and the "none" is named `no_live_cookie`. Calling it
+    `not_connected` would be a claim this module cannot make: measured 2026-10-14, Canva was signed
+    in (through Google, and being edited in that browser) while holding no session cookie at all.
+    """
+    if which in SERVICES:
+        return next(r for r in service_sessions(rows) if r["service"] == which)
+    host = which.lstrip(".").lower()
+    live = [r for r in _host_cookies(rows, host)
+            if _looks_like_a_session(r[1]) and _live(r, _now_us())]
+    return {"service": which, "title": which, "host": host,
+            "state": "connected" if live else "no_live_cookie",
+            "proof": sorted({r[1] for r in live}),
+            "last_update": max([_when(r[4]) for r in _host_cookies(rows, host)] or [""])}
+
+
 # ── verbs ───────────────────────────────────────────────────────────────────────────────────────
 
 def cmd_list() -> None:
@@ -481,13 +696,58 @@ def cmd_run_queued() -> None:
         note(f"sync skipped at boot ({exit_code.code})")
 
 
+def cmd_sessions() -> None:
+    rows = _cookie_rows()
+    services = service_sessions(rows)
+    out(verb="sessions", count=len(services), connected=[s["service"] for s in services
+                                                         if s["state"] == "connected"],
+        services=services, hosts=other_sessions(rows))
+
+
+def cmd_await(which: str, seconds: str) -> None:
+    """Wait for the owner to finish a sign-in, and report what PROVED it — never that it "should" be
+    done. The profile's cookie jar is the source: it is written by Chrome itself, it survives the
+    page moving on, and it is the same fact `sessions` reports before and after."""
+    if not which:
+        fail("usage", "await needs a service or a host, e.g. `bbox b42 logins await google`")
+    try:
+        budget = float(seconds) if seconds else DEFAULT_AWAIT_SECONDS
+    except ValueError:
+        fail("usage", f"'{seconds}' is not a number of seconds")
+    started = time.time()
+    deadline = started + max(1.0, budget)
+    last = None
+    while True:
+        last = session_of(which, _cookie_rows())
+        if last["state"] == "connected":
+            out(verb="await", target=which, state="connected", proof=last.get("proof", []),
+                waited_s=round(time.time() - started, 1), detail=last)
+            return
+        if last["state"] == "not_a_cookie":
+            # Waiting would be waiting for something this check can never see. Say which, now.
+            fail("not_a_cookie", f"{which}: {last.get('note') or 'its session is not a cookie'} — "
+                                 f"a cookie jar cannot report it")
+        if time.time() >= deadline:
+            fail("not_connected", f"{which}: no live session after {round(time.time() - started)}s "
+                                  f"({last['state']}; last cookie activity "
+                                  f"{last.get('last_update') or 'never'})")
+        note(f"{which}: {last['state']} — still waiting "
+             f"({round(time.time() - started)}s of {round(budget)}s)")
+        time.sleep(POLL_SECONDS)
+
+
 def main() -> None:
     verb = sys.argv[1] if len(sys.argv) > 1 else ""
     arg = sys.argv[2] if len(sys.argv) > 2 else ""
+    arg2 = sys.argv[3] if len(sys.argv) > 3 else ""
     if verb == "list":
         cmd_list()
     elif verb == "sources":
         cmd_sources()
+    elif verb == "sessions":
+        cmd_sessions()
+    elif verb == "await":
+        cmd_await(arg, arg2)
     elif verb == "sync":
         cmd_sync()
     elif verb == "materialize":
@@ -499,7 +759,8 @@ def main() -> None:
     elif verb in ("run-queued", "sync-at-boot"):
         cmd_run_queued()
     else:
-        fail("usage", "verbs: list | sources | sync | materialize | harvest | export <site> | run-queued")
+        fail("usage", "verbs: list | sources | sessions | await <service|host> [seconds] | sync | "
+                      "materialize | harvest | export <site> | run-queued")
 
 
 if __name__ == "__main__":

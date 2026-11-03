@@ -4,13 +4,13 @@
 # computed and ensured by the `images` job in .github/workflows/indox-e2e.yml.
 services:
   apitools:
-    image: ghcr.io/solomonboltin/deployment-bina-comp/apitools:${APITOOLS_IMAGE_TAG:-ci}
+    image: ghcr.io/solomonboltin/deployment-hacohen/apitools:${APITOOLS_IMAGE_TAG:-ci}
   n8n:
-    image: ghcr.io/solomonboltin/deployment-bina-comp/n8n:${N8N_IMAGE_TAG:-ci}
+    image: ghcr.io/solomonboltin/deployment-hacohen/n8n:${N8N_IMAGE_TAG:-ci}
   n8n-worker-1:
-    image: ghcr.io/solomonboltin/deployment-bina-comp/n8n:${N8N_IMAGE_TAG:-ci}
+    image: ghcr.io/solomonboltin/deployment-hacohen/n8n:${N8N_IMAGE_TAG:-ci}
   n8n-worker-2:
-    image: ghcr.io/solomonboltin/deployment-bina-comp/n8n:${N8N_IMAGE_TAG:-ci}
+    image: ghcr.io/solomonboltin/deployment-hacohen/n8n:${N8N_IMAGE_TAG:-ci}
 
 # ── the first-party images (DGO-41) ─────────────────────────────────────────────────────────────
 # Built by .github/workflows/images.yml on every push to main/dgo and pushed to GHCR, so a
@@ -18,7 +18,7 @@ services:
 #   OVERLAYS=platform/profiles/ci-images.yml ./scripts/dc up -d --no-build
 # and pin a revision with IMAGE_TAG=<sha> in .env (the default is `latest`).
 #
-# The naming above (`deployment-bina-comp/<app>`) is the older, content-addressed set the indox-e2e
+# The naming above (`deployment-hacohen/<app>`) is the older, content-addressed set the indox-e2e
 # runner publishes for apitools/n8n; the images job uses `digital-office/<app>` because these are
 # the whole office, not one product. Both are kept until the older job is folded into this one.
   any-concurrency:
@@ -53,6 +53,8 @@ services:
     image: ghcr.io/solomonboltin/digital-office/my-docs:${IMAGE_TAG:-latest}
   notifications:
     image: ghcr.io/solomonboltin/digital-office/notifications:${IMAGE_TAG:-latest}
+  ollama:
+    image: ghcr.io/solomonboltin/digital-office/ollama:${IMAGE_TAG:-latest}
   project-pln:
     image: ghcr.io/solomonboltin/digital-office/project-pln:${IMAGE_TAG:-latest}
   sites:

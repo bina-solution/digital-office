@@ -15,6 +15,10 @@
   "use": [],
   "connections": [],
   "compose": "docker-compose.yml",
+  "agent": {
+    "context": "AGENT.md",
+    "order": 95
+  },
   "routing": [
     {
       "host": "hello-bina",

@@ -123,9 +123,15 @@ def _ports(peer: dict) -> dict:
     out = {}
     for app, port in ((peer or {}).get("ports") or {}).items():
         try:
-            out[str(app)] = int(port)
+            n = int(port)
         except (TypeError, ValueError):
             raise FirewallError(f"פורט לא תקין ל„{app}” בקישור עם {(peer or {}).get('office')!r}: {port!r}")
+        # A port nft cannot express makes it refuse the WHOLE ruleset, not the one rule — refused here,
+        # by name, where the declaration is read (DGO-603).
+        if not 1 <= n <= 65535:
+            raise FirewallError(f"פורט לא תקין ל„{app}” בקישור עם {(peer or {}).get('office')!r}: "
+                                f"{port!r} — מחוץ לטווח 1–65535")
+        out[str(app)] = n
     return out
 
 
@@ -411,7 +417,12 @@ def selftest() -> list[str]:
                      ({"office": "x", "address": "10.79.9.2", "direction": "sideways"},
                       "a direction that is neither use nor serve"),
                      ({"office": "x", "address": "10.79.9.2", "direction": "serve",
-                       "ports": {"drive": "http"}}, "a port that is not a number")):
+                       "ports": {"drive": "http"}}, "a port that is not a number"),
+                     # nft refuses the WHOLE ruleset over one such port (DGO-603)
+                     ({"office": "x", "address": "10.79.9.2", "direction": "serve",
+                       "ports": {"drive": 70000}}, "a port above 65535"),
+                     ({"office": "x", "address": "10.79.9.2", "direction": "serve",
+                       "ports": {"drive": 0}}, "port 0")):
         try:
             nft_document([bad])
             problems.append(f"{why} must be refused")

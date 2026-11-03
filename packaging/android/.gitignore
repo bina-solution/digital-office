@@ -1,0 +1,9 @@
+# built here, never committed: Gradle's output, and dgo — compiled into the app by its workflow
+.gradle/
+build/
+app/build/
+app/src/main/jniLibs/
+app/src/main/assets/qemu/
+app/src/main/assets/guest/
+app/src/main/assets/office-root.zip
+local.properties

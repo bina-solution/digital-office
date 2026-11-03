@@ -1,13 +1,23 @@
 #: tasks — read and move work items in this office's Plane, from the CLI
 #
 # tasks list [--project DGO] [--mine|--assignee <name>] [--state unstarted|started|completed] [--json]
-# tasks show DGO-12
+# tasks show DGO-12 [--body]    # …with --body also the item's description, as text
 # tasks start DGO-12            # → the state in group `started`
 # tasks done DGO-12 [--comment "what was done, where, and the proof"]
 # tasks comment DGO-12 "…"
 # tasks take DGO-12             # assign it to me (the account behind the chosen token)
 # tasks attach DGO-12 <file> [<file>…]   # the files a request came with, on its work item
+# tasks label MEET-15 נותח[,<label>…]    # add labels by name; one the project lacks is created
+# tasks unlabel DGO-12 בעלים[,<label>…]  # take off exactly the labels named
+# tasks link MEET-15 DGO-1003 FPG-2 …    # related both ways, across projects (Plane's `relates_to`)
+# tasks batch @actions.jsonl             # many of the verbs above in ONE run: one JSON object per line,
+#                                        # {"verb","ref","comment"?,"words"?[]} — the project is paged once
 # …any of the above with `--as <slug>` to act as that office agent (its own vault account + token)
+#
+# ON AN OFFICE THAT DOES NOT RUN PLANE, the same verbs reach the one that does — through the link and
+# with NO key at all: `where.sh` points the run at that office's door, and the door signs the request
+# in as the identity its office declared for this one (DGO-545). `--as` is a local-office idea and is
+# ignored there: one link carries one identity.
 #
 # WHY IT EXISTS: `plan` writes a plan INTO Plane; this reads and moves the result, so an agent (or
 # the owner through `bbox agent tasks`) can say what is mine, what started, what finished — without
@@ -20,9 +30,11 @@
 #              "module","url","updated_at"}]}
 # Every mutating verb prints one line unless `--json` is given, in which case it prints
 #   {"ok":true,"ref":"…","state":"…","group":"…","url":"…"}.
+import html
 import json
 import mimetypes
 import os
+import re
 import sys
 import time
 import urllib.error
@@ -30,6 +42,10 @@ import urllib.parse
 import urllib.request
 
 BASE = (os.environ.get("PLANE_API_URL") or "http://127.0.0.1").rstrip("/")
+#: Is this run reaching a Plane that runs on a LINKED office? `where.sh` says so by setting
+#: `PLANE_API_URL` to that office's link door; the default (`127.0.0.1`) is this office's own app.
+REMOTE = bool(os.environ.get("PLANE_API_URL")) and not re.match(
+    r"^https?://(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$", BASE)
 VAULT = (os.environ.get("CONNECTIONS_URL") or "http://connections:8990").rstrip("/")
 WEB = (os.environ.get("WEB_URL") or "http://plane.localhost:8080").rstrip("/")
 # The link a PERSON follows is the CONSOLE's, not the app's own host: a console URL opens Plane
@@ -41,6 +57,23 @@ WEB = (os.environ.get("WEB_URL") or "http://plane.localhost:8080").rstrip("/")
 # as `app_url`, for anything that must talk to the app itself.
 CONSOLE = (os.environ.get("CONSOLE_URL") or "").rstrip("/")
 CONSOLE_MODULE = os.environ.get("PLANE_CONSOLE_MODULE") or "project-pln"
+
+
+def console_module() -> str:
+    """The console module id THIS office addresses Plane by.
+
+    A local app's tile carries its own id (`project-pln`). A remote one carries `<alias>.<office>`
+    (the compiled `console.modules.yaml` gives the remote entry that id, and its `module_id:
+    project-pln` is metadata the shell never reads), and the shell's hash grammar addresses a module
+    BY ID — so a link built with the local id names no live module here and `route()` falls through
+    to the office's FIRST tile, silently opening another app (measured on vps1, 2026-10-13:
+    `#/m/project-pln/…` did not open Plane). The door's own host IS that id.
+    """
+    if REMOTE:
+        host = urllib.parse.urlsplit(BASE).hostname or ""
+        if host:
+            return host
+    return CONSOLE_MODULE
 WS_SLUG = os.environ.get("PLANE_WORKSPACE") or "bina"
 GROUP_OF = {"backlog": "backlog", "unstarted": "unstarted", "started": "started",
             "completed": "completed", "cancelled": "cancelled", "triage": "triage"}
@@ -97,13 +130,24 @@ def project_meta(p, pid: str):
     return states, labels, modules
 
 
+# A Plane that does not answer must not hold a verb for half an hour: six tries × 90 s per request and several
+# requests per verb, with every caller on the Mac's engine queued behind them (measured 2026-11-02 17:40: seven
+# calls stuck 20–35 min while the HP, which runs Plane, did not answer, and the engine at load 140). A request
+# whose connection fails or times out is tried once more; then this process stops asking (`DOWN`), and every
+# later request fails at once with the reason.
+DOWN = ""
+
+
 def http(method: str, url: str, body=None, headers=None, tries: int = 6):
+    global DOWN
+    if DOWN:
+        return {"error": f"Plane is not answering ({DOWN})"}, -1
     data = json.dumps(body).encode() if body is not None else None
     hdrs = {"Content-Type": "application/json", **(headers or {})}
     for attempt in range(tries):
         req = urllib.request.Request(url, data=data, method=method, headers=hdrs)
         try:
-            with urllib.request.urlopen(req, timeout=90) as r:
+            with urllib.request.urlopen(req, timeout=90) as r:          # the project list takes ~55 s under load
                 raw = r.read().decode("utf-8", "replace")
             return (json.loads(raw) if raw.strip() else {}), r.status
         except urllib.error.HTTPError as e:
@@ -111,6 +155,12 @@ def http(method: str, url: str, body=None, headers=None, tries: int = 6):
                 time.sleep(5 * (attempt + 1))
                 continue
             return {"error": e.read().decode("utf-8", "replace")[:300]}, e.code
+        except (urllib.error.URLError, OSError) as e:          # no connection, or no answer in time
+            if attempt < min(tries, 2) - 1:
+                time.sleep(2)
+                continue
+            DOWN = f"{type(e).__name__}: {e}"
+            return {"error": DOWN}, -1
         except Exception as e:                                 # noqa: BLE001
             if attempt < tries - 1:
                 time.sleep(2)
@@ -127,6 +177,14 @@ def upload(url: str, fields: dict, kind: str, blob: bytes) -> int:
                     for k, v in fields.items())
     body += (f'--{edge}\r\nContent-Disposition: form-data; name="file"; filename="file"\r\n'
              f"Content-Type: {kind}\r\n\r\n").encode() + blob + f"\r\n--{edge}--\r\n".encode()
+    # Plane signs the form for its PUBLIC origin (<WEB_URL netloc>/uploads, USE_MINIO=1), which a
+    # LINKED office cannot reach: `plane.localhost` there is itself, so every attach through the link
+    # failed with -1 (measured from vps1 and claude-cloud, 2026-10-20/21). That office's link door
+    # serves the same /uploads (project-pln's Caddyfile owns the route): the form goes there.
+    if REMOTE:
+        signed = urllib.parse.urlsplit(url)
+        if signed.path.rstrip("/") == "/uploads":
+            url = BASE + signed.path + (f"?{signed.query}" if signed.query else "")
     req = urllib.request.Request(url, data=body, method="POST",
                                  headers={"Content-Type": f"multipart/form-data; boundary={edge}"})
     try:
@@ -139,7 +197,18 @@ def upload(url: str, fields: dict, kind: str, blob: bytes) -> int:
 
 
 def token_for(slug: str) -> tuple[str, str, str]:
-    """(token, user_id, email) for an office agent — the vault instance is the contract."""
+    """(token, user_id, email) for an office agent — the vault instance is the contract.
+
+    …and NO token at all when the app runs on a LINKED office (`where.sh` points this run at that
+    office's door, `http://<alias>.<office>:<door>`): there is nothing to read here, and nothing to
+    read it for. That office's door replaces the peer's claims with the identity it declared for this
+    office and SIGNS it (`apps/dgo-extend/link-proxy.py`, DGO-545), so the request arrives signed in
+    as the mapped user — the token API accepts that identity as if it were a key (patches/
+    api-door-identity.py). Reading this office's vault instead is what made a linked office's agent
+    stop with `no Plane account behind vault instance plane_local_api_token-azaria (HTTP 404)` while
+    the link was perfectly healthy (measured on vps1, 2026-10-13)."""
+    if REMOTE:
+        return ("", "", "")
     if slug == "local" and os.environ.get("PLANE_LOCAL_API_TOKEN"):
         return (os.environ["PLANE_LOCAL_API_TOKEN"], os.environ.get("PLANE_LOCAL_USER_ID") or "",
                 os.environ.get("PLANE_LOCAL_EMAIL") or "")
@@ -189,10 +258,20 @@ def collect(p, proj, want_mine, assignee, state_filter) -> list:
                      "updated_at": it.get("updated_at") or ""})
     return rows
 
+def me_from_app() -> tuple[str, str]:
+    """(id, email) of whoever this run IS, asked of the app itself — a linked office has no token
+    that names the account, and `--mine` has to mean the same thing in both offices."""
+    out, code = http("GET", f"{BASE}/api/users/me/")
+    if code == 200 and isinstance(out, dict):
+        return str(out.get("id") or ""), str(out.get("email") or "")
+    return "", ""
+
+
 class Plane:
     def __init__(self, key: str, me_id: str = "", me_email: str = ""):
         self.base = f"{BASE}/api/v1/workspaces/{WS_SLUG}"
-        self.h = {"X-API-Key": key}
+        # No key = a request that is authenticated by the link's door instead (DGO-545/lnk-027).
+        self.h = {"X-API-Key": key} if key else {}
         self.me_id = me_id
         self.me_email = me_email
 
@@ -226,6 +305,10 @@ class Plane:
         return rows
 
 
+#: A project's items, paged once per PROCESS (keyed by the project id): one run of a verb, or one `batch`.
+_ISSUES: dict = {}
+
+
 def main(argv: list[str]) -> int:
     if not argv or argv[0] in ("-h", "--help", "help"):
         print(__doc__.strip() if __doc__ else "")
@@ -237,14 +320,18 @@ def main(argv: list[str]) -> int:
     assignee = ""
     state_filter = ""
     as_json = False
+    want_body = False
     comment = ""
     ref = ""
+    words = []  # what follows the ref, by POSITION: the files of `attach`, the labels of `label`, the items of `link`
     args = list(rest)
     i = 0
     while i < len(args):
         a = args[i]
         if a == "--json":
             as_json = True
+        elif a == "--body":
+            want_body = True
         elif a == "--mine":
             want_mine = True
         elif a in ("--project", "--assignee", "--state", "--comment", "--as") and i + 1 < len(args):
@@ -262,7 +349,49 @@ def main(argv: list[str]) -> int:
                 slug = val
         elif not ref and a:
             ref = a
+        elif a and not a.startswith("--"):
+            words.append(a)
         i += 1
+
+    if verb == "batch":
+        # `tasks batch @actions.jsonl` — the hook puts the file's text where the ref would be. Each line
+        # runs through the same verbs as the command line, in THIS process, so the project's items are
+        # paged once for the whole batch (`_ISSUES`) instead of once per action: with 1,227 items at
+        # 60 requests a minute, a triage of 200 items was 200 runs of minutes each (2026-11-03).
+        if (ref or "").startswith("@"):
+            sys.exit(f"[project-pln] batch {ref}: the file was not read — put `@<file>` right after `batch`")
+        # split on "\n" only: splitlines() also cuts at U+2028/U+2029, which a comment may carry
+        lines = [ln for ln in (ref or "").lstrip("﻿").split("\n") if ln.strip()]
+        if not lines:
+            sys.exit("[project-pln] tasks batch @<file.jsonl> — one {\"verb\",\"ref\",\"comment\"?,\"words\"?} per line")
+        rc = 0
+        for n, line in enumerate(lines, 1):
+            try:
+                act = json.loads(line)
+            except ValueError as e:
+                print(f"  #{n}: not JSON ({e}) — skipped")
+                rc = 1
+                continue
+            if not isinstance(act, dict):
+                print(f"  #{n}: not an object — skipped")
+                rc = 1
+                continue
+            v, r, w = act.get("verb"), str(act.get("ref") or ""), act.get("words") or []
+            if (v not in ("done", "start", "comment", "take", "label", "unlabel", "link")
+                    or not re.fullmatch(r"[A-Z][A-Z0-9]*-\d+", r) or not isinstance(w, list)):
+                print(f"  #{n}: {v} {r}: not a batch verb, a ref and a list of words — skipped")
+                rc = 1
+                continue
+            one = [v, r] + [str(x) for x in w]
+            if act.get("comment"):
+                one += ["--comment", str(act["comment"])]
+            one += ["--as", slug]
+            try:
+                rc |= main(one) or 0
+            except (SystemExit, Exception) as e:   # one item's failure is that item's, not the batch's
+                print(f"  #{n}: {v} {r}: {e}")
+                rc = 1
+        return rc
 
     # A ref NAMES its project: `DGO-12` is in DGO. So `--project` is only needed to list, and a verb
     # that takes one item never has to be told twice which project it is in.
@@ -275,6 +404,8 @@ def main(argv: list[str]) -> int:
     all_projects = not project and not ref
 
     key, my_id, my_email = token_for(slug)
+    if REMOTE and not my_id:
+        my_id, my_email = me_from_app()
     p = Plane(key, my_id, my_email)
     projects = project_list(p)
     if all_projects:
@@ -345,7 +476,7 @@ def main(argv: list[str]) -> int:
         """
         if not CONSOLE:
             return ""
-        return f"{CONSOLE}/#/m/{CONSOLE_MODULE}/{WS_SLUG}/projects/{pid}/issues/{iid}"
+        return f"{CONSOLE}/#/m/{console_module()}/{WS_SLUG}/projects/{pid}/issues/{iid}"
 
     def shape(it: dict) -> dict:
         mod = ""
@@ -370,19 +501,21 @@ def main(argv: list[str]) -> int:
                 "app_url": app_link(it["id"]),
                 "updated_at": it.get("updated_at") or ""}
 
-    _issues: list = []
-
     def issues() -> list:
-        """Every item of the project, paged ONCE per run (a `done` used to page them three times)."""
-        if not _issues:
-            _issues.extend(p.page(f"{P}/issues/?expand=labels,assignees"))
-        return _issues
+        """Every item of the project, paged ONCE per run (a `done` used to page them three times) — and
+        once per `batch`, whose actions share this process (`_ISSUES`, keyed by the project)."""
+        if pid not in _ISSUES:
+            _ISSUES[pid] = list(p.page(f"{P}/issues/?expand=labels,assignees"))
+        return _ISSUES[pid]
 
     def find(which: str) -> dict:
         want = which.rsplit("-", 1)[-1]
-        for it in issues():
-            if str(it.get("sequence_id")) == want:
-                return it
+        for attempt in (0, 1):
+            for it in issues():
+                if str(it.get("sequence_id")) == want:
+                    return it
+            if attempt == 0 and pid in _ISSUES:
+                del _ISSUES[pid]         # paged earlier in this process: an item made since is not in it yet
         sys.exit(f"[project-pln] no work item {which} in {proj['identifier']}")
 
     def is_mine(it: dict) -> bool:
@@ -428,6 +561,13 @@ def main(argv: list[str]) -> int:
         t["files"] = [f"{(a.get('attributes') or {}).get('name') or a.get('id')} "
                       f"({(a.get('attributes') or {}).get('size') or 0} bytes)"
                       for a in (got if code == 200 and isinstance(got, list) else [])]
+        if want_body:
+            # the item's own words — a request quoted verbatim, a meeting's transcript — as plain text
+            got, code = http("GET", f"{p.base}{P}/issues/{t['id']}/", None, p.h)
+            body = got if code == 200 and isinstance(got, dict) else {}
+            t["description"] = body.get("description_stripped") or html.unescape(
+                re.sub(r"<(br|/p|/li|/h\d)[^>]*>", "\n", body.get("description_html") or "")).strip()
+            t["description"] = re.sub(r"<[^>]+>", "", t["description"]).strip()
         if as_json:
             print(json.dumps({"tasks": [t]}, ensure_ascii=False))
         else:
@@ -436,21 +576,95 @@ def main(argv: list[str]) -> int:
                   f"\n  labels: {', '.join(l for l in t['labels'] if l) or '—'}"
                   f"\n  module: {t['module'] or '—'}"
                   f"\n  files: {', '.join(t['files']) or '—'}\n  {t['url']}")
+            if want_body:
+                print("\n" + (t["description"] or "(no description)"))
         return 0
 
-    if verb not in ("start", "done", "comment", "take", "attach"):
+    if verb not in ("start", "done", "comment", "take", "attach", "label", "unlabel", "link"):
         sys.exit(f"[project-pln] unknown verb {verb!r} — see ./bbox project-pln tasks --help")
     if not ref:
         sys.exit(f"[project-pln] tasks {verb} <REF>")
 
     it = find(ref)
+    # The words after the ref (`words`, by position): the files of `attach`, the labels of `label`, the
+    # items of `link` — never a flag's value (`--project MEET` made a label «MEET» while they were picked
+    # by value, the second reader of DGO-1005).
+    more = words
+    if verb == "label":
+        # A meeting that was read is `נותח` (DGO-1005: «a reference that you paid attention, and that you
+        # transformed it into tasks»), after `הקלטה` and `תומלל`. Labels are ADDED by name, a name the
+        # project does not have yet is created there, and none is ever taken off.
+        names = [n.strip() for a in more for n in a.split(",") if n.strip()]
+        if not names:
+            sys.exit("[project-pln] tasks label <REF> <label>[,<label>…]")
+        by_name = {v: k for k, v in labels.items()}
+        have = [l if isinstance(l, str) else l.get("id") for l in (it.get("label_ids") or it.get("labels") or [])]
+        for n in names:
+            if n not in by_name:
+                # The list is a cache (30 min): a label made since — by the owner, or by another office —
+                # is read fresh once before one is made, or Plane refuses the second as a duplicate.
+                by_name.update({l["name"]: l["id"] for l in cached(f"{pid}:labels", lambda: p.page(f"{P}/labels/"), fresh=True)})
+            if n not in by_name:
+                # --olive of the one palette (theme-tokens.css): a label's colour is a field of Plane, where
+                # no token can be named, so the palette's value is written (G82 counts no other).
+                by_name[n] = p.call("POST", f"{P}/labels/", {"name": n, "color": "#56693f"})["id"]
+                cached(f"{pid}:labels", lambda: p.page(f"{P}/labels/"), fresh=True)
+            if by_name[n] not in have:
+                have.append(by_name[n])
+        p.call("PATCH", f"{P}/issues/{it['id']}/", {"labels": have})
+        it["label_ids"] = it["labels"] = have          # the cached item, for the next action of a `batch`
+        log(f"{ref} labelled {', '.join(names)}")
+        if as_json:
+            print(json.dumps({"ok": True, "ref": ref, "labels": names}, ensure_ascii=False))
+        return 0
+    if verb == "unlabel":
+        # The deliberate inverse of `label`, by name: only the labels named are taken off, never all of them.
+        # A label put on wrongly is otherwise there for good — a `בעלים` on an item the owner has nothing to
+        # do on puts it in the list he reads as his own work (the owner's order, 2026-11-02, DGO-1117).
+        names = [n.strip() for a in more for n in a.split(",") if n.strip()]
+        if not names:
+            sys.exit("[project-pln] tasks unlabel <REF> <label>[,<label>…]")
+        by_name = {v: k for k, v in labels.items()}
+        drop = {by_name[n] for n in names if n in by_name}
+        have = [l if isinstance(l, str) else l.get("id") for l in (it.get("label_ids") or it.get("labels") or [])]
+        keep = [l for l in have if l not in drop]
+        if len(keep) != len(have):
+            p.call("PATCH", f"{P}/issues/{it['id']}/", {"labels": keep})
+            it["label_ids"] = it["labels"] = keep      # the cached item, for the next action of a `batch`
+        log(f"{ref} unlabelled {', '.join(names)} ({len(have) - len(keep)} removed)")
+        if as_json:
+            print(json.dumps({"ok": True, "ref": ref, "removed": len(have) - len(keep)}, ensure_ascii=False))
+        return 0
+    if verb == "link":
+        # A meeting and every item opened from it, RELATED: Plane's `relates_to` is symmetric, so each side
+        # shows the other in its own Relations, in any project (DGO-1005: «all the tickets created from
+        # that meeting linked to that meeting»). A ref is resolved by its identifier, one request each; an
+        # item already related is not related twice.
+        if not more:
+            sys.exit("[project-pln] tasks link <REF> <REF> [<REF>…]")
+        R = f"{P}/work-items/{it['id']}/relations/"
+        known = p.call("GET", R)
+        known = {str(x.get("issue_id")) for x in (known.get("relates_to") or [])} if isinstance(known, dict) else set()
+        new = []
+        for o in more:
+            got, code = http("GET", f"{p.base}/work-items/{o}/", None, p.h)
+            if code != 200 or not isinstance(got, dict) or not got.get("id"):
+                sys.exit(f"[project-pln] no work item {o} (HTTP {code})")
+            if str(got["id"]) != str(it["id"]) and str(got["id"]) not in known and str(got["id"]) not in new:
+                new.append(str(got["id"]))
+        if new:
+            p.call("POST", R, {"relation_type": "relates_to", "issues": new})
+        log(f"{ref} relates to {', '.join(more)} ({len(new)} new)")
+        if as_json:
+            print(json.dumps({"ok": True, "ref": ref, "related": more, "new": len(new)}, ensure_ascii=False))
+        return 0
     if verb == "attach":
         # A request's files belong ON its work item (the owner, 2026-10-07): Plane signs a form for
         # each, the file goes to the store through it, and the item is told it arrived — the same
         # three steps its own screen takes. The paths are this container's (hooks/tasks brings them).
         # …and NOT the value of a flag: `--as azaria` is two arguments, and the second is a name, not
         # a file (measured 2026-10-08: `attach DGO-500 --as azaria shot.png` tried to open `azaria`).
-        paths = [a for a in args if a and not a.startswith("--") and a not in (ref, slug, comment)]
+        paths = words
         if not paths:
             sys.exit("[project-pln] tasks attach <REF> <file> [<file>…]")
         A = f"{P}/issues/{it['id']}/issue-attachments/"
@@ -471,7 +685,9 @@ def main(argv: list[str]) -> int:
               if as_json else f"  {t['ref']}  {len(paths)} file(s) attached  {t['url']}")
         return 0
     if verb == "comment":
-        body = comment or " ".join(a for a in args if a and not a.startswith("--") and a != ref)
+        # the words after the ref, never a flag's VALUE: joining every non-flag argument made `--as azaria`
+        # part of the comment ("… azaria"), and a batch action without text post its slug alone
+        body = comment or " ".join(words)
         if not body:
             sys.exit("[project-pln] tasks comment <REF> \"…\"")
         p.call("POST", f"{P}/issues/{it['id']}/comments/", {"comment_html": f"<p>{body}</p>"})
@@ -484,6 +700,7 @@ def main(argv: list[str]) -> int:
         mine = [my_id] if my_id else []
         others = ids_of(it)
         p.call("PATCH", f"{P}/issues/{it['id']}/", {"assignees": others + mine})
+        it["assignees"] = others + mine                # the cached item, for the next action of a `batch`
         log(f"{ref} assigned to {uid_name(my_id) if my_id else slug}")
     else:
         group = "started" if verb == "start" else "completed"

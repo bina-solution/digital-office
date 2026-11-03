@@ -101,7 +101,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://apitools.bina-comp.bina-solutions.co.il/documentOcr",
+        "url": "https://apitools.hacohen.bina-solutions.co.il/documentOcr",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
@@ -274,7 +274,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://apitools.bina-comp.bina-solutions.co.il/documentJsonQuery",
+        "url": "https://apitools.hacohen.bina-solutions.co.il/documentJsonQuery",
         "sendBody": true,
         "specifyBody": "=json",
         "bodyParameters": {
@@ -997,16 +997,7 @@
   },
   "staticData": null,
   "meta": null,
-  "pinData": {
-    "When Executed by Another Workflow": [
-      {
-        "json": {
-          "ID": "420993375mfcxwb",
-          "LINK": "https://drive.google.com/file/d/1E-8LCkJVqNWvkYfHgepxlt9q75RNp4_9/edit"
-        }
-      }
-    ]
-  },
+  "pinData": {},
   "versionId": "dd9ccd56-96bb-43a7-8805-7d1a92f34865",
   "activeVersionId": "dd9ccd56-96bb-43a7-8805-7d1a92f34865",
   "versionCounter": 77,

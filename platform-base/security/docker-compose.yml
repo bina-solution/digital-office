@@ -1,0 +1,144 @@
+# security — «אבטחה»: who reaches the office and what the office calls, with a fail2ban built in (see
+# app.py's and sensor.py's docstrings). Two services from one image, split by what each may touch:
+#
+#  * `security` — the screen and the API, on the office network like every app, behind the office's
+#    sign-in. It reads the edge's and the identity provider's logs from the engine (GET requests only:
+#    dockerapi.py has no other verb) and never touches the network stack.
+#
+#  * `security-sensor` — the eyes and hands on the MACHINE: the host's network namespace, exactly two
+#    capabilities (NET_ADMIN for its nftables table and the connection table, NET_RAW for the filtered
+#    sniffer), a read-only root, no published port and no listener at all. It talks to the app through
+#    one volume (`security_sensor`): the app writes what it wants enforced, the sensor writes what it
+#    saw. Nothing on any network can reach it.
+#
+# What is mounted, and why only that:
+#    /var/log (ro)           the machine's journal — sshd's sign-ins and failures (journalctl -D)
+#    /root/.ssh (ro)         authorized_keys — to name the key behind every SSH sign-in (public keys only)
+#    /etc/os-release (ro)    the machine's operating system's name, for the resource view
+#    the engine socket (ro)  the edge's and sign-in logs, container names and resource use (GET only)
+#    .generated/registry     which apps exist and which offices are linked (the compiled registry)
+# Not mounted: the host's root filesystem (what the machine app did — issues/sec-the-machine-app-
+# mounts-the-whole-host-filesystem.yaml). The disk the resource view shows is the partition this
+# app's own volume lives on.
+services:
+  security:
+    image: ghcr.io/solomonboltin/digital-office/security:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: security-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: security
+    restart: unless-stopped
+    environment:
+      - DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-bina-deployment}
+      - DGO_OFFICE_ID=${DGO_OFFICE_ID:-}
+      # the two logs this app reads, by the names the compiler gives their containers; the sign-in
+      # service's is the one DGO_IDENTITY names (app.py), unless SECURITY_AUTH_CONTAINER says otherwise
+      - SECURITY_EDGE_CONTAINER=traefik-${DEPLOYMENT_NAME:-bina-deployment}
+      - DGO_IDENTITY=${DGO_IDENTITY:-authentik}
+      - SECURITY_AUTH_CONTAINER=${SECURITY_AUTH_CONTAINER:-}
+      - NOTIFICATIONS_URL=${NOTIFICATIONS_URL:-http://notifications:8977}
+      # city (≈145 MB, a dot per city) | country (≈18 MB) | off — DB-IP lite, CC BY 4.0, fetched by the office
+      - SECURITY_GEO=${SECURITY_GEO:-city}
+      # 1 lets a LINKED office change bans and lists here; the default is read-only over a link
+      - SECURITY_REMOTE_CONTROL=${SECURITY_REMOTE_CONTROL:-0}
+      - SENSOR_DIR=/sensor
+      - SECURITY_DATA=/data
+      - SECURITY_REGISTRY=/registry
+    volumes:
+      - security_data:/data
+      - security_sensor:/sensor
+      - ${BBOX_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
+      - ../../.generated/registry:/registry:ro
+      - /etc/os-release:/host/os-release:ro
+    networks:
+      - traefik-network
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://localhost:8995/healthz',timeout=8).status==200 else 1)"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          # parsing the edge's log and answering the screen; the GeoIP files are mapped, not loaded
+          cpus: '0.5'
+          memory: 320M
+        reservations:
+          cpus: '0.02'
+          memory: 48M
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+
+  security-sensor:
+    image: ghcr.io/solomonboltin/digital-office/security:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: security-sensor-${DEPLOYMENT_NAME:-bina-deployment}
+    command: ["python3", "sensor.py"]
+    restart: unless-stopped
+    network_mode: host
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    environment:
+      - SENSOR_DIR=/sensor
+      - SENSOR_JOURNAL_DIR=/host/log/journal
+      - SENSOR_SSH_DIR=/host/ssh
+      # private addresses worth asking whether they are a router (a laptop's LAN gateway when the
+      # office runs inside a VM whose own gateway is the VM's NAT)
+      - SECURITY_ROUTER_HINTS=${SECURITY_ROUTER_HINTS:-}
+      # one STUN question an hour: the office's public address, to place it on its own map ('' = never)
+      - SECURITY_STUN=${SECURITY_STUN-stun.cloudflare.com:3478}
+    volumes:
+      - security_sensor:/sensor
+      - /var/log:/host/log:ro
+      - /root/.ssh:/host/ssh:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os,time,sys;sys.exit(0 if time.time()-os.path.getmtime('/sensor/facts.json')<120 else 1)"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 160M
+        reservations:
+          cpus: '0.02'
+          memory: 24M
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+
+volumes:
+  security_data:
+  security_sensor:
+
+networks:
+  traefik-network:
+    external: true

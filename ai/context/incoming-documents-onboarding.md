@@ -32,8 +32,8 @@ company just **consent** (the "one Google login"). Everything else is API/CLI/UI
 | 1 | Gmail inbox receiving docs | `person9@example.com` | yes (their account) |
 | 2 | Gmail label for automation | `לטיפול-אוטומציה-שמירת-מסמכים` | yes (create in their Gmail) |
 | 3 | Drive folder tree (filed docs) | per company/type | yes (create in their Drive) |
-| 4 | Incoming-Documents GSheet | `AutomationValues` / `מסמכים נכנסים` (gid 542119184), id `1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo`, 52 cols, PK `ID` | yes (create per company) |
-| 5 | n8n OAuth credentials (Gmail, Sheets, Sheets-Trigger, Drive) | `person17@example.com` / `person9@example.com` creds | yes (new refresh token per company, **shared client**) |
+| 4 | Incoming-Documents GSheet | `AutomationValues` / `מסמכים נכנסים` (gid 542119184), id `1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0049`, 52 cols, PK `ID` | yes (create per company) |
+| 5 | n8n OAuth credentials (Gmail, Sheets, Sheets-Trigger, Drive) | `person17.x@example.com` / `person9@example.com` creds | yes (new refresh token per company, **shared client**) |
 | 6 | Google Cloud OAuth **client** (id+secret) | shared, in `.env` | **NO — reused** (see §3) |
 | 7 | Vision API key (OCR) | `GOOGLE_VISION_API_KEY` in apitools (default hardcoded) | shared mgmt project |
 | 8 | Gemini API key (extraction) | `GEMINI_API_KEY` in `.env` | shared mgmt project |
@@ -227,7 +227,7 @@ Executed end-to-end on the local `shlomo-laptop` stack to validate the flow:
 1. Secrets split — all 35 real secrets → `env.secrets-temp` (git-ignored); fresh infra secrets generated into `.env`; Google/onboarding keys left empty.
 2. `docker compose down -v` (full wipe incl. browser42 `cloakprofile`) → `up -d --build`; all services healthy.
    - Local fix needed again: authentik embedded-outpost token is broken on a fresh stack → forward-auth 404s, so the **local** `browser42.localhost` router's `middlewares=authentik` was commented out (see `production/compose.override.yml`) so the operator can reach `/view`. Re-add once the outpost is fixed.
-3. `scripts/n8n-push` → owner `shlomo@local.dev` bootstrapped, 36 creds + 113 workflows imported, 61 reactivated. **Credential secrets do NOT decrypt** (new `N8N_ENCRYPTION_KEY` ≠ blueprint key) → every Google credential must be re-authed (expected for fresh onboarding).
+3. `scripts/n8n-push` → owner `person2@example.com` bootstrapped, 36 creds + 113 workflows imported, 61 reactivated. **Credential secrets do NOT decrypt** (new `N8N_ENCRYPTION_KEY` ≠ blueprint key) → every Google credential must be re-authed (expected for fresh onboarding).
 4. Operator Google login in browser42 (`person8@example.com`); gcloud CLI re-authed via browser42 consent (operator/agent click).
 5. **GCP provisioned under `person8@example.com`:**
    - Project **`shlomo-laptop-deployment`** (proj # 936853307928), billing `014F8D-7253FC-52F745` linked.
@@ -321,7 +321,7 @@ to force the webhook to register, then `POST /webhook/trigger-google-health` (CI
   to the new sheet/folder/label.
 - Seed a real invoice in Gmail/Drive → run → verify a processed row in the sheet.
 
-## 8d. AI/LLM document creds — Gemini ✅ / Vision ⛔ (2026-06-18, person2@example.com)
+## 8d. AI/LLM document creds — Gemini ✅ / Vision ⛔ (2026-06-18, person3@example.com)
 
 Two shared keys power doc intelligence: **`GEMINI_API_KEY`** (AI extractors — invoice / balance-sheet,
 via n8n googlePalmApi/`ai-studio-bs-extraction` cred) and **`GOOGLE_VISION_API_KEY`** (apitools
@@ -361,7 +361,7 @@ Gemini-based extraction still works (the AI extractors don't need Vision).
 ## §9 — Fresh-account onboarding run (2026-06-18) + full architecture/product plan
 
 A complete brand-new-tenant test was executed: stack wiped (`down -v`), new `N8N_ENCRYPTION_KEY`
-(fp `77aee1e8`), brand-new Google account `person2@example.com`, new GCP project
+(fp `77aee1e8`), brand-new Google account `person3@example.com`, new GCP project
 `bina-incdocs-onboard` (#831351881172), new OAuth client, all creds re-authed.
 
 **Verified GREEN:** env-driven local creds survive key drift (6/6); 4 Google OAuth creds re-authed
@@ -373,8 +373,8 @@ account because workflows embed **account-specific Gmail label IDs** (`Label_655
 Engine assumes existing label state. De-hardcode (resolve labels by name) is Phase 1 of the plan.
 
 **New resources provisioned this session (owned by `solutionsbina`):** settings spreadsheet
-`1Y5JYUcbVe0CnqPUnA5ISmqSUPO28YbZpAHnGbFqnZSM` (tabs Settings/Companies/Tag-Settings), Drive parent
-`1nyWOzGNacjyVuJddiZFc5wQaba4Lj_jr` (+5 subfolders, gmail-docs `163H-S4XSo4uqA0FRUziu0wCUiHcF9rZU`).
+`1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0052` (tabs Settings/Companies/Tag-Settings), Drive parent
+`1REDACTEDdrivexxxxxxxxxxxxxxx0053` (+5 subfolders, gmail-docs `1REDACTEDdrivexxxxxxxxxxxxxxx0054`).
 Scripts: `data/browser42/provision.js` (create folders+sheet), `data/browser42/rewire.js` (REST repoint).
 
 **Full write-up** (system map, responsibilities, exact provisioning steps to become an automated

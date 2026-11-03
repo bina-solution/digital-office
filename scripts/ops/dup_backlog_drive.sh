@@ -26,7 +26,7 @@
 set -u
 DK="docker -H unix:///run/bbox-docker.sock"
 PSQL="$DK exec -i supabase-db-shlomo-laptop psql -U postgres -tAc"
-ENVF=/mnt/c/Users/user/Desktop/personalWorkspace/AutomateOs/deployment-bina-comp/.env
+ENVF=/mnt/c/Users/user/Desktop/personalWorkspace/AutomateOs/deployment-hacohen/.env
 
 # --- the one definition of a duplicate group -----------------------------------------------
 # Mirrors groupKeyOf() in indoxV2ActionsGlobal01 'Adjudicate Merge' and the driver's dbl CTE:

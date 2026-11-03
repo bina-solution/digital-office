@@ -13,6 +13,13 @@ read-write in six containers, and traefik publishing `6379`/`15432` on `0.0.0.0`
 documented firewall bypass (doc line 60-61), live on this host. Every one of those is a fact of a
 COMPOSE FILE, and nothing in this directory read a compose file for it.
 
+THAT SENTENCE IS PAST TENSE ON PURPOSE NOW (2026-10-10). Two of its facts were fixed in the tree the
+day the gate's known-red list reached zero: traefik's two passthroughs are bound to `127.0.0.1`, and
+traefik holds NO engine socket — it asks `platform-base/traefik/socket-proxy/`, a first-party door
+that admits the ten paths a docker provider reads and refuses everything else, while being the one
+container that holds the socket read-only (DGO-136). The remaining ones are named per rule below with
+their reason, and the `KNOWN_RED` table is empty: `--strict` fails on the 8 justified entries.
+
 A live scan answers what is running NOW; this gate answers what the NEXT COMMIT will run, from the
 tree alone — no network, no Docker daemon, no `.env`, ~1 s. Its DENOMINATOR is every compose file
 this repo would put containers on a machine from, taken from git rather than from a hand-kept list
@@ -154,7 +161,7 @@ DOC = "ai/context/dgo-security-session.md"
 #: `image-pin-lint.py`'s FIRST_PARTY_* by hand, because the two answer different questions (G15:
 #: "is it pinned at all"; here: "is it digest-pinned, and is a digest even the right question for
 #: this reference").
-FIRST_PARTY_PREFIXES = ("deployment-bina-comp-", "binaos/", "incoming-documents-local", "my-docs-local",
+FIRST_PARTY_PREFIXES = ("deployment-hacohen-", "binaos/", "incoming-documents-local", "my-docs-local",
                         "llm-gateway-local")
 OFFICE_REGISTRY = "ghcr.io/solomonboltin/digital-office/"
 
@@ -194,46 +201,39 @@ NOT_RUN_HERE: dict[str, str] = {
 #: real exposure the doc forbids, still in the tree, recorded with WHY it is still there. `--strict`
 #: treats every one of them as a finding. A stale entry FAILS (see ANTI-ROT above).
 KNOWN_RED: dict[str, str] = {
-    # ── R1: published on 0.0.0.0, where `127.0.0.1:` in front of the host port is the whole fix,
-    #        and is what every other publish in this tree already does. Measured live by `rap-009`'s
-    #        pentest as traefik publishing `6379`/`15432` on `0.0.0.0` — the second number is this
-    #        office's `TRAEFIK_POSTGRES_HOST_PORT`, the first is the default linted here.
-    "platform-base/traefik/docker-compose.yml|traefik-deployment|${TRAEFIK_POSTGRES_HOST_PORT:-5432}:5432":
-        "the host side is published on 0.0.0.0 (5432 by default, 15432 on this office's .env), so "
-        "Docker's port publish bypasses the host firewall and any machine on the network reaches "
-        "Postgres' passthrough. The comment above it justifies the port NUMBER being overridable, "
-        "not the interface: `127.0.0.1:${TRAEFIK_POSTGRES_HOST_PORT:-5432}:5432` is the fix, and it "
-        "is a production traefik config change that needs its own item (sec-0xx), not this gate's.",
-    "platform-base/traefik/docker-compose.yml|traefik-deployment|${TRAEFIK_REDIS_HOST_PORT:-6379}:6379":
-        "same publish, same interface, redis' passthrough (6379 default). Same one-line fix — bind "
-        "the host side to 127.0.0.1 — and the same reason it is not done here: a production edge "
-        "change, measured 2026-10-09 by the pentest, owed its own item.",
-    # ── R1: openhands is a gallery app, `enabled: false` in platform.state.yaml — so none of these
-    #        four is reachable on this office TODAY. They are gated anyway because a gallery app is
-    #        one `enabled: true` from running (G15's reasoning about shipping images), and 2375 is
-    #        not an ordinary debug port: it is the Docker API with no TLS.
-    "apps/openhands/docker-compose.yml|docker-proxy|2375:2375":
-        "publishes the Docker API itself on every interface — the engine that runs this office, "
-        "with no TLS in front of it. openhands is disabled on this office (`enabled: false`), so it "
-        "is not reachable today; it is red because enabling it is one state line, and because the "
-        "port sits beside a read-write engine socket (see R2 below) in the same service.",
-    "apps/openhands/docker-compose.yml|openhands|3000:3000":
-        "openhands' own web UI on 0.0.0.0, one line above a correct `127.0.0.1:3001:3000` to the "
-        "same container port — which is what makes it a decision rather than an oversight: the "
-        "loopback form exists in the file, under the same service. Disabled gallery app, so not "
-        "reachable today; red for the day it is enabled.",
-    # ── R2: the one read-write engine socket a read-only mount WOULD do for, which is the case this
-    #        rule exists to name. The other seven read-write mounts are in JUSTIFIED below, each with
-    #        the reason `:ro` would not do — this one has none.
-    "platform-base/traefik/docker-compose.yml|traefik-deployment|${BBOX_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock":
-        "traefik's docker provider only LISTS containers and WATCHES events (`/containers/json`, "
-        "`/events`) — it never writes — so `:ro` is the correct spelling of what this mount is, and "
-        "it is the spelling every read-only consumer here already uses (connections, "
-        "any-concurrency, machine). Kept read-write because the comment above it explains the "
-        "SOCKET PATH choice, not the mode, and because none of the six other read-write mounts has "
-        "a socket proxy in front of it either. Measured 2026-10-09: the source is "
-        "`${BBOX_DOCKER_SOCK}`, i.e. this project's own `/run/bbox-docker.sock`, not a Desktop "
-        "socket.",
+    # ── R1: traefik's two passthroughs WERE here — `5432`/`6379` published on 0.0.0.0, where
+    #        `127.0.0.1:` in front of the host port is the whole fix and is what every other publish
+    #        in this tree already does. They are gone (2026-10-10): the host side is
+    #        `127.0.0.1:${TRAEFIK_POSTGRES_HOST_PORT:-5432}:5432` and the same for redis, so Docker's
+    #        publish — which lands in the DOCKER chain ahead of the host's own rules, the documented
+    #        firewall bypass — no longer exposes either to the network. Measured from the daemon's
+    #        own host namespace the hour it landed:
+    #        `127.0.0.1:15432 -> OPEN`, `127.0.0.1:6379 -> OPEN`, and `192.168.16.100:15432 ->
+    #        ConnectionRefused`. The port NUMBERS stay overridable (a native Windows PostgreSQL under
+    #        WSL mirrored networking shares the host's port space — measured on hp-laptop 2026-10-04);
+    #        only the interface is pinned. The pentest behind `rap-009` is what named these first.
+    # ── R1: openhands' two publishes WERE here, as known red with a written reason ("one
+    #        `enabled: true` from running, and 2375 is not an ordinary debug port"). They are gone
+    #        because the file was fixed on 2026-10-10 (DGO-409): the UI keeps its loopback form and
+    #        loses the 0.0.0.0 one beside it, and the docker API is published on 127.0.0.1 only —
+    #        which is what the office's own security session asks for in one sentence («If you must
+    #        publish a port for debugging, bind it to 127.0.0.1:port only»). The two entries were
+    #        deleted the moment they stopped matching, because that is this table's own rule: a
+    #        declaration that outlives its finding is not a declaration, it is an exemption.
+    # ── R2: traefik's read-write socket WAS the entry here — the one mount a read-only door WOULD
+    #        do for, and the case this rule exists to name. It is gone (DGO-136, 2026-10-10): traefik
+    #        holds NO socket now. It asks `docker-socket-proxy` — a first-party stdlib door
+    #        (platform-base/traefik/socket-proxy/) that answers GET/HEAD on the ten paths a docker
+    #        provider reads and refuses everything else by name — and the door is the one container of
+    #        that app holding the engine socket, read-only.
+    #        Measured live the hour it landed: `GET /containers/json` 200, `POST
+    #        /containers/<id>/restart` 403, `DELETE /containers/x` 403, `GET /images/json` 403, and
+    #        the edge serves its hosts through it (console/machine/plane -> 302, the same as before).
+    #        A read-only MOUNT was never the fix, and that is measured too: a socket mounted `:ro`
+    #        still answers `GET /_ping` with 200 — `:ro` constrains the file node, not the protocol.
+    #        The door's first version refused `/v1.24/version` (a docker client versions every path,
+    #        and traefik hardcodes API 1.24): the edge came up with ZERO routers, 302 -> 404 on every
+    #        host while traefik reported healthy. That shape is a case in the door's own self-test.
 }
 
 #: Real exposures that the doc's own qualifier EXCLUDES, each with the written reason `:ro` would
@@ -254,10 +254,21 @@ JUSTIFIED: dict[str, str] = {
         "the archiver's import path creates containers from an export, so it writes to the engine. "
         "Its file explains the socket PATH (:44-45, why the host's /run/bbox-docker.sock appears as "
         "/var/run/docker.sock inside) — a read-only mount would break import and nothing else here.",
+    "apps/bina-claude/docker-compose.yml|bina-claude|${BBOX_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock":
+        "Claude Code operates the office from inside the container the way Azaria does (DGO-1074, the "
+        "owner: «Claude will be able to use Bina DS's agents … via the CLI»): `./bbox agent` reads the "
+        "other agent's action token with `docker exec` (POST /containers/{id}/exec — a write), and "
+        "`./bbox` / `./scripts/dc` run compose against the engine. `:ro` breaks both. The desktop "
+        "app's container (bina-claude-desktop) holds no socket.",
     "apps/bina-ds/docker-compose.yml|bina-ds|${BBOX_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock":
         "the agent's shell runs `./bbox run` — compose, i.e. the engine — from inside the container. "
         "It is the deliberate door described in the office's own operating model: `exec` on a "
         "machine is `POST /api/computers/<id>/exec`, and this container is that door's own tool.",
+    "platform-base/follow-runner/docker-compose.yml|follow-runner|${BBOX_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock":
+        "the follow cycle's schedule on an office whose bbox runs only in containers (r030-205): its one "
+        "job is `docker run` of the cycle container (`POST /containers/create`, a write), which then runs "
+        "`./bbox run` — bina-ds's own door, for the same named call. The cycle runs in a container of its "
+        "own so the `bbox run` it causes cannot kill it (runner.sh). Off by default (platform.state.default.yaml).",
     "apps/openhands/docker-compose.yml|openhands|/var/run/docker.sock:/var/run/docker.sock":
         "a coding agent that launches its own runtime containers (docker-outside-of-docker) — "
         "already declared as such by G32's SOCK_ALLOWED_APPS for the same reason. Disabled gallery "
@@ -394,7 +405,13 @@ def _split_publish(entry: object) -> tuple[str | None, str | None, bool]:
     if len(parts) == 2:                                          # "8080:80" — 0.0.0.0:8080
         return None, parts[0], bool(parts[0])
     if len(parts) == 3:                                          # "ip:8080:80"
-        return (parts[0] or None), parts[1], bool(parts[1])
+        # THE ADDRESS IS WHAT R1 IS ABOUT, and an EMPTY published port is not an unknown interface:
+        # `127.0.0.1::51443` (from `${DGO_CARRY_PUBLISH_PORT:-}`) makes Docker pick a free ephemeral
+        # port ON THE ADDRESS BESIDE IT — the form exists so a taken port cannot stop `dgo-net` from
+        # coming up. Reading the missing port as "unreadable host side" reported a loopback publish
+        # as an exposure; the host side is unreadable only when the ADDRESS is (`${VAR}` with no
+        # default), and that case still fails.
+        return (parts[0] or None), (parts[1] or None), bool(parts[0]) or bool(parts[1])
     return None, None, False                                     # unreadable: say so, do not guess
 
 
@@ -647,7 +664,7 @@ def self_test() -> int:
     # the counted rules, which are not findings and must not become any
     unpinned = _third_party_unpinned({"a/docker-compose.yml": {"services": {
         "u": {"image": "postgres:17"}, "d": {"image": "postgres@sha256:" + "0" * 64},
-        "f": {"image": "deployment-bina-comp-console"}, "o": {"image": OFFICE_REGISTRY + "drive:latest"}}}})
+        "f": {"image": "deployment-hacohen-console"}, "o": {"image": OFFICE_REGISTRY + "drive:latest"}}}})
     if [i for i, _ in unpinned] != ["postgres:17"]:
         bad += 1
         print(f"  [FAIL] the digest count must be 1 (postgres:17), got {unpinned}")

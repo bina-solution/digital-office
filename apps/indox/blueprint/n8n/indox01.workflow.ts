@@ -37,13 +37,13 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 @workflow({
     /*__n8n__*/ description: null,
     /*__n8n__*/ isArchived: false,
-    /*__n8n__*/ connections: {"Tick":{"main":[[{"node":"Load Plan","type":"main","index":0}]]},"Load Plan":{"main":[[{"node":"Decide Due","type":"main","index":0}]]},"Decide Due":{"main":[[{"node":"Mark Dispatched","type":"main","index":0}]]},"Mark Dispatched":{"main":[[{"node":"Route Job","type":"main","index":0}]]},"Route Job":{"main":[[{"node":"Call Drain","type":"main","index":0}],[{"node":"Call Sync","type":"main","index":0}],[{"node":"Call Reaper","type":"main","index":0}],[{"node":"Call Health","type":"main","index":0}]]}},
+    /*__n8n__*/ connections: {"Tick":{"main":[[{"node":"Load Plan","type":"main","index":0}]]},"Load Plan":{"main":[[{"node":"Decide Due","type":"main","index":0}]]},"Decide Due":{"main":[[{"node":"Mark Dispatched","type":"main","index":0}]]},"Mark Dispatched":{"main":[[{"node":"Route Job","type":"main","index":0}]]},"Route Job":{"main":[[{"node":"Call Drain","type":"main","index":0}],[{"node":"Call Sync","type":"main","index":0}],[{"node":"Call Reaper","type":"main","index":0}],[{"node":"Call Health","type":"main","index":0}]]},"Call Drain":{"main":[[{"node":"Verify Dispatch","type":"main","index":0}]]},"Call Sync":{"main":[[{"node":"Verify Dispatch","type":"main","index":0}]]},"Call Reaper":{"main":[[{"node":"Verify Dispatch","type":"main","index":0}]]},"Call Health":{"main":[[{"node":"Verify Dispatch","type":"main","index":0}]]}},
     /*__n8n__*/ tags: [{"updatedAt":"2026-08-16T14:20:49.737Z","createdAt":"2026-08-16T14:20:49.737Z","id":"93ff3a3f-6b78-5d0a-a4de-2948ea161953","name":"app:indox"}],
     /*__n8n__*/ versionMetadata: {"name":null,"description":null},
     /*__n8n__*/ meta: null,
     /*__n8n__*/ pinData: {},
     /*__n8n__*/ staticData: {"node:Tick":{"recurrenceRules":[]}},
-    /*__n8n__*/ shared: [{"updatedAt":"2026-08-27T22:17:55.176Z","createdAt":"2026-08-27T22:17:55.176Z","role":"workflow:owner","workflowId":"indox01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <shlomo@local.dev>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
+    /*__n8n__*/ shared: [{"updatedAt":"2026-08-27T22:17:55.176Z","createdAt":"2026-08-27T22:17:55.176Z","role":"workflow:owner","workflowId":"indox01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
     id: 'indox01',
     name: 'INDOX app scheduler (all automation, all instances)',
     active: true,
@@ -96,8 +96,8 @@ export class IndoxAppSchedulerAllAutomationAllInstancesWorkflow {
   -- Every scheduler setting in one prefix read, so adding a job's cadence needs no SQL change.
   -- [global settings 2026-08-28] public.app_settings, NOT public.settings. This scheduler is the
   -- single entry point for EVERY instance, so its switches are global by definition. public.settings
-  -- is a compatibility view onto ONE instance (indox_bina_comp), so reading indox.auto.* from there
-  -- meant bina-comp's rows silently gated the whole estate — and it breaks outright when that view is
+  -- is a compatibility view onto ONE instance (indox_hacohen), so reading indox.auto.* from there
+  -- meant hacohen's rows silently gated the whole estate — and it breaks outright when that view is
   -- dropped at the cutover. app_settings sits beside the other two global tables this same query
   -- already reads, public.indox_instances and public.app_schedule_state; none is instance data.
   SELECT key, value FROM public.app_settings WHERE app = 'indox' AND key LIKE 'indox.auto.%'
@@ -341,6 +341,7 @@ return out;`,
         version: 1.2,
         position: [1120, -176],
         onError: 'continueRegularOutput',
+        alwaysOutputData: true,
     })
     CallDrain = {
         workflowId: {
@@ -369,6 +370,7 @@ return out;`,
         version: 1.2,
         position: [1120, 16],
         onError: 'continueRegularOutput',
+        alwaysOutputData: true,
     })
     CallSync = {
         workflowId: {
@@ -392,6 +394,7 @@ return out;`,
         version: 1.2,
         position: [1120, 208],
         onError: 'continueRegularOutput',
+        alwaysOutputData: true,
     })
     CallReaper = {
         workflowId: {
@@ -415,6 +418,7 @@ return out;`,
         version: 1.2,
         position: [1120, 400],
         onError: 'continueRegularOutput',
+        alwaysOutputData: true,
     })
     CallHealth = {
         workflowId: {
@@ -429,6 +433,38 @@ return out;`,
         options: {
             waitForSubWorkflow: false,
         },
+    };
+
+    @node({
+        id: 'ix01-verify-dispatch',
+        name: 'Verify Dispatch',
+        /*__n8n__*/ notes: "The ONE reader of a failed dispatch. Each Call node continues on error so one job cannot silence the tick, and each is terminal — so a job whose sub-workflow was never started was reported NOWHERE: 'Mark Dispatched' had already stamped its last_run_at and the tick looked green. That is the worst of the two shapes, because the stamp then suppresses the retry for the job's whole cadence (up to 120 minutes). Read it here. The throw is DELAYED to the invocation that arrives once every DUE Call node has been attempted: this node sits downstream of all four, so it runs once per dispatched branch, and throwing on the first would abort the dispatch of the jobs after it — jobs whose rows are stamped as run. `pending` is that check; the failure is stamped into the run's metadata on every invocation, and thrown on the last one.",
+        type: 'n8n-nodes-base.code',
+        version: 2,
+        position: [1344, 176],
+    })
+    VerifyDispatch = {
+        jsCode: `// The job -> Call node map mirrors 'Route Job' one-for-one (its output 0 is a startsWith on
+// 'drain', so drain_full shares it). Both lists change together; an unknown job matches nothing
+// and therefore never blocks the throw.
+const CALLS = [['Call Drain','drain'],['Call Sync','sync'],['Call Reaper','ledger_reaper'],['Call Health','health']];
+const jobs = (() => { try { return $('Route Job').all().map(i => String((i.json || {}).job || '')); } catch (e) { return []; } })();
+const due = (tag) => tag === 'drain' ? jobs.some(j => j.startsWith('drain')) : jobs.includes(tag);
+const ran = (name) => { try { $('' + name).all(); return true; } catch (e) { return false; } };
+const pending = CALLS.filter(([n, tag]) => due(tag) && !ran(n)).map(([n]) => n);
+const failed = $input.all().map(i => (i && i.json) || {})
+  .filter(j => j.error || j.errorMessage)
+  .map(j => String(j.error || j.errorMessage).slice(0, 200));
+try {
+  $execution.customData.set('dispatch_due', jobs.join(','));
+  $execution.customData.set('dispatch_pending', pending.join(','));
+  $execution.customData.set('dispatch_failed', String(failed.length));
+  if (failed.length) $execution.customData.set('dispatch_errors', failed.join(' | ').slice(0, 500));
+} catch (e) {}
+if (failed.length && !pending.length) {
+  throw new Error('dispatch failed for ' + failed.length + ' job(s) — the worker never started: ' + failed.join(' | '));
+}
+return [{ json: { dispatch_pending: pending.length, dispatch_failed: failed.length } }];`,
     };
 
     @node({
@@ -480,5 +516,9 @@ RETURNING job, instance, instance AS "__instance", last_run_at`,
         this.RouteJob.out(1).to(this.CallSync.in(0));
         this.RouteJob.out(2).to(this.CallReaper.in(0));
         this.RouteJob.out(3).to(this.CallHealth.in(0));
+        this.CallDrain.out(0).to(this.VerifyDispatch.in(0));
+        this.CallSync.out(0).to(this.VerifyDispatch.in(0));
+        this.CallReaper.out(0).to(this.VerifyDispatch.in(0));
+        this.CallHealth.out(0).to(this.VerifyDispatch.in(0));
     }
 }

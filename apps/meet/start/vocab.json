@@ -1,0 +1,79 @@
+{
+  "about": "The office's own words, spelt the office's way in the machine's text (meet-start fix_terms; AUD-C5-002110). Each term: what to write (say) and the forms the office's recognisers were measured writing for it (heard). A Hebrew prefix glued on stays and takes a hyphen. Edit this file to add a term; meet-start reads it again within 30 s, no restart.",
+  "terms": [
+    {
+      "say": "DGO fee",
+      "heard": [
+        "DGOP",
+        "DGO P",
+        "DGO-P",
+        "DGO פי",
+        "די ג'ופי",
+        "דיג'ופי",
+        "דיג'ו פי",
+        "די ג'ו פי",
+        "דיג'י אופי",
+        "די ג'י אופי",
+        "דיג'י או פי",
+        "די ג'י או פי",
+        "די ג'י או-פי",
+        "דיג'יאופי",
+        "די ג'י או פיי",
+        "דיג'י או פיי",
+        "DGOF",
+        "דג'י אופי",
+        "דג'ו פי"
+      ]
+    },
+    {
+      "say": "Our share",
+      "heard": [
+        "אאוור שייר",
+        "אוור שייר",
+        "אאור שייר",
+        "אאוורשייר",
+        "אוורשייר",
+        "וורשייר",
+        "אוואר שייר"
+      ]
+    },
+    {
+      "say": "Stripe",
+      "heard": [
+        "סטרייפ",
+        "סטרייפּ"
+      ]
+    },
+    {
+      "say": "Plane",
+      "heard": [
+        "פליין"
+      ]
+    },
+    {
+      "say": "mesh screen",
+      "heard": [
+        "מש סקרין",
+        "מש-סקרין"
+      ]
+    },
+    {
+      "say": "Zelle",
+      "heard": [
+        "Zelt",
+        "Zel"
+      ]
+    },
+    {
+      "say": "chimney cap",
+      "heard": [
+        "Shimny Kapp",
+        "Shimny Cap"
+      ]
+    }
+  ],
+  "measured": "call 5 (fpg105, 2026-10-28): the server's live captions 0 -> 13 «DGO fee» and 8 «Our share»; the ivrit pass 16 lines and the whisper pass 15 lines put right (DGO fee, Our share, Stripe, Plane, mesh screen); no other word touched. Zelle (said 12 times) is not here yet: its misheard forms were not measured.",
+  "prompt": "DGO fee, Our share, Zelle, Stripe, Plane, chimney cap, mesh screen, spark arrestor, chase cover.",
+  "prompt_about": "Given to the live captions' recogniser as the text before the first words (Whisper's initial prompt; meet-start sends it with every 30-s caption, FPG-471). Only the office's English terms, as a list: a Hebrew sentence as the prompt once made the model drop the first 8 s of a piece of call 5 (measured 2026-10-29). Empty = no prompt.",
+  "measured_r6": "2026-10-29 (lane R6-MEET, FPG-471): the live captions of a synthetic call wrote «the DGOF is paid with the zel» — DGOF and Zel added (not «DGO F»: it would turn a spelled «DGO F-E-E» into «DGO fee-E-E»); call 5's pieces through ivrit wrote «די ג'ו פי», «דג'י אופי», «דג'ו פי» — added. Zelle's Hebrew form «זל» is NOT a rule: it is inside «מזל» (luck), which a prefix rule would turn into «מ-Zelle»."
+}

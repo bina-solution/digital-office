@@ -488,7 +488,7 @@ def _settings_queries() -> dict:
     # [multi-instance 2026-08-28] The SCHEMA follows the request's instance too, not just the
     # `instance` filter column. Those are different things and both are needed: the column separates
     # components ('incoming-documents-main'), the schema separates TENANTS. Hardcoding "public" here
-    # meant every tenant read bina-comp's settings through the compatibility view — and it stops
+    # meant every tenant read hacohen's settings through the compatibility view — and it stops
     # resolving at all once that view is dropped.
     from .api import _tenant, _request_schema
     rows = transport.select(schema=_request_schema(), table="settings", select=["key", "value"],
@@ -530,7 +530,7 @@ def _resolved_queries() -> dict:
     try:
         # [multi-instance 2026-08-28] extraction_queries is a DERIVED view over that tenant's
         # settings and companies, so it exists once per tenant schema and must be read from the
-        # request's own. bina-comp's q_v3_company binds to 186,878 bytes and levi's to 522 — reading
+        # request's own. hacohen's q_v3_company binds to 186,878 bytes and levi's to 522 — reading
         # the wrong schema does not fail, it silently previews another client's company registry.
         rows = HttpxSupabaseTransport().select(
             schema=_request_schema(), table="extraction_queries",
@@ -1419,7 +1419,7 @@ def register_extraction(bp: Blueprint) -> None:
 
         # [multi-instance 2026-08-28] A WRITE, and the last hardcoded `public` on this path. It
         # mattered more than the reads: `public.settings` is an auto-updatable VIEW over ONE tenant,
-        # so an operator viewing levi and saving a query wrote the new value into BINA_COMP's settings
+        # so an operator viewing levi and saving a query wrote the new value into HACOHEN's settings
         # — silently, with a success response, and visible to the other client on their next
         # extraction. Note the two different `instance`s on this line and keep them apart: the COLUMN
         # is the component ('incoming-documents-main'), the SCHEMA is the tenant.

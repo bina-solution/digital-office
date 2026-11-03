@@ -128,7 +128,7 @@ git config --global "url.$base/git/gh/$acc/.insteadOf" "https://github.com/"
 
 ## כתובות
 
-- מתוך הרשת (`traefik-network`): `http://<service>:<port>` — למשל `http://console:8080`, `http://connections:8990`, `http://computers:8977`.
+- מתוך הרשת (`traefik-network`): `http://<service>:<port>` — למשל `http://console:8000`, `http://connections:8990`, `http://computers:8977`.
 - בדפדפן של הבעלים: `http://<app>.localhost:8080`; הקונסול: `http://console.localhost:8080`. במחשבי Mac הקצה יושב על 8080 (לא 80).
 - זהות: כל בקשה שעוברת את הקצה נושאת `X-authentik-username`; ב-SSO כבוי הקצה חותם `akadmin`.
 

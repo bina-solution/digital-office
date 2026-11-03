@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+#: is a meeting running now? exit 0 with one line when it is (the office is not to be recreated under it), 1 when not
+# busy — asked by scripts/follow.sh before it takes dgo-stable into this office (r030-201): the `bbox run` that follows a
+# take may recreate the bridge, the recorder or the meeting page, and that ends every call in progress. Measured
+# 2026-11-03 on vps1: a conference was live at the moment the first take there would have run.
+# The bridge's own count, from inside its container — the reading hooks/verify prints. A bridge that cannot be read
+# answers "not busy": a broken bridge must not keep an office from ever taking the fix for it.
+set -uo pipefail
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh" >/dev/null 2>&1   # DN: DEPLOYMENT_NAME as compose resolves it (container_name meet-jvb-<DN>)
+n="$(docker exec "meet-jvb-${DN}" curl -fsS --max-time 10 http://localhost:8080/colibri/stats 2>/dev/null \
+     | python3 -c 'import json, sys; print(int(json.load(sys.stdin).get("conferences") or 0))' 2>/dev/null)"
+[ "${n:-0}" -gt 0 ] 2>/dev/null || exit 1
+echo "${n} meeting(s) in progress on the video bridge"

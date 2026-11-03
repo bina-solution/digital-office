@@ -82,7 +82,7 @@ claim no worker holds — exactly the stuck state the `שחרר` move exists to 
 ├───────────────────────────────────────────────────────────────────────────────┤
 │  [+ מקור סנכרון חדש]                                                          │
 │                                                                               │
-│  ╭ ✉ gmail-invoices    Gmail · person134@example.com   INVOICE   [●] ⋯ ╮        │
+│  ╭ ✉ gmail-invoices    Gmail · person112@example.com   INVOICE   [●] ⋯ ╮        │
 │  │ ▓▓▓▓▓▓▓▓▓▓▓▓░░░░  2 לסנכרון · 1 בתהליך · 184 סונכרן · 1 נכשל       │        │
 │  │ תוויות  INDOX/לסנכרון → INDOX/סונכרן  · נכשל: INDOX/נכשל           │        │
 │  │ כל 5 דק׳ · take 20 · הרצה אחרונה לפני 3 דק׳                        │        │

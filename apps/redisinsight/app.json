@@ -26,6 +26,10 @@
     }
   ],
   "compose": "docker-compose.yml",
+  "agent": {
+    "context": "AGENT.md",
+    "order": 98
+  },
   "routing": [
     {
       "host": "redisinsight",

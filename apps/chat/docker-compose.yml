@@ -21,7 +21,10 @@ services:
           memory: 128M
     environment:
     - AUTH_USERNAME=${CHAT_AUTH_USER:-admin}
-    - AUTH_PASSWORD=${CHAT_AUTH_PASS:-1234}
+    - AUTH_PASSWORD=${CHAT_AUTH_PASS:-CHANGE_ME}
+    # the session cookies' signing key, minted per office by hooks/prepare (DGO-1221); never handed in, chat
+    # fell back to the public default in src/config.js and anyone could forge a session
+    - SESSION_SECRET=${CHAT_SESSION_SECRET:-}
     # ── the settings/company webhook credential ────────────────────────────────────────────────
     # ONE secret, two names. n8n's 'Settings Auth'(m44S) credential is provisioned from
     # SETTINGS_AUTH_USER/PASS (apps/n8n/blueprint.yml); this service's code reads
@@ -49,7 +52,7 @@ services:
     - TRUST_EDGE_AUTH=${TRUST_EDGE_AUTH:-false}
     # glitchtip-push provisions one project per APP ID and derives the env name from it
     # (init-projects.sh: <PROJECT_NAME>_SENTRY_DSN). The id became `chat`, so the project is `chat`
-    # and the DSN arrives as CHAT_SENTRY_DSN. Reading the old WHATSAPP_BINA_COMP_SENTRY_DSN — now
+    # and the DSN arrives as CHAT_SENTRY_DSN. Reading the old WHATSAPP_HACOHANIM_SENTRY_DSN — now
     # orphaned and empty — silently disabled error reporting for this service: Sentry initialises
     # with an empty DSN, reports nothing, and logs nothing about why.
     - SENTRY_DSN=${CHAT_SENTRY_DSN:-}
@@ -131,7 +134,7 @@ services:
     - traefik.http.routers.chat-https.entrypoints=websecure
     - traefik.http.routers.chat-https.tls=true
     - traefik.http.routers.chat-https.service=chat
-    - traefik.http.routers.chat-https.tls.certresolver=myresolver
+    - traefik.http.routers.chat-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
     - traefik.http.routers.chat-https.middlewares=authentik@file
     - traefik.http.services.chat.loadbalancer.server.port=${CHAT_APP_PORT:-3000}
     depends_on:

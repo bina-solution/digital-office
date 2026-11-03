@@ -66,7 +66,8 @@ dcx "$@" || rc=$?
 #     replaces it, which is exactly how `dc up -d --build bina-ds` can be rolled back at all).
 #     Keeping a `:previous` tag for EVERY service was considered and rejected: it doubles the image
 #     cost of the whole estate to serve a rollback almost nobody performs, while every app's real
-#     source of truth is the checkout — `git checkout <commit>` and a rebuild is the rollback.
+#     source of truth is the checkout — `git checkout <commit>` and a rebuild is the rollback, said on
+#     purpose: `BBOX_ALLOW_ROLLBACK=1` (dcx refuses a build that drops what this office runs, G90).
 #   * `builder prune -f` — the build cache, which is the other half of the same leak. Weekly rather
 #     than per-build: a cache that is thrown away after every build stops being a cache (the second
 #     build of the day pays full price again). The stamp file is the schedule, so no daemon, no

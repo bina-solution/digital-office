@@ -40,7 +40,7 @@ GlitchTip is an open-source error tracking platform, similar to Sentry. It helps
 
 ## URLs
 
-- **Production**: https://glitchtip.bina-comp.bina-solutions.co.il
+- **Production**: https://glitchtip.hacohen.bina-solutions.co.il
 - **Local Development**: http://glitchtip.localhost
 
 ## Environment Variables
@@ -49,8 +49,8 @@ Add to `.env`:
 
 ```bash
 # GlitchTip configuration
-GLITCHTIP_BASE_URL=glitchtip.bina-comp.bina-solutions.co.il
-GLITCHTIP_BASE_URL_2=glitchtip2.bina-comp.bina-solutions.co.il
+GLITCHTIP_BASE_URL=glitchtip.hacohen.bina-solutions.co.il
+GLITCHTIP_BASE_URL_2=glitchtip2.hacohen.bina-solutions.co.il
 
 # Generate with: openssl rand -hex 32
 GLITCHTIP_SECRET_KEY=your-random-secret-key-here
@@ -61,7 +61,7 @@ GLITCHTIP_DB_PASSWORD=your-secure-database-password
 # Email configuration (SMTP format)
 # Example: smtp://user:password@smtp.example.com:587
 GLITCHTIP_EMAIL_URL=consolemail://
-GLITCHTIP_FROM_EMAIL=person3@example.com
+GLITCHTIP_FROM_EMAIL=person4@example.com
 
 # Optional settings
 GLITCHTIP_MAX_EVENT_LIFE_DAYS=90
@@ -87,7 +87,7 @@ GLITCHTIP_ENABLE_ORG_CREATION=false
    docker compose up -d glitchtip glitchtip-worker
    ```
 
-4. Access GlitchTip at https://glitchtip.bina-comp.bina-solutions.co.il
+4. Access GlitchTip at https://glitchtip.hacohen.bina-solutions.co.il
 
 5. Create your first user by clicking "Register"
 
@@ -107,8 +107,8 @@ For fully automated deployments, use the initialization script to create organiz
 ```bash
 # Set required environment variables
 export GLITCHTIP_ADMIN_PASSWORD="your-admin-password"
-export GLITCHTIP_ADMIN_EMAIL="person192@example.com"
-export GLITCHTIP_ORG_NAME="Bina-comp"
+export GLITCHTIP_ADMIN_EMAIL="person173@example.com"
+export GLITCHTIP_ORG_NAME="Hacohen"
 export GLITCHTIP_TEAM_SLUG="developers"
 
 # Run the initialization script
@@ -152,7 +152,7 @@ GlitchTip provides a full REST API for programmatic management:
 import * as Sentry from "@sentry/browser";
 
 Sentry.init({
-  dsn: "https://person193@example.com/1",
+  dsn: "https://YOUR_KEY@glitchtip.hacohen.bina-solutions.co.il/1",
   environment: "production"
 });
 ```
@@ -163,7 +163,7 @@ Sentry.init({
 import sentry_sdk
 
 sentry_sdk.init(
-    dsn="https://person193@example.com/1",
+    dsn="https://YOUR_KEY@glitchtip.hacohen.bina-solutions.co.il/1",
     environment="production"
 )
 ```
@@ -174,7 +174,7 @@ sentry_sdk.init(
 const Sentry = require("@sentry/node");
 
 Sentry.init({
-  dsn: "https://person193@example.com/1",
+  dsn: "https://YOUR_KEY@glitchtip.hacohen.bina-solutions.co.il/1",
   environment: "production"
 });
 ```
@@ -231,7 +231,7 @@ Migrations run automatically on container start.
 docker compose ps | grep glitchtip
 
 # Check health endpoint
-curl -s https://glitchtip.bina-comp.bina-solutions.co.il/_health/
+curl -s https://glitchtip.hacohen.bina-solutions.co.il/_health/
 ```
 
 ### Common Issues

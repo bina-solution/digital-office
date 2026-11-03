@@ -45,6 +45,7 @@ import socket
 import subprocess
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -350,6 +351,11 @@ def vault_token(instances: list, office: str, timeout: float = DEFAULT_TIMEOUT) 
             secret = (json.loads(body) or {}).get("secret") or {}
         except ValueError:
             secret = {}
+        # An agent credential names the office that gave it. Office and app ids are joined with dashes,
+        # so `hp` + `laptop-bina-ds` names hp-laptop's row: a row of another office is never its token.
+        if name.startswith("dgo_link-serve-") and secret.get("office") and str(secret["office"]) != office:
+            tried.append(f"{name}: holds the credential of {secret['office']}")
+            continue
         token = _pick_token(secret)
         if token:
             return token, name
@@ -598,7 +604,10 @@ def cmd_call(args) -> int:
     resolved = json.loads(os.environ.get(ENV_RESOLVED) or "{}") or None
     if not resolved:
         resolved = resolve(args.office, args.alias, args.api)
-    url = resolved["url"] + path
+    # A path is sent as written, except that what HTTP cannot carry raw is percent-encoded: a Hebrew word
+    # in a query (`/api/messages?q=<a Hebrew word>`) ended the call in a UnicodeEncodeError. `%` stays, so
+    # a path that is already encoded is not encoded twice; `+`, `&`, `=` and `?` keep their meaning.
+    url = resolved["url"] + urllib.parse.quote(path, safe="/?&=+:@%,;!$'()*~-._")
     if not _in_network() and not _resolves(_host_of(resolved["url"])):
         # The alias is a docker network alias: on the office's own machine it means nothing, and the
         # request has to be made from a container that is attached to the office network.
@@ -620,8 +629,14 @@ def cmd_call(args) -> int:
         if not instances:
             instances = _catalog_instances(resolved, args.timeout)
         if instances:
-            token, held_as = vault_token(instances, resolved["office"], args.timeout)
-            headers.setdefault("Authorization", f"Bearer {token}")
+            try:
+                token, held_as = vault_token(instances, resolved["office"], args.timeout)
+                headers.setdefault("Authorization", f"Bearer {token}")
+            except RemoteError as e:
+                # …as said above: the miss is reported, and the call goes out without one. It used to
+                # end the call here, before anything was sent (the second reader of DGO-1002).
+                print(f"  {e.message} — the call goes out without a credential", file=sys.stderr)
+                instances = []
     method = (args.method or ("POST" if data is not None else "GET")).upper()
     status, hdrs, body = http(method, url, data=data, headers=headers, timeout=args.timeout)
     text = body.decode("utf-8", "replace")
@@ -676,7 +691,9 @@ def _argv_for(args) -> list:
     if args.method:
         out += ["-X", args.method]
     if args.data is not None:
-        out += ["-d", args.data]
+        # the body itself, literally: the far side must not read a leading `@` as a file again, and
+        # the `=` form keeps a body that starts with `--` an argument rather than an option
+        out.append(f"--data-raw={args.data}")
     if args.api:
         out += ["--api"]
     for h in (args.header or []):
@@ -699,7 +716,9 @@ def build_parser() -> argparse.ArgumentParser:
                                              "apps, and a local app may share the alias")
     ap.add_argument("path", nargs="?", help="a PATH on that app, e.g. /v1/sessions or /healthz")
     ap.add_argument("-X", "--method", help="HTTP method (default GET, or POST with -d)")
-    ap.add_argument("-d", "--data", help="request body (implies POST unless -X says otherwise)")
+    ap.add_argument("-d", "--data", help="request body (implies POST unless -X says otherwise); "
+                                         "@FILE reads it from a file and @- from stdin, as curl does")
+    ap.add_argument("--data-raw", help="request body taken literally (a leading @ is not a file)")
     ap.add_argument("-H", "--header", action="append", metavar="K: V", help="extra header (repeatable)")
     ap.add_argument("--api", action="store_true",
                     help="call the app's API door (agent_api_port) instead of its UI door")
@@ -707,6 +726,20 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT, metavar="SEC")
     ap.add_argument("--json", action="store_true", help="machine-readable output")
     return ap
+
+
+def _read_body(data: str) -> str:
+    """`-d @FILE` / `-d @-`: the body read from a file or from stdin, the way curl reads one. A body
+    written by a file tool never passes through a shell's quoting: the office agent on a small local
+    model put "office's" inside a single-quoted JSON argument, bash refused the line, and no mail was
+    sent (DGO-825, 2026-10-21 03:48 UTC)."""
+    src = data[1:]
+    try:
+        return sys.stdin.read() if src == "-" else open(src, encoding="utf-8").read()
+    except OSError as e:
+        raise RemoteError(f"-d {data}: {e.strerror or e}", EXIT_USAGE)
+    except ValueError as e:                       # not UTF-8
+        raise RemoteError(f"-d {data}: {e}", EXIT_USAGE)
 
 
 def main(argv: list = None) -> int:
@@ -717,6 +750,14 @@ def main(argv: list = None) -> int:
     args.office = (args.office or "").strip().lower()
     args.alias = (args.alias or "").strip().lower()
     try:
+        if args.data_raw is not None:
+            args.data = args.data_raw
+        elif args.data is not None and args.data.startswith("@"):
+            args.data = _read_body(args.data)
+            # a command handed to a container on the office network carries the body, not a path
+            # that only exists here
+            if args.office and args.alias and args.path:
+                _ARGV = _argv_for(args)
         if not args.office:
             return cmd_offices(args)
         if not args.alias:

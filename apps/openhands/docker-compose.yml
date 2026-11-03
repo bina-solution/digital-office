@@ -16,7 +16,7 @@ services:
     - LITELLM_PROXY_API_KEY=${DEEPSEEK_API_KEY}
     - WORKSPACE_BASE=/opt/workspace_base
     - WORKSPACE_MOUNT_PATH=/opt/workspace_base
-    - SANDBOX_VOLUMES=/root/deployment-bina-comp:/workspace/project:rw,/root/deployment-bina-comp:/root/deployment-bina-comp:rw
+    - SANDBOX_VOLUMES=/root/deployment-hacohen:/workspace/project:rw,/root/deployment-hacohen:/root/deployment-hacohen:rw
     - SANDBOX_USER_ID=0
     - SANDBOX_LOCAL_RUNTIME_URL=http://host.docker.internal
     - AGENT_SERVER_USE_HOST_NETWORK=false
@@ -31,7 +31,7 @@ services:
     - INIT_GIT_IN_EMPTY_WORKSPACE=0
     - FILE_STORE=local
     - FILE_STORE_PATH=/.openhands-state
-    - JWT_SECRET=${OPENHANDS_JWT_SECRET:-openhands-dev-secret-change-me}
+    - JWT_SECRET=${OPENHANDS_JWT_SECRET:-CHANGE_ME}
     - MAX_CONCURRENT_CONVERSATIONS=5
     - MAX_BUDGET_PER_TASK=5.0
     - MAX_ITERATIONS=500
@@ -40,11 +40,16 @@ services:
     - MCP_SHTTP_SERVERS=["http://host.docker.internal:8931/mcp/shttp","http://host.docker.internal:8932/mcp/shttp"]
     volumes:
     - /var/run/docker.sock:/var/run/docker.sock
-    - /root/deployment-bina-comp:/opt/workspace_base:rw
+    - /root/deployment-hacohen:/opt/workspace_base:rw
     - openhands_state:/.openhands-state
     - openhands_config:/.openhands
     ports:
-    - 3000:3000
+    # LOOPBACK ONLY (DGO-409). This service publishes its UI and, one line below, the SAME
+    # container port on 127.0.0.1 — which is what makes the 0.0.0.0 form a decision rather than
+    # an oversight. The office's own security session (ai/context/dgo-security-session.md) is
+    # explicit: «If you must publish a port for debugging, bind it to 127.0.0.1:port only», and
+    # the front door is the edge, which already routes ${OPENHANDS_BASE_URL} here.
+    - 127.0.0.1:3000:3000
     - 127.0.0.1:3001:3000
     extra_hosts:
     - host.docker.internal:host-gateway
@@ -72,7 +77,7 @@ services:
     - OPENAI_API_KEY=${OPENAI_API_KEY:-}
     - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
     - LLM_GATEWAY_URL=${LLM_GATEWAY_URL:-http://llm-gateway:4000}
-    - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:-sk-REDACTED-key-4}
+    - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:-CHANGE_ME}
     volumes:
     - ./generate-settings.sh:/generate-settings.sh:ro
     - openhands_state:/.openhands-state
@@ -103,7 +108,7 @@ services:
     - GEMINI_API_KEY=${GEMINI_API_KEY:-${GOOGLE_API_KEY:-}}
     - OPENAI_API_KEY=${OPENAI_API_KEY:-}
     - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-    - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:-sk-REDACTED-key-4}
+    - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:-CHANGE_ME}
     volumes:
     - ./generate-litellm-config.py:/generate-litellm-config.py:ro
     - llm_gateway_config:/app
@@ -131,7 +136,7 @@ services:
       llm-gateway-init:
         condition: service_completed_successfully
     environment:
-    - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:-sk-REDACTED-key-4}
+    - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:-CHANGE_ME}
     - LITELLM_PORT=4000
     - LITELLM_NUM_WORKERS=2
     volumes:
@@ -160,7 +165,7 @@ services:
     build:
       context: ./agent-proxy
       dockerfile: Dockerfile
-    image: deployment-bina-comp-agent-proxy:latest
+    image: deployment-hacohen-agent-proxy:latest
     container_name: agent-proxy-${DEPLOYMENT_NAME:-bina-deployment}
     restart: unless-stopped
     environment:
@@ -184,11 +189,16 @@ services:
     build:
       context: ./docker-proxy
       dockerfile: Dockerfile
-    image: deployment-bina-comp-docker-proxy:latest
+    image: deployment-hacohen-docker-proxy:latest
     container_name: docker-proxy-${DEPLOYMENT_NAME:-bina-deployment}
     restart: unless-stopped
     ports:
-    - 2375:2375
+    # LOOPBACK ONLY (DGO-409). 2375 is the Docker API itself; published on every interface it
+    # is the engine that runs this office, with no TLS in front of it. Nothing outside this
+    # host needs to speak to a sandbox's docker API: the proxy exists for the sandbox
+    # containers on this engine, which reach it by name. A debugger's curl still works from
+    # the host: `curl localhost:2375/_ping`.
+    - 127.0.0.1:2375:2375
     volumes:
     - /var/run/docker.sock:/var/run/docker.sock
     networks:
@@ -207,7 +217,7 @@ services:
     build:
       context: ./dispatcher
       dockerfile: Dockerfile
-    image: deployment-bina-comp-dispatcher:latest
+    image: deployment-hacohen-dispatcher:latest
     container_name: dispatcher-${DEPLOYMENT_NAME:-bina-deployment}
     restart: unless-stopped
     depends_on:
@@ -216,7 +226,7 @@ services:
     environment:
     - OPENHANDS_URL=http://openhands-${DEPLOYMENT_NAME:-bina-deployment}:3000
     - OPENHANDS_PUBLIC_URL=https://${OPENHANDS_BASE_URL:-openhands.${DEPLOYMENT_DOMAIN:-localhost}}
-    - DISPATCHER_TOKEN=${DISPATCHER_TOKEN:-dispatcher-dev-token}
+    - DISPATCHER_TOKEN=${DISPATCHER_TOKEN:-CHANGE_ME}
     - DISPATCHER_MAX_CONCURRENT=3
     - DISPATCHER_TIMEOUT_MS=600000
     - DISPATCHER_PORT=8800
@@ -236,9 +246,9 @@ services:
     volumes:
     - openhands_state:/.openhands-state
     - /var/run/docker.sock:/var/run/docker.sock:ro
-    - /root/deployment-bina-comp/ai/obsidian:/root/deployment-bina-comp/ai/obsidian:rw
-    - /root/deployment-bina-comp/.github/skills:/root/deployment-bina-comp/.github/skills:ro
-    - /root/deployment-bina-comp/apps/openhands/downloads:/root/deployment-bina-comp/apps/openhands/downloads:rw
+    - /root/deployment-hacohen/ai/obsidian:/root/deployment-hacohen/ai/obsidian:rw
+    - /root/deployment-hacohen/.github/skills:/root/deployment-hacohen/.github/skills:ro
+    - /root/deployment-hacohen/apps/openhands/downloads:/root/deployment-hacohen/apps/openhands/downloads:rw
     networks:
     - traefik-network
     deploy:

@@ -59,7 +59,7 @@ services:
       - traefik.http.routers.notifications-https.rule=Host(`${NOTIFICATIONS_BASE_URL:-alerts-svc.${DEPLOYMENT_DOMAIN:-localhost}}`)
       - traefik.http.routers.notifications-https.entrypoints=websecure
       - traefik.http.routers.notifications-https.tls=true
-      - traefik.http.routers.notifications-https.tls.certresolver=myresolver
+      - traefik.http.routers.notifications-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
       - traefik.http.routers.notifications-https.middlewares=authentik@file
       - traefik.http.routers.notifications-https.service=notifications
       - traefik.http.services.notifications.loadbalancer.server.port=8977

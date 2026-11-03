@@ -23,4 +23,8 @@ COPY *.py ./
 COPY static/ ./static/
 
 EXPOSE 8977
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8977", "--proxy-headers", "--forwarded-allow-ips=*"]
+# --no-access-log: the share door's token is a PATH SEGMENT (`/share/<token>`), and uvicorn's access
+# log prints the raw path — so the log of this container carried a bearer token to the host's sshd,
+# which breaks the one promise the door makes ("shown once"). The app logs what it needs itself
+# (`share <id>: open/closed`), by id and never by token.
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8977", "--proxy-headers", "--forwarded-allow-ips=*", "--no-access-log"]

@@ -111,7 +111,7 @@
         "operation": "appendOrUpdate",
         "documentId": {
           "__rl": true,
-          "value": "1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo",
+          "value": "1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0049",
           "mode": "list",
           "cachedResultName": "AutomationValues"
         },
@@ -120,7 +120,7 @@
           "value": 542119184,
           "mode": "list",
           "cachedResultName": "מסמכים נכנסים",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo/edit#gid=542119184"
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0049/edit#gid=542119184"
         },
         "columns": {
           "mappingMode": "autoMapInputData",
@@ -418,7 +418,7 @@
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "e2knIZpw8YF0QBAB",
-          "name": "Google Sheets person17@example.com"
+          "name": "Google Sheets person17.x@example.com"
         }
       },
       "onError": "continueErrorOutput"
@@ -576,7 +576,7 @@
     },
     {
       "parameters": {
-        "url": "https://n8n.bina-comp.bina-solutions.co.il/webhook/incoming_document",
+        "url": "https://n8n.hacohen.bina-solutions.co.il/webhook/incoming_document",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
@@ -605,7 +605,7 @@
     },
     {
       "parameters": {
-        "url": "https://n8n.bina-comp.bina-solutions.co.il/webhook/incoming_document",
+        "url": "https://n8n.hacohen.bina-solutions.co.il/webhook/incoming_document",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
@@ -705,7 +705,7 @@
       "parameters": {
         "documentId": {
           "__rl": true,
-          "value": "1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo",
+          "value": "1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0049",
           "mode": "id"
         },
         "sheetName": {
@@ -713,7 +713,7 @@
           "value": 542119184,
           "mode": "list",
           "cachedResultName": "מסמכים נכנסים",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo/edit#gid=542119184"
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0049/edit#gid=542119184"
         },
         "filtersUI": {
           "values": [
@@ -742,7 +742,7 @@
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "e2knIZpw8YF0QBAB",
-          "name": "Google Sheets person17@example.com"
+          "name": "Google Sheets person17.x@example.com"
         }
       },
       "onError": "continueErrorOutput"
@@ -1135,33 +1135,7 @@
   },
   "staticData": null,
   "meta": null,
-  "pinData": {
-    "When Executed by Another Workflow": [
-      {
-        "json": {
-          "NAME": "אל גל תעשיות 04.25.pdf",
-          "LINK": "https://drive.google.com/file/d/1F7vBy4O0WblMGsxN6s-keeQ-2360E-XF/view?usp=drivesdk",
-          "TYPE": "BALANCE_SHEET",
-          "COMPANY_DOC_ID": null,
-          "COMPANY_ID": "511623688",
-          "SOURCE_TYPE": "GOOGLE_DRIVE_FOLDER",
-          "SOURCE_ID": "14BiWFxQpfUqxSlv0P4SiJZr8BabBj5ZB",
-          "SOURCE_LINK": null,
-          "SIZE": 86125,
-          "HASH": "5a56d1f80745b2f6c1fec0d88432dc38",
-          "STATUS": null,
-          "REQUIRED_ACTION": null,
-          "FROM_OFFICE": null,
-          "FROM_OFFICE_CHECK": null,
-          "PURCHASE_ID": null,
-          "LINKED_BS": null,
-          "BS_LINE_AMOUNT": null,
-          "BS_LINE_DATE": null,
-          "BS_LINE_NOTE": null
-        }
-      }
-    ]
-  },
+  "pinData": {},
   "versionId": "0b8651f8-5ce9-4bdd-ba39-d6e872c785dd",
   "activeVersionId": "0b8651f8-5ce9-4bdd-ba39-d6e872c785dd",
   "versionCounter": 104,

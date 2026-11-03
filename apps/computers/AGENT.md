@@ -25,13 +25,29 @@ curl -s http://computers:8977/api/computers/<id>/status
 the deliberate door for "this must run on the machine itself"; `ssh` (or the engine socket) from
 inside a container is not.
 
+## The herd: every office's computer (DGO-890), and where each app belongs (DGO-911)
+
+```bash
+curl -s http://computers:8977/api/herd                                     # this office + every linked one
+curl -s http://computers:8977/api/hosts/vps1/machine/api/overview?brief=1   # a computer's resources, via its door
+curl -s http://computers:8977/api/hosts/vps1/security/api/summary?hours=24  # its network, from ITS security app
+./bbox computers herd [--json]   # every office against herd.yaml: MOVE · LEFT OVER · MISSING · ANOTHER DEPLOYMENT
+```
+
+- A read is one GET to a path on `herd.ALLOW`; anything else is a 403 before any network.
+- A computer running security without machine (the Mac) is drawn from `security/api/host/overview`.
+- The one write is a cleanup on THIS computer (`POST /api/hosts/local/machine/cleanup/<id>`).
+- `herd.yaml` is the business's placement: one office per app, the base everywhere
+  (`ai/context/dgo-herd.md`). Change it there, in one commit.
+- `herd` exits 0 when the herd matches, 1 when it does not, 2 when it cannot read.
+
 ## Moving a volume between two machines — `stream`
 
 ```bash
 # a docker volume from one machine to another, RESUMABLE and with live progress.
 # `transfer` is the same door under its older name.
 curl -s -X POST http://computers:8977/api/computers/<src>/stream -H 'content-type: application/json' \
-     -d '{"to":"<dst>","volume":"drive_uploads","dest_volume":"deployment-bina_comp_drive_uploads"}'
+     -d '{"to":"<dst>","volume":"drive_uploads","dest_volume":"deployment-hacohen_drive_uploads"}'
 curl -s http://computers:8977/api/transfers/<job>          # phase, bytes, done_bytes, total, percent, rate, eta
 curl -s -X POST http://computers:8977/api/transfers/<job>/cancel   # pause: the staging file stays
 ```
@@ -51,6 +67,13 @@ How it behaves, and the three things an `ok` means:
   beside the staging file); `restart:true` is the deliberate override.
 - `ok` = the staging file reached the measured total, its bytes matched the source's own `tar`
   byte-for-byte, and it extracted. Fewer than all three is reported as a failure, not as "mostly done".
+
+## Sharing a computer with another office — `shares`
+
+`POST /api/computers/<id>/shares {"to","public_key"}` (the borrower's `GET /api/office-key`) lends a
+machine over HTTPS and returns the `door` (`wss://<host>/share/<token>`, shown ONCE); the borrower
+adds it with `POST /api/computers {"door",…}` and exec/probe/stream then go through it. Revoke:
+`DELETE /api/shares/<sid>` (lists at `GET /api/shares`). No SSO on that one path — never widen it.
 
 ## Traps
 

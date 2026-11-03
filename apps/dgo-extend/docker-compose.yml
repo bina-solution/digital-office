@@ -36,6 +36,9 @@ services:
       # Declared here rather than hand-written into the volume: the id is what every link, tile and
       # vault instance of this office is named from, and it must survive a rebuilt container.
       - DGO_OFFICE_ID=${DGO_OFFICE_ID:-}
+      # THIS office's HERD — the company it belongs to (DGO-1003): published with its catalog, and
+      # what a linked office groups it by. Empty = none said.
+      - DGO_HERD=${DGO_HERD:-}
       # THIS office's own tunnel listen port (net.py:local_listen_port). Empty = the pair's port
       # (51820). It exists because the DIALING side's source port is the one part of the path this
       # office does not control: on 2026-10-04 a home network blackholed every packet of the flow
@@ -50,11 +53,27 @@ services:
       # machine's LAN address by looking, so it is a declaration in `.env`.
       - DGO_WG_ENDPOINT=${DGO_WG_ENDPOINT:-}
       - DGO_WG_PUBLISH_PORT=${DGO_WG_PUBLISH_PORT:-}
+      # ...and WHERE dgo-net publishes it (its default is loopback = nobody), so the app can say when a
+      # pair it listens in is not reachable at all (`app._listen_published`, the verdict's `listen`).
+      - DGO_WG_PUBLISH_BIND=${DGO_WG_PUBLISH_BIND:-}
       # ...and WHY NOT, when it cannot be: the reason `hooks/prepare` measured on the machine
       # (`wsl-nat`, `engine-guest`) and the owner's own "this office only dials" (DGO_WG_AUTO=0).
       # The screen says it with what would change it, instead of "none - this office only dials".
       - DGO_WG_DIAL_ONLY=${DGO_WG_DIAL_ONLY:-}
       - DGO_WG_AUTO=${DGO_WG_AUTO:-}
+      # WHETHER THIS OFFICE'S CARRIER CAN BE REACHED by its peers' carriers (`dgo-carry`, the TCP path
+      # of a `transport: tcp` pair): 1 = it accepts on 51443 and its peers dial it; empty = it dials.
+      # A MacBook says 1 — its engine publishes the port on the Mac's LAN through its door
+      # (packaging/macos/lan-door.py); a Windows office behind its firewall dials (net.carry_plan).
+      - DGO_CARRY_ACCEPT=${DGO_CARRY_ACCEPT:-}
+      # THE HERD'S HUB (carrier/relay.go, DGO-1097). DGO_RELAY: where this office's tcp pairs meet their
+      # peers when their own way stays silent, `wss://link.<the hub's domain>/relay` (empty = never).
+      # DGO_RELAY_FOR, on the hub only: the offices whose pairs its door joins, `id` or `id=<public key>`.
+      - DGO_RELAY=${DGO_RELAY:-}
+      - DGO_RELAY_FOR=${DGO_RELAY_FOR:-}
+      # THE AGENTS THIS OFFICE HANDS ITS TOKEN FOR to a linked office it gives them (DGO-1127): app ids or
+      # aliases, comma-separated, beside what `serve:` names by hand. `*` alone never hands a token over.
+      - DGO_SERVE_AGENTS=${DGO_SERVE_AGENTS:-}
       # WHO a request arriving over a link BECOMES on this office, when the app it reaches declared no
       # mapping of its own: the account `bbox run` creates at this office's edge. A NAME, not a
       # credential. Declared here because the other way to learn it is reading `.env` on the machine
@@ -62,9 +81,26 @@ services:
       - DGO_SSO_USER=${AUTHENTIK_BOOTSTRAP_USER:-}
       - DGO_IDENTITY_DIR=/identity
       - DGO_REGISTRY_DIR=/registry
+      # JOINING BY DECLARATION (join_api.py). On the office that is JOINED: its public link host, the
+      # name the edge routes to the door below (`link.<domain>`); empty = no door, no joins. On the
+      # office that JOINS: DGO_JOIN — an invite (DGOJOIN1:…, joins with nobody looking) or the other
+      # office's door address (asks; a person approves) — pinned by DGO_JOIN_PIN, its fingerprint.
+      - DGO_LINK_HOST=${DGO_LINK_HOST:-}
+      - DGO_JOIN=${DGO_JOIN:-}
+      - DGO_JOIN_PIN=${DGO_JOIN_PIN:-}
+      - DGO_JOIN_DIRECTION=${DGO_JOIN_DIRECTION:-}
+      - DGO_JOIN_REQUESTS=${DGO_JOIN_REQUESTS:-1}
+      # How a joining office reaches the world when its network says so: a CA to trust beside the
+      # usual ones (a cloud sandbox's intercepting proxy — hooks/prepare writes it there and nowhere
+      # else) and, only where containers must name a proxy, the proxy itself.
+      - DGO_EGRESS_CA=/etc/dgo/egress-ca.pem
+      - HTTPS_PROXY=${DGO_EGRESS_PROXY:-}
+      - NO_PROXY=${DGO_EGRESS_NO_PROXY:-localhost,127.0.0.1,dgo-extend,dgo-net,connections,computers,notifications,git,domains}
     volumes:
       # the declarations (one YAML per office) and the run logs — the office's intent, kept
       - dgo_extend_state:/data
+      # the CA above, read-only; an office given none mounts an empty file
+      - ${DGO_EGRESS_CA_FILE:-/dev/null}:/etc/dgo/egress-ca.pem:ro
       # the peer registry: one file per app that runs on a remote office and is shown HERE. The
       # console mounts this same volume at /app/peers.d (declared in app.json contributes.volumes).
       - dgo_extend_peers:/data/peers
@@ -75,6 +111,11 @@ services:
       # the tunnel plan this app RENDERS (net.py) and `dgo-net` applies. Written here, read there:
       # one owner of the plan, one applier, no second opinion about what the link allows.
       - dgo_tunnel:/tunnel
+      # what the carrier (`dgo-carry`) MEASURED, read-only: its own volume, which it alone writes
+      - dgo_carry:/carry:ro
+      # what the DOOR recorded, read-only: one line per request another office made through it
+      # (link-proxy.py's access record, DGO-890), which `GET /api/link/access` serves to the security app
+      - dgo_doorlog:/doorlog:ro
       # THIS OFFICE's OWN compiled registry, read-only (DGO-37). The catalog this office publishes
       # on a link is a PROJECTION of `.generated/registry/office.apps.json`, so there is exactly one
       # list of which apps this office has — the compiler's — and never a second one maintained here.
@@ -146,11 +187,41 @@ services:
     # machine's own firewall, which no container can do for it.
     ports:
       - "${DGO_WG_PUBLISH_BIND:-127.0.0.1}:${DGO_WG_PUBLISH_PORT:-51839}:${DGO_WG_PUBLISH_PORT:-51839}/udp"
+      # The carriers' TCP door (`dgo-carry` lives in this namespace and accepts on 51443). LOOPBACK, and
+      # on a port Docker picks unless one is named, so it can never collide with a port the machine
+      # already uses — a mapping that cannot bind keeps dgo-net, and every pair, from starting. A Mac
+      # that accepts names 51444 (hooks/prepare writes it with DGO_CARRY_ACCEPT): the engine forwards
+      # that to the Mac's 127.0.0.1, where its LAN door (packaging/macos/lan-door.py) hands it the
+      # LAN's 51443. Reachable by nobody else until an office says DGO_CARRY_PUBLISH_BIND=0.0.0.0.
+      - "${DGO_CARRY_PUBLISH_BIND:-127.0.0.1}:${DGO_CARRY_PUBLISH_PORT:-}:51443/tcp"
     volumes:
       - dgo_tunnel:/tunnel
     entrypoint: ["/tunnel-entrypoint.sh"]
     networks:
       - traefik-network
+    # THE LINK DOOR at the edge (carrier/door.go, join_api.py): `link.<domain>` on 443, TLS at the edge,
+    # handed to the carrier's door in THIS namespace (51445, never published). It answers four things —
+    # a carrier's websocket (`/carry`, admitted only by the pair's WireGuard keys), one side of another
+    # pair met at the herd's hub (`/relay`, only the tags DGO_RELAY_FOR declares; carrier/relay.go), a join
+    # request (`POST /join`: an invite's signature, or a request a person approves) and that request's
+    # state (`GET /join/<id>`) — and 404s everything else, whatever this rule says: the door names its
+    # paths. The rule must name each of them too: without `/relay` here the hub's door answered it from
+    # inside vps1 and the edge 404'd it from outside (measured 2026-11-01 15:04, the vps1 session).
+    # No sign-in in front of it on purpose: what admits a caller is a key, and a person cannot be asked
+    # to sign in from a machine that has no screen. Labels rather than the routing compiler because the
+    # route is a PATH of a host and lives on the tunnel's container, which the compiler does not emit.
+    # An office that declares no DGO_LINK_HOST routes `link.localhost`, where nothing answers — and asks no
+    # certificate for it: the resolver is named only with a declared host. Before, every edge start asked
+    # Let's Encrypt for link.localhost and was refused (fireplace, 2026-10-23; an empty resolver is what a
+    # local office's routers already carry — scripts/lib.sh export_cert_resolver).
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.dgo-extend-link-door.rule=Host(`${DGO_LINK_HOST:-link.localhost}`) && (Path(`/carry`) || Path(`/relay`) || Path(`/join`) || PathPrefix(`/join/`))
+      - traefik.http.routers.dgo-extend-link-door.entrypoints=websecure
+      - traefik.http.routers.dgo-extend-link-door.tls=true
+      - traefik.http.routers.dgo-extend-link-door.tls.certresolver=${DGO_LINK_HOST:+${TRAEFIK_CERTRESOLVER-myresolver}}
+      - traefik.http.routers.dgo-extend-link-door.service=dgo-extend-link-door
+      - traefik.http.services.dgo-extend-link-door.loadbalancer.server.port=51445
     deploy:
       resources:
         limits:
@@ -205,6 +276,9 @@ services:
       # Absolute (`BBOX_REPO_HOST`), never relative: compose trims a relative source and mounts an
       # empty directory instead (measured 2026-10-02 — see ai/context/repo-path-trailing-space-bind-mount.md).
       - ${BBOX_REPO_HOST:-/var/lib/bbox}/.dgo/doors:/doors
+      # the door's access record (DGO-890): every request another office made, one JSON line each —
+      # written here alone, read by the app; the door is its only writer
+      - dgo_doorlog:/doorlog
     entrypoint: ["python3", "/app/link-proxy.py"]
     deploy:
       resources:
@@ -222,11 +296,72 @@ services:
         max-size: 5m
         max-file: '3'
 
+  # The TCP PATH of a pair that can never exchange a UDP packet (carrier/main.go): the pair's
+  # WireGuard sends to this process on 127.0.0.1, and it carries the datagrams over one TCP connection
+  # to the peer's carrier — accepted here when this office can be reached (DGO_CARRY_ACCEPT), dialed
+  # and searched for on the LAN otherwise. It needs dgo-net's NAMESPACE for the same reason dgo-link
+  # does (that is where the interfaces and their 127.0.0.1 are). The tunnel volume is READ-ONLY here:
+  # it holds the pairs' configurations and the firewall that dgo-net applies as root, and a carrier
+  # that went wrong must not be able to rewrite them. What it answers (`carry-state.json`, the
+  # contract `wg-state.json` already follows) goes to a volume of its own, which the app reads.
+  # It reads the office's WireGuard private key (`wg-private.key`, root's, 600) — which is why it
+  # runs as root, with every capability dropped, no new privileges and a read-only root filesystem.
+  dgo-carry:
+    image: ghcr.io/solomonboltin/digital-office/dgo-carry:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    build:
+      context: ./carrier
+      dockerfile: Dockerfile
+    container_name: dgo-carry-${DEPLOYMENT_NAME:-bina-deployment}
+    restart: unless-stopped
+    network_mode: "service:dgo-net"
+    depends_on:
+      - dgo-net
+    environment:
+      # the app its link door passes join requests to (carrier/door.go) — on the office's own network
+      - DGO_CARRY_APP=http://dgo-extend:8983
+      # what a pair that rides another office's door trusts for that door's TLS, beside the system's
+      # roots, and the proxy it must name when its network has one (dgo-extend's two, the same values)
+      - DGO_CARRY_CA=/etc/dgo/egress-ca.pem
+      - HTTPS_PROXY=${DGO_EGRESS_PROXY:-}
+      - NO_PROXY=${DGO_EGRESS_NO_PROXY:-localhost,127.0.0.1,dgo-extend,dgo-net,connections,computers,notifications,git,domains}
+    volumes:
+      - dgo_tunnel:/tunnel:ro
+      - dgo_carry:/carry
+      - ${DGO_EGRESS_CA_FILE:-/dev/null}:/etc/dgo/egress-ca.pem:ro
+    cap_drop:
+      - ALL
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "/dgo-carry", "-health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          # Moves datagrams between a socket and a connection: tens of MB/s fit in a tenth of a core.
+          cpus: '0.1'
+          memory: 48M
+        reservations:
+          cpus: '0.01'
+          memory: 8M
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+
 volumes:
   dgo_extend_state:
   dgo_tunnel:
   dgo_extend_peers:
   dgo_identity:
+  dgo_carry:
+  dgo_doorlog:
 networks:
   traefik-network:
     external: true

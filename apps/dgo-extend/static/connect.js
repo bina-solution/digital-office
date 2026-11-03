@@ -907,8 +907,13 @@ var binaNoAnswer = () => ({ ok: false, status: 0, json: async () => ({}), text: 
     var dir = $("direction").value, g = GIVING;
     if (!g || dir === "use") { el.innerHTML = dir === "use" && g ? "בקישור הזה הלשכה הזאת רק לוקחת — היא לא נותנת אפליקציות." : ""; return; }
     var change = ' <a class="link" href="./">שינוי</a>';
-    el.innerHTML = g.mode === "all" ? "הלשכה הזאת נותנת את כל האפליקציות שלה (" + esc(g.count) + ")." + change
-      : g.mode === "some" ? "הלשכה הזאת נותנת " + esc(g.count) + " מתוך " + esc(g.total) + " אפליקציות." + change
+    // …and its doors for machines (DGO-945), so "nothing" is never said over a door that is open
+    var doors = (g.doors || []).length;
+    var doorsLine = doors ? " היא נותנת גם " + (doors === 1 ? "דלת אחת למכונות" : esc(doors) + " דלתות למכונות")
+      + " (בלי מסך)." : "";
+    el.innerHTML = g.mode === "all" ? "הלשכה הזאת נותנת את כל האפליקציות שלה (" + esc(g.count) + ")." + doorsLine + change
+      : g.mode === "some" ? "הלשכה הזאת נותנת " + esc(g.count) + " מתוך " + esc(g.total) + " אפליקציות." + doorsLine + change
+      : doors ? "הלשכה הזאת לא נותנת אפליקציות — הלשכה השנייה לא תראה אפליקציות שלה." + doorsLine + change
       : (g.chosen ? "הלשכה הזאת הוגדרה לא לתת דבר — הלשכה השנייה לא תראה אפליקציות שלה." + change
                   : "עם אישור הצימוד הלשכה הזאת תיתן את כל האפליקציות שלה (" + esc(g.total) + "). אפשר לצמצם אחר כך במסך הלשכות.");
   }

@@ -32,7 +32,8 @@
       },
       "TO_EXTRACT": {
         "label": "ממתין לעיבוד",
-        "kind": "muted"
+        "kind": "muted",
+        "note": "delivered by sync, awaiting extraction — the thin-pipe resting state, not a failure"
       },
       "IN_PROGRESS": {
         "label": "בעיבוד",
@@ -86,10 +87,14 @@
         "label": "חריגת ניסיונות",
         "kind": "bad"
       },
-      "PRIORITY_SYNC_FAILED": { "label": "סנכרון לפריוריטי נכשל", "kind": "bad" },
+      "PRIORITY_SYNC_FAILED": {
+        "label": "סנכרון לפריוריטי נכשל",
+        "kind": "bad"
+      },
       "API_TOOLS_FAILED": {
         "label": "כשל בעיבוד",
-        "kind": "bad"
+        "kind": "bad",
+        "note": "the apitools leg gave up on this document — it was reaching the UI as a bare English enum"
       },
       "DOUBLE": {
         "label": "כפילות",
@@ -105,11 +110,13 @@
       },
       "MERGED": {
         "label": "מוזג למסמך אחר",
-        "kind": "muted"
+        "kind": "muted",
+        "note": "terminal RESOLVED outcome, not a failure"
       },
       "GARBAGE": {
         "label": "מסמך לא קריא",
-        "kind": "muted"
+        "kind": "muted",
+        "note": "terminal RESOLVED outcome, not a failure"
       }
     },
     "TYPE": {
@@ -132,10 +139,12 @@
         "label": "לא מזוהה"
       },
       "IRRELEVANT": {
-        "label": "לא רלוונטי"
+        "label": "לא רלוונטי",
+        "note": "classified as \"not a business document we act on\" — was rendering as raw English"
       },
       "GARBAGE": {
-        "label": "לא קריא"
+        "label": "לא קריא",
+        "note": "GARBAGE is BOTH a TYPE and a STATUS: BaseDocEx01 stamps both on the same row."
       }
     },
     "SOURCE_TYPE": {

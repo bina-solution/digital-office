@@ -1,0 +1,13 @@
+<!-- apps/meet: the welcome page's own extension point (interfaceConfig.DISPLAY_WELCOME_PAGE_ADDITIONAL_CARD).
+     Jitsi's page stays as it is; this card adds the two things only the office has: a meeting opened
+     by a signed-in host, and the office's recordings. The links go to the host's door through the
+     console (plugin.head.html derives its address from config.tokenAuthUrl), so a person who is
+     signed in to the console is not asked again. -->
+<template id="welcome-page-additional-card-template">
+  <div class="meet-office-card">
+    <p class="meet-office-title">לאנשי המשרד</p>
+    <a class="meet-office-link" data-meet-door="new">פגישה חדשה כמארח</a>
+    <a class="meet-office-link" data-meet-door="flow/">כל הפגישות — הקלטות, תמלול, החלטות ומשימות</a>
+    <a class="meet-office-link" data-meet-door="recordings">הקלטות הפגישות</a>
+  </div>
+</template>

@@ -1,0 +1,194 @@
+#!/usr/bin/env bash
+#: door — the machine this office runs on answers the computers app: an sshd where the OS has none, and the office key authorized from the engine's network only [status]
+#
+# WHY. The built-in machine («המחשב הזה», computer_local-local) is `ssh <user>@<the engine network's gateway>`
+# with the office key. That needed two things a person did by hand: an sshd on the host, and the office
+# key pasted into the host's authorized_keys. Windows/WSL ships no sshd, so on the HP every command was
+# code 255 «Connection refused», and with the agent doors too new for a stale office, nothing was left
+# but the owner at the machine (rep-local-261102-201500, DGO-1083, r030-202).
+#
+# WHY NOT A DOOR INSIDE A CONTAINER. A container reaches its host only by escaping it: `privileged`,
+# `pid: host` + nsenter, or the engine socket. The owner's security standard says «never use privileged,
+# and never mount the Docker socket» (ai/context/dgo-security-session.md :262, gate G84). The door to a
+# host is a daemon ON the host, and the vetted one for exactly this is sshd. So the app declares it.
+#
+# WHAT IT DOES (Linux, as root or with passwordless sudo, on the machine that owns the engine network's gateway):
+#   * NO sshd INSTALLED → openssh-server is installed, with ONE drop-in this hook owns, written BEFORE the package
+#     (it starts sshd as it installs): keys only, AllowUsers only from the engine's network and this machine. Then
+#     the EFFECTIVE configuration is read back (`sshd -T`), and an sshd that would take a password is stopped.
+#   * An sshd that is installed and not ours (no drop-in of ours) is the owner's: never configured, never reloaded,
+#     whatever port it listens on and whether it runs or not.
+#   * The office key (this office's computers volume) goes into the local user's authorized_keys — once, tagged
+#     `computers-office:<deployment>`, limited by `from=` to the engine's network. Appended, never rewritten, unless
+#     the network moved; then the new file replaces the old by rename, and only if every other line survived. A line
+#     the owner approved by hand is left exactly as it is.
+#   * Anything it cannot read (the network's subnets, the key, the file) → it changes nothing and says so.
+# Run by the app's own onboard hook on every `bbox run`; `bbox computers door status` says where it stands.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="${REPO_ROOT:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
+LOG_TAG=computers
+. "${REPO_ROOT}/scripts/lib.sh"   # say, colors, read_env, DN
+export LC_ALL=C                   # authorized_keys is bytes: no line is ever dropped for not being UTF-8
+
+MODE="${1:-install}"
+case "${MODE}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; install|status) ;; *) die "usage: bbox computers door [status]" ;; esac
+DROPIN="${DOOR_SSHD_DROPIN:-/etc/ssh/sshd_config.d/10-dgo-computers.conf}"
+LUSER="$(read_env COMPUTERS_LOCAL_USER)"; LUSER="${LUSER:-root}"
+NETWORK="$(read_env COMPUTERS_NETWORK)"; NETWORK="${NETWORK:-traefik-network}"
+TAG="computers-office:${DN}"
+sudo=""
+
+# this office's public key, from its own computers volume (the private half never leaves it)
+office_pub() {
+  if [ -n "${DOOR_PUBKEY_FILE:-}" ]; then head -1 "${DOOR_PUBKEY_FILE}"; return; fi
+  docker exec "computers-${DN}" cat /data/ssh/office_key.pub 2>/dev/null | head -1
+}
+net_field() { docker network inspect "${NETWORK}" -f "{{range .IPAM.Config}}{{.$1}} {{end}}" 2>/dev/null | tr ' ' '\n' | sed '/^$/d'; }
+subnets() { if [ -n "${DOOR_SUBNETS+x}" ]; then printf '%s\n' ${DOOR_SUBNETS}; else net_field Subnet; fi; }
+gateways() { if [ -n "${DOOR_GATEWAY+x}" ]; then printf '%s\n' ${DOOR_GATEWAY}; else net_field Gateway; fi; }
+# an IPv4 address this machine itself holds (the kernel's local routes — no iproute2 needed)
+is_local_addr() { grep -qxF -- "$1" <<<"$(awk '/\|--/ {ip = $2} /\/32 host LOCAL/ {print ip}' /proc/net/fib_trie 2>/dev/null)"; }
+sshd_bin() { command -v sshd 2>/dev/null || { [ -x /usr/sbin/sshd ] && echo /usr/sbin/sshd; }; }
+# something LISTENs on port 22 (0016), IPv4 or IPv6 — read from the kernel, so no `ss` is needed
+listening22() { awk '$4 == "0A" && $2 ~ /:0016$/ {f = 1} END {exit !f}' /proc/net/tcp /proc/net/tcp6 2>/dev/null; }
+home_of() { getent passwd "$1" | cut -d: -f6; }
+
+dropin_text() {   # the one sshd file this hook owns
+  local allow="root@127.0.0.1 root@::1" n
+  for n in $(subnets); do allow="${allow} ${LUSER}@${n}"; done
+  [ "${LUSER}" = root ] || allow="${allow} ${LUSER}@127.0.0.1 ${LUSER}@::1"
+  printf '%s\n' \
+    "# Written by apps/computers/hooks/door (r030-202). This machine had no sshd; this is the computers app's" \
+    "# door to it: keys only, from the engine's network (${NETWORK}) and this machine itself. Rewritten by every" \
+    "# \`bbox run\` from the network's subnets — edit the hook, not this file." \
+    'PasswordAuthentication no' 'KbdInteractiveAuthentication no' 'PermitRootLogin prohibit-password' \
+    "AllowUsers ${allow}"
+}
+# the configuration sshd will REALLY use for a stranger: passwords off, and an AllowUsers in force
+effective_ok() {
+  local t; ${sudo} mkdir -p /run/sshd    # sshd -T refuses to answer without its privilege-separation directory
+  t="$(${sudo} "$(sshd_bin)" -T -C user=root,host=203.0.113.9,addr=203.0.113.9 2>/dev/null)" || return 1
+  # here-strings, never `printf | grep -q`: grep -q leaves at its first match, and under pipefail the printf it
+  # cut off (SIGPIPE) turned a good configuration into "stop sshd" (measured in test_door.sh, 1 run in 3)
+  grep -qx 'passwordauthentication no' <<<"${t}" && grep -qx 'kbdinteractiveauthentication no' <<<"${t}" \
+    && grep -q '^allowusers ' <<<"${t}"
+}
+ssh_start() {   # start, or reload what runs (Debian's init script answers 0 to a `reload` of an sshd that is not running)
+  if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
+    ${sudo} systemctl enable ssh >/dev/null 2>&1 || true
+    if listening22; then ${sudo} systemctl reload ssh >/dev/null 2>&1; else ${sudo} systemctl restart ssh >/dev/null 2>&1; fi
+  elif listening22; then
+    ${sudo} sh -c 'kill -HUP "$(cat /run/sshd.pid)"' 2>/dev/null
+  else
+    ${sudo} mkdir -p /run/sshd
+    ${sudo} service ssh start >/dev/null 2>&1 || ${sudo} "$(sshd_bin)"
+  fi
+}
+ssh_stop() {   # → 0 only when nothing listens on :22 any more
+  local waited=0
+  if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
+    # the socket too: on Ubuntu 22.10+ (WSL's default) ssh.socket keeps :22 and starts sshd again on the next connection
+    ${sudo} systemctl disable --now ssh.socket ssh.service >/dev/null 2>&1
+  else ${sudo} sh -c 'kill "$(cat /run/sshd.pid)"' 2>/dev/null; fi
+  while listening22 && [ "${waited}" -lt 10 ]; do sleep 1; waited=$((waited + 1)); done
+  ! listening22
+}
+
+ensure_sshd() {
+  local want waited=0
+  if [ -n "$(sshd_bin)" ] && [ ! -e "${DROPIN}" ]; then return 0; fi   # the owner's own sshd: never touched
+  want="$(dropin_text)"
+  if [ -z "$(sshd_bin)" ]; then
+    command -v apt-get >/dev/null 2>&1 || { say "${cy}no sshd on this machine, and no apt-get to install one — the computers app cannot reach it${c0}"; return 1; }
+    say "no sshd on this machine — installing openssh-server for the computers app (keys only, from ${NETWORK} only)"
+    # the drop-in FIRST: the package starts sshd as it installs, and it must never be up with passwords
+    ${sudo} mkdir -p "$(dirname "${DROPIN}")" && printf '%s\n' "${want}" | ${sudo} tee "${DROPIN}" >/dev/null || return 1
+    if ! { ${sudo} env DEBIAN_FRONTEND=noninteractive apt-get install -y -q openssh-server >/dev/null 2>&1 \
+           || { ${sudo} apt-get update -q >/dev/null 2>&1 && ${sudo} env DEBIAN_FRONTEND=noninteractive apt-get install -y -q openssh-server >/dev/null 2>&1; }; }; then
+      if [ -z "$(sshd_bin)" ]; then
+        ${sudo} rm -f "${DROPIN}"   # nothing installed: no drop-in either, so the next run tries the install again
+        say "${cy}openssh-server did not install (apt-get; the next bbox run tries again) — the computers app cannot reach this machine yet${c0}"
+        return 1
+      fi
+      # apt failed AFTER unpacking sshd (another package's error, :22 taken): the drop-in stays, and the checks below
+      # decide — removing it would leave an sshd with Debian's defaults that every later run takes for the owner's
+      say "${cy}apt-get reported a failure, but sshd is installed — checking it as ours${c0}"
+    fi
+  elif [ "$(${sudo} cat "${DROPIN}" 2>/dev/null)" != "${want}" ]; then
+    printf '%s\n' "${want}" | ${sudo} tee "${DROPIN}" >/dev/null || return 1
+    say "the engine's network moved — the door's sshd now admits: $(subnets | tr '\n' ' ')"
+  elif listening22 && effective_ok; then
+    return 0                        # ours, unchanged and up: nothing to do
+  fi
+  if ! effective_ok; then
+    if ssh_stop; then say "${cy}sshd would accept passwords or anyone here (its configuration does not take ${DROPIN}) — stopped${c0}"
+    else say "${cy}sshd would accept passwords or anyone here (its configuration does not take ${DROPIN}), and it did NOT stop — stop it by hand${c0}"; fi
+    return 1
+  fi
+  ssh_start
+  while ! listening22 && [ "${waited}" -lt 10 ]; do sleep 1; waited=$((waited + 1)); done
+  listening22 || { say "${cy}sshd did not come up on :22${c0}"; return 1; }
+}
+
+ensure_key() {
+  local pub kind body home ak from n line cur ours keep tmp
+  pub="$(office_pub)"; kind="$(printf '%s' "${pub}" | cut -d' ' -f1)"; body="$(printf '%s' "${pub}" | cut -d' ' -f2)"
+  [ -n "${body}" ] || { say "the office key is not minted yet (computers not up) — the next bbox run authorizes it"; return 0; }
+  home="$(home_of "${LUSER}")"; [ -n "${home}" ] || { say "${cy}no user ${LUSER} on this machine (COMPUTERS_LOCAL_USER)${c0}"; return 1; }
+  ak="${home}/.ssh/authorized_keys"
+  from="127.0.0.1,::1"; for n in $(subnets); do from="${from},${n}"; done
+  line="from=\"${from}\",no-agent-forwarding,no-X11-forwarding ${kind} ${body} ${TAG}"
+  # READ first; a file that exists and cannot be read is never written
+  if ${sudo} test -e "${ak}"; then cur="$(${sudo} cat "${ak}")" || { say "${cy}cannot read ${ak} — not touched${c0}"; return 1; }; else cur=""; fi
+  # a line the owner approved by hand (the key, not our tag) stays exactly as it is; ours, if current, too
+  awk -v b="${body}" -v t="${TAG}" '{for (i = 1; i <= NF; i++) if ($i == b && $NF != t) f = 1} END {exit !f}' <<<"${cur}" && return 0
+  grep -qxF -- "${line}" <<<"${cur}" && return 0
+  ${sudo} mkdir -p "${home}/.ssh" && ${sudo} chmod 700 "${home}/.ssh" && ${sudo} chown "${LUSER}:" "${home}/.ssh" || return 1
+  ours="$(printf '%s\n' "${cur}" | awk -v t="${TAG}" '$NF == t' | grep -c . || true)"
+  if [ "${ours}" = 0 ]; then
+    # the common case: one line APPENDED, nothing rewritten
+    if ${sudo} test -s "${ak}" && [ -n "$(${sudo} tail -c1 "${ak}" | tr -d '\n')" ]; then printf '\n' | ${sudo} tee -a "${ak}" >/dev/null; fi
+    printf '%s\n' "${line}" | ${sudo} tee -a "${ak}" >/dev/null && ${sudo} chown "${LUSER}:" "${ak}" && ${sudo} chmod 600 "${ak}" || return 1
+  else
+    # the network moved: our line is replaced, every other line kept — by rename, and only if they all survived
+    keep="$(printf '%s\n' "${cur}" | awk -v t="${TAG}" '$NF != t')"
+    [ "$(printf '%s\n' "${keep}" | grep -c '' )" -ge "$(( $(printf '%s\n' "${cur}" | grep -c '') - ours ))" ] \
+      || { say "${cy}rewriting ${ak} would drop lines — not touched${c0}"; return 1; }
+    tmp="$(${sudo} mktemp "${home}/.ssh/.authorized_keys.XXXXXX")" || return 1
+    { printf '%s\n' "${keep}" | sed '/^$/d'; printf '%s\n' "${line}"; } | ${sudo} tee "${tmp}" >/dev/null \
+      && ${sudo} chown "${LUSER}:" "${tmp}" && ${sudo} chmod 600 "${tmp}" && ${sudo} mv -f "${tmp}" "${ak}" \
+      || { ${sudo} rm -f "${tmp}"; say "${cy}could not write ${ak}${c0}"; return 1; }
+  fi
+  say "the office key is authorized for ${LUSER} on this machine, from ${NETWORK} only (${TAG})"
+}
+
+status() {
+  local pub body home ak cur
+  if [ -e "${DROPIN}" ]; then say "sshd: installed by this hook (${DROPIN}), $(listening22 && echo listening on :22 || echo NOT listening)"
+  elif [ -n "$(sshd_bin)" ]; then say "sshd: the machine's own, untouched ($(listening22 && echo listening on :22 || echo not on :22))"
+  else say "${cy}sshd: none installed${c0}"; fi
+  pub="$(office_pub)"; body="$(printf '%s' "${pub}" | cut -d' ' -f2)"
+  home="$(home_of "${LUSER}")"; ak="${home}/.ssh/authorized_keys"; cur="$(${sudo} cat "${ak}" 2>/dev/null)"
+  if [ -z "${body}" ]; then say "office key: not minted yet"
+  elif awk -v b="${body}" -v t="${TAG}" '{for (i = 1; i < NF; i++) if ($i == b && $NF == t) f = 1} END {exit !f}' <<<"${cur}"; then
+    say "office key: authorized for ${LUSER}, from ${NETWORK} only"
+  elif awk -v b="${body}" '{for (i = 1; i <= NF; i++) if ($i == b) f = 1} END {exit !f}' <<<"${cur}"; then say "office key: authorized for ${LUSER} by hand"
+  else say "${cy}office key: NOT authorized for ${LUSER}${c0}"; fi
+  say "engine network ${NETWORK}: $(subnets | tr '\n' ' ')"
+}
+
+[ "$(uname -s)" = Linux ] || { say "door: Linux only (on a Mac, bbox runs inside its engine's Linux guest)"; exit 0; }
+if [ "$(id -u)" != 0 ]; then
+  if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then sudo="sudo -n"
+  elif [ "${MODE}" = install ]; then
+    say "${cy}the computers app's door to this machine needs root or passwordless sudo once — not set up${c0}"; exit 0
+  fi
+fi
+[ "${MODE}" = status ] && { status; exit 0; }
+# Only on the machine that owns the engine's network: from inside a container (an agent's shell), the "machine" here
+# is that container, and a door there opens nothing.
+gw="$(gateways | grep -m1 '\.')"
+[ -n "${gw}" ] && [ -n "$(subnets)" ] || { say "${cy}the engine network ${NETWORK} cannot be read — the door is left as it is${c0}"; exit 1; }
+is_local_addr "${gw}" || { say "the engine network's gateway ${gw} is not on this machine (run inside a container?) — the door is left as it is"; exit 0; }
+rc=0; ensure_sshd || rc=1; ensure_key || rc=1; exit "${rc}"

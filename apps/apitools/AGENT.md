@@ -1,9 +1,12 @@
 # Operating `apitools` — כלי מסמכים (documents, OCR, and the office's Hebrew speech-to-text)
 
 Three capabilities live here. `ocr` and `ledger` serve the document pipeline; `speech` is the
-office's transcriber (ivrit.ai's Hebrew Whisper, running on this machine — no cloud, no key).
+office's transcriber, running on this machine — no cloud, no key. Two models (DGO-955): `ivrit`
+(the default, ivrit.ai's Hebrew Whisper) and `whisper` (OpenAI's own, for English or `language=auto`,
+each stretch as spoken); a job names one (`-F model=whisper`), and one is in memory at a time.
 
-Read `GET <endpoint>/manifest` for the live contract of each. The basics a caller must know:
+The speech service answers `GET /manifest` with its live contract; the web container
+(`apitools:8080`) has none. The basics a caller must know:
 
 ## `speech` — תמלול עברית (Hebrew speech-to-text)
 
@@ -30,14 +33,16 @@ curl -s http://apitools-asr:8987/speechHealth          # model state, queue dept
   confidence + revision).
 - **The canonical object is the store; VTT/SRT/TXT/DOCX are views.** SRT is a one-way export
   (no speaker field, no styling) — never read it back as the transcript.
-- **Measured on this host** (2 vCPU, no GPU, 2026-10-07): ~3× slower than real time for dense
+- **Measured on one host** (2 vCPU, no GPU, 2026-10-07; the container is now capped at 1 CPU, so
+  treat these as a floor): ~3× slower than real time for dense
   speech (RTF 0.29–0.35), about real time on an ordinary voice note; one job at a time; the model is
   released after 5 idle minutes and the next job pays 10–16 s to reload it (58 s if the file is not
   in the page cache). A 30-second voice note is ~20–40 s of work, so **never put this in a chat
   reply's critical path without saying it is queued**.
-- **Jobs are records.** Each has `/data/jobs/<id>.json`; transcripts survive a restart, and a
-  completed job can be re-rendered into another format without re-running the model. Uploads are
-  content-addressed (the same file twice costs one copy) and pruned by TTL.
+- **Jobs are records.** Each has `/data/jobs/<id>.json`; a COMPLETED transcript survives a restart
+  and can be re-rendered into another format without re-running the model (a queued or running job
+  becomes `error: interrupted`). Records are pruned after 30 days; uploads (content-addressed) are
+  pruned after 7 days or past 5 GiB.
 - **Traps:** one worker and a bounded queue of 8 — a full queue answers `429` with `Retry-After`,
   and that is the correct answer, not an error to retry in a tight loop. Duration is probed from the
   header *before* the work is queued, so an over-long file is refused with a number in it
@@ -56,8 +61,10 @@ curl -s http://apitools-asr:8987/speechHealth          # model state, queue dept
 
 ## `ocr` — documents
 
-`POST /documentOcr` (multipart `file`) returns a `file_id` (md5 of the content) plus the OCR JSON;
-`POST /documentJsonQuery` answers position-based questions over that result. Google Vision is the
+`POST /documentOcr` (multipart `file`, at most 50 MB) returns a `file_hash` (md5 of the content)
+plus the OCR JSON; `POST /documentJsonQuery` answers position-based questions over that result, and
+takes that hash as its `file_id`. `?ocr_engine=local|google` picks the engine per request and skips
+the cache. Google Vision is the
 engine unless `OCR_ENGINE=local`, and the `google-vision-key` connection probe is this app's
 `/health`. Depth: `apps/apitools/README.md`. Traps worth repeating: a query is bounded by
 `APITOOLS_QUERY_SOFT_TIMEOUT` and a "find option" over a huge candidate list is what made that a
@@ -65,6 +72,10 @@ real limit; the bulkhead's slots are file locks, so two containers have two pool
 
 ## `ledger` — פנקס המסמכים
 
-`business`, `customers`, `items`, `documents`, `issue`, `download` over the office's Postgres
-(`supabase-db`, tables declared in `app.json` under `data.sql`). Money-moving calls are the ones to
-be careful with; everything else is read-mostly.
+`business`, `customers`, `items`, `documents` over the office's Postgres (`supabase-db`, tables
+declared in `app.json` under `data.sql`); the screen in front of it is `my-docs`. The ledger is
+mostly writes, and three are final: `issue` takes the next gapless number (and asks the tax
+authority, with `ALLOCATION_BACKEND=live`) and freezes it, `cancel` issues a credit document, and `DELETE` on a customer or an item is a hard
+delete — each only on the owner's words. `GET /documents/<id>/download` is a write too: the first
+copy is marked «מקור». `send` only marks the document sent. No web screen, no `/manifest`. Verbs:
+`./bbox apitools test [--no-up]`, and the reads `speech-health|speech-jobs|speech-models|ocr-health`.

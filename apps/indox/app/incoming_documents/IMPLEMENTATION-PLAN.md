@@ -206,7 +206,7 @@ DELETE /incomingDocuments/repos/<repo>/documents                  → body {ids:
 | 2. Ensure container exists | If `gsheet.spreadsheet_id` is `null` → create a new spreadsheet (`spreadsheets.create`) named `gsheet.spreadsheet_title`, store the returned ID back into the registry. Else verify the spreadsheet is accessible by the service account. | If `supabase.schema` does not exist → `CREATE SCHEMA IF NOT EXISTS "<schema>"`. |
 | 3. Ensure tab/table exists | If sheet tab `gsheet.sheet_name` does not exist on the spreadsheet → `spreadsheets.batchUpdate.addSheet` (returns the new `gid`, stored back into the registry). | `CREATE TABLE IF NOT EXISTS "<schema>"."<table>" ( <pk> text PRIMARY KEY, ... )`. |
 | 4. Ensure schema (columns) | Write the header row in row 1 with `RepoConfig.columns` in declared order. If a header row already exists → reorder is **never** done; missing columns are appended at the right; extra columns are reported as a warning, never deleted. | `ALTER TABLE ... ADD COLUMN IF NOT EXISTS "<col>" <type>` per missing column. PK enforced via `CREATE UNIQUE INDEX IF NOT EXISTS`. Mirrors the `Batch Upsert Supabase` reference workflow's introspection branch. Removed columns are reported but never dropped. |
-| 5. Sharing / permissions | Share the spreadsheet with `RepoConfig.gsheet.editors[]` (defaults to `[person17@example.com]`) via `drive.permissions.create`. | Grant `service_role` SELECT/INSERT/UPDATE/DELETE on the table (RLS off by default; opt-in via `RepoConfig.supabase.rls=true`). |
+| 5. Sharing / permissions | Share the spreadsheet with `RepoConfig.gsheet.editors[]` (defaults to `[person17.x@example.com]`) via `drive.permissions.create`. | Grant `service_role` SELECT/INSERT/UPDATE/DELETE on the table (RLS off by default; opt-in via `RepoConfig.supabase.rls=true`). |
 | 6. Ensure Kafka topic | `kafka_admin.create_topic(${prefix}.<repo>, partitions=3, retention=7d)` if missing. | Same. |
 | 7. Persist `RepoConfig` | Write the (possibly enriched) config to the JSON registry via the atomic temp-file + `os.replace` path. | Same. |
 | 8. Publish `repo_created` event | Emit a single event of type `REPO_CREATED` to `${prefix}.<repo>` so live consumers see the new repo immediately. | Same. |
@@ -245,7 +245,7 @@ For `gsheet`, omit `gsheet.spreadsheet_id` to have one created for you:
   "gsheet": {
     "spreadsheet_title": "Incoming Documents — prod",
     "sheet_name": "מסמכים נכנסים",
-    "editors": ["person17@example.com"]
+    "editors": ["person17.x@example.com"]
   }
 }
 ```
@@ -448,7 +448,7 @@ INCOMING_DOCS_QUERY_MAX_LIMIT=2000                  # /documents/query hard cap;
 GOOGLE_SERVICE_ACCOUNT_JSON=/run/secrets/gsa.json
 
 # Supabase
-SUPABASE_BASE_URL=https://supabase.bina-comp.bina-solutions.co.il
+SUPABASE_BASE_URL=https://supabase.hacohen.bina-solutions.co.il
 SUPABASE_SERVICE_KEY=__PLACEHOLDER__
 
 # Kafka (Redpanda)
@@ -462,7 +462,7 @@ INCOMING_DOCS_WEBAPP_PREFIX=/incomingDocuments/ui
 INCOMING_DOCS_WEBAPP_DIST=apitools/src/incoming_documents/webapp/dist
 INCOMING_DOCS_SSE_MAX_SECONDS=300
 # JSON: {"<authentik group name>": "viewer" | "editor" | "admin"}
-INCOMING_DOCS_ROLE_MAPPING={"bina-comp-incoming-docs-admins":"admin","bina-comp-incoming-docs-editors":"editor","bina-comp-staff":"viewer"}
+INCOMING_DOCS_ROLE_MAPPING={"hacohen-incoming-docs-admins":"admin","hacohen-incoming-docs-editors":"editor","hacohen-staff":"viewer"}
 ```
 
 ### 5.1 `/health` probe

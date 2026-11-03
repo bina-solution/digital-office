@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+#: glitchtip — the office moved to another domain: its users' addresses, and the one it sends from, move
+#
+# rename-address — every GlitchTip user whose address is <local>@<old domain> becomes <local>@<new domain>:
+# the SAME user (organization, teams, alert rules), never a new one; the verified-address rows the sign-in
+# also reads (allauth's EmailAddress) and invitations still pending at the old address follow. Then .env:
+#   GLITCHTIP_ADMIN_EMAIL — decided from STATE: it follows whenever no account holds the old address any
+#     more. ORDER MATTERS: `push` keeps exactly the account with that address and CREATES one when none has
+#     it, so a key moved while its account still had the old address would make a second superuser.
+#   GLITCHTIP_FROM_EMAIL — the address alerts are sent FROM: no account stands behind it, and the office's
+#     mail answers on the new domain now, so it simply follows.
+# The domains come from the environment (DGO_RENAME_FROM, DGO_RENAME_TO, DGO_RENAME_DRY_RUN), set by
+# `bbox rename-address [--dry-run]` (FPG-34). One transaction; a new address that is someone else's is
+# refused and named; GlitchTip being DOWN is a failure, not "nothing to move"; the dry run rolls back and
+# exits non-zero when the real run would refuse. No password is read or printed.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # say, colors, read_env_value, env_set, rename_note, DN
+GT="${GLITCHTIP_CONTAINER:-glitchtip-${DN}}"
+OLD="$(printf '%s' "${DGO_RENAME_FROM:-}" | tr '[:upper:]' '[:lower:]')"
+NEW="$(printf '%s' "${DGO_RENAME_TO:-}" | tr '[:upper:]' '[:lower:]')"
+DRY="${DGO_RENAME_DRY_RUN:-0}"
+domain='^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$'
+if ! [[ "${OLD}" =~ ${domain} && "${NEW}" =~ ${domain} && "${OLD}" != "${NEW}" ]]; then
+  say "${cr}[glitchtip] rename-address: DGO_RENAME_FROM and DGO_RENAME_TO must be two different domains${c0}"
+  exit 1
+fi
+if ! docker ps --format '{{.Names}}' | grep -Fxq "${GT}"; then
+  say "${cr}[glitchtip] rename-address: GlitchTip is enabled here but not running — nothing was moved; run it and try again${c0}"
+  rename_note GLITCHTIP_ADMIN_EMAIL failed
+  exit 1
+fi
+KEYVAL="$(read_env_value GLITCHTIP_ADMIN_EMAIL)"
+OUT="$(mktemp)"
+docker exec -i -e DGO_RENAME_FROM="${OLD}" -e DGO_RENAME_TO="${NEW}" -e DGO_RENAME_DRY_RUN="${DRY}" \
+  -e DGO_KEY_VALUE="${KEYVAL}" "${GT}" python manage.py shell >"${OUT}" 2>&1 <<'PY'
+import os
+from django.db import transaction
+from django.contrib.auth import get_user_model
+try:
+    from allauth.account.models import EmailAddress
+except Exception:                       # an image without allauth keeps no second copy to move
+    EmailAddress = None
+try:
+    from apps.organizations_ext.models import OrganizationUser
+except Exception:
+    OrganizationUser = None
+User = get_user_model()
+old, new = os.environ["DGO_RENAME_FROM"], os.environ["DGO_RENAME_TO"]
+key = (os.environ.get("DGO_KEY_VALUE") or "").strip().lower()
+moved, refused = [], []
+def to_new(email):
+    return email.rsplit("@", 1)[0] + "@" + new
+def locals_on(dom):
+    return sorted({e.rsplit("@", 1)[0].lower() for e in User.objects.filter(email__iendswith="@" + dom).values_list("email", flat=True)})
+with transaction.atomic():
+    for u in User.objects.select_for_update().filter(email__iendswith="@" + old):
+        target = to_new(u.email)
+        if User.objects.filter(email__iexact=target).exclude(pk=u.pk).exists():
+            refused.append(u.email.rsplit("@", 1)[0])
+            continue
+        u.email = target
+        u.save(update_fields=["email"])
+        moved.append(u.email.rsplit("@", 1)[0])
+    if EmailAddress is not None:
+        for ea in EmailAddress.objects.select_for_update().filter(email__iendswith="@" + old):
+            target = to_new(ea.email)
+            keep = EmailAddress.objects.filter(email__iexact=target, user=ea.user).exclude(pk=ea.pk).first()
+            if keep is not None:
+                # the same person already holds the new row: it inherits what the old one proved (verified,
+                # primary) — a mandatory verification must not lock them out — and the old row goes FIRST:
+                # allauth allows one primary row per user, so saving the new one primary beside it would fail
+                verified, primary = keep.verified or ea.verified, keep.primary or ea.primary
+                ea.delete()
+                keep.verified, keep.primary = verified, primary
+                keep.save(update_fields=["verified", "primary"])
+                continue
+            if EmailAddress.objects.filter(email__iexact=target).exclude(user=ea.user).exists():
+                refused.append("address-row:" + ea.email.rsplit("@", 1)[0])
+                continue
+            ea.email = target
+            ea.save(update_fields=["email"])
+    if OrganizationUser is not None and any(f.name == "email" for f in OrganizationUser._meta.fields):
+        for ou in OrganizationUser.objects.select_for_update().filter(email__iendswith="@" + old):
+            target = to_new(ou.email)
+            if OrganizationUser.objects.filter(organization=ou.organization, email__iexact=target).exclude(pk=ou.pk).exists():
+                refused.append("invitation:" + ou.email.rsplit("@", 1)[0])
+                continue
+            ou.email = target
+            ou.save(update_fields=["email"])
+    follows = to_new(key) if key.endswith("@" + old) and not User.objects.filter(email__iexact=key).exists() else ""
+    present, behind = locals_on(new), locals_on(old)
+    if os.environ.get("DGO_RENAME_DRY_RUN") == "1":
+        transaction.set_rollback(True)
+print("MOVED=" + ",".join(moved))
+print("REFUSED=" + ",".join(refused))
+print("PRESENT=" + ",".join(present))
+print("BEHIND=" + ",".join(behind))
+print("FOLLOWS=" + follows)
+PY
+RC=$?
+fact() { tr -d '\r' <"${OUT}" | sed -n "s/^$1=//p" | tail -1; }
+moved="$(fact MOVED)"; refused="$(fact REFUSED)"; follows="$(fact FOLLOWS)"
+present="$(fact PRESENT)"; behind="$(fact BEHIND)"
+if [ "${RC}" -ne 0 ] || ! grep -q '^FOLLOWS=' "${OUT}"; then
+  say "${cr}[glitchtip] rename-address FAILED — nothing in GlitchTip was changed (one transaction)${c0}"
+  grep -v '^[A-Z]*=' "${OUT}" | grep -iv 'password\|secret\|token' | tail -6 | sed 's/^/  /'
+  rm -f "${OUT}"
+  rename_note GLITCHTIP_ADMIN_EMAIL failed
+  exit 1
+fi
+rm -f "${OUT}"
+rename_note GLITCHTIP_ADMIN_EMAIL present "${present}"
+rename_note GLITCHTIP_ADMIN_EMAIL behind "${behind}"
+rename_note GLITCHTIP_FROM_EMAIL any
+sender="$(read_env_value GLITCHTIP_FROM_EMAIL | tr '[:upper:]' '[:lower:]')"
+sender_to=""
+case "${sender}" in *@"${OLD}") sender_to="${sender%@*}@${NEW}" ;; esac
+if [ "${DRY}" = 1 ]; then
+  say "[glitchtip] DRY RUN, nothing changed — would move to @${NEW}: ${moved:-none}; GLITCHTIP_ADMIN_EMAIL → ${follows:-unchanged}; sender → ${sender_to:-unchanged}; refused: ${refused:-none}"
+  [ -z "${refused}" ]; exit $?
+fi
+say "[glitchtip] addresses moved to @${NEW}: ${moved:-none}"
+{ [ -n "${moved}" ] || [ -n "${follows}" ] || [ -n "${sender_to}" ]; } && rename_note - changed
+if [ -n "${follows}" ]; then
+  env_set GLITCHTIP_ADMIN_EMAIL "${follows}" && say "[glitchtip] GLITCHTIP_ADMIN_EMAIL now names ${follows}" \
+    || { say "${cr}[glitchtip] GLITCHTIP_ADMIN_EMAIL could not be written — run this again${c0}"; exit 1; }
+fi
+if [ -n "${sender_to}" ]; then
+  env_set GLITCHTIP_FROM_EMAIL "${sender_to}" && say "[glitchtip] alerts are now sent from ${sender_to}" \
+    || { say "${cr}[glitchtip] GLITCHTIP_FROM_EMAIL could not be written${c0}"; exit 1; }
+fi
+if [ -n "${refused}" ]; then
+  say "${cy}[glitchtip] NOT moved — the new address is already someone else's: ${refused}${c0}"
+  exit 1
+fi
+exit 0

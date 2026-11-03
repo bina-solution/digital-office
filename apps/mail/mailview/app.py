@@ -298,7 +298,7 @@ def label_map():
     /organizer/settings — the SAME resolution point mailLabelEngine01 uses (`Load
     Settings` node reads `.gmail.labels[KEY].name`), so the row triage dot (see
     static/app.js) can never show a stale label TEXT: the vocabulary changed once
-    already for this client (see ai/context/bina-comp-cutover-plan-2026-08-05.md §B) and
+    already for this client (see ai/context/hacohen-cutover-plan-2026-08-05.md §B) and
     will again. No connection_id: this is the mail-scoped defaults singleton, exactly
     what the engine's own scheduled (no-override) run resolves against."""
     return jsonify(gi("/organizer/settings"))

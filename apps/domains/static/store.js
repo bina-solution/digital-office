@@ -207,7 +207,7 @@ var binaNoAnswer = () => ({ ok: false, status: 0, json: async () => ({}), text: 
     if (!ts) return '';
     const s = Math.max(0, Math.floor((nowMs() - ts) / 1000));
     if (s < 10) return 'עכשיו';
-    if (s < 60) return `לפני ${s} שניות`;
+    if (s < 60) return s === 1 ? 'לפני שנייה' : `לפני ${s} שניות`;
     if (s < 3600) return `לפני ${Math.floor(s / 60)} דקות`;
     return `לפני ${Math.floor(s / 3600)} שעות`;
   };

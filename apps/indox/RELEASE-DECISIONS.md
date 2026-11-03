@@ -15,7 +15,7 @@ marks, never state; nothing blocks deleting a sync registry; the server carries 
 
 ---
 
-## 0. The server (Hetzner VPS `bina-comp-prod`, 204.168.193.136) — today's event
+## 0. The server (Hetzner VPS `hacohen-prod`, 93.184.216.13) — today's event
 
 Between 10:08 and 10:58 UTC the machine booted four times (10:08, 10:37, 10:42, 10:57), and
 between boots a foreign system answered on port 22 with two different SSH host keys and no
@@ -42,7 +42,7 @@ retention 14 days, restore rehearsed once). Today no off-box copy exists anywher
 | mail sync registry editing: pick from the connection's tags, no INDOX tag management | the editor reads the sibling apps in the browser (drive folders, mailbox labels, new-tag creator); proven on the live gmail-doc pipe; **the picker itself drifts — fixed in §4 (N4)** |
 | sync UI: one bar (blue / green / red), no docs-state overview, at most a link to the table | one bar per pipe from `sync_item_counts`; the card links to the table filtered on `SYNC_NAME` (1,105 rows for gmail-doc live); **the card lost too much in the rewrite — restored in §4 (N4)** |
 | remove console → INDOX → settings → sync | removed (four tabs, none is sync) |
-| console → apps → Supabase opens the deployment domain | opens `supabase-studio.bina-comp.msh-hac.com` (proven in the owner's session) |
+| console → apps → Supabase opens the deployment domain | opens `supabase-studio.hacohen.msh-hac.com` (proven in the owner's session) |
 | INDOX table timeouts | trigram indexes + memoised count; 26,573 rows load in seconds |
 | remove the SELECTED_* columns | 0 left on the live schema |
 | extraction score / fixed certainty per company | `companies.SELECTION_CERTAINTY` + `max(computed, fixed)` in SelectType01; proven with three seeded companies (pipeline 3/3); **the supplier list is data the owner holds** (0 of 1,180 companies carry a value) |
@@ -341,7 +341,7 @@ emoji icons. No native `prompt` / `confirm`.
    labels builder in `indoxSettings01`; the same verdict is wanted for the two duplicate-shaped pairs
    `indoxDocUploader01` vs `indoxV2UploadApiTools01` and `fullDocEx01` vs `indoxProcessDocument01`.
 6. The server's mail registry: may the seven `mail_imap_local-*` test mailboxes and one of the two
-   solutionsbina entries be deleted, and should the label engine run on person2@example.com
+   solutionsbina entries be deleted, and should the label engine run on person3@example.com
    (the developer's mailbox) at all, or only on the client's? Today the scheduler skips the dead
    ones and the duplicate by itself; the registry still shows them.
 
@@ -448,7 +448,7 @@ The code was right; the screen was not. Three things were done, in this order:
    tooltip and in the drawer); a one-row activity line (cadence · last run ↗ · last delivery · oldest
    waiting) and the table link; a footer of one button family (switch · הרץ · נסה שוב · פריטים |
    עריכה · מחיקה); the type tag in Hebrew; the header switch a real switch and one primary verb.
-   **Proof, in the owner's Chrome under the console (`#/m/incoming/i/bina-comp/sync`, 1552 px):**
+   **Proof, in the owner's Chrome under the console (`#/m/incoming/i/hacohen/sync`, 1552 px):**
    five tiles in one row (0 · 0 · 3,714 · 0 · 187, each in its state colour), one three-cell pass strip
    (7 מקורות · 7 פעילים | סבב אחרון לפני 2 דק׳ · הופעל · פתח ב-n8n on one line | הסבב הבא בעוד 13 דק׳ ·
    20:11 · כל 15 דק׳), seven cards in four rows of two, every card's facts by name (INDOX/drive-bs/to_sync
@@ -512,9 +512,9 @@ drive-whatsapp-bot completed in 4.9 / 5.3 min but their files did NOT move — t
 invalidates n8n's settings cache); the drive-only proof run follows in §7.8. Lesson recorded in memory
 (`sync-registry-lives-in-tenant-settings`); the E2E driver now reads the tenant table.
 
-### 7.7 Release 5 on bina-comp-prod (2026-09-02 17:56–18:02 UTC) — the app, not the host
+### 7.7 Release 5 on hacohen-prod (2026-09-02 17:56–18:02 UTC) — the app, not the host
 Branch `indox-final-consolidation` (every session's commits of the day, 25 on top of what the server
-ran) pulled; migrations applied to `indox_bina_comp` (the reasons view with folded ids, `tag_rules`
+ran) pulled; migrations applied to `indox_hacohen` (the reasons view with folded ids, `tag_rules`
 retired); `bbox run` rebuilt drive, mailapi, mailview; 20 workflows pushed (17 INDOX, `errorHandler01`
 and `indoxApiSupabase01`, the three mail ones), the retired Gmail-actions chain confirmed gone
 (`retired-present=0`), 74 active and published of 100; the n8n cache flushed. **The first pass failed
@@ -540,7 +540,7 @@ document was COMPLETED with base, per-type and lines complete and a company foun
 success rule demanded a `DOC_ID`, which an aging report never carries; the same rule had filed the
 morning's gmail-bs messages under `FAILED_BS`. Fixed in `indoxV2ActionsGlobal01 · __feedbackOutcome`
 (type-aware: the document id is required only where the type carries one), pushed to the laptop and to
-bina-comp-prod. `e2e-bs-1819` after the fix: delivered in 3 s, COMPLETED in 5.4 min, `outcome = success`,
+hacohen-prod. `e2e-bs-1819` after the fix: delivered in 3 s, COMPLETED in 5.4 min, `outcome = success`,
 the file in `INDOX/drive-bs/synced`. What remains in the laptop's `to_sync` folders (5 in drive-bs, 4 in
 whatsapp-bot) are files of earlier runs whose documents completed before those two pipes had a
 feedback channel — nothing will move them now that their documents are settled; they are test

@@ -469,7 +469,7 @@ window.__ModuleLoader__.load({
 .bina-cost-label{display:inline-flex;align-items:center;gap:5px;text-overflow:ellipsis;min-width:0;overflow:hidden}
 .bina-cost-holder{display:inline-flex;min-width:0}
 html[data-bina-cost="ready"] [data-composer-stats] > span[class*="_anchor"]:has(svg ellipse){display:none}
-.bina-cost-panel{position:fixed;z-index:60;box-sizing:border-box;background:var(--dsw-alias-bg-elevated,var(--dsw-alias-bg-base,#fff));color:var(--dsw-alias-label-primary);border:0.5px solid var(--dsw-alias-border-l2);border-radius:12px;box-shadow:var(--dsw-shadow-lg,0 8px 24px rgba(0,0,0,.16));padding:12px;font-size:13px;line-height:1.6;direction:rtl;text-align:right}
+.bina-cost-panel{position:fixed;z-index:60;box-sizing:border-box;background:var(--dsw-alias-bg-elevated,var(--dsw-alias-bg-base));color:var(--dsw-alias-label-primary);border:0.5px solid var(--dsw-alias-border-l2);border-radius:12px;box-shadow:var(--dsw-shadow-lg,0 8px 24px rgba(0,0,0,.16));padding:12px;font-size:13px;line-height:1.6;direction:rtl;text-align:right}
 .bina-cost-panel-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
 .bina-cost-panel-title{color:var(--dsw-alias-label-secondary)}
 .bina-cost-panel-total{font-size:18px;font-weight:600;font-variant-numeric:tabular-nums}
@@ -480,7 +480,7 @@ html[data-bina-cost="ready"] [data-composer-stats] > span[class*="_anchor"]:has(
 .bina-cost-tokens{color:var(--dsw-alias-label-tertiary)}
 .bina-cost-money{color:var(--dsw-alias-label-primary)}
 .bina-cost-foot{display:flex;flex-direction:column;gap:2px;margin:0;color:var(--dsw-alias-label-tertiary);font-size:12px}
-.bina-cost-warn{color:var(--dsw-alias-state-error-primary,#c62828)}
+.bina-cost-warn{color:var(--dsw-alias-state-error-primary)}
 .bina-cost-card{list-style:none;border:0.5px solid var(--dsw-alias-border-l2);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:10px;color:var(--dsw-alias-label-primary)}
 .bina-cost-card-head{display:flex;flex-direction:column;gap:2px}
 .bina-cost-card-name{font-weight:600}
@@ -496,7 +496,7 @@ html[data-bina-cost="ready"] [data-composer-stats] > span[class*="_anchor"]:has(
 .bina-cost-link{color:var(--dsw-alias-label-secondary);background:0 0;border:0;font:inherit;cursor:pointer;padding:4px 2px;border-radius:6px}
 .bina-cost-link:hover{background:var(--dsw-alias-interactive-bg-hover)}
 .bina-cost-link:disabled{color:var(--dsw-alias-label-tertiary);cursor:default;background:0 0}
-.bina-cost-save{background:var(--dsw-alias-button-primary-fill,var(--dsw-alias-brand-primary));color:var(--dsw-alias-label-primary-foreground,#fff);border:0;border-radius:8px;font:inherit;cursor:pointer;padding:5px 14px}
+.bina-cost-save{background:var(--dsw-alias-button-primary-fill,var(--dsw-alias-brand-primary));color:var(--dsw-alias-label-primary-foreground);border:0;border-radius:8px;font:inherit;cursor:pointer;padding:5px 14px}
 .bina-cost-save:disabled{opacity:.5;cursor:default}
 `;
 

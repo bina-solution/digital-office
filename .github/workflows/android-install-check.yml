@@ -1,0 +1,214 @@
+name: android-install-check
+
+# A drafted APK installed on an Android emulator on the Dell's runner with `adb install`, which says WHY an
+# install fails — a phone's installer says only «App not installed as package appears to be invalid» (the
+# owner's phone, android-0.1.50, 2026-11-02, DGO-1090). The draft is read by its tag, checked against its
+# .sha256, installed, and the app is started; the installer's and the app's log lines are kept.
+#
+#   a push to mac-dgo whose head commit says "[android-install-check android-0.1.50]" checks that draft
+#
+# With "[machine-check]" too, the app's first open is followed as a phone's is (DGO-1089): the machine
+# fetched over the emulator's Wi-Fi, checked, unpacked, and its QEMU started — the bytes the emulator
+# received, /data used and a QEMU process each minute, a screenshot every 5 minutes, attached to the draft
+# as check-<run>-*.png. (Its boot is android-guest.yml's proof: QEMU under the emulator's own arm64
+# translation is far slower than on a phone.)
+#
+# The emulator is x86_64 with Android's own arm64 translation (the app ships arm64-v8a only), on KVM.
+
+on:
+  push:
+    branches: [mac-dgo]
+
+permissions:
+  contents: write   # a draft release is visible only to a token that may write ("release not found" under read)
+
+jobs:
+  install:
+    if: contains(github.event.head_commit.message, '[android-install-check ')
+    runs-on: [self-hosted, portable, ssd]
+    timeout-minutes: 255   # 60 for the check and 150 for the machine's, up to 45 that ops/prejob_waitfree.sh may hold it
+    env:
+      MSG: ${{ github.event.head_commit.message }}
+      IMAGE: "system-images;android-35;google_apis;x86_64"
+      MACHINE: ${{ contains(github.event.head_commit.message, '[machine-check]') && '1' || '' }}
+    steps:
+      - name: The draft the commit names
+        id: draft
+        run: |
+          set -euo pipefail
+          t="$(printf '%s\n' "${MSG}" | grep -oE '\[android-install-check android-[0-9]+\.[0-9]+\.[0-9]+\]' | head -1 \
+            | sed -E 's/^\[android-install-check (android-[0-9.]+)\]$/\1/')"
+          [ -n "${t}" ] || { echo "::error::name the draft in the commit: [android-install-check android-0.1.N]"; exit 1; }
+          echo "tag=${t}" >> "${GITHUB_OUTPUT}"
+          echo "draft ${t}"
+
+      - name: KVM, which the emulator needs at any useful speed
+        run: |
+          ls -l /dev/kvm || { echo "::error::no /dev/kvm on this runner"; exit 1; }
+          [ -r /dev/kvm ] && [ -w /dev/kvm ] || { echo "::error::$(id -un) cannot open /dev/kvm (not in its group?)"; exit 1; }
+
+      - name: gh, where the runner has none
+        run: |
+          set -euo pipefail
+          if command -v gh >/dev/null; then gh --version | head -1; exit 0; fi
+          v=2.62.0
+          sum=41c8b0698ad3003cb5c44bde672a1ffd5f818595abd80162fbf8cc999418446a   # gh_2.62.0_checksums.txt
+          d="${RUNNER_TOOL_CACHE:-${RUNNER_TEMP}}/gh/${v}"
+          if [ ! -x "${d}/bin/gh" ]; then
+            mkdir -p "${d}"
+            t="${RUNNER_TEMP}/gh.tgz"
+            curl -fsSL "https://github.com/cli/cli/releases/download/v${v}/gh_${v}_linux_amd64.tar.gz" -o "${t}"
+            echo "${sum}  ${t}" | sha256sum -c -
+            tar -xzf "${t}" -C "${d}" --strip-components=1
+            rm -f "${t}"
+          fi
+          echo "${d}/bin" >> "${GITHUB_PATH}"
+          "${d}/bin/gh" --version | head -1
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools emulator ${{ env.IMAGE }}'
+
+      - name: The APK, as the draft has it
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          d="${RUNNER_TEMP}/apk"
+          rm -rf "${d}" && mkdir -p "${d}"
+          gh release download "${{ steps.draft.outputs.tag }}" -R "${GITHUB_REPOSITORY}" -p '*.apk' -p '*.apk.sha256' -D "${d}"
+          (cd "${d}" && sha256sum -c ./*.sha256)
+          ls -l "${d}"
+
+      - name: Installed on an emulator, and started
+        run: |
+          set -uo pipefail
+          apk="$(ls "${RUNNER_TEMP}"/apk/*.apk)"
+          PATH="${ANDROID_HOME}/emulator:${ANDROID_HOME}/platform-tools:${PATH}"
+          export ANDROID_AVD_HOME="${RUNNER_TEMP}/avd"
+          mkdir -p "${ANDROID_AVD_HOME}"
+          echo no | avdmanager create avd -n dgo-check -k "${IMAGE}" -d pixel_6 --force
+          # room for the 1 GB APK twice (the staged copy and the installed one) and its extracted libraries; for
+          # the machine, what the app asks before it fetches (Guest.java: 2 GB + 10 GB) and a phone's memory
+          # that gives its machine 2 GB (EngineService: half the phone)
+          mem=3072 part=8192
+          [ -z "${MACHINE}" ] || { mem=4096 part=20480; }
+          # the emulator's disk at its fullest, and 20 GB left for the Dell's own office (as export-verify keeps)
+          room=$(( $(df -Pk "${RUNNER_TEMP}" | awk 'NR == 2 {print $4}') / 1048576 ))
+          [ "${room}" -ge $(( part / 1024 + 20 )) ] || { echo "::error::${room} GB free under ${RUNNER_TEMP}, and the emulator's disk with the office's 20 needs $(( part / 1024 + 20 ))"; exit 1; }
+          # two cores: the Dell froze three times at 93–96°C under a long build (the machine's check runs hours)
+          emulator -avd dgo-check -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect \
+            -cores 2 -memory "${mem}" -partition-size "${part}" > "${RUNNER_TEMP}/emulator.log" 2>&1 &
+          echo "$!" > "${RUNNER_TEMP}/emulator.pid"
+          adb wait-for-device
+          for i in $(seq 1 120); do
+            [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ] && break
+            sleep 5
+          done
+          [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1 ] || { echo "::error::the emulator did not boot in 10 min"; tail -40 "${RUNNER_TEMP}/emulator.log"; exit 1; }
+          echo "booted: Android $(adb shell getprop ro.build.version.release | tr -d '\r'), ABIs $(adb shell getprop ro.product.cpu.abilist | tr -d '\r')"
+          adb shell df -h /data | tail -1
+          adb logcat -c
+          adb install -r "${apk}" 2>&1 | tee "${RUNNER_TEMP}/install.txt"
+          rc="${PIPESTATUS[0]}"
+          echo "--- the installer's log"
+          # (a log with no such line is no failure: the step runs under bash -e)
+          adb logcat -d | grep -E 'PackageManager|PackageInstaller|INSTALL_|NativeLibraryHelper|ApkSignatureVerifier|PackageParser' | tail -60 || true
+          if [ "${rc}" -ne 0 ] || ! grep -q '^Success' "${RUNNER_TEMP}/install.txt"; then
+            echo "::error::adb install refused ${apk##*/}: $(tail -1 "${RUNNER_TEMP}/install.txt")"
+            exit 1
+          fi
+          adb logcat -c
+          adb shell monkey -p il.co.digitaloffice.app -c android.intent.category.LAUNCHER 1
+          sleep 45
+          echo "--- the app's first 45 s"
+          adb logcat -d | grep -E 'il\.co\.digitaloffice|AndroidRuntime|FATAL|DEBUG' | tail -80 || true
+          adb shell pidof il.co.digitaloffice.app && echo "the app is running" || { echo "::error::the app is not running 45 s after its start"; exit 1; }
+
+      # The app's first open asks for the machine (the core asks once its listeners are bound, for an office
+      # with apps in its machine): fetched at 0–49 %, unpacked at 50–99 %, then QEMU — read from outside, as a
+      # release APK lets nothing read its files. Done once the app's QEMU has run 20 minutes (its first screens);
+      # failed when the app goes, when its QEMU ends before then, or 150 minutes pass with no QEMU. The Dell's
+      # heat is watched as the engine's build watches it: at 92°C the emulator is paused 30 s at a time.
+      - name: The machine, as a phone gets it
+        if: env.MACHINE == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          PATH="${ANDROID_HOME}/platform-tools:${PATH}"
+          heat() {
+            for z in /sys/class/thermal/thermal_zone*; do
+              if [ "$(cat "${z}/type" 2>/dev/null)" = x86_pkg_temp ]; then
+                t="$(cat "${z}/temp" 2>/dev/null)" && [ -n "${t}" ] && { echo $(( t / 1000 )); return; }
+              fi
+            done
+            echo 0
+          }
+          epid="$(cat "${RUNNER_TEMP}/emulator.pid")"
+          ( while sleep 30; do
+              c="$(heat)"
+              if [ "${c}" -ge 92 ]; then
+                # the launcher and the QEMU it runs as its child, both
+                echo "heat: ${c}°C — the emulator paused 30 s"
+                pkill -STOP -P "${epid}" 2>/dev/null || true; kill -STOP "${epid}" 2>/dev/null || true; sleep 30
+                kill -CONT "${epid}" 2>/dev/null || true; pkill -CONT -P "${epid}" 2>/dev/null || true
+              fi
+            done ) &
+          hpid=$!
+          # one group under `|| true`: under bash -e a failing kill in an EXIT trap would be the step's status
+          trap '{ pkill -P "${hpid}"; kill "${hpid}"; kill -CONT "${epid}"; pkill -CONT -P "${epid}"; } 2>/dev/null || true' EXIT
+          shots="${RUNNER_TEMP}/shots"; rm -rf "${shots}"; mkdir -p "${shots}"
+          # an empty capture (the emulator paused, adb between answers) is no screenshot: removed, taken again later
+          shot() {
+            f="${shots}/check-${GITHUB_RUN_ID}-$(printf '%03d' "$1")min.png"
+            adb exec-out screencap -p > "${f}" 2>/dev/null || true
+            if [ -s "${f}" ]; then last_shot=$(date +%s); else rm -f "${f}"; fi
+          }
+          rx() { adb shell cat /proc/net/dev 2>/dev/null | tr -d '\r' | awk '$1 != "lo:" && $1 ~ /:$/ {s += $2} END {print int(s / 1048576)}'; }
+          used() { adb shell df -k /data 2>/dev/null | tr -d '\r' | awk 'NR == 2 {printf "%.1f", $3 / 1048576}'; }
+          # the app's own QEMU (EngineService: libqemu-system-aarch64.so from its native-library directory),
+          # never the emulator image's own processes; nothing when adb gave no answer (paused, between answers)
+          qemu() {
+            local out
+            out="$(adb shell ps -A -o NAME,ARGS 2>/dev/null | tr -d '\r')" || true
+            [ -n "${out}" ] || return 0
+            printf '%s\n' "${out}" | grep -c 'libqemu-system-aarch64' || true
+          }
+          s=$(date +%s); seen=""; rc=1; last_shot=0; gone=0
+          while :; do
+            m=$(( ($(date +%s) - s) / 60 ))
+            q="$(qemu)"
+            echo "[${m} min] received $(rx) MB, /data used $(used) GB, the app's QEMU ${q:-unread}"
+            [ $(( $(date +%s) - last_shot )) -ge 300 ] && shot "${m}"
+            adb shell pidof il.co.digitaloffice.app >/dev/null || { echo "::error::the app is gone at ${m} min"; shot "${m}"; break; }
+            if [ -n "${q}" ] && [ "${q}" -gt 0 ] && [ -z "${seen}" ]; then seen="${m}"; echo "QEMU started at ${m} min: the machine is fetched, checked and unpacked"; fi
+            # ended: no QEMU in two answers in a row (one read can miss)
+            if [ "${q:-x}" = 0 ]; then gone=$((gone + 1)); elif [ -n "${q}" ]; then gone=0; fi
+            [ -z "${seen}" ] || [ "${gone}" -lt 2 ] || { echo "::error::the app's QEMU ended at ${m} min, $(( m - seen )) min after it started"; shot "${m}"; break; }
+            if [ -n "${seen}" ] && [ $(( m - seen )) -ge 20 ]; then rc=0; shot "${m}"; break; fi
+            [ -n "${seen}" ] || [ "${m}" -lt 150 ] || { echo "::error::no QEMU after 150 min"; shot "${m}"; break; }
+            sleep 60
+          done
+          echo "--- the app's last lines"
+          adb logcat -d | grep -E 'il\.co\.digitaloffice|AndroidRuntime|FATAL' | tail -40 || true
+          gh release upload "${{ steps.draft.outputs.tag }}" -R "${GITHUB_REPOSITORY}" "${shots}"/*.png --clobber \
+            && echo "screenshots: $(ls "${shots}" | wc -l), on draft ${{ steps.draft.outputs.tag }}"
+          exit "${rc}"
+
+      - name: The emulator stopped
+        if: always()
+        run: |
+          # resumed first: an emulator paused for heat when its step was killed holds every signal until then
+          if [ -f "${RUNNER_TEMP}/emulator.pid" ]; then
+            kill -CONT "$(cat "${RUNNER_TEMP}/emulator.pid")" 2>/dev/null || true
+            pkill -CONT -P "$(cat "${RUNNER_TEMP}/emulator.pid")" 2>/dev/null || true
+          fi
+          "${ANDROID_HOME}/platform-tools/adb" emu kill 2>/dev/null || true
+          [ -f "${RUNNER_TEMP}/emulator.pid" ] && kill "$(cat "${RUNNER_TEMP}/emulator.pid")" 2>/dev/null || true
+          rm -rf "${RUNNER_TEMP}/avd" "${RUNNER_TEMP}/apk"

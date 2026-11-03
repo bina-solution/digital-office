@@ -1663,7 +1663,7 @@ export default function DocumentBrowserPage() {
                     disabled={!!bulkUnavailable}
                     title={
                       bulkUnavailable ??
-                      `שינוי STATUS ל-ACTION_RESTART עבור ${n} מסמכים — ${RESTART_NOTE}`
+                      `שינוי STATUS ל-ACTION_RESTART עבור ${n === 1 ? 'מסמך אחד' : n + ' מסמכים'} — ${RESTART_NOTE}`
                     }
                     onClick={() => setBulkAsk({ fixed: 'ACTION_RESTART' })}
                   >

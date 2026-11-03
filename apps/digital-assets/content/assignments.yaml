@@ -1,0 +1,148 @@
+# apps/digital-assets/content/assignments.yaml — every piece the content library is to hold, as data.
+#
+# One entry per piece: `type/slug` (= the file content/<type>/<slug>.he.md and the slot
+# content.<type>.<slug>-he), the work item it answers (plane), a working Hebrew title, and the angle the
+# writer must cover. Writers follow content/BRIEF.md and content/FACTS.md. The SEO plan the pieces come
+# from is apps/project-pln/plans/seo.yaml (modules «SEO · 3…7», items DGO-660…818).
+#
+# `status` on a project names its DGO status from FACTS.md: live | inside-app | planned.
+# A piece that is written is a file; this list is what is still to write as much as what was asked.
+
+flagship:   # type: article — 1,800–2,400 words each (SEO · 3)
+  - { slug: n8n,               plane: DGO-692, status: live,       title: "n8n — אוטומציות לעסק בלי Zapier",              angle: "fair-code licence honestly; self-hosted vs cloud pricing; AI agent nodes; Israeli automations (documents, WhatsApp, Sheets); moving out of DGO's core" }
+  - { slug: plane,             plane: DGO-693, status: live,       title: "Plane — ניהול פרויקטים במקום Jira ו-Monday",    angle: "AGPL; Hebrew build plane-he; the hub this office runs on (modules, cycles, agents taking items); Community vs paid editions" }
+  - { slug: supabase,          plane: DGO-694, status: live,       title: "Supabase — Postgres, אחסון ו-API במקום Firebase", angle: "self-hosted vs cloud; what Lovable/Bolt apps lean on and how to bring them home; auth, storage, edge functions limits self-hosted" }
+  - { slug: ollama,            plane: DGO-695, status: live,       title: "Ollama — מודלי שפה על המחשב שלכם",             angle: "which models handle Hebrew; RAM/VRAM tiers; Apple Silicon; speed; privacy; OpenAI-compatible API" }
+  - { slug: openhands,         plane: DGO-696, status: live,       title: "OpenHands — סוכן תוכנה שכותב ומריץ קוד",        angle: "MIT; what it does well and badly; models behind it; sandboxing; cost per task" }
+  - { slug: deepseek-harness,  plane: DGO-697, status: live,       title: "DeepSeek Harness — הסביבה שמריצה את עזריה",      angle: "what an agent harness is; MIT; DGO's Hebrew locale and brand; permissions, timeline, tasks from the hub; model cost" }
+  - { slug: authentik,         plane: DGO-698, status: live,       title: "authentik — כניסה אחת לכל האפליקציות",          angle: "SSO for a small business; vs Okta/Auth0/Keycloak; forward-auth at the edge; MFA" }
+  - { slug: forgejo,           plane: DGO-699, status: live,       title: "Forgejo — מאגרי Git משלכם במקום GitHub",         angle: "Forgejo vs Gitea history; mirrors to GitHub; Actions; for a business that keeps sites and code private" }
+  - { slug: docker-mailserver, plane: DGO-700, status: live,       title: "docker-mailserver — שרת מייל משלכם",            angle: "SPF/DKIM/DMARC; deliverability truth; residential IP problem; when to keep Gmail/M365" }
+  - { slug: postgresql,        plane: DGO-701, status: live,       title: "PostgreSQL — בסיס הנתונים שמתחת להכול",          angle: "why one Postgres; backups and restore in practice; pgvector; upgrades" }
+  - { slug: traefik,           plane: DGO-702, status: live,       title: "Traefik — שער הכניסה ותעודות HTTPS",            angle: "routing by host; Let's Encrypt; forward-auth; the Docker 29 API trap" }
+  - { slug: portainer,         plane: DGO-703, status: live,       title: "Portainer — לראות ולנהל את הקונטיינרים",        angle: "CE vs Business licence; when you need it beside the console; safety of the Docker socket" }
+  - { slug: glitchtip,         plane: DGO-704, status: live,       title: "GlitchTip — מעקב שגיאות במקום Sentry",          angle: "Sentry-compatible SDKs; cost vs Sentry; uptime checks" }
+  - { slug: redis,             plane: DGO-705, status: live,       title: "Redis ו-RedisInsight — מטמון, תורים ומה שבפנים", angle: "Redis licence changes 2024–2025 and Valkey; what apps use it for; RedisInsight" }
+  - { slug: playwright-mcp,    plane: DGO-706, status: inside-app, title: "Playwright MCP — דפדפן שסוכני AI שולטים בו",     angle: "MCP explained; the office browser (browser42) with a live view; approval before login/payment; ToS of sites" }
+  - { slug: litellm,           plane: DGO-707, status: inside-app, title: "LiteLLM — שער אחד לכל מודלי ה-AI",             angle: "one API for many providers; cost tracking; fallbacks; inside OpenHands in DGO" }
+  - { slug: minio,             plane: DGO-708, status: inside-app, title: "MinIO — אחסון קבצים תואם S3",                   angle: "licence and community-edition changes in 2025 (verify); alternatives (Garage, SeaweedFS); where DGO uses it" }
+  - { slug: wireguard,         plane: DGO-709, status: inside-app, title: "WireGuard — המנהרה שמחברת את הלשכות",            angle: "how it works; linking home, office and VPS; UDP blocked → TCP path; vs Tailscale/ZeroTier" }
+  - { slug: tesseract,         plane: DGO-710, status: inside-app, title: "Tesseract — OCR בעברית לחשבוניות ולמסמכים",      angle: "Hebrew traineddata quality; preprocessing; vs PaddleOCR and cloud OCR; inside apitools/INDOX" }
+  - { slug: nextcloud,         plane: DGO-711, status: planned,    title: "Nextcloud — קבצים ושיתוף במקום Google Drive",    angle: "Hub features; performance truth; Hebrew; office suite pairing" }
+  - { slug: immich,            plane: DGO-712, status: planned,    title: "Immich — תמונות וסרטונים במקום Google Photos",  angle: "face/object search locally; hardware; backups; business use (site photos, projects)" }
+  - { slug: paperless-ngx,     plane: DGO-713, status: planned,    title: "Paperless-ngx — ארכיון מסמכים סרוקים עם חיפוש",  angle: "Hebrew OCR; tags and matching; next to INDOX; the 7-year retention reality in Israel" }
+  - { slug: stirling-pdf,      plane: DGO-714, status: planned,    title: "Stirling-PDF — כל פעולות ה-PDF בלי לשלוח קבצים החוצה", angle: "merge/split/sign/compress/OCR; privacy of payslips and contracts; licence" }
+  - { slug: vaultwarden,       plane: DGO-715, status: planned,    title: "Vaultwarden — מנהל סיסמאות לכל העובדים",        angle: "Bitwarden clients; unofficial server caveats; backups; vs 1Password per-seat cost" }
+  - { slug: mattermost,        plane: DGO-716, status: planned,    title: "Mattermost — צ׳אט לצוות במקום Slack",          angle: "licence of the free edition; vs the office chat; WhatsApp reality in Israel" }
+  - { slug: chatwoot,          plane: DGO-717, status: planned,    title: "Chatwoot — שירות לקוחות בכל הערוצים, כולל WhatsApp", angle: "WhatsApp Business API costs in Israel; inbox for site/email/social; bots" }
+  - { slug: cal-com,           plane: DGO-718, status: planned,    title: "Cal.com — זימון פגישות במקום Calendly",         angle: "self-hosted vs cloud; licence (AGPL + commercial); Israeli calendar/holidays" }
+  - { slug: vikunja,           plane: DGO-719, status: planned,    title: "Vikunja — משימות ורשימות לצוות קטן",           angle: "when Vikunja and when Plane; the repo's own comparison (ai/context/plane-selfhost-research.md)" }
+  - { slug: metabase,          plane: DGO-720, status: planned,    title: "Metabase — דשבורדים מהנתונים של העסק",          angle: "questions without SQL; licence editions; connecting to the office's Postgres" }
+  - { slug: nocodb,            plane: DGO-721, status: planned,    title: "NocoDB — טבלאות כמו Airtable על בסיס נתונים אמיתי", angle: "licence; vs Baserow/Teable; Hebrew/RTL in grids" }
+  - { slug: plausible,         plane: DGO-722, status: planned,    title: "Plausible — אנליטיקס לאתר בלי Google Analytics", angle: "privacy and cookies law; CE vs cloud; how the company's own sites will be measured" }
+  - { slug: librechat,         plane: DGO-723, status: planned,    title: "LibreChat — צ׳אט אחד לכל המודלים",             angle: "Claude/GPT/Gemini/local in one UI; accounts for staff; cost control; MIT" }
+  - { slug: searxng,           plane: DGO-724, status: planned,    title: "SearXNG — מנוע חיפוש פרטי",                    angle: "metasearch; privacy; search for the office's agents" }
+  - { slug: home-assistant,    plane: DGO-725, status: planned,    title: "Home Assistant — משרד חכם",                    angle: "lights, AC, cameras, sensors in an office; Israeli hardware availability" }
+  - { slug: odoo,              plane: DGO-726, status: planned,    title: "Odoo — ERP ו-CRM לעסק",                        angle: "Community vs Enterprise honestly; Israeli localization; when my-docs/INDOX are enough" }
+
+projects:   # type: project — 450–650 words each (SEO · 4), by category (plane = the category's item)
+  DGO-728: { category: cad,            he: "CAD, תלת-ממד ואלקטרוניקה", slugs: [freecad, librecad, openscad, solvespace, kicad, blender, qcad, brl-cad, cadquery, dune-3d, leocad, meshlab] }
+  DGO-729: { category: design,         he: "עיצוב ותמונה",             slugs: [gimp, krita, inkscape, darktable, rawtherapee, graphite, pinta, pixelorama, digikam, scribus, penpot, upscayl] }
+  DGO-730: { category: video-audio,    he: "וידאו, אודיו ושידור",       slugs: [kdenlive, shotcut, openshot, olive, obs-studio, audacity, ardour, lmms, handbrake, natron, jellyfin, navidrome] }
+  DGO-731: { category: creative-ai,    he: "AI יצירתי ומודלים מקומיים", slugs: [comfyui, stable-diffusion-webui, invokeai, fooocus, whisper, piper, localai, jan, anythingllm, open-webui, langflow, flowise, dify, llamagpt] }
+  DGO-732: { category: office,         he: "משרד, PDF, מסמכים וחתימה",  slugs: [libreoffice, onlyoffice, collabora-online, docuseal, documenso, docspell, papermerge, calibre, joplin, logseq, standard-notes, excalidraw] }
+  DGO-733: { category: accounting,     he: "הנהלת חשבונות, ERP ומשאבי אנוש", slugs: [erpnext, dolibarr, akaunting, invoice-ninja, invoiceplane, gnucash, firefly-iii, actual-budget, kimai, tryton, orangehrm, frappe-hr] }
+  DGO-734: { category: crm,            he: "CRM, מכירות ושירות לקוחות",  slugs: [twenty, espocrm, suitecrm, krayin, zammad, freescout, osticket, erxes, monica, novu, peppermint] }
+  DGO-735: { category: marketing,      he: "שיווק, ניוזלטר, טפסים ואנליטיקס", slugs: [mautic, listmonk, postiz, mixpost, formbricks, typebot, limesurvey, umami, matomo, posthog, dub, shlink] }
+  DGO-736: { category: websites,       he: "אתרים ומערכות ניהול תוכן",   slugs: [wordpress, ghost, strapi, directus, payload, wagtail, decap-cms, hugo, eleventy, astro, grav, joomla] }
+  DGO-737: { category: ecommerce,      he: "מסחר אלקטרוני",            slugs: [woocommerce, prestashop, medusa, saleor, sylius, bagisto, magento-open-source, vendure, opencart, shopware] }
+  DGO-738: { category: communication,  he: "תקשורת וצוות",             slugs: [rocket-chat, zulip, element-synapse, jitsi-meet, bigbluebutton, nextcloud-talk, mumble, tinode, matterbridge, mautrix-bridges, rallly] }
+  DGO-739: { category: knowledge,      he: "ידע, ויקי ומשימות",         slugs: [outline, bookstack, wiki-js, docmost, appflowy, affine, focalboard, wekan, taiga, openproject, leantime, kanboard, huly] }
+  DGO-740: { category: data,           he: "נתונים, BI ו-no-code",       slugs: [apache-superset, redash, grafana, baserow, teable, appsmith, budibase, tooljet, airbyte, windmill, redpanda, firecrawl] }
+  DGO-741: { category: security,       he: "אבטחה, זהות וסודות",        slugs: [keycloak, authelia, zitadel, passbolt, infisical, nango, crowdsec, wazuh, pi-hole, adguard-home, bitwarden] }
+  DGO-742: { category: networks,       he: "רשתות פרטיות וחיבור מחשבים", slugs: [headscale, netbird, nebula, openziti, netmaker, zerotier, firezone, pangolin, easytier, wg-easy] }
+  DGO-743: { category: infrastructure, he: "תשתית, פיתוח וגיבוי",       slugs: [gitea, gitlab-ce, coolify, dokploy, caprover, uptime-kuma, prometheus, loki, restic, kopia, syncthing, duplicati, archify, lima] }
+  DGO-744: { category: files-media,    he: "קבצים, תמונות ושרתי מדיה",   slugs: [seafile, owncloud-infinite-scale, photoprism, audiobookshelf, file-browser, pingvin-share, pairdrop, kavita] }
+  DGO-745: { category: home-servers,   he: "שרתים ביתיים ושולחנות עבודה בדפדפן", slugs: [umbrel, casaos, yunohost, cloudron, puter, daedalos, os-js, homepage, activitywatch, homarr] }
+  DGO-746: { category: automation,     he: "אוטומציה ובית חכם",         slugs: [node-red, activepieces, huginn, automatisch, kestra, trigger-dev, esphome, temporal] }
+  DGO-747: { category: ocr,            he: "OCR ובינה למסמכים",          slugs: [paddleocr, surya, easyocr, doctr, got-ocr2, ocrmypdf, marker, docling, unstructured] }
+  DGO-748: { category: israeli,        he: "קוד פתוח ישראלי ועברית",     slugs: [dicta-dictalm, dicta-dictabert, dicta-nakdan, tesseract-hebrew, hasadna-open-budget, data-gov-il] }
+
+pieces:     # every other piece: tutorials, long articles, comparisons, directories, news, reports, glossary
+  - { type: tutorial,   slug: install-dgo-with-claude,        plane: DGO-749, title: "להתקין DGO עם Claude — מה אומרים לו ואיך הוא צריך לפעול" }
+  - { type: tutorial,   slug: install-dgo-with-gemini,        plane: DGO-750, title: "להתקין DGO עם Gemini CLI ועם Google Antigravity" }
+  - { type: tutorial,   slug: install-dgo-with-openai,        plane: DGO-751, title: "להתקין DGO עם OpenAI: Codex, ChatGPT ו-Dots",  angle: "Dots run on OpenAI's cloud computer — test honestly whether and how they can install DGO on your VPS" }
+  - { type: tutorial,   slug: install-dgo-with-coding-agents, plane: DGO-752, title: "להתקין DGO עם Cursor, GitHub Copilot ושאר סוכני הקוד" }
+  - { type: tutorial,   slug: dgo-on-google-cloud,            plane: DGO-754, title: "DGO על Google Cloud, במכונה הקטנה שמספיקה" }
+  - { type: tutorial,   slug: dgo-on-aws-azure-oracle,        plane: DGO-755, title: "DGO על AWS, Azure ו-Oracle — כולל האזורים בישראל" }
+  - { type: tutorial,   slug: dgo-on-a-small-vps,             plane: DGO-756, title: "DGO על VPS זול: Hostinger, Hetzner, DigitalOcean, Contabo" }
+  - { type: article,    slug: the-triangle,                   plane: DGO-757, title: "המשולש: להריץ קוד פתוח איפה שרוצים ולהגיע אליו מכל מקום" }
+  - { type: article,    slug: one-small-vps,                  plane: DGO-758, title: "VPS קטן אחד שמחבר את כל האפליקציות — הארכיטקטורה והעלות" }
+  - { type: article,    slug: private-agents,                 plane: DGO-759, title: "סוכנים פרטיים בתוך הלשכה: עזריה ו-OpenHands" }
+  - { type: tutorial,   slug: private-gpu-agents-with-ollama, plane: DGO-760, title: "סוכנים על GPU פרטי עם Ollama: חומרה, מודלים ועברית" }
+  - { type: tutorial,   slug: install-dgo-manually,           plane: DGO-761, title: "התקנה בלי סוכן: Mac, Windows ו-Linux, צעד אחר צעד" }
+  - { type: tutorial,   slug: installing-apps-in-dgo,         plane: DGO-762, title: "להתקין, להפעיל ולכבות אפליקציות בלשכה", angle: "the app-management screen as it is today; the signed store (dgo install) is not released yet — say so" }
+  - { type: article,    slug: hardware-for-an-office,         plane: DGO-763, title: "איזה מחשב לקנות כדי להריץ לשכה" }
+  - { type: article,    slug: open-source-licenses,           plane: DGO-764, title: "רישיונות קוד פתוח בעברית: AGPL, GPL, MIT ו-fair-code — מה מותר לעסק" }
+  - { type: glossary,   slug: terms-part-1,                   plane: DGO-765, title: "מילון: 50 מונחים — קוד פתוח ואירוח עצמי" }
+  - { type: glossary,   slug: terms-part-2,                   plane: DGO-765, title: "מילון: 50 מונחים — סוכני AI, רשתות ועסקים בישראל" }
+  - { type: tutorial,   slug: pay-bills-with-the-office-browser, plane: DGO-766, title: "לשלם חשבונות דרך הדפדפן של הלשכה" }
+  - { type: article,    slug: bookkeeping-with-dgo,           plane: DGO-767, title: "הנהלת חשבונות עם DGO: חשבוניות, קבלות ומספר הקצאה", angle: "do NOT claim Tax Authority registration; check what the bookkeeping rules require from invoicing software" }
+  - { type: article,    slug: indox-documents-automation,     plane: DGO-768, title: "אוטומציה מלאה למסמכים נכנסים עם INDOX, מקצה לקצה" }
+  - { type: tutorial,   slug: advertise-from-dgo,             plane: DGO-769, title: "לפרסם מתוך DGO: רשתות חברתיות, אתרים ומודעות" }
+  - { type: tutorial,   slug: project-management-with-plane,  plane: DGO-770, title: "ניהול פרויקטים מההתחלה עד הסוף עם Plane שבלשכה" }
+  - { type: tutorial,   slug: supermarket-shopping-with-the-office-browser, plane: DGO-771, title: "קניות בסופר דרך הדפדפן של הלשכה: רמי לוי ושופרסל" }
+  - { type: directory,  slug: israeli-government-digital-services, plane: DGO-772, title: "שירותי הממשלה הדיגיטליים: מה עושים אונליין ומה רק בסניף" }
+  - { type: article,    slug: business-banking-automation,    plane: DGO-773, title: "בנקאות לעסק: דפי חשבון, תשלומים ואישורים — מה אפשר לאוטומט ומה אסור" }
+  - { type: tutorial,   slug: open-a-business-in-israel,      plane: DGO-774, title: "לפתוח עסק בישראל: עוסק פטור, עוסק מורשה וחברה — ומה הלשכה מסדרת" }
+  - { type: article,    slug: software-cost-of-an-israeli-business, plane: DGO-775, title: "כמה עולה התוכנה של עסק ישראלי — ומה נשאר ממנה עם DGO" }
+  - { type: directory,  slug: dgo-for-professions,            plane: DGO-776, title: "DGO לפי מקצוע: רואי חשבון, עורכי דין, קליניקות, קבלנים, נדל״ן, עמותות וחנויות" }
+  - { type: tutorial,   slug: whatsapp-for-business,          plane: DGO-777, title: "WhatsApp לעסק מתוך הלשכה" }
+  - { type: tutorial,   slug: gmail-and-drive-in-the-office,  plane: DGO-778, title: "Gmail ו-Google Drive מחוברים ללשכה" }
+  - { type: article,    slug: privacy-amendment-13,           plane: DGO-779, title: "פרטיות ותיקון 13: למה להחזיק את המידע של העסק אצלכם" }
+  - { type: article,    slug: case-study-bina-solutions,      plane: DGO-780, title: "סיפור מקרה: איך בינה סולושנס מנהלת את עצמה על DGO" }
+  - { type: comparison, slug: lovable-to-dgo,                 plane: DGO-782, title: "לעבור מ-Lovable ל-DGO" }
+  - { type: comparison, slug: base44-to-dgo,                  plane: DGO-783, title: "לעבור מ-Base44 ל-DGO" }
+  - { type: comparison, slug: antigravity-and-dgo,            plane: DGO-784, title: "לעבוד עם Google Antigravity ולהריץ את התוצאה ב-DGO" }
+  - { type: comparison, slug: bolt-replit-v0-to-dgo,          plane: DGO-785, title: "לעבור מ-Bolt, Replit ו-v0 ל-DGO" }
+  - { type: comparison, slug: dgo-vs-openai-dots,             plane: DGO-786, title: "DGO מול OpenAI Dots" }
+  - { type: comparison, slug: dgo-vs-meta-muse,               plane: DGO-787, title: "DGO מול Meta Muse לעסקים קטנים" }
+  - { type: comparison, slug: dgo-vs-copilot-and-gemini,      plane: DGO-788, title: "DGO מול Microsoft Copilot ומול Google Workspace עם Gemini" }
+  - { type: comparison, slug: dgo-vs-umbrel-casaos-coolify,   plane: DGO-789, title: "DGO מול Umbrel, CasaOS, Coolify, YunoHost ו-Cloudron" }
+  - { type: comparison, slug: dgo-vs-israeli-saas,            plane: DGO-790, title: "DGO מול תוכנה ישראלית בענן: Monday, Priority, Morning" }
+  - { type: comparison, slug: n8n-vs-zapier,                  plane: DGO-791, title: "n8n מול Zapier ו-Make" }
+  - { type: comparison, slug: jira-and-monday-alternatives,   plane: DGO-791, title: "חלופות ל-Jira ול-Monday בקוד פתוח" }
+  - { type: comparison, slug: notion-alternatives,            plane: DGO-791, title: "חלופות ל-Notion בקוד פתוח" }
+  - { type: comparison, slug: slack-alternatives,             plane: DGO-791, title: "חלופות ל-Slack ול-Teams בקוד פתוח" }
+  - { type: comparison, slug: google-drive-alternatives,      plane: DGO-791, title: "חלופות ל-Google Drive ול-Dropbox בקוד פתוח" }
+  - { type: comparison, slug: photoshop-alternatives,         plane: DGO-791, title: "חלופות ל-Photoshop ול-Illustrator בקוד פתוח" }
+  - { type: comparison, slug: autocad-alternatives,           plane: DGO-791, title: "חלופות ל-AutoCAD, SolidWorks ו-Fusion 360 בקוד פתוח" }
+  - { type: comparison, slug: airtable-alternatives,          plane: DGO-791, title: "חלופות ל-Airtable בקוד פתוח" }
+  - { type: comparison, slug: mailchimp-alternatives,         plane: DGO-791, title: "חלופות ל-Mailchimp בקוד פתוח" }
+  - { type: comparison, slug: calendly-alternatives,          plane: DGO-791, title: "חלופות ל-Calendly בקוד פתוח" }
+  - { type: comparison, slug: zendesk-alternatives,           plane: DGO-791, title: "חלופות ל-Zendesk ול-Intercom בקוד פתוח" }
+  - { type: comparison, slug: password-manager-alternatives,  plane: DGO-791, title: "חלופות ל-1Password ול-LastPass בקוד פתוח" }
+  - { type: comparison, slug: chatgpt-alternatives,           plane: DGO-791, title: "חלופות ל-ChatGPT שרצות אצלכם" }
+  - { type: comparison, slug: figma-alternatives,             plane: DGO-791, title: "חלופות ל-Figma בקוד פתוח" }
+  - { type: comparison, slug: google-analytics-alternatives,  plane: DGO-791, title: "חלופות ל-Google Analytics בקוד פתוח" }
+  - { type: comparison, slug: docusign-alternatives,          plane: DGO-791, title: "חלופות ל-DocuSign בקוד פתוח" }
+  - { type: comparison, slug: microsoft-office-alternatives,  plane: DGO-791, title: "חלופות ל-Microsoft Office בקוד פתוח" }
+  - { type: comparison, slug: hubspot-salesforce-alternatives, plane: DGO-791, title: "חלופות ל-HubSpot ול-Salesforce בקוד פתוח" }
+  - { type: comparison, slug: shopify-wix-alternatives,       plane: DGO-791, title: "חלופות ל-Shopify ול-Wix בקוד פתוח" }
+  - { type: comparison, slug: zoom-alternatives,              plane: DGO-791, title: "חלופות ל-Zoom בקוד פתוח" }
+  - { type: comparison, slug: firebase-alternatives,          plane: DGO-791, title: "חלופות ל-Firebase בקוד פתוח" }
+  - { type: comparison, slug: github-alternatives,            plane: DGO-791, title: "חלופות ל-GitHub שרצות אצלכם" }
+  - { type: comparison, slug: sentry-alternatives,            plane: DGO-791, title: "חלופות ל-Sentry בקוד פתוח" }
+  - { type: comparison, slug: google-photos-alternatives,     plane: DGO-791, title: "חלופות ל-Google Photos בקוד פתוח" }
+  - { type: comparison, slug: okta-alternatives,              plane: DGO-791, title: "חלופות ל-Okta ול-Auth0 בקוד פתוח" }
+  - { type: comparison, slug: typeform-alternatives,          plane: DGO-791, title: "חלופות ל-Typeform ול-Google Forms בקוד פתוח" }
+  - { type: directory,  slug: popular-israeli-sites,          plane: DGO-672, title: "200 האתרים הישראליים שעסק נוגע בהם" }
+  - { type: directory,  slug: israeli-banks-digital-services, plane: DGO-673, title: "הבנקים בישראל והשירותים הדיגיטליים שלהם" }
+  - { type: directory,  slug: israeli-business-software,      plane: DGO-674, title: "תוכנה ישראלית לעסקים: מה כל אחת עושה וכמה היא עולה" }
+  - { type: directory,  slug: israeli-online-retailers,       plane: DGO-675, title: "קמעונאים עם קנייה אונליין: רמי לוי, שופרסל וכל השאר" }
+  - { type: directory,  slug: physical-offices-and-embassies, plane: DGO-677, title: "משרדים פיזיים ושגרירויות: איפה מקבלים הזדהות, סיסמאות ותורים" }
+  - { type: directory,  slug: cloud-providers-for-dgo,        plane: DGO-680, title: "ספקי ענן ו-VPS ש-DGO רץ עליהם, וכמה זה עולה" }
+  - { type: directory,  slug: ai-platforms-map,               plane: DGO-681, title: "מפת עולם ה-AI: מה כל פלטפורמה עושה ומה הקשר ל-DGO" }
+  - { type: news,       slug: dgo-1-released-agpl,            plane: DGO-662, title: "DGO 1 שוחרר בקוד פתוח, ברישיון AGPL v3" }
+  - { type: report,     slug: oss-weekly-2026-10-19,          plane: DGO-809, title: "מה חדש בקוד פתוח לעסקים — שבוע 19 באוקטובר 2026", angle: "real releases of the flagship projects in the last 14 days, from their release pages" }
+  - { type: report,     slug: regulation-2026-10,             plane: DGO-811, title: "רגולציה ומשפט לעסקים דיגיטליים — אוקטובר 2026", angle: "Amendment 13, AI policy, חשבוניות ישראל thresholds, EU AI Act timeline, e-signature, accessibility — each with its official source" }

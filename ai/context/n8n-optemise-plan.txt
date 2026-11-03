@@ -1,6 +1,6 @@
 n8n optimise plan (findings + mitigations)
 Date: 2025-09-19
-Scope: n8n + Postgres + Redis on Docker Compose (Traefik v3). Services: n8n-bina-deployment, n8n-postgres-bina-deployment, redis. DB: Postgres 17, db "n8n", user "bina-comp". Queue env present; EXECUTIONS save-on-progress enabled; concurrency limit commented out.
+Scope: n8n + Postgres + Redis on Docker Compose (Traefik v3). Services: n8n-bina-deployment, n8n-postgres-bina-deployment, redis. DB: Postgres 17, db "n8n", user "hacohen". Queue env present; EXECUTIONS save-on-progress enabled; concurrency limit commented out.
 
 1) Symptoms observed
 - During run of HTTP → Run with ~6000 items in a burst:
@@ -14,7 +14,7 @@ Scope: n8n + Postgres + Redis on Docker Compose (Traefik v3). Services: n8n-bina
 - Collation version mismatch spam adds noise and may incur extra checks at query time.
 
 3) Current instrumentation
-- DB slow query logging enabled to 200ms via role-in-database for bina-comp@n8n (effective for new sessions).
+- DB slow query logging enabled to 200ms via role-in-database for hacohen@n8n (effective for new sessions).
 - Lock wait logging on; deadlock_timeout=1s. logging_collector currently off (logs go to container stderr).
 
 4) Immediate mitigations (low risk)

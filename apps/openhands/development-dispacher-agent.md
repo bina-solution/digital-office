@@ -9,10 +9,10 @@
 | Field | Value |
 |-------|-------|
 | **Project Name** | `development-dispacher-agent` |
-| **Repository** | `deployment-bina-comp/openhands/` |
+| **Repository** | `deployment-hacohen/openhands/` |
 | **Branch** | `COPILOT` |
-| **Deployment Domain** | `dispatch.bina-comp.bina-solutions.co.il` |
-| **OpenHands Domain** | `openhands.bina-comp.bina-solutions.co.il` |
+| **Deployment Domain** | `dispatch.hacohen.bina-solutions.co.il` |
+| **OpenHands Domain** | `openhands.hacohen.bina-solutions.co.il` |
 | **Setup Command** | `docker compose up -d openhands dispatcher` |
 | **Net Lines of Config** | ~200 (compose) + ~3000 (dispatcher) + ~130 (init) |
 
@@ -134,7 +134,7 @@ Note: No hardcoded models, no profile overwriters, no file patchers
 
 ### Web UI Access
 ```
-openhands.bina-comp.bina-solutions.co.il
+openhands.hacohen.bina-solutions.co.il
   ├── /                          → Main dashboard
   ├── /conversations/{id}        → Conversation view
   ├── /settings                  → LLM profile settings
@@ -153,7 +153,7 @@ The `ai/context/deployment-context.txt` file is injected into OpenHands agent ta
 |---------|------------------|
 | Service Map | 60+ services, their ports, URLs, resource limits |
 | Compose Structure | 14 sub-compose files, Traefik v3.3 proxy |
-| Domain Pattern | `<service>.bina-comp.bina-solutions.co.il` |
+| Domain Pattern | `<service>.hacohen.bina-solutions.co.il` |
 | Network Architecture | `traefik-network` for all services |
 | Deployment Instructions | How to add new services with Traefik labels |
 | Database Info | PostgreSQL versions, connection strings |
@@ -171,10 +171,10 @@ if (/deploy|clone|setup|create.*service|add.*docker|nginx/i.test(message)) {
 
 ### Key Deployment Rules (for agents)
 1. Use HOST paths for volume mounts, not sandbox paths
-2. `/workspace/project/` maps to `/root/deployment-bina-comp/` on Docker host
+2. `/workspace/project/` maps to `/root/deployment-hacohen/` on Docker host
 3. Add new services to root `compose.yml` `include` directive
 4. Traefik labels: `traefik.enable=true`, host rule, TLS
-5. Restart from root: `cd /root/deployment-bina-comp && docker compose up -d`
+5. Restart from root: `cd /root/deployment-hacohen && docker compose up -d`
 
 ---
 
@@ -182,7 +182,7 @@ if (/deploy|clone|setup|create.*service|add.*docker|nginx/i.test(message)) {
 
 ### Core Files (must exist for system to work)
 ```
-deployment-bina-comp/
+deployment-hacohen/
 ├── .env                              # API keys + config vars
 ├── compose.yml                       # Root compose (includes openhands/...)
 ├── compose.override.yaml             # Traefik labels per service
@@ -215,9 +215,9 @@ deployment-bina-comp/
 openhands_state:  /.openhands-state   → settings.json, dispatcher DBs
 openhands_config: /.openhands         → settings.json seed
 /var/run/docker.sock                  → Docker API access
-/root/deployment-bina-comp              → Workspace mount (full host access)
-/root/deployment-bina-comp/downloads    → Shared file transfer
-/root/deployment-bina-comp/ai/obsidian     → AI memory vault
+/root/deployment-hacohen              → Workspace mount (full host access)
+/root/deployment-hacohen/downloads    → Shared file transfer
+/root/deployment-hacohen/ai/obsidian     → AI memory vault
 ```
 
 ### Startup Sequence
@@ -357,8 +357,8 @@ Internet
   │
   ▼
 Traefik (443)
-  ├── openhands.bina-comp... → openhands:3000 (Web UI + API)
-  └── dispatch.bina-comp...  → dispatcher:8800 (Chat UI + Telegram webhook)
+  ├── openhands.hacohen... → openhands:3000 (Web UI + API)
+  └── dispatch.hacohen...  → dispatcher:8800 (Chat UI + Telegram webhook)
                                 │
                                 ├── Direct LLM call (DeepSeek API)
                                 ├── Vision LLM call (Gemini API)
@@ -368,8 +368,8 @@ Traefik (443)
 ### One-Command Setup
 ```bash
 # 1. Clone repo
-git clone https://github.com/solomonBoltin/deployment-bina-comp
-cd deployment-bina-comp
+git clone https://github.com/solomonBoltin/deployment-hacohen
+cd deployment-hacohen
 
 # 2. Configure .env (add API keys)
 cp .env.ex .env

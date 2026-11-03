@@ -143,6 +143,25 @@ def fam(image):
     return ALIASES.get(family(image), family(image))
 
 
+#: A LANGUAGE RUNTIME IS NOT A PIECE OF SOFTWARE, so an image that carries one does not identify a
+#: provider. `meet` serves `recordings` from its own python tile service (`python:3.12-alpine` plus
+#: code in THIS repo), and taking that image name as the capability's family made every one-shot
+#: `python:3-alpine` job in the catalog look like a second recordings service — openhands' two init
+#: jobs (a settings generator and a litellm config renderer, neither of which serves a single
+#: `recordings` op) were reported as undeclared own instances. The rule below keeps what the family
+#: test exists FOR (postgres, redis, valkey, jitsi… where the image IS the software) and drops the
+#: case where the image says only "this is written in python".
+LANGUAGE_RUNTIMES = frozenset({
+    "python", "node", "alpine", "busybox", "debian", "ubuntu", "golang", "rust", "ruby", "php",
+    "openjdk", "eclipse-temurin", "deno", "bun", "perl",
+})
+
+
+def names_software(family_name: str) -> bool:
+    """Does this image family identify the SOFTWARE a capability is served by? (see above)"""
+    return bool(family_name) and family_name not in LANGUAGE_RUNTIMES
+
+
 # Capabilities served by something OUTSIDE this catalog, waived BY NAME with the reason. It is empty
 # and must stay that way for as long as every provider is a manifest: the enumeration below already
 # spans apps/ + platform-base/, which is where the platform's own substrate (sql, kv, secrets, edge,
@@ -263,7 +282,7 @@ def capability_families(cat):
                 continue          # abstract capability (forward-auth, automation-stdlib) — no image
             host = ep.split("://", 1)[-1].split("/", 1)[0].rsplit(":", 1)[0]
             f = by_host.get(host)
-            if f:
+            if f and names_software(f):
                 out.setdefault(name, set()).add(f)
     return out
 
@@ -316,6 +335,8 @@ def self_test() -> int:
         ("another entrypoint but restarted: a server with a wrapper", one_shot(dict(job, restart="always")), False),
         ("namespace and tag do not make a different database", fam("supabase/postgres:15.8.1.085"), "postgres"),
         ("a fork speaking the same protocol is the same family", fam("valkey/valkey:8"), "redis"),
+        ("a database's image names the software", names_software("postgres"), True),
+        ("a language runtime names nothing to compare", names_software(fam("python:3-alpine")), False),
         ("a use[] a manifest provides is satisfied", unsatisfied(good), []),
         ("a use[] NOBODY provides is refused, by name and manifest",
          unsatisfied(typo), [("bina-ds", "notifications", "requires", "apps/bina-ds/app.json")]),

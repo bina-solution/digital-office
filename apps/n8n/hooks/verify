@@ -28,8 +28,11 @@ audit N8N_GOOGLE_OAUTH_CLIENT_ID "Google OAuth (Sheets/Drive) cannot connect"
 audit N8N_GMAIL_OAUTH_CLIENT_ID  "Gmail OAuth cannot connect"
 
 echo "[2) settings webhook + 3) OAuth credentials]"
+# The Settings webhook (/webhook/setting) is INDOX's own workflow: an office with INDOX off never imports it, so n8n
+# answers 404 there and the probe reported a fault that is not one (FPG, CHAT-105). Ask it only where INDOX is on.
+INDOX_OFF="$(grep -qE '^[[:space:]]*indox:[[:space:]]*\{[^}]*state:[[:space:]]*enabled' "${REPO_ROOT}/platform.state.yaml" 2>/dev/null || echo 1)"
 NOCLR="$([ -t 1 ] && echo '' || echo 1)"
-docker exec -e OE="${OE}" -e OP="${OP}" -e SU="$(read_env SETTINGS_AUTH_USER)" -e SP="$(read_env SETTINGS_AUTH_PASS)" -e OAB="$(read_env N8N_OAUTH_BASE)" -e NOCLR="${NOCLR}" "${N8N}" node -e '
+docker exec -e INDOX_OFF="${INDOX_OFF}" -e OE="${OE}" -e OP="${OP}" -e SU="$(read_env SETTINGS_AUTH_USER)" -e SP="$(read_env SETTINGS_AUTH_PASS)" -e OAB="$(read_env N8N_OAUTH_BASE)" -e NOCLR="${NOCLR}" "${N8N}" node -e '
 const OE=process.env.OE,OP=process.env.OP;let C="";
 const reauthBase=(process.env.OAB&&process.env.OAB.length)?process.env.OAB:"http://127.0.0.1:5678";
 async function rq(p,m,b,h){const r=await fetch("http://localhost:5678"+p,{method:m||"GET",headers:{"Content-Type":"application/json",...(C?{Cookie:C}:{}),...(h||{})},body:b?JSON.stringify(b):undefined});const sc=r.headers.get("set-cookie");if(sc)C=sc.split(";")[0];const t=await r.text();let j=null;try{j=JSON.parse(t);}catch(e){}return{status:r.status,text:t,data:j&&j.data!==undefined?j.data:j};}
@@ -40,7 +43,8 @@ const ok=s=>console.log("  "+G+"✓"+C0+" "+s),wa=s=>console.log("  "+Y+"!"+C0+"
   // retry only while the connection is refused (n8n restarting); stop once an HTTP response comes.
   for(let i=0;i<30;i++){ try{ await rq("/rest/login","POST",{emailOrLdapLoginId:OE,password:OP}); break; }catch(e){ await new Promise(r=>setTimeout(r,2000)); } }
   if(!C){ wa("could not authenticate to n8n (still starting / login rate-limited / N8N_OWNER_* wrong) — re-run: bbox n8n verify"); return; }
-  if(process.env.SU){
+  if(process.env.INDOX_OFF){ ok("settings webhook not asked — INDOX is off in this office (the webhook belongs to the INDOX Settings workflow)"); }
+  else if(process.env.SU){
     try{ const a=Buffer.from(process.env.SU+":"+process.env.SP).toString("base64");
       // cap the probe: a broken Settings workflow (e.g. inaccessible data sheet) retries ~45s before 500 —
       // a readiness check must fail FAST and loud, not hang. 8s is plenty for a healthy sheet read.

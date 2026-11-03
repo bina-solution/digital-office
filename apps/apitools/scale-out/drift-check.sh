@@ -19,8 +19,8 @@
 set -uo pipefail
 
 export DOCKER_HOST=${DOCKER_HOST:-unix:///run/bbox-docker.sock}
-KEY=${PORTABLE_KEY:-/home/shlomo/.ssh/portable_key}
-HOST=${PORTABLE_HOST:-shlomy@192.168.16.103}
+KEY=${PORTABLE_KEY:?set PORTABLE_KEY to the ssh key of the machine to scale out to}
+HOST=${PORTABLE_HOST:?set PORTABLE_HOST=<user>@<host> of the machine to scale out to}
 SSHO="-i $KEY -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15"
 LOCAL_C=${LOCAL_CONTAINER:-apitools}
 REMOTE_C=${REMOTE_CONTAINER:-apitools-remote}

@@ -21,9 +21,9 @@ HEADERS = {
 
 # Credential IDs (from the database)
 CREDS = {
-    "googleSheetsOAuth2Api": {"id": "e2knIZpw8YF0QBAB", "name": "Google Sheets person17@example.com"},
-    "googleDriveOAuth2Api": {"id": "KirWFwoFdEFmnN0R", "name": "Google Drive person17@example.com"},
-    "gmailOAuth2": {"id": "jft0CdgvgPNvaLNn", "name": "Gmail person17@example.com"},
+    "googleSheetsOAuth2Api": {"id": "e2knIZpw8YF0QBAB", "name": "Google Sheets person17.x@example.com"},
+    "googleDriveOAuth2Api": {"id": "KirWFwoFdEFmnN0R", "name": "Google Drive person17.x@example.com"},
+    "gmailOAuth2": {"id": "jft0CdgvgPNvaLNn", "name": "Gmail person17.x@example.com"},
     "googlePalmApi": {"id": "6mfcsdRaqQ4IdQ8Y", "name": "ai-studio-bs-extraction"},
     "redis": {"id": "BoJE1odVZ6MBcpax", "name": "Redis Local Account"},
     "postgres": {"id": "tJ195ajNq1kQveRG", "name": "N8N DB"},
@@ -80,10 +80,10 @@ def gsheet_workflow():
                     "authentication": "oAuth2",
                     "documentId": {
                         "__rl": True,
-                        "value": "1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo",
+                        "value": "1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0049",
                         "mode": "list",
                         "cachedResultName": "AutomationValues",
-                        "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo/edit?usp=drivesdk",
+                        "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0049/edit?usp=drivesdk",
                     },
                     "sheetName": {
                         "__rl": True,

@@ -20,7 +20,11 @@ EXT_PATH = os.environ.get("EXTENSIONS_PATH", "/data/extensions.json")
 
 # The slots this service offers (§4c). A slot it does not render is refused at registration: an app
 # must never believe it registered something that will never appear.
-SLOTS = ("rail", "container_badge", "item_action", "dropzone")
+#   open-with  an app that opens or edits files from «קבצים»: {label, exts:[…], mimes:[…],
+#              url:"/a/<app>/open?file={id}", mode:"view"|"edit", target?:"tab"}. The files UI offers
+#              it on every file it matches — and only while the app is registered, so an office
+#              that does not run the app never sees it.
+SLOTS = ("rail", "container_badge", "item_action", "dropzone", "open-with")
 _NAME = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
 
 

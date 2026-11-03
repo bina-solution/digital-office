@@ -1,0 +1,168 @@
+#!/usr/bin/env python3
+"""Point the STAGED n8n workflows at the offices that run what they call (DGO-945) — and back.
+
+    scripts/link-endpoints-apply --stage DIR              rewrite DIR/*.json in place, and say every rewrite
+    scripts/link-endpoints-apply --stage DIR --inverse    the other way: a door's address back to the app's
+
+A workflow names what it calls by the address its app declares: `http://apitools-asr:8987` (the
+speech capability's endpoint), `http://meet-start:8001` (Meet's recordings door), `http://project-pln:80`
+(Plane's backend). In the office that runs the app, the name resolves. In one that does not, the
+app may run in a linked office that publishes it, and the call has to go to that office's link
+door: `http://speech.dell:<door>`. The compiler knows both halves — which apps run here, and what
+each linked office publishes — and prints the map (`reconcile.py link-endpoints`); this applies it
+to the copies that are about to be imported. The repo's blueprints keep their own names.
+
+`--inverse` is the pull's half (`bbox n8n pull`): what comes back from this office's n8n carries the
+doors it was pushed with, and the blueprint is shared by every office, so the doors are turned back
+into the apps' own addresses before a line of code is written. It reads the doors' SHAPE from the
+manifests, never this minute's map: `http://<name>.<office>:<port>`, where <name> is a capability an
+app offers to links or a tile's alias and <port> is a link door's (9001–9254, any office: a door
+that moved or was withdrawn since the push goes back too) or the app's own (an office this one is
+linked to), goes back to that app's own address. Anything else of that shape — an agent API on its
+own port, a host that only looks like `<name>.<office>` — is left as written. A name two apps
+declare cannot be turned back without a guess, and stops the pull.
+
+Only an address followed by a path, a quote or the end of the string is rewritten, so
+`http://meet-start:8080` never matches inside `http://meet-start:80801`. Every rewrite is printed
+(its sibling, scripts/perf-profile-apply, once substituted nothing for a year and said nothing). A
+map that cannot be computed stops the push and the pull: importing the local names into an office
+where they do not resolve is a workflow that fails on every run, and committing an office's doors
+into the shared blueprint points every other office at them.
+"""
+import glob, json, os, re, subprocess, sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def endpoint_map() -> dict:
+    r = subprocess.run([sys.executable, os.path.join(ROOT, "platform", "manager", "reconcile.py"),
+                        "link-endpoints"], cwd=ROOT, capture_output=True, text=True)
+    if r.returncode != 0:
+        raise SystemExit(f"[link-endpoints] the map could not be computed:\n{r.stderr.strip()}")
+    if r.stderr.strip():
+        print(r.stderr.strip(), file=sys.stderr)
+    return json.loads(r.stdout or "{}")
+
+
+#: An address the forward map writes: `http://<name>.<office>:<door>` (never `.localhost`, which is an
+#: authority of this office and not a linked one).
+DOOR = re.compile(r"http://([a-z][a-z0-9-]{0,30})\.([a-z][a-z0-9-]{1,30}):(\d{1,5})(?=[/'\"`\\]|$)")
+#: The ports a link door listens on (`linkproxy.DOOR_BASE` + the pair's slot, 1–254). The forward map
+#: writes one of these, or — for a peer whose catalog names no door — the app's own port; any other
+#: `<name>.<office>:<port>` is somebody's ordinary address (`bina.macbook:3081`, a CLI's agent door;
+#: `chat.example:3000`) and is never turned back (second reader, DGO-945).
+DOOR_PORTS = range(9001, 9255)
+
+
+def linked_offices() -> set:
+    """The offices this one is linked to now (`reconcile.py remote-get`) — the only ones an address on
+    an app's OWN port may be a door of. A block that cannot be read is no office: the door range still
+    turns back, an app's own port then does not."""
+    try:
+        r = subprocess.run([sys.executable, os.path.join(ROOT, "platform", "manager", "reconcile.py"),
+                            "remote-get"], cwd=ROOT, capture_output=True, text=True, timeout=120)
+        block = json.loads(r.stdout or "[]") if r.returncode == 0 else []
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return set()
+    return {str(e.get("office") or "").lower() for e in block if isinstance(e, dict)}
+#: reconcile._endpoint_parts, for the address the door goes back to.
+ENDPOINT = re.compile(r"https?://([a-z0-9][a-z0-9-]*)(?::(\d{1,5}))?/?")
+
+
+def door_names() -> dict:
+    """<name> → the app addresses a door of that name stands for, from every manifest the compiler
+    reads (reconcile.CATALOG_ROOTS): each `link: true` capability by its name, each tile by its
+    alias — the same pairs `reconcile.link_endpoints` rewrites."""
+    names: dict = {}
+    for f in sorted(glob.glob(os.path.join(ROOT, "platform-base", "*", "app.json"))
+                    + glob.glob(os.path.join(ROOT, "apps", "*", "app.json"))):
+        try:
+            with open(f, encoding="utf-8") as fh:
+                man = json.load(fh)
+        except (OSError, ValueError):
+            continue
+        pairs = [(c.get("name"), c.get("endpoint")) for c in (man.get("capabilities") or [])
+                 if isinstance(c, dict) and c.get("link")]
+        pairs += [((r.get("module") or {}).get("alias"), (r.get("module") or {}).get("url"))
+                  for r in (man.get("routing") or []) if isinstance(r, dict) and isinstance(r.get("module"), dict)]
+        for name, endpoint in pairs:
+            m = ENDPOINT.fullmatch(str(endpoint or "").strip().lower())
+            name = str(name or "").strip().lower()
+            if m and name:
+                names.setdefault(name, set()).add(f"http://{m.group(1)}:{int(m.group(2) or 80)}")
+    return names
+
+
+def turn_back(text: str, names: dict, offices: set = frozenset()) -> tuple[str, dict, list]:
+    """Every address the push could have written — a known name, on a door's port (or on the app's own
+    port, for an office this one is linked to) — back to its app's own address."""
+    said, ambiguous = {}, []
+
+    def one(m):
+        name, office, port = m.group(1), m.group(2), int(m.group(3))
+        bases = names.get(name) or set()
+        if office == "localhost" or not bases:
+            return m.group(0)
+        own = {int(b.rsplit(":", 1)[1]) for b in bases}
+        if port not in DOOR_PORTS and not (port in own and office in offices):
+            return m.group(0)
+        if len(bases) > 1:
+            ambiguous.append(f"{m.group(0)} ({', '.join(sorted(bases))})")
+            return m.group(0)
+        base = next(iter(bases))
+        said[f"{m.group(0)} → {base}"] = said.get(f"{m.group(0)} → {base}", 0) + 1
+        return base
+    return DOOR.sub(one, text), said, ambiguous
+
+
+def rewrite(text: str, emap: dict) -> tuple[str, dict]:
+    said = {}
+    for local, there in sorted(emap.items(), key=lambda kv: -len(kv[0])):
+        pat = re.compile(re.escape(local) + r"(?=[/'\"`\\]|$)")
+        text, n = pat.subn(there, text)
+        if n:
+            said[f"{local} → {there}"] = n
+    return text, said
+
+
+def main(argv) -> int:
+    inverse = argv[3:] == ["--inverse"]
+    if len(argv) not in (3, 4) or argv[1] != "--stage" or (len(argv) == 4 and not inverse):
+        print(__doc__.strip().splitlines()[2].strip(), file=sys.stderr)
+        return 2
+    stage = argv[2]
+    files = sorted(glob.glob(os.path.join(stage, "*.json")))
+    if not files:
+        return 0
+    names = door_names() if inverse else {}
+    offices = linked_offices() if inverse else set()
+    emap = {} if inverse else endpoint_map()
+    if not inverse and not emap:
+        return 0
+    stuck, out = [], []
+    for f in files:
+        with open(f, encoding="utf-8") as fh:
+            text = fh.read()
+        if inverse:
+            new, said, ambiguous = turn_back(text, names, offices)
+            stuck += [f"{os.path.basename(f)[:-5]}: {a}" for a in ambiguous]
+        else:
+            new, said = rewrite(text, emap)
+        if said:
+            json.loads(new)                  # a rewrite never leaves a file n8n cannot import
+            out.append((f, new, said))
+    if stuck:
+        # nothing is written: every file is turned back, or none is
+        print("[link-endpoints] these addresses are the door of more than one app, and turning them back "
+              "would be a guess:\n  " + "\n  ".join(stuck), file=sys.stderr)
+        return 1
+    for f, new, said in out:
+        with open(f, "w", encoding="utf-8") as fh:
+            fh.write(new)
+        for what, n in said.items():
+            print(f"[link-endpoints] {os.path.basename(f)[:-5]}: {what} (×{n})")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

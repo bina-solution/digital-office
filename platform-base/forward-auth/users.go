@@ -13,7 +13,7 @@ import (
 	"strings"
 )
 
-// The user store is a FILE read once at boot and then held in memory. It is deliberately not a
+// The user store is a FILE, held in memory and re-read when it changes (live.go). It is deliberately not a
 // database and not an API: v1 has one owner, and the office already has exactly one place that
 // holds a person's secret — the credential plane (`connections`). When the credential plane can
 // write this file, the store is empty of policy and this program never learns a new fact.

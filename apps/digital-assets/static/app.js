@@ -30,16 +30,26 @@ const MOUNT = (() => {
   }
 })();
 function reportRoute() {
-  if (window.parent === window) return;
-  const inner = location.hash.replace(/^#/, '') || '/';
-  try { window.parent.postMessage({ type: 'bina:route', path: inner.startsWith('/') ? inner : '/' + inner }, location.origin); }
-  catch (e) { /* an opaque parent — nothing to mirror */ }
+  // NOTHING IS POSTED, AND THAT IS THE CHANGE (2026-10-13). The console mirrors the frame's own URL
+  // by itself now (platform-base/console/static/app.js `watchFrameRoute`), and this app already
+  // translates an arriving path into its own hash (`adoptPathRoute` above) — so what this function
+  // used to send is exactly what the URL already holds. The call sites stay (they are where the route
+  // is read), the message is gone, and the console's `bina:route` listener goes with it once every
+  // sender is converted. THIS OFFICE DOES NOT RUN THIS APP: the deploy-and-measure step belongs to an
+  // office that does (the source change is inert here — the app is disabled in platform.state.yaml).
+  return;
 }
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g,
   (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const S = { ov: null, route: '', query: {}, slotCache: {}, drawerKey: null };
+
+// ONE IS SAID AS ONE (G86): a count of one is its own sentence — «1 ערוצים» is not Hebrew — and
+// every other count is the number with the plural. The rule is written out in
+// apps/mail/mailview/static/app.js.
+const num = (n) => Number(n).toLocaleString('he-IL');
+const one = (n, single, many) => (Number(n) === 1 ? single : `${num(n)} ${many}`);
 
 /* @bina-said:start */
 var binaSaid = (status) => (!status ? "אין תשובה מהשירות"
@@ -270,7 +280,9 @@ const GROUP_HE = { logo: 'לוגו', name: 'שמות', names: 'שמות', legal:
   community: 'קהילה', menu: 'תפריטים', kosher: 'כשרות', license: 'רישוי', signage: 'שילוט', table: 'שולחן',
   delivery: 'משלוחים', reservations: 'הזמנת מקומות', events: 'אירועים', specials: 'מנות היום',
   catering: 'קייטרינג', restaurant: 'המסעדה', links: 'קישורים', photo: 'צילומים', image: 'תמונות',
-  video: 'וידאו', food: 'צילומי אוכל', inbox: 'לא משובץ', calendar: 'לוח שנה' };
+  video: 'וידאו', food: 'צילומי אוכל', inbox: 'לא משובץ', calendar: 'לוח שנה',
+  library: 'ספריית התוכן', article: 'מאמרי עומק', project: 'כרטיסי פרויקטים', tutorial: 'מדריכים',
+  comparison: 'השוואות וחלופות', directory: 'מפתחות', report: 'דוחות', post: 'פוסטים', glossary: 'מילון' };
 const grpHe = (g) => GROUP_HE[g] || g || 'כללי';
 const lbl = (o) => (o && (o.he || o.en)) || '';
 const fmtDate = (iso) => { if (!iso) return ''; const [y, m, d] = String(iso).split('-'); return `${d}.${m}.${String(y).slice(2)}`; };
@@ -321,11 +333,11 @@ window.addEventListener('hashchange', route);
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('drawer-root').innerHTML) closeDrawer(); });
 
 const MENU = [
-  { path: '/', label: 'סקירה', icon: 'home' },
+  { path: '/', label: 'מפה', icon: 'home' },
   { path: '/s/identity', label: 'זיהוי', icon: 'id', count: 'identity' },
   { path: '/s/content', label: 'תוכן', icon: 'text', count: 'content' },
   { path: '/media', label: 'מדיה', icon: 'image', count: 'media' },
-  { path: '/channels', label: 'ערוצים', icon: 'share', count: 'channels' },
+  { path: '/gallery', label: 'גלריה', icon: 'image' },  /* OP-13: channels left the UI (a future social app) */
   { path: '/blueprints', label: 'תבניות', icon: 'layers' },
   { path: '/activity', label: 'פעילות', icon: 'activity' },
 ];
@@ -380,7 +392,9 @@ async function route() {
   view.dataset.path = path;
   $('actions').innerHTML = '';
   try {
-    if (path === '/') await pageOverview();
+    if (path === '/') await (window.pageMap || pageOverview)();  /* OP-13: the map (map.js) */
+    else if (path === '/gallery') await window.pageGallery();  /* OP-13: the Drive gallery (gallery.js) */
+    else if (path === '/channels') { go('/'); return; }  /* OP-13: no channels screen */
     else if (path.startsWith('/s/')) await pageSection(path.split('/')[2]);
     else if (path.startsWith('/media')) await pageMedia(path.split('/')[2] || 'timeline');
     else if (path === '/channels') await pageChannels();
@@ -606,7 +620,7 @@ function slotThumb(s) {
 }
 function slotValue(s) {
   const a = s.active;
-  if (!a) return s.count ? `${s.count} גרסאות · אין פעילה` : 'ריק';
+  if (!a) return s.count ? `${one(s.count, 'גרסה אחת', 'גרסאות')} · אין פעילה` : 'ריק';
   if (a.text) return a.text.replace(/\s+/g, ' ').slice(0, 140);
   return a.title || KIND_HE[a.kind] || a.kind;
 }
@@ -616,7 +630,7 @@ function slotRow(s) {
     <div class="t">${slotThumb(s)}<div class="tx"><div class="lbl">${esc(lbl(s.label))}</div>
       <div class="val">${esc(slotValue(s))}</div></div></div>
     <div class="end">${s.required && !s.active ? chip('חובה', 'req') : ''}
-      ${reach ? chip(`${reach} ערוצים`, 'plain', 'לאן הנכס מגיע') : ''}
+      ${reach ? chip(one(reach, 'ערוץ אחד', 'ערוצים'), 'plain', 'לאן הנכס מגיע') : ''}
       ${s.active ? chip('פעיל', 'ok') : ''}</div></div>`;
 }
 
@@ -772,7 +786,8 @@ function addForm(s) {
   else if (textish) input = `<input id="f-text" ${max} placeholder="${esc(KIND_HE[k] || 'ערך')}">`;
   return `${textish ? input : ''}
     ${fileish ? `<div class="drop" id="f-drop" tabindex="0" title="בחירת קובץ">${ic('upload')} גררו לכאן קובץ, או לחצו לבחירה
-      <input type="file" id="f-file" hidden></div><div class="note" id="f-picked"></div>` : ''}
+      <input type="file" id="f-file" hidden></div><div class="note" id="f-picked"></div>
+      <button class="btn sm" type="button" onclick="gxPickFor(S.query.slot)" title="פריט מהגלריה — הופך לגרסה הפעילה של המשבצת הזאת">${ic('image')}בחירה מהגלריה</button>` : ''}
     ${k === 'document' ? '<label for="f-exp">בתוקף עד</label><input type="date" id="f-exp">' : ''}
     ${textish && cons.max_len ? `<div class="note" id="f-count">0 / ${cons.max_len}</div>` : ''}
     <div class="row" style="margin-top:10px">
@@ -852,7 +867,7 @@ async function showPlan(key, assetId) {
   const pl = r.body;
   const go = pl.items.filter((it) => it.action !== 'skip' && it.action !== 'manual');
   const manual = pl.items.filter((it) => it.action === 'manual').length;
-  box.innerHTML = `<h4>תכנית פרסום <span class="note">${go.length} ערוצים ישתנו${manual ? ` · ${manual} עדכונים ידניים (סמנו כדי לעקוב)` : ''} · ${pl.items.length - go.length - manual} לא</span></h4>
+  box.innerHTML = `<h4>תכנית פרסום <span class="note">${one(go.length, 'ערוץ אחד ישתנה', 'ערוצים ישתנו')}${manual ? ` · ${one(manual, 'עדכון ידני אחד (סמנו כדי לעקוב)', 'עדכונים ידניים (סמנו כדי לעקוב)')}` : ''} · ${pl.items.length - go.length - manual} לא</span></h4>
     <div class="plan">${pl.items.map((it) => `<label class="pi ${it.action === 'skip' ? 'off' : ''}" style="margin:0">
       <input type="checkbox" data-i="${it.i}" ${it.action === 'skip' ? 'disabled' : (it.action === 'manual' ? '' : 'checked')} aria-label="כלול ${esc(it.channel_label)}">
       <div style="min-width:0"><div class="c">${esc(it.channel_label)}${it.field_label ? ` · ${esc(it.field_label)}` : ''}</div>
@@ -873,7 +888,7 @@ async function showPlan(key, assetId) {
     if (!choose.length) return binaTell('לא סומן אף ערוץ', 'warn');
     const r2 = await post(`api/slots/${encodeURIComponent(key)}/publish`, { asset_id: pl.asset_id, choose, watch: $('p-watch').checked });
     if (!r2.ok) return binaTell(errText(r2.body), 'bad');
-    binaTell(`הפרסום יצא ל-${choose.length} ערוצים — ההתקדמות כאן`);
+    binaTell(`הפרסום יצא ל-${one(choose.length, 'ערוץ אחד', 'ערוצים')} — ההתקדמות כאן`);
     S.drawerKey = null;
     withQuery({ slot: key, plan: null });
     refreshSoon();
@@ -986,7 +1001,7 @@ async function mediaTimeline() {
         const specs = (p.assets || []).map((a) => KIND_HE[a.kind] || a.kind);
         return `<div class="unit" data-key="${esc(u.key)}" tabindex="0" title="${esc(u.key)}">${due}
           <div style="min-width:0"><div class="nm">${esc(lbl(u.label))}</div><div class="sub">${esc([...new Set(specs)].join(' · ') || lbl(u.brief))}</div></div>
-          <div class="end">${u.count ? chip(`${u.count} פריטים`, 'ok') : chip('ריק', 'plain')}${(p.channels || []).length ? chip(`${p.channels.length} ערוצים`, 'plain') : ''}</div></div>`;
+          <div class="end">${u.count ? chip(one(u.count, 'פריט אחד', 'פריטים'), 'ok') : chip('ריק', 'plain')}${(p.channels || []).length ? chip(one(p.channels.length, 'ערוץ אחד', 'ערוצים'), 'plain') : ''}</div></div>`;
       }).join('')}</div></div>`;
   }).join('') || '<div class="card"><div class="empty">אין עדיין יחידות מדיה. <a href="#/blueprints">החילו תבנית</a>.</div></div>');
   $('view').querySelectorAll('.unit').forEach((el) => { el.onclick = () => openSlot(el.dataset.key); el.onkeydown = (e) => { if (e.key === 'Enter') openSlot(el.dataset.key); }; });
@@ -1006,7 +1021,7 @@ async function mediaGallery() {
   const items = r.body.assets;
   S.sel = S.sel || new Set();
   if (!items.length) { $('view').innerHTML = '<div class="card"><div class="empty">הגלריה ריקה. מדיה שעזריה יוצרת נכנסת לכאן, וכל קובץ שמעלים ליחידת מדיה.</div></div>'; return; }
-  $('view').innerHTML = `<div class="card"><h3>הגלריה <span class="hint">${items.length} פריטים · סמנו כדי לפרסם יחד</span>
+  $('view').innerHTML = `<div class="card"><h3>הגלריה <span class="hint">${one(items.length, 'פריט אחד', 'פריטים')} · סמנו כדי לפרסם יחד</span>
       <button class="btn sm primary" id="g-post" title="פוסט עם הפריטים המסומנים">${ic('send')}פוסט עם המסומנים</button></h3>
     <div class="gallery">${items.map((a) => `<button class="tile ${S.sel.has(a.id) ? 'sel' : ''}" data-id="${esc(a.id)}" data-slot="${esc(a.slot_key)}" title="${esc(a.slot_label || a.slot_key)}">
       <div class="pic">${a.file && /^image\//.test(a.mime || '') ? `<img src="${esc(a.thumb)}" alt="" loading="lazy">`
@@ -1069,7 +1084,7 @@ async function postDrawer(which) {
     <label class="row note" style="margin-top:10px"><input type="checkbox" id="p-watch2" style="width:auto"> אני צופה בדפדפן הלשכה (לתסריט דפדפן שעוד לא אומת)</label>`,
   `<button class="btn sm primary" id="pt-go">${ic('send')}פרסום</button><span class="note">כל ערוץ מקבל את הגודל והמגבלות שלו</span>`);
   const t = $('pt');
-  const count = () => { $('pt-n').textContent = `${t.value.length} תווים${t.value.length > 280 ? ' · ב-X ייחתך ל-280' : ''}`; };
+  const count = () => { $('pt-n').textContent = `${one(t.value.length, 'תו אחד', 'תווים')}${t.value.length > 280 ? ' · ב-X ייחתך ל-280' : ''}`; };
   t.oninput = count; count();
   $('d-body').querySelectorAll('[data-pick]').forEach((b) => b.onclick = () => { chosen.has(b.dataset.pick) ? chosen.delete(b.dataset.pick) : chosen.add(b.dataset.pick); b.classList.toggle('sel'); });
   $('pt-go').onclick = () => busy($('pt-go'), async () => {
@@ -1098,7 +1113,7 @@ async function pageChannels() {
   const core = all.filter((c) => c.core);
   const other = all.filter((c) => !c.core);
   $('view').innerHTML = `${r.body.social_error ? `<div class="issue">${esc(r.body.social_error)}</div>` : ''}
-    <div class="card"><h3>הערוצים הראשיים <span class="hint">${core.filter((c) => c.bound).length} מתוך ${core.length} מחוברים</span></h3>
+    <div class="card"><h3>הערוצים הראשיים <span class="hint">${one(core.filter((c) => c.bound).length, 'אחד', 'מתוך')} ${core.length} מחוברים</span></h3>
       <div class="chgrid">${core.map((c) => channelCard(c)).join('')}</div></div>
     ${other.length ? `<div class="card"><h3>עוד מקומות שהעסק מופיע בהם <span class="hint">רישומים, דפוס ומסמכים — הלשכה עוקבת, העדכון ידני</span></h3>
       <div class="tscroll"><table class="t"><thead><tr><th>ערוץ</th><th>סוג</th><th>כתובת</th><th></th></tr></thead><tbody>${other.map((c) => `<tr>
@@ -1170,7 +1185,7 @@ function siteScanView(sc) {
       <div class="w" title="${esc(m.current)}">באתר: ${esc(m.current || '—')}</div></div>
       ${!m.known ? chip('משבצת לא קיימת', 'bad', m.key) : m.active == null ? chip('אין ערך פעיל', 'plain') : chip('יתעדכן', 'ok')}</div>`).join('')}</div>`
       : '<div class="note">העמוד עוד לא מסמן אף טקסט או תמונה ב-data-da.</div>'}</section>
-    <section><h4>עוד כתוב ביד <span class="note">${un.length} טקסטים ותמונות שאינם משבצות</span></h4>
+    <section><h4>עוד כתוב ביד <span class="note">${one(un.length, 'טקסט/תמונה אחד שאינו משבצת', 'טקסטים ותמונות שאינם משבצות')}</span></h4>
     ${un.length ? `<div class="plan">${un.slice(0, 40).map((u) => `<div class="pi" style="grid-template-columns:auto minmax(0,1fr)">
       ${chip(WHAT[u.what] || u.what, 'plain', u.tag)}<div class="w" style="white-space:normal" title="${esc(u.current)}">${esc(u.current)}</div></div>`).join('')}</div>` : '<div class="note">הכל ממופה.</div>'}</section>`;
 }

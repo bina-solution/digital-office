@@ -1,0 +1,66 @@
+plugins {
+    id 'com.android.application'
+}
+
+// the machine's pieces (defaultConfig below): checked here, as they become Java string literals
+def machineUrl = System.getenv('DGO_MACHINE_URL') ?: ''
+def machineManifest = System.getenv('DGO_MACHINE_MANIFEST') ?: ''
+if (!(machineManifest ==~ /([0-9a-f]{64})?/)) throw new GradleException('DGO_MACHINE_MANIFEST is not a SHA-256 in hex')
+if (!(machineUrl ==~ /(https:\/\/[A-Za-z0-9._~:\/%-]+)?/)) throw new GradleException('DGO_MACHINE_URL is not a plain https URL')
+if (machineUrl.isEmpty() != machineManifest.isEmpty()) throw new GradleException('DGO_MACHINE_URL and DGO_MACHINE_MANIFEST come together')
+
+android {
+    namespace 'il.co.digitaloffice.app'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'il.co.digitaloffice.app'
+        minSdk 26
+        targetSdk 35
+        // the workflow stamps its run: the store wants every upload's code higher than the last
+        versionCode((System.getenv('DGO_APP_VERSION_CODE') ?: '1') as int)
+        versionName System.getenv('DGO_APP_VERSION') ?: '0.1.0-dev'
+        ndk {
+            abiFilters 'arm64-v8a'   // phones; dgo for android/amd64 would need cgo
+        }
+        // The office's machine fetched in pieces (DGO-1089, Guest.fetch): where they are, and the SHA-256 of
+        // the list that names them — compiled in, so the phone trusts no list and no piece it cannot hash
+        // back to this APK. Both empty (the workflow sets them only where a machine is published): no fetch.
+        buildConfigField 'String', 'MACHINE_URL', "\"${machineUrl}\""
+        buildConfigField 'String', 'MACHINE_MANIFEST', "\"${machineManifest}\""
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    // The workflow's one debug key across runs, at the path it keeps (android-app.yml): left to itself AGP
+    // put its key where the cache never found it (measured: "Path(s) … do(es) not exist, hence no cache is
+    // being saved"), so every APK had a new key and none installed over the last. Elsewhere, AGP's own.
+    signingConfigs {
+        debug {
+            def ks = System.getenv('DGO_ANDROID_DEBUG_KEYSTORE_FILE')
+            if (ks) storeFile file(ks)
+        }
+    }
+
+    // dgo ships as lib/arm64-v8a/libdgo.so and runs from the app's native-library directory: an app that
+    // targets Android 10+ cannot execute a file it wrote, and the store forbids code fetched from anywhere
+    // else — so every program the app runs is inside the APK, extracted at install.
+    packaging {
+        jniLibs {
+            useLegacyPackaging true
+            // kept as built: dgo is built stripped (-s -w), and the engine's QEMU and libraries were edited by
+            // patchelf, which a strip after it is known to break — whether AGP strips depends on an NDK found
+            keepDebugSymbols += ['**/libdgo.so', '**/libforward-auth.so', '**/libqemu-system-aarch64.so', '**/libdgoq-*.so']
+        }
+    }
+
+    // The office's machine (assets/guest/*.img.xz) is not an asset Gradle sees: AGP reads an asset into one
+    // array and cannot pack 1.35 GB, so android-app.yml adds it to the built APK, stored, and signs again.
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}

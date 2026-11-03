@@ -8,8 +8,12 @@ WORKDIR /app
 # `nft` (nftables) and `ip` (iproute2). They are installed HERE rather than in a second image because
 # the tunnel is this app's own sidecar (service `dgo-net`, same image) — one image to build, and the
 # renderer and the applier can never drift apart by being two.
+# `wireguard-go` is the userspace fallback the design names (dgo-extend-plan §5): on a kernel without
+# the WireGuard module (a cloud sandbox's Firecracker kernel, measured 2026-10-15) `wg-quick up` fails
+# at `ip link add … type wireguard` and, with this binary in PATH, falls back to it by itself. Where
+# the kernel has WireGuard it is never invoked.
 RUN apt-get update -qq && apt-get install -y -qq --no-install-recommends \
-        wireguard-tools nftables iproute2 \
+        wireguard-tools wireguard-go nftables iproute2 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

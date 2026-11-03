@@ -12,6 +12,7 @@ last parses the Hebrew poster format); auto-detected unless a person locked it. 
 file, id `<chat_id>:<message_id>`, stable across re-scans. **series** = episodes derived from NAMES.
 
 ## What you can do from here
+From the shell, reads: `./bbox telegram-tv status|movies [q] [N]|series|sync`.
 
 ```bash
 curl -s -X POST http://telegram-tv:8982/status   -H 'content-type: application/json' -d '{}'

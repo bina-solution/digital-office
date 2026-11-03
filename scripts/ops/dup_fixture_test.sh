@@ -14,7 +14,7 @@
 #   T6 lone row, no twin           -> untouched, never flagged double
 DK="docker -H unix:///run/bbox-docker.sock"
 S=/mnt/c/Users/user/AppData/Local/Temp/claude/C--Users-user/90c9fa3b-f7b6-4d07-8cb7-84e965839620/scratchpad
-ENVF=/mnt/c/Users/user/Desktop/personalWorkspace/AutomateOs/deployment-bina-comp/.env
+ENVF=/mnt/c/Users/user/Desktop/personalWorkspace/AutomateOs/deployment-hacohen/.env
 WU=$(grep -E '^BS_WEBHOOK_USER=' "$ENVF" | head -1 | cut -d= -f2-)
 WP=$(grep -E '^BS_WEBHOOK_PASS=' "$ENVF" | head -1 | cut -d= -f2-)
 PFX='zzdup'

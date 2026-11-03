@@ -53,10 +53,24 @@ lima() { "${LIMACTL}" "$@"; }
 # measures (`requires.mem`), exactly as the WSL VM is on Windows. The floor profile (ci-small)
 # needs 5 GiB, so on an 8 GB Mac the guest gets 5 and macOS keeps 3 — tight, and deliberate: the
 # alternative is a guest that satisfies no profile at all. Larger hosts hand over 60%, capped.
-# Override any of these with BBOX_VM_MEM (GiB), BBOX_VM_CPUS, BBOX_VM_DISK (GiB).
+# Override any of these with BBOX_VM_MEM (GiB), BBOX_VM_CPUS, BBOX_VM_DISK (GiB) — in the environment, or
+# DECLARED in the office's .env, which is where a size belongs: "tight, and deliberate" assumed a Mac doing
+# nothing else, and the owner's command-center Mac (Claude Desktop + Chrome, ~9 GB of their own) kept a 5 GiB
+# guest in macOS's swap — the guest stalled on page-ins and read load 60–120 while the Mac sat 68% idle (2026-11-02,
+# issues/the-macbook-runs-14-gb-on-8-gb-and-its-engine-stalls.yaml).
 host_mem_gib() { echo $(( $(sysctl -n hw.memsize) / 1073741824 )); }
-vm_mem()  { if [ -n "${BBOX_VM_MEM:-}" ]; then echo "${BBOX_VM_MEM}"; else local h; h="$(host_mem_gib)"; if [ "${h}" -le 8 ]; then echo 5; else local m=$(( h * 60 / 100 )); [ "${m}" -gt 12 ] && m=12; echo "${m}"; fi; fi; }
-vm_cpus() { if [ -n "${BBOX_VM_CPUS:-}" ]; then echo "${BBOX_VM_CPUS}"; else local n; n="$(sysctl -n hw.ncpu)"; [ "${n}" -gt 4 ] && n=4; echo "${n}"; fi; }
+# A declared size is a plain number (GiB may be fractional); anything else ("3GiB", "3 # small") is said on stderr
+# — these run inside $(…) — and ignored, so the engine is never created or edited with a value lima refuses.
+declared_num() {   # <NAME> → its value if it is a number, else nothing
+  local v="${!1:-$(env_value "$1")}"
+  [ -z "${v}" ] && return 0
+  if printf '%s' "${v}" | grep -Eq '^[0-9]+(\.[0-9]+)?$'; then printf '%s' "${v}"
+  else echo "[bbox engine] ${1}=${v} is not a number — ignored (the default size applies)" >&2; fi
+}
+declared_mem()  { declared_num BBOX_VM_MEM; }
+declared_cpus() { declared_num BBOX_VM_CPUS; }
+vm_mem()  { local d; d="$(declared_mem)"; if [ -n "${d}" ]; then echo "${d}"; else local h; h="$(host_mem_gib)"; if [ "${h}" -le 8 ]; then echo 5; else local m=$(( h * 60 / 100 )); [ "${m}" -gt 12 ] && m=12; echo "${m}"; fi; fi; }
+vm_cpus() { local d; d="$(declared_cpus)"; if [ -n "${d}" ]; then echo "${d}"; else local n; n="$(sysctl -n hw.ncpu)"; [ "${n}" -gt 4 ] && n=4; echo "${n}"; fi; }
 vm_disk() { echo "${BBOX_VM_DISK:-60}"; }
 
 # Rosetta lets the guest run linux/amd64 images that have no arm64 build. It is Apple's, not
@@ -70,6 +84,21 @@ rosetta_flags() {
 
 state() {   # Running | Stopped | Broken | … | "" (not created)
   lima list --format '{{.Name}} {{.Status}}' 2>/dev/null | awk -v n="${INSTANCE}" '$1==n {print $2}'
+}
+
+# An engine keeps the size it was CREATED with: `lima start` of a stopped instance takes no --memory/--cpus.
+# A size the office declares (BBOX_VM_MEM / BBOX_VM_CPUS, .env or environment) is applied here, while the
+# engine is stopped. Never fatal: if the edit fails, say so and start at the old size.
+resize_if_declared() {
+  local mem cpus cur
+  mem="$(declared_mem)"; cpus="$(declared_cpus)"
+  [ -n "${mem}${cpus}" ] || return 0
+  cur="$(lima list --format '{{.Name}} {{.CPUs}} {{.Memory}}' 2>/dev/null | awk -v n="${INSTANCE}" '$1==n {printf "%s %g", $2, $3/1073741824}')" || cur=""
+  if [ "${cur}" = "${cpus:-${cur%% *}} ${mem:-${cur##* }}" ]; then return 0; fi
+  say "resizing the engine to the declared size: ${cpus:-${cur%% *}} cpus / ${mem:-${cur##* }} GiB (was ${cur%% *} cpus / ${cur##* } GiB)"
+  # shellcheck disable=SC2086
+  lima edit --tty=false ${cpus:+--cpus="${cpus}"} ${mem:+--memory="${mem}"} "${INSTANCE}" \
+    || say "${cy}the engine could not be resized (${LIMACTL} edit ${INSTANCE}); starting it at its old size${c0}"
 }
 host_socket() { printf '%s/%s/sock/docker.sock\n' "${LIMA_HOME}" "${INSTANCE}"; }
 
@@ -93,6 +122,8 @@ cmd_start() {
         --mount="${HOME}:w" ${rs:+"${rs}"} "${TEMPLATE}" \
         || die "the engine did not come up. Diagnose: ${LIMACTL} --debug start ${INSTANCE}   (LIMA_HOME=${LIMA_HOME})" ;;
     *)
+      # only a Stopped engine is edited: a Broken or Starting one may be another process's boot in progress
+      [ "${st}" = Stopped ] && resize_if_declared
       say "starting the engine (${st})…"
       lima start --tty=false "${INSTANCE}" || die "the engine did not start. Diagnose: ${LIMACTL} --debug start ${INSTANCE}" ;;
   esac
@@ -101,6 +132,70 @@ cmd_start() {
   [ -n "${v}" ] || die "engine is up but dockerd does not answer inside it"
   ok "project engine: Docker ${v}  socket: $(host_socket)"
   power_agent_start
+  lan_door_start
+  console_door_start
+}
+
+# ── the LAN door: the one guest port a peer office on this LAN dials ───────────────────────────
+# The engine forwards a guest port to the Mac's 127.0.0.1 only, and a forward to 0.0.0.0 is a rule
+# of the template that takes effect only when the VM restarts. A peer on the LAN (the HP beside this
+# MacBook) dials the Mac's own address, so lan-door.py takes the LAN's TCP 51443 and hands it to
+# 127.0.0.1:51444, which the engine forwards to dgo-net's carrier (apps/dgo-extend/carrier) — the
+# TCP path of a link that can never carry a UDP packet. Private sources only; the carrier still
+# admits nobody who does not hold the pair's key. One per Mac, tied to the engine's host-agent PID
+# like the power agent. BBOX_LAN_DOOR=0 turns it off.
+DOOR_PID="${BBOX_MACOS_HOME}/lan-door.pid"
+DOOR_LOG="${BBOX_MACOS_HOME}/lan-door.log"
+DOOR_PORT=51443   # what the LAN dials
+DOOR_TO=51444     # the Mac's loopback port the engine forwards to dgo-net's carrier (DGO_CARRY_PUBLISH_PORT)
+lan_door_running() { local p; p="$(cat "${DOOR_PID}" 2>/dev/null || true)"; [ -n "${p}" ] && kill -0 "${p}" 2>/dev/null; }
+# OPEN, not merely running: the process holds the LAN port (a door still waiting for the port to be
+# free is running and lets nobody in). This is what the hand-off tells the guest.
+lan_door_open() {
+  lan_door_running || return 1
+  lsof -nP -a -p "$(cat "${DOOR_PID}")" -iTCP:"${DOOR_PORT}" -sTCP:LISTEN >/dev/null 2>&1
+}
+lan_door_start() {
+  [ "${BBOX_LAN_DOOR:-1}" = 0 ] && return 0
+  lan_door_running && return 0
+  local ha; ha="$(cat "${LIMA_HOME}/${INSTANCE}/ha.pid" 2>/dev/null || true)"
+  [ -n "${ha}" ] && kill -0 "${ha}" 2>/dev/null || return 0
+  nohup /usr/bin/python3 "${HERE}/lan-door.py" --listen "0.0.0.0:${DOOR_PORT}" --to "127.0.0.1:${DOOR_TO}" \
+    --watch-pid "${ha}" >>"${DOOR_LOG}" 2>&1 </dev/null &
+  echo $! > "${DOOR_PID}"
+  local i; for i in 1 2 3 4 5 6 7 8 9 10; do lan_door_open && break; sleep 0.2; done
+}
+lan_door_stop() {
+  local p; p="$(cat "${DOOR_PID}" 2>/dev/null || true)"
+  [ -n "${p}" ] && kill "${p}" 2>/dev/null || true
+  rm -f "${DOOR_PID}"
+  console_door_stop
+}
+
+# ── the console's door: this office's console on the LAN, for a phone on the same Wi-Fi (DGO-1125) ──
+# The same lan-door.py in HTTP's shape: it runs with the engine but LISTENS only while
+# data/lan/policy.json says on (written by the network screen), on that file's LAN address, never 0.0.0.0
+# and never 127.0.0.1:8080, the engine's own forward. It hands each connection to the guest's `lan` entry
+# (CONSOLE_DOOR_TO), whose routes need no host name. Private sources only, 12 at a time and 60 new a
+# minute from any one. BBOX_CONSOLE_DOOR=0 turns it off.
+CONSOLE_DOOR_PID="${BBOX_MACOS_HOME}/console-door.pid"
+CONSOLE_DOOR_LOG="${BBOX_MACOS_HOME}/console-door.log"
+CONSOLE_DOOR_TO="${BBOX_CONSOLE_DOOR_TO:-8081}"
+console_door_running() { local p; p="$(cat "${CONSOLE_DOOR_PID}" 2>/dev/null || true)"; [ -n "${p}" ] && kill -0 "${p}" 2>/dev/null; }
+console_door_start() {
+  [ "${BBOX_CONSOLE_DOOR:-1}" = 0 ] && return 0
+  console_door_running && return 0
+  local ha; ha="$(cat "${LIMA_HOME}/${INSTANCE}/ha.pid" 2>/dev/null || true)"
+  [ -n "${ha}" ] && kill -0 "${ha}" 2>/dev/null || return 0
+  nohup /usr/bin/python3 "${HERE}/lan-door.py" --policy "${REPO_ROOT}/data/lan/policy.json" \
+    --to "127.0.0.1:${CONSOLE_DOOR_TO}" --first-bytes 0 --per-source 12 --rate 60 \
+    --watch-pid "${ha}" >>"${CONSOLE_DOOR_LOG}" 2>&1 </dev/null &
+  echo $! > "${CONSOLE_DOOR_PID}"
+}
+console_door_stop() {
+  local p; p="$(cat "${CONSOLE_DOOR_PID}" 2>/dev/null || true)"
+  [ -n "${p}" ] && kill "${p}" 2>/dev/null || true
+  rm -f "${CONSOLE_DOOR_PID}"
 }
 
 # ── the power agent: keeps the Mac awake while the office should be working ────────────────────
@@ -263,7 +358,11 @@ guest_udp_handoff() {   # → "ADDR PORT" when this engine forwards a UDP port f
 # The one expression for "what this engine hands to the guest", so both doors below cannot drift.
 handoff_env() {
   local h; h="$(guest_udp_handoff)"
-  [ -n "${h}" ] && printf 'BBOX_HOST_LAN_ADDR=%s BBOX_HOST_UDP_PORT=%s' "${h%% *}" "${h##* }"
+  [ -n "${h}" ] && printf 'BBOX_HOST_LAN_ADDR=%s BBOX_HOST_UDP_PORT=%s ' "${h%% *}" "${h##* }"
+  # …and the LAN door, when it is OPEN: a peer's carrier can reach this office's. hooks/prepare turns
+  # it into DGO_CARRY_ACCEPT=1 and DGO_CARRY_PUBLISH_PORT=<DOOR_TO> (so this office's TCP pairs wait
+  # to be dialed, at the port the door hands them to), and empties both when a hand-off says nothing.
+  lan_door_open && printf 'BBOX_HOST_CARRY_PORT=%s BBOX_HOST_CARRY_TO=%s' "${DOOR_PORT}" "${DOOR_TO}"
   return 0
 }
 
@@ -302,6 +401,8 @@ cmd_exec() {
   ensure_runtime
   [ "$(state)" = Running ] || cmd_start >&2
   power_agent_start
+  lan_door_start
+  console_door_start
   # root in the guest, like bbox.cmd's `-u root`: the engine is root's, the drop-in it may rewrite
   # is root's, and the mount maps writes back to the host user regardless of the guest uid.
   # BBOX_IN_GUEST stops bbox from handing itself across a second time. --workdir is this repo,
@@ -325,7 +426,7 @@ cmd_exec() {
 # interactive shell must see exactly what bbox itself hands across, or the guest's answer to "can
 # this office be dialed" would depend on which door was used.
 cmd_shell()  { ensure_runtime; [ "$(state)" = Running ] || cmd_start >&2; local udp_env; udp_env="$(handoff_env)"; exec "${LIMACTL}" shell --workdir "${REPO_ROOT}" "${INSTANCE}" -- sudo -H env BBOX_IN_GUEST=1 HOME=/root ${udp_env} bash -c "cd '${REPO_ROOT}'; ${*:-exec bash}"; }
-cmd_stop()   { ensure_runtime; power_agent_stop; case "$(state)" in Running) lima stop "${INSTANCE}"; ok "engine stopped (state kept)";; "") say "engine not created";; *) ok "engine already stopped";; esac; }
+cmd_stop()   { ensure_runtime; power_agent_stop; lan_door_stop; case "$(state)" in Running) lima stop "${INSTANCE}"; ok "engine stopped (state kept)";; "") say "engine not created";; *) ok "engine already stopped";; esac; }
 cmd_status() { ensure_runtime; local st; st="$(state)"; echo "${st:-not created}"; [ "${st}" = Running ]; }
 cmd_socket() { host_socket; }
 cmd_destroy() {

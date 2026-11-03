@@ -1,0 +1,112 @@
+name: fresh-install
+
+# A clean machine, the documented path and nothing else: git, `bbox install debian`, a secretless .env,
+# the product's default state with the BASE collection, then `bbox run`. The drill the MacBook's engine
+# cannot host: beside a live office the base bring-up drove it to load 82 on 4 cores (the 0.2.0 drill,
+# DGO-1040). GitHub's runners are fresh Ubuntus with systemd — 24.04 and 26.04, the two LTS releases a
+# client's new VPS comes with — so this is also the path that VPS takes. Only on request — it spends hosted minutes (this repo chose a self-hosted runner over
+# them; .github/workflows/ci-verify.yml): a push to dgo-stable whose head commit says "[fresh-install]"
+# runs it on that commit, and a skipped job costs nothing. (workflow_dispatch works once this file is
+# on the default branch, which GitHub requires for it.)
+#
+#   gh workflow run fresh-install.yml --ref dgo-stable -f ref=<commit|branch|tag>
+
+on:
+  push:
+    branches: [dgo-stable]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "commit, branch or tag to install (empty = the dispatched ref)"
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  install:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[fresh-install]')
+    # On the JOB, not the workflow: a later push that does not ask for a drill starts a run too, and a
+    # workflow-level group let it cancel the drill and then skip its own job. Per system, or the two
+    # legs of one run would cancel each other.
+    concurrency:
+      group: fresh-install-${{ inputs.ref || github.ref }}-${{ matrix.os }}
+      cancel-in-progress: true
+    # Both named, never ubuntu-latest (it moved to 26.04 under v0.2.0, b32afc37). 26.04 is the harder one:
+    # Docker publishes only 29.x for it (the installer takes 28.x from the noble channel), and python3 is
+    # 3.14 for every host-side script, the compiler included (DGO-1038).
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-26.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 80
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      # The runner carries ~30 GB of toolchains a fresh VPS does not (Android, .NET, Haskell, CodeQL);
+      # with them the base's image builds ran out of disk ("No space left on device", run 41194361820).
+      - name: The room a fresh VPS would have
+        run: |
+          df -h / | tail -1
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          df -h / | tail -1
+
+      - name: The machine as it comes
+        run: |
+          uname -srm; nproc; free -m | head -2; df -h / | tail -1
+          docker version --format 'docker {{.Server.Version}}' 2>/dev/null || echo "docker: no daemon answers"
+          python3 --version
+
+      # The runner comes with a Docker of its own; the platform needs 28.x, and the installer replaces
+      # anything else only when told to (BBOX_REPLACE_DOCKER) — on a throwaway runner nothing is lost.
+      - name: bbox install debian
+        env:
+          BBOX_REPLACE_DOCKER: "1"
+        run: ./bbox install debian
+
+      - name: A secretless .env, the product's default state, the base collection
+        run: |
+          # The state first: ci-env.sh writes the identity the state on disk runs (forward-auth here).
+          cp platform.state.default.yaml platform.state.yaml
+          CI_ENV_FORCE=1 bash scripts/ci-env.sh
+          ./bbox apps disable apitools indox drive mail bina-ds data-management
+
+      # The product's identity since 0.3.0 is forward-auth (r030-005): one Go binary with no migrations,
+      # so this phase is seconds where authentik's was its own cold boot.
+      - name: bbox run — identity first
+        env:
+          BBOX_WAIT_TIMEOUT: "1800"
+        run: ./bbox run forward-auth
+
+      - name: bbox run — the base collection
+        env:
+          BBOX_WAIT_TIMEOUT: "1800"
+        run: ./bbox run
+
+      # The same command again on what it just brought up: it should find nothing to build, re-create or
+      # wait for. On ubuntu-24.04 — whose own Docker 28.0.4 and Compose 2.38.2 the installer keeps, as any
+      # 28.x — the base run's second `up` re-created the seven containers it had just built, where 26.04's
+      # pinned 28.5.2 and Compose 2.40.3 re-created none (run 41199369095): once, or every run? (DGO-1038)
+      - name: bbox run — again, on what is up
+        timeout-minutes: 20   # a probe: a rebuild here must not spend the job's 80 minutes
+        env:
+          BBOX_WAIT_TIMEOUT: "600"
+        run: ./bbox run
+
+      # Bounded and traced: on its first run `bbox status` was still running 20 minutes after the base
+      # came up, and a cancelled job keeps no log — so it gets 300 s, and its trace's last lines say
+      # where it was (DGO-1038).
+      - name: What runs
+        if: always()
+        timeout-minutes: 10
+        run: |
+          set +e
+          PS4='+ $(date +%T) ${BASH_SOURCE##*/}:${LINENO}: ' timeout 300 bash -x ./bbox status > status.out 2> status.trace
+          echo "bbox status: exit $? (124 = still running after 300 s)"
+          tail -80 status.out
+          echo "--- where it was: the trace's last lines"
+          tail -40 status.trace
+          sudo docker ps -a --format '{{.Names}}\t{{.Status}}' | sort

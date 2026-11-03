@@ -11,7 +11,7 @@
 --   needs_review retry budget exhausted, needs an operator         (FAIL / REAP)
 --
 -- Run per tenant schema:
---   psql -U postgres -d postgres -v schema=indox_bina_comp -f 2026-09-02_sync_item.sql
+--   psql -U postgres -d postgres -v schema=indox_hacohen -f 2026-09-02_sync_item.sql
 -- Idempotent: every statement is add-if-missing / on-conflict.
 
 \set ON_ERROR_STOP on

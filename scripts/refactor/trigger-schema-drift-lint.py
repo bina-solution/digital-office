@@ -359,7 +359,7 @@ def live_trigger_schemas() -> dict[str, set[str]] | None:
             print("  live check SKIPPED: no n8n-postgres-* container running.")
             return None
         out = subprocess.run(
-            ["docker", "exec", pg, "psql", "-U", "bina-comp", "-d", "n8n", "-tAc",
+            ["docker", "exec", pg, "psql", "-U", "hacohen", "-d", "n8n", "-tAc",
              'select id || E\'\\t\' || nodes::text from workflow_entity'],
             capture_output=True, text=True, timeout=120, env=env)
         if out.returncode != 0:

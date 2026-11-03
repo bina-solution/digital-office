@@ -3,7 +3,7 @@
  *
  * This file used to BE the bot: 1068 lines of document intake, agent jobs and subscriber state, with
  * `require('./send')` at the top and Baileys message shapes read inline. The bot moved to
- * `apps/chat/bots/bina-comp-bot/`; what is left here is the only part that was ever really about
+ * `apps/chat/bots/hacohen-bot/`; what is left here is the only part that was ever really about
  * WhatsApp, and it is the part that must stay:
  *
  *   · JID routing — `@g.us` is a group, `@s.whatsapp.net` is a DM, `@lid` is neither until you resolve
@@ -23,7 +23,7 @@
 const { toWhatsAppJid } = require('../utils/phone');
 const { sendTextMessage, sendLongTextMessage } = require('./send');
 const runtime = require('../../bots/chat_bot');
-const binacompBot = require('../../bots/bina-comp-bot');
+const hacohenBot = require('../../bots/hacohen-bot');
 const { Sentry } = require('../services/sentry');
 
 /**
@@ -191,7 +191,7 @@ module.exports = {
     onMessage,
     /** Back-compat: the states used to live here. They are the bot's, and this re-export means any
      *  caller that still reaches for `require('./chat_bot').STATES` keeps working. */
-    STATES: binacompBot.STATES,
+    STATES: hacohenBot.STATES,
     // exported for the adapter's own tests
     normalise, routeOf, extractMessageText, attachmentsOf, backendFor, transportFor,
     WA_CONNECTION_ID,

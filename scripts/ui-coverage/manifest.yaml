@@ -22,6 +22,11 @@ hosts:
   connections:        {env: CONNECTIONS_BASE_URL,      local: connections.localhost,       auth: authentik, tier: first_party}
   mailview:           {env: MAILVIEW_BASE_URL,         local: mail.localhost,              auth: authentik, tier: first_party}
   drive:         {env: DRIVE_BASE_URL,            local: drive.localhost,             auth: authentik, tier: first_party}
+  # [2026-10-29] the recorder (`הקלטות`): not a route of anybody's own — a MODULE embedded on drive
+  # (`routing[]` entry with no `host`, served at drive's `/rec/` behind `/a/recorder/`). The shell
+  # frames it, so this row is a fallback address only; it exists because the row is where tier and
+  # auth come from, and inventory.py requires one for every app it emits a view for.
+  recorder:       {env: RECORDER_BASE_URL,         local: recorder.localhost,          auth: authentik, tier: first_party}
   notifications:      {env: NOTIFICATIONS_BASE_URL,    local: alerts-svc.localhost,        auth: authentik, tier: first_party}
   machine:            {env: MACHINE_BASE_URL,          local: machine.localhost,           auth: authentik, tier: first_party}
   chat:               {env: CHAT_APP_BASE_URL,         local: chat.localhost,              auth: own,       tier: first_party}
@@ -49,11 +54,21 @@ hosts:
   sites:              {env: SITES_BASE_URL,            local: sites.localhost,             auth: authentik, tier: first_party}
   domains:            {env: DOMAINS_BASE_URL,          local: domains.localhost,           auth: authentik, tier: first_party}
   computers:          {env: COMPUTERS_BASE_URL,        local: computers.localhost,         auth: authentik, tier: first_party}
+  # [2026-10-21] the security app (DGO-890): who comes in, what goes out, the bans — embedded at /a/security/
+  security:           {env: SECURITY_BASE_URL,         local: security.localhost,          auth: authentik, tier: first_party}
+  # [2026-10-22] the office's vault: real Obsidian served by Ignis — a third party's screen, framed
+  # on its own host
+  obsidian:           {env: OBSIDIAN_BASE_URL,         local: obsidian.localhost,          auth: authentik, tier: third_party}
+  # [2026-10-31] CAD (DGO-1076): FreeCAD's own screen in the browser — a third party's, framed on its own
+  # host like obsidian; cad-api is its first-party API and has no tile
+  cad:                {env: CAD_BASE_URL,              local: cad.localhost,               auth: authentik, tier: third_party}
   data-management:    {env: DATA_MANAGEMENT_BASE_URL,  local: data-management.localhost,   auth: authentik, tier: first_party}
   app-management:     {env: APP_MANAGEMENT_BASE_URL,   local: apps.localhost,              auth: authentik, tier: first_party}
   digital-assets:     {env: DIGITAL_ASSETS_BASE_URL,   local: digital-assets.localhost,    auth: authentik, tier: first_party}
   social-list:        {env: SOCIAL_LIST_BASE_URL,      local: social-list.localhost,       auth: authentik, tier: first_party}
   dgo-extend:            {env: DGO_EXTEND_BASE_URL,          local: dgo-extend.localhost,           auth: authentik, tier: first_party}
+  # [2026-11-02] the herd dashboard (the MacBook's station board, the LAN switch): a tile since DGO-1125, in no map until G-embed-coverage asked
+  dashboard:          {env: DASHBOARD_BASE_URL,        local: dashboard.localhost,         auth: authentik, tier: first_party}
   # [2026-10-07] archify: in the rail since it was added, and in no map — it had no row here.
   archify:            {env: ARCHIFY_BASE_URL,          local: archify.localhost,           auth: authentik, tier: first_party}
   # [2026-09-30] Plane (project-pln). Its screens are upstream's SPA, so in the scorecard's sense
@@ -64,6 +79,17 @@ hosts:
   # ship and measure are our shell framing our tile, so the row is first_party, and `auth` is the
   # SSO the app.json declares (`auth: sso`).
   project-pln:        {env: PROJECT_PLN_BASE_URL,      local: plane.localhost,             auth: authentik, tier: first_party}
+  # [2026-10-20] Video meetings (apps/meet, DGO-826). The tile is meet-start at /a/meet/, which hands
+  # the frame to Jitsi Meet's own welcome page (upstream's SPA, on meet.<domain>) — first_party for
+  # the same reason as Plane: what a person sees is our shell framing our tile.
+  meet:               {env: MEET_START_BASE_URL,       local: meet-start.localhost,        auth: authentik, tier: first_party}
+  # [2026-10-21] Ollama (DGO-825): a framed tile since it got one, so linked offices see it. Embedded
+  # like Plane (/a/ollama/), so first_party for the same reason; `auth` is its app.json's `sso`.
+  ollama:             {env: OLLAMA_BASE_URL,           local: ollama.localhost,            auth: authentik, tier: first_party}
+  # [2026-10-31] Bina Claude (DGO-1074): the official Claude Desktop app streamed by Selkies (/a/bina-claude/)
+  # and Claude Code's terminal (/a/claude-terminal/) — both embedded, so first_party like Plane.
+  claude:             {env: BINA_CLAUDE_BASE_URL,      local: claude.localhost,            auth: authentik, tier: first_party}
+  claude-terminal:    {env: BINA_CLAUDE_TERMINAL_BASE_URL, local: claude-terminal.localhost, auth: authentik, tier: first_party}
 
 # ── apps that live INSIDE the console shell ─────────────────────────────────
 # The console is the product. A user never visits my-docs.localhost — they open the console and
@@ -88,23 +114,46 @@ hosts:
 # extractor — so "single view" can never silently hide new screens.
 single_view:
   machine:            {path: "/", title: "מכונה — מדדי מארח ו-Docker"}
-  notifications:      {path: "/", title: "התראות — מרכז התראות"}
-  any-concurrency:    {path: "/", title: "כל מקביל — ציר-זמן מקביליות"}
+  # [2026-11-02] the herd dashboard: one screen (the station board and the LAN switch) — framed in the rail since DGO-1125
+  dashboard:          {path: "/", title: "לוח העדר — תחנת העבודה, המחשבים והמתג המקומי"}
+  # notifications LEFT this list on 2026-10-13, and the anti-drift check is what said so: it grew a
+  # route per alert (`#/m/alerts/<id>`, the owner's "one address per screen" work: a link EXPANDS that
+  # alert), so the screen it opens is a view the map must count instead of hiding it behind
+  # "single view". Its replacement is an EXTRACTOR in `inventory.py` (like drive's or mailview's):
+  # one view for the list (`/`) and one for an alert (`/:id` — the id resolved at capture time by
+  # `resolve_params.py`, the same way indox's `/extraction/:type/:name` is). Written down here
+  # because the declaration alone is now a lie the inventory refuses.
+  # any-concurrency LEFT this list on 2026-10-13 for the same reason as notifications: it grew a route
+  # per window (`#/m/concurrency/w/<hours>`), so its extractor in inventory.py counts the timeline AND
+  # the window instead of declaring one screen.
   browser42:          {path: "/view/", title: "Browser42 — תצוגת דפדפן חי"}
   hello-bina:         {path: "/", title: "שלום בינה — אפליקציית דוגמה"}
+  # [2026-10-22] Obsidian's own app (Ignis): one screen, the vault — its notes are the owner's, not views
+  obsidian:           {path: "/", title: "אובסידיאן — הכספת"}
+  # [2026-10-31] CAD (DGO-1076): one stream, FreeCAD's window; its families are addressed by `./bbox cad`
+  cad:                {path: "/", title: "מודלים תלת־ממד — FreeCAD"}
+  # [2026-10-31] Bina Claude (DGO-1074): one stream each — the Claude Desktop app's pixels, and a TTY. Their
+  # screens are inside the software they stream; the sessions are addressed by `./bbox bina-claude sessions`.
+  claude:             {path: "/", title: "בינה קלוד — אפליקציית Claude"}
+  claude-terminal:    {path: "/", title: "בינה קלוד — מסוף"}
   # [2026-09-27] classified by running the router-smell probe over each app's own source:
   # these three serve ONE screen (cards/sections, no router, no tabs). They get a probe
   # below, so the moment one grows navigation the inventory fails instead of hiding it.
-  computers:          {path: "/", title: "מחשבים — צי המכונות"}
+  # (computers did, 2026-10-21 — every office's computer with a page of its own — and left this
+  #  list for its own extractor in inventory.py, x_computers.)
   # [2026-09-29] renamed: the console tile now reads „ניהול גרסאות" — the capture locates this
   # panel by the tile TEXT in the rail, so a stale title here is a capture that hangs until the
   # shard timeout, reported as "0 captured" rather than as the rename it actually is.
   git:                {path: "/", title: "ניהול גרסאות — חשבונות, מראות וספריית הקוד"}
-  # [2026-09-29] data-management was enabled, embedded and in the rail with **zero** views in the
-  # denominator — the only embedded module in that state, found by diffing console_embed against
-  # the inventory. It is one scrolling page (four <h2> sections, no router), so it is declared
-  # here and gets a probe like the rest: the day it grows a router the inventory fails.
-  data-management:    {path: "/", title: "ניהול נתונים — מלאי, גיבוי ושחזור"}
+  # data-management LEFT this list on 2026-10-22, and the probe is what said so: [2026-09-29] it was
+  # enabled, embedded and in the rail with **zero** views in the denominator (found by diffing
+  # console_embed against the inventory), and it was genuinely one scrolling page (four <h2>
+  # sections, no router) — so it was declared here with the sentence "the day it grows a router the
+  # inventory fails". It grew one: `MOUNT/routeOf/showRoute` with `PLACES`, a `pushState` per menu
+  # row and `popstate` back, and the app serves a deep path (app.py's catch-all → static/index.html).
+  # Its five places are a real EXTRACTOR in `inventory.py` (x_data_management) now, for the same
+  # reason notifications and any-concurrency left: a declaration that hides four addresses is a lie
+  # the inventory refuses.
   # dgo-extend has no router at all (checked with the smell probe before declaring it).
   dgo-extend:            {path: "/", title: "לשכות נוספות — הצהרות והרצות"}
   # bina (the DeepSeek-Harness agent) is genuinely one screen — a conversation with panels
@@ -117,6 +166,15 @@ single_view:
   # One screen: the app's whole surface is embedded at /a/plane/. The title's first half must be
   # the console TILE's text, because the capture locates the panel by that text in the rail.
   project-pln:        {path: "/", title: "ניהול פרויקטים — לוחות ומשימות"}
+  # Jitsi Meet's screens are upstream's SPA (served by its own container), so, like Plane, no probe
+  # file reads them; the tile lands on its welcome page.
+  meet:               {path: "/", title: "פגישות וידאו — Jitsi Meet"}
+  # [2026-10-29] the recorder tile (drive's `recorder` module, `/a/recorder/` → drive's `/rec/`): one
+  # screen — the meter, the button, the takes of this visit — and no router of its own. It needs no
+  # probe (recorder.js touches `top.location.hash` only to hand the route back to the console's
+  # shell, and the smell probe would read that as navigation); what it must never do is grow a
+  # second screen, and the day it does the map is wrong in the direction this file refuses.
+  recorder:           {path: "/", title: "הקלטות — הקלטה בלחיצה"}
 
 # ── third-party: pinned screens we deliberately chose to document ────────────
 # NOT claimed as "100% of that product" — reported as its own tier in the scorecard.

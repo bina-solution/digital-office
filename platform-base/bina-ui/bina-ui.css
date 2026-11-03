@@ -217,10 +217,26 @@ input.mono{font-family:var(--mono);font-size:12px}
 .table tr:hover td{background:var(--surface-2)}
 code{color:var(--ink);background:var(--surface-2);border:1px solid var(--line);padding:1px 6px;border-radius:5px;font-size:12px;font-family:var(--mono)}
 
-/* modal */
-.modal-ov{position:fixed;inset:0;background:var(--scrim);display:flex;align-items:center;justify-content:center;z-index:50}
-.modal{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:22px;width:min(420px,92vw);box-shadow:var(--shadow-lg)}
-.modal-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+/* @bina-modal:start */
+/* A dialog is bounded by its window and its title never leaves it. The card used to scroll WHOLE —
+   the title and the way out went with the content, so in a window shorter than the card they began
+   outside it with nothing to scroll (DGO-518 the console's own dialogs, DGO-519 INDOX's). Two
+   surfaces had already worked this out on their own and three had not, so the rule is here once.
+   `--mp` is the card's own padding said once: the header takes it with it and sticks that far ABOVE
+   the content edge, which is where a padded scroller measures `top` from. The action row stays at
+   the form's end on purpose — stuck to the bottom it could be pressed with the refusal it explains
+   out of sight above it.
+   WIDTH IS NOT HERE. Each surface sizes its own dialogs and they differ (420px, 460px, 600px,
+   760px), so a surface sets it AFTER this block, where the cascade lets it win. `16px` is the radius
+   every surface that has one already uses; `--radius` is an app's own token and the console has
+   none, so the shared value is the number, not a variable that would resolve to nothing there. */
+.modal-ov{position:fixed;inset:0;background:var(--scrim);display:flex;align-items:center;justify-content:center;z-index:50;padding:18px}
+.modal{--mp:22px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:var(--mp);
+       max-height:92vh;overflow:auto;box-shadow:var(--shadow-lg)}
+.modal-h{display:flex;align-items:center;justify-content:space-between;gap:12px;position:sticky;top:calc(-1*var(--mp));z-index:1;
+         margin:calc(-1*var(--mp)) calc(-1*var(--mp)) 4px;padding:var(--mp) var(--mp) 10px;background:var(--surface)}
 .modal-h h3{margin:0;font-size:16px}
+@media (max-height:399px){.modal-ov{padding:8px}.modal{--mp:14px}}
+/* @bina-modal:end */
 
 .muted{color:var(--muted)} .small{font-size:12px} .spin{color:var(--muted);padding:20px;text-align:center}

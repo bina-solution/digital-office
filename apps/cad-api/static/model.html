@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Model</title>
+<link rel="stylesheet" href="/static/cad.css?v=2">
+<script type="importmap">{ "imports": { "three": "/static/vendor/three.module.min.js" } }</script>
+</head>
+<body>
+<header class="top">
+  <h1 id="title">Model</h1>
+  <span class="sub" id="style"></span>
+  <a href="/models" class="sub">All models</a>
+</header>
+<main>
+  <div class="cap">
+    <div>
+      <div id="view"><div class="state">Loading the model…</div></div>
+      <div class="renders" id="renders"></div>
+      <section class="block">
+        <h3>Parts list</h3>
+        <table id="parts"></table>
+      </section>
+    </div>
+    <div>
+      <div class="card">
+        <h3>Files</h3>
+        <div class="actions" id="downloads"></div>
+        <div class="actions"><button id="copy" type="button">Copy this link</button></div>
+      </div>
+      <section class="block card">
+        <h3>In FreeCAD</h3>
+        <p class="src">Open <a id="freecad" target="_blank">FreeCAD</a>, then File → Open:</p>
+        <p><code id="path"></code></p>
+      </section>
+      <section class="block card">
+        <h3>How it goes together</h3>
+        <ol class="steps" id="steps"></ol>
+      </section>
+    </div>
+  </div>
+</main>
+<script type="module">
+  import { modelPage } from '/static/models.js?v=1';
+  modelPage();
+</script>
+</body>
+</html>

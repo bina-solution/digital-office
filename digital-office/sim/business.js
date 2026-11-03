@@ -12,7 +12,7 @@
 
   var business = {
     name: 'בינה פתרונות בע״מ', tax_id: '514789234', type: 'עוסק מורשה',
-    email: 'person127@example.com', domain: 'bina-solutions.co.il',
+    email: 'person105@example.com', domain: 'bina-solutions.co.il',
   };
 
   // Incoming supplier documents — the mail → INDOX → notifications spine. Values match what each app
@@ -20,7 +20,7 @@
   var incoming = [
     {
       key: 'karton_20458', supplier: 'ישראל קרטון בע״מ', supplier_id: '513765432',
-      email: 'person128@example.com', kind: 'invoice', number: '20458',
+      email: 'person106@example.com', kind: 'invoice', number: '20458',
       amount: 3450.00, currency: 'ILS', date: '2026-07-21T09:42:00', status: 'to_handle', unread: true,
       subject: 'חשבונית מס 20458 - אספקת קרטונים לחודש יולי',
       file: 'חשבונית_20458.pdf', size: 184320,
@@ -29,7 +29,7 @@
     },
     {
       key: 'cloud_88213', supplier: 'ספק הענן בע״מ', supplier_id: '514771290',
-      email: 'person129@example.com', kind: 'receipt', number: '88213',
+      email: 'person107@example.com', kind: 'receipt', number: '88213',
       amount: 412.00, currency: 'ILS', date: '2026-07-20T11:20:00', status: 'done', unread: false,
       subject: 'קבלה #88213 עבור מנוי ענן - יולי 2026',
       file: 'קבלה_88213.pdf', size: 92160,
@@ -37,8 +37,8 @@
       body_html: '<div dir="rtl" style="font-family:Arial,sans-serif">תודה על התשלום! מצ"ב קבלה מס\' 88213 עבור מנוי הענן החודשי (יולי 2026), סך <b>412.00 ₪</b>.<br><br>ספק הענן בע"מ</div>',
     },
     {
-      key: 'iec_44521', supplier: 'חברת חשמל לישראל', supplier_id: '500010111',
-      email: 'person130@example.com', kind: 'invoice', number: '44521',
+      key: 'iec_44521', supplier: 'חברת חשמל לישראל', supplier_id: '500001060',
+      email: 'person108@example.com', kind: 'invoice', number: '44521',
       amount: 1205.60, currency: 'ILS', date: '2026-07-19T16:48:00', status: 'failed', unread: true,
       fail_reason: 'מספר עוסק מורשה לא תואם לרשומה הקיימת במערכת',
       subject: 'חשבון חשמל - מספר לקוח 44521 - תקופה 6',
@@ -48,7 +48,7 @@
     },
     {
       key: 'bezeq_jul', supplier: 'בזק בינלאומי', supplier_id: '520044771',
-      email: 'person131@example.com', kind: 'invoice', number: 'BZ-07-26',
+      email: 'person109@example.com', kind: 'invoice', number: 'BZ-07-26',
       amount: 289.90, currency: 'ILS', date: '2026-07-19T10:03:00', status: 'processing', unread: true,
       subject: 'חשבונית אינטרנט וטלפוניה - יולי 2026',
       file: 'חשבונית_בזק_יולי.pdf', size: 71200,
@@ -76,13 +76,18 @@
   var DRIVE_CONNS = [
     { id: 'drive-local', source: 'drive', provider: 'local', label: 'אחסון מקומי',
       identity: 'מקומי · מובנה', color: 'var(--olive)', status: 'ok', builtin: true,
-      locations: ['נכנס', 'נכנס/חשבוניות', 'נכנס/קבלות', 'ארכיון', 'סרוקים'] },
+      locations: ['נכנס', 'נכנס/חשבוניות', 'נכנס/קבלות', 'ארכיון', 'סרוקים',
+                  // the folders the אגן instance's sources read and file to (incoming.js INST_AGAN)
+                  'אגן/נכנס/הזמנות', 'אגן/ארכיון/הזמנות', 'אגן/נכנס/משלוחים', 'אגן/ארכיון/משלוחים'] },
     { id: 'acc_office', source: 'drive', provider: 'gdrive', label: 'Google Drive · בינה',
-      identity: 'person127@example.com', color: '#1a73e8', status: 'ok',
+      identity: 'person105@example.com', color: '#1a73e8', status: 'ok',
       locations: ['לקוחות', 'חשבוניות ומסמכים', 'כספים 2026', 'חוזים', 'מצגות',
-                  'נכנס/חשבוניות', 'נכנס/קבלות', 'נכנס/תעודות משלוח', 'ארכיון/חשבוניות', 'ארכיון/קבלות'] },
+                  'נכנס/חשבוניות', 'נכנס/קבלות', 'נכנס/תעודות משלוח', 'ארכיון/חשבוניות', 'ארכיון/קבלות',
+                  // each drive source's OWN folders (incoming.js REGISTRY) — and not «ארכיון/תעודות משלוח - נכשל»:
+                  // that one is gone from the drive, and the source still naming it is what its card pins
+                  'ארכיון/תעודות משלוח', 'ארכיון/קבלות - נכשל', 'ארכיון/חשבוניות - נכשל'] },
     { id: 'acc_personal', source: 'drive', provider: 'gdrive', label: 'Google Drive · אישי',
-      identity: 'person132@example.com', color: '#e8710a', status: 'warning',
+      identity: 'person110.x@example.com', color: '#e8710a', status: 'warning',
       reason: 'מכסת האחסון כמעט מלאה (92% מתוך 15GB)',
       locations: ['תמונות', 'מסמכים אישיים', 'סרוקים 2026'] },
     { id: 'acc_dropbox', source: 'drive', provider: 'dropbox', label: 'Dropbox',
@@ -95,13 +100,13 @@
       identity: 'מקומי · מובנה', color: 'var(--olive)', status: 'ok', builtin: true,
       locations: ['INBOX', 'ספקים', 'כספים'] },
     { id: 'gmail_office', source: 'gmail', provider: 'gmail', label: 'Gmail',
-      identity: 'person127@example.com', color: '#ea4335', status: 'ok',
+      identity: 'person105@example.com', color: '#ea4335', status: 'ok',
       locations: ['INBOX', 'לקוחות', 'ספקים', 'דחוף', 'מעקב', 'כספים',
                   'אינדוקס - חשבוניות - לטיפול', 'אינדוקס - חשבוניות - טופל',
                   'אינדוקס - קבלות - לטיפול', 'אינדוקס - קבלות - טופל',
                   'אינדוקס - דוחות בנק - לטיפול', 'אינדוקס - נכשל'] },
     { id: 'outlook_admin', source: 'gmail', provider: 'outlook', label: 'Outlook',
-      identity: 'person133@example.com', color: '#0078d4', status: 'warning',
+      identity: 'person111@example.com', color: '#0078d4', status: 'warning',
       reason: 'אימות Microsoft יפוג בעוד 3 ימים — מומלץ לחדש את החיבור',
       locations: ['INBOX', 'ספקים', 'הנהלת חשבונות', 'דוחות גיול'] },
   ];

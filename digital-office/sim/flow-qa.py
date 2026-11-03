@@ -214,7 +214,7 @@ def drive_flows(pg, errs):
     q = asked()
     check('drive/a permanent delete is asked by the office: it names the file and opens on «ביטול»',
           q.get('yes') == 'מחיקה סופית' and q.get('fact') == name and q.get('focus') == 'ביטול' and not q.get('own'), q)
-    fl.locator('body').evaluate("""() => { const real = window.fetch; window.fetch = function (u) {
+    fl.locator('body').evaluate("""() => { const real = window.fetch.bind(window); window.fetch = function (u) {
       if (!/api\\/delete/.test(String(u))) return real.apply(this, arguments);
       window.fetch = real;
       return Promise.resolve(new Response(JSON.stringify({ error: 'הקובץ נעול כרגע' }),
@@ -410,7 +410,7 @@ def mail_flows(pg, errs):
         gap = w.evaluate('e => { const r = e.getBoundingClientRect(); return [Math.round(r.left), Math.round(innerWidth - r.right), innerWidth]; }')
         check("mail/the compose sheet is the screen's width on a phone, and inset from the reading side on a wider screen",
               gap[:2] == [0, 0] if gap[2] <= 640 else gap[1] == 24, gap)
-        w.locator('[data-to]').fill('person135@example.com')
+        w.locator('[data-to]').fill('person113@example.com')
         w.locator('[data-subj]').fill('בדיקת QA — הודעה חדשה')
         w.locator('[data-body]').fill('גוף ההודעה לבדיקה.')
         w.locator('.mlc-send').click(); pg.wait_for_timeout(1200)
@@ -470,7 +470,7 @@ def mail_settings_flows(pg, fl, view):
     # tries one message — and ONE unreadable message asked the trial of a number, which failed and asked again:
     # 7,568 rows and as many requests in twelve seconds, «[object Promise]» for a summary, no «עצירה» left to press.
     # The first message the trial asks for is refused here (in the page only), and the trial is left to end.
-    fl.locator('body').evaluate("""() => { const f0 = window.fetch; let asked = 0;
+    fl.locator('body').evaluate("""() => { const f0 = window.fetch.bind(window); let asked = 0;
       window.fetch = (u, o) => String(u).includes('api/message/') && !asked++
         ? Promise.resolve(new Response('{"error":"down"}', { status: 502, headers: { 'content-type': 'application/json' } })) : f0(u, o);
       window.__whole = () => { window.fetch = f0; }; }""")
@@ -810,7 +810,7 @@ def indox_flows(pg, errs):
     # the page, as the mail's rule trial does). Two rows are ticked here.
     told = lambda: ' · '.join(' '.join(t.split()) for t in fl.locator('#bina-tell .btell').all_inner_texts())
     hush = lambda: fl.locator('#bina-tell .btell').evaluate_all('els => els.forEach(e => e.remove())')
-    refuse = lambda method: inpage("""() => { const f0 = window.fetch; let n = 0;
+    refuse = lambda method: inpage("""() => { const f0 = window.fetch.bind(window); let n = 0;
       window.fetch = (u, o) => (o && o.method === '%s' && !n++)
         ? Promise.resolve(new Response('<html>502</html>', { status: 502, headers: { 'content-type': 'text/html' } })) : f0(u, o);
       window.__whole = () => { window.fetch = f0; }; }""" % method)
@@ -971,7 +971,7 @@ def console_flows(pg, errs):
             # two or three reads were in flight for as long as it stood open, each slowing the next.
             # Here every answer is held back 7 seconds, across two of the screen's ticks.
             reads = fr.evaluate("""async () => {
-              const real = window.fetch; let out = 0, most = 0, asked = 0;
+              const real = window.fetch.bind(window); let out = 0, most = 0, asked = 0;
               window.fetch = (u, o) => {
                 if (!/(^|\\/)api\\/apps$/.test(String(u).split('?')[0])) return real(u, o);
                 asked += 1; out += 1; most = Math.max(most, out);
@@ -985,14 +985,28 @@ def console_flows(pg, errs):
                   reads['asked'] >= 1 and reads['most_at_once'] == 1, reads)
             card = fr.locator('article.card[data-id="drive"]')
             was = card.locator('.badge').first.inner_text().strip() if card.count() else ''
-            if card.count():
-                card.locator('button[data-act="disable"]').click()
-                pg.wait_for_timeout(2500)
-            card = fr.locator('article.card[data-id="drive"]')
-            now = card.locator('.badge').first.inner_text().strip() if card.count() else ''
-            again = card.locator('button[data-act="install"]').count() if card.count() else 0
-            check('console/apps · switching an app off is seen on its card, with the way back',
-                  bool(was) and was != now and 'מושבתת' in now and again == 1, {'was': was, 'now': now, 'on': again})
+            # A LIVE OFFICE IS NOT A SCRATCH ONE. This step PRESSES an app's «disable» and leaves it
+            # off: in the simulation `drive` is a mock, but against the office the suite is pointed at
+            # (`--url`) it takes the owner's drive down and does not put it back. Measured 2026-10-13:
+            # the live `console` suite waited 30s for that button on this office (it is not offered
+            # there right now) — on another office it would have switched the app off. The control is
+            # therefore READ on a live office and PRESSED only in the simulation.
+            live = target_url().startswith("http")
+            if live:
+                has = card.locator('button[data-act="disable"]').count() if card.count() else 0
+                check('console/apps · the card says whether an app can be switched off (not pressed here)',
+                      card.count() > 0 and was != '', {'card': card.count(), 'badge': was, 'disable': has})
+                print('  (console/apps: the switching-off card is not pressed against a live office — '
+                      'the simulation runs that press)')
+            else:
+                if card.count():
+                    card.locator('button[data-act="disable"]').click()
+                    pg.wait_for_timeout(2500)
+                card = fr.locator('article.card[data-id="drive"]')
+                now = card.locator('.badge').first.inner_text().strip() if card.count() else ''
+                again = card.locator('button[data-act="install"]').count() if card.count() else 0
+                check('console/apps · switching an app off is seen on its card, with the way back',
+                      bool(was) and was != now and 'מושבתת' in now and again == 1, {'was': was, 'now': now, 'on': again})
 
     # THE NOTIFICATIONS SCREEN, pressed. No line pressed a row of it or either of its buttons, so nothing had met what
     # a press does there. A row shows two lines of its text and a press opens a text that is cut — and the first
@@ -1081,7 +1095,7 @@ def console_flows(pg, errs):
                     # …and the list's own read does not draw over it (the read a tab asks when it is returned to — the
                     # clock's read is the same one). That a read WAS asked is counted in the page: a list that is
                     # paused, or a page that is hidden, asks nothing — and would leave the word marked for that reason.
-                    fr.evaluate("""() => { const f0 = window.fetch; window.__reads = 0;
+                    fr.evaluate("""() => { const f0 = window.fetch.bind(window); window.__reads = 0;
                       window.fetch = (u, o) => { if (/api\\/notifications\\?/.test(String(u))) window.__reads++; return f0(u, o); };
                       window.__whole = () => { window.fetch = f0; }; }""")
                     fr.evaluate("() => document.dispatchEvent(new Event('visibilitychange'))"); pg.wait_for_timeout(900)
@@ -1144,7 +1158,7 @@ def console_flows(pg, errs):
                 for i in left[:-1]:
                     press(row % (i, '.title'))
                 # (from here the list's own reads are held in the page: the tiles stay a read behind until they are let go)
-                fr.evaluate("""() => { const f0 = window.fetch; let go; const held = new Promise((r) => { go = r; });
+                fr.evaluate("""() => { const f0 = window.fetch.bind(window); let go; const held = new Promise((r) => { go = r; });
                   window.fetch = (u, o) => /api\\/notifications\\?/.test(String(u)) ? held.then(() => f0(u, o)) : f0(u, o);
                   window.__whole = () => { window.fetch = f0; go(); }; }""")
                 if left:
@@ -1164,7 +1178,7 @@ def console_flows(pg, errs):
                 # list — the one that was behind — is read again. The press has to LAND on rows that are still there:
                 # where the button deletes without asking they are gone by now, and it is off for that reason. And A
                 # COUNT THAT CANNOT BE READ IS NOT SAID (that read refused): the question asks without a number.
-                plant = lambda answer: fr.evaluate("""(a) => { const f0 = window.fetch; window.__reads = 0;
+                plant = lambda answer: fr.evaluate("""(a) => { const f0 = window.fetch.bind(window); window.__reads = 0;
                   window.fetch = (u, o) => { if (/api\\/notifications\\?/.test(String(u))) window.__reads++;
                     return !/notifications\\/stats/.test(String(u)) ? f0(u, o) : !a ? Promise.reject(new TypeError('down'))
                       : Promise.resolve(new Response(JSON.stringify(a), { status: 200, headers: { 'content-type': 'application/json' } })); };
@@ -1237,13 +1251,19 @@ def console_flows(pg, errs):
         if '--mobile' not in sys.argv:
             check('console/own host · desktop mode mounts', False, 'no desktop on a wide viewport')
     else:
-        check('console/own host · desktop window, unsigned: the card over an empty frame, and the page stays',
-              'נדרשת כניסה' in d['unsigned']['card'] and not d['unsigned']['src'] and not d['unsigned']['went'],
-              d['unsigned'])
-        check('console/own host · desktop window, signed in after returning: the app, no card',
-              not d['signed']['card'] and d['signed']['src'] == d['url'], d)
-        check('console/own host · desktop window being opened, unsigned: the same trip, back to that window',
-              len(d['went']) == 1 and d['went'][0].endswith('/.dgo/enter/m/plane.here'), d['went'])
+        gone = d['unsigned'].get('missing') or d['signed'].get('missing')
+        if gone:
+            # the same idiom the suite uses for a module this office does not run: the flow is NOT
+            # run, and it says why — instead of three checks failing about an empty string.
+            print(f"  (console/own host: {gone} — this office has no linked-office window; that flow is not run)")
+        else:
+            check('console/own host · desktop window, unsigned: the card over an empty frame, and the page stays',
+                  'נדרשת כניסה' in d['unsigned']['card'] and not d['unsigned']['src'] and not d['unsigned']['went'],
+                  d['unsigned'])
+            check('console/own host · desktop window, signed in after returning: the app, no card',
+                  not d['signed']['card'] and d['signed']['src'] == d['url'], d)
+            check('console/own host · desktop window being opened, unsigned: the same trip, back to that window',
+                  len(d['went']) == 1 and d['went'][0].endswith('/.dgo/enter/m/plane.here'), d['went'])
 
     # FINDING AN APP BY TYPING. One matcher answers ⌘K and the desktop dock's «עוד» panel
     # (app.js `moduleMatches`), and it used to be a case-sensitive search of the Hebrew name: typing
@@ -1342,7 +1362,18 @@ OWN_HOST = """async () => {
                 host: 'drive.macbook', embed: '/a/drive/', proxy: '/a/drive.macbook/', remote: from};
   const here = {id: 'plane.here', name: 'ניהול פרויקטים', icon: 'check', group: 'עסק', external: true,
                 host: 'plane', embed: '/a/plane/', signed_in: '/.dgo/signed-in', enter: '/.dgo/enter'};
-  const real = {fetch: window.fetch, showEmbed, hash: location.hash, leave: leaveFor};
+  // `fetch` must be BOUND. `real.fetch(u, o)` calls it with `real` — a plain object — as the
+  // receiver, and a NATIVE fetch refuses that: "Failed to execute 'fetch' on 'Window': Illegal
+  // invocation". The bare form (`const f0 = window.fetch; … f0(u, o)`) fails the same way inside a
+  // `page.evaluate` body, which Playwright evaluates in a strict scope where a plain call leaves
+  // `this` undefined — both forms were measured on the live console, 2026-10-16. Nothing said so in
+  // the simulation, where build.mjs replaces window.fetch with a plain function that ignores its
+  // receiver; against the live office the probe's own read of /api/modules rejected, the shell
+  // rendered its "the app list came back empty" state, and every `console/own host`,
+  // `console/link down` and `console/stays open` check failed on a page whose rail was in fact full.
+  // EVERY capture of window.fetch in this file is bound for that reason (`grep -n window.fetch`);
+  // binding is a no-op in the simulation, so both lanes stay one code path.
+  const real = {fetch: window.fetch.bind(window), showEmbed, hash: location.hash, leave: leaveFor};
   const asked = [], framed = [], trips = [];
   let answer = '';
   leaveFor = (u) => { trips.push(u); };                  // the trip is counted, not taken
@@ -1392,17 +1423,26 @@ OWN_HOST = """async () => {
     const seen = async (a) => {
       answer = a; BinaDesktop.askOwnHosts(); await wait();
       const w = document.querySelector('.dk-win.external');
+      // A WINDOW THAT IS NOT THERE IS SAID, NOT THROWN. On a live office whose linked office is down
+      // — this one's usual state — there is no external tile and therefore no such window, and
+      // `w.querySelector` threw a TypeError that read as a broken suite instead of as "this office has
+      // no linked-office window" (measured 2026-10-13, the live `console` suite: 24/25, the missing
+      // line being `Cannot read properties of null (reading 'querySelector')`).
+      if (!w) return {card: '', src: '', went: trips.slice(), missing: 'no `.dk-win.external` window here'};
       return {card: w.querySelector('.dk-ask').innerText, src: w.querySelector('iframe').getAttribute('src') || '',
               went: trips.slice()};
     };
     await wait();                       // mounting routes the hash: the tile in view is the window
     tried(here.id, 0);                  // an OPEN window never goes by itself, whenever the last trip was
     out.desk = {url: 'http://127.0.0.1:9/', unsigned: await seen('opaqueredirect'), signed: await seen('cors')};
-    document.querySelector('.dk-win.external .dk-l.close').click();
+    // …and the window is closed only if it is there: on an office with no linked-office window these
+    // clicks waited 30s for an element that does not exist, which turned one honest skip into a
+    // TimeoutError (measured 2026-10-13).
+    document.querySelector('.dk-win.external .dk-l.close')?.click();
     tried(here.id, 0); answer = 'opaqueredirect';        // …and a window that is being OPENED goes itself
     BinaDesktop.openModule(here); await wait();
     out.desk.went = trips.slice();
-    document.querySelector('.dk-win.external .dk-l.close').click();
+    document.querySelector('.dk-win.external .dk-l.close')?.click();
     BinaDesktop.disable();
   }
   externalUrl = realUrl; leaveFor = real.leave; enterOwnHost.gone = false;
@@ -1420,7 +1460,7 @@ OWN_HOST = """async () => {
 # The edge's answer is stood in for (a redirect where the page expects JSON), and the top-level load
 # is counted instead of taken — what is checked is the page's decision for each situation.
 SIGNED_OUT = """async () => {
-  const real = {fetch: window.fetch, go: signInAgain};
+  const real = {fetch: window.fetch.bind(window), go: signInAgain};
   let went = 0;
   signInAgain = () => { went++; };
   window.fetch = async (u, o) => String(u).includes('/api/version') ? {type: 'opaqueredirect'} : real.fetch(u, o);
@@ -1456,11 +1496,17 @@ LINK_DOWN = """async () => {
      embed: '/a/notes/', remote: from(ok)},
     {id: 'drive.macbook', name: 'דרייב', icon: 'folder', group: 'עסק', external: true, host: 'drive.macbook',
      embed: '/a/drive/', proxy: '/a/drive.macbook/', remote: from(ok)}];
-  const real = {fetch: window.fetch, showEmbed, externalFallback, hash: location.hash};
+  const real = {fetch: window.fetch.bind(window), showEmbed, externalFallback, hash: location.hash};
   const drawn = await real.fetch('/api/version').then(r => r.json()).catch(() => ({}));   // what this page was drawn from
   const framed = [];
   let ok = false, turn = 0;
   window.fetch = async (u, o) => {
+    // THE PEER'S SIGN-IN PROBE IS STOOD IN FOR, as it already is in the classic shell's stub: a tile
+    // that keeps its own host names its `signed_in` path, the shell asks it, and under `file://` the
+    // real fetch became `Fetch API cannot load file://plane/.dgo/signed-in` — one JS error in a run
+    // that was otherwise clean, in a suite whose own rule is that nothing is fetched from a host that
+    // does not exist here (measured 2026-10-13; the sim has no identity provider to ask).
+    if (String(u).includes('/.dgo/signed-in')) return {ok: true, type: 'cors', json: async () => ({})};
     if (String(u).includes('/api/version'))
       return {ok: true, json: async () => Object.assign({}, drawn, {registry: 'link-' + turn})};
     const r = await real.fetch(u, o);
@@ -1521,9 +1567,15 @@ LINK_DOWN = """async () => {
 
 STAYS_OPEN = """async () => {
   window.__drawn_before_the_new_build = true;
-  const real = window.fetch;
+  const real = window.fetch.bind(window);
   const more = {id: 'linked.later', name: 'נוסף אחר כך', icon: 'bot', group: 'עסק', embed: '/a/my-docs/'};
-  let says = {registry: 'another'};
+  // The stand-in carries what it is NOT changing. `freshen` reads the shell FIRST and returns on a
+  // difference, so a version record that simply drops the field reads as "a newer build" on an
+  // office whose own stamp has one — the probe then stops before the registry comparison and this
+  // check fails for the wrong reason (measured on the live console, 2026-10-16: `registry: 'another'`
+  // alone, tile not re-read; the second half below sets `shell` explicitly, which is the same fact).
+  const own = await real('/api/version').then(r => r.json()).catch(() => ({}));
+  let says = Object.assign({}, own, {registry: 'another'});
   window.fetch = async (u, o) => {
     if (String(u).includes('/api/version')) return {ok: true, json: async () => says};
     const r = await real(u, o);
@@ -1764,12 +1816,30 @@ def screen(pg, suite, m):
         check(f'{suite}/{m}', False, f'the page left the office for {pg.url[:80]}')
         pg.goto(target_url()); pg.wait_for_timeout(900)
         return False
-    # …and when the office has no tile of that name. The shell sends an id it does not know to its FIRST tile:
-    # `install` stayed in the list after the install screen was taken out of the shell, and every rule of two
-    # suites was asked of my-docs a second time and passed under its name (found by looking at what stood there).
+    # …and when the office has no tile of that name. The shell KEEPS the address and SAYS so (it used
+    # to send an unknown id to its first tile — `install` stayed in the list after the install screen
+    # was taken out of the shell, and every rule of two suites was asked of my-docs a second time and
+    # passed under its name). The card the shell draws is what this reads: the module's own flows are
+    # not run at all, and it is said rather than counted.
     at = pg.evaluate("() => location.hash")
     if not at.startswith('#/m/' + m):
         check(f'{suite}/{m}', False, f'the office has no tile of this name: its address became {at[:50]}')
+        return False
+    # the card itself: the address is kept AND the shell says there is no such screen here — the
+    # module's own flows are NOT run against a card that says so (they were, and `chat`'s failed with
+    # `['#newChat', '#mNew']` on an office that does not run chat — measured 2026-10-13).
+    # …AND ONLY WHEN IT IS THE VISIBLE ONE: `#content` keeps the last card's DOM while an embed is
+    # shown, so a check that only asked for the text called every module after the first "no such
+    # screen" — nine of them, and the suite passed green over a third of its flows.
+    nosuch = pg.evaluate("""() => {
+      const c = document.querySelector('#content');
+      if (!c || c.classList.contains('hidden')) return false;
+      const h = c.querySelector('.wcard h3');
+      return !!h && h.textContent.includes('אין מסך בשם הזה');
+    }""")
+    if nosuch:
+        print(f"  (the office has no screen named {m} — its address is kept and the shell says so; "
+              f"{suite}'s flows for it are not run)")
         return False
     if late(r):
         check(f'{suite}/{m} has said what it has to say in time, before it is measured', False, drawn.said(r))
@@ -2116,7 +2186,7 @@ def layout_flows(pg, errs):
                 read(f'«{name}» ')
             check(f'layout/{m} one is said as one: no «1» stands before a plural, on any view the screen names', not ones, ones[:3])
             # 19 — A TEXT STANDS INSIDE ITS CARD, read on the same walk. The simulation chat's «חיבור פעיל» card said
-            #      «וואטסאפ עסקי050-000-0007»: the name and the number on one line with nothing between them,
+            #      «וואטסאפ עסקי+972 50-123-4567»: the name and the number on one line with nothing between them,
             #      the number 6px past the card's edge — two inline spans whose ellipsis never applied. Nothing
             #      scrolled sideways (1), nothing left the screen (2), and no box that clips had cut anything (6).
             check(f'layout/{m} every text stands inside the box painted around it, on any view the screen names', not spilt, spilt[:3])
@@ -2371,8 +2441,17 @@ CUT_PROBE = r"""() => {
     if (e.scrollWidth <= e.clientWidth + 1 || e.children.length > 1 || !e.getClientRects().length) continue;
     const cs = getComputedStyle(e);
     if (cs.textOverflow !== 'ellipsis' || cs.overflowX === 'visible') continue;
+    // …AND `unicode-bidi:plaintext` IS AN ANSWER, not an exemption: this rule's own intent is "a box
+    // that is cut must read the way its words do", and `plaintext` is exactly the mechanism that gives
+    // each box its own direction — the computed `direction` stays the row's, so this proxy cannot see
+    // it, and the honest comparison is against what the box actually reads: the FIRST STRONG
+    // CHARACTER. Measured 2026-10-13 on the mail list, whose sender cell holds both `admin@…` (Latin)
+    // and «מערכת INDOX @…» (Hebrew first): no single fixed `direction` is right for both, and only
+    // `plaintext` puts the ellipsis at the logical end of every row.
+    const plaintext = (cs.unicodeBidi || '').includes('plaintext');
     const t = e.textContent.trim(), first = (t.match(/[A-Za-z֐-׿]/) || [''])[0];
-    if (first && /[A-Za-z]/.test(first) !== (cs.direction === 'ltr')) cut.push('cut at its beginning: ' + t.slice(0, 24));
+    const reads = plaintext ? 'both' : (cs.direction === 'ltr' ? 'ltr' : 'rtl');
+    if (first && reads !== 'both' && /[A-Za-z]/.test(first) !== (reads === 'ltr')) cut.push('cut at its beginning: ' + t.slice(0, 24));
   }
   return cut.slice(0, 5);
 }"""
@@ -2419,7 +2498,7 @@ ONE_PROBE = r"""() => {
 }"""
 
 
-# -> the texts in sight that reach past the box painted around them: «050-000-0007 | 6px past #connftr»
+# -> the texts in sight that reach past the box painted around them: «+972 50-123-4567 | 6px past #connftr»
 SPILL_PROBE = r"""() => {
   for (let w = window; w !== w.parent; w = w.parent) {      // only a frame that is drawn
     if (!w.frameElement || !w.frameElement.getClientRects().length) return [];
@@ -3386,6 +3465,14 @@ def window_flows(pg, errs):
                     check(f'windows/{m} its corner drags in to the smallest window', r['vw'] <= 400 and r['vh'] <= 280, f"{r['vw']}x{r['vh']}")
                 # …the app's page, or the shell's own card where the app cannot be shown in a frame
                 said = r['textLen'] > 40 or len(win.query_selector('.dk-body').inner_text().strip()) > 40
+                # `hello-bina` IS A FOREIGN IMAGE NAMED BY ITS OWN CONTENT: caddy answering one fixed
+                # sentence (32 characters). The 40-character rule asks a screen to have more to say
+                # than this app has, and these two were the only reds left in a healthy office
+                # (measured 2026-10-13) — a check that cannot be satisfied is not a finding. The
+                # allowance is the app's own sentence, and it is named here rather than in a silent
+                # pass; G83 makes the same allowance for the same app, for the same reason.
+                if m == 'hello-bina':
+                    said = r['textLen'] >= 20
                 check(f'windows/{m} has content in {at}', said, r)
                 check(f'windows/{m} no sideways scroll in {at}', r['sideways'] <= 2, f"{r['sideways']}px wide at {r['vw']}x{r['vh']}")
                 check(f'windows/{m} no number or column header cut, and nothing cut at its beginning, in {at}', not cut, cut[:3])
@@ -3471,12 +3558,18 @@ def main():
                             is_mobile=phone, has_touch=phone, device_scale_factor=1)
         pg = ctx.new_page()
         print(f"viewport: {'390x844 (phone)' if phone else '1440x900 (desktop)'}")
-        errs, where = [], {}
+        errs, where, first_stack = [], {}, {}
 
-        def err(msg):
+        def err(msg, stack=''):
             # …and by the check it came after: an error with no place is a search, not a finding.
             errs.append(msg); where.setdefault(msg, RESULTS[-1][0] if RESULTS else 'start')
-        pg.on('pageerror', lambda e: err(str(e)))
+            # …AND WHERE IT WAS THROWN, once per distinct message. A counted error whose text is
+            # `Cannot read properties of null (reading 'classList')` names neither a file nor a line —
+            # the live lane reported exactly that on 2026-10-13 and it could not be chased (it did not
+            # recur in two runs). The stack is what turns the next occurrence into a place.
+            if stack and msg not in first_stack:
+                first_stack[msg] = stack
+        pg.on('pageerror', lambda e: err(str(e), getattr(e, 'stack', '') or ''))
         # A resource that did not load is named by its address: the console's own line for it says
         # only "Failed to load resource", sixty times, about sixty unknown things.
 
@@ -3526,6 +3619,10 @@ def main():
         kinds[e] = kinds.get(e, 0) + 1
     for e, n in sorted(kinds.items(), key=lambda kv: -kv[1])[:12]:
         print(f'    x{n}  {e[:200]}' + (f'   [first after: {where[e]}]' if e in where else ''))
+        if e in first_stack:                       # where it was thrown, so it can be chased
+            frames = [f.strip() for f in first_stack[e].splitlines() if f.strip() and 'Error' not in f[:20]]
+            for frame in frames[:3]:
+                print(f'         at {frame[:160]}')
     sys.exit(1 if bad or errs else 0)
 
 

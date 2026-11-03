@@ -22,7 +22,7 @@ needs the owner's per-lane verdicts. Static gates 28 run, 0 regressions, 3 known
 sync_sources (timed out under 130 concurrent extractions), bs and gdoc (the upload dedupe) were
 re-run alone on the quiet machine with the dedupe gone: **bs 4/4 · gdoc 5/5 · sync_sources 16/16 in
 189 s — all 13 INDOX suites green today.** Thumbnails: 0 rows created all day. `tag_rules` gone,
-`sync_item_reasons` live, on all three tenants. **Released to bina-comp-prod at 18:02 UTC (§7.7):** 20
+`sync_item_reasons` live, on all three tenants. **Released to hacohen-prod at 18:02 UTC (§7.7):** 20
 workflows pushed, four images rebuilt, migrations applied, 47,401 dangling thumbnail rows purged with
 their ids kept, score 96 and reasons on every red pipe live on the box; the first app build there failed
 on files another session had left uncommitted — committed as they stood, rebuilt alone. **Focused
@@ -61,7 +61,7 @@ raster upload it guarded against no longer exists, and documents dedupe by hash 
 You must fix once and for all… full display and div tree and managed css for doc view no matter where
 it will fit." Investigation + market survey + plan: the artifact **INDOX Document Stage**
 (https://claude.ai/code/artifact/e01763b0-dbe7-4d1f-950c-ac4039534a23). This entry is P0 and P1 of it,
-shipped and verified on the local stack against `indox_bina_comp` (26,747 documents).
+shipped and verified on the local stack against `indox_hacohen` (26,747 documents).
 
 **The two defects, root-caused with measurements — neither was a display quirk.**
 
@@ -70,8 +70,8 @@ shipped and verified on the local stack against `indox_bina_comp` (26,747 docume
    an `<img src>` and were hand-built, so they carried none. The BFF read schema `public`, whose
    compatibility view was dropped, PostgREST answered 404, Flask's catch-all turned it into a bare 500,
    and the viewer fell back to a preview while captioning the document «לא הופק סימון חילוץ». Measured
-   live on console.bina-comp (`doc_mtk56k1zbq1ws3`): draw/file/tokens **500 → 200 image/png** with
-   `?instance=bina-comp`. The production log named it exactly (`_document_draw_handle`, PostgREST 404 on
+   live on console.hacohen (`doc_mtk56k1zbq1ws3`): draw/file/tokens **500 → 200 image/png** with
+   `?instance=hacohen`. The production log named it exactly (`_document_draw_handle`, PostgREST 404 on
    `public.incoming_documents`).
 2. **The top of every tall document was unreachable.** The pane centred an overflowing child with
    `align-items:center` inside a scroll container: the overflow splits in two and `scrollTop` cannot go
@@ -197,7 +197,7 @@ at the end of the artifact are still open; nothing in P0/P1 pre-empts them.
 
 ## 2026-09-02 (day) — PRODUCTION-READINESS INVESTIGATION: current state, decisions, plan (owner ask 10:15 UTC)
 
-**⚠ 10:30 UTC — the production address changed identity.** `204.168.193.136` answers SSH with three
+**⚠ 10:30 UTC — the production address changed identity.** `93.184.216.13` answers SSH with three
 brand-new host keys (ED25519 / RSA / ECDSA all differ from the recorded ones), ports 80/443 are closed,
 DNS still points there. Signature of a fresh install or a provider rescue system. No key accepted,
 nothing run against it since; a watcher reports when the known key or https returns. Every server-side
@@ -324,7 +324,7 @@ marks as `delivered` rows keyed by `SOURCE_ID`, or state that history starts 08-
 orphan rows on registry delete: delete with confirmation, or a REAP sweep — decision · P9 remove the
 fallback Vision key · P10 cursor-first mail search.
 
-## 2026-09-02 (night) — FINAL CONSOLIDATION: thin, aligned, no old implementation left; live on bina-comp-prod
+## 2026-09-02 (night) — FINAL CONSOLIDATION: thin, aligned, no old implementation left; live on hacohen-prod
 
 **Owner order:** clean/consolidate/align workflows | api | bff | ui | cli, delete every old
 reference, discovery fully bound by `OldDocumentMonthsBack`, best-practice check, one document.
@@ -357,7 +357,7 @@ reference, discovery fully bound by `OldDocumentMonthsBack`, best-practice check
   `.workflow.ts` (+ startsWith prefixes), G48 reply nodes, G39 (JQExV3 callers stop sending fields
   the triggers drop; BS's AI call keeps `LINK_CONNECTION`), G41/G46/G56 by deletion or scrub.
   Known-red stays G60.
-- **Server (bina-comp-prod), phases 9–10:** schema re-owned to `postgres`; 5 migrations; registry
+- **Server (hacohen-prod), phases 9–10:** schema re-owned to `postgres`; 5 migrations; registry
   row cleaned (`mail-private` out); `bbox run`; every workflow pushed and active (`indox01` forced
   past the emergency-stop CAS); 13 retired workflows deleted live; gates ON; the Redis-cached
   workflow→project map held a project that no longer exists → every sub-workflow call was denied
@@ -390,7 +390,7 @@ reference, discovery fully bound by `OldDocumentMonthsBack`, best-practice check
   loads in seconds), a document page with its extraction preview, the sync page (one bar per pipe,
   run / retry / edit / delete / master switch), the gmail pipe editor (mailbox connection, tag,
   attachment drive, destination folder, new-tag creator, batch knobs), settings (four tabs, no sync
-  tab), apps → Supabase opens `supabase-studio.bina-comp.msh-hac.com`, the mail app (the client's
+  tab), apps → Supabase opens `supabase-studio.hacohen.msh-hac.com`, the mail app (the client's
   Gmail) and the drive app (the client's Google Drive).
 - **Two more root causes of "links don't work" on mail documents, both fixed:** the drive app's
   `public_link` hardcoded `http://` (mixed content inside the https console; every delivery since
@@ -521,7 +521,7 @@ no-op, which is exactly how the reaper ran dead for hours earlier today.
 did more verification than anything I could have staged:
 
 ```
-drain_full rows          bina-comp + levi, dispatched 08:36:41
+drain_full rows          hacohen + levi, dispatched 08:36:41
 indoxV2Driver01          7 success + 4 running, 0 errors   <- MY FIX, FINALLY PROVEN
 indoxApi01               17 success
 Global/Inv/Ship/BS/Ord/Rcp/Decide   9-10 success each
@@ -562,7 +562,7 @@ carried, and a sub-workflow boundary is where the input stops carrying anything.
 ## 2026-08-28 08:30 — DEFECT: the drain's full sweep is missed ~half the time (window < tick gap)
 
 **The recovery sweep fires only if a tick lands inside a 2-minute window every 2 hours, and the
-ticks are 4 minutes apart.** So roughly every other sweep is silently skipped. Measured, bina-comp,
+ticks are 4 minutes apart.** So roughly every other sweep is silently skipped. Measured, hacohen,
 3 hours: **46 ticks, 1 full sweep.**
 
 `indoxV2BaseDrain01` line 229:
@@ -608,15 +608,15 @@ need a different explanation than the one I gave.
 **TWO-TENANT E2E ON THE DOCUMENT PIPELINE: PROVEN.** From the drain's own items, not inference:
 
 ```
-drain runs, last 25 min      levi 5 / bina-comp 5, each with its own __instance
+drain runs, last 25 min      levi 5 / hacohen 5, each with its own __instance
 levi full sweep 06:00:14     Select IDs -> levi_doc_0001
                              Fire Lanes -> {accepted: true, execution: 3694777}
 executions 3694777/9/80      indoxV2Driver01  SUCCESS  (for levi)
 execution  3694778           indoxApi01       SUCCESS
-selected totals, 6h          bina-comp mode=all 26,064 · levi mode=all 1
+selected totals, 6h          hacohen mode=all 26,064 · levi mode=all 1
 ```
 
-So levi is dispatched, selected, fired, driven and answered independently of bina-comp, with the
+So levi is dispatched, selected, fired, driven and answered independently of hacohen, with the
 right instance at every hop and the right row counts for each tenant. That is the two-tenant
 document pipeline working, not just scheduling.
 
@@ -672,7 +672,7 @@ action leaks a document permanently.
 
 9 guard sites now THROW instead of resolving to `public`; the 2 `SHARED[t]` returns (genuinely
 global `ai_extraction_cache`) are untouched. **146 executions in the following 20 minutes, 0
-errors.** levi still 1 doc / 0 ledger, bina-comp 26,066.
+errors.** levi still 1 doc / 0 ledger, hacohen 26,066.
 
 **I broke indoxApi01 twice getting there, and both were escaping, not logic:**
 1. `\'` inside a JS single-quoted string inside a `.ts` template literal — the backslash was
@@ -689,7 +689,7 @@ Code node's `jsCode` from the LIVE workflow and runs `node --check`:
 76 chars and the newlines truncated the files — strip them.)
 
 **THE REAL DEFECT, found by the sync agent: the instance can arrive PER ROW.** indoxV2Driver01
-sends `filters:[{ID:...,__instance:'bina-comp'},...]`; the guard read only the top level, so a fully
+sends `filters:[{ID:...,__instance:'hacohen'},...]`; the guard read only the top level, so a fully
 migrated, correctly tenant-aware caller failed closed. Same class as the `instance`/`__instance`
 conflation at 05:56 — **right rule, wrong field.** `Build Get SQL`, `Build Table Get` and
 `Build Table Upsert` now LIFT the instance from batch rows when they AGREE, and refuse only when
@@ -792,12 +792,12 @@ INACTIVE `ApiSupabase01`. It carried the same `instance:'*'` pattern that caused
 scoped it rather than deactivating it, because retiring the v1 chain is a bigger call than a code
 fix. It is a duplicate of the v3 chain and a candidate for deletion.
 
-## 2026-08-28 05:55 — CROSS-TENANT LEAK: bina-comp's mail was delivered into indox_levi
+## 2026-08-28 05:55 — CROSS-TENANT LEAK: hacohen's mail was delivered into indox_levi
 
 **104 ledger rows, 104 documents, 46 attempts written into `indox_levi` between 05:25:37 and
-05:42:04**, every one sourced `incoming-documents-main/*` — bina-comp's pipes — and every one
-(104/104) already delivered in `indox_bina_comp.sync_ledger`. Found, stopped, backed up, cleaned.
-`indox_levi` is back to **1 document** (`levi_doc_0001`), ledger 0, attempts 0; bina-comp verified
+05:42:04**, every one sourced `incoming-documents-main/*` — hacohen's pipes — and every one
+(104/104) already delivered in `indox_hacohen.sync_ledger`. Found, stopped, backed up, cleaned.
+`indox_levi` is back to **1 document** (`levi_doc_0001`), ledger 0, attempts 0; hacohen verified
 untouched at 26,064 documents / 29,098 ledger.
 Backup: `data/_registry_backup/cutover-20260828/levi-crosstenant-leak-backup.sql` (105+46+104 rows,
 dumped to WSL-native storage and byte-verified before copying — see the /mnt/c warning below).
@@ -808,12 +808,12 @@ scanner served all tenants and had no way to know which instance it was for. It 
 correct when `indox01` became the scheduler — syncV3Main0001's own `Schedule 15m` is disabled and
 every pass now arrives via `When Called` (18/18 executions mode `integrated`), dispatched once per
 enabled instance WITH its identity. `'*'` then stopped meaning "fan out" and started meaning "every
-pass reads every registry". `indox_levi` has no `sync_registry` row, so levi's pass read bina-comp's,
+pass reads every registry". `indox_levi` has no `sync_registry` row, so levi's pass read hacohen's,
 and `Build Units` correctly stamped those pipes with the dispatching instance.
 
 **The propagation work did not cause this — it revealed it, and then made it efficient.** Before
-`__instance` reached the writers, levi's deliveries fell back to `public` and landed in bina-comp:
-wrong, but invisibly so. Once propagation worked, the same pipes routed bina-comp's documents into
+`__instance` reached the writers, levi's deliveries fell back to `public` and landed in hacohen:
+wrong, but invisibly so. Once propagation worked, the same pipes routed hacohen's documents into
 levi. *A propagation fix without a scoped registry read is worse than neither.*
 
 **Fixed:** `Registry Req` reads the dispatching instance's registry and THROWS when it cannot name
@@ -834,7 +834,7 @@ WSL-native storage, verify the bytes, then copy. Do not trust any backup written
 
 **What moved.** `public.indox_{base_selection_hash,line_hash,priority_signature,selection_hash}(incoming_documents)`
 — the overloads bound to the COMPAT VIEW's composite type — are gone. 8 table-typed overloads
-survive (4 functions × indox_bina_comp + indox_levi), `view_typed_left = 0`, and both instances
+survive (4 functions × indox_hacohen + indox_levi), `view_typed_left = 0`, and both instances
 smoke-test `t/t` on line_hash and selection_hash. 31 executions after the drop: **0 errors, 0
 function-missing errors.**
 Revert is one file: `data/_registry_backup/cutover-20260828/revert-view-typed-overloads.sql`.
@@ -880,12 +880,12 @@ every workflow filtered -main  ->  the pipeline saw 8 of 68
 
 levi's entire configuration — every `q_v3_*` query, `indoxDrainOn`, `activePrioritySync`, the drain
 pool settings — was **invisible to every workflow**, and my seeding masked it by making levi look
-configured. Normalised onto one value (68 visible, bina-comp untouched at 82); the two sets shared no
+configured. Normalised onto one value (68 visible, hacohen untouched at 82); the two sets shared no
 keys so the `(instance, key)` primary key could not collide.
 
 **WORKFLOW SIDE NOW CLEAN: 0 live production nodes filter on the column** (was 30). 38 occurrences
 removed across 19 workflows, each edit a WHERE-clause change, pushed and verified: 52 executions, 0
-SQL-syntax errors, 0 missing-relation errors; both tenants read their own settings (bina-comp 82, levi
+SQL-syntax errors, 0 missing-relation errors; both tenants read their own settings (hacohen 82, levi
 68, both `drain_on=true`). The one remaining mention in `indoxV2BaseDrain01` is prose in a `notes`
 field. **Removing the filter had to come before dropping the column** — that is the sequencing.
 
@@ -942,7 +942,7 @@ never a second "active". If Model B cannot express something, change Model B —
 
 **Backup first:** `data/_registry_backup/precutover-20260828-034844/` — 880 MB custom-format dump
 (760 objects, 235 tenant-schema entries, 28 views), schema-only SQL, and every n8n graph as JSON.
-Witnesses: bina-comp 25,982 docs / 82 settings, levi 1 / 60, action_log 485,289.
+Witnesses: hacohen 25,982 docs / 82 settings, levi 1 / 60, action_log 485,289.
 
 **1. Every active production node now resolves its schema from `__instance`.** ~50 nodes across 26
 workflows. The resolver is inline and uniform:
@@ -960,11 +960,11 @@ handler — doing `UPDATE incoming_documents`, and `indoxApi01 :: Get Changed Do
 on `settings`/`companies`) exist in each tenant schema, built with `search_path` set so their
 schema-relative bodies bind correctly, and with `extraction_queries` repointed at its own tenant's
 `company_registry` (schema.sql hardcodes `public.` there — the one non-relative reference in the file).
-Proof they are genuinely separate: bina-comp's `q_v3_company` binds to 186,878 bytes, levi's to 522.
+Proof they are genuinely separate: hacohen's `q_v3_company` binds to 186,878 bytes, levi's to 522.
 
 **3. Global settings got a real home: `public.app_settings (app, key, value)`.** `indox01` was reading
 `indox.auto.*` from `public.settings` — a compatibility view onto ONE tenant — so **the global
-scheduler was gated by bina-comp's rows**, and would have broken outright at the cutover. It now sits
+scheduler was gated by hacohen's rows**, and would have broken outright at the cutover. It now sits
 beside the two global tables it already read, `public.indox_instances` and `public.app_schedule_state`.
 
 **4. THE SCHEDULER CUTOVER IS DONE.** All four legacy schedule triggers DISABLED (not deleted —
@@ -976,24 +976,24 @@ active and is now the app's only clock. `indox.auto.on = true`.
 each of the four workers ran **twice in the same second**, once per tenant, each carrying its own
 `__instance` — read out of the flattened `execution_data`, not inferred from the dispatch table:
 
-| worker | bina-comp | levi |
+| worker | hacohen | levi |
 |---|---|---|
 | `indoxV2BaseDrain01` | 3687639 | 3687640 |
 | `syncV3Main0001` | 3687641 | 3687643 |
 | `indoxHealth00001` | 3687647 | 3687648 |
 | `syncLedgerApi01` | 3687644 | 3687646 |
 
-**138 executions, 0 errors.** Isolation intact: bina-comp 25,982 / 82 unchanged, levi 1 / 68.
+**138 executions, 0 errors.** Isolation intact: hacohen 25,982 / 82 unchanged, levi 1 / 68.
 
-**levi got 8 OPERATIONAL settings seeded and none of the other 14.** The missing keys are bina-comp
+**levi got 8 OPERATIONAL settings seeded and none of the other 14.** The missing keys are hacohen
 IDENTITY — Drive folder URLs, Gmail addresses, WhatsApp admin numbers, and `sync_registry`, which
-names bina-comp's actual document sources. Copying them would have pointed levi's pipeline at
-bina-comp's Drive and mail: the exact cross-tenant leak this migration exists to prevent, installed by
+names hacohen's actual document sources. Copying them would have pointed levi's pipeline at
+hacohen's Drive and mail: the exact cross-tenant leak this migration exists to prevent, installed by
 hand under the banner of "making levi work". **That distinction — operational vs identity — is the
 settings taxonomy, and it is enforced by what is absent.**
 
 **STILL OPEN before the views can be dropped:** the BFF's dashboard, sync board and action log still
-read `public` (documents reads ARE tenant-scoped and proven: levi returns its 1 row, bina-comp its
+read `public` (documents reads ARE tenant-scoped and proven: levi returns its 1 row, hacohen its
 25,982, via `run_sql`); and `extraction.py` reads the two derived views, which now need pointing at
 the tenant copies.
 
@@ -1003,14 +1003,14 @@ the tenant copies.
 
 **1. `public.company_registry` and `public.extraction_queries` did not exist.** Both are VIEWS
 declared in `schema.sql` (1221–1250 and 1302–1323), both built on `settings`/`companies`. When those
-tables moved into `indox_bina_comp`, the dependent views went with them and nothing recreated them.
+tables moved into `indox_hacohen`, the dependent views went with them and nothing recreated them.
 **60 errors in 4 h across 14 active workflows**; `indoxSettings01` went 0 → 45 in one hour on
 `relation "public.extraction_queries" does not exist`, and `syncV3Unit0001` 3 → 15.
 
 Restored both from `schema.sql` **by line range rather than retyped** — `company_registry` encodes
 identifier ordering, the 9-digit split and the `פריוריטי` exclusion, all of which a transcription
 slip gets silently wrong. Into `public` deliberately: `public.settings` and `public.companies` are
-already compat views onto `indox_bina_comp`, so this reproduces pre-migration behaviour exactly and
+already compat views onto `indox_hacohen`, so this reproduces pre-migration behaviour exactly and
 adds no semantics the cutover then has to unpick. **Proven:** `company_registry` 1 row,
 `extraction_queries` 16 keys, `q_v3_company` binding to 186,878 bytes, `indoxSettings01` last error
 00:31 and three successes at 00:45.
@@ -1040,7 +1040,7 @@ behind `^[a-z][a-z0-9_]*$`, falls back to `public` when absent — i.e. today's 
 - **PostgREST cannot see tenant schemas** (`PGRST_DB_SCHEMAS=public,storage,graphql_public`), so the
   17 compat views are the ONLY way the BFF reads tenant data. Dropping them does not degrade the
   console, it stops it. Resolved by routing tenant reads through `run_sql` — done and proven for
-  documents (levi returns its 1 row, bina-comp its 25,982); dashboard / sync board / action log still
+  documents (levi returns its 1 row, hacohen its 25,982); dashboard / sync board / action log still
   pass no instance and are in progress.
 - Of the 16 workflows holding those 28 nodes, **14 already carry `__instance`** and 15 are entered as
   sub-workflows, so propagation rides the call chain. Only `indoxV2ActionRouter01` (the dispatch hub,
@@ -1127,11 +1127,11 @@ the bare anchor `קבלה` to *invoice*. Receipts were being filed as invoices.
   one ORDER generated by apitools `/docGen`, uploaded to LOCALDRIVE (`drive_local-19213e58`), and
   injected as two rows carrying only LINK / LINK_CONNECTION / SOURCE_TYPE='MANUAL_TEST' — **TYPE and
   COMPANY_ID deliberately NULL**, so base extraction had to classify and resolve them itself. The
-  company (514291418 / בי גי) is an EXISTING registry entry on purpose: inserting a new company
+  company (500000070 / בי גי) is an EXISTING registry entry on purpose: inserting a new company
   moves `q_v3_company`'s resolver_gen, which by design re-opens the company gate estate-wide.
   Result — **both engines independently agreed**, which is the strongest form this proof takes:
-      mt_rcp_20260827  LOCAL_TYPE=receipt  AI_TYPE=RECEIPT  -> TYPE=RECEIPT  COMPANY_ID=514291418
-      mt_ord_20260827  LOCAL_TYPE=order    AI_TYPE=ORDER    -> TYPE=ORDER    COMPANY_ID=514291418
+      mt_rcp_20260827  LOCAL_TYPE=receipt  AI_TYPE=RECEIPT  -> TYPE=RECEIPT  COMPANY_ID=500000070
+      mt_ord_20260827  LOCAL_TYPE=order    AI_TYPE=ORDER    -> TYPE=ORDER    COMPANY_ID=500000070
   `AI_TYPE=RECEIPT` could not have occurred before this change: the Gemini structured-output enum
   forbade the value, and the cues that taught it are compiled from the new `q_v3_type` rule, not
   hand-written. Action log, identical for both, 4 dispatches each:
@@ -1310,7 +1310,7 @@ Full write-up + the E2E: `issues/indox-source-contract-and-e2e-2026-08-25.md`.
 - **Two defects the proof exposed, fixed live:** (a) `SyncProcGDoc0001` stamped the TERMINAL
   `COMPLETED` on `Is OK` alone while its own REQUIRED_ACTION said "Missing company name", and it
   renames the file to `unknown-*` — so `select_base` could never run and the company (present in
-  ATTACHMENT_TEXT: "ברייטקום ב" = 515273175) was unreachable; now COMPLETED requires company AND
+  ATTACHMENT_TEXT: "ברייטקום ב" = 500000930) was unreachable; now COMPLETED requires company AND
   type, else IN_PROGRESS. (b) `SYNC_REGISTRY_ID` derived from the wrong ctx field.
 
 ## 2026-08-25 — THE SYNC UI IS THE OPERATOR'S SURFACE (audit + repair)
@@ -1537,8 +1537,8 @@ already-ERP-synced documents alone" used `=== true` against a string and had nev
 
 Sample of what landed, and note the last column:
 
-    doc_msmfz9fson2fbj  516431434  SI266000975  warehouse=Y  total=2974
-    doc_msm33ay5zus8pp  510711716  23598871     warehouse=Y  total=466.57
+    doc_msmfz9fson2fbj  500000948  SI266000975  warehouse=Y  total=2974
+    doc_msm33ay5zus8pp  500000955  23598871     warehouse=Y  total=466.57
 
 `FROMWAREHOUSE=Y` is the mapping fix whose signature mismatch was corrected earlier today —
 the payload and the fingerprint now describe the same thing.
@@ -1801,8 +1801,8 @@ after `PG Merge Write` into an unlock, exactly as the upsert path does. Not appl
 change to the central API needs a quiet window, and it blocks nothing now that dedup is at zero.
 
 **3. ~~Extraction is producing document ids that are not document ids.~~ OVERSTATED — corrected.**
-Of the 49 quarantined ids, only **two** are dramatic wrong-field extractions: `515561520` (a
-company registration number under fifteen companies) and `02-6333155` (a phone number under five).
+Of the 49 quarantined ids, only **two** are dramatic wrong-field extractions: `500000088` (a
+company registration number under fifteen companies) and `02-0000011` (a phone number under five).
 The rest are 26 alphanumeric and 21 numeric ids that merely collide across companies — plus `02-6`
 (a truncated phone number) and `21/06/26` (**a date** in the DOC_ID field). I described the two
 most vivid examples as if they were the population.
@@ -1823,8 +1823,8 @@ so it is a decision, not a tidy-up.
 found, not dropped. Terminus pending the file existing in Drive — a connection/scope question.
 
 **5. The old "extraction is producing bad ids" line, kept for the record:** 49 doc-ids across 258 rows
-are shared by 3+ companies: `515561520` is a company registration number under FIFTEEN companies,
-`02-6333155` is a phone number under five. Dedup no longer trips over them (they are quarantined
+are shared by 3+ companies: `500000088` is a company registration number under FIFTEEN companies,
+`02-0000011` is a phone number under five. Dedup no longer trips over them (they are quarantined
 at the key), but nothing upstream has changed and they will keep arriving.
 
 ## 2026-08-23 — DUPLICATE GROUPS: 0
@@ -1860,12 +1860,12 @@ The evidence, measured rather than inferred:
 
 | DOC_ID in the tail | distinct companies using it | rows |
 |---|---|---|
-| `515561520` (a company registration number) | **15** | 68 |
-| `02-6333155` (**a phone number**) | 5 | 18 |
+| `500000088` (a company registration number) | **15** | 68 |
+| `02-0000011` (**a phone number**) | 5 | 18 |
 | `SH26000709` | 3 | 6 |
 | `SH26004136` | 3 | 6 |
 
-`515561520` alone accounted for **7 of the 10 remaining groups**, under seven different companies.
+`500000088` alone accounted for **7 of the 10 remaining groups**, under seven different companies.
 Table-wide there are **49 such doc-ids across 258 rows**.
 
 **The fix is at the KEY, not after grouping.** A doc-id used by 3+ companies no longer forms a biz
@@ -1897,8 +1897,8 @@ over-reports against the machine's actual behaviour.
 **The 10 that remain are the hard cases, all characterised, none mysterious:**
 - **5 mains at 146 `action_merge_doubles` dispatches each**, all OLD, all above the retry cap so
   nothing retries them. These are the runaway loops, and one of them is the shape that should
-  never be merged automatically: `doc_msmuxtfmdi6zcb`, eight rows under `COMPANY_ID 515186625 /
-  DOC_ID 515561520`, eight distinct hashes, six COMPLETED — a mis-extracted DOC_ID that is really
+  never be merged automatically: `doc_msmuxtfmdi6zcb`, eight rows under `COMPANY_ID 500000021 /
+  DOC_ID 500000088`, eight distinct hashes, six COMPLETED — a mis-extracted DOC_ID that is really
   a counterparty company number, so they are eight different documents sharing a bad key.
   **Owner call, not another dispatch.**
 - the rest sit at the retry cap in ACTION_RESTART, feedable, waiting out their merge locks (see
@@ -1970,7 +1970,7 @@ while draining.
 | **3+ hashes AND 2+ COMPLETED** | **10** | **the only genuinely risky set** — see below |
 
 **The 10 need a look after the sweep, not a veto before it.** Worst example
-`doc_msmuxtfmdi6zcb`: EIGHT rows under `COMPANY_ID 515186625 / DOC_ID 515561520`, eight distinct
+`doc_msmuxtfmdi6zcb`: EIGHT rows under `COMPANY_ID 500000021 / DOC_ID 500000088`, eight distinct
 hashes, six of them `COMPLETED`. That `DOC_ID` is a **company registration number**, not a
 document id — it is a mis-extraction, and the eight rows are eight different documents that
 merely share a bad key. `btrim(COMPANY_ID) <> btrim(DOC_ID)` does not catch it because the number
@@ -3530,12 +3530,12 @@ instance work estate-wide (`public.companies` -> `{{ $json.__instance ? 'indox_'
 'public' }}.companies`, settings lookups dropping the `instance=` column filter for the schema,
 queries re-prefixed `=` so interpolation evaluates). NOT committed — that churn is theirs, not drift.
 Also from them: `indox_levi.settings` has NO `%registry` row, so levi has zero sync pipes; all 8 thin
-pipes measured here are bina-comp's.
+pipes measured here are hacohen's.
 
 ## 2026-08-28 ~06:3xZ — MAIL CURSOR SCOPED (last unscoped op pair closed), + sync outage diagnosed.
 The mail walk shared ONE `sync_cursor` position across all tenants: `mailDiscovery01` had ZERO
 `__instance`, and CURSOR_GET/CURSOR_SET reached syncLedgerApi01 with `__instance:''` (measured: 13
-SET + 12 GET), so every cursor read/write resolved `public.sync_cursor` = indox_bina_comp whatever
+SET + 12 GET), so every cursor read/write resolved `public.sync_cursor` = indox_hacohen whatever
 tenant the pass was for. `source` is NOT protection — it is keyed `<component>/<pipe>`
 ("incoming-documents-main/gmail-doc"), IDENTICAL across instances, so only the SCHEMA separates
 tenants. THREE edits: (1) `mailDiscovery01`'s `When Called` now DECLARES `__instance` — load-bearing,
@@ -3549,8 +3549,8 @@ item, and `Search` maps `={{ $json.__instance }}` off it — so my FIRST push st
 `__instance:''` at runtime. Found by measuring, not reading.
 EXECUTED PROOF (06:28 pass), GET and SET are independent paths so both are shown:
 [3695577](http://n8n.localhost/workflow/syncLedgerApi01/executions/3695577) CURSOR_GET
-`__instance='bina-comp'` · [3695579](http://n8n.localhost/workflow/syncLedgerApi01/executions/3695579)
-CURSOR_SET `__instance='bina-comp'` · 3695590 CURSOR_GET gmail-bs — 3/3 scoped.
+`__instance='hacohen'` · [3695579](http://n8n.localhost/workflow/syncLedgerApi01/executions/3695579)
+CURSOR_SET `__instance='hacohen'` · 3695590 CURSOR_GET gmail-bs — 3/3 scoped.
 ALSO FIXED: `syncV3Deliver0001` failed `bbox n8n code validate` on a sticky note (`Timeout Note`)
 missing `parameters.color`, so that file had NO working validation gate. Added `color: 3`; both it
 and syncV3Unit0001 now validate.
@@ -3583,7 +3583,7 @@ Re-probed the live graph after their many pushes; every fix of mine survived: fa
 throw 1 · `conn_kind` gate 4 · `Search Req` `__instance` 7 · deliver `TYPE_BY_SOURCE` 6 /
 `ATTACHMENT_TEXT` 2 · mailDiscovery01 `__instance` 9. Registry: **thin=8 proc=0**. Latest pass shows
 the two workstreams composing correctly — each mail pipe searching ONLY its own label AND carrying
-its instance: gmail-doc `inst='bina-comp'` `label:לטיפול-אוטומציה-שמירת-מסמכים` · gmail-bs
+its instance: gmail-doc `inst='hacohen'` `label:לטיפול-אוטומציה-שמירת-מסמכים` · gmail-bs
 `label:לטיפול-אוטומציה-שמירת-דוחות-גיול` · gmail-link `label:לטיפול-אוטומציה-קישור-למסמך`.
 **0 errors in 30 minutes**; 25 documents touched in 30 min (0 in the last 10 = between passes, the
 resting state, not a stall). Their independent census over the same window: 0 unscoped ops of 33,
@@ -3617,7 +3617,7 @@ idempotent, `stuck` excluded so it can never contend with the `att` CTE in the s
 `promdel` clears the attempt row. This is what the sync-v3 plan always specified — it simply had no
 trigger that could fire.
 **PROVEN**: dry-run in a ROLLBACK transaction first (promoted 200 / cleared 200), then live —
-exec 3696681 bina-comp `{"released":0,"attempts_written":0,"promoted_needs_review":200,
+exec 3696681 hacohen `{"released":0,"attempts_written":0,"promoted_needs_review":200,
 "attempts_cleared":200}`, exec 3696682 levi correctly `0`. sync_attempt 224 → 21 and still draining;
 needs_review 95 → 295. Live syntax-checked all 16 Code nodes with `node --check` after the push
 (push success proves nothing on this file — the other session broke it twice that way).

@@ -8,7 +8,7 @@ services:
     # the `build:` below stays as the fallback. Needs the GHCR package readable — a package made
     # from a private repo is private, so `docker login ghcr.io` on a machine that must pull.
     #
-    # It used to be `image: deployment-bina-comp-connections` — tagless, so `compose pull` resolved
+    # It used to be `image: deployment-hacohen-connections` — tagless, so `compose pull` resolved
     # it against Docker Hub and got "pull access denied"; indox-e2e still carries
     # `--ignore-pull-failures` on that account. The name CI publishes is the one below.
     image: ghcr.io/solomonboltin/digital-office/connections:${IMAGE_TAG:-latest}
@@ -28,7 +28,10 @@ services:
       - SENTRY_DSN=${CONNECTIONS_SENTRY_DSN:-}
       - DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-bina-deployment}
       - PORT=8990
-      - CONNECTIONS_ROOT_KEY=${CONNECTIONS_ROOT_KEY:-dev-root-key-not-for-production}
+      - CONNECTIONS_ROOT_KEY=${CONNECTIONS_ROOT_KEY:-CHANGE_ME}
+      # the previous key(s), comma-separated, while the vault moves to a new one: they still decrypt, the new key
+      # encrypts, and rekey() re-encrypts; empty once it is done (hos-002, app.py _fernet)
+      - CONNECTIONS_ROOT_KEY_OLD=${CONNECTIONS_ROOT_KEY_OLD:-}
       # WA_SESSION_DIR (the WhatsApp QR probe's offline fallback) was hardcoded here — the note
       # above, verbatim. chat contributes the /wa mount, so it now contributes the path with it.
       # inject_into_n8n() logs into n8n's REST API as the owner to PATCH the granted tokens into
@@ -97,7 +100,7 @@ services:
       - traefik.http.routers.connections-https.rule=Host(`${CONNECTIONS_BASE_URL:-connections.${DEPLOYMENT_DOMAIN:-localhost}}`)
       - traefik.http.routers.connections-https.entrypoints=websecure
       - traefik.http.routers.connections-https.tls=true
-      - traefik.http.routers.connections-https.tls.certresolver=myresolver
+      - traefik.http.routers.connections-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
       - traefik.http.routers.connections-https.service=connections
       - traefik.http.routers.connections-https.middlewares=authentik@file
     logging:

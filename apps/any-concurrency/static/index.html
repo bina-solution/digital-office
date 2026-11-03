@@ -420,6 +420,22 @@ button.pg-live{cursor:pointer}
 @media (max-height:699px) and (max-width:430px){
   .pg-head:not([data-view]):has(.pg-actions) h1{display:none}
   .pg-actions{margin-inline-start:0}
+  /* THE HEADING IS ONE LINE, AND THE ROW OF ACTIONS SCROLLS INSIDE IT. With the title kept (the rule
+     above keeps it when it names a view) the row wrapped instead: on the sites screen at 380×224 the
+     buttons took three lines and the heading ended at 125px of the window's 224 — most of the smallest
+     window given to chrome (measured 2026-10-13, the windows suite). The title keeps its width, the row
+     takes what is left and scrolls sideways — the idiom this office already uses for a row of tools in
+     a short frame. A button does not wrap its own label either: with the row held to one line two
+     controls grew to 64px and 46px and the heading was still 73px. */
+  .pg-head{flex-wrap:nowrap;margin-bottom:6px;padding-bottom:6px}
+  .pg-head>:first-child{flex:none}
+  .pg-actions{flex:1 1 auto;min-width:0;justify-content:flex-end}
+  .pg-actions{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;max-width:100%}
+  .pg-actions::-webkit-scrollbar{display:none}
+  .pg-actions .btn,.pg-actions button,.pg-actions a.btn,.pg-actions select{white-space:nowrap}
+  /* …and the row's own status line ellipsises instead of stacking: `span.live` («2 אתרים · הכל עונה»)
+     was 59px WIDE and 83px TALL — the row's height was one line of text wrapping letter by letter. */
+  .pg-actions .live{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
   /* …and a line that reports (`data-live`) shares that line with them, as far as it fits */
   .pg-head:has(.pg-sub[data-live]){flex-wrap:nowrap}
   .pg-head>:first-child:has(.pg-sub[data-live]){flex:1 1 0;min-width:0}
@@ -489,7 +505,7 @@ const $=s=>document.querySelector(s), DPR=()=>Math.max(1,Math.min(2.5,devicePixe
 // that run it (every n8n worker and task runner is a lane inside it), so it is pinned directly
 // below that section in build() instead of floating by span count like every other source.
 const N8N_BG="n8n-bg";
-const HE_SRC={indox:"מסמכים נכנסים",n8n:"אוטומציות","n8n-bg":"אוטומציות - תהליכי רקע",traefik:"רשת",docker:"מכולות",gmail:"דואר",apitools:"מנוע מסמכים",mailapi:"שירות הדואר",drive:"דרייב",webhook:"וובהוק",logspan:"יומן",custom:"מותאם",wa:"ווצאפ",browser42:"דפדפן",bina:"בינה"};
+const HE_SRC={indox:"מסמכים נכנסים",n8n:"אוטומציות","n8n-bg":"אוטומציות - תהליכי רקע",traefik:"רשת",docker:"מכולות",gmail:"דואר",apitools:"מנוע מסמכים",mailapi:"שירות הדואר",drive:"דרייב",webhook:"וובהוק",logspan:"יומן",custom:"מותאם",wa:"ווצאפ",browser42:"דפדפן",bina:"בינה",security:"אבטחה"};
 // The timeline names no colour. It draws with the office's palette, read where it is written (the
 // theme block) each time the data is loaded — so a theme that turns is followed.
 //   a run's state: done is olive, in motion is sky, failed is plum — each a fill and the ink on it
@@ -508,6 +524,39 @@ const S={winH:0.25,stat:"all",sys:{},q:"",spans:[],groups:[],live:true,now:Date.
   scroll:0,rowH:26,collapsed:{},expanded:{},font:"",_contentH:0,
   viewS:0,viewE:0,follow:true,hover:null,drag:null,tS:null,tE:null,n8nUrl:""};
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+
+/* ── the screen in the address bar (the console's route contract) ────────────────────────────────
+   The tail of the console's hash is this screen's own URL — `#/m/concurrency/w/<hours>` is
+   `/a/concurrency/w/<hours>` — and the shell mirrors whatever this page's URL says, so nothing here
+   talks to the console. The state of this screen that is worth an address is its WINDOW: "look at
+   the last two hours" is what a person sends, and `/` opens the screen's own default (15 minutes).
+   See ai/context/build-your-first-app.md § "the address is the state". */
+const MOUNT = new URL(document.baseURI).pathname.replace(/\/+$/, "");
+const routeOf = () => {
+  const p = location.pathname;
+  if (!MOUNT) return p === "/" ? "" : p.replace(/^\/+/, "");
+  if (p === MOUNT || p === MOUNT + "/") return "";
+  return p.startsWith(MOUNT + "/") ? decodeURIComponent(p.slice(MOUNT.length + 1)) : "";
+};
+const showRoute = (route, replace) => {
+  const next = MOUNT + (route ? "/" + route : "/");
+  if (location.pathname + location.search !== next) history[replace ? "replaceState" : "pushState"]({}, "", next);
+};
+function applyRoute() {
+  const m = /^w\/(\d+(?:\.\d+)?)$/.exec(routeOf());
+  if (!m) return;
+  const hours = Number(m[1]);
+  if (hours > 0 && hours <= 24) S.winH = hours;      // before the first read, so the window is real
+}
+window.addEventListener("popstate", () => { applyRoute(); load(); });
+// a window press writes the address: captured on the control itself, so the app's own handler and
+// this one never have to know about each other
+const winBox = document.getElementById("win");
+if (winBox) winBox.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-w]");
+  if (b) showRoute("w/" + b.dataset.w, true);
+}, true);
+applyRoute();
 
 // n8n base URL (e.g. https://n8n.localhost) — fetched once so the drawer can deep-link an execution
 // straight into n8n's own UI. n8n opts out of same-origin console embedding (embed:false in its

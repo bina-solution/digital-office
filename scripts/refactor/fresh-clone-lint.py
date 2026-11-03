@@ -49,6 +49,16 @@ EXEMPT = {
         "when nothing is declared. Without this entry the gate was red on exactly the offices "
         "that are linked (measured on the HP office 2026-10-05: a checkout that both had a link "
         "and ran the gates).",
+    "platform-base/traefik/config/sites-public.yaml":
+        "written and removed by the sites app at publish time: apps/sites/public.py:652 (publish) "
+        "writes it into the edge's config dir when a site is served by the OFFICE, and the same "
+        "function `rm -f`s it when no such site is left, which is how a site goes back to its own "
+        "container. A fresh clone is an office with no public path, so it is correctly ABSENT and "
+        "needs none. Its only reference is a defect record -- "
+        "issues/traefik-404-on-the-office-s-own-domain-and-linked-office-hosts.yaml -- which NAMES "
+        "the path as prose while explaining the bug, not a dependency on it; it is caught at all "
+        "only because .yaml is in TEXT_SUFFIXES. It is gitignored on purpose (.gitignore:140, "
+        "'config, not source'), so committing it would freeze a live routing table in the repo.",
 }
 
 # Paths that appear inside a repo-relative reference: scripts/x.py, platform/manager/y.py, apps/…

@@ -45,22 +45,24 @@ window.__ModuleLoader__.load({
 
 		const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-		// Two classes, and every value is a harness token with a neutral fallback, so the strip stays
-		// legible even if a future build renames one.
+		// Two classes, and every value is one of the harness's OWN alias tokens — the strip wears the
+		// page it is drawn on. No fallback value of ours: every token below is defined by the harness
+		// on the light ground and on the dark one (checked 2026-10-13 against the bundled theme), so a
+		// written copy of its value is a second palette, drifting from the one it belongs to.
 		const CSS = `
-.bina-voice-btn{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;border:0;background:transparent;color:var(--dsw-alias-label-primary,#1f2328);cursor:pointer;padding:0}
-.bina-voice-primary{border-radius:50%;background:var(--dsw-alias-button-primary-fill,var(--dsw-alias-brand-primary,#2563eb));color:var(--dsw-alias-label-primary-foreground,#fff)}
-.bina-voice-primary:hover{background:var(--dsw-alias-button-primary-hover,var(--dsw-alias-brand-primary,#1d4ed8))}
-.bina-voice-primary[data-recording="true"]{background:var(--dsw-alias-state-error-primary,#c62828)}
-.bina-voice-btn:hover{background:var(--dsw-alias-button-tool-bar-hover,rgba(127,127,127,.14))}
-.bina-voice-btn[data-recording="true"]{color:var(--dsw-alias-state-error-primary,#c62828);background:var(--dsw-alias-interactive-bg-hover-danger,rgba(198,40,40,.12))}
-.bina-voice-strip{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:4px 8px 6px;font-size:12px;line-height:1.6;color:var(--dsw-alias-label-caption,#5b6470)}
-.bina-voice-strip b{font-weight:600;color:var(--dsw-alias-label-primary,#1f2328)}
-.bina-voice-dot{width:7px;height:7px;border-radius:50%;background:var(--dsw-alias-state-error-primary,#c62828);animation:bina-voice-pulse 1.3s ease-in-out infinite}
+.bina-voice-btn{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;border:0;background:transparent;color:var(--dsw-alias-label-primary);cursor:pointer;padding:0}
+.bina-voice-primary{border-radius:50%;background:var(--dsw-alias-button-primary-fill,var(--dsw-alias-brand-primary));color:var(--dsw-alias-label-primary-foreground)}
+.bina-voice-primary:hover{background:var(--dsw-alias-button-primary-hover,var(--dsw-alias-brand-primary))}
+.bina-voice-primary[data-recording="true"]{background:var(--dsw-alias-state-error-primary)}
+.bina-voice-btn:hover{background:var(--dsw-alias-button-tool-bar-hover)}
+.bina-voice-btn[data-recording="true"]{color:var(--dsw-alias-state-error-primary);background:var(--dsw-alias-interactive-bg-hover-danger)}
+.bina-voice-strip{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:4px 8px 6px;font-size:12px;line-height:1.6;color:var(--dsw-alias-label-caption)}
+.bina-voice-strip b{font-weight:600;color:var(--dsw-alias-label-primary)}
+.bina-voice-dot{width:7px;height:7px;border-radius:50%;background:var(--dsw-alias-state-error-primary);animation:bina-voice-pulse 1.3s ease-in-out infinite}
 @keyframes bina-voice-pulse{0%,100%{opacity:1}50%{opacity:.2}}
-.bina-voice-act{border:0;background:transparent;color:var(--dsw-alias-label-primary,#1f2328);font:inherit;cursor:pointer;padding:2px 6px;border-radius:6px;text-decoration:underline;text-underline-offset:2px}
-.bina-voice-act:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(127,127,127,.12))}
-.bina-voice-err{color:var(--dsw-alias-state-error-primary,#c62828)}
+.bina-voice-act{border:0;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;cursor:pointer;padding:2px 6px;border-radius:6px;text-decoration:underline;text-underline-offset:2px}
+.bina-voice-act:hover{background:var(--dsw-alias-interactive-bg-hover)}
+.bina-voice-err{color:var(--dsw-alias-state-error-primary)}
 `;
 		function installCss() {
 			if (typeof document === "undefined" || document.getElementById("bina-voice-css")) return;

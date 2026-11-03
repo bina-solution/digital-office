@@ -1,0 +1,34 @@
+# /etc/default/office-watch — the office watch's settings (AUD-C5-001331). Owners change a value here;
+# no code changes. Takes effect on the next run (within a minute). Lines are KEY=VALUE.
+
+# CPU «at its limit»: host busy % at/over CPU_PCT for CPU_MIN minutes in a row (owners' question:
+# confirm 90 % / 5 min). PSI_PCT: also counts when tasks wait for CPU this much (avg60); 0 = off.
+CPU_PCT=90
+CPU_MIN=5
+CPU_CLEAR_MIN=2
+PSI_PCT=80
+
+# Services: every container of the office's compose project + these names; down = unhealthy,
+# restarting, dead or exited non-zero on SERVICE_RUNS checks in a row (autoheal gets the first).
+WATCH_EXTRA="site-fireplace-guys site-fireplace-guys-forms"
+IGNORE="*-init-*"
+SERVICE_RUNS=2
+EXITED_ZERO_OK=1
+
+# Disk: nearly full = DISK_PCT used or less than DISK_FREE_GB free.
+DISK_PATHS=/
+DISK_PCT=90
+DISK_FREE_GB=5
+
+# Off-server backup (X-17): the newest line failed, or no good copy for longer than profile=hours.
+# Empty OFFSITE_LOG turns this check off.
+OFFSITE_LOG=/var/backups/fpg-offsite/offsite.log
+OFFSITE_MAX_AGE_H="core=26 full=194"
+
+# Where notices go: empty NOTICE_URL = http://<notifications-fireplace IP>:8977 (as X-17 does).
+# LINK: shown on each row. ALSO_POST_URLS: more receivers of the same JSON (e.g. a phone push
+# endpoint once the notice centre has one) — space-separated, best effort.
+OFFICE=fireplace
+NOTICE_URL=
+LINK=
+ALSO_POST_URLS=

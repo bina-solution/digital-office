@@ -82,7 +82,10 @@ HOST_SOCK = re.compile(r"""^\s*-\s*["']?/var/run/docker\.sock:""")
 #: Files whose SUBJECT is the host socket — they name it because they detect, compare, or migrate
 #: it. Rewriting these to ${BBOX_DOCKER_SOCK} would defeat what they do.
 SOCK_SUBJECT = ("packaging/linux/adapt-host.py", "packaging/linux/check-coexistence.sh",
-                "platform/manager/catalog_selftest.py", "platform-base/connections/identity.py")
+                "platform/manager/catalog_selftest.py", "platform-base/connections/identity.py",
+                # the Go twin of catalog_selftest.py: its fixture mounts the socket so the store's
+                # disclosure (`docker_socket: true`) can be asserted (DGO-599)
+                "packaging/dgo/internal/store/build_test.go")
 
 #: Apps that genuinely run containers and therefore need a real engine socket
 #: (docker-outside-of-docker). Recorded here so the choice is VISIBLE rather than assumed — each

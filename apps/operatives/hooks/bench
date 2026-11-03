@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+#: bench <provider> <model> [<case-id>…] — the DGO benchmark: each case in a new «עזריה · מקומי» session on that model; a JSON line per case, then a summary
+# The DGO benchmark (DGO-949): the cases are apps/operatives/bench/cases.json (BENCH_CASES=<file> for
+# others); the runner, bench/agent.mjs, runs inside this office's bina-ds container, where the harness
+# and its token are. Each case is a real session of the office's agent, so before each one the runner
+# waits until nobody else has used the agent for BENCH_IDLE_S (600): it looks again every 30 s, and
+# stops after BENCH_WAIT_S (1800). BENCH_TURN_S (900) is how long one case may take. BENCH_TIMES=k
+# runs each case k times (pass^k).
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # dcx
+[ $# -ge 2 ] || { sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 2; }
+CASES="${BENCH_CASES:-${REPO_ROOT}/apps/operatives/bench/cases.json}"
+[ -f "${CASES}" ] || { say "${cr}[operatives] no cases file ${CASES}${c0}"; exit 2; }
+dcx exec -T -e BENCH_CASES_JSON="$(cat "${CASES}")" -e BENCH_TURN_S="${BENCH_TURN_S:-900}" \
+  -e BENCH_TIMES="${BENCH_TIMES:-1}" -e BENCH_IDLE_S="${BENCH_IDLE_S:-600}" -e BENCH_WAIT_S="${BENCH_WAIT_S:-1800}" \
+  -e BENCH_IGNORE="${BENCH_IGNORE:-${DSH_SESSION_ID:-}}" \
+  bina-ds node --input-type=module - "$@" < "${REPO_ROOT}/apps/operatives/bench/agent.mjs"

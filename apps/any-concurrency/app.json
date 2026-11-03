@@ -41,6 +41,10 @@
     }
   ],
   "compose": "docker-compose.yml",
+  "agent": {
+    "context": "AGENT.md",
+    "order": 80
+  },
   "routing": [
     {
       "host": "any-concurrency",

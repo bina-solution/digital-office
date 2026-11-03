@@ -44,13 +44,13 @@ describe('minsAgo', () => {
 
 describe('initialsOf', () => {
   test('first letters of the first two words', () => {
-    expect(initialsOf('משה כהן', '050-000-0006')).toBe('מכ');
+    expect(initialsOf('משה כהן', '+972501112233')).toBe('מכ');
   });
   test('a single word takes two characters', () => {
     expect(initialsOf('מאפייה', '')).toBe('מא');
   });
   test('falls back to the handle so a nameless user still gets an avatar', () => {
-    expect(initialsOf('', '050-000-0006')).toBe('33');
+    expect(initialsOf('', '+972501112233')).toBe('33');
     expect(initialsOf('', '@BinaOfficeBot')).toBe('Bi');
     expect(initialsOf(null, null)).toBe('??');
   });
@@ -92,8 +92,8 @@ describe('parseMentions', () => {
   test('an email address is not a mention', () => {
     // a LETTER/DIGIT immediately before the @ means this is the tail of an address; treating it as
     // a mention would turn every address in a message into a broken lookup
-    expect(parseMentions('שלחו לperson40@example.com')).toEqual([]);
-    expect(parseMentions('person21@example.com')).toEqual([]);   // a hyphen INSIDE the local part, still email
+    expect(parseMentions('שלחו ל-person21@example.com')).toEqual([]);
+    expect(parseMentions('person22-x@example.com')).toEqual([]);   // a hyphen INSIDE the local part, still email
   });
 
   test('the ordinary Hebrew "ו-@דוד" is a mention — a hyphen before @ is not an address', () => {

@@ -249,13 +249,43 @@ function today() { const d = new Date(); return `${String(d.getDate()).padStart(
 
 // ── navigation ──────────────────────────────────────────────
 const VIEWS = { dash: 'לוח בקרה', docs: 'מסמכים', customers: 'לקוחות', items: 'פריטים', settings: 'הגדרות עסק' };
+
+/* ── the screen in the address bar (the console's route contract) ────────────────────────────────
+   The tail of the console's hash is this app's own URL — `#/m/my-docs/<route>` is
+   `/a/my-docs/<route>` — and the shell mirrors whatever this page's URL says, so nothing here talks
+   to the console. Two screens are worth an address: a VIEW (`dash` · `docs` · `customers` · `items` ·
+   `settings`) and a DOCUMENT (`doc/<id>`, the drawer). "Look at this invoice" is what a person
+   sends. See ai/context/build-your-first-app.md § "the address is the state". */
+const MOUNT = new URL(document.baseURI).pathname.replace(/\/+$/, "");
+const routeOf = () => {
+  const p = location.pathname;
+  if (!MOUNT) return p === "/" ? "" : p.replace(/^\/+/, "");
+  if (p === MOUNT || p === MOUNT + "/") return "";
+  return p.startsWith(MOUNT + "/") ? decodeURIComponent(p.slice(MOUNT.length + 1)) : "";
+};
+const showRoute = (route, replace) => {
+  const next = MOUNT + (route ? "/" + route : "/");
+  if (location.pathname + location.search !== next) history[replace ? "replaceState" : "pushState"]({}, "", next);
+};
+/** The one reader: the URL decides the view, and a `doc/<id>` route opens that document's drawer. */
+function applyRoute() {
+  const route = routeOf();
+  if (route.startsWith("doc/")) { openDoc(route.slice(4)); return; }
+  if (VIEWS[route]) { show(route); return; }
+  closeDrawer();
+}
+window.addEventListener("popstate", applyRoute);
+
 function show(view) {
   filter.view = view;
   document.querySelectorAll('.side nav a').forEach(a => a.classList.toggle('active', a.dataset.view === view));
   Object.keys(VIEWS).forEach(v => $('#view-' + v).classList.toggle('hidden', v !== view));
   $('#viewTitle').textContent = VIEWS[view];
+  if (!routeOf().startsWith('doc/')) showRoute(view, true);
   ({ dash: loadDash, docs: loadDocs, customers: loadCustomers, items: loadItems, settings: loadSettings }[view] || loadDash)();
 }
+
+// the view is the address: switching screens writes it, and the shell mirrors it
 
 // ── onboarding + business settings ──────────────────────────
 function bizFieldHTML(f, val) {
@@ -649,8 +679,9 @@ async function openDoc(id) {
   const ev = (await read('/documents/' + id + '/events')) || [];
   $('#dEvents').innerHTML = ev.map(e => `<li><b>${EVENT_HE[e.action] || e.action}</b>${e.detail ? ' · ' + e.detail : ''}<div class="t">${(e.ts || '').replace('T', ' ').slice(0, 16)}</div></li>`).join('') || '<li class="muted">—</li>';
   $('#overlay').classList.remove('hidden'); $('#drawer').classList.remove('hidden');
+  showRoute('doc/' + encodeURIComponent(id));
 }
-function closeDrawer() { $('#overlay').classList.add('hidden'); $('#drawer').classList.add('hidden'); }
+function closeDrawer() { $('#overlay').classList.add('hidden'); $('#drawer').classList.add('hidden'); showRoute(filter.view || 'dash', true); }
 function actions(d) {
   const b = [];
   if (d.status === 'draft') b.push(['issue', 'הפק מסמך', 'primary']);
@@ -718,4 +749,5 @@ async function start() {
   if (biz && !biz.onboarded) { openOnboarding(); }
   show(filter.view || 'dash');
 }
+applyRoute();   // …and then the URL decides (a deep link lands on its view or its document)
 start();

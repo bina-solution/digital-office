@@ -44,7 +44,11 @@ import signing                                             # noqa: E402
 REPO = pathlib.Path(__file__).resolve().parents[2]
 APPS = REPO / "apps"
 STATE = REPO / "platform.state.yaml"
-ID_RE = re.compile(r"^[a-z][a-z0-9-]{1,30}$")
+#: An app id. `\Z`, never `$`: Python's `$` also matches just BEFORE a trailing newline, and the id is
+#: read unstripped from an artifact's own app.json — "indox\n" passed, missed the id-conflict check
+#: (no app is called that), and `place` would have created `apps/indox\n/` and written its state line
+#: in two halves, leaving platform.state.yaml unparseable until the rollback (DGO-615).
+ID_RE = re.compile(r"^[a-z][a-z0-9-]{1,30}\Z")
 
 
 class InstallError(Exception):
@@ -197,7 +201,7 @@ def inspect(app_dir, prov=None):
     aid = manifest.get("id")
     refusals = []
     if not aid or not ID_RE.match(str(aid)):
-        raise InstallError(f"app id '{aid}' is not a valid id (^[a-z][a-z0-9-]{{1,30}}$)")
+        raise InstallError(f"app id {aid!r} is not a valid id (^[a-z][a-z0-9-]{{1,30}}$)")
     if manifest.get("layer") != 3:
         refusals.append(f"layer {manifest.get('layer')} — only layer-3 apps are installable; "
                         f"layers 1-2 are the platform chassis and ship with it")

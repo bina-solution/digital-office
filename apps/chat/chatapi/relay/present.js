@@ -82,14 +82,14 @@ function colorOf(key) {
  * whitespace would mention "רחל" and leave "לוי" as plain text.
  *
  * Emails are excluded by what may precede the @: a LETTER, DIGIT, `_`, `.` or `+` means this is the
- * tail of an address (`person20@example.com`), and treating that as a mention would turn every
+ * tail of an address (`person21@example.com`), and treating that as a mention would turn every
  * address in a message into a broken lookup.
  *
  * The rule is stated as "what may NOT come before" rather than "what may", and that distinction is
  * not pedantry — it was a bug. An allow-list of separators missed `ו-@דוד`, the ordinary Hebrew way
  * of writing "and @david": the hyphen was not in the list, so the mention silently did not exist
  * and the person was never notified. A hyphen before an @ is never part of an email local part
- * (`person21@example.com` still has a LETTER immediately before the @), so excluding by character class
+ * (`person22-x@example.com` still has a LETTER immediately before the @), so excluding by character class
  * catches the address without also catching the language.
  */
 function parseMentions(text) {

@@ -16,8 +16,13 @@ REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 
 # [cutover 2026-08-31] The report is PER TENANT: `--instance=<id>` (or INDOX_INSTANCE) names it,
 # else the sole production tenant resolves with a printed note. public.* here were compat views.
-_INST_ARG=""
-for _a in "$@"; do case "${_a}" in --instance=*) _INST_ARG="${_a#--instance=}" ;; esac; done
+# Both spellings: `--instance <id>` is the one the resolver's own message names (_schema-lib.sh), and
+# dropping it silently reported the sole production instance instead.
+_INST_ARG=""; _next=""
+for _a in "$@"; do
+  if [ -n "${_next}" ]; then _INST_ARG="${_a}"; _next=""; continue; fi
+  case "${_a}" in --instance=*) _INST_ARG="${_a#--instance=}" ;; --instance) _next=1 ;; esac
+done
 IFS='|' read -r _IID SCH <<<"$(indox_resolve_instance "${_INST_ARG}")"
 [ -n "${SCH:-}" ] || exit 1
 

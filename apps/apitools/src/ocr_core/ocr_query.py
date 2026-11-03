@@ -544,7 +544,7 @@ def ocr_find_by_relative_position_example():
 def ocr_find_option_example():
     filename = f"{ocr_test_files_path()}/file10.jpg"
     ocr_query = ocr_query_factory(filename)
-    options_res = ocr_query.find_matching_texts(["משימה משימה", "חוליות זרימה", "nahnv sdkj", "046946011", "google"])
+    options_res = ocr_query.find_matching_texts(["משימה משימה", "חוליות זרימה", "nahnv sdkj", "040000005", "google"])
     if "error" in options_res:
         print(options_res["error"])
     else:

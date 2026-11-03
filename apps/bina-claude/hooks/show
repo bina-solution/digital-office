@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+#: show <session id or prefix> [--json] [-n N] — one Claude session's conversation, from the office's own copy:  ./bbox bina-claude show 3f2a
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+case "${1:-}" in ""|-h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; [ -n "${1:-}" ]; exit $? ;; esac
+dcx exec -T bina-claude python3 - show "$@" < "$(npath "${REPO_ROOT}")/apps/bina-claude/sessions.py"

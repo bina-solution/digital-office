@@ -13,7 +13,7 @@ the colour for that".
 |---|---|---|---|
 | hp (this one — the heavy laptop) | elephant | **grey** | said |
 | macbook (MacBook Neo) | deer | **yellow** | said |
-| vps (srv908573, staging) | eagle | *open* | **the owner** — he kept the colour for himself |
+| vps (srv000001, staging) | eagle | *open* | **the owner** — he kept the colour for himself |
 | a fourth office, a fifth… | the registry's next icon | a legal hue | whoever installs it, in the wizard |
 
 ## Where each half lives (one source per fact)

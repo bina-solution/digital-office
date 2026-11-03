@@ -221,7 +221,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
     /*__n8n__*/ meta: {"templateCredsSetupCompleted":true},
     /*__n8n__*/ pinData: {},
     /*__n8n__*/ staticData: null,
-    /*__n8n__*/ shared: [{"updatedAt":"2026-08-27T19:51:21.199Z","createdAt":"2026-08-27T19:51:21.199Z","role":"workflow:owner","workflowId":"indoxV2ActionsInv01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <shlomo@local.dev>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
+    /*__n8n__*/ shared: [{"updatedAt":"2026-08-27T19:51:21.199Z","createdAt":"2026-08-27T19:51:21.199Z","role":"workflow:owner","workflowId":"indoxV2ActionsInv01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
     id: 'indoxV2ActionsInv01',
     name: 'indox-v2 Actions — Invoice',
     active: true,
@@ -799,7 +799,7 @@ export class IndoxV2ActionsInvoiceWorkflow {
     })
     PostPriorityTable = {
         method: 'POST',
-        url: '={{ $("Action: priority_sync").item.json.__priority_local === false ? "https://msh.macomp.vip/odata/Priority/tabula.ini/binacomp/SHIM_RECEIVE_SUPDOC" : "http://n8n-webhook:5678/webhook/indox-priority-local" }}',
+        url: '={{ $("Action: priority_sync").item.json.__priority_local === false ? "https://msh.macomp.vip/odata/Priority/tabula.ini/mscohen/SHIM_RECEIVE_SUPDOC" : "http://n8n-webhook:5678/webhook/indox-priority-local" }}',
         authentication: 'genericCredentialType',
         genericAuthType: 'httpBasicAuth',
         sendBody: true,

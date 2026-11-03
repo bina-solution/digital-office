@@ -24,6 +24,14 @@ const controller = require('./controller');
 const app = express();
 
 // Configure session middleware
+// A session cookie is signed with SESSION_SECRET, so a secret anyone can read signs cookies anyone can forge.
+// The office mints chat a secret of its own now (apps/chat/hooks/prepare → CHAT_SESSION_SECRET → SESSION_SECRET,
+// DGO-1221); a chat started without it falls back to the public default in config.js. Stage one of tightening it
+// (r030-301): say so loudly at start; refusing to start comes once every office has run the hook.
+const PUBLIC_SESSION_SECRETS = new Set(['hacohanim-secret-key', 'change-me-to-a-long-random-string']);
+if (PUBLIC_SESSION_SECRETS.has(CONFIG.SESSION_SECRET) || CONFIG.SESSION_SECRET.length < 32) {
+  console.warn('[chat] SESSION_SECRET is a public default or shorter than 32 characters: session cookies can be forged. Set SESSION_SECRET.');
+}
 // Trust proxy for secure cookies in production
 app.set('trust proxy', CONFIG.IS_PRODUCTION ? 1 : 0);
 app.use(session({

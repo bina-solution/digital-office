@@ -3,7 +3,7 @@
 stage, with the time each stage took — from the sync ledger, the documents table and the action
 execution log (nothing is inferred; a missing timestamp prints as a gap).
 
-    python3 scripts/ops/indox-e2e-timeline.py --tenant bina-comp --tag e2e-20260903T1500 [--json out.json]
+    python3 scripts/ops/indox-e2e-timeline.py --tenant hacohen --tag e2e-20260903T1500 [--json out.json]
 
 `--tag` is the run marker the driver put into every subject / file name (indox-e2e-real.py);
 rows are matched on the sync item's listing (subject or name) OR the document's NAME containing it.

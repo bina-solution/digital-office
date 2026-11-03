@@ -38,7 +38,7 @@ jobs:
   # (scripts/ui-coverage/view-profiles.yaml `ci_matrix`) and adding a profile needs no workflow edit.
   profiles:
     if: ${{ vars.UI_MAP_PAUSED != '1' }}
-    runs-on: [self-hosted, portable]
+    runs-on: [self-hosted, portable, ssd]
     outputs:
       matrix: ${{ steps.pick.outputs.matrix }}
     steps:
@@ -68,8 +68,8 @@ jobs:
     # networking the capture relies on behave normally (the runner fs IS the daemon fs, and it can
     # reach container IPs) — the exact environment where the capture is proven to work locally. Set
     # the UI_MAP_RUNNER repo variable to a self-hosted/larger label to override.
-    runs-on: ${{ vars.UI_MAP_RUNNER != '' && vars.UI_MAP_RUNNER || 'self-hosted' }}
-    timeout-minutes: 60
+    runs-on: ${{ vars.UI_MAP_RUNNER != '' && vars.UI_MAP_RUNNER || fromJSON('["self-hosted", "portable", "ssd"]') }}
+    timeout-minutes: 105   # 60 for the job + up to 45 that ops/prejob_waitfree.sh may hold it (memory, heat, a fresh boot)
     env:
       # the UI stack: everything that serves a screen. Capture spins up its own Chromium
       # containers (bbox ui-map), so no browser is in this list.

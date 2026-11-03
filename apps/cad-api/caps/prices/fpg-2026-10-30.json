@@ -1,0 +1,23 @@
+{
+  "id": "fpg-2026-10-30",
+  "shop": "The Fireplace Guys",
+  "valid_from": "2026-10-30",
+  "source": "Alan, MEET-41 (2026-10-30), unless the line says ASSUMED",
+  "sheets": {
+    "galvanized": {"w": 48, "h": 120, "cents": 7000, "source": "MEET-41 [23:32] «around 70»"},
+    "prepainted": {"w": 48, "h": 120, "cents": 9000, "source": "ASSUMED: painted steel ~ galvanized + $20"},
+    "paintgrip":  {"w": 48, "h": 120, "cents": 8000, "source": "ASSUMED"},
+    "galvalume":  {"w": 48, "h": 120, "cents": 8000, "source": "ASSUMED"},
+    "bonderized": {"w": 48, "h": 120, "cents": 8000, "source": "ASSUMED"},
+    "stainless":  {"w": 48, "h": 120, "cents": 18000, "source": "MEET-41 [23:38] «stainless 180 a sheet»"},
+    "copper":     {"w": 36, "h": 120, "cents": 30000, "source": "MEET-41 [16:13] «copper only three by ten», [23:42] ~$300"}
+  },
+  "mesh": {"cents_per_ft2": 250, "source": "ASSUMED until the shop's mesh invoice: 3/4\" galvanized or stainless spark-arrestor mesh"},
+  "rivet": {"cents_each": 33, "source": "MEET-41 [43:05] $40 a bag of ~120"},
+  "caulk": {"cents_per_tube": 300, "source": "MEET-41 [42:50] half a tube at $3"},
+  "labour": {"cents_per_hour": 2500, "source": "MEET-41 [41:51] $200 a day of 8 hours"},
+  "markup": {"factor": 2.0, "source": "MEET-41 [43:58] «what it costs me to make, I charge around double»"},
+  "floor_cents": 0,
+  "sheet_charge": "whole",
+  "spot_welder": false
+}

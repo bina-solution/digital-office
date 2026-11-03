@@ -62,6 +62,10 @@
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const h = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
   const modules = () => (typeof MODULES !== "undefined" && Array.isArray(MODULES) ? MODULES : []);
+  // ONE IS SAID AS ONE (DGO-530): a count of one is its own sentence — «נפתחו 1 יישומים» is not Hebrew —
+  // and any other count is the number with the plural. The rule is written out in the shell's app.js.
+  const num = n => Number(n).toLocaleString("he-IL");
+  const one = (n, single, many) => (Number(n) === 1 ? single : `${num(n)} ${many}`);
   const modById = id => modules().find(m => m.id === id);
   // name, icon (and embed/service) of what a window shows: a module, a native tool, or an external
   // app (its own host, framed as is — see openExternal)
@@ -138,7 +142,9 @@
     // a native window (a desktop tool such as the memory view) draws DOM into its body; every other
     // window is an app page in an iframe
     const body = w.native ? '<div class="dk-body"><div class="dk-native"></div></div>'
-      : '<div class="dk-body"><iframe title="' + escH(m.name) + '"></iframe>' +
+      // allow: as the shell's own frame (index.html says why `*`) — an app may ask for the camera,
+      // microphone and screen, and the browser still asks the person
+      : '<div class="dk-body"><iframe title="' + escH(m.name) + '" allow="camera *; microphone *; display-capture *; fullscreen *; autoplay *; clipboard-write *"></iframe>' +
         '<div class="dk-sleep">' + icon(m.icon) + '<div>' + escH(m.name) + ' במנוחה · לחצו כדי להעיר</div></div></div>';
     e.innerHTML =
       '<div class="dk-tb"><div class="dk-lights">' +
@@ -154,7 +160,7 @@
     w.tEl = e.querySelector(".dk-t");
     w.wgBtn = e.querySelector(".dk-wg-btn");
     w.wgLbl = e.querySelector(".dk-wg-lbl");
-    if (w.frame) w.frame.addEventListener("load", () => instrument(w));
+    if (w.frame) w.frame.addEventListener("load", () => { instrument(w); watchWinRoute(w); });
     else e.querySelector(".dk-body").addEventListener("pointerdown", () => { if (focused !== w) focusWin(w, { keepFocus: true }); });
     const tb = e.querySelector(".dk-tb");
     tb.addEventListener("pointerdown", ev => startMove(ev, w, false));
@@ -185,6 +191,50 @@
   // link carried (`#/m/<module>/<route>`). One derivation, used by every path that frames one.
   const extSrc = w => BinaExtRoute.framedUrl(w.ext && w.ext.url, w.ext && w.ext.route);
 
+  // ── the route of the page in a window, read from the page's own URL ──────────────────────
+  // The same contract the classic shell keeps in `watchFrameRoute`: a window's address IS the page's
+  // own path under its mount (`/a/<alias>/folder/5` ⇄ `#/m/drive/folder/5`), read from the page's own
+  // navigations. It used to arrive as a `bina:route` postMessage — the office protocol the owner
+  // retired («אסור שזה תהיה תלוי בסריקות וקוד מורכב») — and the last two carriers (`mailview`,
+  // `incoming`) were converted, deployed and measured on 2026-10-13, so the reader is now the
+  // mechanism every web app already has. Without this a window's route would never move: the
+  // desktop shell has no other source for it.
+  function watchWinRoute(w) {
+    if (!w.frame || w.ext || w.native) return;            // a page of another host cannot be read
+    const m = modById(w.mid);
+    if (!m || !m.embed) return;                           // a console-own view writes the hash itself
+    let win = null;
+    try { win = w.frame.contentWindow; } catch (err) { return; }
+    if (!win || !win.location || !win.location.pathname) return;
+    const mount = String(m.embed).replace(/\/+$/, "");
+    const inner = (href) => {
+      const url = new URL(href, location.origin);
+      if (!url.pathname.startsWith(mount)) return null;   // the page left the app
+      const path = url.pathname.slice(mount.length);
+      // the mount itself IS the root, and the page's fragment is deliberately not carried: an app
+      // that routes by hash translates the path it was handed into its own hash on load
+      return (path === "/" ? "" : path) + url.search;
+    };
+    const reflect = (href) => {
+      const route = inner(href);
+      if (route === null || route === w.route) return;
+      w.route = route;
+      if (w === focused) writeHash(w);
+      emit("route", w);
+      saveSoon();
+    };
+    if (!win.__binaWinWatched) {
+      win.__binaWinWatched = true;
+      if (win.navigation && typeof win.navigation.addEventListener === "function") {
+        win.navigation.addEventListener("navigate", (ev) => reflect(ev.destination.url));
+      } else {
+        win.addEventListener("hashchange", () => reflect(win.location.href));
+        win.addEventListener("popstate", () => reflect(win.location.href));
+      }
+    }
+    reflect(win.location.href);
+  }
+
   function loadFrame(w) {
     if (w.ext) {
       // A linked office the platform has already MEASURED as not answering: the card, never the frame.
@@ -195,6 +245,7 @@
       const m = modById(String(w.mid).replace(/^ext:/, ""));
       const r = remoteOfWin(w) || (m ? remoteInfo(m) : null);
       if (m && r && r.off) { remoteDownCard(w, m); return; }
+      if (w.ext.refused) return;        // #63: the app refuses a frame — the window is its card (guardFrame)
       if (w.ext.ask) askOwnHost(w, true); else if (w.frame) w.frame.src = extSrc(w); return;
     }
     const m = modById(w.mid);
@@ -209,19 +260,25 @@
     box.innerHTML = externalNotice(m, w.ext.url, "");
   }
 
-  // A window on an app's own host is ASKED first where that host cannot show its sign-in inside a
-  // frame (app.js: ownHostState) — the shell's own card instead of the browser's error page, and
-  // the app once the sign-in is done. Asked again on every return to the tab (askOwnHosts), so a
-  // sign-in that ran out becomes the card, and the card becomes the app. A window that is being
-  // OPENED takes the browser to that sign-in itself (app.js: enterOwnHost) — nothing is under
-  // anybody's hands yet; one that is already open only says so, with the button.
+  // A window on an app's own host is ASKED where that host cannot show its sign-in inside a frame
+  // (app.js: ownHostState) — the shell's own card instead of the browser's error page, and the app
+  // once the sign-in is done. Asked again on every return to the tab (askOwnHosts), so a sign-in that
+  // ran out becomes the card, and the card becomes the app. A window that is being OPENED takes the
+  // browser to that sign-in itself (app.js: enterOwnHost) — nothing is under anybody's hands yet; one
+  // that is already open only says so, with the button.
+  //
+  // WHERE THE QUESTION COMES IN THE ORDER IS THE CONSOLE'S, NOT THIS FILE'S: on a `.localhost` console
+  // a cross-site frame can never sign itself in, so the host is asked BEFORE it is opened; on a real
+  // domain the frame signs itself in silently while the provider's session is alive, so the frame goes
+  // first and the host is asked straight after it (app.js: watchOwnHost) — `probed` is that "it has
+  // had its chance" mark, and it is what keeps the silently-signed-in case from being interrupted.
   async function askOwnHost(w, opening) {
     // the tile as the registry has it now: a window restored from a saved layout carries it as it was
     const m = modById(String(w.mid).replace(/^ext:/, "")) || w.ext.ask;
     // …and a window of a LINKED office whose office is measured unreachable (app.js: isOff) is the
     // same card for the same reason — until the person asks for it anyway (the card's «נסה שוב»).
     const need = isOff(m) && !w.ext.anyway ? ""
-      : m.signed_in && noNestedHost(location.hostname) ? await ownHostState(m) : "ok";
+      : m.signed_in && (noNestedHost(location.hostname) || w.ext.probed) ? await ownHostState(m) : "ok";
     if (!wins.includes(w) || w.sleeping) return;
     if (need === "signin" && opening && enterOwnHost(m)) return;
     const card = w.el.querySelector(".dk-ask") || w.el.querySelector(".dk-body").appendChild(h("div", "dk-ask"));
@@ -231,6 +288,14 @@
     const off = !!(m && (remoteOfWin(w) || remoteInfo(m) || {}).off);
     card.innerHTML = (need === "ok" && !off) ? "" : externalNotice(m, w.ext.url, off ? "" : need);
     if (need === "ok" && !off && (was || w.frame.getAttribute("src") !== extSrc(w))) w.frame.src = extSrc(w);
+    // …and a window that was just opened on a host this browser has not signed in on gets the answer
+    // three seconds later, when the frame has had its chance: a host still asking for a sign-in is a
+    // frame that will stay empty, and this window's card is what says so (the shell's own frame does
+    // the same thing, on its own card, in app.js).
+    if (need === "ok" && !off && m.signed_in && !w.ext.probed) {
+      w.ext.probed = 1;
+      watchOwnHost(m, extSrc(w), () => { if (wins.includes(w) && !w.sleeping) askOwnHost(w, false); });
+    }
   }
 
   // the page is same-origin (the console proxies every app under /a/<name>/), so the shell can read
@@ -311,13 +376,26 @@
       w.wgBtn.className = "dk-wg-btn";
       w.wgBtn.innerHTML = (a && GLYPH[a.icon]) || icon(m.icon);
       w.wgBtn.setAttribute("aria-label", a && a.label ? a.label : m.name);
-      w.wgLbl.textContent = w.widget.label ? m.name + " · " + w.widget.label : m.name;
+      label(w, w.widget.label ? m.name + " · " + w.widget.label : m.name);
     } else {
       w.wgBtn.className = "dk-wg-btn " + colorFor(w.mid);
       w.wgBtn.innerHTML = icon(m.icon);
       w.wgBtn.setAttribute("aria-label", "החזרת " + m.name + " למרכז");
-      w.wgLbl.textContent = w.title || m.name;
+      label(w, w.title || m.name);
     }
+  }
+
+  // THE WHOLE OF A LINE THAT IS CUT (DGO-532). A window pushed aside is a round button in a 120px box
+  // (`WG_BOX`) with ONE line under it, `.dk-wg-lbl`: 12px, `max-width:120px`, an ellipsis past that.
+  // The shell composes the line from what the screen posted — «התראות · 120 לא נקראו» needs 123px in
+  // Segoe UI and 130px with this distro's fonts — so the end of it was cut with no way to read it, and
+  // the SCREEN cannot help: it does not know how much room the shell gave it. The box cannot grow (a
+  // widget sits in a flank beside its neighbours), so the line says its whole in a title and keeps its
+  // ellipsis drawing. Set wherever the label is set, so a window reused for another app cannot keep
+  // the previous line's title.
+  function label(w, text) {
+    w.wgLbl.textContent = text;
+    w.wgLbl.title = text;
   }
 
   // P3: long names keep both ends — the start says what it is, the end says which one
@@ -505,11 +583,32 @@
     }
     if (inZone(w)) w.home = { cx: w.cx, cy: w.cy };
     if (o.sleep) { w.sleeping = true; w.el.classList.add("sleeping"); } else loadFrame(w);
+    if (!ext.ask && !ext.remote) guardFrame(w, !o.sleep);
     emit("open", w);
     if (!o.noFocus) focusWin(w); else { applyZ(); enforceLive(); }
     updateDock();
     saveSoon();
     return w;
+  }
+
+  // A WINDOW IS NEVER DEAD (#63). An app that forbids being framed (X-Frame-Options, CSP
+  // frame-ancestors) used to leave this window empty with a 7-second hint. The app's own answer is
+  // asked server-side (app.js frameVerdict); a refusal empties the frame and the window carries the
+  // card whose button opens the app in a tab. When the answer is already known at the click — still
+  // the person's gesture — the tab opens straight away as well.
+  function guardFrame(w, gesture) {
+    if (typeof frameVerdict !== "function") return;
+    const show = v => {
+      if (!wins.includes(w) || !v || v.verdict !== "refused") return;
+      w.ext.refused = v;
+      if (w.frame && w.frame.getAttribute("src")) w.frame.src = "about:blank";
+      const hint = w.el.querySelector(".dk-exthint"); if (hint) hint.remove();
+      const card = w.el.querySelector(".dk-ask") || w.el.querySelector(".dk-body").appendChild(h("div", "dk-ask"));
+      card.innerHTML = externalNotice({ id: w.mid, name: w.ext.name, desc: "" }, w.ext.url, "refused", v.why || "");
+    };
+    const known = frameKnown(w.ext.url);
+    if (known) { if (gesture) window.open(w.ext.url, "_blank", "noopener"); show(known); return; }
+    frameVerdict(w.ext.url).then(show);
   }
 
   function closeWin(w) {
@@ -950,7 +1049,7 @@
   function openAll() {
     const todo = modules().filter(m => !wins.some(w => w.mid === m.id));
     todo.forEach(m => openWin(m, "", { noFocus: true }));
-    if (todo.length) toast("נפתחו " + todo.length + " יישומים");
+    if (todo.length) toast("נפתחו " + one(todo.length, "יישום אחד", "יישומים"));
   }
   function closeAll() { wins.slice().forEach(closeWin); }
   function openDefaults() {
@@ -1289,9 +1388,9 @@
     // (hp-laptop, 2026-10-06). Three dots is what "there is more behind this" looks like everywhere.
     const b = h("button", "dk-ic dk-c6 dk-more-ic",
       icon("more") + '<span class="tip"></span><span class="dk-more-n num"></span>');
-    b.querySelector(".tip").textContent = "עוד " + behind.length + " אפליקציות";
+    b.querySelector(".tip").textContent = "עוד " + one(behind.length, "אפליקציה אחת", "אפליקציות");
     b.querySelector(".dk-more-n").textContent = String(behind.length);
-    b.setAttribute("aria-label", "עוד " + behind.length + " אפליקציות — כל האפליקציות");
+    b.setAttribute("aria-label", "עוד " + one(behind.length, "אפליקציה אחת", "אפליקציות") + " — כל האפליקציות");
     b.addEventListener("click", () => openDockMore());
     return b;
   }
@@ -1305,6 +1404,12 @@
     closeDockMore();
     if (!root) return;
     const apps = modules();
+    // …AND THE APPS THIS CONSOLE DOES NOT FRAME (FPG-107). An app whose UI lives only on its own host
+    // (`embed: false`, e.g. the services app) has no module, so this panel — the desktop's only search —
+    // never listed it while the apps screen did: «החיפוש לא מוצא את אפליקציית השירותים» (fpg2 2:24:48).
+    // They come from the answer ⌘K already reads (app.js otherApps(): app-management's /api/apps) and
+    // open the way ⌘K and that screen open them (app.js openOutside: a window on this desktop).
+    let others = [];
     const ov = h("div", "dk-more");
     ov.setAttribute("role", "dialog");
     ov.setAttribute("aria-label", "כל האפליקציות");
@@ -1318,7 +1423,7 @@
     const list = h("div", "dk-more-list");
     const draw = () => {
       // the shell's one matcher (app.js moduleMatches): name, description, id, office — any case
-      const hits = apps.filter(m => moduleMatches(m, q.value));
+      const hits = apps.concat(others).filter(m => moduleMatches(m, q.value));
       const groups = [];
       hits.forEach(m => {
         let g = groups.find(x => x.name === (m.group || ""));
@@ -1334,7 +1439,9 @@
             `</button>`).join("")}</div>`).join("") : `<div class="dk-more-none">אין תוצאות</div>`;
       list.querySelectorAll("[data-mid]").forEach(el => el.addEventListener("click", ev => {
         const mm = modById(el.dataset.mid);
+        const out = mm ? null : others.find(o => o.id === el.dataset.mid);
         closeDockMore();
+        if (out) { openOutside(out); return; }
         if (!mm) return;
         if (ev.ctrlKey || ev.metaKey || ev.shiftKey) openWin(mm, ""); else openModule(mm, "");
       }));
@@ -1346,6 +1453,13 @@
     root.appendChild(ov);
     draw();
     q.focus();
+    if (typeof otherApps === "function") otherApps().then(l => {
+      others = Array.isArray(l) ? l : [];
+      if (!others.length || !ov.isConnected) return;
+      const n = head.querySelector(".num");
+      if (n) n.textContent = String(apps.length + others.length);
+      draw();
+    });
   }
   // `back` = the panel was DISMISSED (Escape, a click beside it), not used to open an app: focus
   // goes back to the door it came from. It used to land on <body>, so a keyboard had to walk the
@@ -1479,14 +1593,9 @@
     if (!root || e.origin !== location.origin || !e.data || typeof e.data !== "object") return;
     const w = wins.find(x => x.frame && x.frame.contentWindow === e.source);
     if (!w) return;
-    if (e.data.type === "bina:route" && typeof e.data.path === "string" && /^[/?][^#]*$/.test(e.data.path)) {
-      const next = e.data.path === "/" ? "" : e.data.path;
-      if (next === w.route) return;
-      w.route = next;
-      if (w === focused) writeHash(w);
-      emit("route", w);
-      saveSoon();
-    } else if (e.data.type === "bina:widget") {
+    // A window's route is READ from the page (watchWinRoute), never sent: the `bina:route` branch
+    // that used to sit here was the office protocol, retired 2026-10-13.
+    if (e.data.type === "bina:widget") {
       // an app that can collapse to a control says so; the shell draws it when the window is far out
       w.widget = sanitizeWidget(e.data);
       w.mode = "";
@@ -1574,6 +1683,16 @@
     acctFor = undefined;
     compact = false;
     clearInterval(clockT);
+    // EVERY timer this mount started, not just the clock. The toast's 1.9s timer outlived the desk it
+    // belonged to and fired into a null `toastEl` — measured live on the running console: turning the
+    // mode off right after a toast left `Cannot read properties of null (reading 'classList')` in the
+    // console (DGO-535). `saveT` and `resizeRaf` are guarded where they run, so they were only waste;
+    // they are cleared here for the same reason as the toast — a mount's timers die with the mount.
+    // Each is reset to 0: `resizeRaf` and `saveT` are their callers' "already scheduled" flags, and a
+    // cleared timer that leaves its flag set would make the next resize a no-op forever.
+    clearTimeout(toastT); toastT = 0;
+    clearTimeout(saveT); saveT = 0;
+    clearTimeout(resizeRaf); resizeRaf = 0;
     window.removeEventListener("pointermove", onMove);
     window.removeEventListener("pointerup", onUp);
     window.removeEventListener("pointercancel", onUp);

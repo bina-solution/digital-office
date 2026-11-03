@@ -848,13 +848,29 @@ async def api_account_domain_records(aid: str, domain: str, request: Request):
     """create | update | delete ONE record, through whichever door this account has."""
     body = (await request.json()) if await request.body() else {}
     body = body or {}
+    # The person the edge signed in (authentik's forward-auth header on the console's routes). The one
+    # watched consent to a draft panel write is taken only with a person, and kept with the name — the
+    # same word every app here takes for "who"; DGO-1019 is the signature that will prove it.
+    person = (request.headers.get("x-authentik-username") or "").strip() or None
     # The work below is BLOCKING (vault HTTP, a provider's API, and for a portal account a browser
     # page). Running it on the event loop would freeze the whole app — including /healthz and the
     # progress stream this very write reports on — so it is handed to the threadpool.
-    return await run_in_threadpool(_records_endpoint, aid, domain, body)
+    return await run_in_threadpool(_records_endpoint, aid, domain, body, person)
 
 
-def _records_endpoint(aid: str, domain: str, body: dict):
+def _consent(body: dict, person: str | None):
+    """(who consented, refusal) for a draft panel write (DGO-1032). The flag alone was the whole consent,
+    from any caller — the op API's included, which other apps and agents call (the second reader). Now
+    it is the screen's: with no signed-in person it is refused by name, and nothing is written."""
+    if not body.get("allow_draft_write"):
+        return None, None
+    if not person:
+        return None, _err("האישור החד-פעמי לכתיבה בפורטל ניתן במסך הדומיינים, על ידי אדם מחובר — לא "
+                          "בקריאה מתוכנה. לא נכתב דבר.", 403)
+    return person, None
+
+
+def _records_endpoint(aid: str, domain: str, body: dict, person: str | None = None):
     inst, secret, err = accounts.resolve(aid)
     if err:
         return _err(err, 404)
@@ -876,6 +892,9 @@ def _records_endpoint(aid: str, domain: str, body: dict):
     # edits a row knows the old value (it just rendered it) and sends it as `before`; when it does
     # not, only a create is safely revertible — deleting and updating are not guessed.
     before = body.get("before") if isinstance(body.get("before"), dict) else None
+    consented_by, refused = _consent(body, person) if provider == "portal" else (None, None)
+    if refused:
+        return refused
     if provider == "portal" and not body.get("sync"):
         # A panel write is slow and interactive: run it as a JOB so the screen can show steps, and
         # return immediately. `sync: true` keeps the blocking behaviour for callers that want an
@@ -883,7 +902,10 @@ def _records_endpoint(aid: str, domain: str, body: dict):
         job = webengine.submit(
             "portal_write", lambda progress, params: _portal_write_job(progress, name, action, rec,
                                                                        params),
-            {"domain": name, "action": action, "record": rec},
+            # the owner's one watched consent rides the job, with his name: without it the screen's
+            # create could only ever be refused while the script is a draft (the second reader)
+            {"domain": name, "action": action, "record": rec,
+             "allow_draft_write": bool(consented_by), "consented_by": consented_by},
             title=f"{action} רשומה ב-{name}",
             invalidates=[f"domain:{aid}:{name.lower()}", f"health:{name}"],
             client=body.get("client"))
@@ -893,7 +915,7 @@ def _records_endpoint(aid: str, domain: str, body: dict):
         # `sync: true` keeps the blocking behaviour for a caller that wants one round trip (a script
         # or a test) — but it must still go through the PANEL path. Falling through to the adapter
         # here is how a panel write used to be answered with "this provider does not support it".
-        return _portal_write(name, action, rec, body)
+        return _portal_write(name, action, rec, consented_by)
     adapter = _json(adapter_for, provider, secret or {})
     if isinstance(adapter, JSONResponse):
         return adapter
@@ -995,21 +1017,61 @@ def _portal_write_job(progress, name: str, action: str, rec: dict, params: dict)
     # WHICH operation writes a record is the SCRIPT's business, not a name this app guesses: this
     # panel has one zone form for create and update, and no delete at all. Asking the script keeps
     # the app free of provider detail and turns "not scripted" into a sentence that names the gap.
-    res = portal_mod.run_write(PORTAL_PROVIDERS["portal"], action,
-                               {"domain": name, "type": rec.get("type"), "name": rec.get("name"),
-                                "value": rec.get("content"), "ttl": rec.get("ttl")},
-                               None, bool(params.get("allow_draft_write")))
+    consented_by = params.get("consented_by")
+    res = _portal_written(name, action, rec, consented_by)
     progress(70, "קורא את האזור חזרה")
     if not res.get("ok"):
-        raise DomainError(res.get("error") or "הפעולה בפורטל נכשלת",
-                          status=409 if res.get("state") in ("needs_verification", "not_scripted")
-                          else 502,
-                          detail=res.get("why") or res.get("how"), kind="portal",
+        raise DomainError(res.get("error") or "הפעולה בפורטל נכשלת", status=_portal_status(res),
+                          # the writer's own evidence (found? which records are missing?) — the refusal's
+                          # why/how stood in its place, and a failure arrived without it (the second reader)
+                          detail=res.get("detail") or res.get("why") or res.get("how"), kind="portal",
                           refusal={k: v for k, v in res.items()
                                    if k in ("title", "why", "how", "state", "portal_url", "missing")})
     records = _read_records("portal", {}, name)
-    progress(100, f"בוצע · {len(records)} רשומות באזור")
+    # a read that failed returns no records: "0 records in the zone" was said then (the third reader)
+    progress(100, f"בוצע · {len(records)} רשומות באזור" if records else "בוצע")
     return {"domain": name, "action": action, "records": len(records), "portal": res}
+
+
+def _portal_status(res: dict) -> int:
+    """What a panel refusal IS, for both doors: a value the record cannot hold is the caller's (400); a
+    refusal the office chose — a draft, an unmapped type, a changed zone, a guard that cannot run, a
+    selection it will not risk — is a 409; only a failure of the panel or the browser is a 502 (the
+    fourth reader: all of them read as "system"; the fifth: the sync door said 409 for everything)."""
+    state = res.get("state")
+    if state == "invalid":
+        return 400
+    if state in ("needs_verification", "not_scripted", "conflict", "guard_unavailable"):
+        return 409
+    return 502
+
+
+def _portal_written(name: str, action: str, rec: dict, consented_by: str | None) -> dict:
+    """One panel write, by either door, and what follows it: the domain's history says what it DID, and a
+    write a person watched succeed makes that action the office's own from now on (portal.verified)."""
+    portal = PORTAL_PROVIDERS["portal"]
+    res = portal_mod.run_write(portal, action,
+                               {"domain": name, "type": rec.get("type"), "name": rec.get("name"),
+                                "value": rec.get("content"), "ttl": rec.get("ttl")},
+                               None, bool(consented_by))
+    who = f" · באישור {consented_by}" if consented_by else ""
+    if res.get("ok") and not res.get("unchanged"):
+        registry.event(name, f"dns_{action}", f"{action} {rec.get('type')} {rec.get('name')}{who}",
+                       {"provider": "portal", "before": None, "after": res.get("record") or rec,
+                        "result": {k: res.get(k) for k in ("state", "note", "guard", "ttl_asked")},
+                        "consented_by": consented_by, "revertible": False})
+        # only a write whose guard RAN vouches for the writer (the third reader: "unavailable" marked it)
+        if consented_by and res.get("guard") == "checked" and not portal_mod.verified(portal, action):
+            portal_mod.mark_verified(portal, action, consented_by, res.get("record") or {})
+    elif not res.get("ok") and (res.get("saved") or res.get("state") == "unverified"):
+        # a save went through and the zone is not what was written — or no one can tell: that is history
+        # too, with its evidence (a save that lost records left no trace before)
+        registry.event(name, f"dns_{action}_failed", f"{res.get('error') or action}{who}",
+                       {"provider": "portal", "before": None, "after": None,
+                        "result": {k: res.get(k) for k in ("state", "error", "detail")},
+                        "consented_by": consented_by, "revertible": False})
+    # an unchanged create (the record was already there) is no change, and is not logged as one
+    return res
 
 
 def _op_job(progress, op_id: str, name: str, provider: str, secret: dict, params: dict) -> dict:
@@ -1032,23 +1094,19 @@ def _read_records(provider: str, secret: dict, name: str):
     return adapter_for(provider, secret).list_records(name)
 
 
-def _portal_write(name: str, action: str, rec: dict, body: dict):
+def _portal_write(name: str, action: str, rec: dict, consented_by: str | None):
     """A write through the PANEL — and therefore through the human gate.
 
-    The script that performs it is still a `draft` (the flow PAST the login was observed on
-    2026-09-23; the write itself has not been watched end to end), and `portal.run` refuses a draft
-    write on purpose: the office does not drive the owner's registrar with an unverified script.
-    `allow_draft_write: true` is the owner watching it once.
+    A write whose action no person has watched succeed is refused (`portal.verified`): the office does
+    not drive the owner's registrar with an unwatched script. The consent is a signed-in person's, from
+    the screen (`_consent`); this door logs what it did exactly as the job does — it logged nothing.
     """
-    res = _json(portal_mod.run_write, PORTAL_PROVIDERS["portal"], action,
-                {"domain": name, "type": rec.get("type"), "name": rec.get("name"),
-                 "value": rec.get("content"), "ttl": rec.get("ttl")},
-                None, bool(body.get("allow_draft_write")))
+    res = _json(_portal_written, name, action, rec, consented_by)
     if isinstance(res, JSONResponse):
         return res
     if not res.get("ok"):
         return JSONResponse({"ok": False, "op": action, "provider": "portal", **res},
-                            status_code=409)
+                            status_code=_portal_status(res))
     return {"ok": True, "action": action, "provider": "portal", "result": res,
             "records": _read_records("portal", {}, name)}
 

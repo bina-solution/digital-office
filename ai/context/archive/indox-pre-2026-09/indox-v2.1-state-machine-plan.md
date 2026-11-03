@@ -434,7 +434,7 @@ Rebuilt `indoxV2DocBaseTest01` as a clean multi-lane fan-out (like the GDoc test
 - **Lane C — lifecycle** (get_company_name executes → routes).
 - **Lane D — figure coverage on REAL demo files** (find-or-upload one file per type via driveApi, then run
   `figure_document_type` + `figure_company_id` and assert): **figure_type 4/4** (INVOICE/ORDER/SHIPMENT/
-  BALANCE_SHEET all classify correctly), **figure_company 3/3** (resolves 511301129/511234567/514291418).
+  BALANCE_SHEET all classify correctly), **figure_company 3/3** (resolves 500000062/511234567/500000070).
   These two handlers were exercised by NO prior suite (BS/GDoc pre-seed type+company) — this is their only test.
 - Companies must be seeded into `companies` for figure_company_id to resolve (it validates against the table);
   the test seeds them. Summary sits at the figure-lane tail (the splitInBatches loop defers it, so it runs last

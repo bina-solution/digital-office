@@ -1,6 +1,6 @@
 # Sunday Morning Deployment Report Context
 
-Use this file as the operating brief for a thorough Sunday morning business automation deployment and process review of `/root/deployment-bina-comp`.
+Use this file as the operating brief for a thorough Sunday morning business automation deployment and process review of `/root/deployment-hacohen`.
 
 The review must be evidence-based. Prefer live machine state, Docker Compose status, collected logs, n8n execution history, feature-validation results, Traefik data, and security-relevant host/network artifacts over assumptions. When a check cannot be performed, say exactly why and list the next best manual command or access path.
 
@@ -13,7 +13,7 @@ Read first:
 - `feature-validation/README.md`, `feature-validation/docker-compose.yml`, and all active feature `scenario.json` files for validation scope.
 - Current `context/storage-report*.txt` files for prior storage trajectory and cleanup history.
 
-Assume this is a single Debian host running a multi-service Docker Compose deployment behind Traefik v3.3. The public domain pattern is `<service>.bina-comp.bina-solutions.co.il`. The deployment serves real business automation processes, especially OCR/document extraction, WhatsApp operations, n8n workflows, AI/MCP tools, observability, and identity/access services.
+Assume this is a single Debian host running a multi-service Docker Compose deployment behind Traefik v3.3. The public domain pattern is `<service>.hacohen.bina-solutions.co.il`. The deployment serves real business automation processes, especially OCR/document extraction, WhatsApp operations, n8n workflows, AI/MCP tools, observability, and identity/access services.
 
 ## Required Report Output
 
@@ -223,7 +223,7 @@ Pay special attention to:
 
 ## Suggested Final Checklist
 
-- `docker compose ps` reviewed from `/root/deployment-bina-comp`.
+- `docker compose ps` reviewed from `/root/deployment-hacohen`.
 - Storage pressure reviewed and compared with prior reports.
 - All service logs reviewed for seven days.
 - Last 24 hours reviewed separately.

@@ -219,7 +219,7 @@ def _max_exec_id():
     """Highest n8n execution id right now — the battery-window fence for the legacy guard."""
     dn = env("DEPLOYMENT_NAME", "shlomo-laptop")
     o = subprocess.run(["docker", "exec", f"n8n-postgres-{dn}", "psql", "-U",
-                        env("POSTGRES_USER", "bina-comp"), "-d", "n8n", "-t", "-A", "-c",
+                        env("POSTGRES_USER", "hacohen"), "-d", "n8n", "-t", "-A", "-c",
                         "SELECT coalesce(max(id),0) FROM execution_entity;"],
                        capture_output=True)
     try:
@@ -233,7 +233,7 @@ def _legacy_runs_since(start_id):
     dn = env("DEPLOYMENT_NAME", "shlomo-laptop")
     wfs = ",".join("'%s'" % w for w in LEGACY_RETIRED)
     o = subprocess.run(["docker", "exec", f"n8n-postgres-{dn}", "psql", "-U",
-                        env("POSTGRES_USER", "bina-comp"), "-d", "n8n", "-t", "-A", "-c",
+                        env("POSTGRES_USER", "hacohen"), "-d", "n8n", "-t", "-A", "-c",
                         'SELECT "workflowId"||\'|\'||count(*) FROM execution_entity '
                         f'WHERE id>{int(start_id)} AND "workflowId" IN ({wfs}) GROUP BY 1;'],
                        capture_output=True)
@@ -249,7 +249,7 @@ def fetch_summary(eid):
     """Read the 🏁 Test Summary output (or the failure detail) straight from the n8n DB."""
     dn = env("DEPLOYMENT_NAME", "shlomo-laptop")
     o = subprocess.run(["docker", "exec", f"n8n-postgres-{dn}", "psql", "-U",
-                        env("POSTGRES_USER", "bina-comp"), "-d", "n8n", "-t", "-A", "-c",
+                        env("POSTGRES_USER", "hacohen"), "-d", "n8n", "-t", "-A", "-c",
                         f'SELECT data FROM execution_data WHERE "executionId"={int(eid)};'],
                        capture_output=True)
     raw = o.stdout.decode("utf-8", errors="replace").strip()
@@ -284,7 +284,7 @@ def dump_state(reason):
     dn = env("DEPLOYMENT_NAME", "shlomo-laptop")
     print(f"[indox-test] ── state dump ({reason}) ──", flush=True)
     o = subprocess.run(["docker", "exec", f"n8n-postgres-{dn}", "psql", "-U",
-                        env("POSTGRES_USER", "bina-comp"), "-d", "n8n", "-t", "-A", "-F", " | ", "-c",
+                        env("POSTGRES_USER", "hacohen"), "-d", "n8n", "-t", "-A", "-F", " | ", "-c",
                         'SELECT e.id, w.name, e.status, e."startedAt" FROM execution_entity e '
                         'JOIN workflow_entity w ON w.id=e."workflowId" ORDER BY e.id DESC LIMIT 25;'],
                        capture_output=True)
@@ -458,7 +458,7 @@ def wait_for_webhooks():
     deadline = time.time() + 300
     while time.time() < deadline:
         o = subprocess.run(["docker", "exec", f"n8n-postgres-{dn}", "psql", "-U",
-                            env("POSTGRES_USER", "bina-comp"), "-d", "n8n", "-t", "-A", "-c",
+                            env("POSTGRES_USER", "hacohen"), "-d", "n8n", "-t", "-A", "-c",
                             'SELECT "webhookPath" FROM webhook_entity;'], capture_output=True)
         have = set(o.stdout.decode(errors="replace").split())
         missing = need - have
@@ -569,7 +569,7 @@ def run_suite(ck, key):
         # execution id hasn't moved in 120s, the environment is wedged (e.g. task-runner
         # broker not dispatching) — fail LOUDLY now instead of burning the whole budget.
         o = subprocess.run(["docker", "exec", f"n8n-postgres-{dn}", "psql", "-U",
-                            env("POSTGRES_USER", "bina-comp"), "-d", "n8n", "-t", "-A", "-c",
+                            env("POSTGRES_USER", "hacohen"), "-d", "n8n", "-t", "-A", "-c",
                             "SELECT max(id) FROM execution_entity;"], capture_output=True)
         cur_max = o.stdout.decode(errors="replace").strip()
         if cur_max != last_max:
@@ -584,14 +584,14 @@ def run_suite(ck, key):
         if beats % 3 == 0:  # live heartbeat every ~30s: shows WHERE the run is, so hangs are visible
             # (cur_max vs the previous heartbeat = sub-executions completed since — movement =健)
             o = subprocess.run(["docker", "exec", f"n8n-postgres-{dn}", "psql", "-U",
-                                env("POSTGRES_USER", "bina-comp"), "-d", "n8n", "-t", "-A", "-F", "|", "-c",
+                                env("POSTGRES_USER", "hacohen"), "-d", "n8n", "-t", "-A", "-F", "|", "-c",
                                 "SELECT status||' '||count(*)||'x '||string_agg(DISTINCT w.name, ',') "
                                 "FROM execution_entity e JOIN workflow_entity w ON w.id=e.\"workflowId\" "
                                 "WHERE e.status IN ('running','new') GROUP BY status;"],
                                capture_output=True)
             act = " ; ".join(x for x in o.stdout.decode(errors="replace").splitlines() if x.strip()) if o.stdout else ""
             oe = subprocess.run(["docker", "exec", f"n8n-postgres-{dn}", "psql", "-U",
-                                 env("POSTGRES_USER", "bina-comp"), "-d", "n8n", "-t", "-A", "-c",
+                                 env("POSTGRES_USER", "hacohen"), "-d", "n8n", "-t", "-A", "-c",
                                  "SELECT count(*) FROM execution_entity WHERE status='error';"],
                                 capture_output=True)
             try:
@@ -797,7 +797,7 @@ def _reset_test_instance():
     while time.time() < deadline:
         time.sleep(5)
         o = subprocess.run(["docker", "exec", f"n8n-postgres-{dn}", "psql", "-U",
-                            env("POSTGRES_USER", "bina-comp"), "-d", "n8n", "-t", "-A", "-c",
+                            env("POSTGRES_USER", "hacohen"), "-d", "n8n", "-t", "-A", "-c",
                             f"SELECT status FROM execution_entity WHERE id={eid};"],
                            capture_output=True)
         st = o.stdout.decode("utf-8", errors="replace").strip()

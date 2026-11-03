@@ -9,7 +9,6 @@ requests==2.31.0
 opencv-python-headless==4.9.0.80
 numpy~=1.26.4
 pytesseract~=0.3.10
-layoutparser~=0.3.4
 fuzzywuzzy
 python-Levenshtein
 # Pinned: 26.0.0 leaks stale entries into the arbiter's WORKERS set, so the

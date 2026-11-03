@@ -61,17 +61,17 @@ DB = DOCKER + ["exec", "-i", "supabase-db-shlomo-laptop",
 CONN = "drive_google_service_account-ea660043"
 
 # ---- the corrected `failed` folder for drive-gdoc-scanned --------------------------------------
-# The registry points at 11rj5zDw2lhYnc8zMUxmYADKIJaPaunhb 'acharei shemot, sroukot Boris nichshal'
+# The registry points at 1REDACTEDdrivexxxxxxxxxxxxxxx0014 'acharei shemot, sroukot Boris nichshal'
 # (101 files in window). The real failed folder of this family is
-# 1m25RdFEkfv_5KjSqFGM8gpjupXWZuUW2 'sroukot- nichshal (Boris)' (918 files in window). Established
+# 1REDACTEDdrivexxxxxxxxxxxxxxx0009 'sroukot- nichshal (Boris)' (918 files in window). Established
 # by the tri-state sibling resolution in scripts/ops/registry-fix-drive-gdoc-warehouse.sql:26.
-SCANNED_FAILED_WRONG = "11rj5zDw2lhYnc8zMUxmYADKIJaPaunhb"
-SCANNED_FAILED_RIGHT = "1m25RdFEkfv_5KjSqFGM8gpjupXWZuUW2"
+SCANNED_FAILED_WRONG = "1REDACTEDdrivexxxxxxxxxxxxxxx0014"
+SCANNED_FAILED_RIGHT = "1REDACTEDdrivexxxxxxxxxxxxxxx0009"
 
-F_SCANNED_SYNCED = "1YpapJ3vJDYo_idP3aZiFJR_1WoEaCNhu"
+F_SCANNED_SYNCED = "1REDACTEDdrivexxxxxxxxxxxxxxx0002"
 F_SCANNED_FAILED = SCANNED_FAILED_RIGHT
-F_CHAT_SYNCED = "1xthreeBl1VD-5uN9PFu9Zi-0IABQDwst"
-F_CHAT_FAILED = "1PYaVJ4dKdOl1iGJlVKFT0pzJ_Rs2mYNL"
+F_CHAT_SYNCED = "1REDACTEDdrivexxxxxxxxxxxxxxx0093"
+F_CHAT_FAILED = "1REDACTEDdrivexxxxxxxxxxxxxxx0015"
 
 
 def readonly_entry(name, folder, page_size):

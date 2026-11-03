@@ -83,7 +83,7 @@ if [ -n "$SBDB" ]; then
   # public writer. The schema list comes from the registry apply-schema just ensured.
   _schemas="$(docker exec "$SBDB" psql -U postgres -d postgres -tAc \
       "select schema_name from public.indox_instances where enabled" 2>/dev/null | tr -d ' \r')"
-  [ -n "${_schemas}" ] || _schemas="indox_bina_comp"
+  [ -n "${_schemas}" ] || _schemas="indox_hacohen"
   for _sch in ${_schemas}; do
   python3 - apps/indox/blueprint/fixtures/settings.json "${_sch}" <<'PY' | docker exec -i "$SBDB" psql -U postgres -d postgres -q -v ON_ERROR_STOP=0 >/dev/null 2>&1 \
     && ok "settings seeded into ${_sch} (existing keys left untouched — insert-only)" || warn "settings seed reported issues (${_sch})"

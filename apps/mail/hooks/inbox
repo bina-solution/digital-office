@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+#: inbox [N] [--connection <id>] — the newest N in the inbox, one line each (default 10):  ./bbox mail inbox 5
+# Pipes the app's own CLI (apps/mail/cli.py) into the mailview container, and its answer through the
+# operatives' formatter (apps/mail/operatives/lines.py), which flattens what a sender wrote.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+dcx exec -T mailview python - inbox "$@" < "$(npath "${REPO_ROOT}")/apps/mail/cli.py" \
+  | python3 "$(npath "${REPO_ROOT}/apps/mail/operatives/lines.py")"

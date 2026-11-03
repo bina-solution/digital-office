@@ -54,7 +54,7 @@ if not providers:
     providers["deepseek"] = {"api_key": "placeholder", "model_prefix": "deepseek"}
 
 # ── Build LiteLLM config ──
-master_key = os.environ.get("LITELLM_MASTER_KEY", "sk-REDACTED-key-4")
+master_key = os.environ.get("LITELLM_MASTER_KEY", "sk-litellm-master-key-change-me")
 
 config = {
     "general_settings": {

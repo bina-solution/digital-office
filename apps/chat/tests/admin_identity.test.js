@@ -9,7 +9,7 @@
  * "מספרים או מזהי משתמש".
  *
  * These tests pin BOTH shapes, because fixing one and breaking the other is the easy mistake: a
- * phone must still normalise (050-000-0007 and 050-000-0007 are the same admin) and an engine id
+ * phone must still normalise (0501234567 and +972-50-123-4567 are the same admin) and an engine id
  * must survive as itself.
  */
 const settings = require('../src/services/settings_api');
@@ -18,9 +18,9 @@ beforeEach(() => settings.setBotAdmins([]));
 
 describe('canonAdmin', () => {
   test('a phone number normalises, in any of the shapes people type', () => {
-    expect(settings.canonAdmin('050-000-0007')).toBe('050-000-0007');
-    expect(settings.canonAdmin('050-000-0007')).toBe('050-000-0007');
-    expect(settings.canonAdmin(' 050-000-0007 ')).toBe('050-000-0007');
+    expect(settings.canonAdmin('0501234567')).toBe('972501234567');
+    expect(settings.canonAdmin('+972-50-123-4567')).toBe('972501234567');
+    expect(settings.canonAdmin(' 972501234567 ')).toBe('972501234567');
   });
 
   test('a private-engine user id survives as ITSELF instead of becoming empty', () => {
@@ -38,8 +38,8 @@ describe('canonAdmin', () => {
 
 describe('setBotAdmins / isAdmin', () => {
   test('a list may mix engine ids and phone numbers', () => {
-    expect(settings.setBotAdmins('me, bot-user, 050-000-0007'))
-      .toEqual(['me', 'bot-user', '050-000-0007']);
+    expect(settings.setBotAdmins('me, bot-user, 0501234567'))
+      .toEqual(['me', 'bot-user', '972501234567']);
   });
 
   test('an engine identity is recognised — the case that could not work before', async () => {
@@ -48,9 +48,9 @@ describe('setBotAdmins / isAdmin', () => {
   });
 
   test('a phone still matches however the sender spells it', async () => {
-    settings.setBotAdmins(['050-000-0007']);
-    expect(await settings.isAdmin('050-000-0007')).toBe(true);
-    expect(await settings.isAdmin('050-000-0007')).toBe(true);
+    settings.setBotAdmins(['0501234567']);
+    expect(await settings.isAdmin('972501234567')).toBe(true);
+    expect(await settings.isAdmin('+972 50 123 4567')).toBe(true);
   });
 
   test('someone not on the list is not an admin', async () => {

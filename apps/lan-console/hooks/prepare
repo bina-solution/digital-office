@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+#: prepare — the console's name on the LAN, and its sign-in: the office's forward-auth users, read by lan-signin
+#
+# Run by `bbox run` before the services start (run_app_hooks), and by hand as `./bbox lan-console prepare`
+# after LAN_ADDRESS or LAN_PORT changes. The console answers on a NAME (DGO-1126): LAN_DOMAIN, written here
+# from the address when .env has none (`192.168.16.100` → `192-168-16-100.sslip.io`, the same default the
+# compiler takes, platform/manager/reconcile.py lan_name). The sign-in is lan-signin (docker-compose.yml): the
+# office's forward-auth image at auth.<LAN_DOMAIN>, reading forward-auth's own users file read-only — so
+# there is nothing to provision here, only the office's forward-auth to find, and the sign-in this entry
+# had before to take away.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # say, read_env_value, env_set, DN
+ADDR="$(read_env_value LAN_ADDRESS)"
+PORT="$(read_env_value LAN_PORT)"; PORT="${PORT:-8080}"
+[ -n "${ADDR}" ] || { say "[lan-console] LAN_ADDRESS is not set in .env — nothing to prepare"; exit 1; }
+NAME="$(read_env_value LAN_DOMAIN)"
+DERIVED="$(printf '%s' "${ADDR}" | tr '.' '-').sslip.io"
+# The default follows the address: a name this hook derived from an OLD address (the Mac on another Wi-Fi,
+# a new DHCP lease) is rewritten; a name the office chose itself is kept (the second reader, 2026-11-02)
+if [ -z "${NAME}" ] || { [[ "${NAME}" =~ ^[0-9]+(-[0-9]+){3}\.sslip\.io$ ]] && [ "${NAME}" != "${DERIVED}" ]; }; then
+  NAME="${DERIVED}"
+  env_set LAN_DOMAIN "${NAME}" && say "[lan-console] the console's name on the LAN: console.${NAME} (LAN_DOMAIN written to .env)"
+fi
+# The sign-in this replaced (authentik's proxy outpost, lan-outpost, r030-002): its labels name the same
+# `lan-auth` middleware with another address, and traefik drops a router two containers disagree on, so it
+# goes. Its provider and token stay in authentik, which nothing asks any more, until authentik itself goes.
+if docker inspect "lan-outpost-${DN}" >/dev/null 2>&1; then
+  docker rm -f "lan-outpost-${DN}" >/dev/null && say "[lan-console] the old lan-outpost container is removed"
+fi
+# The accounts are forward-auth's: lan-signin cannot start without its users file (a fresh office makes
+# the owner at forward-auth's first-run link first), and says so in its own log.
+if ! docker inspect -f '{{.State.Running}}' "forward-auth-${DN}" 2>/dev/null | grep -qx true; then
+  say "[lan-console] forward-auth-${DN} is not running — the LAN sign-in reads its accounts and waits for it"
+  exit 1
+fi
+# ...and an owner must exist: an office still at forward-auth's first-run setup would send a phone to
+# /setup, which is not on this entry (and lan-signin holds that state until it restarts). The service's own
+# answer: with a users file, `-import-users` says `owner-exists` and reads nothing.
+if [ "$(docker exec -i "forward-auth-${DN}" /forward-auth -import-users </dev/null 2>/dev/null | tr -d '\r' | tail -1)" != owner-exists ]; then
+  say "[lan-console] forward-auth has no owner yet — make the owner at its first-run link, then prepare again"
+  exit 1
+fi
+say "[lan-console] sign-in at http://console.${NAME}:${PORT}: the office's forward-auth accounts, at auth.${NAME}"

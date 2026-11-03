@@ -1,0 +1,5 @@
+#!/command/with-contenv bash
+# apps/meet: the recorder's watchdog and the live captions (jibri/watch.py), an s6 longrun beside
+# Jibri (s6-overlay v3, /etc/s6-overlay/s6-rc.d/60-meet-watch, listed in user/contents.d). The
+# directory and its marker are bind-mounted read-only; s6-rc compiles them at boot. Dies → restarted.
+exec python3 -u /usr/local/bin/meet-watch.py

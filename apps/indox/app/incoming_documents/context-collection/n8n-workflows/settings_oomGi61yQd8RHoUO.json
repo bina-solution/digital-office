@@ -205,17 +205,17 @@
       "parameters": {
         "documentId": {
           "__rl": true,
-          "value": "1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo",
+          "value": "1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0049",
           "mode": "list",
           "cachedResultName": "AutomationValues",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo/edit?usp=drivesdk"
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0049/edit?usp=drivesdk"
         },
         "sheetName": {
           "__rl": true,
           "value": 1467881049,
           "mode": "list",
           "cachedResultName": "הגדרות",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo/edit#gid=1467881049"
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0049/edit#gid=1467881049"
         },
         "options": {}
       },
@@ -233,7 +233,7 @@
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "e2knIZpw8YF0QBAB",
-          "name": "Google Sheets person17@example.com"
+          "name": "Google Sheets person17.x@example.com"
         }
       }
     },
@@ -241,17 +241,17 @@
       "parameters": {
         "documentId": {
           "__rl": true,
-          "value": "1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo",
+          "value": "1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0049",
           "mode": "list",
           "cachedResultName": "AutomationValues",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo/edit?usp=drivesdk"
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0049/edit?usp=drivesdk"
         },
         "sheetName": {
           "__rl": true,
           "value": 749586510,
           "mode": "list",
           "cachedResultName": "חברות",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo/edit#gid=749586510"
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0049/edit#gid=749586510"
         },
         "options": {}
       },
@@ -267,7 +267,7 @@
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "e2knIZpw8YF0QBAB",
-          "name": "Google Sheets person17@example.com"
+          "name": "Google Sheets person17.x@example.com"
         }
       }
     },
@@ -1787,125 +1787,7 @@
   "meta": {
     "templateCredsSetupCompleted": true
   },
-  "pinData": {
-    "Settings Loader Start": [
-      {
-        "json": {}
-      }
-    ],
-    "Company Webhook": [
-      {
-        "json": {
-          "headers": {
-            "host": "n8n.bina-comp.bina-solutions.co.il",
-            "user-agent": "axios/1.8.3",
-            "accept": "application/json,text/html,application/xhtml+xml,application/xml,text/*;q=0.9, image/*;q=0.8, */*;q=0.7",
-            "accept-encoding": "gzip, compress, deflate, br",
-            "x-forwarded-for": "172.18.0.1",
-            "x-forwarded-host": "n8n.bina-comp.bina-solutions.co.il",
-            "x-forwarded-port": "443",
-            "x-forwarded-proto": "https",
-            "x-forwarded-server": "60882555e47e",
-            "x-real-ip": "172.18.0.1"
-          },
-          "params": {},
-          "query": {
-            "all": true,
-            "TRIGGERED_FROM": "INCOMING_DOCUMENT"
-          },
-          "body": {},
-          "webhookUrl": "https://n8n.bina-comp.bina-solutions.co.il/webhook/company",
-          "executionMode": "production"
-        }
-      }
-    ],
-    "Settings Webhook": [
-      {
-        "json": {
-          "headers": {
-            "host": "n8n.bina-comp.bina-solutions.co.il",
-            "user-agent": "axios/1.8.3",
-            "accept": "application/json,text/html,application/xhtml+xml,application/xml,text/*;q=0.9, image/*;q=0.8, */*;q=0.7",
-            "accept-encoding": "gzip, compress, deflate, br",
-            "x-forwarded-for": "172.18.0.1",
-            "x-forwarded-host": "n8n.bina-comp.bina-solutions.co.il",
-            "x-forwarded-port": "443",
-            "x-forwarded-proto": "https",
-            "x-forwarded-server": "60882555e47e",
-            "x-real-ip": "172.18.0.1"
-          },
-          "params": {},
-          "query": {
-            "key": "gmail_docs_download_ignored_mails",
-            "TRIGGERED_FROM": "PINNED_TEST"
-          },
-          "body": {},
-          "webhookUrl": "https://n8n.bina-comp.bina-solutions.co.il/webhook/company",
-          "executionMode": "production"
-        }
-      }
-    ],
-    "When Executed by Another Workflow": [
-      {
-        "json": {
-          "load_settings": true,
-          "load_companies": true,
-          "load_queries": true,
-          "TRIGGERED_FROM": "Gmail Documents Downloader"
-        }
-      }
-    ],
-    "Queries Webhook": [
-      {
-        "json": {
-          "headers": {
-            "host": "n8n.bina-comp.bina-solutions.co.il",
-            "user-agent": "axios/1.8.3",
-            "accept": "application/json,text/html,application/xhtml+xml,application/xml,text/*;q=0.9, image/*;q=0.8, */*;q=0.7",
-            "accept-encoding": "gzip, compress, deflate, br",
-            "x-forwarded-for": "172.18.0.1",
-            "x-forwarded-host": "n8n.bina-comp.bina-solutions.co.il",
-            "x-forwarded-port": "443",
-            "x-forwarded-proto": "https",
-            "x-forwarded-server": "60882555e47e",
-            "x-real-ip": "172.18.0.1"
-          },
-          "params": {},
-          "query": {
-            "TRIGGERED_FROM": "PINNED_TEST"
-          },
-          "body": {},
-          "webhookUrl": "https://n8n.bina-comp.bina-solutions.co.il/webhook/company",
-          "executionMode": "production"
-        }
-      }
-    ],
-    "All Setting Webhook": [
-      {
-        "json": {
-          "headers": {
-            "host": "n8n.bina-comp.bina-solutions.co.il",
-            "user-agent": "axios/1.8.3",
-            "accept": "application/json,text/html,application/xhtml+xml,application/xml,text/*;q=0.9, image/*;q=0.8, */*;q=0.7",
-            "accept-encoding": "gzip, compress, deflate, br",
-            "x-forwarded-for": "172.18.0.1",
-            "x-forwarded-host": "n8n.bina-comp.bina-solutions.co.il",
-            "x-forwarded-port": "443",
-            "x-forwarded-proto": "https",
-            "x-forwarded-server": "60882555e47e",
-            "x-real-ip": "172.18.0.1"
-          },
-          "params": {},
-          "query": {
-            "TRIGGERED_FROM": "PINNED_TEST"
-          },
-          "body": {},
-          "webhookUrl": "https://n8n.bina-comp.bina-solutions.co.il/webhook/company",
-          "executionMode": "production"
-        }
-      }
-    ]
-  },
+  "pinData": {},
   "versionId": "86430070-37e5-4fc5-837b-386c6b01a4c2",
   "activeVersionId": "86430070-37e5-4fc5-837b-386c6b01a4c2",
   "versionCounter": 152,

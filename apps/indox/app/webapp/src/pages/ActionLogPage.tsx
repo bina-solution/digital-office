@@ -245,7 +245,7 @@ function ActionDocDrawer({ docId, onClose }: { docId: string; onClose: () => voi
                     </span>
                   )}
                   <span className="muted small">
-                    ‏{he(d.total ?? 0)} פעולות
+                    ‏{d.total === 1 ? 'פעולה אחת' : `${he(d.total ?? 0)} פעולות`}
                     {span > 0 ? ` · לאורך ${fmtGap(span).replace('+', '')}` : ''}
                   </span>
                   {instance && (
@@ -278,7 +278,7 @@ function ActionDocDrawer({ docId, onClose }: { docId: string; onClose: () => voi
               )}
               {!!d.unparsed && (
                 <div className="callout">
-                  ‏{he(d.unparsed)} רשומות ביומן של המסמך הזה נכתבו בלי שם פעולה, ולכן אינן מוצגות
+                  ‏{d.unparsed === 1 ? 'רשומה אחת' : `${he(d.unparsed)} רשומות`} ביומן של המסמך הזה נכתבו בלי שם פעולה, ולכן אינן מוצגות
                   כשלבים בציר הזמן.
                 </div>
               )}
@@ -960,7 +960,7 @@ export default function ActionLogPage() {
       a.download = `action-log-${win}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.csv`;
       a.click();
       URL.revokeObjectURL(a.href);
-      push('ok', `יוצאו ${he(out.length)} שיגורים לקובץ CSV`);
+      push('ok', `יוצאו ${out.length === 1 ? 'שיגור אחד' : `${he(out.length)} שיגורים`} לקובץ CSV`);
     } catch (e: unknown) {
       push('bad', `הייצוא נכשל: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
@@ -1153,7 +1153,7 @@ export default function ActionLogPage() {
               'מזהה ההרצה נמצא במפתח הראשי של טבלת השיגורים, ולכן שורה שנייה לאותו צמד היא ' +
               'הרצה כפולה אמיתית ולא רישום כפול.\n' +
               (answered
-                ? `בטווח ${winLabel(win)}: ${he(d?.dup_pairs ?? 0)} צמדים, ${he(d?.dup_rows ?? 0)} שורות.\n`
+                ? `בטווח ${winLabel(win)}: ${(d?.dup_pairs ?? 0) === 1 ? 'צמד אחד' : `${he(d?.dup_pairs ?? 0)} צמדים`}, ${(d?.dup_rows ?? 0) === 1 ? 'שורה אחת' : `${he(d?.dup_rows ?? 0)} שורות`}.\n`
                 : 'עדיין לא נמדד בטווח הזה.\n') +
               'לחיצה מציגה בדיוק את השורות האלה, מקובצות לפי מסמך ופעולה.'
             }
@@ -1224,7 +1224,7 @@ export default function ActionLogPage() {
               Shown now only when the pre-filter genuinely read more than it kept. */}
           {answered && d?.scanned_rows != null && d.scanned_rows !== windowTotal && (
             <span className="muted small" title="שורות שיגור שנקראו כדי לבנות את הטווח הזה">
-              נקראו {he(d.scanned_rows)} שורות
+              נקראו {d.scanned_rows === 1 ? 'שורה אחת' : `${he(d.scanned_rows)} שורות`}
             </span>
           )}
           {/* completeness, stated — never implied. Gated on `answered` like every other number
@@ -1233,9 +1233,9 @@ export default function ActionLogPage() {
           {answered && d?.truncated && (
             <span
               className="pill warn"
-              title={`הטווח מכיל ${he(windowTotal)} פעולות. ניתן לדפדף ולסנן ${he(retained)} מהן — האחרונות. לצפייה בכולן בחרו טווח צר יותר.`}
+              title={`הטווח מכיל ${windowTotal === 1 ? 'פעולה אחת' : `${he(windowTotal)} פעולות`}. ניתן לדפדף ולסנן ${retained === 1 ? 'אחת' : `${he(retained)} מהן`} — האחרונות. לצפייה בכולן בחרו טווח צר יותר.`}
             >
-              ‏{he(windowTotal)} בטווח — ניתן לדפדף ב-{he(retained)} האחרונות
+              ‏{he(windowTotal)} בטווח — ניתן לדפדף ב-{retained === 1 ? 'אחרונה אחת' : `${he(retained)} האחרונות`}
             </span>
           )}
           {answered && d?.rows_capped && (
@@ -1269,7 +1269,7 @@ export default function ActionLogPage() {
                 'הן אינן מופיעות בשום מספר על המסך הזה. זו תקלת כתיבה בצינור, לא מגבלת תצוגה.'
               }
             >
-              ‏{he(d.unparsed)} שורות לא קריאות
+              ‏{d.unparsed === 1 ? 'שורה אחת לא קריאה' : `${he(d.unparsed)} שורות לא קריאות`}
             </span>
           )}
         </div>
@@ -1306,8 +1306,8 @@ export default function ActionLogPage() {
             <>
               <b>
                 {scan.lens === 'open'
-                  ? `${he(scan.rows.length)} שיגורים פתוחים מעל ${scan.minutes} דק׳`
-                  : `${he(scan.rows.length)} שיגורים שנסגרו ${REAPED_MIN} דק׳ או יותר אחרי הפתיחה`}
+                  ? `${scan.rows.length === 1 ? 'שיגור אחד פתוח' : `${he(scan.rows.length)} שיגורים פתוחים`} מעל ${scan.minutes} דק׳`
+                  : `${scan.rows.length === 1 ? 'שיגור אחד שנסגר' : `${he(scan.rows.length)} שיגורים שנסגרו`} ${REAPED_MIN} דק׳ או יותר אחרי הפתיחה`}
               </b>{' '}
               {scan.lens === 'open'
                 ? 'שורה כזו היא או עבודה שרצה עכשיו, או הרצת ראוטר שמתה בין «Log Action Start» ל-«Log Action End» — אף אחד כבר לא יסגור אותה.'

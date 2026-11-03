@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+#: ssh — a shell (or one command) on a fleet computer, with the office's own key and route: <computer-id|local> [command…]
+#
+# The same connection /exec makes — same key, same pinned host key, and for a SHARED computer the
+# same door — but attached to this terminal, so a long or interactive job is not bound by /exec's
+# timeout. Ids: ./bbox computers ssh list
+set -uo pipefail
+export PYTHONIOENCODING=utf-8
+CONTAINER="$(docker ps --filter 'name=^computers-' --format '{{.Names}}' 2>/dev/null | head -1)"
+[ -n "${CONTAINER}" ] || { echo "computers is not running here (./bbox apps enable computers && ./bbox run)" >&2; exit 1; }
+CID="${1:-list}"; shift || true
+if [ "${CID}" = list ]; then
+  docker exec -i "${CONTAINER}" python3 -c '
+import json, urllib.request
+for c in json.load(urllib.request.urlopen("http://127.0.0.1:8977/api/computers?probe=0", timeout=30))["computers"]:
+    cid, label, where = c["id"], c.get("label") or "", "%s@%s" % (c.get("user"), c.get("host"))
+    print(f"{cid:28} {label:24} {where}" + ("  (shared)" if c.get("shared") else ""))'
+  exit 0
+fi
+[ "${CID}" = local ] && CID=computer_local-local
+TTY=(-i); [ -t 0 ] && [ -t 1 ] && TTY=(-it)
+# The argv is built BY the app (ssh_argv), never re-spelled here — one answer to "how is a machine reached".
+exec docker exec "${TTY[@]}" -w /app "${CONTAINER}" python3 -c '
+import os, sys
+import app
+cid, cmd = sys.argv[1], " ".join(sys.argv[2:])
+rec, bad = app._resolve(cid, app.local_gateway())
+if bad:
+    sys.exit(bad.body.decode())
+sec, _ = app._computer_ctx(rec, app.local_gateway())
+argv = app.ssh_argv(cid, rec["host"], rec["port"], rec["user"], sec, cmd)
+if not cmd:
+    argv = argv[:-1]
+if sys.stdin.isatty():
+    argv.insert(1, "-t")
+os.execvp(argv[0], argv)' "${CID}" "$@"

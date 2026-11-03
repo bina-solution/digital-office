@@ -36,8 +36,8 @@ concurrency:
 
 jobs:
   bundle:
-    runs-on: [self-hosted, portable]
-    timeout-minutes: 120
+    runs-on: [self-hosted, portable, ssd]
+    timeout-minutes: 165   # 120 for the job + up to 45 that ops/prejob_waitfree.sh may hold it (memory, heat, a fresh boot)
     steps:
       - uses: actions/checkout@v4
 

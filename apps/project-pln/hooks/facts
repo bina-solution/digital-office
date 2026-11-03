@@ -17,18 +17,20 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 DB="$(archive_require plane-db)" || exit 1
 q() { docker exec "${DB}" psql -U plane -d plane -tAc "$1" 2>/dev/null | tr -d '\r' | tr -d ' '; }
 
-echo "FACT plane_users $(q 'select count(*) from users;')"
-echo "FACT plane_workspaces $(q 'select count(*) from workspaces;')"
-echo "FACT plane_projects $(q 'select count(*) from projects;')"
-echo "FACT plane_work_items $(q 'select count(*) from issues;')"
-echo "FACT plane_comments $(q 'select count(*) from issue_comments;')"
+# A table this Plane does not have is the fact `absent` (factq, scripts/archive-lib.sh), never an
+# empty value the archiver refuses: an office that cannot be backed up is the worse failure (wbc-vps).
+factq plane_users "$(q 'select count(*) from users;')"
+factq plane_workspaces "$(q 'select count(*) from workspaces;')"
+factq plane_projects "$(q 'select count(*) from projects;')"
+factq plane_work_items "$(q 'select count(*) from issues;')"
+factq plane_comments "$(q 'select count(*) from issue_comments;')"
 
 # The object store, as an INDEX and as BYTES. The index is rows in the database (`file_assets` is
 # what Plane actually serves from — attachments, avatars, covers and page files all land there); the
 # bytes live in `project_pln_minio`, which the generic volume tar carries.
-echo "FACT plane_assets $(q 'select count(*) from file_assets;')"
-echo "FACT plane_attachment_rows $(q 'select count(*) from issue_attachments;')"
-echo "FACT plane_assets_sha $(q "select coalesce(md5(string_agg(id::text || coalesce(asset,'') || coalesce(entity_type,'') || coalesce(size::text,''), '|' order by id)), 'empty') from file_assets;")"
+factq plane_assets "$(q 'select count(*) from file_assets;')"
+factq plane_attachment_rows "$(q 'select count(*) from issue_attachments;')"
+factq plane_assets_sha "$(q "select coalesce(md5(string_agg(id::text || coalesce(asset,'') || coalesce(entity_type,'') || coalesce(size::text,''), '|' order by id)), 'empty') from file_assets;")"
 
 # …and the bytes themselves, counted by the store that has to SERVE them. The three facts above are
 # all rows, so they come out equal on a restore that landed the database and lost the volume — the

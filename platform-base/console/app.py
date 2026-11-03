@@ -261,6 +261,123 @@ def modules():
     return jsonify(modules=_tiles())
 
 
+# ── may an app be shown INSIDE this console? (#63) ─────────────────────────────
+# A window on an app's own host that the app forbids being framed in stayed EMPTY — the browser
+# draws its own grey error page and tells the page that framed it nothing (FPG, 2026-10-28: the
+# services window). The browser decides from two headers of the app's answer, so the console asks
+# the same answer server-side and judges it the way a browser does:
+#   · CSP `frame-ancestors` (when present it wins: browsers then ignore X-Frame-Options) must allow
+#     this console's origin — `'none'` never does, `'self'` only for the app's own origin;
+#   · otherwise X-Frame-Options: DENY refuses, SAMEORIGIN refuses unless the app IS this origin.
+# The verdict is "refused" only when the answer says so; no answer (a timeout, a TLS or DNS
+# failure, a sign-in page) is "unknown" and the shell frames as it always did. Only hosts of this
+# office's own domain are asked (no open fetcher inside the office network), and nothing of the
+# body is read or returned.
+FRAME_CHECK_TTL = int(os.environ.get("FRAME_CHECK_TTL", "300"))
+_frame_seen = {}
+
+
+def _csp_allows(policy, console_origin, app_origin):
+    """None when the policy says nothing about framing, else (allowed, the directive as written)."""
+    for part in policy.split(";"):
+        bits = part.strip().split()
+        if not bits or bits[0].lower() != "frame-ancestors":
+            continue
+        srcs = [s for s in bits[1:]]
+        said = "frame-ancestors " + " ".join(srcs)
+        c = urlparse(console_origin)
+        for s in srcs:
+            low = s.lower()
+            if low == "'none'":
+                return False, said
+            if low == "'self'":
+                if console_origin == app_origin:
+                    return True, said
+                continue
+            if low == "*":
+                return True, said
+            if low.endswith(":") and "/" not in low:              # a scheme source: `https:`
+                if c.scheme == low[:-1]:
+                    return True, said
+                continue
+            anyport = low.endswith(":*")
+            src = low[:-2] if anyport else low
+            src = src if "://" in src else f"{c.scheme}://{src}"
+            sp = urlparse(src)
+            if sp.scheme != c.scheme:
+                continue
+            host = sp.hostname or ""
+            ch = c.hostname or ""
+            if host.startswith("*."):
+                if not ch.endswith(host[1:]):
+                    continue
+            elif host != ch:
+                continue
+            try:
+                port = sp.port or {"http": 80, "https": 443}.get(sp.scheme)
+            except ValueError:
+                continue
+            cport = c.port or {"http": 80, "https": 443}.get(c.scheme)
+            if anyport or port == cport:
+                return True, said
+        return False, said
+    return None
+
+
+def frame_verdict(headers, console_origin, app_origin):
+    """("ok" | "refused", why) for an app's response headers, as a browser judges them."""
+    csp = [v for k, v in headers.items() if k.lower() == "content-security-policy"]
+    for policy in csp:
+        for one in policy.split(","):                   # several policies folded into one header
+            got = _csp_allows(one, console_origin, app_origin)
+            if got is not None and not got[0]:
+                return "refused", "Content-Security-Policy: " + got[1]
+    if any(_csp_allows(p, console_origin, app_origin) is not None for pol in csp for p in pol.split(",")):
+        return "ok", ""
+    xfo = next((v for k, v in headers.items() if k.lower() == "x-frame-options"), "").strip()
+    first = xfo.split(",")[0].strip().upper()
+    if first == "DENY":
+        return "refused", "X-Frame-Options: " + xfo
+    if first == "SAMEORIGIN" and console_origin != app_origin:
+        return "refused", "X-Frame-Options: " + xfo
+    return "ok", ""
+
+
+def _office_domain(host):
+    host = (host or "").split(":")[0].lower()
+    if re.fullmatch(r"[0-9.]+|\[[0-9a-f:]+\]", host):
+        return None                                     # an address has no names under it
+    return host.split(".", 1)[1] if "." in host else host
+
+
+@app.get("/api/frame-check")
+def frame_check():
+    url = (request.args.get("url") or "").strip()
+    u = urlparse(url)
+    proto = (request.headers.get("X-Forwarded-Proto") or request.scheme or "https").split(",")[0].strip()
+    console_origin = f"{proto}://{request.host}"
+    dom = _office_domain(request.host)
+    host = (u.hostname or "").lower()
+    if u.scheme not in ("http", "https") or not host or not dom or not (host == dom or host.endswith("." + dom)):
+        return jsonify(verdict="unknown", why="not an address of this office"), 400
+    app_origin = f"{u.scheme}://{u.netloc}"
+    key = (console_origin, app_origin + (u.path or "/"))
+    hit = _frame_seen.get(key)
+    if hit and time.time() - hit[0] < FRAME_CHECK_TTL:
+        return jsonify(hit[1])
+    try:
+        r = requests.get(url, timeout=(3, 4), allow_redirects=True, stream=True,
+                         headers={"Accept": "text/html", "Sec-Fetch-Dest": "iframe"})
+        r.close()
+        landed = urlparse(r.url)
+        verdict, why = frame_verdict(r.headers, console_origin, f"{landed.scheme}://{landed.netloc}")
+        out = {"verdict": verdict, "why": why, "status": r.status_code}
+    except requests.RequestException as e:
+        out = {"verdict": "unknown", "why": type(e).__name__}
+    _frame_seen[key] = (time.time(), out)
+    return jsonify(out)
+
+
 # `/api/apps` and its `_ADMIN_TOOLS` list lived here. Both are gone, and the list is why.
 #
 # It hardcoded the name, icon and description of five apps — n8n, GlitchTip, Supabase Studio,
@@ -553,8 +670,11 @@ def _as_remote(fwd, door):
         fwd["Host"] = door["host"]
     cookie = next((v for k, v in fwd.items() if k.lower() == "cookie"), None)
     if cookie is not None:
+        # this office's own sign-in never travels: authentik's cookies, and forward-auth's session and
+        # its sign-in state (dgo_session, dgo_state — DGO-1090), which would be a live session here
         kept = [part.strip() for part in cookie.split(";")
-                if part.strip() and not part.strip().lower().startswith("authentik_")]
+                if part.strip() and not part.strip().lower().startswith(
+                    ("authentik_", "dgo_session=", "dgo_state=", "__host-dgo_state="))]
         drop("cookie")
         if kept:
             fwd["Cookie"] = "; ".join(kept)
@@ -793,6 +913,34 @@ def app_proxy(name, sub):
         return jsonify(error="app_unreachable", app=name, message=str(e)), 502
     out = {k: v for k, v in r.headers.items() if k.lower() not in _HOP}
     ct = r.headers.get("Content-Type", "")
+    # ── THE HISTORY FALLBACK: a path that is a SCREEN is served, one that is not stays a 404 ─────
+    # The console's tail IS the app's own URL (`#/m/computers/<id>` arrived as
+    # `/a/computers/<id>`), and an app whose server serves its single page only at `/` answers 404
+    # for that path — so the screen the link names never loads. Measured 2026-10-12: twelve of this
+    # office's fifteen embedded apps do exactly that (drive serves the paths its router knows and
+    # 404s the rest; `my-docs` and `incoming` serve anything; the hash-routed ones never see a path
+    # at all). The standard fix is the one every SPA framework ships — connect-history-api-fallback:
+    # a GET that a BROWSER asked for as a page, whose last segment has no file extension, is
+    # answered with the app's entry document instead of an error. It lives HERE, once, rather than
+    # in fifteen servers, and it is what makes "the path is always the full path" true for an app
+    # that only knows how to be a directory of files.
+    #
+    # `out`/`ct` are assigned BEFORE this branch and re-assigned inside it, on purpose: an earlier
+    # version of this change assigned them only in the fallback, so every OTHER proxied request died
+    # with UnboundLocalError — the console answered 500 for the whole office and GlitchTip raised it
+    # as the newest alert within the minute (measured 2026-10-12 22:16, notification 3205861). The
+    # two lines above are the fix, and they are why the assignment stays where the original was.
+    if (r.status_code == 404 and asked_for_a_page and request.method == "GET"
+            and "." not in (sub or "").rsplit("/", 1)[-1]):
+        r.close()
+        try:
+            r = requests.request("GET", base.rstrip("/") + "/", headers=fwd,
+                                 timeout=40, stream=True, allow_redirects=False)
+        except requests.RequestException as e:
+            return jsonify(error="app_unreachable", app=name, message=str(e)), 502
+        out = {k: v for k, v in r.headers.items() if k.lower() not in _HOP}
+        out["X-Bina-History-Fallback"] = "1"
+        ct = r.headers.get("Content-Type", "")
     # The linked office ANSWERED, and what it answered for the tile's own page is an error with no
     # page of its own (its door has no listener for the app, the app is switched off there): the
     # frame was simply blank — the MacBook's browser tile, 404 with an empty body, 2026-10-06. The
@@ -834,6 +982,21 @@ def app_proxy(name, sub):
         out["Cache-Control"] = "no-cache, no-store, must-revalidate"
         return Response(html.encode("utf-8"), status=r.status_code, headers=out)
 
+    # ── asset freshness (2026-10-11) ──────────────────────────────────────────────────────────────
+    # A JS or CSS file a framed app serves often carries NO Cache-Control at all (only ETag and
+    # Last-Modified), and a browser then applies HEURISTIC freshness — so an app whose code was just
+    # rebuilt keeps running the PREVIOUS bundle from cache. That is invisible from the server side
+    # (the file on disk is new, `curl` gets the new bytes) and it is exactly how a translated screen
+    # goes on rendering Hebrew: the runtime that translates it is the cached one. Forcing
+    # revalidation here costs a conditional request per asset and returns a 304 while the file is
+    # unchanged, so the app keeps its own caching semantics and only loses the heuristics.
+    # Only where the app said NOTHING: an explicit policy (a hashed bundle's `immutable`, a `no-store`)
+    # is the app's own decision and stays, and a lowercase `cache-control` from the app counts as one
+    # (otherwise the response would carry two Cache-Control headers).
+    if ("text/event-stream" not in ct and any(t in ct for t in ("javascript", "text/css"))
+            and not any(k.lower() == "cache-control" for k in out)):
+        out["Cache-Control"] = "no-cache"
+
     # Everything that is NOT html streams straight through.
     #
     # HTML above must stay buffered — the rewrite needs the whole document. Nothing else does, and
@@ -843,9 +1006,13 @@ def app_proxy(name, sub):
     # app's own origin and silently failed inside the console iframe, which is the surface operators
     # actually use.
     #
-    # Streaming the rest is a straight win beyond SSE: a large download (chat's conversation export,
-    # a document, a QR image) no longer has to sit in this process's memory in full before the first
-    # byte reaches the client.
+    # Streaming the rest keeps a large download (a meeting's recording, chat's conversation export, a
+    # document) out of this process's memory — but only in pieces of a BOUNDED size. With
+    # `chunk_size=None`, urllib3 reads a body that has a Content-Length with ONE `read(None)`: the
+    # whole file, in memory, before the first byte goes out. That is what OOM-killed this worker at
+    # its 256M limit five times on FPG (DGO-1231, 10-28..10-30): a 297 MB and a 369 MB meeting mp4
+    # served through /a/meet/recordings, each kill at ~250 MB anon. An event-stream is chunked, so
+    # it keeps `None` below: each chunk is passed on the moment it arrives.
     #
     # Safe to hand back DECODED bytes because _HOP already strips content-length and
     # content-encoding from the forwarded headers — so the client is never told a length or an
@@ -856,8 +1023,24 @@ def app_proxy(name, sub):
         out["Cache-Control"] = "no-cache, no-transform"
         out["X-Accel-Buffering"] = "no"
         return Response(_bounded_stream(r), status=r.status_code, headers=out, direct_passthrough=True)
-    return Response(r.iter_content(chunk_size=None),
-                    status=r.status_code, headers=out, direct_passthrough=True)
+    passed = Response(_passed_on(r), status=r.status_code, headers=out, direct_passthrough=True)
+    # A HEAD, 204 or 304 never starts the generator (werkzeug answers it with no body), so its
+    # `finally` does not run there; this closes the upstream in that case too. Closing twice is safe.
+    passed.call_on_close(r.close)
+    return passed
+
+
+# The most of a proxied body this process holds at once, per request (see the comment above).
+PASS_CHUNK = 64 * 1024
+
+
+def _passed_on(r):
+    """The body of `r`, PASS_CHUNK at a time; the upstream is closed when the body ends, fails or
+    the client goes away."""
+    try:
+        yield from r.iter_content(chunk_size=PASS_CHUNK)
+    finally:
+        r.close()
 
 
 # A proxied event-stream holds one of the worker's threads for as long as it stays open. With one
@@ -879,6 +1062,21 @@ def _bounded_stream(r):
         r.close()
 
 
+def _referer_app():
+    """The alias of the embedded app a request came FROM, or None.
+
+    `Referer: http://<this host>/a/<alias>/…` is a page inside an app's frame — and that is the ONLY
+    thing that can say whose a root-level path is. Used for a path the console itself does not serve:
+    an app that addresses its own assets from the ROOT of the origin (DSH does: `/plugins/??…`, an
+    absolute path, because at its own origin it is the whole site) has no other way to be reached from
+    inside its tile. Never crosses hosts — a referer from somewhere else is not this office's page."""
+    ref = request.headers.get("Referer") or ""
+    m = re.match(r"^https?://([^/]+)/a/([A-Za-z0-9._-]+)(?:/|$)", ref)
+    if not m or m.group(1) != request.host:
+        return None
+    return m.group(2)
+
+
 @app.route("/", defaults={"p": "index.html"})
 @app.route("/<path:p>")
 def spa(p):
@@ -889,6 +1087,19 @@ def spa(p):
     if p == "index.html" and request.path == "/" and _first_run():
         p = "install.html"
     full = os.path.join(STATIC, p)
+    # A PATH THE CONSOLE DOES NOT OWN, ASKED FOR BY A PAGE INSIDE AN APP, IS THAT APP'S. This is the
+    # standard rule for an app mounted under a prefix that still speaks from the root, and here it is
+    # what makes the harness work inside its tile: DSH addresses its client bundles as
+    # `/plugins/??@scope/pkg/client.js,…` (an absolute path). The catch-all answered that with
+    # index.html, the browser evaluated HTML as JavaScript ("Unexpected token '<'"), the harness said
+    # «Failed to load plugins», and — because `office-links` is one of those bundles — a link inside
+    # the chat opened a NEW TAB instead of moving the desktop (measured 2026-10-13, ui2-060).
+    # `app_proxy` rebuilds the upstream URL byte for byte, including the literal second `?` of the
+    # specifier list (see its own note); nothing here re-encodes it.
+    if not os.path.isfile(full):
+        owner = _referer_app()
+        if owner and (owner in _app_bases() or owner in _remote_doors()):
+            return app_proxy(owner, p)
     resp = send_from_directory(STATIC, p) if os.path.isfile(full) \
         else send_from_directory(STATIC, "index.html")
     resp.headers["Cache-Control"] = "no-cache"

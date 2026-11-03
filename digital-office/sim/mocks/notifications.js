@@ -59,8 +59,8 @@
         title:"סנכרון Gmail נכשל — אימות פג תוקף",
         // …with an ADDRESS in its text, as a real office's notifications carry one (a hub link, a consent link): a
         // screen that prints it as text spends the two lines a notification's text is given on it
-        body:"OAuth token לכתובת person187@example.com פג תוקף. נדרש חיבור מחדש: https://accounts.google.com/o/oauth2/v2/auth?client_id=1182-bina-office&redirect_uri=https%3A%2F%2Foffice.bina-solutions.co.il%2Fa%2Fconnections%2Fcallback&scope=gmail.readonly",
-        meta:{account:"person187@example.com", count:6},
+        body:"OAuth token לכתובת person171@example.com פג תוקף. נדרש חיבור מחדש: https://accounts.google.com/o/oauth2/v2/auth?client_id=1182-bina-office&redirect_uri=https%3A%2F%2Foffice.bina-solutions.co.il%2Fa%2Fconnections%2Fcallback&scope=gmail.readonly",
+        meta:{account:"person171@example.com", count:6},
         link:"/a/connections/gmail", read:false}),
 
     mk({source:"system", level:"error", mins:61,
@@ -80,8 +80,8 @@
 
     mk({source:"gmail-sync", level:"warning", mins:340,
         title:"תיבת דואר מתקרבת למכסה",
-        body:"תיבת person116@example.com בשימוש 88% מהמכסה. שקלו לפנות ארכיון ישן.",
-        meta:{account:"person116@example.com", pct:88}, read:true}),
+        body:"תיבת person94@example.com בשימוש 88% מהמכסה. שקלו לפנות ארכיון ישן.",
+        meta:{account:"person94@example.com", pct:88}, read:true}),
 
     mk({source:"system", level:"info", mins:900,
         title:"גיבוי לילי הושלם בהצלחה",

@@ -3,8 +3,8 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { execSync } from 'node:child_process';
 
-const VAULT_PATH = '/root/deployment-bina-comp/ai/obsidian';
-const SKILLS_PATH = '/root/deployment-bina-comp/.github/skills';
+const VAULT_PATH = '/root/deployment-hacohen/ai/obsidian';
+const SKILLS_PATH = '/root/deployment-hacohen/.github/skills';
 
 var obsidianBrainSkill = null;
 
@@ -92,7 +92,7 @@ export function buildObsidianBrainPrompt(userCommand) {
 
   var prompt = '[OBSIDIAN BRAIN SKILL — LOADED]\n';
   prompt += 'You have FULL access to the Obsidian Brain vault.\n';
-  prompt += 'The vault on the HOST is at /root/deployment-bina-comp/ai/obsidian/.\n';
+  prompt += 'The vault on the HOST is at /root/deployment-hacohen/ai/obsidian/.\n';
   prompt += 'In YOUR sandbox, the workspace is at /workspace/project/ so the vault is at /workspace/project/ai/obsidian/.\n';
   prompt += 'This is the AI\'s persistent cross-session memory system.\n\n';
   prompt += '## Vault Quick Reference\n';

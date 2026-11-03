@@ -56,13 +56,13 @@ fi
 q() { docker exec "${DB}" psql -U "${U}" -d postgres -tAc "$1" 2>/dev/null | tr -d '\r' | tr -d ' '; }
 for t in incoming_documents settings sync_ledger sync_cursor sync_pipe_state sync_attempt \
          companies drive_files ocr_cache business_documents chat_messages tag_rules; do
-  echo "FACT ${t} $(q "select count(*) from public.${t};")"
+  factq "${t}" "$(q "select count(*) from public.${t};")" "public.${t}"
 done
-echo "FACT public_tables $(q "select count(*) from information_schema.tables where table_schema='public';")"
+factq public_tables "$(q "select count(*) from information_schema.tables where table_schema='public';")"
 # On a tenancy estate these two read through public VIEWS (active instance only) — view-level,
 # non-authoritative. The per-schema shas below are the real comparison against backup's FACTs.
-echo "FACT documents_sha $(q "select md5(string_agg(\"ID\"::text||coalesce(\"STATUS\",''), '|' order by \"ID\")) from public.incoming_documents;")"
-echo "FACT settings_sha $(q "select md5(string_agg(key||'='||coalesce(value::text,''), '|' order by key, instance)) from public.settings;")"
+factq documents_sha "$(q "select coalesce(md5(string_agg(\"ID\"::text||coalesce(\"STATUS\",''), '|' order by \"ID\")), 'empty') from public.incoming_documents;")" public.incoming_documents
+factq settings_sha "$(q "select coalesce(md5(string_agg(key||'='||coalesce(value::text,''), '|' order by key, instance)), 'empty') from public.settings;")" public.settings
 # Same four invariants as backup's discovery block (fail CLOSED, plain top-level assignment,
 # escaped underscore, same-archive) — measured on the RESTORED instance so the driver's diff
 # compares real tenant tables, not views.
@@ -72,9 +72,9 @@ TENANT_SCHEMAS="$(docker exec "${DB}" psql -U "${U}" -d postgres -tAc \
   || { echo "[postgres/restore] tenant-schema enumeration FAILED — cannot verify the restored tenants" >&2; exit 1; }
 echo "FACT tenant_schemas $(printf '%s\n' ${TENANT_SCHEMAS} | grep -c . || true)"
 for s in ${TENANT_SCHEMAS}; do
-  echo "FACT ${s}_documents $(q "select count(*) from ${s}.incoming_documents;")"
-  echo "FACT ${s}_documents_sha $(q "select md5(string_agg(\"ID\"::text||coalesce(\"STATUS\",''), '|' order by \"ID\")) from ${s}.incoming_documents;")"
-  echo "FACT ${s}_action_log $(q "select count(*) from ${s}.indox_action_execution_log;")"
-  echo "FACT ${s}_settings $(q "select count(*) from ${s}.settings;")"
+  factq "${s}_documents" "$(q "select count(*) from ${s}.incoming_documents;")" "${s}.incoming_documents"
+  factq "${s}_documents_sha" "$(q "select coalesce(md5(string_agg(\"ID\"::text||coalesce(\"STATUS\",''), '|' order by \"ID\")), 'empty') from ${s}.incoming_documents;")" "${s}.incoming_documents"
+  factq "${s}_action_log" "$(q "select count(*) from ${s}.indox_action_execution_log;")" "${s}.indox_action_execution_log"
+  factq "${s}_settings" "$(q "select count(*) from ${s}.settings;")" "${s}.settings"
 done
 exit 0

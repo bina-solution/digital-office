@@ -14,11 +14,28 @@
 #   is_mobile    Playwright is_mobile: enables the mobile viewport meta + overlay scrollbars
 #   has_touch    exposes touch events, so hover-only affordances correctly do NOT appear
 #   cols         montage columns (wide desktop cells tile 2-up; narrow phone cells tile 4-up)
+#   user_agent   the navigator.userAgent the page sees (null = the browser's own). Every consumer
+#                passes it where it already passes the viewport: Playwright new_context(user_agent=…),
+#                CDP Emulation.setUserAgentOverride. WHY, below.
 #   note         why this profile exists — keep it honest, it drives what we design for
 #
 # The three below are deliberately the *breakpoint-defining* sizes, not a device catalogue:
 # 390 sits under the 820px mobile breakpoint, 834 sits between 820 and 1024 (the icon-rail
 # band), and 1440 is above 1024 (full sidebar). Together they exercise every responsive rule.
+#
+# user_agent — a viewport is not a phone. is_mobile/has_touch set the viewport meta, the overlay
+# scrollbars and the pointer, but Playwright and CDP leave navigator.userAgent as the headless
+# browser's own («Mozilla/5.0 (<the machine's OS>) … HeadlessChrome/134 …»), and apps decide "phone"
+# from the UA:
+# Plane tests /iPhone|iPad|iPod|Android/i, bina-ui's revo-grid /Mobi|Android/i (or maxTouchPoints).
+# Measured on the live office 2026-10-14 (DGO-576): the same screen at 390px with the desktop UA →
+# sidebar static, content 122px; with a phone UA → sidebar absolute, content 372px. So every 390px
+# capture of a UA-deciding app photographed the desktop branch, and an owner-reported bug stayed
+# unseen. The strings are Playwright 1.51's own device descriptors (deviceDescriptorsSource.json),
+# the ones it pairs with is_mobile/has_touch = true — not hand-typed: «Pixel 7» for the phone,
+# «Galaxy Tab S4» for the tablet (Chrome's tablet form: Android without the Mobile token). Both are
+# Chrome on Android because the capture browser IS Chromium: an iPhone/iPad string would promise
+# WebKit code paths this browser cannot honour. Desktop stays null — a headless Chromium already is one.
 
 profiles:
   mobile:
@@ -28,6 +45,7 @@ profiles:
     dsf: 3
     is_mobile: true
     has_touch: true
+    user_agent: "Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.6998.35 Mobile Safari/537.36"
     cols: 4
     note: >-
       iPhone 14/15 class. Below the 820px breakpoint: bottom tab bar, off-canvas drawers,
@@ -40,6 +58,7 @@ profiles:
     dsf: 2
     is_mobile: true
     has_touch: true
+    user_agent: "Mozilla/5.0 (Linux; Android 8.1.0; SM-T837A) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.6998.35 Safari/537.36"
     cols: 3
     note: >-
       iPad Air portrait. The in-between band (820–1024) where the console shows its icon rail
@@ -52,6 +71,7 @@ profiles:
     dsf: 1
     is_mobile: false
     has_touch: false
+    user_agent: null
     cols: 2
     note: >-
       Above 1024: full sidebar, multi-pane layouts, hover affordances live. The reference

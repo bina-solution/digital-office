@@ -187,6 +187,6 @@ All figures are ceilings computed from measured idle slot-time at 200s/document 
 ## Appendix: files and containers used
 
 - Tool: `scripts/ops/timeline-gaps.py`
-- n8n Postgres: `n8n-postgres-shlomo-laptop` (db `n8n`, user `bina-comp`) — `execution_entity`, `workflow_entity`
+- n8n Postgres: `n8n-postgres-shlomo-laptop` (db `n8n`, user `hacohen`) — `execution_entity`, `workflow_entity`
 - Ledger Postgres: `supabase-db-shlomo-laptop` (db `postgres`, user `postgres`) — `sync_ledger`, `sync_pipe_state` (currently empty — reset by a recent redeploy, not usable for historical queue-depth reconstruction either)
 - Schedule configs verified directly from `workflow_entity.nodes` JSON (not inferred): `Sync Scanner` = 15 min, `Sync v3 Reconcile` = 15 min, `Gmail Actions Scanner` = 3 min (configured, doesn't match observed), `Sync Ledger API` reaper = 5 min

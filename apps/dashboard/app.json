@@ -1,0 +1,63 @@
+{
+  "id": "dashboard",
+  "title": {
+    "he": "מרכז הבקרה",
+    "en": "Control centre"
+  },
+  "layer": 3,
+  "kind": "service",
+  "version": "0.1.0",
+  "summary": {
+    "he": "כל המחשבים של כל הלשכות עם נקודה ירוקה, ומה שעובדים עליו עכשיו",
+    "en": "Every computer of every office with its dot, and the work under way"
+  },
+  "capabilities": [],
+  "use": [
+    {
+      "capability": "identity",
+      "strength": "requires",
+      "after": true
+    }
+  ],
+  "connections": [],
+  "compose": "docker-compose.yml",
+  "agent": {
+    "context": "AGENT.md",
+    "order": 5
+  },
+  "routing": [
+    {
+      "host": "dashboard",
+      "port": 80,
+      "auth": "sso",
+      "emit_labels": true,
+      "module": {
+        "group": "תשתית",
+        "icon": "activity",
+        "embed": true,
+        "alias": "dashboard",
+        "id": "dashboard",
+        "name": "מרכז הבקרה",
+        "desc": "כל המחשבים, ירוקים או לא, ומה מתקדם",
+        "order": 1,
+        "url": "http://dashboard:80",
+        "url_env": "DASHBOARD_URL"
+      },
+      "sso": {
+        "slug": "dashboard",
+        "display_name": "Control centre",
+        "default_host": "dashboard.localhost",
+        "base_url_env": "DASHBOARD_BASE_URL",
+        "local_twin": true
+      }
+    }
+  ],
+  "data": {
+    "volumes": ["dashboard_state", "../../data/lan"],
+    "on_uninstall": "keep"
+  },
+  "resources": {
+    "cpus": "0.2",
+    "memory": "112M"
+  }
+}

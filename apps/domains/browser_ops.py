@@ -1,6 +1,6 @@
 """domains.browser_ops — HOW an abstract domain operation becomes browser actions.
 
-This is the layer the app was missing. `writeRecord(zone, A, www, 1.2.3.4)` is a sentence about
+This is the layer the app was missing. `writeRecord(zone, A, www, 93.184.216.7)` is a sentence about
 domains; a control panel knows nothing about it and offers buttons, labels and a table. Something has
 to translate, and that something is this file. It is deliberately NOT a pile of hardcoded selectors:
 

@@ -47,6 +47,8 @@ TEXT_KINDS = {"text", "richtext", "link", "handle", "list", "price-list", "hours
 INBOX = "media.inbox"
 
 app = FastAPI(title=SERVICE, docs_url=None, redoc_url=None, openapi_url=None)
+import gallery  # noqa: E402 — the Drive-backed gallery (gallery.py), before the catch-all routes
+app.include_router(gallery.router)
 
 
 def _err(message: str, status: int = 400, **extra) -> JSONResponse:
@@ -219,10 +221,16 @@ async def api_slot_create(request: Request):
     kind = body.get("kind") or "text"
     if kind not in blueprints.KINDS:
         return _err("סוג לא מוכר", 400)
+    # A slot may be born under a blueprint that declares its TYPE without listing it — a content
+    # piece under `content-article` — so the screen says where it belongs instead of «משבצת שלכם».
+    bid = body.get("blueprint") or None
+    if bid and bid not in blueprints.all_blueprints():
+        return _err("תבנית לא מוכרת", 400)
     s = store.upsert_slot({"key": key, "section": key.split(".")[0], "grp": key.split(".")[1],
                            "label": {"he": body.get("label") or key, "en": body.get("label_en") or key},
-                           "kind": kind, "targets": body.get("targets") or [],
-                           "constraints": body.get("constraints") or {}})
+                           "kind": kind, "lang": body.get("lang") or "", "brief": body.get("brief") or {},
+                           "targets": body.get("targets") or [],
+                           "constraints": body.get("constraints") or {}}, source=bid)
     store.event("slot", f"נוספה משבצת {_label(s)}", slot_key=key, actor=_actor(request, body))
     return s
 

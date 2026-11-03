@@ -58,7 +58,8 @@ param(
     [switch]$HostFacts,
     [string]$Distro   = 'Ubuntu',
     [string]$TaskName = 'Platform-OS-Keepalive',
-    [int]$MinContainers = 20
+    [int]$MinContainers = 20,
+    [int]$MinFreeGB = 20
 )
 
 $ErrorActionPreference = 'Stop'
@@ -142,9 +143,17 @@ function Install-Task {
     # is a GUI-subsystem binary and WScript.Shell.Run(cmd, 0, True) never creates a window at all.
     # The True makes it block for the child's lifetime, so the task stays Running and
     # MultipleInstances=IgnoreNew still guards against duplicate anchors.
-    $vbs = Join-Path (Split-Path $PSCommandPath -Parent) 'hidden-run.vbs'
-    $action = New-ScheduledTaskAction -Execute 'wscript.exe' `
-        -Argument ('//B //Nologo "' + $vbs + '" wsl.exe -d ' + $Distro + ' -u root -e /bin/sleep infinity')
+    #
+    # SINCE 2026-10-15: conhost.exe --headless, and hidden-run.vbs is gone. VBScript is being retired
+    # from Windows (this machine logged a VBScriptDeprecationAlert every 12 minutes, one per launch), and
+    # a keepalive that stops launching the day it is switched off takes the office down with it.
+    # conhost --headless hosts the console application with no window at all, and lives exactly as long
+    # as it - the three things hidden-run.vbs gave, measured under Task Scheduler with this task's
+    # principal (DGO-625): the task is Running for the child's whole life, the child's exit code is the
+    # task's result, no visible window is owned by either process, and a second start is ignored
+    # (IgnoreNew) - so the duplicate guard still holds.
+    $action = New-ScheduledTaskAction -Execute 'conhost.exe' `
+        -Argument ('--headless wsl.exe -d ' + $Distro + ' -u root -e /bin/sleep infinity')
 
     # Delays are load-bearing, measured 2026-08-12 on a real reboot:
     #   11:40:27 Windows booted
@@ -224,7 +233,6 @@ function Install-Task {
 
 function Install-CompanionTasks {
     $ps = (Get-Command powershell.exe).Source
-    $vbs = Join-Path (Split-Path $PSCommandPath -Parent) 'hidden-run.vbs'
     $principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" `
         -LogonType Interactive -RunLevel Limited
 
@@ -239,8 +247,8 @@ function Install-CompanionTasks {
         $evt.Subscription = $xpath
         $evt.Enabled = $true
 
-        $act = New-ScheduledTaskAction -Execute 'wscript.exe' `
-            -Argument ('//B //Nologo "' + $vbs + '" "' + $ps + '" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + $PSCommandPath + '" -Shutdown -Distro ' + $Distro)
+        $act = New-ScheduledTaskAction -Execute 'conhost.exe' `
+            -Argument ('--headless "' + $ps + '" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + $PSCommandPath + '" -Shutdown -Distro ' + $Distro)
         # Short limit: if we have not finished in 60s the machine is going down anyway.
         $set = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
             -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Seconds 60)
@@ -254,8 +262,8 @@ function Install-CompanionTasks {
 
     # --- health check every 5 minutes, alerts on TRANSITION only ---
     try {
-        $act2 = New-ScheduledTaskAction -Execute 'wscript.exe' `
-            -Argument ('//B //Nologo "' + $vbs + '" "' + $ps + '" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + $PSCommandPath + '" -HealthCheck -Distro ' + $Distro)
+        $act2 = New-ScheduledTaskAction -Execute 'conhost.exe' `
+            -Argument ('--headless "' + $ps + '" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + $PSCommandPath + '" -HealthCheck -Distro ' + $Distro)
         $t2 = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(5) `
                 -RepetitionInterval (New-TimeSpan -Minutes 5)
         $set2 = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
@@ -314,24 +322,40 @@ function Invoke-GracefulShutdown {
     # shutdown the way it waits for Group Policy shutdown scripts. Triggering on System event 1074
     # (shutdown initiated) buys a head start, usually a few seconds, before the axe falls. So the
     # order below matters more than completeness: stop the WRITERS first so the databases stop
-    # receiving work, then checkpoint the databases. If we only get through step 1 we have still
-    # reduced the damage; if we get through step 2 we have eliminated it.
-    Write-Log "SHUTDOWN signal - stopping stack gracefully (best effort)"
+    # receiving work, then checkpoint the databases. (That order was the first version's; see below for
+    # why it stops nothing now.)
+    #
+    # SINCE 2026-10-15 (DGO-634): a CHECKPOINT in each of this office's Postgres servers, and nothing is
+    # stopped. The first version stopped containers by name - n8n-postgres-shlomo-laptop and its
+    # neighbours, another deployment's names, so on this office it stopped nothing - and stopping is the
+    # wrong tool anyway: `docker stop` marks a container manually stopped, and restart: unless-stopped then
+    # leaves it DOWN after the very reboot it was stopped for. A CHECKPOINT writes every dirty page now, so
+    # the crash recovery after the axe falls has almost nothing to replay, and no container changes state.
+    # The servers are found by IMAGE (postgres, supabase/postgres - not postgres-meta, not postgrest), and
+    # only among the containers THIS checkout's compose project runs: the engine also carries a
+    # neighbour's stack, whose databases are its own business. Measured on hp-laptop: four servers
+    # (n8n, supabase, plane, authentik), each answered CHECKPOINT; the neighbour's was left out.
+    Write-Log "SHUTDOWN signal - a CHECKPOINT in every Postgres of this office (best effort)"
     $sw = [Diagnostics.Stopwatch]::StartNew()
-
-    # 1. writers first - n8n main and workers stop enqueueing and executing
-    & wsl.exe -d $Distro -u root -e docker -H unix:///run/bbox-docker.sock stop -t 8 `
-        n8n-shlomo-laptop n8n-worker-1-shlomo-laptop n8n-worker-2-shlomo-laptop 2>&1 | Out-Null
-    Write-Log "  writers stopped at $($sw.Elapsed.TotalSeconds.ToString('0.0'))s"
-
-    # 2. databases - SIGTERM makes postgres do a fast shutdown WITH a checkpoint, which is exactly
-    #    what avoids crash recovery. This is the step that actually matters.
-    & wsl.exe -d $Distro -u root -e docker -H unix:///run/bbox-docker.sock stop -t 15 `
-        n8n-postgres-shlomo-laptop supabase-db-shlomo-laptop 2>&1 | Out-Null
-    Write-Log "  databases checkpointed at $($sw.Elapsed.TotalSeconds.ToString('0.0'))s"
-
+    $repo = Split-Path (Split-Path (Split-Path $PSCommandPath -Parent) -Parent) -Parent
+    $wd   = '/mnt/' + $repo.Substring(0, 1).ToLower() + ($repo.Substring(2) -replace '\\', '/')
+    $dbs  = @()
+    try {
+        $rows = & wsl.exe -d $Distro -u root -e docker -H unix:///run/bbox-docker.sock ps `
+                  --filter "label=com.docker.compose.project.working_dir=$wd" --format '{{.Names}} {{.Image}}' 2>$null
+        $dbs = @($rows | Where-Object { $_ -match '^\S+ (\S+/)?postgres:\S+$' } | ForEach-Object { ($_ -split ' ')[0] })
+    } catch { Write-Log "  could not list the databases: $_" }
+    foreach ($c in $dbs) {
+        try {
+            $r = & wsl.exe -d $Distro -u root -e docker -H unix:///run/bbox-docker.sock exec $c `
+                    sh -c 'psql -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-${POSTGRES_USER:-postgres}} -tAc CHECKPOINT' 2>&1
+            Write-Log ("  {0}: {1} at {2}s" -f $c, (($r | Out-String).Trim()), $sw.Elapsed.TotalSeconds.ToString('0.0'))
+        } catch {
+            Write-Log ("  {0}: failed - {1}" -f $c, $_)
+        }
+    }
     $sw.Stop()
-    Write-Log "SHUTDOWN complete in $($sw.Elapsed.TotalSeconds.ToString('0.0'))s"
+    Write-Log "SHUTDOWN checkpointed $($dbs.Count) database(s) in $($sw.Elapsed.TotalSeconds.ToString('0.0'))s"
 }
 
 function Write-HostFacts {
@@ -381,13 +405,33 @@ function Invoke-HealthCheck {
     # Reports on TRANSITION, not on every tick - an alert that fires every 5 minutes is an alert
     # nobody reads.
     $stateFile = Join-Path $LogDir 'health.state'
-    $prev = if (Test-Path $stateFile) { (Get-Content $stateFile -Raw).Trim() } else { 'unknown' }
+    # READ DEFENSIVELY. Measured 2026-10-15 (DGO-625): the real state file had been EMPTY since
+    # 2026-08-31 19:01 - written in the minute the machine went down, so its bytes never reached the
+    # disk - and (Get-Content -Raw) of an empty file is $null, whose .Trim() is a terminating error.
+    # Every tick for 45 days died on that line, before it could rewrite the file: the office had no
+    # health alert at all, the three-hour WSL outage of that morning included. A state that cannot be
+    # read is 'unknown', never a reason to stop checking.
+    $prev = 'unknown'
+    try {
+        if (Test-Path $stateFile) {
+            $raw = Get-Content $stateFile -Raw -ErrorAction Stop
+            if ($raw -and $raw.Trim()) { $prev = $raw.Trim() }
+        }
+    } catch { }
 
-    $count = 0; $execs = 0; $why = ''
+    $count = 0; $execs = -1; $why = ''
     try {
         $count = Get-ContainerCount
+        # THE PIPELINE, WHERE THIS OFFICE HAS ONE. Its database is found by its compose SERVICE, not by a
+        # container name: a name carries the deployment (this file asked for n8n-postgres-shlomo-laptop
+        # until 2026-10-15, on an office whose containers end in -hp, so every tick would have read
+        # "No such container" as a failed check), and an office that does not run n8n has no pipeline
+        # to stall.
+        $db = @(& wsl.exe -d $Distro -u root -e docker -H unix:///run/bbox-docker.sock ps -q `
+                  --filter label=com.docker.compose.service=n8n-postgres 2>&1 |
+                Where-Object { $_ -match '^[0-9a-f]{6,}$' }) | Select-Object -First 1
         if ($count -lt $MinContainers) { $why = "only $count containers running (expected >= $MinContainers)" }
-        else {
+        elseif ($db) {
             # The column is camelCase, so Postgres REQUIRES double quotes around it - unquoted it
             # folds to "startedat" and errors. Those quotes have to survive PowerShell AND wsl.exe,
             # so they are backslash-escaped here. Measured failure without this:
@@ -396,28 +440,53 @@ function Invoke-HealthCheck {
             # the checker, not the stack. Worth keeping the fail-loud behaviour, but not the bug.
             $q = 'select count(*) from execution_entity where \"startedAt\" > now() - interval ''15 minutes'';'
             $r = & wsl.exe -d $Distro -u root -e docker -H unix:///run/bbox-docker.sock `
-                    exec -i n8n-postgres-shlomo-laptop psql -U bina-comp -d n8n -t -A -c $q 2>&1
+                    exec -i $db psql -U hacohen -d n8n -t -A -c $q 2>&1
             $execs = [int](($r | Where-Object { $_ -match '^\s*\d+\s*$' } | Select-Object -First 1))
             # Zero executions in 15 minutes with a healthy container count means the stack is UP but
             # the pipeline is DEAD - the failure mode that looks fine to every container-level check.
             if ($execs -eq 0) { $why = "stack is up ($count containers) but ZERO executions in 15 min - pipeline stalled" }
+        }
+        # THE HOST'S DISK (DGO-625, measured 2026-10-15): the office stopped because C: filled. WSL's
+        # ext4.vhdx grows into the host's free space and does not give it back by itself, and with 2.3 GB
+        # left the VM was stopped from outside - three hours down, while this check (dead since August)
+        # said nothing. Below the floor the check is unhealthy BEFORE the office stops.
+        $freeGB = [math]::Round((Get-PSDrive -Name C).Free / 1GB, 1)
+        if (-not $why -and $freeGB -lt $MinFreeGB) {
+            $why = "C: has only $freeGB GB free (floor $MinFreeGB GB) - WSL's disk grows into it, and the office stops when it is full"
+        }
+        # THE VM'S MEMORY (DGO-625): every new wsl.exe session needs a 512 KB contiguous ring buffer (an
+        # order-7 allocation, vmbus_alloc_ring). When the VM's memory is fragmented the kernel logs
+        # "page allocation failure" and the new session times out (Wsl/Service/0x8007274c): the office
+        # keeps running, but nothing new can reach it. Counted over the last tick, from the kernel's log.
+        $frag = & wsl.exe -d $Distro -u root -e sh -c "journalctl -k --since '-6 min' --no-pager 2>/dev/null | grep -c 'page allocation failure'" 2>&1
+        $fails = [int](($frag | Where-Object { $_ -match '^\s*\d+\s*$' } | Select-Object -First 1))
+        if (-not $why -and $fails -gt 0) {
+            $why = "the WSL kernel failed $fails memory allocation(s) in 6 min - new wsl.exe sessions time out (0x8007274c) while the office runs"
         }
     } catch {
         $why = "health check itself failed: $_"
     }
 
     $now = if ($why) { 'unhealthy' } else { 'healthy' }
-    Set-Content -Path $stateFile -Value $now -Encoding utf8
+    # WRITTEN THROUGH A TEMPORARY FILE, so a machine that goes down mid-write leaves the previous state
+    # or none - never the empty file that silenced this check for 45 days.
+    $tmp = $stateFile + '.tmp'
+    Set-Content -Path $tmp -Value $now -Encoding utf8
+    Move-Item -Path $tmp -Destination $stateFile -Force
 
+    $pipe = if ($execs -ge 0) { "$execs executions in 15 min" } else { 'no n8n pipeline on this office' }
     if ($now -ne $prev) {
         if ($now -eq 'unhealthy') {
             Write-Log "ALERT  $why"
             Write-EventLogEntry -Level Warning -Message "INDOX platform UNHEALTHY: $why"
             Show-Toast -Title 'INDOX platform is DOWN' -Body $why
+        } elseif ($prev -eq 'unknown') {
+            # A first look is not a recovery: nothing was reported down, so nothing is announced.
+            Write-Log "FIRST CHECK  healthy - $count containers, $pipe"
         } else {
-            Write-Log "RECOVERED  $count containers, $execs executions in 15 min"
-            Write-EventLogEntry -Level Information -Message "INDOX platform recovered: $count containers, $execs executions/15min"
-            Show-Toast -Title 'INDOX platform recovered' -Body "$count containers, $execs executions in 15 min"
+            Write-Log "RECOVERED  $count containers, $pipe"
+            Write-EventLogEntry -Level Information -Message "INDOX platform recovered: $count containers, $pipe"
+            Show-Toast -Title 'INDOX platform recovered' -Body "$count containers, $pipe"
         }
     }
 }

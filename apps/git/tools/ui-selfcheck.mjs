@@ -1,6 +1,7 @@
 /* ui-selfcheck.mjs — the parts of the browser app that can be PROVEN without a browser.
  *
- * Why this exists. The screen is vanilla JS driven by hash routes, and its historical defects were
+ * Why this exists. The screen is vanilla JS driven by its address (the path under its mount since
+ * G83; an old `#/` link still lands), and its historical defects were
  * pure-logic bugs a screenshot would have shown as "the page is empty": a router that rejoined a
  * repository name out of the wrong segments, a branch picker that threw its own choice away, a menu
  * mounted into an element the console also owns. None of those need a browser — they need the
@@ -45,9 +46,21 @@ function el(id) {
   }
   return els.get(id);
 }
+/* The address, as a browser holds it (G83, DGO-1040): the page is served at a MOUNT — `/` on its own
+ * host, `/a/<module>/` framed by the console — the screen is the path under it, and go() writes it with
+ * pushState. So the stub carries what the app reads: baseURI, pathname, search, hash, and a history. */
+const MOUNT = '/a/git-accounts/';
 const document = {
   getElementById: (id) => el(id), querySelector: () => null, querySelectorAll: () => [],
   createElement: () => el(''), addEventListener() {}, body: el('body'), title: '',
+  baseURI: 'http://console.localhost:8080' + MOUNT,
+};
+const location = { pathname: MOUNT, search: '', hash: '#/', reload() {} };
+const history = {
+  pushState(_state, _title, url) {
+    const u = new URL(url, document.baseURI);
+    location.pathname = u.pathname; location.search = u.search; location.hash = u.hash;
+  },
 };
 const mainHtml = () => (els.get('main') || {}).innerHTML || '';
 
@@ -80,10 +93,10 @@ const ANSWERS = {
   ] },
   'api/mirrors': { ok: true, forge: 'http://forge.example:8080', interval_seconds: 900,
     guards: { max_bytes: 2147483648, min_free_mb: 2048 }, mirrors: [
-      { id: 'm1', source_account: 'a1', source_repo: 'solomonBoltin/deployment-bina-comp',
-        target_owner: 'office', target_repo: 'deployment-bina-comp', last_status: 'ok',
+      { id: 'm1', source_account: 'a1', source_repo: 'solomonBoltin/deployment-hacohen',
+        target_owner: 'office', target_repo: 'deployment-hacohen', last_status: 'ok',
         last_run: Math.floor(Date.now() / 1000) - 150, bytes: 1324000000,     // unix seconds, as mirrors.py writes it
-        browse_url: 'http://forge.example:8080/office/deployment-bina-comp' },
+        browse_url: 'http://forge.example:8080/office/deployment-hacohen' },
       { id: 'm2', source_account: 'a1', source_repo: 'solomonBoltin/broken-repo',
         target_owner: 'office', target_repo: 'broken-repo', last_status: 'error',
         last_error: 'GIT_MIRROR_MAX_BYTES exceeded', browse_url: 'http://forge.example:8080/office/broken-repo' }] },
@@ -119,7 +132,7 @@ const navIds = (which) => {
 };
 const sandbox = {
   BinaNav,
-  document, window: { addEventListener() {}, open(...a) { opened.push(a); } }, location: { hash: '#/', reload() {} },
+  document, window: { addEventListener() {}, open(...a) { opened.push(a); } }, location, history, URL,
   fetch: async (path, opt) => {
     calls.push({ path, method: (opt && opt.method) || 'GET', body: opt && opt.body });
     const key = String(path);
@@ -155,12 +168,28 @@ function truthy(name, got) {
 const has = (hay, needle) => String(hay).includes(needle);
 
 /* ── the router: two routes, and the query string must not become part of a segment ─────────────── */
-function route(hash) { sandbox.location.hash = hash; return X.parseHash(); }
-is('route: #/mirrors', route('#/mirrors').parts, ['mirrors']);
-is('route: #/accounts', route('#/accounts').parts, ['accounts']);
-is('route: the empty hash is the accounts screen', route('#/').parts, []);
-is('route: a trailing slash adds no empty segment', route('#/mirrors/').parts, ['mirrors']);
-is('route: a query is parsed, not glued to a segment', route('#/mirrors?x=1').q.get('x'), '1');
+/** at('mirrors?x=1'): the address a screen has — the path under the mount, as go() writes it */
+function at(path) {
+  const [p, q] = path.split('?');
+  location.pathname = MOUNT + p; location.search = q ? '?' + q : ''; location.hash = '';
+  return X.parseHash();
+}
+is('address: /mirrors under the mount', at('mirrors').parts, ['mirrors']);
+is('address: /accounts under the mount', at('accounts').parts, ['accounts']);
+is('address: the mount itself is the accounts screen', at('').parts, []);
+is('address: a trailing slash adds no empty segment', at('mirrors/').parts, ['mirrors']);
+is('address: a query is parsed, not glued to a segment', at('mirrors?x=1').q.get('x'), '1');
+document.baseURI = 'http://git.localhost:8080/';            // the app on its own host: the mount is "/"
+location.pathname = '/mirrors'; location.hash = '';
+is('address: on its own host, /mirrors is the mirrors screen', X.parseHash().parts, ['mirrors']);
+document.baseURI = 'http://console.localhost:8080' + MOUNT;
+/* an old link — `#/mirrors` on the mount — still lands on its screen */
+function route(hash) { location.pathname = MOUNT; location.search = ''; location.hash = hash; return X.parseHash(); }
+is('old link: #/mirrors', route('#/mirrors').parts, ['mirrors']);
+is('old link: #/accounts', route('#/accounts').parts, ['accounts']);
+is('old link: the empty hash is the accounts screen', route('#/').parts, []);
+is('old link: a trailing slash adds no empty segment', route('#/mirrors/').parts, ['mirrors']);
+is('old link: a query is parsed, not glued to a segment', route('#/mirrors?x=1').q.get('x'), '1');
 
 /* ── helpers, with the inputs the service really produces ───────────────────────────────────────── */
 is('esc: null is empty', X.esc(null), '');
@@ -256,7 +285,7 @@ X.renderAccounts(ANSWERS.providers.providers);
 truthy('accounts: the list carries no title of its own — the page names it, the menu counts it',
        !has(mainHtml(), '<h2>חשבונות</h2>') && has(mainHtml(), '<h2>חיבור חשבון חדש</h2>'));
 X.S.accounts = [
-  { id: 't1', account_hint: 'Solomon@github.com', label: 'GitHub — solomon', provider: 'github', state: 'unknown' },
+  { id: 't1', account_hint: 'person41@example.com', label: 'GitHub — solomon', provider: 'github', state: 'unknown' },
   { id: 't2', login: 'solomon', label: 'my github', provider: 'github', state: 'ok' },
   { id: 't3', login: 'solomon', label: 'GitLab — solomon', provider: 'gitlab', state: 'ok' }];
 X.renderAccounts(ANSWERS.providers.providers);
@@ -288,7 +317,7 @@ truthy('wizard: an ltr field is marked dir="ltr" (a token typed into an RTL box 
 /* ── the mirrors screen ─────────────────────────────────────────────────────────────────────────── */
 await X.viewMirrors();
 const mir = mainHtml();
-truthy('mirrors: the mirrored repository is listed', has(mir, 'solomonBoltin/deployment-bina-comp'));
+truthy('mirrors: the mirrored repository is listed', has(mir, 'solomonBoltin/deployment-hacohen'));
 truthy('mirrors: a synced mirror reads as synced', has(mir, 'מסונכרן'));
 truthy('mirrors: …and says when, before its size — never a separator with nothing before it',
        /לפני [23] דק׳ · 1\.23GB/.test(mir) && !/<span> · /.test(mir));
@@ -296,7 +325,7 @@ truthy('mirrors: a failed one says so in Hebrew — never the bare "error" or "n
        has(mir, 'הסנכרון נכשל') && !has(mir, '>error<') && !has(mir, '>new<'));
 truthy('mirrors: the list carries no title of its own either', !has(mir, '<h2>מראות</h2>'));
 truthy('one spelling of the forge on the screen', !has(mir, 'פורג׳') && !has(acc, 'פורג׳'));
-truthy('mirrors: its copy in the forge is named', has(mir, 'office/deployment-bina-comp'));
+truthy('mirrors: its copy in the forge is named', has(mir, 'office/deployment-hacohen'));
 truthy('mirrors: sync and remove are offered per row',
        has(mir, 'data-sync="m1"') && has(mir, 'data-del="m1"'));
 truthy('mirrors: a failed sync shows its reason, not a bare "error"',
@@ -308,7 +337,7 @@ truthy('mirrors: the forge origin comes from the service, not from a hardcoded h
 truthy('mirrors: the "open the forge" link points at that origin',
        has(mir, 'href="http://forge.example:8080"') && has(mir, 'id="open-forge"'));
 truthy('mirrors: the row deep-links into the forge copy',
-       has(mir, 'href="http://forge.example:8080/office/deployment-bina-comp"'));
+       has(mir, 'href="http://forge.example:8080/office/deployment-hacohen"'));
 truthy('mirrors: the automatic sync interval is stated, in minutes', has(mir, 'כל 15 דק׳'));
 truthy('mirrors: declaring one needs a source account and an owner/repo',
        has(mir, 'id="m-acct"') && has(mir, 'id="m-repo"') && has(mir, 'owner/repo'));
@@ -331,20 +360,24 @@ truthy('router: #/ lands on accounts, and the menu says so',
 
 /* a pick in the menu moves the app — the declaration is not decoration */
 const mountsBefore = navMounts.length;
-sandbox.location.hash = '#/accounts';
+at('accounts');
 lastNav().cfg.onPick('mirrors');
-is('pick: the mirrors row routes to the mirrors screen', sandbox.location.hash, '#/mirrors');
+is('pick: the mirrors row routes to the mirrors screen — its address', location.pathname + location.hash, MOUNT + 'mirrors');
 lastNav().cfg.onPick('mirror:m1');
-is('pick: a mirror row goes to the screen that owns it', sandbox.location.hash, '#/mirrors');
+is('pick: a mirror row goes to the screen that owns it', location.pathname + location.hash, MOUNT + 'mirrors');
 lastNav().cfg.onPick('accounts');
-is('pick: the accounts row routes back', sandbox.location.hash, '#/accounts');
+is('pick: the accounts row routes back', location.pathname + location.hash, MOUNT + 'accounts');
+/* The pick itself: go() draws the screen, and the menu stays the one that was picked from. (The screens
+   then re-read the service; a declaration that really changed may remount by design — renderNav — and
+   this file's canned lists do change: 2 accounts cheap, 3 probed.) */
 is('pick: a pick never remounts the menu (a phone drawer must not slam shut)', navMounts.length, mountsBefore);
+await flush();
 /* …and the mirrors are rows in it, with the state the service reported */
 X.S.loaded = false;
 await X.viewMirrors();
 is('menu: the declared mirrors are rows', navIds('mirrors'), ['mirror:m1', 'mirror:m2']);
 const mrow = lastNav().cfg.sections.find((x) => x.id === 'mirrors').items[0];
-truthy('menu: a row carries the repository and its state', has(mrow.label, 'deployment-bina-comp')
+truthy('menu: a row carries the repository and its state', has(mrow.label, 'deployment-hacohen')
        && mrow.meta === 'מסונכרן');
 truthy('menu: a failed sync is the only thing that earns a badge',
        lastNav().cfg.sections.find((x) => x.id === 'mirrors').items[1].badge === '!');

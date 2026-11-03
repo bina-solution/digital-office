@@ -1,0 +1,90 @@
+name: go-test
+
+# The office's native binaries are tested on every push and pull request, not only on a release tag.
+# Until this workflow, `go test` ran in release-binaries.yml alone (a v* tag or a manual dispatch), so
+# a Go change that broke a test could sit on a branch unseen until the next release (plan step 0,
+# ai/context/dgo-architecture-2026.md §6, DGO-594).
+#
+# packaging/dgo's tests include ORACLE tests: they run platform/manager/reconcile.py (and the other
+# Python originals a slice ports) beside the Go code on the same input and require identical answers.
+# They skip themselves when no Python with PyYAML is on PATH, which on a runner would read as a pass
+# while proving nothing — so PyYAML and Flask are ensured first, and a skipped oracle fails the job.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+# A run is never cancelled by a newer push: one runs, and only the NEWEST push waits behind it (GitHub
+# replaces a pending run of the group with the next one). Cancelling kept mac-dgo with no result at all —
+# measured 2026-11-02, 20:39–20:49Z: five pushes in ten minutes, every run cancelled, against a run of
+# ~20 min, so no Go change on the branch was ever tested (r030-003). The Dell runs as many as before.
+concurrency:
+  group: go-test-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: [self-hosted, portable]
+    timeout-minutes: 75   # 30 for the job + up to 45 that ops/prejob_waitfree.sh may hold it (memory, heat, a fresh boot)
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [packaging/trust, packaging/dgo, packaging/installer, packaging/relsign, platform-base/forward-auth]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: false   # stdlib-only modules: no go.sum, nothing to cache
+
+      # The oracles compare the Go code with CPython 3.12's exact answers — refusal messages, nesting and
+      # digit limits, address tables. The runner's own python3 is Ubuntu 26.04's, newer, and an
+      # interpreter that is not 3.12 answers some inputs differently: in WSL's 3.10, five oracle cases
+      # of the compiler lanes differ (2026-10-15), and the net lane requires 3.12.4 or later. A red that
+      # is the interpreter's and not the port's proves nothing, so the interpreter is pinned.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # The console image's own declaration, as release-binaries.yml installs it: PyYAML, Flask, werkzeug,
+      # flask-compress and requests, pinned as the image has them — the console's oracle needs the last
+      # three, and under DGO_ORACLE_REQUIRED a clean tool cache would fail it on the first missing one.
+      - name: The oracles' Python (the console image's requirements.txt)
+        run: python3 -m pip install --quiet -r platform-base/console/requirements.txt
+
+      - name: vet + gofmt — ${{ matrix.module }}
+        working-directory: ${{ matrix.module }}
+        run: |
+          set -euo pipefail
+          go vet ./...
+          unformatted="$(gofmt -l .)"
+          if [ -n "${unformatted}" ]; then echo "::error::not gofmt-formatted: ${unformatted}"; exit 1; fi
+
+      - name: test — ${{ matrix.module }}
+        working-directory: ${{ matrix.module }}
+        env:
+          # The oracles FAIL instead of skipping when what they compare against is missing (Python,
+          # PyYAML, Flask, the checkout's state file) — the skip below is the second guard, not the first.
+          DGO_ORACLE_REQUIRED: "1"
+        run: |
+          set -euo pipefail
+          # The compiler's oracle package takes 5–11 minutes on a loaded machine (measured 2026-10-15: 685 s
+          # on Windows, 678 s in WSL) — past go test's default 10-minute timeout, which would read as a hang.
+          # -p 2: two packages at a time, not one per CPU. On the Dell (an i7-5500U laptop, 4 threads) the full
+          # width ran the package to 96°C and froze it (DGO-1122, 2026-11-02); the wall time is the oracle
+          # package's own, so halving the width costs little.
+          go test -p 2 -count=1 -timeout 20m -v ./... 2>&1 | tee "${RUNNER_TEMP}/go-test.log"
+          # An oracle that skipped proved nothing: the job fails instead of reading as green — known by
+          # its name (…MatchesPython), or by its reason, which -v prints on a line BEFORE the skip: serve's
+          # and engine's oracles skip as "no python with … on PATH" / "no python3 here" under names that
+          # say neither (the second reader of 3158af77..ce975f56, DGO-1038).
+          if grep -E -- '--- SKIP' "${RUNNER_TEMP}/go-test.log" | grep -qiE 'python|pyyaml|flask' \
+             || grep -qE '_test\.go:[0-9]+: no python' "${RUNNER_TEMP}/go-test.log"; then
+            echo "::error::an oracle test skipped — the Python it compares against was not found"
+            exit 1
+          fi

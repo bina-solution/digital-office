@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+#: whois <domain> — ONE live query of the public registry (never in a loop; `show` has the last watched record):  ./bbox domains whois example.co.il
+# Pipes the app's own CLI (apps/domains/cli.py) into its container: no address, no key, no rebuild.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+case "${1:-}" in -h|--help|"") sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+dcx exec -T domains python - whois "$@" < "$(npath "${REPO_ROOT}")/apps/domains/cli.py"

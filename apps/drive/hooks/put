@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+#: put — a local file into «קבצים»:  ./bbox drive put ./doc.pdf /מסמכים/   (a path ending in / keeps the name; --replace)
+# Folders on the way are created. An existing name is kept and the new file is called «name (2)»,
+# unless --replace (which moves the old one to the trash).
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+case "${1:-}" in ""|-h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+src="$1"; dest="${2:-/}"; shift 2 2>/dev/null || shift
+[ -f "${src}" ] || die "[drive] no such file: ${src}"
+case "${dest}" in */) dest="${dest}$(basename "${src}")" ;; esac
+dcx exec -T drive python /app/cli.py put "${dest}" "$@" < "${src}"

@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+#: status [--json] — is Claude up, and which account is it signed in with:  ./bbox bina-claude status
+# Asks the app's own agent.v1 health (no token needed) from inside its container: no address, no key.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+JSON=0; [ "${1:-}" = "--json" ] && JSON=1
+dcx exec -T -e JSON="${JSON}" bina-claude node -e '
+fetch("http://127.0.0.1:3091/v1/health?deep=1").then(r => r.json()).then(h => {
+  if (process.env.JSON === "1") { console.log(JSON.stringify(h)); return; }
+  const l = h.login || {};
+  console.log(`bina-claude ${h.version} · ${h.harness} · up ${h.uptime_s}s · ${h.sessions} sessions · ${h.active}/${h.max_turns} turns running`);
+  console.log(l.logged_in
+    ? `signed in: ${l.method}${l.subscription ? " (" + l.subscription + ")" : ""}${l.expires_at ? " · token until " + l.expires_at : ""}`
+    : `NOT signed in — ${l.how}`);
+  process.exit(l.logged_in ? 0 : 3);
+}).catch(e => { console.error("the adapter does not answer: " + e.message); process.exit(1); });'

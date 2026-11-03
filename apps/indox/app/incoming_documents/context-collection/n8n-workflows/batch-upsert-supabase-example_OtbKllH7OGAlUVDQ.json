@@ -1002,44 +1002,7 @@
   },
   "staticData": null,
   "meta": null,
-  "pinData": {
-    "When Executed by Another Workflow": [
-      {
-        "json": {
-          "NAME": "test1",
-          "COMPANY_ID": 638709840,
-          "SHORT_DOC_ID": "12345",
-          "AI_COMPANY_ID": "512663543",
-          "AI_TYPE": "INVOICE",
-          "AI_DOC_ID": "34983",
-          "AI_DOC_DATE": "18/02/2026",
-          "AI_DOC_AMOUNT": "2,435.00",
-          "AI_SHIPMENT_IDS": [
-            "32886"
-          ],
-          "AI_ORDER_IDS": "30541",
-          "AI_EXTRACTION_COMPLETED": true
-        }
-      },
-      {
-        "json": {
-          "NAME": "test2",
-          "COMPANY_ID": 6387098420,
-          "SHORT_DOC_ID": "12346",
-          "AI_COMPANY_ID": "512663543",
-          "AI_TYPE": "INVOICE",
-          "AI_DOC_ID": "34983",
-          "AI_DOC_DATE": "18/02/2026",
-          "AI_DOC_AMOUNT": "2,435.00",
-          "AI_SHIPMENT_IDS": [
-            "32886"
-          ],
-          "AI_ORDER_IDS": "30541",
-          "AI_EXTRACTION_COMPLETED": true
-        }
-      }
-    ]
-  },
+  "pinData": {},
   "versionId": "13ea92f5-a19e-47ac-a2e5-eb9435ea9983",
   "activeVersionId": null,
   "versionCounter": 5,

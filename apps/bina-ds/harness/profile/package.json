@@ -6,6 +6,7 @@
     "@deepseek-ai/dsh": "0.1.6-alpha.1",
     "@bina/dsh-client-locale-he": "file:../../plugins/locale-he",
     "@bina/dsh-client-ui-brand-bina": "file:../../plugins/brand-bina",
+    "@bina/dsh-client-ui-nav-collapse": "file:../../plugins/nav-collapse",
     "@bina/dsh-client-session-link": "file:../../plugins/session-link",
     "@bina/dsh-office-workspace": "file:../../plugins/office-workspace",
     "@bina/dsh-office-context": "file:../../plugins/office-context",

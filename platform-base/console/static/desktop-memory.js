@@ -26,6 +26,10 @@
   const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  // ONE IS SAID AS ONE (DGO-530): a count of one is its own sentence — «טבלה · 1 פריטים» is not
+  // Hebrew — and any other count is the number with the plural. The rule is written out in app.js.
+  const num = n => Number(n).toLocaleString("he-IL");
+  const one = (n, single, many) => (Number(n) === 1 ? single : `${num(n)} ${many}`);
   const hm = t => new Date(t).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" });
   const dur = ms => { const m = Math.round(ms / 60000); return m < 1 ? "פחות מדקה" : m < 60 ? m + " דק׳" : Math.floor(m / 60) + ":" + String(m % 60).padStart(2, "0") + " שע׳"; };
   const placeOf = w => (w && !w.native ? w.mid + (w.route || "") : null);
@@ -190,7 +194,7 @@
       const src = it.src && it.src.mid ? '<button type="button" class="src" data-src="1" title="פתיחת המקור">' + iconOf(it.src.mid) + esc(nameOf(it.src.mid)) + "</button>"
         : it.src && it.src.kind === "os" ? '<span class="src">מהמחשב</span>' : it.src && it.src.kind === "clip" ? '<span class="src">מההדבקה</span>' : "";
       row.innerHTML = '<span class="ic">' + wm.icon(KIND_ICON[it.kind] || "app") + "</span>" +
-        '<div class="tx"><b></b><small>' + esc(KIND_HE[it.kind] || "") + (kids ? " · " + kids + " פריטים" : "") + " · " + hm(it.created) + " " + src + "</small></div>";
+        '<div class="tx"><b></b><small>' + esc(KIND_HE[it.kind] || "") + (kids ? " · " + one(kids, "פריט אחד", "פריטים") : "") + " · " + hm(it.created) + " " + src + "</small></div>";
       row.querySelector("b").textContent = it.title || "";
       row.addEventListener("click", e => {
         if (e.target.closest("[data-src]")) { openSource(it); return; }
@@ -381,16 +385,16 @@
   }
   async function deriveTable(w, pool) {
     const rows = [["כותרת", "סוג", "מקור", "נאסף"]].concat(pool.map(it => [it.title || it.url || "", KIND_HE[it.kind] || "", it.src && it.src.mid ? nameOf(it.src.mid) : "", hm(it.created)]));
-    await addItem(w, { kind: "table", title: "טבלה · " + pool.length + " פריטים", rows, parents: pool.map(it => it.id) });
+    await addItem(w, { kind: "table", title: "טבלה · " + one(pool.length, "פריט אחד", "פריטים"), rows, parents: pool.map(it => it.id) });
   }
   async function deriveNote(w, pool) {
     const byKind = {}, bySrc = {};
     pool.forEach(it => { byKind[KIND_HE[it.kind]] = (byKind[KIND_HE[it.kind]] || 0) + 1; const s = it.src && it.src.mid ? nameOf(it.src.mid) : "ללא מקור"; bySrc[s] = (bySrc[s] || 0) + 1; });
-    const text = "סיכום של " + pool.length + " פריטים\n\n" +
+    const text = "סיכום של " + one(pool.length, "פריט אחד", "פריטים") + "\n\n" +
       "לפי סוג: " + Object.entries(byKind).map(([k, v]) => k + " " + v).join(", ") + "\n" +
       "לפי מקור: " + Object.entries(bySrc).map(([k, v]) => k + " " + v).join(", ") + "\n\n" +
       pool.map(it => "• " + (it.title || it.url || "")).join("\n");
-    await addItem(w, { kind: "note", text, title: "סיכום · " + pool.length + " פריטים", parents: pool.map(it => it.id) });
+    await addItem(w, { kind: "note", text, title: "סיכום · " + one(pool.length, "פריט אחד", "פריטים"), parents: pool.map(it => it.id) });
   }
   async function organizeBySource(w) {
     const p = panels.get(w.id);
@@ -681,7 +685,7 @@
       const flows = [];
       const seq = s.visits.slice().sort((a, b) => a.t0 - b.t0);
       seq.forEach((v, i) => { if (v.copy || v.cut) { const to = seq.slice(i + 1).find(x => x.paste && x.place !== v.place); if (to) flows.push([v, to]); } });
-      card.innerHTML = '<header><b>' + hm(s.t0) + " – " + hm(s.t1) + "</b><small>" + dur(s.t1 - s.t0) + " · " + places.length + " מקומות · " + s.visits.length + " מעברים</small></header>";
+      card.innerHTML = '<header><b>' + hm(s.t0) + " – " + hm(s.t1) + "</b><small>" + dur(s.t1 - s.t0) + " · " + one(places.length, "מקום אחד", "מקומות") + " · " + one(s.visits.length, "מעבר אחד", "מעברים") + "</small></header>";
       const chain = h("div", "chain");
       main.forEach((p, i) => {
         if (i) chain.appendChild(h("span", "arrow", "←"));
@@ -804,7 +808,7 @@
         if (!c) return;
         const hh = 3 + (LANE - 8) * Math.log(1 + c) / Math.log(1 + mx);
         svg += '<rect class="bin' + (err[i] ? " err" : "") + '" x="' + (X0 + i * bw) + '" y="' + (y + LANE - 3 - hh) + '" width="' + Math.max(1, bw - 0.6) + '" height="' + hh + '"><title>' +
-          esc(src + " · " + c + " אירועים" + (err[i] ? " · " + err[i] + " שגיאות" : "") + " · " + hm(t0 + i * (now - t0) / bins)) + "</title></rect>";
+          esc(src + " · " + one(c, "אירוע אחד", "אירועים") + (err[i] ? " · " + one(err[i], "שגיאה אחת", "שגיאות") : "") + " · " + hm(t0 + i * (now - t0) / bins)) + "</title></rect>";
       });
       y += LANE;
     });
@@ -843,7 +847,7 @@
       wm.openModule(m, x.route || "");
       n++;
     });
-    wm.toast(n ? "שוחזרו " + n + " חלונות מ-" + hm(s.t) : "כל החלונות של " + hm(s.t) + " כבר פתוחים");
+    wm.toast(n ? "שוחזרו " + one(n, "חלון אחד", "חלונות") + " מ-" + hm(s.t) : "כל החלונות של " + hm(s.t) + " כבר פתוחים");
   }
 
   // what is recorded, in the open, with the switch and the eraser

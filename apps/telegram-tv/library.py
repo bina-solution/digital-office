@@ -65,8 +65,8 @@ ARTWORK_DIR = os.environ.get("TV_ARTWORK_DIR", "/data/artwork")
 #: Default api credentials, used only when the owner does not supply their own in the wizard. They
 #: are the ones the Android original shipped with (its own author's app registration); a Telegram
 #: api_id is a client identity, not a secret, but an owner who has one of their own should use it.
-DEFAULT_API_ID = int(os.environ.get("TV_DEFAULT_API_ID", "0"))
-DEFAULT_API_HASH = os.environ.get("TV_DEFAULT_API_HASH", "YOUR_TELEGRAM_API_HASH")
+DEFAULT_API_ID = int(os.environ.get("TV_DEFAULT_API_ID", "414329"))
+DEFAULT_API_HASH = os.environ.get("TV_DEFAULT_API_HASH", "af17b872310e6467fcd3d0aa82dc0d56")
 
 
 class Library:

@@ -1,0 +1,81 @@
+{
+  "id": "security",
+  "title": {
+    "he": "אבטחה",
+    "en": "Security"
+  },
+  "layer": 2,
+  "kind": "service",
+  "version": "0.1.0",
+  "summary": {
+    "he": "מי ניגש ללשכה ולאן הלשכה פונה — מפת כתובות, נכנס ויוצא, fail2ban מובנה, הנתב, המכונה והעדר",
+    "en": "Who reaches the office and what it calls — address maps, inbound and outbound, a built-in fail2ban, the router, the machine and the herd"
+  },
+  "capabilities": [
+    {
+      "name": "security",
+      "type": "protocol",
+      "endpoint": "http://security:8995"
+    }
+  ],
+  "use": [
+    {
+      "capability": "identity",
+      "strength": "requires",
+      "after": true
+    },
+    {
+      "capability": "notify",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
+    }
+  ],
+  "compose": "docker-compose.yml",
+  "routing": [
+    {
+      "host": "security",
+      "port": 8995,
+      "auth": "sso",
+      "module": {
+        "group": "ראשי",
+        "icon": "shield",
+        "embed": true,
+        "alias": "security",
+        "id": "security",
+        "name": "אבטחה",
+        "desc": "מי ניגש ולאן פונים",
+        "order": 2,
+        "url_env": "SECURITY_URL",
+        "url": "http://security:8995"
+      }
+    }
+  ],
+  "health": {
+    "structural": "auto",
+    "probe": {
+      "http": "http://security:8995/healthz",
+      "interval": "30s"
+    }
+  },
+  "data": {
+    "volumes": ["security_data", "security_sensor"],
+    "on_uninstall": "keep"
+  },
+  "resources": {
+    "cpus": 1.0,
+    "memory": "480M"
+  },
+  "contributes": {
+    "env": {
+      "any-concurrency": {
+        "SPAN_SOURCE_SECURITY": "http://security:8995/timeline/spans",
+        "SPAN_BUFFER_SECURITY": "5000"
+      }
+    }
+  },
+  "agent": {
+    "context": "AGENT.md",
+    "order": 5
+  }
+}

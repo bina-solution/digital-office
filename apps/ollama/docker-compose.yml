@@ -1,25 +1,62 @@
 services:
   ollama:
-    image: ollama/ollama:0.32.5
+    # Ollama with its CPU and Vulkan backends and without CUDA (Dockerfile, which alone names the
+    # version): about 470 MB against the upstream image's 3.3 GB compressed. An AMD or Intel GPU is a
+    # variable (OLLAMA_GPU_DEVICE, below); an NVIDIA one needs the upstream image, which is a compose
+    # override on that machine, not a variable — `bbox run` builds every service that has a `build:`
+    # and would tag this build with whatever name a variable gave it (README, "GPU").
+    image: ghcr.io/solomonboltin/digital-office/ollama:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: ollama-${DEPLOYMENT_NAME:-bina-deployment}
     restart: unless-stopped
+    # The office's .env sizes it. A machine that is there for its models (the Dell, DGO-825) gives it
+    # every core and most of its memory: OLLAMA_CPUS=4.0, OLLAMA_MEMORY=11G. The defaults are the
+    # old fixed caps, so an office that never set them is unchanged.
     deploy:
       resources:
         limits:
-          cpus: '1.5'
-          memory: 6G
+          cpus: '${OLLAMA_CPUS:-1.5}'
+          memory: ${OLLAMA_MEMORY:-6G}
         reservations:
           cpus: '0.25'
           memory: 256M
+    # The GPU, when the machine has one Ollama can use through Vulkan (an AMD or Intel render node):
+    # OLLAMA_GPU_DEVICE in .env names it, e.g. the Dell's Radeon R7 M265 at /dev/dri/renderD129
+    # (`/sys/class/drm/renderD*/device/vendor` says which is which: 0x1002 AMD, 0x8086 Intel). The node
+    # keeps its own path inside: mapped to another name, libdrm cannot match it and Vulkan's backend fails
+    # to start (measured on the Dell, 2026-10-21). Unset, /dev/null is mapped onto itself and Ollama
+    # runs on the CPU.
+    devices:
+    - ${OLLAMA_GPU_DEVICE:-/dev/null}:${OLLAMA_GPU_DEVICE:-/dev/null}
+    # serve, then pull every model the office declares (OLLAMA_PULL) — entrypoint.sh
+    entrypoint: ["/bin/sh", "/ollama-entrypoint.sh"]
     environment:
     - OLLAMA_HOST=0.0.0.0
     - OLLAMA_ORIGINS=*
-    - OLLAMA_KEEP_ALIVE=10m
+    - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:-10m}
+    # One slot unless the office says more. A second slot keeps the agent's session-TITLE request from
+    # replacing the conversation's cached prompt (on the Dell, with two, the second message reused
+    # 1,893 cached tokens: 32 s end to end), but every slot holds a context of its own, and a dense
+    # 8B model at 32k twice does not fit the default 6G — so 2 is a machine's choice (OLLAMA_MEMORY).
     - OLLAMA_NUM_PARALLEL=${OLLAMA_NUM_PARALLEL:-1}
+    - OLLAMA_VULKAN=${OLLAMA_VULKAN:-1}
     - OLLAMA_MAX_LOADED_MODELS=${OLLAMA_MAX_LOADED_MODELS:-1}
     - OLLAMA_NUM_THREAD=2
+    # An agent's prompt is 3–25k tokens, and Ollama's own default context (4096) cuts it silently.
+    # Every parallel slot holds a context of its own, so the KV cache is quantised (q8_0, half of
+    # f16, which needs flash attention); a big dense model at full context wants OLLAMA_MEMORY raised.
+    - OLLAMA_CONTEXT_LENGTH=${OLLAMA_CONTEXT_LENGTH:-32768}
+    - OLLAMA_FLASH_ATTENTION=${OLLAMA_FLASH_ATTENTION:-1}
+    - OLLAMA_KV_CACHE_TYPE=${OLLAMA_KV_CACHE_TYPE:-q8_0}
+    - OLLAMA_PULL=${OLLAMA_PULL:-}
     volumes:
-    - ollama_data:/root/.ollama
+    # Models are gigabytes. OLLAMA_MODELS_DIR, when an office sets it to a path (a disk of its own,
+    # e.g. /mnt/dgo-data/dgo/ollama), holds them there; unset, they stay in the `ollama_data` volume.
+    - ${OLLAMA_MODELS_DIR:-ollama_data}:/root/.ollama
+    - ./entrypoint.sh:/ollama-entrypoint.sh:ro
     networks:
     - traefik-network
     healthcheck:

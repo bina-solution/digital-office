@@ -221,17 +221,17 @@
       "parameters": {
         "documentId": {
           "__rl": true,
-          "value": "1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo",
+          "value": "1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0049",
           "mode": "list",
           "cachedResultName": "AutomationValues",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo/edit?usp=drivesdk"
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0049/edit?usp=drivesdk"
         },
         "sheetName": {
           "__rl": true,
           "value": 542119184,
           "mode": "list",
           "cachedResultName": "מסמכים נכנסים",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo/edit#gid=542119184"
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0049/edit#gid=542119184"
         },
         "filtersUI": {
           "values": [
@@ -259,14 +259,14 @@
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "e2knIZpw8YF0QBAB",
-          "name": "Google Sheets person17@example.com"
+          "name": "Google Sheets person17.x@example.com"
         }
       },
       "onError": "continueErrorOutput"
     },
     {
       "parameters": {
-        "url": "https://sheets.googleapis.com/v4/spreadsheets/1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo/values/מסמכים נכנסים!A:Z",
+        "url": "https://sheets.googleapis.com/v4/spreadsheets/1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0049/values/מסמכים נכנסים!A:Z",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "googleSheetsOAuth2Api",
         "options": {}
@@ -282,7 +282,7 @@
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "e2knIZpw8YF0QBAB",
-          "name": "Google Sheets person17@example.com"
+          "name": "Google Sheets person17.x@example.com"
         }
       }
     },
@@ -290,17 +290,17 @@
       "parameters": {
         "documentId": {
           "__rl": true,
-          "value": "1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo",
+          "value": "1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0049",
           "mode": "list",
           "cachedResultName": "AutomationValues",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo/edit?usp=drivesdk"
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0049/edit?usp=drivesdk"
         },
         "sheetName": {
           "__rl": true,
           "value": 542119184,
           "mode": "list",
           "cachedResultName": "מסמכים נכנסים",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo/edit#gid=542119184"
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0049/edit#gid=542119184"
         },
         "options": {}
       },
@@ -318,7 +318,7 @@
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "e2knIZpw8YF0QBAB",
-          "name": "Google Sheets person17@example.com"
+          "name": "Google Sheets person17.x@example.com"
         }
       }
     },
@@ -326,7 +326,7 @@
       "parameters": {
         "documentId": {
           "__rl": true,
-          "value": "1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo",
+          "value": "1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0049",
           "mode": "id"
         },
         "sheetName": {
@@ -334,7 +334,7 @@
           "value": 542119184,
           "mode": "list",
           "cachedResultName": "מסמכים נכנסים",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo/edit#gid=542119184"
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0049/edit#gid=542119184"
         },
         "filtersUI": {
           "values": [
@@ -363,7 +363,7 @@
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "e2knIZpw8YF0QBAB",
-          "name": "Google Sheets person17@example.com"
+          "name": "Google Sheets person17.x@example.com"
         }
       },
       "onError": "continueErrorOutput"
@@ -464,7 +464,7 @@
         "operation": "getMany",
         "documentId": {
           "__rl": true,
-          "value": "={{ $('When Executed by Another Workflow').first().json.spreadsheetId || '1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo' }}",
+          "value": "={{ $('When Executed by Another Workflow').first().json.spreadsheetId || '1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0049' }}",
           "mode": "id"
         }
       },
@@ -480,7 +480,7 @@
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "e2knIZpw8YF0QBAB",
-          "name": "Google Sheets person17@example.com"
+          "name": "Google Sheets person17.x@example.com"
         }
       },
       "onError": "continueErrorOutput"
@@ -490,7 +490,7 @@
         "operation": "getMany",
         "documentId": {
           "__rl": true,
-          "value": "={{ $('When Executed by Another Workflow').first().json.spreadsheetId || '1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo' }}",
+          "value": "={{ $('When Executed by Another Workflow').first().json.spreadsheetId || '1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0049' }}",
           "mode": "id"
         }
       },
@@ -506,7 +506,7 @@
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "e2knIZpw8YF0QBAB",
-          "name": "Google Sheets person17@example.com"
+          "name": "Google Sheets person17.x@example.com"
         }
       }
     },
@@ -832,40 +832,7 @@
   "meta": {
     "templateCredsSetupCompleted": true
   },
-  "pinData": {
-    "When Executed by Another Workflow": [
-      {
-        "json": {
-          "ID": "682656165s1yyor",
-          "COMPANY_ID": null,
-          "SHORT_DOC_ID": null
-        },
-        "pairedItem": {
-          "item": 0
-        }
-      },
-      {
-        "json": {
-          "ID": "644982822su0mdn",
-          "COMPANY_ID": null,
-          "SHORT_DOC_ID": null
-        },
-        "pairedItem": {
-          "item": 1
-        }
-      },
-      {
-        "json": {
-          "ID": "5487791274oacxz",
-          "COMPANY_ID": null,
-          "SHORT_DOC_ID": null
-        },
-        "pairedItem": {
-          "item": 2
-        }
-      }
-    ]
-  },
+  "pinData": {},
   "versionId": "afb0caba-caeb-47c9-9ee3-48d24fa571be",
   "activeVersionId": "afb0caba-caeb-47c9-9ee3-48d24fa571be",
   "versionCounter": 59,

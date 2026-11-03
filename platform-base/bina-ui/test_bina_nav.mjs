@@ -59,6 +59,15 @@ class El {
       },
     };
   }
+  closest(sel) {
+    const want = String(sel).replace(/^\./, "");
+    let node = this;
+    while (node) {
+      if (node._cls && node._cls.has(want)) return node;
+      node = node.parentElement;
+    }
+    return null;
+  }
   setAttribute(k, v) { this.attrs[k] = String(v); }
   getAttribute(k) { return k in this.attrs ? this.attrs[k] : k === "class" ? this.className : null; }
   removeAttribute(k) { delete this.attrs[k]; }
@@ -116,7 +125,9 @@ function compound(n, sel) {
 const document = {
   createElement: (t) => new El(t),
   body: new El("body"),
+  documentElement: new El("html"),      // the component marks `html` when it draws the fallback button
   addEventListener() {},
+  querySelector: (sel) => document.body.querySelector(sel),
   querySelectorAll: (sel) => document.body.querySelectorAll(sel),
 };
 const store = new Map();
@@ -172,6 +183,7 @@ const cfg = {
 };
 
 const root = new El("aside");
+root.parentElement = new El("div");   // every real menu has one; the component marks it as its container
 const nav = BinaNav.mount(root, cfg);
 
 ok("mount adds .bnv to the host element", root.classList.contains("bnv"));
@@ -253,6 +265,17 @@ ok("the rail is remembered for the next visit", localStorage.getItem("bnav:rail:
 nav.setRail(false);
 
 nav.open();
+// the way in: the page placed no `[data-nav-toggle]`, so the component drew one — and it marked the
+// element it was given as the container its own size classes answer (`container-type:inline-size`).
+ok("a page that placed no burger gets one from the component",
+  document.body.children.some((c) => c.classList.contains("bnv-burger") && c.classList.contains("is-float")));
+const fallbackBurger = document.body.children.find((c) => c.classList.contains("bnv-burger"));
+ok("…wired as the menu's toggle, not a decoration",
+  !!fallbackBurger && fallbackBurger.getAttribute("data-nav-toggle") === "menu");
+ok("…and announced on the root, which is what shows it in a phone-sized frame",
+  document.documentElement.classList.contains("bnv-float"));
+ok("the element the menu was given becomes its container, so its own sizes apply",
+  root.parentElement.classList.contains("bnv-host"));
 const scrim = document.body.children.find((c) => c.classList.contains("bnv-scrim"));
 ok("opening the drawer raises a scrim and marks the menu open",
   root.classList.contains("is-open") && scrim && scrim.classList.contains("is-open"));
@@ -399,6 +422,29 @@ const ADOPTERS = ["apps", "platform-base"].flatMap((top) => sources(join(ROOT, t
   });
 ok("the adopters are found in the tree (a search that finds none has measured nothing)", ADOPTERS.length >= 6,
   ADOPTERS.map((a) => a.app).join(" "));
+
+/* ── …and the half that made the audit miss it ────────────────────────────────────────────────────
+   WHO is audited above is derived from the `BinaNav.mount` call — so a screen that drew the menu's
+   rows ITSELF was never in the set, and three of them were on a phone with no way into the menu at
+   all: `sites` and `domains` drew a 56px rail 127px tall, `drive` parked its drawer off-canvas at
+   x=404 of a 390px frame (measured on the live office, 2026-10-12, from the owner's screenshot).
+   The component is now self-sufficient, but the way a screen can regress is by hand-rolling again:
+   this promise fails the moment one carries the menu's own row classes without mounting it. */
+const MENU_ROWS = /class="[^"]*\bbnv-(item|label|head|foot|group|scrim|burger)\b/;
+const CARRIES_JS = (src) => MOUNTS(src) || src.includes("/* @bina-nav-js" + ":" + "start */");
+/* One screen is allowed to carry the menu's rows without this script, and it says why: the CONSOLE
+   hides its rail on a phone on purpose and answers with a bottom tab bar of its own — a second way
+   into a menu that is deliberately not drawn there is not a fix, it is a contradiction. */
+const OWN_NAV = ["platform-base/console/static/index.html"];
+const HANDROLLED = ["apps", "platform-base"].flatMap((top) => sources(join(ROOT, top)))
+  .filter((f) => /\.(html|tsx)$/.test(f))
+  .filter((f) => MENU_ROWS.test(readFileSync(f, "utf8")))
+  .filter((f) => !CARRIES_JS(readFileSync(f, "utf8")))
+  .map((f) => relative(ROOT, f).split("\\").join("/"))
+  .filter((f) => !OWN_NAV.includes(f));
+ok("every screen that carries the side menu's rows also carries the component's script — it mounts "
+  + "it, or the script ADOPTS the menu the screen drew (one behaviour, every app)",
+  HANDROLLED.length === 0, HANDROLLED.join(" ") || "none missing");
 
 /* Some apps mount into an element that is not called #sideNav — the contract is the CONTAINER and
    the mount, not the name. The check below reads the id out of the mount call instead of assuming. */

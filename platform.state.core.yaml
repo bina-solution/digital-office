@@ -1,0 +1,62 @@
+# platform.state.core.yaml — THE CORE: what a fresh office starts from when it should reach a running
+# console as fast as possible, and offer the rest after (DGO-1090). The phone's office starts from it
+# (packaging/android/engine/guest.sh, .github/workflows/android-engine.yml); a desktop install can too.
+#
+# Same rules as platform.state.default.yaml (read its header): a product file, tracked, written by
+# nobody; an office copies it to platform.state.yaml once and owns its copy from then on. Every line is
+# a disposition and nothing else.
+#
+# THE OWNER, 2026-11-01: "the basic DGO should be very light. It's just the app management,
+# notifications, basic Go based or Rust based authentication … extension is part of the core … I should
+# get to the DGO console as fast as possible … then it could pop up a screen saying, hi, would you like
+# to install the other apps? … maybe no super base needed."
+#
+# So, against the default, measured (DGO-1090's inventory): 9 services instead of 14, and their memory
+# limits from ~5.8 GB to ~2.0 GB.
+#   on:  the edge (traefik + its socket proxy), forward-auth (identity, Go, one 7.8 MB binary — no
+#        authentik), connections (the vault the console and dgo-extend require), app-management,
+#        console, notifications (SQLite), and the extensions: dgo-extend and the computers it needs.
+#   off: authentik and its postgres (1.1 GB, 4 containers), postgres (supabase-db: nothing in the core
+#        uses it), redis (only authentik did), machine and autoheal (nothing in the core needs them),
+#        data-management and the business apps — each offered once the console is up.
+# The edge asks forward-auth when .env says DGO_IDENTITY=forward-auth (scripts/ci-env.sh writes it from
+# CI_IDENTITY); this file and that value go together.
+#
+# The offered apps come back through the first-run wizard (platform-base/console/static/install.js),
+# which the console serves to a fresh office: one enable per chosen app, and the compiler pulls in what
+# each requires. A capability with one provider (sql → postgres, kv → redis) is pulled in even though
+# this file lists it off; only a choice between two providers obeys an off switch — which is why the
+# identity choice is written below as this office's own binding (reconcile.py's provider rule 1), and
+# not as `product_bindings:`, which the compiler reads from platform.state.default.yaml alone.
+schema_version: 1
+
+bindings:
+  identity: forward-auth
+
+apps:
+  # ── the core ───────────────────────────────────────────────────────────────────
+  app-management:   { enabled: true }   # the control plane — install/enable/disable/uninstall apps
+  traefik:          { enabled: true }   # the edge — routing, and the forwardAuth middleware
+  forward-auth:     { enabled: true }   # identity: one Go binary; first-run setup makes the owner
+  connections:      { enabled: true }   # the vault (secret-base)
+  console:          { enabled: true }
+  notifications:    { enabled: true }
+  bina-ui:          { enabled: true }   # build-time library, no container
+  dgo-extend:       { enabled: true }   # extensions — linking this office with the others
+  computers:        { enabled: true }   # what dgo-extend runs commands and moves files through
+
+  # ── offered after the console is up ────────────────────────────────────────────
+  authentik:        { enabled: false }  # replaced by forward-auth
+  postgres:         { enabled: false }  # the sql provider — the apps that need it bring it back
+  redis:            { enabled: false }  # the kv provider — likewise
+  autoheal:         { enabled: false }
+  follow-runner:    { enabled: false }
+  machine:          { enabled: false }
+  data-management:  { enabled: false }
+  n8n:              { enabled: false }
+  any-concurrency:  { enabled: false }
+  apitools:         { enabled: false }
+  indox:            { enabled: false }
+  drive:            { enabled: false }
+  mail:             { enabled: false }
+  bina-ds:          { enabled: false }

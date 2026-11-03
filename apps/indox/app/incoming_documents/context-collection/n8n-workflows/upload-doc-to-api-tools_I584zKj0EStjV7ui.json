@@ -29,7 +29,7 @@
       "credentials": {
         "googleDriveOAuth2Api": {
           "id": "KirWFwoFdEFmnN0R",
-          "name": "Google Drive person17@example.com"
+          "name": "Google Drive person17.x@example.com"
         }
       },
       "onError": "continueRegularOutput"
@@ -37,7 +37,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://apitools.bina-comp.bina-solutions.co.il/documentOcr",
+        "url": "https://apitools.hacohen.bina-solutions.co.il/documentOcr",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
@@ -219,7 +219,7 @@
     },
     {
       "parameters": {
-        "url": "https://apitools.bina-comp.bina-solutions.co.il/docExists",
+        "url": "https://apitools.hacohen.bina-solutions.co.il/docExists",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
@@ -328,10 +328,10 @@
         "operation": "download",
         "fileId": {
           "__rl": true,
-          "value": "1ZsOTNsIG4feWexl-5djDTc4gmtw9nuQd",
+          "value": "1REDACTEDdrivexxxxxxxxxxxxxxx0080",
           "mode": "list",
           "cachedResultName": " אורבונד 06.2024 .PNG",
-          "cachedResultUrl": "https://drive.google.com/file/d/1ZsOTNsIG4feWexl-5djDTc4gmtw9nuQd/view?usp=drivesdk"
+          "cachedResultUrl": "https://drive.google.com/file/d/1REDACTEDdrivexxxxxxxxxxxxxxx0080/view?usp=drivesdk"
         },
         "options": {}
       },
@@ -346,7 +346,7 @@
       "credentials": {
         "googleDriveOAuth2Api": {
           "id": "KirWFwoFdEFmnN0R",
-          "name": "Google Drive person17@example.com"
+          "name": "Google Drive person17.x@example.com"
         }
       }
     },
@@ -709,15 +709,7 @@
   "meta": {
     "templateCredsSetupCompleted": true
   },
-  "pinData": {
-    "Start": [
-      {
-        "json": {
-          "LINK": "https://drive.google.com/file/d/1S3X1iFXLFWSGTXA3JUxbniP8OdWz8h9X"
-        }
-      }
-    ]
-  },
+  "pinData": {},
   "versionId": "a491af13-38bb-4d45-8f60-938b6ed6ff42",
   "activeVersionId": "a491af13-38bb-4d45-8f60-938b6ed6ff42",
   "versionCounter": 77,

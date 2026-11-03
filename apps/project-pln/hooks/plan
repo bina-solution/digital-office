@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 #: project-pln — apply a declared project plan (project, states, labels, modules, work items) to the office's Plane, idempotently
 #
-# plan — `./bbox project-pln plan <name|file.yaml> [--dry-run]`
+# plan — `./bbox project-pln plan <name|file.yaml> [--dry-run] [--only <key>[,<key>…]]`
+#
+# `--only cyc-001,cyc-002` applies just those work items — each looked up by its identity, a handful
+# of requests instead of the project's whole page — which is how the one item of a bug report lands
+# in seconds (DGO-559). The keys are the plan's own (`key:`), not Plane's numbers.
 #
 # A roadmap that lives only in a project tool is a roadmap one office has. This verb makes a plan
 # DATA in the repo — apps/project-pln/plans/<name>.yaml — and Plane its rendering: the same file
@@ -22,15 +26,18 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 SVC=project-pln
 APP_DIR="${REPO_ROOT}/apps/project-pln"
 APPLIER="${APP_DIR}/plan.py"
-DRY=0; NAME=""
-for a in "$@"; do
-  case "${a}" in
+DRY=0; NAME=""; ONLY=""
+while [ $# -gt 0 ]; do
+  case "${1}" in
     --dry-run) DRY=1 ;;
+    --only)    ONLY="${ONLY:+${ONLY},}${2:-}"; shift ;;
+    --only=*)  ONLY="${ONLY:+${ONLY},}${1#--only=}" ;;
     -h|--help) sed -n 's/^#: //p; s/^# plan — //p' "${BASH_SOURCE[0]}"; echo "plans: $(ls "${APP_DIR}/plans" 2>/dev/null | sed 's/\.yaml$//' | tr '\n' ' ')"; exit 0 ;;
-    *) NAME="${a}" ;;
+    *) NAME="${1}" ;;
   esac
+  shift
 done
-[ -n "${NAME}" ] || { say "${cr}[project-pln] which plan? ./bbox project-pln plan <name|file.yaml> [--dry-run]${c0}"; echo "  plans: $(ls "${APP_DIR}/plans" 2>/dev/null | sed 's/\.yaml$//' | tr '\n' ' ')"; exit 2; }
+[ -n "${NAME}" ] || { say "${cr}[project-pln] which plan? ./bbox project-pln plan <name|file.yaml> [--dry-run] [--only <key>[,<key>…]]${c0}"; echo "  plans: $(ls "${APP_DIR}/plans" 2>/dev/null | sed 's/\.yaml$//' | tr '\n' ' ')"; exit 2; }
 
 # The plan file: a path as given, a path under the app, or a name under plans/.
 for cand in "${NAME}" "${REPO_ROOT}/${NAME}" "${APP_DIR}/${NAME}" "${APP_DIR}/plans/${NAME}" "${APP_DIR}/plans/${NAME}.yaml"; do
@@ -45,13 +52,41 @@ WORKSPACE="${PLANE_LOCAL_WORKSPACE:-$(read_env PLANE_LOCAL_WORKSPACE)}"; WORKSPA
 SPEC="$(python3 -c 'import json,sys,yaml;print(json.dumps(yaml.safe_load(open(sys.argv[1],encoding="utf-8")),ensure_ascii=False))' "${FILE}" 2>/dev/null)"
 [ -n "${SPEC}" ] || { say "${cr}[project-pln] could not read ${FILE} (is PyYAML installed for python3?)${c0}"; exit 1; }
 
-say "[project-pln] applying $(basename "${FILE}") to workspace '${WORKSPACE}'$([ "${DRY}" = 1 ] && printf ' (dry run)')"
-. "${APP_DIR}/where.sh"          # PLN_IN, PLN_API — here, or behind the link
+# ── THE OUTBOX (DGO-1100, any-201) ──────────────────────────────────────────────────────────────────
+# A plan IS a write: with no path to Plane it used to fail and the apply was forgotten. It is kept
+# instead, with a COPY of the plan file — what is applied later is the plan as it was written now — and
+# sent by the first run that has a path, in its place in the queue (outbox.py, `.state/outbox/…`).
+OUTBOX="${PLN_OUTBOX_DIR:-${REPO_ROOT}/.state/outbox/project-pln}"
+obx() { python3 "$(npath "${APP_DIR}/outbox.py")" --dir "${OUTBOX}" "$@"; }
+PLN_PATH=1
+WHERE_RC=0
+. "${APP_DIR}/where.sh" || WHERE_RC=$?   # PLN_IN, PLN_API — here, or behind the link; PLN_DEAD
+[ "${WHERE_RC}" -eq 0 ] && [ "${PLN_DEAD:-0}" != 1 ] || PLN_PATH=0
+PLAN_ARGS=("${FILE}")
+[ "${DRY}" = 1 ] && PLAN_ARGS+=(--dry-run)
+[ -n "${ONLY}" ] && PLAN_ARGS+=(--only "${ONLY}")
+if [ "${PLN_PATH}" = 0 ]; then
+  if [ -z "${PLN_OUTBOX_REPLAY:-}" ]; then
+    N="$(obx queue --verb plan --copy "${FILE}" -- "${PLAN_ARGS[@]}")" || exit 1
+    say "${cy}[project-pln] אין עכשיו דרך ל-Plane — התוכנית נשמרה, ותוחל כשתהיה: בתור, ${N} ממתין${c0}"
+    exit 0
+  fi
+  say "${cr}[project-pln] עדיין אין דרך ל-Plane — התוכנית נשארה בתור, $(obx count) ממתין${c0}"
+  exit 3
+fi
+obx flush --quiet || true        # what was kept while there was no path, before this apply
+say "[project-pln] applying $(basename "${FILE}") to workspace '${WORKSPACE}'$([ "${DRY}" = 1 ] && printf ' (dry run)')${ONLY:+ (only: ${ONLY})}"
+if [ -n "${PLN_HUB:-}" ]; then   # away from home: this plan file, applied from the herd's hub (where.sh, DGO-1092)
+  # the exec's own limit: a first apply of a long plan writes about one item a second
+  exec "${REPO_ROOT}/bbox" via "${PLN_HUB}" --timeout 600 --put "${FILE}" project-pln plan "${FILE}" \
+    $([ "${DRY}" = 1 ] && printf -- '--dry-run') ${ONLY:+--only "${ONLY}"}
+fi
 OUT="$(mktemp)"
 dcx exec -T \
   -e PLANE_API_URL="${PLN_API}" \
   -e PLANE_WORKSPACE="${WORKSPACE}" \
   -e PLANE_PLAN_DRY_RUN="${DRY}" \
+  -e PLANE_PLAN_ONLY="${ONLY}" \
   -e PLANE_LOCAL_API_TOKEN="${PLANE_LOCAL_API_TOKEN:-}" \
   "${PLN_IN}" python3 -c "$(cat "${APPLIER}")" <<<"${SPEC}" >"${OUT}" 2>&1
 RC=$?
@@ -77,5 +112,10 @@ sys.exit(1 if d.get("problems") else 0)'
 RC=$?
 ORIGIN="$(read_env PROJECT_PLN_BASE_URL)"; ORIGIN="${ORIGIN:-plane.localhost:8080}"
 IDENT="$(printf '%s' "${RESULT}" | python3 -c 'import json,sys;print((json.load(sys.stdin).get("project") or {}).get("identifier") or "")')"
-[ -n "${IDENT}" ] && say "[project-pln] ${IDENT} is at $(read_env PROJECT_PLN_PROTOCOL || printf http)://${ORIGIN}/${WORKSPACE}/projects/ (work items ${IDENT}-1…)"
+# An unset protocol is http, the local default; `read_env … || printf http` never got there, because
+# read_env succeeds with an empty line (vps1 printed `://plane.staging…`, 2026-11-01).
+PROTO="$(read_env PROJECT_PLN_PROTOCOL)"
+# No item number on this line: a caller that takes the LAST `DGO-<n>` of the output took «DGO-1…» from it and
+# attached two files to DGO-1 (DGO-1022). What was made is plan.py's own `created|updated DGO-<n> [key]` lines.
+[ -n "${IDENT}" ] && say "[project-pln] ${IDENT} is at ${PROTO:-http}://${ORIGIN}/${WORKSPACE}/projects/"
 exit "${RC}"

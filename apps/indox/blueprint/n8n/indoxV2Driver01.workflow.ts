@@ -131,9 +131,9 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
     /*__n8n__*/ tags: [{"updatedAt":"2026-07-30T23:42:19.465Z","createdAt":"2026-07-30T23:42:19.465Z","id":"1a1f9021-970c-46eb-8cef-4746d2dca0d0","name":"indox-state-machine-v2"},{"updatedAt":"2026-08-05T22:56:59.007Z","createdAt":"2026-08-05T22:56:59.007Z","id":"22f1e71e-91bf-48db-811f-8d3bc4e55a3e","name":"sm-refactor-v2.1"},{"updatedAt":"2026-08-05T22:56:59.007Z","createdAt":"2026-08-05T22:56:59.007Z","id":"2b5cb873-dd65-44dd-bf27-a2c99d2b81a4","name":"state-machine-v2"},{"updatedAt":"2026-08-16T14:20:49.737Z","createdAt":"2026-08-16T14:20:49.737Z","id":"93ff3a3f-6b78-5d0a-a4de-2948ea161953","name":"app:indox"},{"updatedAt":"2026-07-30T23:41:29.646Z","createdAt":"2026-07-30T23:41:29.646Z","id":"9c337cfe-7feb-4f3d-ab26-3de6439357ce","name":"sm-refactore-v2.1"},{"updatedAt":"2026-07-30T23:42:19.465Z","createdAt":"2026-07-30T23:42:19.465Z","id":"d84b71a8-a6dd-4cc4-9ec4-44d6af9c8f76","name":"indox"},{"updatedAt":"2026-08-05T22:56:59.007Z","createdAt":"2026-08-05T22:56:59.007Z","id":"edad0600-cc86-4f33-b016-311b555b8f4e","name":"indox-app"}],
     /*__n8n__*/ versionMetadata: {"name":null,"description":null},
     /*__n8n__*/ meta: {"templateCredsSetupCompleted":true},
-    /*__n8n__*/ pinData: {"Webhook":[{"json":{"headers":{"accept":"application/json,text/html,application/xhtml+xml,application/xml,text/*;q=0.9, image/*;q=0.8, */*;q=0.7","content-type":"application/json","user-agent":"axios/1.13.5","content-length":"72284","accept-encoding":"gzip, compress, deflate, br","host":"n8n:5678","authorization":{"__redacted":true,"reason":"node_defined_field","canReveal":false},"connection":"close"},"params":{},"query":{},"body":{"IDS":"[\"test01\"]","TRIGGER_TYPE":"drain_lane6_g1","DRAINER_TYPE":"drainer_lane6","DRAINER_ID":"lane6:3403183","DRAINER_CHAIN":"lane6:3403183","ORIGIN_EXECUTION":"3403183","PARENT_EXECUTION":"3403183"},"webhookUrl":"http://n8n.localhost/webhook/incoming-documents-017","executionMode":"production"}}],"When Executed by Another Workflow":[{"json":{"run_page":true,"after":"1780503618785ctd84b"}}]},
+    /*__n8n__*/ pinData: {},
     /*__n8n__*/ staticData: {},
-    /*__n8n__*/ shared: [{"updatedAt":"2026-07-30T23:42:27.037Z","createdAt":"2026-07-30T23:42:27.037Z","role":"workflow:owner","workflowId":"indoxV2Driver01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <shlomo@local.dev>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
+    /*__n8n__*/ shared: [{"updatedAt":"2026-07-30T23:42:27.037Z","createdAt":"2026-07-30T23:42:27.037Z","role":"workflow:owner","workflowId":"indoxV2Driver01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
     id: 'indoxV2Driver01',
     name: 'Incoming Documents v2',
     active: true,
@@ -708,7 +708,7 @@ for (const item of $input.all()) {
   // node downstream resolves its schema from $json.__instance. But this node does not forward the
   // body — it CONSTRUCTS a new item from four named fields, so any field not named here simply
   // ceases to exist from this point on. Traced 2026-08-28: 'When Called' and 'Normalize Request'
-  // in the drain both carried 'bina-comp'/'levi' correctly, and 'Enrich Double Lines' one hop later
+  // in the drain both carried 'hacohen'/'levi' correctly, and 'Enrich Double Lines' one hop later
   // saw nothing. A rebuild like this is a silent field filter.
   const inst = String(b.__instance || '');
   if (ids && ids.length) {
@@ -868,7 +868,7 @@ return out;`,
   -- item per enabled instance, and everything downstream is told which one it is acting for.
   --
   -- So the instance arrives on the request and is passed straight through as "__instance". It is
-  -- the instance IDENTITY ('bina-comp'), never the storage location ('indox_bina_comp'): indoxApi01 is
+  -- the instance IDENTITY ('hacohen'), never the storage location ('indox_hacohen'): indoxApi01 is
   -- the single place that maps identity to schema, so the indox_<id> convention lives in one file
   -- rather than in every producer.
   SELECT COALESCE((SELECT lower(value) = 'true' FROM {{ (() => { const i = String($json.__instance || ''); if (!/^[a-z][a-z0-9_]*$/.test(i)) { throw new Error('indoxV2Driver01: no valid __instance — public fallback removed at the 2026-08-31 cutover'); } return 'indox_' + i; })() }}.settings
@@ -914,8 +914,8 @@ return out;`,
      driver raises it, the adjudicator refuses it, nothing is written, and it is raised again on
      the next sweep. Five mains reached 146 action_merge_doubles dispatches this way.
      Every one of the last 10 duplicate groups on the table was this and only this. The worst
-     offender, DOC_ID 515561520, is a company registration number appearing under FIFTEEN
-     companies across 68 rows; another, 02-6333155, is a phone number under 5. They are not
+     offender, DOC_ID 500000088, is a company registration number appearing under FIFTEEN
+     companies across 68 rows; another, 02-0000011, is a phone number under 5. They are not
      duplicates -- they are different documents whose id was mis-extracted.
      Table-wide: 49 such doc-ids, 258 rows.
      Quarantining at the KEY, not after grouping, is what gives them a terminal state: they simply
@@ -1059,7 +1059,7 @@ SELECT b.*,
        (SELECT priority_local FROM toggle)       AS "__priority_local",
        (SELECT old_months FROM toggle)           AS "__old_months",
        -- [fan-out landed 2026-08-28] The value the driver was HANDED, passed straight through.
-       -- It is the instance IDENTITY ('bina-comp'), never the storage location ('indox_bina_comp') —
+       -- It is the instance IDENTITY ('hacohen'), never the storage location ('indox_hacohen') —
        -- indoxApi01 stays the single place that maps identity to schema. Still empty when the
        -- caller supplies nothing (a manual webhook probe), which resolves to 'public' exactly as
        -- before; once the compatibility views are dropped that absence becomes a loud failure
@@ -1722,7 +1722,7 @@ for (const item of $input.all()) {
   // skipped on STATUS=IN_PROGRESS with NO age bound, so a doc whose driver died mid-action
   // (worker OOM/restart; bracket later closed by the 65-min reaper) was skipped FOREVER:
   // the drain's rescue clause re-selected it, decide re-answered the same action, and this
-  // guard called that a live collision. Measured on bina-comp: 173 IN_PROGRESS rows frozen
+  // guard called that a live collision. Measured on hacohen: 173 IN_PROGRESS rows frozen
   // 6-72h. Past 70 minutes (over the router's own 3600s executionTimeout and the reaper
   // horizon -- the same dead-owner doctrine as 'Poll Progress' and the drain clause) the
   // dispatch provably has no live owner, and the action DID NOT COMPLETE (a completed action

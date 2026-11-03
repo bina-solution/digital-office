@@ -332,7 +332,7 @@ function QueryCard({
       >
         <b>{meta?.label || qkey}</b>
         <span className="mono small muted" style={{ direction: 'ltr' }}>{qkey}</span>
-        <span className="tag num">{steps.length} שלבים</span>
+        <span className="tag num">{steps.length === 1 ? 'שלב אחד' : steps.length + ' שלבים'}</span>
         {justSaved && <span className="pill ok">נשמר</span>}
         <button
           className="link"

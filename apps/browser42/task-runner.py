@@ -12,8 +12,10 @@ v2 (final-architecture slice):
   verify -> finish in one request, no model turns.
 """
 
+import hmac
 import json
 import os
+import secrets
 import signal
 import subprocess
 import sys
@@ -42,6 +44,9 @@ ALLOWED = {
     # container and stitches the steps by overlap, so the shared browser's small viewport stops
     # deciding how much context an agent can have.
     "read": (2, 3),
+    # front <slug> — bring the task's tab to the front of the shared window, so keyboard input from
+    # outside the protocol lands in the page the task is actually driving.
+    "front": (2, 2),
     # captcha <slug> [detect | click <index>] — a human-verification challenge lives in a
     # cross-origin frame that `inspect` cannot see; this verb reads it (instruction, targets in page
     # coordinates, a picture) and presses ONE target with a human-like click. Never a solver service.
@@ -50,6 +55,10 @@ ALLOWED = {
     "finish": (2, 2),
     "status": (2, 2),
     "heartbeat": (2, 2),
+    # await <slug> <conditions> [seconds] — the HUMAN HANDOFF, measured on the page: block until the
+    # page says the person finished (a QR pairing leaves no cookie for `logins await` to see) and
+    # report what proved it, or refuse with what the page last showed.
+    "await": (3, 4),
     "goal": (4, 4),
 }
 # Read commands never take a work slot — monitoring must not starve owning agents.
@@ -213,6 +222,48 @@ def build_response(request: object) -> tuple[int, dict]:
     return 200, {**payload}
 
 
+# WHO MAY DRIVE THE BROWSER (DGO-1152, hos-003). The runner listens on 0.0.0.0:8766 for the office
+# network and for a linked office's agent door, and it drives the Chromium the owner is signed into, so
+# a caller must present this runner's own token: `Authorization: Bearer <token>`. It is the agent.v1 model
+# bina-ds uses. The token is minted once into AGENT_TOKEN_FILE (on the app's data volume), the vault reads
+# it from there (connections `agent_token`), dgo-extend hands it to the offices that are given this app
+# (7cd6e82f), and `bbox remote` presents it. The local `bbox b42 task` reads the file itself (task-client.py).
+# Rule 8, two stages: BROWSER42_TASK_AUTH=warn (the default now) serves a caller without the token and logs
+# who it was; =refuse answers 401. `/healthz` stays open: it says nothing but the runner's state.
+AGENT_TOKEN_FILE = os.environ.get("AGENT_TOKEN_FILE", "")
+TASK_AUTH = (os.environ.get("BROWSER42_TASK_AUTH") or "warn").strip().lower()
+TOKEN = ""
+
+
+def load_or_mint_token(path: str) -> str:
+    """The runner's token: read from `path`, minted there (0600, written whole) when it is absent or short."""
+    if not path:
+        return ""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            token = fh.read().strip()
+        if len(token) >= 32:
+            return token
+    except OSError:
+        pass
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    token = secrets.token_urlsafe(32)
+    tmp = f"{path}.{os.getpid()}.tmp"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(token + "\n")
+    os.replace(tmp, path)
+    return token
+
+
+def authorized(header: str, token: str) -> bool:
+    """True when `header` is `Bearer <token>` for a real token, compared in constant time."""
+    scheme, _, given = header.partition(" ")
+    if not token or scheme.lower() != "bearer":          # the scheme is case-insensitive (RFC 7235)
+        return False
+    return hmac.compare_digest(given.strip().encode(), token.encode())
+
+
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802 - HTTP handler API
         if self.path != "/healthz":
@@ -224,6 +275,16 @@ class Handler(BaseHTTPRequestHandler):
         if self.path != "/v1/task":
             self.respond(404, {"ok": False, "error": {"code": "not_found", "message": "unknown endpoint"}})
             return
+        if not authorized(self.headers.get("Authorization", ""), TOKEN):
+            who = (f"{self.client_address[0]} office={self.headers.get('X-DGO-Office') or '-'} "
+                   f"forwarded={self.headers.get('X-Forwarded-For') or '-'}")
+            if TASK_AUTH == "refuse":
+                print(f"[task-runner] refused a caller without the runner's token: {who}", file=sys.stderr, flush=True)
+                self.respond(401, {"ok": False, "error": {"code": "unauthorized", "message":
+                                   "this runner needs its token: Authorization: Bearer <AGENT_TOKEN_FILE>"}})
+                return
+            print(f"[task-runner] served a caller WITHOUT the runner's token (refused once "
+                  f"BROWSER42_TASK_AUTH=refuse, DGO-1152): {who}", file=sys.stderr, flush=True)
         try:
             length = int(self.headers.get("Content-Length", "0"))
             request = json.loads(self.rfile.read(length))
@@ -249,4 +310,8 @@ STATE = RunnerState(MAX_CONCURRENT)
 
 
 if __name__ == "__main__":
+    TOKEN = load_or_mint_token(AGENT_TOKEN_FILE)
+    if not TOKEN:
+        print("[task-runner] no AGENT_TOKEN_FILE: every caller is one without a token "
+              f"({'refused' if TASK_AUTH == 'refuse' else 'served and logged'})", file=sys.stderr, flush=True)
     ThreadingHTTPServer(("0.0.0.0", 8766), Handler).serve_forever()

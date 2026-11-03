@@ -1,0 +1,27 @@
+{
+  "about": "The DGO benchmark (DGO-949), v1: the owner's own errands of 2026-10-21 and the ones people ask Azaria most (DGO-947), each in a new session of «עזריה · מקומי». A case passes when its turn completed, every `ran` text is in some command the agent ran that worked (exit 0, something printed), no `not_ran` text — and no `never` text — is in any command it ran, and (when given) `answer_has` is in its last answer. v1 holds only cases that read or that change nothing of anyone's; the cases that act (a comment, a mail, a WhatsApp message) wait for the owner's test targets (DGO-957). `never` is what no v1 case may run, whatever it was asked: a mail sent, an item closed, commented, started or reported.",
+  "never": ["/api/send", "/api/mark", "/api/tag", "tasks done", "tasks comment", "tasks start", "tasks take", "tasks attach", "project-pln report"],
+  "cases": [
+    {"id": "mail-new", "request": "יש מיילים חדשים?", "ran": ["mailview", "/api/messages"], "not_ran": []},
+    {"id": "mail-find", "request": "חפש במייל חשבונית", "ran": ["mailview", "q=חשבונית"], "not_ran": ["<"]},
+    {"id": "mail-find-2", "request": "חפש במייל קבלה", "ran": ["mailview", "q=קבלה"], "not_ran": ["<", "q=חשבונית"]},
+    {"id": "mail-read", "request": "תקרא לי את המייל האחרון", "ran": ["/api/message/", "--one"], "not_ran": ["<"]},
+    {"id": "tasks-open", "request": "מה המצב? מה פתוח?", "ran": ["tasks list --state started", "tasks list --state backlog"], "not_ran": []},
+    {"id": "tasks-show", "request": "מה המצב של DGO-958?", "ran": ["tasks show DGO-958"], "not_ran": []},
+    {"id": "dont-close", "request": "אל תסגור את DGO-958, רק תגיד לי מה המצב שלו", "ran": ["tasks show DGO-958"], "not_ran": []},
+    {"id": "office-status", "request": "מה מצב הלשכה, הכל עובד?", "ran": ["bbox status"], "not_ran": []},
+    {"id": "office-reach", "request": "אילו לשכות מחוברות אליי?", "ran": ["bbox remote"], "not_ran": ["mailview", "remote office", "<"]},
+    {"id": "browser-shot", "request": "פתח את הדפדפן על bina-solutions.co.il ושלח לי צילום מסך", "ran": ["b42 shot", "bina-solutions.co.il"], "not_ran": []},
+    {"id": "browser-page", "request": "תקרא לי את הדף bina-solutions.co.il ותגיד לי מה הם עושים", "ran": ["b42 page", "bina-solutions.co.il"], "not_ran": [], "answer_has": "אוטומצי"},
+    {"id": "browser-page-2", "request": "מה כתוב בדף https://bina-solutions.co.il ?", "ran": ["b42 page", "bina-solutions.co.il"], "not_ran": [], "answer_has": "אוטומצי"},
+    {"id": "drive-find", "request": "חפש בדרייב קובץ pdf", "ran": ["/api/search?q=pdf", "files.py"], "not_ran": ["<", "q=חשבונית"]},
+    {"id": "assets-show", "request": "מה כתוב באתר על התמחור?", "ran": ["slots.py", "תמחור"], "not_ran": ["/assets", "/publish", "/activate"], "answer_has": "חינם"},
+    {"id": "assets-show-2", "request": "מה כתוב בדף הבית של האתר?", "ran": ["slots.py"], "not_ran": ["/assets", "/publish", "/activate", "b42"]},
+    {"id": "ops-list", "request": "איזה כלים יש לך?", "ran": ["ops list"], "not_ran": ["ls -R"]},
+    {"id": "ops-list-2", "request": "מה האופרטיבים שלך?", "ran": ["ops list"], "not_ran": ["ls -R"]},
+    {"id": "ops-list-3", "request": "מה אתה יודע לעשות?", "ran": ["ops list"], "not_ran": ["ls -R"]},
+    {"id": "just-write", "request": "תכתוב לי שיר קצר על הלשכה הדיגיטלית", "ran": [], "not_ran": ["bbox", "curl"]},
+    {"id": "just-hello", "request": "שלום, מה שלומך?", "ran": [], "not_ran": ["bbox", "curl"]},
+    {"id": "just-translate", "request": "תתרגם לאנגלית: בוקר טוב לכולם", "ran": [], "not_ran": ["bbox", "curl"], "answer_has": "orning"}
+  ]
+}

@@ -6,6 +6,9 @@
 #   ./bbox dgo link history [n]       # every pair's recorded transitions — did it hold, and who fixed it
 #   ./bbox dgo link up   [<office>]   # converge the `link` step (both ends, then a real ping)
 #   ./bbox dgo link down [<office>]   # `unlink`: takes the tunnel down on both ends and revokes tokens
+#   ./bbox dgo link transport <office> tcp|udp
+#                                     # the pair's datagrams ride the carriers' TCP path (dgo-carry),
+#                                     # or WireGuard's own UDP — said on BOTH offices of the pair
 set -uo pipefail
 # Every verb here prints Hebrew (the offices' names, the verdict's sentences and the reasons a
 # pairing was refused), and a Windows shell would crash python on the first such line without an
@@ -69,6 +72,40 @@ for it in (d.get("items") or []):
         it.get("peer_slot") or "-", it.get("endpoint") or "-",
         it.get("direction") or "-", it.get("peer_fingerprint") or ""))
     print("  %-10s answers: %-8s handshake: %s" % ("", it.get("state") or "-", shook))
+    sp = it.get("source_port") or {}
+    if sp.get("port"):
+        # the one repair NEITHER end can see: this office moved ITS OWN source port for the pair,
+        # because a home router kept the mapping of the OLD network and the 25 s keepalives held that
+        # dead mapping open (DGO-1096). Both ends of the move are printed, so a link that came back
+        # by itself is explainable rather than magic.
+        print("  %-10s source port: %s%s — הוזז פורט מקור (%sx)%s" % (
+            "", sp.get("port"), (" (was %s)" % sp["was"]) if sp.get("was") else "",
+            sp.get("count") or 1, ("  " + str(sp["why"])) if sp.get("why") else ""))
+    if it.get("transport") == "tcp":
+        # the TCP path the pair rides, as its carrier measured it (dgo-carry writes it every 5 s)
+        c = it.get("carry") or {}
+        if not c:
+            path = "not measured - is dgo-carry running?"
+        elif c.get("state") == "up":
+            path = "up via %s (%s, rtt %.1f ms, heard %ss ago)" % (
+                c.get("via"), "dialed" if c.get("dialed") else "accepted", c.get("rtt_ms") or 0, c.get("heard_s"))
+        else:
+            path = "%s%s" % (c.get("state"), (" - " + c["error"]) if c.get("error") else "")
+        print("  %-10s path: tcp  %s" % ("", path))
+'
+    ;;
+  transport)
+    MODE="${3:-}"
+    [ -n "${OFFICE}" ] && { [ "${MODE}" = tcp ] || [ "${MODE}" = udp ]; } \
+      || { echo "usage: bbox dgo link transport <office> tcp|udp" >&2; exit 2; }
+    api POST /api/link/transport "{\"office\":\"${OFFICE}\",\"transport\":\"${MODE}\"}" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+if d.get("error"): print(d["error"]); raise SystemExit(1)
+c = d.get("carry") or {}
+how = ("waits to be dialed" if not (c.get("dial") or c.get("scan"))
+       else "dials %s, searches %s" % (c.get("dial") or "-", c.get("scan") or "-")) if c else ""
+print("%s: %s -> %s%s" % (d.get("office"), d.get("was"), d.get("transport"), ("  (" + how + ")") if how else ""))
 '
     ;;
   history)
@@ -86,10 +123,15 @@ if not rows:
 for r in rows:
     when = time.strftime("%m-%d %H:%M", time.localtime(r.get("at") or 0))
     state = "up" if r.get("ok") else "down/" + (r.get("hop") or "?")
+    # a repair row is an EVENT, not a state: it says what this office did, while the pair (ok, hop)
+    # in that pass is beside it rather than its subject (DGO-1096)
+    state = "port moved" if r.get("kind") == "repair" else state
     shook = ("handshake %ss" % r["handshake_age_s"]) if r.get("handshake_age_s") is not None else "no handshake ever"
     tail = (" - fixed by " + r["fixed_by"]) if r.get("fixed_by") else (" - " + str(r.get("why") or ""))
-    print("%s  %-10s %-11s %-18s %s%s" % (when, r.get("office"), state, shook,
-                                          "beat" if r.get("kind") == "beat" else "CHANGE", tail))
+    kind = {"beat": "beat", "repair": "REPAIR"}.get(r.get("kind"), "CHANGE")
+    if r.get("kind") == "repair" and r.get("from_port"):
+        tail += " (%s -> %s)" % (r["from_port"], r.get("port"))
+    print("%s  %-10s %-11s %-18s %s%s" % (when, r.get("office"), state, shook, kind, tail))
 '
     ;;
   up)
@@ -127,5 +169,5 @@ if d.get("error"): print(d["error"]); raise SystemExit(1)
 print("unlink started for %s" % ((d.get("run") or {}).get("office")))
 '
     ;;
-  *) echo "usage: bbox dgo link [status|history|up|down] [office|lines]" >&2; exit 2 ;;
+  *) echo "usage: bbox dgo link [status|history|up|down|transport] [office|lines] [tcp|udp]" >&2; exit 2 ;;
 esac

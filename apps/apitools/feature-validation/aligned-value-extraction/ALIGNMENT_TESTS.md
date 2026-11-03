@@ -85,14 +85,14 @@ The tests validate that:
 ## Usage
 To run the validation tests:
 ```bash
-cd /root/deployment-bina-comp/feature-validation
+cd /root/deployment-hacohen/feature-validation
 docker compose up --build
 ```
 
 To regenerate the test images:
 ```bash
-cd /root/deployment-bina-comp/feature-validation/aligned-value-extraction
-/root/deployment-bina-comp/.venv/bin/python generate_alignment_images.py
+cd /root/deployment-hacohen/feature-validation/aligned-value-extraction
+/root/deployment-hacohen/.venv/bin/python generate_alignment_images.py
 ```
 
 ## Future Improvements

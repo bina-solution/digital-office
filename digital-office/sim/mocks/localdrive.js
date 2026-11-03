@@ -159,12 +159,12 @@
   var ACCOUNTS = [
     { id: "drive-local", provider: "local", protocol: "drive_local", label: "אחסון מקומי", email: null, account_hint: "מקומי · מובנה", color: "var(--olive)", status: "ok", builtin: true,
       checked: 1, log: [{ mins: 1, level: "info", msg: "אחסון מקומי זמין" }] },
-    { id: "acc_office", provider: "gdrive", protocol: "gdrive", label: "Google Drive · בינה", email: "person127@example.com", account_hint: "person127@example.com", color: "#1a73e8", status: "ok",
+    { id: "acc_office", provider: "gdrive", protocol: "gdrive", label: "Google Drive · בינה", email: "person105@example.com", account_hint: "person105@example.com", color: "#1a73e8", status: "ok",
       checked: 6, log: [{ mins: 6, level: "info", msg: "מסונכרן — 14 קבצים" }, { mins: 2880, level: "info", msg: "אסימון הגישה חודש" }, { mins: 30240, level: "info", msg: "החשבון חובר בהצלחה" }] },
-    { id: "acc_personal", provider: "gdrive", protocol: "gdrive", label: "Google Drive · אישי", email: "person132@example.com", account_hint: "person132@example.com", color: "#e8710a", status: "warning",
+    { id: "acc_personal", provider: "gdrive", protocol: "gdrive", label: "Google Drive · אישי", email: "person110.x@example.com", account_hint: "person110.x@example.com", color: "#e8710a", status: "warning",
       reason: "מכסת האחסון כמעט מלאה (92% מתוך 15GB)", checked: 45,
       log: [{ mins: 45, level: "warn", msg: "מכסת אחסון גבוהה — 92%" }, { mins: 4320, level: "info", msg: "מסונכרן — 5 קבצים" }] },
-    { id: "acc_dropbox", provider: "dropbox", protocol: "dropbox", label: "Dropbox", email: "person127@example.com", account_hint: "Dropbox · office@bina", color: "#0061ff", status: "error",
+    { id: "acc_dropbox", provider: "dropbox", protocol: "dropbox", label: "Dropbox", email: "person105@example.com", account_hint: "Dropbox · office@bina", color: "#0061ff", status: "error",
       reason: "החיבור נותק — נדרש אימות מחדש (שגיאת הרשאה 401)", checked: 62,
       log: [{ mins: 62, level: "error", msg: "אימות נכשל — שגיאה 401 (הרשאה בוטלה)" }, { mins: 75, level: "warn", msg: "ניתוקים חוזרים מהשירות" }, { mins: 10080, level: "info", msg: "החשבון חובר בהצלחה" }] },
   ];
@@ -313,8 +313,8 @@
   var nextId = 1000;
 
   function hintFor(p) {
-    return ({ gdrive: "person141@example.com", gdrive_sa: "svc@project.iam", dropbox: "person142@example.com",
-              dropbox_token: "אסימון •••••", onedrive: "person143@example.com", s3: "bucket · region" })[p] || "demo@local";
+    return ({ gdrive: "person119@example.com", gdrive_sa: "person120@example.com", dropbox: "person121@example.com",
+              dropbox_token: "אסימון •••••", onedrive: "person122@example.com", s3: "bucket · region" })[p] || "demo@local";
   }
   // Connect a fresh instance (starts with an empty Drive) — used by the connect flow + OAuth hook below.
   function addAccount(protocol, label) {

@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# DGO Extend — after the stack is up (`bbox run`'s last step, run_app_hooks onboard).
+#
+# AN IDENTITY ON THE FIRST RUN. `hooks/prepare` mints the office's keys before anything is built, and
+# minting needs this app's image (identity.py + openssl) — so on a genuinely fresh machine the first
+# run minted nothing and the office could not pair, or JOIN, until a second run (measured in a Claude
+# cloud sandbox, 2026-10-15: issues/a-fresh-office-mints-no-identity-on-its-first-run.yaml). Here the
+# image exists. Minting is idempotent (an identity that exists is never replaced), and the app reads
+# the identity volume when it needs it, so a declared join (DGO_JOIN) goes ahead on its next pass.
+set -uo pipefail
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+if bash "${REPO_ROOT}/apps/dgo-extend/hooks/identity" fingerprint >/dev/null 2>&1; then
+  exit 0
+fi
+if bash "${REPO_ROOT}/apps/dgo-extend/hooks/identity" mint >/dev/null 2>&1; then
+  echo "[dgo] this office's identity: $(bash "${REPO_ROOT}/apps/dgo-extend/hooks/identity" fingerprint 2>/dev/null)"
+else
+  echo "[dgo] note: the identity could not be minted — pairing and joining will say so (bbox dgo identity mint)"
+fi
+exit 0

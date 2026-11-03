@@ -97,7 +97,7 @@ page 1: min=2026-07-30 → max=2026-08-16   (500 msgs)
 page 17: min=2026-01-26 → max=2026-02-19  (500 msgs, 498 in-window) → boundary hit, stopped
 ```
 **Raw messages scanned in window: 8,498.** Of those, **8 are synthetic verification traffic**
-(`from`/`to` on `demo.indox` — a live sync-v3 self-test sender/recipient, e.g. `sv3s-gd@demo.indox`)
+(`from`/`to` on `demo.indox` — a live sync-v3 self-test sender/recipient, e.g. `person7-x@example.com`)
 and are excluded. **Real messages in the 6-month window: 8,490** — a complete count, not a sample
 (total mailbox size at time of read: 83,478, close to the 83,442 in prior measurements — growing
 normally).
@@ -187,7 +187,7 @@ fetched — this is authoritative, not doc-sourced):
 | drive-gdoc-warehouse | `1Lmhk...` ("סרוקות מהמחסן 2026") | `1HoBi...` **← identical to drive-bs's `synced`, a live config collision** | `1FwcE...` (shared) |
 
 **Directly confirmed live**: the two oldest, largest source folders — `drive-gdoc`'s
-`1tK4m0VyC2spEV8ByPYrPt6DKdI53tXp1` and `drive-bs`'s `1M9h_cpKmz5O7dNC2KzbUeEyvczLsWylM` — return
+`1REDACTEDdrivexxxxxxxxxxxxxxx0004` and `drive-bs`'s `1REDACTEDdrivexxxxxxxxxxxxxxx0005` — return
 **`{"files":[],"folders":[]}`, HTTP 200, right now**, via direct `api/files?folder=<id>`. This
 matches `OBJECTIVE-VERIFICATION`'s finding exactly: a genuine 200-with-empty resolve (not a 503/404
 masked error), and these two folder IDs are **absent** from the live 577-folder enumeration despite
@@ -196,7 +196,7 @@ resolving directly — a service-account/shared-item enumeration quirk, not a br
 further in this pass** — flagged `UNVERIFIED`, and it is the single most consequential unknown in
 this section, since these two folders are meant to be the two biggest sources.
 
-**Excluding destinations from the source count**: `1FwcEBh6VAbnxu84Ny2g2xH_Bw5-dT7iq` (the shared
+**Excluding destinations from the source count**: `1REDACTEDdrivexxxxxxxxxxxxxxx0006` (the shared
 failed bin), `1-2Ov...`/`1ev3j...`/`1s3Eh...`/`1HoBi...`/`1xthr...` (synced destinations) must **not**
 be counted as sources — a document that lands there is a *copy of* a source document, not a second
 one. This report did not independently recount their contents (see above), so cannot state the exact
@@ -230,13 +230,13 @@ reported 401, a strong cross-check that both measurements are reading the same l
 
 **The mail↔Drive overlap was directly measured, not estimated: it is effectively zero right now.**
 The two Drive folders that exist specifically to receive a Drive-side copy of a synced Gmail
-attachment — `GmailDownloadedDocumentsFolder` (`15As7by792NlEuyvxKPMRo9hl7p7FctBK`, the `dest_folder`
+attachment — `GmailDownloadedDocumentsFolder` (`1REDACTEDdrivexxxxxxxxxxxxxxx0007`, the `dest_folder`
 for `gmail-doc`/`gmail-link`/`mail-private` per the live registry) and
-`GmailDownloadedBalanceDocsFolder` (`1UMGaSMmUtR4J0wOdS29y6kw9d6LwHoER`, `gmail-bs`'s `dest_folder`)
+`GmailDownloadedBalanceDocsFolder` (`1REDACTEDdrivexxxxxxxxxxxxxxx0008`, `gmail-bs`'s `dest_folder`)
 — were queried directly:
 ```
-GET /api/files?folder=15As7by792NlEuyvxKPMRo9hl7p7FctBK  → {"files":[],"folders":[]}
-GET /api/files?folder=1UMGaSMmUtR4J0wOdS29y6kw9d6LwHoER   → {"files":[],"folders":[]}
+GET /api/files?folder=1REDACTEDdrivexxxxxxxxxxxxxxx0007  → {"files":[],"folders":[]}
+GET /api/files?folder=1REDACTEDdrivexxxxxxxxxxxxxxx0008   → {"files":[],"folders":[]}
 ```
 **Both are empty.** Even the 90 lifetime-delivered documents from section 0 either didn't get a Drive
 copy written to their configured destination, or something removed it — either way, **as measured
@@ -357,8 +357,8 @@ stated: ~90 of an expected ~30,000+ documents in the window, i.e. under 0.3%.**
 | 4 | **Label engine searched INBOX only** | Doc-sourced: "0 vs 115 results in 48h" before the fix. **Code-verified fixed**: `mailLabelEngine01.json` explicitly sets `folder:'[Gmail]/All Mail'` at 3 call sites. Live proof (doc-sourced, `OBJECTIVE-VERIFICATION`): 1,137 messages now carry the processed label | Fixed; `/search`'s own default remains `INBOX` for any *other*, unfixed caller — not biting the sync registries, which all pass `folder`/label explicitly |
 | 5 | **"(בוריס)" files wired to no registry** | **5,555 files, 0 of 6 folders wired** (doc-sourced, `FAILURE-BACKLOG-2026-08-05.md`, high-confidence per-folder reconciliation) | Doc-sourced, cross-checked against the brief's pre-existing figure (exact match) |
 | 6 | **Drive `_list()` pagination bug hid 43,326 of 78,651 files** | Doc-sourced historical figure. **Code-verified as fixed today**: `apps/drive/adapters/google.py` `_list()` (lines 187-207) correctly follows `nextPageToken` to completion now; the code comment documents the historical page-cap-of-600 defect explicitly | Fixed in code; the 43,326/78,651 historical undercount itself is doc-sourced, not independently re-derived (would need the pre-fix code, which is gone) |
-| 7 | **`DOUBLE` status: real duplicates or `SHORT_DOC_ID` collisions?** | 723 `DOUBLE` rows. **Directly measured, three sub-findings**: (a) collision sinks confirmed exactly — `'00000'`→12 rows (spanning 3 different `COMPANY_ID`s — a cross-company collision), `'61520'`→24 rows (spanning `COMPANY_ID` 512600297/515186625/512004235 — also cross-company), `'22026'`→10 rows (4 different `COMPANY_ID`s). (b) Tracing `DOUBLE_LINE_CONTEXT.matchedId` against the table's own `ID`/`SOURCE_ID` columns: of 720 `DOUBLE` rows with a parseable match context, **353 (49%) have a live sibling row** (a real, present duplicate pair) and **365 (51%) point to a `matchedId` that no longer exists anywhere in the current table** — its partner was deleted, replaced, or belongs to pre-reset data no longer present, so those flags cannot be independently re-confirmed against today's table as-is. (c) Code-verified: 3 divergent `SHORT_DOC_ID` formulas exist across `indoxV2Actions*01.json` / `indoxGmailDocDownloader01.json` / `indoxGmailLinkDownloader01.json` (strip-then-slice-then-pad vs. pad-then-slice vs. neither) | (a),(b) directly measured this report; (c) code-verified by source read |
-| 8 | **Config collision: `drive-gdoc-warehouse` and `drive-bs` share one `synced` destination folder** | `1HoBifHSHmzk4cuaw6L98lwwTfQvyIdvH` appears as both registries' `synced` id, confirmed in the live `GET /sync/registry` response fetched by this report | Directly measured |
+| 7 | **`DOUBLE` status: real duplicates or `SHORT_DOC_ID` collisions?** | 723 `DOUBLE` rows. **Directly measured, three sub-findings**: (a) collision sinks confirmed exactly — `'00000'`→12 rows (spanning 3 different `COMPANY_ID`s — a cross-company collision), `'61520'`→24 rows (spanning `COMPANY_ID` 500000013/500000021/500000039 — also cross-company), `'22026'`→10 rows (4 different `COMPANY_ID`s). (b) Tracing `DOUBLE_LINE_CONTEXT.matchedId` against the table's own `ID`/`SOURCE_ID` columns: of 720 `DOUBLE` rows with a parseable match context, **353 (49%) have a live sibling row** (a real, present duplicate pair) and **365 (51%) point to a `matchedId` that no longer exists anywhere in the current table** — its partner was deleted, replaced, or belongs to pre-reset data no longer present, so those flags cannot be independently re-confirmed against today's table as-is. (c) Code-verified: 3 divergent `SHORT_DOC_ID` formulas exist across `indoxV2Actions*01.json` / `indoxGmailDocDownloader01.json` / `indoxGmailLinkDownloader01.json` (strip-then-slice-then-pad vs. pad-then-slice vs. neither) | (a),(b) directly measured this report; (c) code-verified by source read |
+| 8 | **Config collision: `drive-gdoc-warehouse` and `drive-bs` share one `synced` destination folder** | `1REDACTEDdrivexxxxxxxxxxxxxxx0001` appears as both registries' `synced` id, confirmed in the live `GET /sync/registry` response fetched by this report | Directly measured |
 | 9 | **Cached `done` counts collide** *(new finding, not in any prior doc)* | `GET /sync/inventory` reports `gmail-doc` and `gmail-link` **both** at `done: 15832` — identical to 5 digits, on two registries with different queries. Consistent with a shared/degraded cache key, not independently confirmed as a real coincidence | Directly measured, **flagged, not fully diagnosed** — would need the cache-key code read to confirm |
 | 10 | **6 of the 8 live registries are erroring right now** *(new finding)* | `GET /sync/inventory` → `"sources_with_errors": 6` of 8, `totals.sources_measured: 5` of 8. Two concrete errors seen: `drive-bs` and `drive-gdoc-tzat` both `"folders: ReadTimeout: timed out"` at read time | Directly measured, this report, 2026-08-05 ~15:57 UTC |
 | 11 | **`PGRST_DB_MAX_ROWS=1000` truncates every unpaged read against a 6,196-row table** | Doc-sourced (`MASTER-PLAN-2026-08-05-EVENING.md` Pattern A) — the poller, the row-count cache, `_ledger_rows`, and `sync_engine` all call unpaged reads that PostgREST silently caps at 1,000 regardless of the limit requested in code | Doc-sourced; the live `PGRST_DB_MAX_ROWS=1000` setting and the 6,196-row table size are both independently consistent with this report's own findings |
@@ -434,7 +434,7 @@ question.
 | Group B — "יצוא צט"/"נחמן"/"טמבור" folders | ~4,393 | Same — 29 of 30 unwired | Same decision, folder-by-folder |
 | Group C — dated historical archives (2023–2024) | 202 | Outside the 6-month window by definition; look like intentional cold storage, not backlog | Confirm they're archival, not action needed |
 | `drive-gdoc`/`drive-bs` source folders | unknown (currently read as empty) | **UNVERIFIED**: genuinely empty, or a service-account enumeration quirk hiding real content — this report could not settle it | Needs a second measurement method (e.g. the owning human account listing the same folder) to rule out the enumeration quirk |
-| Any reprocessing step requiring a Drive **upload** (not move/rename) | unbounded | Service-account has no Shared Drive — `create_folder`/`upload` unconditionally error (code-verified) | Grant `person7@example.com` a Shared Drive, or add an OAuth Drive connection |
+| Any reprocessing step requiring a Drive **upload** (not move/rename) | unbounded | Service-account has no Shared Drive — `create_folder`/`upload` unconditionally error (code-verified) | Grant `person6-x-x@example.com` a Shared Drive, or add an OAuth Drive connection |
 | `drive-gdoc-warehouse`'s synced output | unbounded going forward | Destination folder collides with `drive-bs` (config bug, confirmed live) — reprocessing now would misfile warehouse scans into the balance-sheet bin | Needs its own destination folder id before any volume is pushed through it |
 | Documents whose duplicate partner no longer exists (the 365 orphaned `DOUBLE` matches, gap #7b) | 365 | Nothing to reconcile against in the current table — cannot confirm or deny the duplicate flag from data alone | Needs either the pre-reset table or a manual spot-check |
 | `NEXT_RETRY_AT`-gated retries | 0 rows ever, but conceptually all `EXTRACTION_FAILED`/error-state docs | The retry-scheduling write path has never fired (n8n silently drops fields not in a workflow's declared schema) — any document waiting on a scheduled retry is not actually going to retry | Needs the schema/field-passing fix, not a reprocessing run |

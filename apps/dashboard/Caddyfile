@@ -1,0 +1,19 @@
+# The control centre's page and the state its collector writes (DGO-1124). The page is apps/dashboard/static,
+# mounted read-only; /data/ is the collector's volume (mounted at /state: /data is caddy's own directory),
+# read fresh on every request.
+:80 {
+	handle_path /data/* {
+		root * /state
+		header Cache-Control "no-store"
+		file_server
+	}
+	# the console-on-the-LAN switch (DGO-1125): the collector holds its one writer, on a unix socket only
+	# this server shares (nothing else on the office network can reach it)
+	handle /api/lan {
+		reverse_proxy unix//run/lan/api.sock
+	}
+	handle {
+		root * /srv
+		file_server
+	}
+}

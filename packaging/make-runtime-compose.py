@@ -47,10 +47,10 @@ def main() -> int:
     ap.add_argument("--out", default=".generated/compose.runtime.yml", type=pathlib.Path)
     # MUST match the project the images were tagged under, because `docker load` restores the tag
     # verbatim. The bundle is built from `compose config --images` on this repo, where the project
-    # is the directory name — deployment-bina-comp. Naming it anything else here produces a compose
+    # is the directory name — deployment-hacohen. Naming it anything else here produces a compose
     # file referencing images that were never loaded, and every first-party service fails to start
     # with "no such image" on the customer's machine.
-    ap.add_argument("--project", default="deployment-bina-comp",
+    ap.add_argument("--project", default="deployment-hacohen",
                     help="compose project name; decides the <project>-<service> fallback tag")
     args = ap.parse_args()
 

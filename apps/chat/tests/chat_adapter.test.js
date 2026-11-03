@@ -35,13 +35,13 @@ describe('minsAgo', () => {
 
 describe('initialsOf', () => {
   test('first letters of the first two words', () => {
-    expect(initialsOf('משה כהן', 'person32@example.com')).toBe('מכ');
+    expect(initialsOf('משה כהן', '972501112233@s.whatsapp.net')).toBe('מכ');
   });
   test('single-word names take two characters', () => {
-    expect(initialsOf('מאפייה', 'person38@example.com')).toBe('מא');
+    expect(initialsOf('מאפייה', '9725@s.whatsapp.net')).toBe('מא');
   });
   test('falls back to the phone tail so a nameless contact still gets an avatar', () => {
-    expect(initialsOf('', 'person32@example.com')).toBe('33');
+    expect(initialsOf('', '972501112233@s.whatsapp.net')).toBe('33');
     expect(initialsOf(null, null)).toBe('??');
   });
 });
@@ -49,7 +49,7 @@ describe('initialsOf', () => {
 describe('colorOf', () => {
   test('is stable for the same jid', () => {
     // colour must survive a reload and a reorder of the list; picking by index would not
-    expect(colorOf('person32@example.com')).toBe(colorOf('person32@example.com'));
+    expect(colorOf('972501112233@s.whatsapp.net')).toBe(colorOf('972501112233@s.whatsapp.net'));
   });
   test('differs across jids often enough to be useful', () => {
     const seen = new Set(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map((x) => colorOf(`${x}@s.whatsapp.net`)));
@@ -60,12 +60,12 @@ describe('colorOf', () => {
 describe('conversationFrom', () => {
   test('maps a direct chat', () => {
     const c = conversationFrom({
-      jid: 'person32@example.com', type: 'individual', name: 'משה כהן',
+      jid: '972501112233@s.whatsapp.net', type: 'individual', name: 'משה כהן',
       last_message_at: new Date(Date.now() - 26 * 60000).toISOString(), unread_count: 2, pinned: 1,
     });
-    expect(c.id).toBe('person32@example.com');
+    expect(c.id).toBe('972501112233@s.whatsapp.net');
     expect(c.name).toBe('משה כהן');
-    expect(c.handle).toBe('050-000-0006');
+    expect(c.handle).toBe('+972501112233');
     expect(c.unread).toBe(2);
     expect(c.pinned).toBe(true);
     expect(c.group).toBe(false);
@@ -79,12 +79,12 @@ describe('conversationFrom', () => {
   });
 
   test('falls back to the phone number when there is no name at all', () => {
-    const c = conversationFrom({ jid: 'person32@example.com', type: 'individual' });
-    expect(c.name).toBe('050-000-0006');
+    const c = conversationFrom({ jid: '972501112233@s.whatsapp.net', type: 'individual' });
+    expect(c.name).toBe('+972501112233');
   });
 
   test('unread/pinned coerce from SQLite integers, not truthiness of a string', () => {
-    const c = conversationFrom({ jid: 'person34@example.com', type: 'individual', unread_count: 0, pinned: 0 });
+    const c = conversationFrom({ jid: 'x@s.whatsapp.net', type: 'individual', unread_count: 0, pinned: 0 });
     expect(c.unread).toBe(0);
     expect(c.pinned).toBe(false);
   });
@@ -110,12 +110,12 @@ describe('messageFrom', () => {
   });
 
   test('group messages carry the sender so the thread can attribute them', () => {
-    const m = messageFrom({ message_id: '5', from_me: 0, text: 'hi', participant_jid: 'person39@example.com' });
+    const m = messageFrom({ message_id: '5', from_me: 0, text: 'hi', participant_jid: '97250999@s.whatsapp.net' });
     expect(m.sender).toBe('+97250999');
   });
 
   test('own messages never carry a sender', () => {
-    const m = messageFrom({ message_id: '6', from_me: 1, text: 'hi', participant_jid: 'person39@example.com' });
+    const m = messageFrom({ message_id: '6', from_me: 1, text: 'hi', participant_jid: '97250999@s.whatsapp.net' });
     expect(m.sender).toBeUndefined();
   });
 });

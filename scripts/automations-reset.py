@@ -96,7 +96,7 @@ def run_wf(name, node, cred_type, cred_id, http_params, start='Run'):
         rest('POST', f'/rest/workflows/{wid}/run', {"startNodes": [{"name": "Run"}], "triggerToStartFrom": {"name": "Manual", "data": {"main": [[{"json": {}}]]}}})
         time.sleep(4)
         # fetch latest execution
-        ex = subprocess.run(['docker', 'exec', f'n8n-postgres-{env("DEPLOYMENT_NAME","shlomo-laptop")}', 'psql', '-U', 'bina-comp', '-d', 'n8n', '-tAc',
+        ex = subprocess.run(['docker', 'exec', f'n8n-postgres-{env("DEPLOYMENT_NAME","shlomo-laptop")}', 'psql', '-U', 'hacohen', '-d', 'n8n', '-tAc',
                              f"select id from execution_entity where \"workflowId\"='{wid}' order by \"startedAt\" desc limit 1;"], capture_output=True, text=True, encoding='utf-8', errors='replace').stdout.strip()
         d = rest('GET', f'/rest/executions/{ex}?includeData=true').get('data', {})
         if not d.get('data'):
@@ -179,7 +179,7 @@ def trash_files_batched(fid):
         dn = env('DEPLOYMENT_NAME', 'shlomo-laptop')
         for _ in range(30):
             time.sleep(3)
-            ex = subprocess.run(['docker', 'exec', f'n8n-postgres-{dn}', 'psql', '-U', 'bina-comp', '-d', 'n8n', '-tAc',
+            ex = subprocess.run(['docker', 'exec', f'n8n-postgres-{dn}', 'psql', '-U', 'hacohen', '-d', 'n8n', '-tAc',
                                  f"select status from execution_entity where \"workflowId\"='{wid}' order by \"startedAt\" desc limit 1;"],
                                 capture_output=True, text=True, encoding='utf-8', errors='replace').stdout.strip()
             if ex and ex != 'running':

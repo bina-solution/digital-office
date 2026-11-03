@@ -56,6 +56,12 @@ FOUR INVARIANTS
      entry lists in `auth_exclude` - drive's public `/file/d/` links, browser42's token-checked
      `/mcp` - so an open path is a line in the manifest, where the rest of the platform can see
      it, and not three labels further down a compose file.
+  5. Two routing entries of one app whose labels the COMPILER emits never share a router name. It
+     names a router `routing[].name or app_id` (reconcile.routing_labels, and the Go twin), so two
+     entries without a name on two services both declared `<app>-local/-http/-https` with different
+     rules — and traefik drops a router two containers define differently. bina-claude shipped that
+     way (its desktop and its terminal); neither tile was routed on the HP's own edge (DGO-1269,
+     fixed in c34d99b6). Read from the manifest alone, as the compiler reads it.
 """
 import json
 import pathlib
@@ -132,6 +138,18 @@ def routers_of(spec):
     return out
 
 
+def router_entries(app):
+    """The manifest's `routing` rows that are ROUTERS — the ones that publish a host.
+
+    A row of `routing` is not necessarily a router: it may instead EMBED a console module on a
+    service the app already routes (`{"port": …, "service": …, "auth": "none", "module": {…}}`,
+    with no `host` — drive's `recorder` tile). Such a row publishes no route of its own, so it
+    claims no host; reading `r["host"]` off it is what crashed this gate. The compiler draws the
+    same line (`reconcile.py`, CONFLICTS: `if r.get("host")`), so this is the manifest's own
+    meaning of the word, not a workaround."""
+    return [r for r in (app.get("routing") or []) if r.get("host")]
+
+
 def ungated(app, doc):
     """Invariant 4 over one app's own compose: [(router, service, why)] for every router that
     routes a host the manifest gates with `auth: sso` and carries no forward-auth middleware,
@@ -141,7 +159,7 @@ def ungated(app, doc):
     the variable the entry is published under (`url_env`, its `sso.base_url_env`, `<HOST>_BASE_URL`,
     and `<APP>_BASE_URL` when the app has one entry). A rule that names no declared host is
     invariant 1's business, not this one's."""
-    entries = app.get("routing") or []
+    entries = router_entries(app)
     by_host, by_var = {}, {}
     for r in entries:
         by_host[r["host"]] = r
@@ -252,8 +270,13 @@ def main() -> int:
     ):
         app = json.loads(manifest.read_text(encoding="utf-8"))
         aid = app["id"]
-        unkept += [f"{aid}: {r['host']} {', '.join(r['auth_exclude'])}" for r in app.get("routing", [])
+        unkept += [f"{aid}: {r['host']} {', '.join(r['auth_exclude'])}" for r in router_entries(app)
                    if r.get("auth_exclude") and r.get("emit_labels", True)]
+        for name, hosts in router_name_clashes(app):                      # invariant 5
+            problems.append((aid, f"{manifest.relative_to(REPO).as_posix()}: routing entries for "
+                                  f"{', '.join(hosts)} all compile to routers named '{name}-*' — "
+                                  f"traefik drops a router two containers define differently; give "
+                                  f"each entry after the first its own `name`"))
         compose = manifest.parent / "docker-compose.yml"
         if not compose.exists():
             continue
@@ -263,7 +286,7 @@ def main() -> int:
             problems.append((aid, f"compose does not parse: {exc}"))
             continue
 
-        declared = {r["host"] for r in app.get("routing", [])}
+        declared = {r["host"] for r in router_entries(app)}
         rel = compose.relative_to(REPO).as_posix()
         for router, svc, why in ungated(app, doc):                       # invariant 4
             problems.append((aid, f"{rel}: router '{router}' ({svc}) {why}"))
@@ -334,6 +357,17 @@ def main() -> int:
     return 0
 
 
+def router_name_clashes(app) -> list:
+    """Invariant 5: the router names two or more compiler-emitted routing entries of `app` share."""
+    seen: dict = {}
+    for r in app.get("routing") or []:
+        if not isinstance(r, dict) or not r.get("host") or not r.get("emit_labels", True):
+            continue                     # no host: no router; emit_labels false: the app's own labels
+        name = r.get("name") or app.get("id")
+        seen.setdefault(name, []).append(r["host"])
+    return [(name, hosts) for name, hosts in seen.items() if len(hosts) > 1]
+
+
 def self_test() -> int:
     """Invariant 4 on made-up apps: what is a door, and what is the declared exception."""
     def app(*routing):
@@ -370,6 +404,14 @@ def self_test() -> int:
                       "sso": {"base_url_env": "DEMO_STUDIO_BASE_URL"}}),
                  doc(**{"demo-api": {"rule": "Host(`${DEMO_BASE_URL}`)"},
                         "demo-studio-http": {"rule": "Host(`${DEMO_STUDIO_BASE_URL}`)"}})), 1),
+        ("a MODULE-only row (no host) is not a router: the sso host it rides is still a door",
+         ungated(app(sso, {"port": 80, "service": "demo", "auth": "none",
+                           "emit_labels": False, "module": {"id": "demo-rec", "alias": "rec"}}),
+                 doc(**{"demo-http": {"rule": rule}})), 1),
+        ("...and a module-only row alone neither crashes nor invents a host to gate",
+         ungated(app({"port": 80, "service": "demo", "auth": "none",
+                      "module": {"id": "demo-rec", "alias": "rec"}}),
+                 doc(**{"demo-local": {"rule": rule, "middlewares": "authentik@file"}})), 0),
     ]
     bad = 0
     for name, got, want in cases:
@@ -384,7 +426,24 @@ def self_test() -> int:
     ok = [f[0] for f in named] == ["demo-studio-http"]
     bad += 0 if ok else 1
     print("  [%s] ...and the finding names the gated host's router, not the open one's" % ("ok " if ok else "FAIL"))
-    print("route-claim-lint self-test: %d/%d passed" % (len(cases) + 1 - bad, len(cases) + 1))
+    mixed = app(sso, {"port": 80, "service": "demo", "auth": "none",
+                      "module": {"id": "demo-rec", "alias": "rec"}})
+    ok = [r["host"] for r in router_entries(mixed)] == ["demo"]
+    bad += 0 if ok else 1
+    print("  [%s] router_entries keeps the router row and drops the module-only row" % ("ok " if ok else "FAIL"))
+    # invariant 5: bina-claude as it shipped (two unnamed emitted entries), as fixed, and the shapes it allows
+    desk = {"host": "claude", "port": 3000, "service": "demo-desktop", "auth": "sso"}
+    term = {"host": "claude-terminal", "port": 7681, "service": "demo", "auth": "sso"}
+    five = [("two unnamed emitted entries share one router name", router_name_clashes(app(desk, term)), 1),
+            ("naming the second one ends it", router_name_clashes(app(desk, dict(term, name="claude-terminal"))), 0),
+            ("an entry whose labels the app writes itself is not the compiler's",
+             router_name_clashes(app(dict(desk, emit_labels=False), dict(term, emit_labels=False))), 0),
+            ("a module-only row (no host) has no router", router_name_clashes(app(desk, {"port": 80, "service": "demo"})), 0)]
+    for name, got, want in five:
+        ok = len(got) == want
+        bad += 0 if ok else 1
+        print("  [%s] %s (%d finding(s), want %d)" % ("ok " if ok else "FAIL", name, len(got), want))
+    print("route-claim-lint self-test: %d/%d passed" % (len(cases) + 2 + len(five) - bad, len(cases) + 2 + len(five)))
     return 1 if bad else 0
 
 

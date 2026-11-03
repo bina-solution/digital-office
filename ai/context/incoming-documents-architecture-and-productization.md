@@ -1,7 +1,7 @@
 # Incoming-Documents — Architecture, Fresh-Tenant Provisioning & Productization Plan
 
 > Written 2026-06-18 after a full fresh-account onboarding test (new `N8N_ENCRYPTION_KEY`,
-> brand-new Google account `person2@example.com`, new GCP project + OAuth client, all wiped).
+> brand-new Google account `person3@example.com`, new GCP project + OAuth client, all wiped).
 > Companion to [incoming-documents-onboarding.md](incoming-documents-onboarding.md) (the strategy/runbook)
 > and the v2 Python API plan. This doc adds: (1) the verified system map + responsibilities, (2) the
 > **exact** provisioning steps executed this session (so they can become an automated "indocs setup"
@@ -68,7 +68,7 @@ Morning/EzCount/Invoice-One/Rivhit/… provider-specific link extraction).
 ## Part C — Fresh-tenant provisioning runbook (executed this session)
 
 Context: stack wiped (`down -v`), new `N8N_ENCRYPTION_KEY` (fp `77aee1e8`), brand-new
-`person2@example.com`, new GCP project `bina-incdocs-onboard` (#831351881172), new OAuth client.
+`person3@example.com`, new GCP project `bina-incdocs-onboard` (#831351881172), new OAuth client.
 
 ### C.1 Credential key-drift model (works; already productized)
 - Local/infra creds (`redis, postgres, httpBasicAuth ×3, googlePalmApi`) are **env-driven** via the
@@ -115,7 +115,7 @@ Uses the freshly-stored Drive cred's **refresh token** → mints an access token
 > Edit live via REST instead.
 - **Settings** [oomGi…]: `Load Settings Table` → new SS + Settings gid; `Load Companies Table` → Companies gid.
 - **Label Engine** [qdWik…]: `Get Tags Settings` / `…1` → new SS + Tag gid.
-- **Settings webhook URL** was **hardcoded to prod** `https://n8n.bina-comp.bina-solutions.co.il/webhook/setting`
+- **Settings webhook URL** was **hardcoded to prod** `https://n8n.hacohen.bina-solutions.co.il/webhook/setting`
   in **6 workflows** — repointed host → `http://n8n:5678` (also caught `/webhook/company`, `/process-document`).
 - **Publish model (n8n 2.17):** a PATCH only updates the *draft*; the live trigger runs the *published*
   snapshot. Must set `activeVersionId = versionId` (SQL) **and restart n8n** to re-register webhooks/triggers.
@@ -142,7 +142,7 @@ These are why a brand-new account isn't "fully operational" even after C:
    rules) and Companies registry are business data, not derivable from code (the old sheet is private).
 4. **Settings webhook URL was hardcoded** (now fixed to `n8n:5678`, but should be an env/`$vars` value).
 5. **Hebrew extraction keyword sets** + the 52-col data-sheet schema are locale/business-specific.
-6. **apitools endpoints** were absolute prod URLs in some nodes (`apitools.bina-comp…`) — should be env-driven.
+6. **apitools endpoints** were absolute prod URLs in some nodes (`apitools.hacohen…`) — should be env-driven.
 
 ---
 
@@ -202,12 +202,12 @@ properly routed config."*
 ### Coupling matrix (the literals that break a fresh tenant)
 | # | Coupling | Prod literal | Where (#files) | Minimal fix |
 |---|---|---|---|---|
-| 1 | n8n webhook base | `https://n8n.bina-comp.bina-solutions.co.il` | 35 wf (Settings, Process Document, all Downloaders, Create/Actions/Find/GDriveSync, **My workflow 15 MCP URLs**) | → internal `http://n8n:5678` (verified 200) / `$env` |
-| 2 | apitools base | `https://apitools.bina-comp.bina-solutions.co.il` | 20 wf (Process Document + all Query/Figure) | → internal `http://apitools:8080` (verified 200) / `$env` |
-| 3 | Sheet ID (settings **and** data — same sheet, many tabs) | `1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo` | ~15 wf | one config source, written by setup |
+| 1 | n8n webhook base | `https://n8n.hacohen.bina-solutions.co.il` | 35 wf (Settings, Process Document, all Downloaders, Create/Actions/Find/GDriveSync, **My workflow 15 MCP URLs**) | → internal `http://n8n:5678` (verified 200) / `$env` |
+| 2 | apitools base | `https://apitools.hacohen.bina-solutions.co.il` | 20 wf (Process Document + all Query/Figure) | → internal `http://apitools:8080` (verified 200) / `$env` |
+| 3 | Sheet ID (settings **and** data — same sheet, many tabs) | `1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0049` | ~15 wf | one config source, written by setup |
 | 4 | 14 Gmail label IDs | `Label_6556…` ×6 + 13 more | Scanner/Downloader/Balance/Links/Actions | resolve-by-name via Label Engine's `final_lable_ids_by_name` (Redis `n8n.label-engine.settings`) |
 | 5 | tab gids | data `542119184`, settings `1467881049`, companies `749586510`, 4 log gids | API + Logger | config / by-name |
-| 6 | Gemini model / business VAT `515561520` / Hebrew keyword sets | — | AI extractors, Figure/Query | LEAVE (business logic, not per-tenant) |
+| 6 | Gemini model / business VAT `500000088` / Hebrew keyword sets | — | AI extractors, Figure/Query | LEAVE (business logic, not per-tenant) |
 
 ### Minimal change set (M1–M5)
 - **M1** — route base URLs #1/#2 → internal hostnames (or `$env`). Biggest unlock, mechanical, low-risk: restores all inter-workflow webhook calls + all extraction on a local/fresh account.
@@ -226,7 +226,7 @@ marked **completed** · **balance sheets** extracted → rows in main table · *
 
 ## Part G — 2026-06-19 progress + revised priorities (autopilot run)
 
-**State now (active sheet `1SfWUiXCpzGcfgfqbd1xogN1sUpMIlsVajL-sKH4y11U`, account solutionsbina):**
+**State now (active sheet `1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0048`, account solutionsbina):**
 - ✅ **Working Gemini billing key** (`.env` GEMINI_API_KEY, cred `6mfcsdRaqQ4IdQ8Y`) — invoice + BS extractors run.
 - ✅ **End-to-end proven**: a real INVOICE reaches `STATUS=COMPLETED` with full extraction + auto-created
   linked SHIPMENT rows (invoice→shipment relationship).

@@ -31,7 +31,7 @@ BUSINESS_NAME = "Acme Ltd"
      ├─ DEPLOYMENT_DOMAIN = acme-ltd.digital-office.co.il
      │    web    console.acme-ltd.digital-office.co.il, mail.acme-ltd…, n8n.acme-ltd…, auth.acme-ltd…
      ├─ MAIL_DOMAIN  = acme-ltd.digital-office.co.il    (= DEPLOYMENT_DOMAIN, deliberately)
-     │    mail   person4@example.com, person6@example.com, …
+     │    mail   person18@example.com, person19@example.com, …
      ├─ MAIL_FQDN    = mail.acme-ltd.digital-office.co.il   (Postfix HELO, the MX target, the PTR)
      └─ MAIL_DKIM_SELECTOR = acme-ltd
           record  acme-ltd._domainkey.acme-ltd.digital-office.co.il
@@ -40,7 +40,7 @@ BUSINESS_NAME = "Acme Ltd"
 The company is in the **domain**, so the local part is a plain human name: `admin@`, `user2@`,
 `billing@`. That is what makes step 3 free.
 
-### Why not `person18@example.com`
+### Why not `person20.x@example.com`
 
 Putting the company in the LOCAL PART of one shared domain is the obvious first design, and it is
 worth being precise about why it was rejected, because on the surface it looks *cheaper* — the base
@@ -149,7 +149,7 @@ points here, SPF authorises this host, the DKIM key signs for `*@<slug>.digital-
 domain. A new person is therefore one line in one file:
 
 ```
-person6@example.com|{SHA512-CRYPT}$6$…
+person19@example.com|{SHA512-CRYPT}$6$…
 ```
 
 That is done from **מייל → the account menu → תיבות דואר בדומיין**: list, create, delete. No DNS,
@@ -301,7 +301,7 @@ Deliberate limits, so the checklist never claims more than it knows:
   treats *agreement* as part of the answer. When they disagree and at least one already has the
   expected value, the row is `propagating` — the record is right, some caches have not expired yet,
   and it does **not** count toward `remaining` or block `ready`. The alternative is what actually
-  happened: the PTR for `203.0.113.10` was corrected at the provider, `1.1.1.1` and `9.9.9.9` still
+  happened: the PTR for `93.184.216.5` was corrected at the provider, `1.1.1.1` and `9.9.9.9` still
   served the old name from a 23-hour cache entry, and the checklist went green → red → green
   depending only on which resolver answered first.
 * **The zone's own nameservers are an upgrade-only tiebreaker.** When *nobody* matches, all of the

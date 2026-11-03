@@ -39,7 +39,13 @@
       ]
     }
   ],
-  "use": [],
+  "use": [
+    {
+      "capability": "identity",
+      "strength": "requires",
+      "after": true
+    }
+  ],
   "connections": [],
   "compose": "docker-compose.yml",
   "routing": [

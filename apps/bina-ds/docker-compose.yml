@@ -129,6 +129,48 @@ services:
         limits:
           cpus: '2'
           memory: 2g
+  # Every Ollama this office can reach (its own `ollama` app, or a linked office's) as a model route of
+  # the agent, beside DeepSeek (tools/llm-routes.mjs, DGO-825). The harness mounts its pi-ai adapter
+  # dormant and re-reads the `llm-pi-ai:` section of settings.yaml per request, so a route written
+  # here is in the model picker on the next request with no restart of bina-ds. Same image (node and the
+  # harness's YAML library), same settings volume, the checkout read-only for the compiled registry,
+  # and the office network, where a linked office's app answers at `<alias>.<office>`.
+  bina-ds-llm-routes:
+    image: ghcr.io/solomonboltin/digital-office/bina-ds:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    container_name: bina-ds-llm-routes-${DEPLOYMENT_NAME:-bina-deployment}
+    restart: unless-stopped
+    init: true
+    # No `depends_on: bina-ds`, on purpose. Compose run from INSIDE bina-ds brings up every service but
+    # its own (scripts/lib.sh, the self-guard), and a dependency would pull bina-ds back into that run
+    # and recreate the container the run lives in. The writer waits for settings.yaml by itself.
+    entrypoint: ["node", "${BBOX_REPO_HOST:-/workspace/office}/apps/bina-ds/tools/llm-routes.mjs", "--loop", "60"]
+    environment:
+      - DSH_HOME=/data/dsh
+      - OFFICE_ROOT=${BBOX_REPO_HOST:-/workspace/office}
+      - DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-bina-deployment}
+    volumes:
+      - bina_ds_home:/data/dsh
+      - type: bind
+        source: ${BBOX_REPO_HOST:-../../}
+        target: ${BBOX_REPO_HOST:-/workspace/office}
+        read_only: true
+    networks:
+      - traefik-network
+    deploy:
+      resources:
+        limits:
+          # one pass a minute: a few HTTP questions and, when something changed, one small file write
+          cpus: '0.1'
+          memory: 96M
+        reservations:
+          cpus: '0.01'
+          memory: 32M
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
 volumes:
   bina_ds_home:
 networks:

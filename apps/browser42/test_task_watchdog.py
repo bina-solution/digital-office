@@ -23,9 +23,12 @@ class TaskWatchdogTests(unittest.TestCase):
     def setUp(self):
         self._spans = MODULE.SPANS_ENABLED
         MODULE.SPANS_ENABLED = False  # unit tests never touch the network (same as test_task_runner.py)
+        self._notify = MODULE.NOTIFICATIONS_URL
+        MODULE.NOTIFICATIONS_URL = ""  # …and an empty notice-centre address means "no notice" (handoff.py)
 
     def tearDown(self):
         MODULE.SPANS_ENABLED = self._spans
+        MODULE.NOTIFICATIONS_URL = self._notify
 
     def test_stale_active_task_gets_stall_timeout(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(MODULE, "TASKS", Path(directory)):
@@ -106,6 +109,28 @@ class TaskWatchdogTests(unittest.TestCase):
                 stalled = MODULE.sweep(current=10 + MODULE.STALL_SECONDS + 1)
             self.assertEqual(stalled, ["slow"])
             self.assertEqual(json.loads(path.read_text())["state"], "stalled")
+
+    def test_stall_tells_the_owner_the_tab_is_released_and_links_the_view(self):
+        # DGO-571: a stalled task is a task nobody is driving. The owner gets ONE notice that tells the
+        # truth — the tab is released (the reaper would reap a terminal task's tab anyway) — and links
+        # the live view, promising no tab in front. Sent before the close, with the stall as its episode.
+        with tempfile.TemporaryDirectory() as directory, patch.object(MODULE, "TASKS", Path(directory)):
+            write_task(directory, "slow", {"slug": "slow", "state": "active", "stage": "inspecting", "created_at": 10, "heartbeat_at": 10, "first_activity_at": 10})
+            order = []
+            current = 10 + MODULE.STALL_SECONDS + 1
+            with patch.object(MODULE, "NOTIFICATIONS_URL", "http://notifications.test:8977"), \
+                    patch.object(MODULE.handoff, "notify_human", side_effect=lambda slug, body, link, url=None, since=None: order.append(("notice", slug, body, link, url, since)) or True), \
+                    patch.object(MODULE, "broker_command", side_effect=lambda command: order.append(("broker", command["action"])) or {"ok": True}), \
+                    patch.dict("os.environ", {"CONSOLE_BASE_URL": "console.localhost:8080", "AUTH_PROTOCOL": "http"}):
+                self.assertEqual(MODULE.sweep(current=current), ["slow"])
+        self.assertEqual([step[0] for step in order], ["notice", "broker"])
+        _, slug, body, link, url, since = order[0]
+        self.assertEqual((slug, url, since), ("slow", "http://notifications.test:8977", current))
+        self.assertEqual(link, "http://console.localhost:8080/a/browser42/")
+        self.assertNotIn("/handoff/", link)
+        self.assertIn("שוחררה", body)
+        self.assertIn("stall_timeout", body)
+        self.assertIn("inspecting", body)
 
     def _sweep_with_spans(self, task_payload: dict, current: int, spans_enabled: bool = True):
         """Run one sweep with urllib.request.urlopen mocked; returns (stalled, span POSTs)."""

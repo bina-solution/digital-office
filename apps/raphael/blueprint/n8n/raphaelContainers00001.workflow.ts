@@ -55,6 +55,9 @@ export class RaphaelContainerScanWorkflow {
     ScanContainers = {
         jsCode: `const OV = 'http://machine:8080/api/overview';
 const NOTIFY = 'http://notifications:8977/api/notifications';
+// ONE IS SAID AS ONE (DGO-526) — see the note in raphaelMachine00001; a Code node cannot import.
+const num = n => Number(n).toLocaleString('he-IL');
+const one = (n, single, many) => (Number(n) === 1 ? single : num(n) + ' ' + many);
 let ov;
 try {
   ov = await this.helpers.httpRequest({ method: 'GET', url: OV, json: true, timeout: 20000 });
@@ -70,6 +73,8 @@ const inventory = {};
 for (const c of ours) { const s = c.status || 'unknown'; inventory[s] = (inventory[s] || 0) + 1; }
 // Anomaly = a container that has crashed or is crash-looping. rap-006 already covers running-but-
 // unhealthy, so this one deliberately does NOT re-flag that — the two scans do not double-notice.
+//: what this scan closed, if anything (so the closing is as visible as the opening)
+let closed = null;
 const crashed = ours.filter(c => c.status === 'dead' || c.status === 'restarting')
   .map(c => (c.name || c.raw_name) + ' (' + c.status + ')');
 if (crashed.length) {
@@ -77,13 +82,30 @@ if (crashed.length) {
     await this.helpers.httpRequest({
       method: 'POST', url: NOTIFY, json: true, timeout: 20000,
       body: { source: 'raphael', source_id: 'scan-containers-crashed',
-        title: 'רפאל: ' + crashed.length + ' קונטיינרים קרסו או בלולאת ריסטארט',
+        title: 'רפאל: ' + one(crashed.length, 'קונטיינר אחד קרס או בלולאת ריסטארט', 'קונטיינרים קרסו או בלולאת ריסטארט'),
         body: crashed.join(', ') + ' — מוצע לבדוק את היומנים ולשקול recreate', level: 'warn' },
     });
   } catch (e) { /* the notice is best-effort; the finding is still returned */ }
+} else {
+  // CLEAN → close this scan's own notice if it is still open (DGO-537, from-azaria §56): an alarm
+  // nobody closes keeps asking, and this scan finding nothing left its old notice on the owner's
+  // list for ever otherwise. Only THIS scan's id, and only while it is unread; a live condition is
+  // never closed by a run that does not see it.
+  try {
+    const list = await this.helpers.httpRequest({ method: 'GET', url: NOTIFY + '?limit=60',
+                                                  json: true, timeout: 15000 });
+    const rows = Array.isArray(list && list.notifications) ? list.notifications : [];
+    for (const row of rows) {
+      if (row && row.source_id === 'scan-containers-crashed' && !row.is_read) {
+        await this.helpers.httpRequest({ method: 'POST', url: NOTIFY + '/' + row.id + '/read',
+                                         json: true, timeout: 10000 });
+        closed = 'scan-containers-crashed';
+      }
+    }
+  } catch (e) { /* a notice left open is not a failure of the scan */ }
 }
 return [{ json: { scan: 'containers', ok: crashed.length === 0, project: project,
-  total: ours.length, inventory: inventory, crashed: crashed.length, containers: crashed } }];
+  total: ours.length, inventory: inventory, crashed: crashed.length, containers: crashed, closed: closed } }];
 `,
     };
 

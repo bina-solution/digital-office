@@ -69,7 +69,57 @@ immutable slug; never adopt a different task.
 ./bbox b42 task captcha <slug> detect        # a human-verification challenge, if one is showing
 ./bbox b42 task captcha <slug> click <index> # answer it: 0, or 0,4,7 for a multi-select round
 ./bbox b42 task captcha <slug> click '@x:y'  # by PAGE pixel, when the DOM hides the widget
+./bbox b42 task await <slug> <conditions> [seconds]  # the HUMAN HANDOFF, measured on the page
 ```
+
+`await` is what the flow needs when a person has to do something the agent cannot: the agent opens the
+page, hands him a link, and *this* is how it learns he finished — by measurement, not by a sleep. Each
+poll asks the live page one declarative question and the answer carries what was seen, so "not yet" and
+"never will be" are different answers:
+
+| condition | holds when |
+|---|---|
+| `selector:<css>` | the element is present **and visible** (`selector:[data-testid=chat-list]`) |
+| `gone:<css>` | it is absent or invisible (`gone:canvas[aria-label\*="Scan"]`) |
+| `url:<fragment>` | the page's own URL contains the fragment |
+| `storage:<key>` | `localStorage[key]` holds a non-empty value |
+| `text:<string>` | the page's visible text contains the string |
+| `notext:<string>` | …and it does **not** — "the sign-in screen is gone" |
+
+**A condition's value may not contain a comma** — the comma is what separates conditions, so
+`selector:[aria-label="Chat list"], [data-testid="chat-list"]` is read as two conditions and the second
+fails LOUDLY as `unknown_condition` (measured 2026-10-14, in the WhatsApp pairing's own report). Write
+two conditions, or one selector without a comma.
+
+Comma-separated conditions are ALL required, the default budget is 280s and that is the ceiling too:
+the task runner ends a request at `BROWSER42_TASK_REQUEST_SECONDS` (300s) and kills the child, so a
+longer budget would be a wait that cannot report (measured 2026-10-14 — a 1500s await died as
+`runner_timeout`). **A longer handoff is a loop of calls**, and while each one waits the task
+**heartbeats** every 15s — a person scanning a QR code is not a stalled task. Success returns
+`state: "met"`, `waited_s` and `observed`; a timeout refuses with `await_timeout` and the last thing the
+…
+
+```bash
+# the pattern for "wait until the person is done, for however long that takes"
+while :; do ./bbox b42 task await whatsapp-pair "notext:Scan the QR code with your phone's camera" 280; done
+```
+
+**When a person may take longer than a task is allowed to live, wait on a SESSION tab instead.** A
+task is killed by its own clocks — 30 minutes of total wall time (`BROWSER42_TASK_TOTAL_SECONDS`) and
+300s per request through the runner — and a person is not bounded that way. Measured 2026-10-14: the
+WhatsApp handoff died at exactly 30 minutes as `task_timeout`, with the owner not yet reached. A
+session tab has no such clock, and `bbox b42 await` does not go through the runner at all:
+
+```bash
+./bbox b42 group whatsapp-pair https://web.whatsapp.com   # the tab the person will look at
+./bbox b42 await whatsapp-pair "notext:Scan the QR code with your phone's camera" 600
+```
+
+Same conditions and the same measured answer (`state:"met"` + `observed`, or `await_timeout` with what
+the page last showed), no task state touched. One window may be an hour (max 3600s); longer is a loop.
+
+It exists for the sign-ins a cookie jar cannot see: WhatsApp Web keeps its session in IndexedDB, so `bbox b42 logins await whatsapp` refuses by name (`not_a_cookie`) — correctly — while
+`bbox b42 task await <slug> 'selector:…' 280` answers — and a second call continues the wait. DGO-573.
 
 `read` is how an agent gets the **whole** page without scrolling it: this browser's viewport is small
 (~780x395) and a transcript, a log or a long document does not fit in it. The verb walks the page's own
@@ -84,7 +134,8 @@ context — read it.
 kind, the instruction, every clickable target with its **page** coordinates and a picture of the
 challenge; you — the caller that can see — pick an index; `click <index>` presses it like a hand.
 After 3 clicks it refuses by name (`captcha_attempts_exhausted`) and hands the round to the owner at
-`http://browser42.localhost:8080/view/` — never keep clicking, and never use a solver service.
+the task's hand-off address (`bbox b42 handoff <slug>`: the browser awake, the task's tab in front,
+and a notice to him) — never keep clicking, and never use a solver service.
 Full background, measured results and the safety boundary: [captcha.md](captcha.md).
 
 `inspect` returns at most 40 visible controls and 12 content containers with opaque `b42h:` handles.
@@ -191,8 +242,9 @@ password live only as local variables for the duration of that call.
 `start` creates one official colored/labeled native Chrome Tab Group and a durable record at
 `data/browser42/tasks/<slug>/`. Task state is `allocated`, `active`, `accepted`, `rejected`, or
 `stalled`. Every inspect/action refreshes the task lease. The platform watchdog marks a task
-`stalled` only after five minutes without activity; it never closes the group, browser, profile, or
-evidence. Use `./bbox b42 task status <slug>` to inspect state.
+`stalled` only after five minutes without activity; it then releases the group's tab (the reaper
+would reap a terminal task's tab anyway), tells the owner so in the notice centre, and never touches
+the browser, profile, or evidence. Use `./bbox b42 task status <slug>` to inspect state.
 
 `goal <slug> <direct-url> [topic]` is the fast path documented above. Optional task commands are
 `goto <slug> <direct-url>`, `wait <slug> [milliseconds]`, and `heartbeat <slug>`. `goto` accepts

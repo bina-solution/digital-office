@@ -68,7 +68,7 @@ from public.incoming_documents;
 --       the same string. MEASURED LIVE: 364 collision groups on the live dedupe
 --       key (COMPANY_ID, SHORT_DOC_ID) covering 786 rows; of those, 94 groups /
 --       202 rows hold genuinely DIFFERENT full document ids. Example, real:
---         COMPANY_ID 511705477, SHORT_DOC_ID '55526' <- 6 distinct documents
+--         COMPANY_ID 500001102, SHORT_DOC_ID '55526' <- 6 distinct documents
 --           125587D55526 / 126587055526 / 141717D55526 /
 --           160040D55526 / 166944D55526 / 169420D55526
 --       *** NO FORMULA FIXES THIS. *** All six collapse to '55526' under the

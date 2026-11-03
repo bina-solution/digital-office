@@ -21,7 +21,7 @@
 -- THIS FILE IS APPLIED INTO AN INSTANCE SCHEMA, NOT INTO `public`.
 --
 -- An INDOX instance is a tenant and its data lives in its own schema (`platform.state.yaml` →
--- indox.entries[].schema, e.g. `indox_bina_comp`). The applier — apps/indox/hooks/apply-schema —
+-- indox.entries[].schema, e.g. `indox_hacohen`). The applier — apps/indox/hooks/apply-schema —
 -- creates that schema and sets `search_path` before sending a byte of this file, so every
 -- unqualified table name below resolves to the tenant's own table.
 --
@@ -1205,7 +1205,7 @@ alter table incoming_documents add column if not exists "DUP_CAUSE" TEXT;
 -- [cutover 2026-08-31] TENANT-LOCAL, no longer `public.`. These used to be declared as shared
 -- public views, which forced apply-schema to STRIP them (an apply under search_path=<tenant>
 -- would have silently repointed the shared copy at whichever tenant ran last), which in turn
--- left every fresh tenant WITHOUT them — the hand-made indox_bina_comp copies were the only
+-- left every fresh tenant WITHOUT them — the hand-made indox_hacohen copies were the only
 -- reason extraction worked. Unqualified, each tenant gets its own copy bound to its own tables
 -- by the apply preamble's search_path, which is exactly what the hand-made copies were.
 create or replace view company_registry as
@@ -1292,7 +1292,7 @@ $bind$;
 -- [cutover 2026-08-31] TENANT-LOCAL, no longer `public.`. These used to be declared as shared
 -- public views, which forced apply-schema to STRIP them (an apply under search_path=<tenant>
 -- would have silently repointed the shared copy at whichever tenant ran last), which in turn
--- left every fresh tenant WITHOUT them — the hand-made indox_bina_comp copies were the only
+-- left every fresh tenant WITHOUT them — the hand-made indox_hacohen copies were the only
 -- reason extraction worked. Unqualified, each tenant gets its own copy bound to its own tables
 -- by the apply preamble's search_path, which is exactly what the hand-made copies were.
 create or replace view extraction_queries as
@@ -1318,7 +1318,7 @@ select q.instance,
       -- company_registry (created above in this same apply, first on the search_path). The
       -- qualified `public.company_registry` that stood here bound every tenant's extraction
       -- queries to instance one's registry — measured: indox_test.extraction_queries joined
-      -- public.company_registry, i.e. the test tenant's extraction read bina-comp's companies.
+      -- public.company_registry, i.e. the test tenant's extraction read hacohen's companies.
       left join company_registry r on r.instance = s.instance
      where s.key like 'q\_v3\_%'
   ) q;
@@ -1424,7 +1424,7 @@ create index if not exists indox_priority_local_received_idx
 -- [cutover 2026-08-31] TENANT-LOCAL, no longer `public.`. These used to be declared as shared
 -- public views, which forced apply-schema to STRIP them (an apply under search_path=<tenant>
 -- would have silently repointed the shared copy at whichever tenant ran last), which in turn
--- left every fresh tenant WITHOUT them — the hand-made indox_bina_comp copies were the only
+-- left every fresh tenant WITHOUT them — the hand-made indox_hacohen copies were the only
 -- reason extraction worked. Unqualified, each tenant gets its own copy bound to its own tables
 -- by the apply preamble's search_path, which is exactly what the hand-made copies were.
 create or replace view v_indox_priority_local_dupes as
@@ -1497,13 +1497,13 @@ $mirror_archive$;
 
 
 -- ── FOUR TABLES A REAL TENANT HAS AND THIS FILE DID NOT ──────────────────────────────────────
--- [2026-08-28, reported by the tenancy session] bina-comp holds 17 tables; this fixture built 13.
+-- [2026-08-28, reported by the tenancy session] hacohen holds 17 tables; this fixture built 13.
 -- The four below reached production through migrations and by hand and never came back here, so
 -- a tenant provisioned from the fixture was missing tables indoxApi01 addresses — the exact
 -- "fresh deploy is not compared to a migrated one" mechanism issues/schema-drift-fixture-vs-live.md
--- leaves open. Definitions taken from the live indox_bina_comp, not reconstructed from memory.
+-- leaves open. Definitions taken from the live indox_hacohen, not reconstructed from memory.
 
--- The dedup audit trail. 10,184 rows on bina-comp, and it was undeclared everywhere — found only
+-- The dedup audit trail. 10,184 rows on hacohen, and it was undeclared everywhere — found only
 -- because ownership was traced by REFERENCE rather than by name prefix.
 create table if not exists merge_audit (
   id                   bigserial primary key,

@@ -168,6 +168,221 @@ PY
   fi
 fi
 
+# 2b. A PAIR IN WHICH THIS OFFICE LISTENS PUBLISHES ITS PORT — whatever `.env` was rebuilt from.
+#    The port another office dials is an agreement written into the pair's record when the two paired
+#    (`tunnel.listen_port`), while compose publishes what `.env` says (DGO_WG_PUBLISH_*): two homes for
+#    one fact, and only one of them survives a rebuilt `.env`. Measured on vps1 (2026-10-19): its `.env`
+#    was rebuilt on 2026-10-14 without the lines its pairing with hp-laptop had needed, the next
+#    re-creation of dgo-net (2026-10-15 09:12 UTC) published 127.0.0.1:51839, and hp-laptop's handshakes
+#    were counted by the server's firewall and reached nothing behind it — for four days, with nothing
+#    anywhere saying so. So the RECORD decides, on every bring-up, on any machine (a public server too:
+#    pairing as the side that listens was the owner's decision to listen). Only fills or corrects —
+#    an office with no listening pair keeps whatever `.env` says.
+if [ -f "${ENV_FILE}" ]; then
+  NAME="$(sed -n 's/^DEPLOYMENT_NAME=//p' "${ENV_FILE}" | tail -1 | tr -d '"'"'"'\r' || true)"
+  APP_CONTAINER="$(docker ps --filter "name=^dgo-extend-${NAME:-bina-deployment}\$" --format '{{.Names}}' 2>/dev/null | head -1 || true)"
+  LISTEN=""
+  if [ -n "${APP_CONTAINER}" ]; then
+    LISTEN="$(docker exec "${APP_CONTAINER}" python3 -c '
+import glob
+import yaml
+ports = set()
+for path in glob.glob("/data/dgo/*.yaml"):
+    try:
+        rec = yaml.safe_load(open(path, encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError):
+        continue
+    t = rec.get("tunnel") or {}
+    # this office LISTENS in a pair when the other side is the one that dials (dgo-pairing-contract.md, A)
+    # — over UDP: a pair on the TCP path of the carriers is dialed at no UDP port, and counting it
+    # could take the one published port away from a pair that is (no apostrophe in this block: it is
+    # one single-quoted argument of the shell)
+    if rec.get("kind") == "paired" and t.get("listen_port") and t.get("dial") != t.get("role") \
+            and str(t.get("transport") or "udp").strip().lower() != "tcp":
+        ports.add(int(t["listen_port"]))
+print(" ".join(str(p) for p in sorted(ports)))
+' 2>/dev/null || true)"
+  fi
+  if [ -n "${LISTEN}" ]; then
+    (
+      cd "${REPO_ROOT}" && python3 - .env "${LISTEN}" <<'PY'
+import re
+import sys
+
+path, ports = sys.argv[1], [int(p) for p in sys.argv[2].split()]
+text = open(path, encoding="utf-8", newline="").read()
+nl = "\r\n" if "\r\n" in text else "\n"
+
+
+def value(name):
+    found = ""
+    for line in text.splitlines():
+        m = re.match(rf"^\s*{re.escape(name)}\s*=(.*)$", line)
+        if m:
+            found = m.group(1).strip().strip('"').strip("'")
+    return found
+
+
+def put(body, name, val):
+    """Replace the LAST assignment of `name` (compose's rule), or append one."""
+    lines = body.split(nl)
+    last = max((i for i, ln in enumerate(lines) if re.match(rf"^\s*{re.escape(name)}\s*=", ln)), default=-1)
+    if last >= 0:
+        lines[last] = f"{name}={val}"
+        return nl.join(lines)
+    return body.rstrip("\r\n") + nl + f"{name}={val}" + nl
+
+
+port = str(ports[0])
+if len(ports) > 1:
+    print(f"[dgo] this office listens in pairs on {', '.join(map(str, ports))} — one UDP port can be "
+          f"published; {port} is, the others' pairs cannot be dialed until they agree on one port")
+want = {"DGO_WG_PUBLISH_PORT": port, "DGO_WG_PUBLISH_BIND": "0.0.0.0"}
+if not value("DGO_WG_PORT"):
+    want["DGO_WG_PORT"] = port
+new = text
+for name, val in want.items():
+    if value(name) != val:
+        new = put(new, name, val)
+if new != text:
+    with open(path, "w", encoding="utf-8", newline="") as f:
+        f.write(new)
+    print(f"[dgo] a pair listens on {port}/udp — published on every interface (.env follows the pair's record)")
+PY
+    ) || true
+  fi
+fi
+
+# 2c. THE TCP PATH'S DOOR. A pair that can never carry a UDP packet rides the carriers' TCP path
+#    (`dgo-carry`), and in such a pair the office that can be REACHED waits while the other dials
+#    (net.carry_plan). On a Mac that is this office whenever the engine's LAN door is open
+#    (packaging/macos/lan-door.py). The engine says so in the hand-off — the LAN port it takes
+#    (BBOX_HOST_CARRY_PORT) and the Mac's loopback port it hands each connection to
+#    (BBOX_HOST_CARRY_TO) — and this hook keeps `.env` in step: DGO_CARRY_ACCEPT=1 and
+#    DGO_CARRY_PUBLISH_PORT=<that loopback port> while the door is open, both emptied when a later
+#    hand-off says it is closed (BBOX_LAN_DOOR=0). It owns those two lines only while it wrote them
+#    (DGO_CARRY_AUTO=1): an owner's own value stands, as DGO_WG_AUTO's rule has it.
+if [ -f "${ENV_FILE}" ] && [ -n "${BBOX_IN_GUEST:-}" ]; then
+  (
+    cd "${REPO_ROOT}" && python3 - .env "${BBOX_HOST_CARRY_PORT:-}" "${BBOX_HOST_CARRY_TO:-}" <<'PY'
+import re
+import sys
+
+path, lan, to = sys.argv[1], sys.argv[2], sys.argv[3]
+text = open(path, encoding="utf-8", newline="").read()
+nl = "\r\n" if "\r\n" in text else "\n"
+
+
+def value(name):
+    found = None
+    for line in text.splitlines():
+        m = re.match(rf"^\s*{re.escape(name)}\s*=(.*)$", line)
+        if m:
+            found = m.group(1).strip().strip('"').strip("'")
+    return found
+
+
+def put(body, name, val):
+    """Replace the LAST assignment of `name` (compose's rule), or append one."""
+    lines = body.split(nl)
+    last = max((i for i, ln in enumerate(lines) if re.match(rf"^\s*{re.escape(name)}\s*=", ln)), default=-1)
+    if last >= 0:
+        lines[last] = f"{name}={val}"
+        return nl.join(lines)
+    return body.rstrip("\r\n") + nl + f"{name}={val}" + nl
+
+
+port_re = re.compile(r"^[0-9]{2,5}\Z")
+door_open = bool(port_re.match(lan)) and bool(port_re.match(to))
+owned = value("DGO_CARRY_AUTO") == "1"
+declared = value("DGO_CARRY_ACCEPT") is not None
+if value("DGO_CARRY_AUTO") == "0":
+    sys.exit(0)                         # the owner's: this hook never touches the two lines
+new = text
+if door_open and (owned or not declared):
+    if not owned:
+        new = new.rstrip("\r\n") + nl + nl + (
+            "# Written by apps/dgo-extend/hooks/prepare: the engine's LAN door is open, so a peer's carrier"
+            + nl + "# reaches this office over TCP and its TCP pairs wait to be dialed (net.carry_plan)."
+            + nl + "# DGO_CARRY_AUTO=0 keeps these two lines yours." + nl)
+    for name, val in (("DGO_CARRY_AUTO", "1"), ("DGO_CARRY_ACCEPT", "1"), ("DGO_CARRY_PUBLISH_PORT", to)):
+        if value(name) != val:
+            new = put(new, name, val)
+    if new != text:
+        print(f"[dgo] the engine's LAN door is open: peers' carriers reach this office on {lan}/tcp")
+elif not door_open and owned and (value("DGO_CARRY_ACCEPT") or value("DGO_CARRY_PUBLISH_PORT")):
+    new = put(put(new, "DGO_CARRY_ACCEPT", ""), "DGO_CARRY_PUBLISH_PORT", "")
+    print("[dgo] the engine's LAN door is closed: this office's TCP pairs dial instead of waiting")
+if new != text:
+    with open(path, "w", encoding="utf-8", newline="") as f:
+        f.write(new)
+PY
+  ) || true
+fi
+
+# 2d. JOINING BY DECLARATION (join_api.py). An office that declares `DGO_JOIN` — in `.env`, or in the
+#    environment it runs in (a cloud sandbox's environment variables; compose reads both, the
+#    environment first) — joins the office it names by itself once it is up. Two facts of THIS machine
+#    are written here for it, each only when nothing was declared:
+#      · DGO_OFFICE_ID from an invite that names the office it admits — the invite is the owner's
+#        word for what this office is called, and an office of another name is refused by it;
+#      · DGO_EGRESS_CA_FILE: in a cloud sandbox (the proxy CA that every ccr_* helper detects), that
+#        CA, so the app and the carrier trust the intercepting proxy's certificate for the join and
+#        for the door. Nowhere else: a laptop or a server trusts the usual roots and nothing more.
+if [ -f "${ENV_FILE}" ]; then
+  (
+    cd "${REPO_ROOT}" && python3 - .env "${DGO_JOIN:-}" "${PROXY_CA:-${BASELINE_PROXY_CA:-/root/.ccr/ca-bundle.crt}}" <<'PY'
+import base64
+import json
+import os
+import re
+import sys
+
+path, join_env, proxy_ca = sys.argv[1], sys.argv[2], sys.argv[3]
+text = open(path, encoding="utf-8", newline="").read()
+nl = "\r\n" if "\r\n" in text else "\n"
+
+
+def value(name):
+    found = None
+    for line in text.splitlines():
+        m = re.match(rf"^\s*{re.escape(name)}\s*=(.*)$", line)
+        if m:
+            found = m.group(1).strip().strip('"').strip("'")
+    return found
+
+
+def put(body, name, val):
+    """Replace the LAST assignment of `name` (compose's rule), or append one."""
+    lines = body.split(nl)
+    last = max((i for i, ln in enumerate(lines) if re.match(rf"^\s*{re.escape(name)}\s*=", ln)), default=-1)
+    if last >= 0:
+        lines[last] = f"{name}={val}"
+        return nl.join(lines)
+    return body.rstrip("\r\n") + nl + f"{name}={val}" + nl
+
+
+new = text
+join = re.sub(r"\s+", "", join_env or value("DGO_JOIN") or "")
+if join.startswith("DGOJOIN1:") and not (os.environ.get("DGO_OFFICE_ID") or value("DGO_OFFICE_ID")):
+    body = join[len("DGOJOIN1:"):]
+    try:
+        office = str(json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4))).get("office") or "")
+    except ValueError:
+        office = ""
+    if re.match(r"^[a-z][a-z0-9-]{1,30}\Z", office):
+        new = put(new, "DGO_OFFICE_ID", office)
+        print(f"[dgo] the invite in DGO_JOIN names this office: DGO_OFFICE_ID={office}")
+if os.path.isfile(proxy_ca) and os.path.getsize(proxy_ca) > 0 and value("DGO_EGRESS_CA_FILE") is None:
+    new = put(new, "DGO_EGRESS_CA_FILE", proxy_ca)
+    print("[dgo] a cloud sandbox: the join and the link door trust its proxy's CA (DGO_EGRESS_CA_FILE)")
+if new != text:
+    with open(path, "w", encoding="utf-8", newline="") as f:
+        f.write(new)
+PY
+  ) || true
+fi
+
 # 3. WHAT LINKED OFFICES GIVE is part of this office's desired state, and `bbox run` is what
 #    converges it: asked HERE, before the compiler runs, so an app a peer published since the last
 #    run becomes a route and a tile in THIS run — on a machine with no door to itself as well (see

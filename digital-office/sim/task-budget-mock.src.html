@@ -1,0 +1,274 @@
+<!doctype html>
+<!--
+  task-budget-mock — תקציב לכל פריט עבודה, והסימון של מה שהוא עלה.
+
+  WHAT THIS IS. A demo of the model the owner stated on 2026-10-13: every piece of work the agent
+  does belongs to an existing work item, every item carries a BUDGET before the work starts, and the
+  item carries a MARKER saying what it has cost in tokens and in the office's currency. Small items
+  get a small budget; a plan meant to run for a weekend or a week gets a big one — or none.
+
+  WHAT IT REFUSES TO PARAPHRASE.
+    * Every figure in the money column is computed by the office's OWN code — `lib/pricing.js` and
+      `lib/cost.js` of `apps/bina-ds/plugins/cost-meter`, loaded as Blob modules from the text the
+      builder inlines. The page computes no price itself.
+    * The colours and type are the office palette (`platform-base/bina-ui/theme-tokens.css`, inlined
+      by the builder into the artifact), so nothing here is a second palette.
+    * The default numbers are the ones measured on 2026-10-13 (the goal `ui2-060`: 502 requests,
+      235M tokens, $1.26), not invented figures.
+
+  Built, never hand-typed:  python3 digital-office/sim/build-task-budget-mock.py
+-->
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <title>תקציב לכל פריט עבודה — הדמייה</title>
+  <link rel="stylesheet" href="../../platform-base/bina-ui/theme-tokens.css" />
+  <style>
+    body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font); display: flex; gap: 24px; padding: 22px; align-items: flex-start; justify-content: center; flex-wrap: wrap; }
+    h1 { font-size: 15px; margin: 0 0 2px; }
+    .sub { font-size: 12px; color: var(--muted); line-height: 1.6; margin: 0 0 10px; }
+    .col { display: flex; flex-direction: column; gap: 16px; }
+    .main { width: 560px; }
+    .rail { width: 330px; }
+    .card { border: 1px solid var(--border); border-radius: 14px; background: var(--surface); padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+    .item-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .key { font-size: 12px; font-weight: 700; letter-spacing: .02em; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); }
+    .chip { font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); }
+    .chip.started { color: var(--ink); }
+    .title { font-size: 15px; font-weight: 600; line-height: 1.5; }
+    .meta { font-size: 12px; color: var(--muted); display: flex; gap: 14px; flex-wrap: wrap; }
+    /* ── the marker: what this item has cost, against what it was given ───────────────────────── */
+    .marker { border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); padding: 12px; display: flex; flex-direction: column; gap: 9px; }
+    .marker .top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+    .money { font-size: 21px; font-weight: 700; }
+    .tokens { font-size: 12px; color: var(--muted); }
+    .budget { font-size: 13px; color: var(--muted); }
+    .bar { height: 8px; border-radius: 999px; background: var(--border); overflow: hidden; }
+    .bar i { display: block; height: 100%; background: var(--accent, #6f8f4a); transition: width .15s ease; }
+    .bar.warn i { background: #d9a441; }
+    .bar.over i { background: #c4553f; }
+    .verdict { font-size: 12.5px; line-height: 1.65; }
+    .verdict.warn { color: #d9a441; }
+    .verdict.over { color: #c4553f; font-weight: 600; }
+    .rows { font-size: 12px; color: var(--muted); display: flex; gap: 12px; flex-wrap: wrap; }
+    .field { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; }
+    .field span { color: var(--muted); }
+    input[type=number], input[type=text] { width: 96px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 8px; background: transparent; color: inherit; font: inherit; }
+    input[type=range] { width: 150px; }
+    select { padding: 4px 8px; border: 1px solid var(--border); border-radius: 8px; background: transparent; color: inherit; font: inherit; }
+    .note { font-size: 11.5px; color: var(--muted); line-height: 1.6; }
+    .plan-item { display: flex; justify-content: space-between; gap: 10px; font-size: 12.5px; padding: 5px 0; border-bottom: 1px dashed var(--border); }
+    .plan-item:last-child { border-bottom: 0; }
+  </style>
+</head>
+<body>
+  <div class="col main">
+    <div>
+      <h1>פריט עבודה אחד, עם התקציב שלו ועם מה שהוא עלה</h1>
+      <p class="sub">אותו פריט שהסוכן עובד עליו — ובתוכו שני מספרים שלא היו קיימים עד היום: כמה הוא כבר עלה, וכמה ניתן לו.</p>
+    </div>
+
+    <div class="card">
+      <div class="item-head">
+        <span class="key" id="i-key">DGO · ui2-060</span>
+        <span class="chip started" id="i-state">בתהליך</span>
+        <span class="chip">עדיפות: דחוף</span>
+        <span class="chip" id="i-class">תקציב: משימה רגילה</span>
+      </div>
+      <div class="title">הדסקטופ תמיד מוכוון קישור: קישור לפריט עבודה פותח את חלון המשימות באותו דסקטופ — לא טאב חדש ולא חלון של בינה</div>
+      <div class="meta"><span>מקבל: עזריה</span><span>מודול: סוכני הלשכה</span><span>שיחה: session-3b0e4897</span></div>
+
+      <div class="marker">
+        <div class="top">
+          <div><span class="money" id="m-money">—</span> <span class="budget" id="m-budget">—</span></div>
+          <div class="tokens" id="m-tokens">—</div>
+        </div>
+        <div class="bar" id="m-bar"><i id="m-fill" style="width:0%"></i></div>
+        <div class="verdict" id="m-verdict">—</div>
+        <div class="rows" id="m-rows"></div>
+      </div>
+      <div class="note">התקציב יושב על הפריט. הסוכן לא יכול להעלות אותו — רק האדם שפתח אותו. מעל התקציב הדופק מפסיק להחזיר את השיחה לעבודה ומודיע.</div>
+    </div>
+
+    <div class="card">
+      <div class="item-head">
+        <span class="key">DGO · plan-weekend</span>
+        <span class="chip started">מתוכנן</span>
+        <span class="chip" id="p-class">תקציב: תוכנית סוף שבוע</span>
+      </div>
+      <div class="title">תוכנית סוף שבוע — מה שרץ לבד מהערב עד צאת השבת</div>
+      <div class="plan-item"><span>ui2-060 · הדסקטוף מכוון קישור</span><span id="p-1">—</span></div>
+      <div class="plan-item"><span>ui2-035 · כל מסך בחלון 380×260</span><span id="p-2">—</span></div>
+      <div class="plan-item"><span>web-002 · הסימולטור באתר הציבורי</span><span id="p-3">—</span></div>
+      <div class="marker">
+        <div class="top">
+          <div><span class="money" id="p-money">—</span> <span class="budget" id="p-budget">—</span></div>
+          <div class="tokens" id="p-tokens">—</div>
+        </div>
+        <div class="bar" id="p-bar"><i id="p-fill" style="width:0%"></i></div>
+        <div class="verdict" id="p-verdict">—</div>
+      </div>
+      <div class="note">אותה שיחה, אותו מונה — אבל לתוכנית שנועדה לרוץ ימים נותנים תקציב גדול, או <b>ללא הגבלה</b>, וזה מה שמאפשר לה לרוץ לאורך זמן בלי שאף אחד יעמוד לידה.</div>
+    </div>
+  </div>
+
+  <div class="col rail">
+    <div class="card">
+      <h1>הגדרות המחיר (של הלשכה)</h1>
+      <div class="field"><span>מטבע</span><input type="text" id="currency" value="₪" /></div>
+      <div class="field"><span>שער לדולר</span><input type="number" id="rate" value="3.7" step="0.1" /></div>
+      <div class="field"><span>שעות שיא</span><input type="checkbox" id="peak" checked /></div>
+      <div class="field"><span>שעה (UTC)</span><input type="number" id="hour" value="3" min="0" max="23" /></div>
+      <div class="field"><span>קצב נוכחי (₪/שעה)</span><input type="number" id="pace" value="1.9" step="0.1" /></div>
+    </div>
+
+    <div class="card">
+      <h1>מה הפריט צרך (המונה של השיחה)</h1>
+      <div class="field"><span>cache-hit</span><input type="number" id="cached" value="234000000" step="1000000" /></div>
+      <div class="field"><span>קלט לא מקומט</span><input type="number" id="uncached" value="240000" step="10000" /></div>
+      <div class="field"><span>פלט</span><input type="number" id="output" value="420000" step="10000" /></div>
+      <div class="field"><span>גרור</span><input type="range" id="cached-range" min="0" max="800000000" step="1000000" value="234000000" /></div>
+      <div class="note">ברירת המחדל היא המדידה של 2026-10-13 עבור <b>ui2-060</b>: 502 בקשות, 235M טוקנים, $1.26.</div>
+    </div>
+
+    <div class="card">
+      <h1>התקציב של הפריט</h1>
+      <div class="field"><span>סוג</span>
+        <select id="class">
+          <option value="1.5">משימה קטנה — ₪1.5</option>
+          <option value="5" selected>משימה רגילה — ₪5</option>
+          <option value="25">תוכנית ארוכה (סוף שבוע) — ₪25</option>
+          <option value="60">תוכנית שבוע — ₪60</option>
+          <option value="inf">ללא הגבלה</option>
+        </select>
+      </div>
+      <div class="field"><span>התקציב בפועל</span><input type="text" id="budget" value="5" /></div>
+      <div class="note">בוחר הסוג ממלא את התקציב, ואפשר לכתוב בו כל מספר (או <b>inf</b>). כך נקבעת „כמה תשומת לב” המשימה הזאת מקבלת לפני שהעבודה מתחילה.</div>
+    </div>
+  </div>
+
+  <script type="text/plain" id="pricing-src">__PRICING_SRC__</script>
+  <script type="text/plain" id="cost-src">__COST_SRC__</script>
+
+  <script type="module">
+    // The office's own price book and arithmetic, running here as Blob modules — the demo computes
+    // every figure through the code that will do it in the product (never a price typed in the page).
+    const blob = (text, map) => URL.createObjectURL(new Blob([map(text)], { type: 'text/javascript' }));
+    const pricingUrl = blob(document.getElementById('pricing-src').textContent, (t) => t);
+    const costUrl = blob(document.getElementById('cost-src').textContent, (t) => t.replace('./pricing.js', pricingUrl));
+    const { fold, initial, view } = await import(costUrl);
+
+    const $ = (id) => document.getElementById(id);
+    const fmtTokens = (n) => n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(0) + 'k' : String(n);
+    const fmtMoney = (v, cur) => cur + v.toFixed(2);
+
+    /** One settled sample of the conversation, priced by the office's own code. */
+    function priceOf(tokens, hour, settings) {
+      const usage = { inputTokens: tokens.uncached, outputTokens: tokens.output, cacheReadTokens: tokens.cached, cacheWriteTokens: 0 };
+      const stamp = Date.UTC(2026, 9, 13, hour, 0, 0);
+      const state = fold(initial(), {
+        type: 'assistant/message', time: stamp,
+        data: { turn: 1, step: 1, usage, message: { source: { provider: 'deepseek', model: 'deepseek-flash' } } },
+      });
+      return view(state, settings);
+    }
+
+    function readSettings() {
+      return {
+        currency: $('currency').value.trim() || '₪',
+        usdRate: Number($('rate').value) || 1,
+        peakPricing: $('peak').checked,
+      };
+    }
+
+    function readTokens() {
+      return { cached: Number($('cached').value) || 0, uncached: Number($('uncached').value) || 0, output: Number($('output').value) || 0 };
+    }
+
+    /** The item's own marker: money, budget, share, and what the watchdog does at the ceiling. */
+    function renderItem() {
+      const settings = readSettings();
+      const hour = Number($('hour').value) || 0;
+      const pace = Number($('pace').value) || 0;
+      const published = priceOf(readTokens(), hour, settings);
+      const raw = $('budget').value.trim();
+      const budget = raw.toLowerCase() === 'inf' ? Infinity : Number(raw);
+      const cur = published.currency;
+      const spent = published.amount;
+
+      $('m-money').textContent = fmtMoney(spent, cur);
+      $('m-tokens').textContent = fmtTokens(published.totalTokens) + ' טוקנים · ' + published.rows.length + ' דליים';
+      $('m-budget').textContent = budget === Infinity ? 'מתוך: ללא הגבלה' : 'מתוך ' + fmtMoney(budget, cur);
+      const share = budget === Infinity ? 0 : Math.min(1, spent / budget);
+      const pct = budget === Infinity ? 0 : (spent / budget) * 100;
+      $('m-fill').style.width = (budget === Infinity ? 4 : share * 100) + '%';
+      const cls = budget === Infinity ? '' : share >= 1 ? 'over' : share >= 0.8 ? 'warn' : '';
+      $('m-bar').className = 'bar ' + cls;
+      const left = budget === Infinity ? Infinity : Math.max(0, budget - spent);
+      const hours = (budget === Infinity || pace <= 0) ? Infinity : left / pace;
+      $('m-verdict').className = 'verdict ' + cls;
+      $('m-verdict').textContent = budget === Infinity
+        ? 'ללא תקרה — הפריט יכול לרוץ עד שהוא נסגר, וכל עלות ממשיכה להירשם עליו.'
+        : share >= 1
+          ? 'התקציב נגמר (' + pct.toFixed(0) + '%) — הדופק הפסיק להחזיר את השיחה לעבודה והודיע. להמשך: האדם שהתקציב שלו מעלה אותו בפריט.'
+          : share >= 0.8
+            ? 'קרוב לתקרה (' + pct.toFixed(0) + '%) — נשארו ' + fmtMoney(left, cur) + ', וזה בערך ' + hours.toFixed(1) + ' שעות בקצב הנוכחי.'
+            : 'בתוך התקציב (' + pct.toFixed(0) + '%) — נשארו ' + fmtMoney(left, cur) + ' ≈ ' + hours.toFixed(1) + ' שעות בקצב הנוכחי.';
+      $('m-rows').textContent = published.rows
+        .filter((r) => r.tokens > 0)
+        .map((r) => ({ cacheHit: 'cache-hit', cacheMiss: 'קלט', cacheWrite: 'כתיבה', output: 'פלט' }[r.bucket]) + ': ' + fmtMoney(r.amount, cur))
+        .join(' · ');
+      $('i-class').textContent = 'תקציב: ' + $('class').selectedOptions[0].textContent.split('—')[0].trim();
+    }
+
+    /** The plan: the same arithmetic, summed over its items, against the plan's own (bigger) budget. */
+    function renderPlan() {
+      const settings = readSettings();
+      const hour = Number($('hour').value) || 0;
+      const base = readTokens();
+      const items = [
+        { id: 'p-1', mult: 1.0 },
+        { id: 'p-2', mult: 0.22 },
+        { id: 'p-3', mult: 0.5 },
+      ];
+      let spent = 0, tokens = 0, cur = '₪';
+      for (const item of items) {
+        const published = priceOf({ cached: base.cached * item.mult, uncached: base.uncached * item.mult, output: base.output * item.mult }, hour, settings);
+        spent += published.amount; tokens += published.totalTokens; cur = published.currency;
+        $(item.id).textContent = fmtMoney(published.amount, cur) + ' · ' + fmtTokens(published.totalTokens);
+      }
+      const raw = $('budget').value.trim();
+      const itemBudget = raw.toLowerCase() === 'inf' ? Infinity : Number(raw);
+      const planBudget = itemBudget === Infinity ? Infinity : itemBudget * 6;
+      $('p-money').textContent = fmtMoney(spent, cur);
+      $('p-tokens').textContent = fmtTokens(tokens) + ' טוקנים';
+      $('p-budget').textContent = planBudget === Infinity ? 'מתוך: ללא הגבלה' : 'מתוך ' + fmtMoney(planBudget, cur);
+      const share = planBudget === Infinity ? 0 : Math.min(1, spent / planBudget);
+      $('p-fill').style.width = (planBudget === Infinity ? 4 : share * 100) + '%';
+      const cls = planBudget === Infinity ? '' : share >= 1 ? 'over' : share >= 0.8 ? 'warn' : '';
+      $('p-bar').className = 'bar ' + cls;
+      $('p-verdict').className = 'verdict ' + cls;
+      $('p-verdict').textContent = planBudget === Infinity
+        ? 'תוכנית ללא תקרה: היא רצה מהערב עד צאת השבת, וכל פריט בתוכה עדיין נרשם בנפרד — כך רואים לאן הלכה התשומת לב.'
+        : 'התוכנית צברה ' + ((spent / planBudget) * 100).toFixed(0) + '% מהתקציב שלה, משלושה פריטים.';
+      $('p-class').textContent = 'תקציב: ' + $('class').selectedOptions[0].textContent.split('—')[0].trim();
+    }
+
+    $('cached-range').addEventListener('input', (e) => { $('cached').value = e.target.value; render(); });
+    $('class').addEventListener('change', (e) => { $('budget').value = e.target.value; render(); });
+    for (const id of ['currency', 'rate', 'peak', 'hour', 'pace', 'budget', 'cached', 'uncached', 'output']) {
+      $(id).addEventListener('input', render);
+    }
+
+    function render() { renderItem(); renderPlan(); }
+    render();
+    // The demo is shootable: ?state=over / ?state=warn pick a lane a screenshot can name.
+    const want = new URLSearchParams(location.search).get('state');
+    if (want === 'over') { $('budget').value = '5'; $('class').value = '5'; render(); }
+    if (want === 'warn') { $('budget').value = '8'; render(); }
+    if (want === 'within') { $('budget').value = '25'; $('class').value = '25'; render(); }
+    if (want === 'inf') { $('budget').value = 'inf'; $('class').value = 'inf'; render(); }
+    document.title = 'תקציב לכל פריט עבודה — הדמייה (' + (want || 'default') + ')';
+  </script>
+</body>
+</html>

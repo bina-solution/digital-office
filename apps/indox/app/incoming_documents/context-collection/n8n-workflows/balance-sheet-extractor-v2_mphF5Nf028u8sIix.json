@@ -670,7 +670,7 @@
       "credentials": {
         "googleDriveOAuth2Api": {
           "id": "KirWFwoFdEFmnN0R",
-          "name": "Google Drive person17@example.com"
+          "name": "Google Drive person17.x@example.com"
         }
       },
       "onError": "continueRegularOutput"
@@ -794,7 +794,7 @@
     },
     {
       "parameters": {
-        "content": "# Next steps\n\nEval table: BALANCE_SHEET_EX_EVAL  - https://n8n.bina-comp.bina-solutions.co.il/projects/EChUnhWXmjrEc3fG/datatables/E4fUDXr9nxDOv8o4\n\n##  Complete evaluation setup\n- put the currect  Expected values in the eval table (where missing)\n- add a few failing balance sheets from incoming documents to eval table, and enter the expected values \n- change RUN_COMPLETED to false for all lines that need to rerun \n\n-- Run Current prompt \n- run this workflow from \"Start Eval\" trigger, let it finish, go over results.\n\n\n-- Develop Refined Prompt \n- write a new prompt that works for all example \n- rerun, until prompt is refined and works for all balance sheets in excel \n\n\n## Current Prompt is in the GREEN NOTE, and in the textual / visual Gemini nodes \n",
+        "content": "# Next steps\n\nEval table: BALANCE_SHEET_EX_EVAL  - https://n8n.hacohen.bina-solutions.co.il/projects/EChUnhWXmjrEc3fG/datatables/E4fUDXr9nxDOv8o4\n\n##  Complete evaluation setup\n- put the currect  Expected values in the eval table (where missing)\n- add a few failing balance sheets from incoming documents to eval table, and enter the expected values \n- change RUN_COMPLETED to false for all lines that need to rerun \n\n-- Run Current prompt \n- run this workflow from \"Start Eval\" trigger, let it finish, go over results.\n\n\n-- Develop Refined Prompt \n- write a new prompt that works for all example \n- rerun, until prompt is refined and works for all balance sheets in excel \n\n\n## Current Prompt is in the GREEN NOTE, and in the textual / visual Gemini nodes \n",
         "height": 800,
         "width": 768,
         "color": 2
@@ -1111,7 +1111,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://apitools.bina-comp.bina-solutions.co.il/documentOcr",
+        "url": "https://apitools.hacohen.bina-solutions.co.il/documentOcr",
         "sendQuery": true,
         "specifyQuery": "json",
         "jsonQuery": "{\"truncate_from\": \"end\", \"max_pages\":3}",
@@ -2000,102 +2000,7 @@
   "meta": {
     "templateCredsSetupCompleted": true
   },
-  "pinData": {
-    "Eval Start": [
-      {
-        "json": {
-          "GDRIVE_LINK": "https://drive.google.com/file/d/1MaLIw1Yly2KSeoFBU-kul8JvqVbVU2vBRAn5FVbDDLQ/edit",
-          "NAME": "זגמן - טקסט",
-          "EXPECTED_FIRST_LINE_DATE": "2024-01-25",
-          "EXPECTED_FIRST_LINE_ID": "340972",
-          "EXPECTED_FIRST_LINE_AMOUNT": "3206",
-          "FIRST_LINE_ID": "340972",
-          "FIRST_LINE_AMOUNT": "3206",
-          "FIRST_LINE_DATE": "2024-01-25",
-          "DOCUMENT_DATE": "",
-          "EXPECTED_DOCUMENT_DATE": "",
-          "FIRST_LINE_ID_MATCH": true,
-          "FIRST_LINE_DATE_MATCH": true,
-          "FIRST_LINE_AMOUNT_MATCH": true,
-          "DOCUMENT_DATE_MATCH": true,
-          "RUN_COMPLETED": false,
-          "VERIFIED": true,
-          "DOCUMENT_TOTAL_DEBIT_MATCH": false,
-          "EXPECTED_BALANCE": 21609,
-          "EXPECTED_TOTAL_CREDIT": 531,
-          "EXPECTED_TOTAL_DEBIT": 22140,
-          "DOCUMENT_TOTAL_DEBIT": 22140,
-          "DOCUMENT_BALANCE": -21609,
-          "DOCUMENT_BALANCE_MATCH": true,
-          "DOCUMENT_CREDIT_MATCH": false,
-          "DOCUMENT_TOTAL_CREDIT": 531,
-          "MiMe_type": "docs",
-          "FIRST_LINE_ID_SELECTION_METHOD": "first_nonempty_fallback",
-          "FIRST_LINE_ID_MATCHED_KEYWORD": "",
-          "FIRST_LINE_ID_KEYWORD_PRIORITY": "-1",
-          "FIRST_LINE_ID_TOTAL_OPTIONS": "2",
-          "FIRST_LINE_ID_ALL_OPTIONS": "[{\"key\":\"מספר\",\"value\":\"340972\"},{\"key\":\"סוג\",\"value\":\"חשבונית\"}]",
-          "FIRST_LINE_DATE_SELECTION_METHOD": "only_option",
-          "FIRST_LINE_DATE_MATCHED_KEYWORD": "",
-          "FIRST_LINE_DATE_KEYWORD_PRIORITY": "-1",
-          "FIRST_LINE_DATE_TOTAL_OPTIONS": "1",
-          "FIRST_LINE_DATE_ALL_OPTIONS": "[{\"key\":\"תאריך\",\"value\":\"2024-01-25\"}]",
-          "COMPUTED_TOTAL_DEBIT": "22140",
-          "COMPUTED_TOTAL_CREDIT": "531",
-          "COMPUTED_EXPECTED_FINAL_BALANCE": "21609",
-          "COMPUTED_ACTUAL_FINAL_BALANCE": "-21609",
-          "BALANCE_RECONCILED": "true",
-          "BALANCE_DIFFERENCE": null,
-          "DEBIT_RECONCILED": "true",
-          "DEBIT_DIFFERENCE": null,
-          "CREDIT_RECONCILED": "true",
-          "CREDIT_DIFFERENCE": null,
-          "RECONCILIATION_TOLERANCE": "0.001",
-          "FIRST_LINE_INDEX": "0",
-          "DOCUMENT_TOTAL": null,
-          "DOCUMENT_TOTAL_MATCH": null,
-          "id": 8,
-          "createdAt": "2025-11-18T01:48:55.253Z",
-          "updatedAt": "2025-12-15T15:56:09.498Z",
-          "row_number": 1,
-          "row_id": 8,
-          "_rowsLeft": 2
-        }
-      }
-    ],
-    "When Executed by Another Workflow": [
-      {
-        "json": {
-          "LINK": "https://drive.google.com/file/d/1AjXsk_QASOUG8_X45bo9yAVltGzRumbY",
-          "use_cache": false
-        }
-      }
-    ],
-    "Webhook Trigger": [
-      {
-        "json": {
-          "headers": {
-            "host": "n8n:5678",
-            "user-agent": "feature-validation-balance-sheet/1.0",
-            "accept-encoding": "gzip, deflate",
-            "accept": "*/*",
-            "connection": "keep-alive",
-            "content-type": "application/json",
-            "content-length": "112",
-            "authorization": "Basic YWRtaW46d2Rua2pkNzI4NzYyODczYmhqZDM4NjIxM2hqZzM3ZGtzeGk3MnNo"
-          },
-          "params": {},
-          "query": {},
-          "body": {
-            "LINK": "https://drive.google.com/file/d/1MaLIw1Yly2KSeoFBU-kul8JvqVbVU2vBRAn5FVbDDLQ/edit",
-            "use_cache": false
-          },
-          "webhookUrl": "https://n8n.bina-comp.bina-solutions.co.il/webhook/bs_ex_2",
-          "executionMode": "production"
-        }
-      }
-    ]
-  },
+  "pinData": {},
   "versionId": "2393d5e4-a5c6-4c8b-beb2-a6c3c1b5fa65",
   "activeVersionId": "2393d5e4-a5c6-4c8b-beb2-a6c3c1b5fa65",
   "versionCounter": 327,

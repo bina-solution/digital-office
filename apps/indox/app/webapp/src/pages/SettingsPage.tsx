@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState, ReactNode } from 'react';
+import { Dispatch, SetStateAction, useCallback, useEffect, useMemo, useRef, useState, ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { ltr } from '../bidi';
 import { useInstanceLink } from '../instancesContext';
 import {
   api,
@@ -492,7 +493,7 @@ function pipelineFacts(ps: PipelineStatus): ConfirmFact[] {
       label: 'נעילות doc_action מוחזקות',
       value: heNum(ps.locks),
       kind: ps.locks > 0 ? 'warn' : 'muted',
-      title: 'מפתחות n8n.process_lock.doc_action.* חיים כרגע',
+      title: `מפתחות ${ltr('n8n.process_lock.doc_action.*')} חיים כרגע`,
     },
     {
       label: 'מהן ישנות (דליפה)',
@@ -547,15 +548,15 @@ function UnlockAllButton() {
             inFlight(ps) ? (
               <>
                 {' '}
-                <b>אבל משהו עובד כרגע</b> — {heNum(ps.drivers)} דרייברים ו-
-                {heNum(ps.dispatch_5m)} שיגורים בחמש הדקות האחרונות. שחרור עכשיו פותח את הדלת
+                <b>אבל משהו עובד כרגע</b> — {ps.drivers === 1 ? 'דרייבר אחד' : `${heNum(ps.drivers)} דרייברים`} ו-
+                {ps.dispatch_5m === 1 ? 'שיגור אחד' : `${heNum(ps.dispatch_5m)} שיגורים`} בחמש הדקות האחרונות. שחרור עכשיו פותח את הדלת
                 לדרייבר נוסף על אותם מסמכים בזמן שהראשון עוד באמצע. זה המצב שבו הכפתור הזה מזיק.
               </>
             ) : (
               <>
                 {' '}
                 <b>שום דבר לא בתעופה</b> — אין דרייברים פעילים, אין שיגורים בחמש הדקות האחרונות,
-                ו-{heNum(ps.locks_stale)} מהנעילות כבר ישנות. זה בדיוק המצב שבו הכפתור הזה הוא
+                ו-{ps.locks_stale === 1 ? 'נעילה אחת' : `${heNum(ps.locks_stale)} מהנעילות`} כבר ישנות. זה בדיוק המצב שבו הכפתור הזה הוא
                 התיקון הנכון: מה שנשאר הוא דליפה, לא עבודה.
               </>
             )
@@ -682,8 +683,15 @@ function StopAllButton() {
 // three affordances that are this screen's own rather than any grid's: bulk
 // delete, CSV/XLSX import, and the quick filters.
 // `order` gives an explicit RTL column order (first = rightmost).
+// THE ROWS HAVE ONE OWNER — the page, which also counts them on the tab. The grid kept a copy of
+// its own (`useState(initial)`, refreshed only when the page's rows changed — which nothing the
+// grid did ever caused): a row added or deleted did not move the tab's number, and leaving the tab
+// and returning drew the copy afresh from the page's rows — the deleted row was back, the added one
+// gone, an edited cell showed what it held before (the service had the change; the screen did not).
+// The grid reads and writes the page's rows; the copy and its effect are gone (DGO-533).
 function ConfigGrid({
-  rows: initial,
+  rows,
+  setRows,
   table,
   pk = 'id',
   denyKeys = [],
@@ -691,13 +699,13 @@ function ConfigGrid({
   hideKeys = [],
 }: {
   rows: ConfigRow[];
+  setRows: Dispatch<SetStateAction<ConfigRow[]>>;
   table: string;
   pk?: string;
   denyKeys?: string[];
   order?: string[];
   hideKeys?: string[];
 }) {
-  const [rows, setRows] = useState<ConfigRow[]>(initial);
   const { ask, confirmUI } = useConfirm();
   const { push } = useToasts();
   /** the active quick filter — this screen's own, so it does not belong inside a general-purpose
@@ -706,7 +714,6 @@ function ConfigGrid({
   const [importing, setImporting] = useState(false);
   const [adding, setAdding] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
-  useEffect(() => setRows(initial), [initial]);
 
   const keys = useMemo(() => {
     const seen: string[] = [];
@@ -790,7 +797,7 @@ function ConfigGrid({
         rs.map((r) => (String(r[pk]) === String(id) ? { ...r, [key]: value } : r)),
       );
     },
-    [table, pk],
+    [table, pk, setRows],
   );
 
   /* ADD, as a record rather than a blank row.
@@ -811,7 +818,7 @@ function ConfigGrid({
       setQuick(null);
       push('ok', `נוספה שורה לטבלת ${table}`);
     },
-    [table, push],
+    [table, push, setRows],
   );
 
   const onDeleteRow = useCallback(
@@ -847,7 +854,7 @@ function ConfigGrid({
         push('bad', `המחיקה נכשלה: ${e instanceof Error ? e.message : String(e)}`);
       }
     },
-    [table, pk, rows, ask, push],
+    [table, pk, rows, ask, push, setRows],
   );
   onDeleteRowRef.current = onDeleteRow;
 
@@ -871,7 +878,7 @@ function ConfigGrid({
       setRows((rs) => rs.filter((r) => !gone.has(String(r[pk]))));
       return { ok: gone.size, fail: errors.length, errors };
     },
-    [table, pk],
+    [table, pk, setRows],
   );
 
   // bulk import (CSV/XLSX rows already mapped to column keys by `importFile`)
@@ -894,7 +901,7 @@ function ConfigGrid({
       if (added.length) setRows((rs) => [...added, ...rs]);
       return { ok, fail };
     },
-    [table],
+    [table, setRows],
   );
 
   // ops quick-filters: incomplete records jump out (chips with live counts)
@@ -1036,7 +1043,7 @@ function ConfigGrid({
           <button
             type="button"
             className="btn sm ghost danger"
-            title={`מחיקת ${ids.length} השורות שנבחרו — אחרי אישור; התוצאה מדווחת שורה-שורה`}
+            title={`מחיקת ${ids.length === 1 ? 'השורה הנבחרת' : ids.length + ' השורות שנבחרו'} — אחרי אישור; התוצאה מדווחת שורה-שורה`}
             onClick={async () => {
               const ok = await ask({
                 title: 'מחיקת שורות',
@@ -1437,7 +1444,7 @@ export default function SettingsPage() {
                               <details key={r.key} className="rosetting">
                                 <summary>
                                   {r.key}
-                                  <span className="len num">{val.length} תווים</span>
+                                  <span className="len num">{val.length === 1 ? 'תו אחד' : val.length + ' תווים'}</span>
                                 </summary>
                                 <pre className="codeblock" style={{ marginTop: 8 }}>
                                   {val}
@@ -1480,7 +1487,7 @@ export default function SettingsPage() {
                           <details key={r.key} className="rosetting">
                             <summary>
                               {r.key}
-                              <span className="len num">{val.length} תווים</span>
+                              <span className="len num">{val.length === 1 ? 'תו אחד' : val.length + ' תווים'}</span>
                             </summary>
                             <pre className="codeblock" style={{ marginTop: 8 }}>
                               {val}
@@ -1511,6 +1518,7 @@ export default function SettingsPage() {
               </div>
               <ConfigGrid
                 rows={companies}
+                setRows={setCompanies}
                 table="companies"
                 pk="id"
                 /* `instance` is the column the SERVER scopes every read and write

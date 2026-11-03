@@ -14,7 +14,7 @@ trigger, or BLOCKED ON OWNER with the exact action needed.
 
 | # | Action | Blocks |
 |---|---|---|
-| B1 | Create `מסמכים כללים` in your Google Drive + share with `person7@example.com`. Same for dedicated `synced`/`failed` folders. | Registry #4; the `drive-gdoc-warehouse`/`drive-bs` shared-destination collision |
+| B1 | Create `מסמכים כללים` in your Google Drive + share with `person6-x-x@example.com`. Same for dedicated `synced`/`failed` folders. | Registry #4; the `drive-gdoc-warehouse`/`drive-bs` shared-destination collision |
 | B2 | `gh auth login` | GitHub Actions status is otherwise unobtainable |
 | B3 | A real `TELEGRAM_BOT_TOKEN` (`.env:299` is the literal placeholder) | Telegram alerting — being made optional/off-by-default meanwhile |
 | B4 | Approve: `psql -f scripts/ops/migrations/2026-08-06_sync_ledger_created_at.sql` | Backlog-depth-over-time and time-to-delivery metrics |

@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+#: content — import the content library (apps/digital-assets/content/<type>/<slug>.<lang>.md): each piece one slot under its type's blueprint, each changed file one new draft version
+#
+#   ./bbox digital-assets content                      # everything under apps/digital-assets/content/
+#   ./bbox digital-assets content --dry-run            # what would be created, refreshed and added
+#   ./bbox digital-assets content article/n8n          # only the pieces named (<type>/<slug>)
+#   ./bbox digital-assets content --activate …         # also make each piece's newest version the active one
+#
+# The library is files because writers (people and agents) work in files and the repository keeps
+# their history; digital assets is where a piece becomes the business's — versioned, active, and read
+# by the sites. This verb is the one way between the two. The files are rendered to JSON here
+# (content/render.py, with the YAML library the host has), and the applier (content/importer.py) runs
+# INSIDE the app's container against its own API: nothing is installed, and no port is opened.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # say, colors, dcx, running, DN
+
+APP_DIR="${REPO_ROOT}/apps/digital-assets"
+DRY=0; ACT=0; ONLY=()
+for a in "$@"; do
+  case "${a}" in
+    --dry-run)  DRY=1 ;;
+    --activate) ACT=1 ;;
+    -h|--help)  sed -n 's/^#: //p; s/^#   //p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    *)          ONLY+=("${a}") ;;
+  esac
+done
+running "digital-assets-${DN}" || { say "${cr}[digital-assets] the app is not running on this office — enable it first${c0}"; exit 1; }
+
+SPEC="$(python3 "$(npath "${APP_DIR}")/content/render.py" "$(npath "${APP_DIR}")/content" ${ONLY[@]+"${ONLY[@]}"})" \
+  || { say "${cr}[digital-assets] could not read the content library (is PyYAML installed for python3?)${c0}"; exit 1; }
+say "[digital-assets] importing $(printf '%s' "${SPEC}" | python3 -c 'import json,sys;d=json.load(sys.stdin);print(len(d["pieces"]), "pieces")')$([ "${DRY}" = 1 ] && printf ' (dry run)')"
+
+OUT="$(mktemp)"
+dcx exec -T -e CONTENT_DRY_RUN="${DRY}" -e CONTENT_ACTIVATE="${ACT}" \
+  digital-assets python3 -c "$(cat "$(npath "${APP_DIR}")/content/importer.py")" <<<"${SPEC}" >"${OUT}" 2>&1
+RC=$?
+unset SPEC
+sed -n 's/^\[digital-assets\] //p' "${OUT}" | sed 's/^/  /'
+RESULT="$(sed -n 's/^RESULT|//p' "${OUT}" | tail -1)"
+if [ "${RC}" -ne 0 ] || [ -z "${RESULT}" ]; then
+  say "${cr}[digital-assets] the import did NOT complete${c0}"
+  grep -v '^\[digital-assets\]' "${OUT}" | grep -v '^RESULT|' | tail -12 | sed 's/^/  /'
+  rm -f "${OUT}"; exit 1
+fi
+rm -f "${OUT}"
+printf '%s' "${RESULT}" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+print("  slots created=%d refreshed=%d · versions added=%d unchanged=%d activated=%d%s" % (
+    len(d["slots_created"]), len(d["slots_refreshed"]), len(d["versions"]), len(d["unchanged"]),
+    len(d["activated"]), " (dry run)" if d.get("dry_run") else ""))
+for p in d.get("problems") or []:
+    print("  problem: %s" % p)
+sys.exit(1 if d.get("problems") else 0)'

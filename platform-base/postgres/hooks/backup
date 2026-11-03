@@ -83,11 +83,23 @@ if [ "${MODE}" = "full" ]; then
 fi
 echo "SKIPVOL supabase_db_data"
 
+# A MISSING RELATION IS A FACT, NOT A HOLE (2026-10-11). `q` sends psql's stderr to /dev/null — an
+# expected table may not exist yet — so a failed count comes back as an empty string, and
+# deployment-archive.py refuses that BY DESIGN ("a silently missing fact makes the restore diff
+# vacuous"). This hook is written for an estate that has run the indox/tenancy migration; on a
+# deployment that has not, `public` holds a handful of tables and every one of these FACTs came back
+# empty, so `bbox data export` failed rc=1 and THAT DEPLOYMENT COULD NOT BE BACKED UP AT ALL.
+# Measured 2026-10-11 on wbc-vps: `public` held 3 tables, ten of the twelve names below did not
+# exist, export refused. `factq` — one definition, in scripts/archive-lib.sh — emits the literal
+# `absent` instead, but only for the relation named last on its line and only when the database says
+# it does not exist: truthful on both sides of the restore diff, while a query that failed on a table
+# that IS there still prints empty and is refused.
+
 for t in incoming_documents settings sync_ledger sync_cursor sync_pipe_state sync_attempt \
          companies drive_files ocr_cache business_documents chat_messages tag_rules; do
-  echo "FACT ${t} $(q "select count(*) from public.${t};")"
+  factq "${t}" "$(q "select count(*) from public.${t};")" "public.${t}"
 done
-echo "FACT public_tables $(q "select count(*) from information_schema.tables where table_schema='public';")"
+factq public_tables "$(q "select count(*) from information_schema.tables where table_schema='public';")"
 # Content, not just cardinality. Two databases can hold 6,341 rows each and disagree about every
 # one of them; this hashes the identity + status of every document so a restore that lost or
 # rewrote content cannot pass by counting.
@@ -96,13 +108,13 @@ echo "FACT public_tables $(q "select count(*) from information_schema.tables whe
 # exist`. settings' columns are ordinary lowercase.
 # On a tenancy estate these two read through public VIEWS, i.e. the ACTIVE instance only —
 # view-level, non-authoritative. The per-schema shas below are the real comparison.
-echo "FACT documents_sha $(q "select md5(string_agg(\"ID\"::text||coalesce(\"STATUS\",''), '|' order by \"ID\")) from public.incoming_documents;")"
-echo "FACT settings_sha $(q "select md5(string_agg(key||'='||coalesce(value::text,''), '|' order by key, instance)) from public.settings;")"
+factq documents_sha "$(q "select coalesce(md5(string_agg(\"ID\"::text||coalesce(\"STATUS\",''), '|' order by \"ID\")), 'empty') from public.incoming_documents;")" public.incoming_documents
+factq settings_sha "$(q "select coalesce(md5(string_agg(key||'='||coalesce(value::text,''), '|' order by key, instance)), 'empty') from public.settings;")" public.settings
 echo "FACT tenant_schemas $(printf '%s\n' ${TENANT_SCHEMAS} | grep -c . || true)"
 for s in ${TENANT_SCHEMAS}; do
-  echo "FACT ${s}_documents $(q "select count(*) from ${s}.incoming_documents;")"
-  echo "FACT ${s}_documents_sha $(q "select md5(string_agg(\"ID\"::text||coalesce(\"STATUS\",''), '|' order by \"ID\")) from ${s}.incoming_documents;")"
-  echo "FACT ${s}_action_log $(q "select count(*) from ${s}.indox_action_execution_log;")"
-  echo "FACT ${s}_settings $(q "select count(*) from ${s}.settings;")"
+  factq "${s}_documents" "$(q "select count(*) from ${s}.incoming_documents;")" "${s}.incoming_documents"
+  factq "${s}_documents_sha" "$(q "select coalesce(md5(string_agg(\"ID\"::text||coalesce(\"STATUS\",''), '|' order by \"ID\")), 'empty') from ${s}.incoming_documents;")" "${s}.incoming_documents"
+  factq "${s}_action_log" "$(q "select count(*) from ${s}.indox_action_execution_log;")" "${s}.indox_action_execution_log"
+  factq "${s}_settings" "$(q "select count(*) from ${s}.settings;")" "${s}.settings"
 done
 exit 0

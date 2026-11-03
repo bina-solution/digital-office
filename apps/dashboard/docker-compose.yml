@@ -1,0 +1,83 @@
+# The control centre (DGO-1124): the page the owner opens first on the MacBook (every computer of every
+# office with its dot, then the work under way), and the collector that writes what the page shows.
+# Both run on stock images with this directory mounted read-only, so the Mac, a command centre, builds
+# nothing (the owner, 2026-10-31: no builds on the Mac's engine).
+services:
+  dashboard:
+    image: caddy:2-alpine
+    container_name: dashboard-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: dashboard
+    restart: unless-stopped
+    # DIRECTORIES, never single files: a file bind-mount keeps the inode it started with, and an edit or a
+    # git merge writes a new one (measured 2026-11-02: the collector kept running the replaced feed.py)
+    command: ["caddy", "run", "--config", "/app/Caddyfile", "--adapter", "caddyfile"]
+    volumes:
+      - .:/app:ro
+      - ./static:/srv:ro
+      - dashboard_state:/state:ro
+      - dashboard_lan_sock:/run/lan        # the LAN switch's unix socket: shared with the collector alone
+    networks:
+      - traefik-network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.1'
+          memory: 48M
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 2m
+        max-file: '2'
+
+  dashboard-feed:
+    image: python:3.12-alpine
+    container_name: dashboard-feed-${DEPLOYMENT_NAME:-bina-deployment}
+    restart: unless-stopped
+    command: ["python3", "/app/feed.py"]
+    environment:
+      - DGO_OFFICE_ID=${DGO_OFFICE_ID:-}
+      - DASHBOARD_EVERY=${DASHBOARD_EVERY:-30}
+      - DASHBOARD_HERD=/computers/herd.yaml
+      - LAN_DOMAIN=${LAN_DOMAIN:-}
+    volumes:
+      - .:/app:ro
+      - ../computers:/computers:ro
+      - ../../.generated/registry:/registry:ro
+      - dashboard_state:/data
+      # the console door's policy (written here, the screen's switch) and status (written by the host's
+      # door, packaging/macos/lan-door.py) — DGO-1125
+      - ../../data/lan:/lan
+      - dashboard_lan_sock:/run/lan
+    networks:
+      - traefik-network
+    healthcheck:
+      # a state file older than four passes means the collector stopped
+      test: ["CMD", "python3", "-c", "import os,sys,time; sys.exit(0 if time.time() - os.path.getmtime('/data/state.json') < 150 else 1)"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.1'
+          memory: 64M
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 2m
+        max-file: '2'
+
+volumes:
+  dashboard_state:
+  dashboard_lan_sock:
+
+networks:
+  traefik-network:
+    external: true

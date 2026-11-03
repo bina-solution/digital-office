@@ -1,0 +1,138 @@
+# This office's console on the LAN, for a phone on the same Wi-Fi (DGO-1125; the owner, 2026-11-02:
+# «expose the console in the local network on its ip address … so i can access it from my phone»).
+#
+# The way in is the host's console door (packaging/macos/lan-door.py --policy): it listens on the LAN
+# address only while data/lan/policy.json says on, private sources only, and hands each connection to
+# traefik's `lan` entry (guest :8081, published on loopback only). The routes below, and the shared apps'
+# `…-console-lan` routers the compiler adds (platform/manager/serve.py), are the ONLY ones on that entry.
+#
+# The console answers on a NAME, `console.<LAN_DOMAIN>`, and the bare address sends the browser there
+# (DGO-1126). LAN_DOMAIN is the address as a name (`192-168-16-100.sslip.io`: public DNS answers it with
+# that same private address), so a host can be nested under it, and every app another office shares
+# opens here exactly as under console.localhost («a shared app has to work inside the console of the
+# office that received it — that's the whole idea», the owner, 2026-11-02).
+#
+# Sign-in is the office's own forward-auth, the same page and the same accounts as everywhere else (the
+# owner: «I want the console just regular»; authentik leaves every office, r030-002). The office's
+# forward-auth sends every browser to signin.<domain>, which a phone cannot resolve, so this entry has a
+# sign-in of its own: the same image, signing in at `auth.<LAN_DOMAIN>` (FORWARD_AUTH_EXTERNAL_URL), whose
+# hand-off gives the console and every app nested under the name a cookie of its own. It reads the
+# office's ONE users file, read-only, from forward-auth's own volume — not a copy of the password hashes —
+# so an account forward-auth knows is an account here, and one it drops is gone here on the next request.
+services:
+  lan-signin:
+    image: ghcr.io/solomonboltin/digital-office/forward-auth:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    container_name: lan-signin-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: lan-signin
+    restart: unless-stopped
+    environment:
+      # the office's signing key: a session this entry mints is one forward-auth would honour, and the
+      # reverse — a browser sends each host only its own cookie, so neither reaches the other's hosts
+      - FORWARD_AUTH_SECRET=${FORWARD_AUTH_SECRET:-}
+      - FORWARD_AUTH_EXTERNAL_URL=http://auth.${LAN_DOMAIN:-lan.invalid}:${LAN_PORT:-8080}
+      # every return-to stays under the LAN name: the console and the apps nested under it
+      - FORWARD_AUTH_ALLOWED_HOSTS=.${LAN_DOMAIN:-lan.invalid}
+      - FORWARD_AUTH_USERS_FILE=/etc/forward-auth/users
+      - FORWARD_AUTH_LISTEN=:9078
+      # the migration pair, as the office's forward-auth has it (both-or-neither, empty is off): a phone
+      # signed in to authentik on this name before the swap is not asked again
+      - FORWARD_AUTH_LEGACY_SECRET=${FORWARD_AUTH_LEGACY_SECRET:-}
+      - FORWARD_AUTH_LEGACY_SESSIONS=${FORWARD_AUTH_LEGACY_SESSIONS:-}
+      - TZ=${TZ:-Asia/Jerusalem}
+    volumes:
+      # forward-auth's own state (platform-base/forward-auth), read-only: the users file, and the legacy
+      # sessions snapshot while an office migrates
+      - forward_auth_data:/etc/forward-auth:ro
+    networks:
+      - traefik-network
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik-network
+      - traefik.http.services.lan-signin.loadbalancer.server.port=9078
+      # Every route below names its host: a request for another host (a forged Host, a rebound name)
+      # gets traefik's 404 and never reaches the sign-in, which would take it as a return-to.
+      # password guesses are capped here: behind Lima every client is one address, so the cap is for the
+      # whole LAN (the second reader, 2026-11-02); forward-auth also blocks a name after five failures
+      - traefik.http.middlewares.lan-signin-rate.ratelimit.average=30
+      - traefik.http.middlewares.lan-signin-rate.ratelimit.period=1m
+      - traefik.http.middlewares.lan-signin-rate.ratelimit.burst=15
+      # the sign-in page and sign-out, on the sign-in host, and nothing else of the service. Only the
+      # password itself (POST /login) is capped: a GET /login is the hand-off every app host needs the first
+      # time it opens, and a console framing many shared apps asks it many times at once (the second reader)
+      - traefik.http.routers.lan-console-signin.rule=Host(`auth.${LAN_DOMAIN:-lan.invalid}`) && Path(`/login`) && Method(`POST`)
+      - traefik.http.routers.lan-console-signin.entrypoints=lan
+      - traefik.http.routers.lan-console-signin.service=lan-signin
+      - traefik.http.routers.lan-console-signin.middlewares=lan-signin-rate
+      - traefik.http.routers.lan-console-signin.priority=96
+      - traefik.http.routers.lan-console-signin-pages.rule=Host(`auth.${LAN_DOMAIN:-lan.invalid}`) && (Path(`/login`) || Path(`/logout`))
+      - traefik.http.routers.lan-console-signin-pages.entrypoints=lan
+      - traefik.http.routers.lan-console-signin-pages.service=lan-signin
+      - traefik.http.routers.lan-console-signin-pages.priority=95
+      # the sign-in host's bare root (a sign-in or sign-out with no return-to lands there) leads to the console
+      - traefik.http.routers.lan-console-signin-root.rule=Host(`auth.${LAN_DOMAIN:-lan.invalid}`) && Path(`/`)
+      - traefik.http.routers.lan-console-signin-root.entrypoints=lan
+      - traefik.http.routers.lan-console-signin-root.middlewares=lan-name
+      - traefik.http.routers.lan-console-signin-root.service=noop@internal
+      - traefik.http.routers.lan-console-signin-root.priority=95
+      # A write from another site is refused before anything sees it. `sslip.io` is not a public suffix, so to a
+      # browser every `*.sslip.io` page is the SAME site as this console and its session cookie rides along on
+      # their form posts (the second reader, 2026-11-02). A browser names the page that sent a write in
+      # `Origin`; one that is not under this name gets traefik's 418 and reaches no app. (The name's dots are
+      # left unescaped in the pattern on purpose: a dot there can only stand for `.` in a host that ends in a
+      # real top-level domain.)
+      - traefik.http.routers.lan-console-foreign-write.rule=HostRegexp(`^(.+\.)?${LAN_DOMAIN:-lan.invalid}$$`) && (Method(`POST`) || Method(`PUT`) || Method(`PATCH`) || Method(`DELETE`)) && HeaderRegexp(`Origin`, `.+`) && !HeaderRegexp(`Origin`, `^https?://([a-z0-9-]+\.)*${LAN_DOMAIN:-lan.invalid}(:[0-9]+)?$$`)
+      - traefik.http.routers.lan-console-foreign-write.entrypoints=lan
+      - traefik.http.routers.lan-console-foreign-write.service=noop@internal
+      - traefik.http.routers.lan-console-foreign-write.priority=10000
+      # the bare address (and /dgo, the address the owner named) leads to the console's name
+      - traefik.http.middlewares.lan-name.redirectregex.regex=^https?://[^/]+(?:/dgo(?:/|$$))?/?(.*)$$
+      - traefik.http.middlewares.lan-name.redirectregex.replacement=http://console.${LAN_DOMAIN:-lan.invalid}:${LAN_PORT:-8080}/$${1}
+      - traefik.http.routers.lan-console-address.rule=Host(`${LAN_ADDRESS:-127.0.0.1}`)
+      - traefik.http.routers.lan-console-address.entrypoints=lan
+      - traefik.http.routers.lan-console-address.middlewares=lan-name
+      - traefik.http.routers.lan-console-address.service=noop@internal
+      - traefik.http.routers.lan-console-address.priority=80
+      - traefik.http.routers.lan-console-dgo.rule=Host(`console.${LAN_DOMAIN:-lan.invalid}`) && (Path(`/dgo`) || Path(`/dgo/`))
+      - traefik.http.routers.lan-console-dgo.entrypoints=lan
+      - traefik.http.routers.lan-console-dgo.middlewares=lan-name
+      - traefik.http.routers.lan-console-dgo.service=noop@internal
+      - traefik.http.routers.lan-console-dgo.priority=90
+      # the console, behind the sign-in, with the same headers as on console.<domain>; this middleware is
+      # also the one the compiler puts in front of every shared app's `…-console-lan` router
+      - traefik.http.middlewares.lan-auth.forwardauth.address=http://lan-signin:9078/auth/traefik
+      # every X-authentik-* name is LISTED, so traefik deletes a client's own before the console sees it —
+      # the six forward-auth never answers included: listing them is what strips a forged one
+      - traefik.http.middlewares.lan-auth.forwardauth.trustForwardHeader=false
+      - traefik.http.middlewares.lan-auth.forwardauth.authResponseHeaders=X-authentik-username,X-authentik-groups,X-authentik-email,X-authentik-name,X-authentik-uid,X-authentik-jwt,X-authentik-meta-jwks,X-authentik-meta-outpost,X-authentik-meta-provider,X-authentik-meta-app,X-authentik-meta-version
+      - traefik.http.routers.lan-console.rule=Host(`console.${LAN_DOMAIN:-lan.invalid}`) && PathPrefix(`/`)
+      - traefik.http.routers.lan-console.entrypoints=lan
+      - traefik.http.routers.lan-console.middlewares=lan-auth
+      - traefik.http.routers.lan-console.service=console@docker
+      - traefik.http.routers.lan-console.priority=1
+    healthcheck:
+      # the image's own probe (a scratch image has no wget), at the port this container listens on
+      test: ["CMD", "/forward-auth", "-health", "http://127.0.0.1:9078/healthz"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.2'
+          memory: 48M
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 2m
+        max-file: '2'
+
+# forward-auth's volume (platform-base/forward-auth/docker-compose.yml declares the same name): the office's
+# compose includes both files into one project, where one name is one volume, mounted read-only above
+volumes:
+  forward_auth_data:
+
+networks:
+  traefik-network:
+    external: true

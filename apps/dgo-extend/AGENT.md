@@ -2,10 +2,10 @@
 
 Other digital offices, linked to this one. Two kinds (`GET /api/link` → `items[].kind`):
 
-- **paired** — installed on its own machine and paired from the pairing screen (`/connect`). It runs
+- **paired** — installed on its own machine and paired from `/connect`. It runs
   itself: nothing here installs, converges or reaches it. No SSH.
 - **office** — a machine in `computers` this office INSTALLS: a declaration (`/data/dgo/<id>.yaml`:
-  machine, domain, path, commit, apps) converged over SSH in the fixed steps below.
+  machine, domain, path, commit, apps) converged over SSH in the steps below (`converge.STEPS` in README.md).
 
 ## The link (both kinds)
 One WireGuard pair per linked office. `dgo-net` holds the interfaces (`wg<slot>`), `dgo-link` is the
@@ -41,9 +41,9 @@ it switched off here — nothing is deleted. A DECLARED machine moves with
 
 ## Converging a declared office
 ```bash
-curl -s http://dgo-extend:8983/api/context            # machines, git accounts, domains, this office's commit
+curl -s http://dgo-extend:8983/api/context # machines, git accounts, domains, this office's commit
 curl -s -X POST http://dgo-extend:8983/api/office/<id>/converge -d '{}' -H 'content-type: application/json'
-curl -s http://dgo-extend:8983/api/office/<id>/run   # step states + log
+curl -s http://dgo-extend:8983/api/office/<id>/run # step states + log
 ```
 - **backup** — `pg_dumpall` per postgres, a tar per volume, `.env`, under
   `/root/backup-<ts>-pre-upgrade` (three newest kept); skipped with no room.

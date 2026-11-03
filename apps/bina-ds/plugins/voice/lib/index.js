@@ -138,7 +138,7 @@ export function apply(ctx) {
     const wanted = String(new URL(request.url).searchParams.get("session") || "").trim();
     if (wanted) return json({ id: wanted, created: false });
     try {
-      const created = await rpc("session/create", { request: { cwd: process.env.DSH_OFFICE_ROOT || "/root/deployment-bina-comp" } }, 30000);
+      const created = await rpc("session/create", { request: { cwd: process.env.DSH_OFFICE_ROOT || "/root/deployment-hacohen" } }, 30000);
       return json({ id: created?.sessionId || null, created: true });
     } catch (error) {
       return json({ error: String(error?.message || error) }, 502);
@@ -160,7 +160,7 @@ export function apply(ctx) {
     if (!asrId) return json({ error: "asr is required" }, 400);
     try {
       if (!sessionId) {
-        const created = await rpc("session/create", { request: { cwd: process.env.DSH_OFFICE_ROOT || "/root/deployment-bina-comp" } }, 30000);
+        const created = await rpc("session/create", { request: { cwd: process.env.DSH_OFFICE_ROOT || "/root/deployment-hacohen" } }, 30000);
         sessionId = created?.sessionId || "";
         if (!sessionId) throw new Error("could not create a conversation for the recording");
       }

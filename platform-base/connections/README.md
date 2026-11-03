@@ -1,6 +1,6 @@
 # connections — the credential plane
 
-The single place for **every** secret/connection in deployment-bina-comp. One declarative catalog
+The single place for **every** secret/connection in deployment-hacohen. One declarative catalog
 describes each; the service resolves values in a fixed order and verifies them with live probes:
 
 ```
@@ -15,7 +15,7 @@ steps — Google OAuth consent and the WhatsApp QR scan.
 ## Declarative layers (git = source of truth)
 - `providers/*.yaml` — the **catalog**: one entry per connection, with `kind`
   (`text-secret | password | app-password | oauth-client | oauth-grant | sa-key | qr-session |
-  derived | cert | config`), the `env` key that seeds it, its `consumers`, a live `probe`, the
+  totp | derived | cert | config`), the `env` key that seeds it, its `consumers`, a live `probe`, the
   `wizard` behaviour, and a `now:` field documenting **exactly how it is implemented today**.
 - `manifests/*.yaml` — what each **service requires** (generalizes n8n's `credential_overrides`);
   the union drives the install wizard + fail-fast boot + dependency graph.
@@ -26,7 +26,7 @@ Adding a connection to any service in the world = adding one catalog entry. No c
 | | |
 |---|---|
 | **UI** | `GET /` — grouped dashboard (status pill · source badge · consumers · "how it works now") |
-| **API** | `GET /api/connections`, `POST /api/resolve/<id>`, `POST /api/set/<id>`, `GET /api/manifest`, `GET /healthz` |
+| **API** | `GET /api/connections`, `POST /api/resolve/<id>`, `POST /api/set/<id>`, `GET /api/totp/<id>?service=<svc>` (mints `{code, next, expires_in}` of a `totp` row), `GET /api/manifest`, `GET /healthz` |
 | **Broker** | `POST /api/broker/lease`, `POST /api/broker/token` → `GET /api/broker/redeem/<t>`, `GET /api/broker/whoami`, `GET /api/broker/audit`, `GET /api/broker/policy` |
 | **CLI** | `python cli.py list [--group G] [--blockers] · get <id> · set <id> <val> · health · manifest` |
 
@@ -113,6 +113,18 @@ the migration is per-app, reversible, and costs un-migrated apps nothing.
 - Vault is encrypted at rest (Fernet); exactly **one** root key (`CONNECTIONS_ROOT_KEY`) unlocks it.
 - The API/UI/CLI return only **masked** values + a source badge — never raw secrets.
 - `derived` connections (Supabase anon/service keys, GlitchTip DSNs) are recomputed, never asked.
+- `totp` connections — the shared secret behind a one-time code («אימות דו-שלבי → אפליקציית אימות») —
+  live in the vault and **nowhere else**: never in `.env`, never in a consumer's environment (export
+  and lease skip the kind), never in the browser profile. The plane mints the code itself:
+  `GET /api/totp/<id>?service=<svc>` → `{code, next, expires_in}`, gated like a lease (identity + the
+  caller's own `connections[]`) and grant-logged; the code is never logged. Validated on write
+  (`totp.py`, pure-stdlib RFC 6238; `totp_test.py` holds the RFC vectors) and stored as one canonical
+  `otpauth://` URI. **Written once, never read back by a human**: `reveal` refuses the kind over the
+  network and the screen offers no reveal button (only the operator inside the container, who holds
+  the root key anyway, can still see it); to move the secret, re-enrol at the provider. The mint
+  refuses an unidentified caller in every mode — `warn` never applies to it. Backup = the vault
+  volume (`connections_vault`), already in the backup set (`scripts/lib.sh`, `data-management/`) —
+  there is nothing else to copy.
 
 ## Run it (against the live stack)
 ```bash

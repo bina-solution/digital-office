@@ -1,0 +1,155 @@
+#!/usr/bin/env bash
+#: join — offices that join this one by DECLARATION, and this office's own declared join (join_api.py).
+#
+#   On the office that is JOINED (it has a link door: DGO_LINK_HOST):
+#   ./bbox dgo join                          # the door, the requests waiting, the invites, who joined
+#   ./bbox dgo join approve <office|id> [use|serve|both]
+#   ./bbox dgo join refuse  <office|id>
+#   ./bbox dgo join invite  <office> [--reusable] [--direction use|serve|both] [--ttl 7d|24h|0]
+#                                            # prints the invite ONCE: put it in the other office's
+#                                            # environment as DGO_JOIN=… (it is a key — treat it as one)
+#   ./bbox dgo join revoke  <invite id>
+#
+#   On the office that JOINS (it declares DGO_JOIN):
+#   ./bbox dgo join status                   # waiting / joined / refused, and the fingerprint to compare
+#   ./bbox dgo join again                    # forget the last join and ask again now
+set -uo pipefail
+# Hebrew sentences come back from the app: a Windows shell needs the io encoding said (G10).
+export PYTHONIOENCODING=utf-8
+VERB="${1:-list}"
+CONTAINER="$(docker ps --filter 'name=^dgo-extend-' --format '{{.Names}}' 2>/dev/null | head -1)"
+
+api() {                    # api <method> <path> [json-body] — the same three ways in as hooks/link
+  local method="$1" path="$2" body="${3:-}"
+  local -a args=(-sS -m 60 -X "${method}")
+  if [ -n "${body}" ]; then args+=(-H 'content-type: application/json' -d "${body}"); fi
+  if [ -n "${DGO_EXTEND_URL:-}" ]; then
+    curl "${args[@]}" "${DGO_EXTEND_URL}${path}" 2>/dev/null && return 0
+  fi
+  curl "${args[@]}" "http://dgo-extend:8983${path}" 2>/dev/null && return 0
+  [ -n "${CONTAINER}" ] || { echo '{"error":"dgo-extend is not running"}'; return 1; }
+  docker exec -i "${CONTAINER}" python3 - "${method}" "${path}" "${body}" <<'PY'
+import json, sys, urllib.request
+method, path, body = sys.argv[1], sys.argv[2], (sys.argv[3] or "")
+data = body.encode() if body else None
+req = urllib.request.Request("http://127.0.0.1:8983" + path, data=data, method=method,
+                             headers={"content-type": "application/json"} if data else {})
+try:
+    print(urllib.request.urlopen(req, timeout=50).read().decode())
+except urllib.error.HTTPError as e:
+    print(e.read().decode() or json.dumps({"error": f"HTTP {e.code}"}))
+PY
+}
+
+say() {                    # say <python expression over d> — print one answer, exit 1 on an error
+  python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+if isinstance(d, dict) and d.get("error"):
+    print(d["error"]); raise SystemExit(1)
+'"$1"
+}
+
+ttl_seconds() {            # 7d | 24h | 90m | 3600 | 0 → seconds
+  local t="${1:-7d}"
+  case "${t}" in
+    *d) echo $(( ${t%d} * 86400 )) ;;
+    *h) echo $(( ${t%h} * 3600 )) ;;
+    *m) echo $(( ${t%m} * 60 )) ;;
+    *[!0-9]*) echo "bad ttl: ${t}" >&2; return 2 ;;
+    *) echo "${t}" ;;
+  esac
+}
+
+case "${VERB}" in
+  list|"")
+    api GET /api/join | say '
+import time
+door = d.get("door") or {}
+print("door: " + (door.get("url") or "none - this office takes no joins (DGO_LINK_HOST)"))
+for r in d.get("requests") or []:
+    left = max(0, int(r["expires_at"]) - int(time.time()))
+    print("  request  %-14s %-20s %s  from %s  %s, %ds left" % (r["office"], r["fingerprint"], r["rid"],
+          r.get("from") or "?", r["state"], left))
+for i in d.get("invites") or []:
+    exp = "never" if not i.get("expires_at") else time.strftime("%Y-%m-%d %H:%M", time.localtime(i["expires_at"]))
+    print("  invite   %s  for %-14s %-5s %-9s uses=%s  expires %s  %s" % (i["id"], i.get("office") or "any office",
+          i["direction"], "reusable" if i.get("reusable") else "once", i.get("uses") or 0, exp, i["state"]))
+for oid, j in sorted((d.get("joined") or {}).items()):
+    print("  joined   %-14s via %s at %s" % (oid, j.get("via"), time.strftime("%Y-%m-%d %H:%M", time.localtime(j.get("at") or 0))))
+me = d.get("joiner") or {}
+if me.get("state") and me["state"] != "off":
+    print("this office joins %s: %s%s" % (me.get("hub") or "?", me["state"],
+          ("  - " + (me.get("error") or me.get("note") or "")) if (me.get("error") or me.get("note")) else ""))
+'
+    ;;
+  status)
+    api GET /api/join | say '
+me = d.get("joiner") or {}
+print("this office: %s  fingerprint %s" % (me.get("office"), me.get("fingerprint") or "-"))
+print("DGO_JOIN: %s" % ("not declared" if me.get("state") == "off" else (me.get("hub") or "?")))
+print("state: %s" % me.get("state"))
+for k in ("request", "peer", "note", "error"):
+    if me.get(k):
+        print("%s: %s" % (k, me[k]))
+for oid, j in (me.get("joined") or {}).items():
+    print("joined %s through %s" % (oid, j.get("hub")))
+'
+    ;;
+  approve)
+    # --replace: the approving person's explicit word that a record of that name which a join did NOT
+    # write (a person paired it, this office installed it) is to be replaced. Without it, never.
+    REF="${2:-}"; DIRECTION=""; REPLACE=null
+    for a in "${@:3}"; do
+      case "${a}" in
+        --replace) REPLACE=true ;;
+        use|serve|both) DIRECTION="${a}" ;;
+        *) echo "usage: bbox dgo join approve <office|request id> [use|serve|both] [--replace]" >&2; exit 2 ;;
+      esac
+    done
+    [ -n "${REF}" ] || { echo "usage: bbox dgo join approve <office|request id> [use|serve|both] [--replace]" >&2; exit 2; }
+    api POST "/api/join/${REF}/approve" "{\"direction\":\"${DIRECTION}\",\"replace\":${REPLACE}}" | say '
+print("approved %s (%s), %s - it completes the pairing on its next pass" % (d["office"], d["fingerprint"], d["direction"]))'
+    ;;
+  refuse)
+    REF="${2:-}"
+    [ -n "${REF}" ] || { echo "usage: bbox dgo join refuse <office|request id>" >&2; exit 2; }
+    api POST "/api/join/${REF}/refuse" | say 'print("refused %s" % d["office"])'
+    ;;
+  invite)
+    OFFICE=""; REUSABLE=false; DIRECTION=both; TTL=7d
+    shift
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --reusable) REUSABLE=true ;;
+        --direction) shift; DIRECTION="${1:-}" ;;
+        --ttl) shift; TTL="${1:-}" ;;
+        -*) echo "unknown option $1" >&2; exit 2 ;;
+        *) OFFICE="$1" ;;
+      esac
+      shift
+    done
+    SECS="$(ttl_seconds "${TTL}")" || exit 2
+    api POST /api/invite "{\"office\":\"${OFFICE}\",\"direction\":\"${DIRECTION}\",\"ttl_seconds\":${SECS},\"reusable\":${REUSABLE}}" | say '
+i = d["invite"]
+print("invite %s for %s (%s, %s) - shown once, keep it like a key:" % (i["id"], i.get("office") or "any office",
+      i["direction"], "reusable" if i.get("reusable") else "single use"))
+print()
+print("DGO_JOIN=" + d["text"])'
+    ;;
+  invites)
+    api GET /api/invite | say '
+for i in d.get("invites") or []:
+    print("%s  %-14s %-5s %-9s uses=%s %s" % (i["id"], i.get("office") or "any", i["direction"],
+          "reusable" if i.get("reusable") else "once", i.get("uses") or 0, i["state"]))'
+    ;;
+  revoke)
+    IID="${2:-}"
+    [ -n "${IID}" ] || { echo "usage: bbox dgo join revoke <invite id>" >&2; exit 2; }
+    api DELETE "/api/invite/${IID}" | say 'print("revoked %s" % d["invite"]["id"])'
+    ;;
+  again)
+    api POST /api/join/again | say 'print("asking again now")'
+    ;;
+  *) echo "usage: bbox dgo join [list|status|approve|refuse|invite|invites|revoke|again]" >&2; exit 2 ;;
+esac

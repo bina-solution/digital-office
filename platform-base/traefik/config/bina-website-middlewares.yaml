@@ -1,0 +1,18 @@
+# Middlewares referenced by /root/bina-devops production/bina-solutions-website labels
+# (copied so the personal site can be served by the staging Traefik). Added 2026-09-17.
+http:
+  middlewares:
+    ratelimit-default:
+      rateLimit:
+        average: 100
+        burst: 50
+    security-headers:
+      headers:
+        customFrameOptionsValue: "SAMEORIGIN"
+        contentTypeNosniff: true
+        browserXssFilter: true
+        referrerPolicy: "strict-origin-when-cross-origin"
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+    compress:
+      compress: {}

@@ -3185,7 +3185,7 @@ def _enrich_registry(transport, registry: list[dict], scope: _Scope,
 #
 # TWO DATABASES, AND THEY ARE NOT THE SAME ONE. INDOX's rows live in the
 # supabase postgres; n8n's executions live in its own postgres (container
-# `n8n-postgres`, user `bina-comp`, db `n8n`). Both are read here over psycopg —
+# `n8n-postgres`, user `hacohen`, db `n8n`). Both are read here over psycopg —
 # already a dependency for the n8n credential store — on connections pinned
 # `default_transaction_read_only=on`, verified 2026-08-23 to reject a write with
 # ReadOnlySqlTransaction. This is the ONLY place in the BFF that reads n8n's
@@ -3400,7 +3400,7 @@ def _pipeline_indox_conninfo() -> str:
 
 def _pipeline_n8n_conninfo() -> str:
     return _pipeline_conninfo(
-        "PIPELINE_N8N", host="n8n-postgres", dbname="n8n", user="bina-comp"
+        "PIPELINE_N8N", host="n8n-postgres", dbname="n8n", user="hacohen"
     )
 
 
@@ -3462,7 +3462,7 @@ def _pipeline_indox_numbers(doc_table: str | None, instance: str,
         return None
     # THE BAR IS ON EVERY SCREEN, SO IT LIED ON EVERY SCREEN. All three relations below were
     # hardcoded `public.`, which is instance one's data behind the compat views — so the pipeline
-    # strip showed בינה קומפ's totals, terminal counts and drain gate while לוי was selected, and would
+    # strip showed הכהן's totals, terminal counts and drain gate while לוי was selected, and would
     # have started failing outright the moment those views are dropped. Same identifier discipline
     # as everywhere else: the schema is validated, never interpolated on trust.
     if not _SAFE_SCHEMA.match(schema or ""):
@@ -4195,7 +4195,7 @@ def create_blueprint(
 
         A request that NAMES an instance never proceeds without it. The first draft swallowed every
         resolution failure and left `g` unset, so `_request_schema()` fell back to `public` — a levi
-        screen operating on bina-comp's data behind a success envelope, including the action-log
+        screen operating on hacohen's data behind a success envelope, including the action-log
         purge. Unknown instance → the ValidationError/RepoNotFound handlers (400/404); a transient
         resolution failure (registry unreachable) → 503, because refusing costs a retry and
         rebinding silently costs a cross-tenant write."""
@@ -4219,7 +4219,7 @@ def create_blueprint(
     # ── READING ONE TENANT'S DATA ────────────────────────────────────────────────────────────
     #
     # The repo config points at schema `public`, where `incoming_documents` is a COMPAT VIEW over
-    # `indox_bina_comp`. So without this, every read — whichever instance the operator picked —
+    # `indox_hacohen`. So without this, every read — whichever instance the operator picked —
     # returns instance one's rows. A instance selector over that is worse than none: it presents a
     # choice the data does not honour, which is the cross-instance read wearing a UI.
     #
@@ -4501,7 +4501,7 @@ def create_blueprint(
         #   /account/detail?instance=levi  ->  docs = 25,995   (levi has 1)
         #                                      columns = 46    (levi's table has 125)
         #
-        # 25,995 is bina-comp's count rendered under levi's name: a cross-tenant number wearing the
+        # 25,995 is hacohen's count rendered under levi's name: a cross-tenant number wearing the
         # other instance's label, which is the exact bleed the schema split exists to end.
         # `repo_for` points the repo at THIS instance's schema, and the row-count cache already
         # keys on the tenant, so both numbers now come from the instance the caller named.
@@ -5728,7 +5728,7 @@ def create_blueprint(
                 # it is the original bug wearing a different hat.
                 # THE SCHEMA TOO: scope.doc_table is the same string in every
                 # instance schema, so without it a levi request inside the TTL
-                # of a bina-comp request was served bina-comp's window aggregate.
+                # of a hacohen request was served hacohen's window aggregate.
                 payload = _sync_cached(
                     f"dashwin:{_request_schema()}:{scope.doc_table}:{win}:"
                     f"{request.args.get('tz') or ''}:{basis}",
@@ -5850,7 +5850,7 @@ def create_blueprint(
         since_iso = _dash_win_since(win, body.get("tz"))
         # A DESTRUCTIVE ROUTE THAT WAS CROSS-TENANT. It built a raw PostgREST DELETE against
         # `{base}/rest/v1/<table>` with NO schema at all, so it always hit `public` — purging the
-        # action log while viewing `לוי` deleted בינה קומפ's rows, and it would 404 outright the moment
+        # action log while viewing `לוי` deleted הכהן's rows, and it would 404 outright the moment
         # the compat views come down. It now goes through the same transport every other read and
         # write uses, so it lands in the schema the request is scoped to and nowhere else.
         try:
@@ -6859,7 +6859,7 @@ def create_blueprint(
         # THE SELECTION AND THE MOVE MUST READ THE SAME SCHEMA. factory(src_cfg) resolved the
         # selection through the config schema (`public` = instance one's compat view) while the
         # INSERT/DELETE below runs in _request_schema() — so a filter-archive under ?instance=levi
-        # enumerated bina-comp's ids and moved levi rows that merely shared them (per-instance ID
+        # enumerated hacohen's ids and moved levi rows that merely shared them (per-instance ID
         # sequences collide by design). repo_for() scopes the selection to the same instance the
         # SQL half writes.
         repo_obj = repo_for(src_cfg, request.args.get("instance"))

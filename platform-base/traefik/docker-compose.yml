@@ -14,12 +14,25 @@ services:
           memory: 256M
     restart: unless-stopped
     container_name: traefik-${DEPLOYMENT_NAME:-bina-deployment}
+    # The door first: traefik's provider retries a refused connection, so this is not a
+    # correctness requirement — it is why a fresh `bbox run` has no window of "zero routers"
+    # (the state the edge came up in for ~12s on 2026-10-10, while the door was still starting).
+    depends_on:
+      - docker-socket-proxy
     command:
     - --providers.docker=true
     - --api.dashboard=${TRAEFIK_API_DASHBOARD:-false}
     - --api.insecure=${TRAEFIK_API_INSECURE:-false}
     - --entrypoints.web.address=:80
     - --entrypoints.websecure.address=:443
+    # THE LAN ENTRY (DGO-1125): this office's console for a phone on the same Wi-Fi. Reached only through
+    # the host's console door (packaging/macos/lan-door.py --policy), and only the routes that NAME it
+    # live here (apps/lan-console). web and websecure are the defaults, so a router that names no entry
+    # keeps landing on those two and never on this one — nothing of the office leaks onto the LAN by
+    # omission.
+    - --entrypoints.lan.address=:8081
+    - --entrypoints.web.asDefault=true
+    - --entrypoints.websecure.asDefault=true
     - --entrypoints.postgres.address=:5432
     - --entrypoints.redis.address=:6379
     - --entrypoints.websecure.transport.respondingTimeouts.readTimeout=600s
@@ -33,15 +46,19 @@ services:
     - --serversTransport.forwardingTimeouts.idleConnTimeout=600s
     - --certificatesresolvers.myresolver.acme.httpchallenge=true
     - --certificatesresolvers.myresolver.acme.httpchallenge.entrypoint=web
-    - --certificatesresolvers.myresolver.acme.email=${TRAEFIK_ACME_EMAIL:-person194@example.com}
+    - --certificatesresolvers.myresolver.acme.email=${TRAEFIK_ACME_EMAIL:-person174.x@example.com}
     - --certificatesresolvers.myresolver.acme.storage=/etc/traefik/acme.json
     - --providers.docker.exposedbydefault=false
+    # …and through the door, by name on the office's own network (DGO-136).
+    - --providers.docker.endpoint=tcp://docker-socket-proxy:2375
     - --providers.file.directory=/etc/traefik/
     - --log.level=INFO
     - --accesslog=true
     - --metrics.prometheus=true
     environment:
     - BBOX_SSO=${BBOX_SSO:-on}
+    # which identity service the forwardAuth middleware asks (config/authentik-forwardauth.yaml)
+    - DGO_IDENTITY=${DGO_IDENTITY:-authentik}
     logging:
       driver: json-file
       options:
@@ -50,20 +67,36 @@ services:
     ports:
     - 80:80
     - 443:443
+    # the LAN entry, on loopback only: the host's console door is its one way in (DGO-1125)
+    - 127.0.0.1:${TRAEFIK_LAN_HOST_PORT:-8081}:8081
     # The HOST side of the two TCP passthroughs is overridable: on a machine where the port is already
     # taken (a native Windows PostgreSQL under WSL mirrored networking shares the host's port space —
     # measured on hp-laptop, 2026-10-04) the bind fails and traefik never starts, taking :80 with it.
-    - ${TRAEFIK_POSTGRES_HOST_PORT:-5432}:5432
-    - ${TRAEFIK_REDIS_HOST_PORT:-6379}:6379
+    # LOOPBACK ONLY (the office's security session: «If you must publish a port for debugging,
+    # bind it to 127.0.0.1:port only»). These two are TCP passthroughs to Postgres and Redis for
+    # whoever is AT this machine — and published on every interface they are Docker's own
+    # documented firewall bypass (the publish rules land in the DOCKER chain, ahead of the host's
+    # own): measured by the pentest behind `rap-009` and by G84 ever since. The port NUMBER stays
+    # overridable for the conflict case below; only the interface is pinned.
+    - 127.0.0.1:${TRAEFIK_POSTGRES_HOST_PORT:-5432}:5432
+    - 127.0.0.1:${TRAEFIK_REDIS_HOST_PORT:-6379}:6379
     volumes:
-    # The HOST side is the project's own socket; the CONTAINER side stays /var/run/docker.sock so
-    # traefik's own config needs no change. Docker Desktop's WSL integration re-binds
-    # /var/run/docker.sock inside the distro whenever it starts, and a traefik pointed there reads
-    # DESKTOP's container list instead of this stack's. It does not error — it finds zero matching
-    # labels and serves 404 for every *.localhost while reporting healthy. Measured 2026-07-30:
-    # opening Docker Desktop and stopping its stray containers took the entire site down while all
-    # 39 real containers stayed up. The default keeps hosts without a project socket working.
-    - ${BBOX_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock
+    # NO SOCKET HERE (DGO-136). traefik's provider asks a door instead: `docker-socket-proxy` below
+    # answers GET/HEAD on the paths a provider reads and refuses everything else by name, and it is
+    # the only container that holds the engine socket — read-only. The mount this replaces was
+    # read-write, in the office's front door: breaching traefik was control of the host.
+    #
+    # WHY A DOOR AND NOT `:ro`: measured 2026-10-10 — a socket mounted read-only still answers
+    # `GET /_ping` with 200. `:ro` constrains the file node, not the protocol spoken over it, so a
+    # compromised traefik would have kept writing. Only something that speaks HTTP can refuse.
+    #
+    # WHAT USED TO BE HERE, and why the path mattered: the HOST side is the project's own socket.
+    # Docker Desktop's WSL integration re-binds /var/run/docker.sock inside the distro whenever it
+    # starts, and a traefik pointed there reads DESKTOP's container list instead of this stack's. It
+    # does not error — it finds zero matching labels and serves 404 for every *.localhost while
+    # reporting healthy. Measured 2026-07-30: opening Docker Desktop and stopping its stray
+    # containers took the entire site down while all 39 real containers stayed up. The proxy takes
+    # the same `${BBOX_DOCKER_SOCK}`, so a host without a project socket still works.
     - ./config:/etc/traefik
     networks:
     - traefik-network
@@ -80,10 +113,54 @@ services:
     - traefik.http.routers.traefik-https.rule=Host(`${TRAEFIK_API_BASE_URL}`)
     - traefik.http.routers.traefik-https.entrypoints=websecure
     - traefik.http.routers.traefik-https.tls=true
-    - traefik.http.routers.traefik-https.tls.certresolver=myresolver
+    - traefik.http.routers.traefik-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
     - traefik.http.routers.traefik-https.service=traefik-deployment
     - traefik.http.routers.traefik-https.middlewares=authentik@file
     - traefik.http.services.traefik-deployment.loadbalancer.server.port=8080
+  # ── the door (DGO-136) ────────────────────────────────────────────────────────────────────────
+  # The ONE container in this app that holds the engine socket — read-only — and the only one that
+  # speaks to the engine at all. It exists because the provider's needs are exactly enumerable:
+  # GET/HEAD on /_ping, /version, /info, /events, /containers, /networks, /services, /tasks,
+  # /nodes, /swarm, /distribution. Everything else is answered 403 with the path in the sentence,
+  # and `docker logs docker-socket-proxy-*` is the record of what was refused.
+  #
+  # It publishes nothing. traefik reaches it by name over traefik-network, and no host port is
+  # mapped, so it is not a door from outside — it is the door the edge uses inside.
+  docker-socket-proxy:
+    build:
+      context: ./socket-proxy
+      dockerfile: Dockerfile
+    image: deployment-hacohen-socket-proxy:latest
+    container_name: docker-socket-proxy-${DEPLOYMENT_NAME:-bina-deployment}
+    restart: unless-stopped
+    volumes:
+      - ${BBOX_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
+    networks:
+      - traefik-network
+    healthcheck:
+      # A door that stopped answering is a provider that silently serves a stale snapshot; the
+      # probe is a request the door itself allows, so it fails exactly when the door does.
+      test: ["CMD-SHELL", "python -c \"import socket,sys; s=socket.create_connection(('127.0.0.1',2375),3); s.sendall(b'GET /_ping HTTP/1.0\\r\\n\\r\\n'); sys.exit(0 if b'200' in s.recv(64) else 1)\""]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-5s}
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          # One python process, stdlib only, two threads per live connection. The provider holds
+          # one long-lived /events stream and makes a listing call every few seconds.
+          cpus: '0.10'
+          memory: 64M
+        reservations:
+          cpus: '0.01'
+          memory: 16M
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+
 networks:
   traefik-network:
     external: true

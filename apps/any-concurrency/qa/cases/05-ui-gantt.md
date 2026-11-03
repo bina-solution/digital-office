@@ -1,6 +1,6 @@
 # QA — 05: Gantt Canvas & Detail Panel
 
-URL: `https://any-concurrency.bina-comp.bina-solutions.co.il/`
+URL: `https://any-concurrency.hacohen.bina-solutions.co.il/`
 
 ---
 

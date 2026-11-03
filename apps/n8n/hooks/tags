@@ -1,0 +1,146 @@
+#!/usr/bin/env bash
+set -euo pipefail
+export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
+# n8n-tags — who OWNS each workflow on this instance: `app:<app id>`, the tag a pull routes by.
+#
+#     bbox n8n tags                 status: per owner, how many workflows and how many already tagged
+#     bbox n8n tags seed            write the missing tags (backup of both tag tables first)
+#     bbox n8n tags seed --dry-run  say exactly what it would write, and write nothing
+#
+# WHY. `apps/n8n/hooks/pull:87` routes every exported workflow to its owner BY TAG `app:<app id>`
+# (owner, 2026-08-16), cut to tag_entity's varchar(24). Workflows with no tag fall back to "which
+# blueprint dir already holds this id" — a fallback that cannot place a workflow CREATED in the UI, so
+# an untagged instance grows a central blueprint nobody owns, and every pull prints a warning per file.
+# Measured on this office 2026-10-13: 28 tags, NONE of them `app:*`; `Routed 0 workflow(s) by app:* tag
+# + 32 by legacy dir fallback`, 50 workflows with no owner at all. The hook's advice used to be
+# "re-run the app-tag seeding" — and no such tool existed. This is it.
+#
+# THE OWNER IS ALREADY DECLARED, by the blueprint file that holds the workflow:
+#     apps/<app>/blueprint/n8n/<id>.workflow.ts   → app:<app>   (only for apps this office ENABLES —
+#                                                                the same map pull routes by, so the
+#                                                                tag it writes is a tag pull can use)
+#     apps/n8n/blueprint/n8n/<id>.workflow.ts     → app:n8n     (the central blueprint IS its home)
+# and a workflow with no file has NO declared owner: it is reported, never guessed.
+#
+# SAFE BY CONSTRUCTION: it only ADDS tag rows (never deletes), it refuses on an empty instance, and
+# `seed` dumps tag_entity + workflows_tags to a file before touching anything.
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"    # read_env, N8N_CONTAINER/PG_CONTAINER, colors, running, pgq
+N8N="${N8N_CONTAINER}"; PG="${PG_CONTAINER}"
+N8N_DIR="${REPO_ROOT}/apps/n8n"; WF_DIR="${N8N_DIR}/blueprint/n8n"
+BACKUP_DIR="${REPO_ROOT}/ci-artifacts"
+
+VERB="${1:-status}"; shift || true
+DRY=0; [ "${1:-}" = "--dry-run" ] && DRY=1
+case "${VERB}" in status|seed) ;; *) echo "usage: bbox n8n tags [status|seed [--dry-run]]" >&2; exit 2 ;; esac
+
+running "${N8N}" || { echo "${cr}n8n not running${c0} (${N8N}) — 'bbox run'"; exit 1; }
+LIVE="$(pgq 'select count(*) from workflow_entity;')"; LIVE="${LIVE:-0}"
+[ "${LIVE}" -gt 0 ] || { echo "${cr}REFUSING${c0}: the instance has 0 workflows — nothing to tag."; exit 1; }
+
+# A write that fails must SAY so: pgq swallows stderr, so the seed path uses its own wrapper.
+pgw() { docker exec -i -e PGPASSWORD="$(read_env POSTGRES_PASSWORD)" "${PG}" \
+          psql -U "$(read_env POSTGRES_USER)" -d "$(read_env POSTGRES_DB)" -v ON_ERROR_STOP=1 -qtA -c "$1"; }
+
+# The map the PULL routes by: enabled apps and their blueprint dirs (platform/manager/reconcile.py).
+# The tag a pull routes by = the app whose blueprint dir holds the file. Not "the apps this office
+# ENABLES": the pull resolves a tag against every apps/*/blueprint/n8n dir in the tree (its tag loop
+# does exactly that, and its render step writes into every one of them), so a workflow whose file sits
+# under an app this office has off is routable by its tag too — measured 2026-10-13, chat/drive.
+BLUEPRINT_DIRS="$( for d in "${REPO_ROOT}"/apps/*/blueprint/n8n; do [ -d "${d}" ] && printf '%s\n' "${d}"; done )"
+
+tag_for_id() {   # $1 = workflow id → the tag of the blueprint dir that holds it, or "" (no owner)
+  local id="$1" d app
+  for d in ${BLUEPRINT_DIRS}; do
+    [ -f "${d}/${id}.workflow.ts" ] || [ -f "${d}/${id}.json" ] || continue
+    if [ "${d}" = "${WF_DIR}" ]; then printf '%s' "app:n8n"; return 0; fi
+    app="$(basename "$(dirname "$(dirname "${d}")")")"
+    printf '%.24s' "app:${app}"; return 0
+  done
+  return 0
+}
+
+# Live workflows and the `app:*` tag each already carries (empty = none).
+LIVE_TAGS="$(pgq "select w.id || '|' || coalesce((select t.name from workflows_tags wt
+                    join tag_entity t on t.id = wt.\"tagId\"
+                   where wt.\"workflowId\" = w.id and t.name like 'app:%' limit 1), '')
+                  from workflow_entity w order by w.id;")"
+
+declare -A PLAN=()        # tag → newline-separated workflow ids
+UNOWNED=""; UNOWNED_N=0; TAGGED_N=0; OWNED_BY_FILE_N=0
+DRIFT=""; DRIFT_N=0
+while IFS='|' read -r id have; do
+  [ -n "${id}" ] || continue
+  want="$(tag_for_id "${id}")"
+  if [ -n "${have}" ]; then
+    TAGGED_N=$(( TAGGED_N + 1 ))
+    # A tag that says one thing while the file says another is the one state routing cannot survive:
+    # the pull believes the tag, so the workflow goes home to the WRONG app. Named, never rewritten
+    # here — a tag is a claim about ownership, and changing it is a decision (see the indoxApiRouter01
+    # move, 2026-10-13, done by hand for exactly that reason).
+    [ -n "${want}" ] && [ "${have}" != "${want}" ] && { DRIFT="${DRIFT} ${id}(${have}→${want})"; DRIFT_N=$(( DRIFT_N + 1 )); }
+    continue
+  fi
+  if [ -z "${want}" ]; then
+    UNOWNED="${UNOWNED} ${id}"; UNOWNED_N=$(( UNOWNED_N + 1 )); continue
+  fi
+  OWNED_BY_FILE_N=$(( OWNED_BY_FILE_N + 1 ))
+  if [ -n "${PLAN["${want}"]:-}" ]; then PLAN["${want}"]="${PLAN["${want}"]}"$'\n'"${id}"
+  else PLAN["${want}"]="${id}"; fi
+done <<< "${LIVE_TAGS}"
+
+if [ "${VERB}" = "status" ]; then
+  echo "${c1}n8n owner tags${c0}  instance=${LIVE} workflows"
+  echo "  already tagged app:*   ${TAGGED_N}"
+  echo "  owned by a blueprint   ${OWNED_BY_FILE_N} (a file declares them; they carry no tag)"
+  echo "  NO declared owner      ${UNOWNED_N}"
+  [ "${DRIFT_N}" -gt 0 ] && echo "  TAG DRIFT (the pull would route them wrong)  ${DRIFT_N}:$(printf '%s' "${DRIFT}" | tr ' ' '\n' | sed '/^$/d' | head -5 | sed 's/^/    /')"
+  if [ "${#PLAN[@]}" -gt 0 ]; then
+    echo "  would be written by 'bbox n8n tags seed':"
+    for t in $(printf '%s\n' "${!PLAN[@]}" | sort); do
+      printf '    %-26s %s\n' "${t}" "$(printf '%s\n' "${PLAN[$t]}" | grep -c . || true)"
+    done
+  fi
+  [ "${UNOWNED_N}" -gt 0 ] && echo "  no owner (tag them in n8n, or move their file):$(printf '%s\n' ${UNOWNED} | head -5 | sed 's/^/    /')"
+  exit 0
+fi
+
+# ── seed ─────────────────────────────────────────────────────────────────────────────────────────
+if [ "${#PLAN[@]}" -eq 0 ]; then ok "nothing to seed — every workflow that has a declared owner already carries its tag."; exit 0; fi
+if [ "${DRY}" = 1 ]; then
+  echo "${c1}dry run${c0} — would write ${OWNED_BY_FILE_N} tag link(s) over ${#PLAN[@]} tag name(s):"
+  for t in $(printf '%s\n' "${!PLAN[@]}" | sort); do echo "  ${t}: $(printf '%s\n' "${PLAN[$t]}" | grep -c . || true) workflow(s)"; done
+  exit 0
+fi
+mkdir -p "${BACKUP_DIR}"
+TS="$(date -u +%Y%m%d-%H%M%S)"
+BACKUP="${BACKUP_DIR}/n8n-tags-backup-${TS}.sql"
+if ! docker exec -e PGPASSWORD="$(read_env POSTGRES_PASSWORD)" "${PG}" pg_dump -U "$(read_env POSTGRES_USER)" \
+       -d "$(read_env POSTGRES_DB)" -t tag_entity -t workflows_tags > "${BACKUP}" 2>/dev/null; then
+  echo "${cr}backup failed${c0} (${BACKUP}) — writing nothing." >&2; exit 1
+fi
+[ -s "${BACKUP}" ] || { echo "${cr}backup is empty${c0} (${BACKUP}) — writing nothing." >&2; exit 1; }
+echo "${c1}backup${c0} ${BACKUP} ($(wc -l < "${BACKUP}") lines)"
+
+WROTE=0
+for t in $(printf '%s\n' "${!PLAN[@]}" | sort); do
+  n="$(printf '%s\n' "${PLAN[$t]}" | grep -c . || true)"
+  [ "${n}" -gt 0 ] || continue
+  pgw "insert into tag_entity (id, name, \"createdAt\", \"updatedAt\")
+       select gen_random_uuid()::text, '${t}', now(), now()
+        where not exists (select 1 from tag_entity where name = '${t}');" >/dev/null
+  for id in ${PLAN[$t]}; do
+    pgw "insert into workflows_tags (\"workflowId\", \"tagId\")
+         select '${id}', id from tag_entity where name = '${t}'
+         on conflict do nothing;" >/dev/null
+    WROTE=$(( WROTE + 1 ))
+  done
+  echo "  ${t}: ${n} workflow(s)"
+done
+
+echo
+ok "seeded ${WROTE} tag link(s) — verify with a pull: it should now report 'Routed ${WROTE} workflow(s) by app:* tag' and no legacy-dir warnings."
+[ "${UNOWNED_N}" -gt 0 ] && warn "${UNOWNED_N} workflow(s) still have NO declared owner — no blueprint file holds them; the pull keeps them in the central blueprint and names them."
+exit 0

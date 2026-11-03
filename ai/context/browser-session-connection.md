@@ -93,7 +93,7 @@ and it survives the redesign that breaks the CSS.
 ```jsonc
 { "state": "ok",
   "steps": [{ "id": "…", "ok": true, "ms": 812 }],
-  "verify": { "read_back": "1.2.3.4", "expected": "1.2.3.4", "match": true },
+  "verify": { "read_back": "93.184.216.7", "expected": "93.184.216.7", "match": true },
   "evidence": { "url": "…", "screenshot": "…", "at": 1790000000 } }
 ```
 

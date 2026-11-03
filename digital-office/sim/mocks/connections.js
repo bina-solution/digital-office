@@ -1,6 +1,6 @@
 /* Mock backend for "חיבורים ומפתחות" (connections/secrets manager) — development/connections/ui.html.
    Real UI code is untouched; only window.fetch is intercepted. Data is for the fictitious
-   client "בינה פתרונות בע״מ" (company_id 514789234, person127@example.com), matching the
+   client "בינה פתרונות בע״מ" (company_id 514789234, person105@example.com), matching the
    other digital-office/sim mocks (console.js, my-docs.js, mailview.js).
 
    Endpoints implemented (see ui.html's api() calls):
@@ -35,7 +35,7 @@
   var ROWS = [
     /* ── app-password: login passwords to the deployment's own apps ── */
     { id:'n8n-admin', pillar:'app-password', title:'n8n', title_he:'n8n',
-      app:{name:'n8n', user:'person133@example.com', url:'https://n8n.bina-solutions.co.il'},
+      app:{name:'n8n', user:'person111@example.com', url:'https://n8n.bina-solutions.co.il'},
       kind:'password', status:'healthy', source:'db', secret:true, masked:'••••nX9k', clear:null,
       reveal_ok:true, rotatable:true },
     { id:'portainer-admin', pillar:'app-password', title:'Portainer', title_he:'Portainer',
@@ -43,11 +43,11 @@
       kind:'password', status:'needs_action', source:'env', secret:true, masked:'••••fault', clear:null,
       reveal_ok:true, rotatable:true, rotate_warn:'הסיסמה הנוכחית היא ברירת המחדל מההתקנה — מומלץ להחליף.' },
     { id:'glitchtip-admin', pillar:'app-password', title:'GlitchTip', title_he:'GlitchTip',
-      app:{name:'GlitchTip', user:'person136@example.com', url:'https://glitchtip.bina-solutions.co.il'},
+      app:{name:'GlitchTip', user:'person114@example.com', url:'https://glitchtip.bina-solutions.co.il'},
       kind:'password', status:'healthy', source:'minted', secret:true, masked:'••••7qLp', clear:null,
       reveal_ok:true, rotatable:true },
     { id:'supabase-studio-admin', pillar:'app-password', title:'Supabase Studio', title_he:'Supabase Studio',
-      app:{name:'Supabase Studio', user:'person133@example.com', url:'https://supabase.bina-solutions.co.il'},
+      app:{name:'Supabase Studio', user:'person111@example.com', url:'https://supabase.bina-solutions.co.il'},
       kind:'password', status:'healthy', source:'db', secret:true, masked:'••••2Vt8', clear:null,
       reveal_ok:true, rotatable:true },
     { id:'authentik-admin', pillar:'app-password', title:'Authentik', title_he:'Authentik',
@@ -67,7 +67,7 @@
       rotate_warn:'יבטל את הגישה לקבצים המחוברים עד לטעינת מפתח שירות חדש.',
       impact:['sync-drive'] },
     { id:'whatsapp-qr', pillar:'auth', title:'WhatsApp Bot', title_he:'בוט ווצאפ',
-      kind:'qr-session', protocol:'qr', consumers:['whatsapp-bina-comp'],
+      kind:'qr-session', protocol:'qr', consumers:['whatsapp-hacohanim'],
       status:'healthy', source:'minted', secret:true, masked:'linked', clear:null,
       reveal_ok:false, rotatable:false },
     { id:'openai-api-key', pillar:'auth', title:'OpenAI API Key', title_he:'מפתח API — OpenAI',
@@ -102,7 +102,7 @@
 
   var CREDS = {
     'n8n-admin': { fields:[
-      { key:'username', label:'שם משתמש', source:'db', primary:false, secret:false, clear:'person133@example.com' },
+      { key:'username', label:'שם משתמש', source:'db', primary:false, secret:false, clear:'person111@example.com' },
       { key:'password', label:'סיסמה', source:'db', primary:true, secret:true }
     ]},
     'portainer-admin': { fields:[
@@ -110,11 +110,11 @@
       { key:'password', label:'סיסמה', source:'env', primary:true, secret:true }
     ]},
     'glitchtip-admin': { fields:[
-      { key:'username', label:'שם משתמש', source:'db', primary:false, secret:false, clear:'person136@example.com' },
+      { key:'username', label:'שם משתמש', source:'db', primary:false, secret:false, clear:'person114@example.com' },
       { key:'password', label:'סיסמה', source:'minted', primary:true, secret:true }
     ]},
     'supabase-studio-admin': { fields:[
-      { key:'username', label:'שם משתמש', source:'db', primary:false, secret:false, clear:'person133@example.com' },
+      { key:'username', label:'שם משתמש', source:'db', primary:false, secret:false, clear:'person111@example.com' },
       { key:'password', label:'סיסמה', source:'db', primary:true, secret:true }
     ]},
     'authentik-admin': { fields:[
@@ -128,12 +128,12 @@
       { key:'scope', label:'הרשאות', source:'env', primary:false, secret:false, clear:'gmail.readonly drive.file' }
     ]},
     'gdrive-service-account': { fields:[
-      { key:'client_email', label:'Service Account Email', source:'db', primary:false, secret:false, clear:'person137@example.com' },
+      { key:'client_email', label:'Service Account Email', source:'db', primary:false, secret:false, clear:'person115-x@example.com' },
       { key:'private_key', label:'מפתח פרטי', source:'db', primary:true, secret:true }
     ]},
     'whatsapp-qr': { fields:[
       { key:'session', label:'סשן WhatsApp', source:'minted', primary:true, secret:true },
-      { key:'phone', label:'מספר מקושר', source:'minted', primary:false, secret:false, clear:'050-000-0007' }
+      { key:'phone', label:'מספר מקושר', source:'minted', primary:false, secret:false, clear:'+972-50-123-4567' }
     ]},
     'openai-api-key': { fields:[
       { key:'api_key', label:'מפתח API', source:'db', primary:true, secret:true }
@@ -157,17 +157,15 @@
 
   /* actual secret values behind the masks, keyed 'id:field' — never sent unless revealed */
   var VAULT = {
-    'n8n-admin:password': 'REDACTED-value-6',
-    'portainer-admin:password': 'REDACTED-value-7',
-    'glitchtip-admin:password': 'REDACTED-value-8',
-    'supabase-studio-admin:password': 'REDACTED-value-9',
-    'gmail-oauth:access_token': 'ya29.a0AfH6SMBx7k2Lq9pR3vTz8wYc1dE5fG6hI7jK8lM9nO0pQ1rS2tU3vW4xY5zA6bC7dE8fG9hI0jK',
-    'gmail-oauth:refresh_token': '1//0gL8k2Jx9mNq3rTz5vYw8xAb1cD4eF7gH0iJ3kM',
-    'gdrive-service-account:private_key': '-----BEGIN PRIVATE KEY-----
-REDACTED
------END PRIVATE KEY-----',
+    'n8n-admin:password': 'REDACTED-value-1',
+    'portainer-admin:password': 'tryportainer123',
+    'glitchtip-admin:password': 'REDACTED-value-2',
+    'supabase-studio-admin:password': 'REDACTED-value-3',
+    'gmail-oauth:access_token': 'ya29.REDACTED',
+    'gmail-oauth:refresh_token': '1//0REDACTED',
+    'gdrive-service-account:private_key': '-----BEGIN PRIVATE KEY-----\nREDACTED...redacted...\n-----END PRIVATE KEY-----',
     'whatsapp-qr:session': 'session-active-9f8e7d6c5b4a',
-    'openai-api-key:api_key': 'REDACTED-value-10',
+    'openai-api-key:api_key': 'sk-REDACTED',
     'n8n-encryption-key:value': 'e91c4f7a2b8d3e6f1a9c5b7d2e4f8a1c',
     'postgres-root-password:value': 'Ps7qXm2Vn9LtBk4Rw6',
     'supabase-jwt-secret:value': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.super-secret-signing-key-do-not-share',

@@ -16,6 +16,7 @@ assets or active choices. `extends` is resolved parents-first.
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import os
 import re
 from pathlib import Path
@@ -30,6 +31,17 @@ KINDS = {"text", "richtext", "image", "video", "animation", "file", "document", 
          "link", "handle", "list", "price-list", "hours", "address", "phone", "email", "set"}
 FIELDS = {"name", "bio", "avatar", "banner", "links", "handle"}
 KIND_ALIASES = {"rich-text": "richtext"}
+#: THE CONTENT LIBRARY (DGO-819, DGO-685): a blueprint's `library:` is its editorial plan — one entry
+#: per item and language, each a richtext slot `content.<type>.<slug>.<lang>`. Its body, when it has
+#: been written, is a markdown file beside the blueprints (`content/<type>/<slug>.<lang>.md`, front
+#: matter + body) so the image carries it and a review reads it as a diff. The types and their shapes
+#: are ai/context/seo/style-guide.md's.
+CONTENT_TYPES = ("article", "tutorial", "post", "news", "report")
+CONTENT_LANGS = ("he", "en")
+CONTENT_DIR = DIR / "content"
+SLUG_RE = re.compile(r"[a-z0-9]+(-[a-z0-9]+)*")
+#: what a written body becomes, until somebody chooses otherwise in the app: a version, never the active one
+CONTENT_AUTHOR = "בינה סולושנס"
 
 
 class BlueprintError(Exception):
@@ -92,6 +104,20 @@ def validate(b: dict, known_channels: set[str]) -> list[str]:
         for u in ph.get("units") or []:
             if not u.get("id"):
                 out.append(f"{b.get('id')}: phase {ph.get('id')} has a unit without id")
+    for e in b.get("library") or []:
+        where = f"{b.get('id')}: library {e.get('type')}/{e.get('slug')}.{e.get('lang') or 'he'}"
+        if e.get("type") not in CONTENT_TYPES:
+            out.append(f"{where}: type not in {CONTENT_TYPES}")
+        if not SLUG_RE.fullmatch(str(e.get("slug") or "")):
+            out.append(f"{where}: slug must be latin lowercase words joined by '-'")
+        if (e.get("lang") or "he") not in CONTENT_LANGS:
+            out.append(f"{where}: lang not in {CONTENT_LANGS}")
+        if not e.get("title"):
+            out.append(f"{where}: no title")
+        k = _library_key(e)
+        if k in keys:
+            out.append(f"{where}: duplicate slot {k}")
+        keys.add(k)
     return out
 
 
@@ -172,6 +198,76 @@ def media_slots(b: dict, params: dict) -> list[dict]:
     return out
 
 
+def _library_key(e: dict) -> str:
+    return f"content.{e.get('type')}.{e.get('slug')}.{e.get('lang') or 'he'}"
+
+
+def _front(text: str) -> tuple[dict, str]:
+    """A content file's front matter (YAML between two `---` lines) and its markdown body."""
+    if text.startswith("---\n"):
+        head, sep, body = text[4:].partition("\n---\n")
+        if sep:
+            front = yaml.load(head, Loader=_Loader) or {}
+            return (front if isinstance(front, dict) else {}), body.lstrip("\n")
+    return {}, text
+
+
+def library_file(e: dict) -> Path:
+    return CONTENT_DIR / str(e.get("type")) / f"{e.get('slug')}.{e.get('lang') or 'he'}.md"
+
+
+def library_slots(b: dict) -> list[dict]:
+    """The editorial plan as slots: one richtext slot per `library:` entry, written or not yet."""
+    out = []
+    for i, e in enumerate(b.get("library") or []):
+        lang = e.get("lang") or "he"
+        out.append({
+            "key": _library_key(e), "section": "content", "grp": e["type"], "kind": "richtext",
+            "lang": lang, "label": _l(e.get("title")),
+            "required": False, "brief": {"he": e.get("brief") or "", "en": ""},
+            "constraints": {"words": e.get("words")} if e.get("words") else {},
+            "targets": [{"channel": "website"}, {"channel": "blog"}],
+            "ord": 9000 + i,
+            "plan": {"type": e["type"], "slug": e["slug"], "lang": lang,
+                     "category": e.get("category") or "", "refs": e.get("refs") or [],
+                     "keywords": e.get("keywords") or [], "words": e.get("words"),
+                     "file": str(library_file(e).relative_to(DIR)), "from": b["id"]}})
+    return out
+
+
+def seed_library(b: dict, by: str = "") -> int:
+    """Each WRITTEN body becomes a draft version of its slot — once per content of the file.
+
+    Additive like the rest of `apply`: a body whose exact text a version already carries
+    (`meta.file_sha`) is not added again, an edited file is a NEW draft beside the old ones, and
+    nothing here ever makes a version active — publishing is the owner's choice in the app."""
+    added = 0
+    for e in b.get("library") or []:
+        f = library_file(e)
+        if not f.is_file():
+            continue
+        raw = f.read_text(encoding="utf-8")
+        sha = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+        key = _library_key(e)
+        if any((a.get("meta") or {}).get("file_sha") == sha
+               for a in store.list_assets(key, include_archived=True)):
+            continue
+        front, body = _front(raw)
+        if not body.strip():
+            continue
+        meta = {k: v for k, v in front.items() if k != "title"}
+        meta.update({"format": "markdown", "file": str(f.relative_to(DIR)), "file_sha": sha,
+                     "words": len(body.split()), "type": e["type"], "slug": e["slug"],
+                     "lang": e.get("lang") or "he"})
+        a = store.add_asset(key, "richtext", title=str(front.get("title") or e.get("title") or ""),
+                            text=body, source="import", status="draft",
+                            author=str(front.get("author") or CONTENT_AUTHOR), meta=meta)
+        store.event("asset", f"טיוטה חדשה מהספרייה: {a['title']}", slot_key=key, actor=by,
+                    data={"asset": a["id"], "file": meta["file"], "words": meta["words"]})
+        added += 1
+    return added
+
+
 def apply(bid: str, params: dict | None = None, by: str = "") -> dict:
     blueprints = all_blueprints()
     chain = resolve(bid, blueprints)
@@ -181,9 +277,9 @@ def apply(bid: str, params: dict | None = None, by: str = "") -> dict:
         raise BlueprintError("התבנית אינה תקינה: " + "; ".join(problems[:8]))
     ensure_channels()
     params = {**(store.applied().get(bid, {}).get("params") or {}), **(params or {})}
-    created = refreshed = 0
+    created = refreshed = drafts = 0
     for depth, b in enumerate(chain):
-        for i, s in enumerate(list(b.get("slots") or []) + media_slots(b, params)):
+        for i, s in enumerate(list(b.get("slots") or []) + media_slots(b, params) + library_slots(b)):
             s = dict(s)
             # the blueprint's own order IS the reading order (logo before colours, names before
             # contact); a parent's slots come before its child's
@@ -199,7 +295,7 @@ def apply(bid: str, params: dict | None = None, by: str = "") -> dict:
         # every channel a slot of this blueprint names becomes a channel row (from the catalogue),
         # so "where is this used" always has somewhere to point
         catalog = {c["id"]: c for c in channel_catalog()}
-        named = {t.get("channel") for s in list(b.get("slots") or []) + media_slots(b, params)
+        named = {t.get("channel") for s in list(b.get("slots") or []) + media_slots(b, params) + library_slots(b)
                  for t in s.get("targets") or []}
         for cid in sorted(c for c in named if c in catalog):
             c = catalog[cid]
@@ -210,11 +306,13 @@ def apply(bid: str, params: dict | None = None, by: str = "") -> dict:
                                   "label": {"he": c.get("he"), "en": c.get("en")},
                                   "platform": c.get("platform"), "url": c.get("url"),
                                   "core": bool(c.get("core")), "ord": 100})
+        drafts += seed_library(b, by)
         store.mark_applied(b["id"], b.get("version") or 1, params if b["id"] == bid else {}, by)
-    store.event("blueprint", f"הוחלה התבנית {bid}: {created} משבצות חדשות, {refreshed} עודכנו",
-                actor=by, data={"blueprint": bid, "chain": [b["id"] for b in chain]})
+    store.event("blueprint", f"הוחלה התבנית {bid}: {created} משבצות חדשות, {refreshed} עודכנו"
+                + (f", {drafts} טיוטות מהספרייה" if drafts else ""),
+                actor=by, data={"blueprint": bid, "chain": [b["id"] for b in chain], "drafts": drafts})
     return {"blueprint": bid, "chain": [b["id"] for b in chain], "created": created,
-            "refreshed": refreshed}
+            "refreshed": refreshed, "drafts": drafts}
 
 
 def ensure_channels() -> None:
@@ -238,10 +336,14 @@ def summary(b: dict) -> dict:
     for s in slots:
         by_section[s.get("section")] = by_section.get(s.get("section"), 0) + 1
     by_section["media"] = by_section.get("media", 0) + len(units) + len(cal)
+    library = [e for x in chain for e in x.get("library") or []]
+    by_section["content"] = by_section.get("content", 0) + len(library)
     return {"id": b["id"], "version": b.get("version") or 1, "name": _l(b.get("name")),
             "summary": _l(b.get("summary")), "extends": b.get("extends") or [],
             "sources": b.get("sources") or [], "params": b.get("params") or [],
             "counts": {"slots": len(slots), "units": len(units), "calendar": len(cal),
                        "phases": sum(len(x.get("phases") or []) for x in chain),
+                       "library": len(library),
+                       "written": sum(1 for e in library if library_file(e).is_file()),
                        "by_section": by_section},
             "applied": store.applied().get(b["id"])}

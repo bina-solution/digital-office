@@ -67,18 +67,28 @@
          replaces cannot hide it with itself. It is shown by `html.focus` (app.js) and never by
          `bare` alone: a console view inside a desktop window is `bare` too, and a whole-window view
          does not want a floating exit button inside it (desktop.css).
-         It says its name when it appears and then folds to a 44px circle: an app's OWN top corner is
-         where its search or its menu lives (the Drive's search sits exactly under this button), so the
-         one control that must never be missing must also stop costing that corner five seconds after
-         it has been read. It unfolds again on hover, on focus, and on the next entry. -->
+         It is drawn as the SAME icon as the button that enters the mode, with no words and no second
+         glyph: the bracket that opens full screen is the bracket that closes it, and a triangle under
+         it (the first version) read as a third thing. Its name lives in `title`/`aria-label`, where a
+         screen reader and a long press find it. -->
     <button id="focusExit" class="focus-exit" type="button" title="יציאה ממסך מלא"
-            aria-label="יציאה ממסך מלא"><span class="txt">יציאה ממסך מלא</span></button>
+            aria-label="יציאה ממסך מלא">
+      <!-- THE SAME GLYPH AS #focusBtn, and no words (owner, 2026-10-13: «שיהיה אותו הסמל
+           שמכניס למצב מלא בלי טקסט … בלי … משולש תחתון מוזר»). One control, two states: the
+           bracket that opened the mode closes it. -->
+      <svg class="ic-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5"/><path d="M20 9V4h-5"/><path d="M4 15v5h5"/><path d="M20 15v5h-5"/></svg>
+    </button>
     <!-- tabindex="-1" so the skip link can actually move focus here; without it the browser scrolls
          to the anchor and leaves focus in the nav, which is the failure mode that makes skip links
          look present and do nothing. -->
     <div class="content" id="content" tabindex="-1"><div class="spin">טוען…</div></div>
     <div class="embedwrap hidden" id="embedwrap">
-      <div class="embed"><iframe id="frame" src="about:blank"></iframe></div>
+      <!-- allow: a framed app may ASK for the camera, microphone and screen, as it could in a tab of
+           its own; the browser still asks the person. `*`, not the default 'src': a tile whose frame
+           starts on the console (/a/<alias>/) and is redirected to the app's own host would otherwise
+           lose it on arrival — the video meetings' tile does exactly that (apps/meet, DGO-826). An app
+           under /a/ is the console's own origin and had all of this already. -->
+      <div class="embed"><iframe id="frame" src="about:blank" allow="camera *; microphone *; display-capture *; fullscreen *; autoplay *; clipboard-write *"></iframe></div>
     </div>
   </main>
 </div>

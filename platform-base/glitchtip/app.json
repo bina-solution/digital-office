@@ -52,6 +52,10 @@
     }
   ],
   "compose": "docker-compose.yml",
+  "agent": {
+    "context": "AGENT.md",
+    "order": 90
+  },
   "routing": [
     {
       "host": "glitchtip",

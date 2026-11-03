@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+#: documents [N] [--type <t>] [--status <s>] [--customer <id>] — the newest N business documents (default 20):  ./bbox my-docs documents 10
+# Pipes the app's own CLI (apps/my-docs/cli.py) into its container: no address, no key, no rebuild.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+dcx exec -T my-docs python - documents "$@" < "$(npath "${REPO_ROOT}")/apps/my-docs/cli.py"

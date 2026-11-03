@@ -5,7 +5,7 @@
 #   ./scripts/first-party-images --rmi       delete them (forces a true from-source rebuild)
 #
 # Why this exists: a "clean rebuild" sweep written as
-#     docker images | grep '^deployment-bina-comp-' | xargs docker rmi
+#     docker images | grep '^deployment-hacohen-' | xargs docker rmi
 # silently MISSES every service that declares an explicit `image:` tag. Two did —
 # incoming-documents-local and my-docs-local — so a rebuild advertised as "from nothing" quietly
 # reused day-old images for those two apps. Ask compose what it builds instead of guessing from

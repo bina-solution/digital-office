@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+#: find — files and folders of «קבצים» whose name holds the text, with their paths:  ./bbox drive find הקלטה
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+case "${1:-}" in ""|-h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+dcx exec -T drive python /app/cli.py find "$@"

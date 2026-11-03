@@ -39,6 +39,11 @@
       "after": true
     },
     {
+      "capability": "workflow",
+      "strength": "requires",
+      "after": true
+    },
+    {
       "capability": "notify",
       "strength": "wants",
       "after": false,
@@ -74,6 +79,10 @@
     }
   },
   "compose": "docker-compose.yml",
+  "agent": {
+    "context": "AGENT.md",
+    "order": 3
+  },
   "routing": [
     {
       "host": "bina",
@@ -143,5 +152,8 @@
   "resources": {
     "cpus": "1",
     "memory": "1g"
+  },
+  "blueprints": {
+    "n8n": "blueprint/n8n"
   }
 }

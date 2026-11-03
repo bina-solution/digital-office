@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Caps — digital replicas</title>
+<link rel="stylesheet" href="/static/cad.css?v=1">
+</head>
+<body>
+<header class="top">
+  <h1>The caps, as digital replicas</h1>
+  <span class="sub" id="shop"></span>
+</header>
+<main>
+  <p class="lead">Every cap the shop makes, built from its own sizes: the cap folded in 3D, the pieces to cut, how they
+    sit on the sheets, the bill of materials and what it costs. Each rule says where it came from — Alan, the shop's
+    builder, the shop's own installs, or ASSUMED until someone who knows says otherwise. Open a cap to see it, change
+    its sizes, and download its STEP.</p>
+  <div class="grid" id="caps"><p class="src">Loading the caps…</p></div>
+</main>
+<script type="module">
+  import { gallery } from '/static/cad.js?v=1';
+  gallery(document.getElementById('caps'), document.getElementById('shop'));
+</script>
+</body>
+</html>

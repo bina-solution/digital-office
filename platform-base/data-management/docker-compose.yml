@@ -25,7 +25,7 @@ services:
     environment:
     - SENTRY_DSN=${DATA_MANAGEMENT_SENTRY_DSN:-}
     - DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-bina-deployment}
-    - COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME:-deployment-bina-comp}
+    - COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME:-deployment-hacohen}
     # The repo at the SAME path inside as outside. BBOX_REPO_HOST is exported by scripts/lib.sh, so
     # every entry point supplies it — the same contract app-management uses. Identical paths matter
     # here more than most: deployment-archive.py shells out to `docker run -v <hostpath>` to tar a
@@ -75,7 +75,7 @@ volumes:
 
 networks:
   # external, and DELIBERATELY without `name:`. The network is literally `traefik-network`; adding
-  # a project-prefixed name resolved to `deployment-bina_comp_traefik-network`, which does not exist,
+  # a project-prefixed name resolved to `deployment-hacohen_traefik-network`, which does not exist,
   # and compose refused the whole service. Same declaration as platform-base/machine.
   traefik-network:
     external: true

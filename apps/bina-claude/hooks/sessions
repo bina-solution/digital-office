@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+#: sessions [--json] [--home cli|desktop] [-n N] — every Claude session this office keeps (the desktop app's and the CLI's):  ./bbox bina-claude sessions
+# Pipes the app's own reader (apps/bina-claude/sessions.py) into its container, where the volume is.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+dcx exec -T bina-claude python3 - sessions "$@" < "$(npath "${REPO_ROOT}")/apps/bina-claude/sessions.py"

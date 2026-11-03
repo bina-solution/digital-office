@@ -21,13 +21,13 @@
   into the repo `.env` as `GMAIL_IMAP_USER`/`GMAIL_IMAP_APP_PW`. `verify_gmail.py` → **ALL PASS** (auth,
   read 10.8k msgs, search, 21 mailboxes incl `[Gmail]/*` + Hebrew user labels in modified-UTF-7, SMTP send,
   round-trip). Used to build + verify the whole IMAP gmail layer end-to-end.
-- **person2@example.com — DONE (active INDOX tenant account).** 2SV on; app password named
+- **person3@example.com — DONE (active INDOX tenant account).** 2SV on; app password named
   `indox-imap` created at `myaccount.google.com/apppasswords` on 2026-06-22 and IMAP-verified (login OK,
   211 inbox msgs, 32 mailboxes incl `[Gmail]/*` + the full INDOX label set: English automation labels
   `saved-invoice-doc`/`balance-doc-saved`/`handeld-by-gdd`/… and the Hebrew ones
   `לטיפול-אוטומציה-שמירת-מסמכים`/`באמצע-טיפול-אוטומציה`/…). Wired into repo `.env` as
-  `GMAIL_IMAP_USER=person2@example.com` + `GMAIL_IMAP_APP_PW` (secret, gitignored); `inbox`
-  recreated and `/healthz` reports `user=person2@example.com`. The 16-char value is in `.env` only.
+  `GMAIL_IMAP_USER=person3@example.com` + `GMAIL_IMAP_APP_PW` (secret, gitignored); `inbox`
+  recreated and `/healthz` reports `user=person3@example.com`. The 16-char value is in `.env` only.
   **ROTATED 2026-06-25:** new app password `indox-imap-2` created via browser42 (CDP create+capture),
   written to `.env` `GMAIL_IMAP_APP_PW`, inbox recreated; direct IMAP verified (login OK, INBOX 540
   msgs, noop OK). Note: docker healthcheck can read `unhealthy` while the single gunicorn gthread worker is

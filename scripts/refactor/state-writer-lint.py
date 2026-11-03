@@ -30,10 +30,14 @@ import sys
 REPO = pathlib.Path(__file__).resolve().parents[2]
 STATE = "platform.state.yaml"
 
-#: The one writer, plus this gate.
+#: The one writer, plus this gate — and a test whose fixtures ARE a state file.
 EXEMPT = {
     "platform/manager/reconcile.py",              # set_disposition() — THE writer
     "scripts/refactor/state-writer-lint.py",      # this file
+    # follow.sh's test (r030-201): it plays what dgo-stable and an office each DECLARE by editing the
+    # platform.state.yaml of throwaway repos it makes under mktemp, which is what a merge of that file is
+    # tested against. No office's own file is opened there.
+    "scripts/test_follow.sh",
 }
 
 SKIP = ("/node_modules/", "/_archive/", "/attic/", "/legacy/", "/.git/", "/ci-artifacts/",

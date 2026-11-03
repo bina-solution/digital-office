@@ -236,6 +236,16 @@ services:
       - traefik.http.routers.mailview.entrypoints=web
       - traefik.http.routers.mailview.middlewares=authentik@file
       - traefik.http.routers.mailview.service=mailview
+      # …and its HTTPS twin, on the address sign-in sends people back to (MAIL_BASE_URL). Without it an
+      # office with a public name had NO router for https://mail.<domain>: the edge answered with its own
+      # default certificate and nothing behind it, and the mail tile could not open (fireplace,
+      # 2026-10-22). A local office has an empty resolver (lib.sh export_cert_resolver): no ACME there.
+      - traefik.http.routers.mailview-https.rule=Host(`${MAIL_BASE_URL:-mail.${DEPLOYMENT_DOMAIN:-localhost}}`)
+      - traefik.http.routers.mailview-https.entrypoints=websecure
+      - traefik.http.routers.mailview-https.tls=true
+      - traefik.http.routers.mailview-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
+      - traefik.http.routers.mailview-https.middlewares=authentik@file
+      - traefik.http.routers.mailview-https.service=mailview
       - traefik.http.services.mailview.loadbalancer.server.port=8976
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://localhost:8976/healthz',timeout=8).status==200 else 1)"]
@@ -258,7 +268,7 @@ services:
   #
   # This replaced GreenMail, and the reason is not features — it is honesty. GreenMail is a TEST
   # double: it accepts every recipient, and for an address it has never seen it CREATES a local
-  # mailbox and files the message there. So `POST /send {"to":"person109@example.com"}` answered
+  # mailbox and files the message there. So `POST /send {"to":"person82@example.com"}` answered
   # {"ok":true,"via":"smtp"} while the mail sat in a fake inbox inside the container. Every layer
   # above it — the app, n8n, the operator — was told mail had been sent that had not been sent.
   #
@@ -475,7 +485,7 @@ services:
   #
   # The SELECTOR is the deployment name, and that is the multi-tenant hinge. The published record
   # lives at `<selector>._domainkey.<domain>`, so two companies sharing digital-office.co.il get
-  # `bina-comp._domainkey…` and `acme._domainkey…` — different records, different keys, neither able
+  # `hacohen._domainkey…` and `acme._domainkey…` — different records, different keys, neither able
   # to sign for the other, and no coordination needed between them beyond one DNS entry each.
   #
   # The private key never leaves the mail_config volume. Nothing here prints it; the setup API reads
@@ -552,13 +562,27 @@ services:
           if [ -n "$$extra" ]; then provision "$$extra"; fi
         done
 
+        # ── Dovecot on a host without IPv6 (DGO-839, F7) ─────────────────────────────────────────
+        # Dovecot listens on `*, ::` by default. On a kernel with no IPv6 at all `listen(::, 143)`
+        # fails, Dovecot exits, and the mailserver restarts in a loop — measured on a fresh cloud
+        # office, 2026-10-22. Postfix already follows MAIL_INET_PROTOCOLS (ipv4 by default); this tells
+        # Dovecot the same, in a block of its own in dovecot.cf (docker-mailserver's override file), so
+        # an operator's own lines there stay, and a run that no longer needs the block removes it.
+        dov="$$cfg/dovecot.cf"
+        touch "$$dov"
+        sed -i '/^# >>> mailserver-init: listen/,/^# <<< mailserver-init: listen/d' "$$dov"
+        if [ "${MAIL_INET_PROTOCOLS:-ipv4}" = "ipv4" ] || [ ! -e /proc/net/if_inet6 ]; then
+          printf '# >>> mailserver-init: listen (written by mailserver-init, DGO-839)\nlisten = *\n# <<< mailserver-init: listen\n' >> "$$dov"
+          echo "mailserver-init: dovecot listens on IPv4 only"
+        fi
+
         # ── reconcile: a previous TENANT must not survive into this deployment ───────────────────
         # Provisioning is append-only, and append-only is exactly how the leak happens: the
         # mail_config VOLUME outlives .env. Re-point a machine at another company (new COMPANY_SLUG,
         # so new MAIL_DOMAIN) without wiping volumes and postfix-accounts.cf still lists the old
         # company's addresses. Measured on staging 2026-07-29: five accounts, ONE of them belonged
-        # to this deployment — person110@example.com, person111@example.com
-        # and person112@example.com were the previous tenant's, and they were on the
+        # to this deployment — person83@example.com, person84@example.com
+        # and person85.x-x@example.com were the previous tenant's, and they were on the
         # new company's mailbox screen. No MX points here for those domains, so they could not
         # receive a single message; they were pure leakage of one customer's names to the next.
         #
@@ -648,8 +672,8 @@ services:
         # address) and SPF (the domain authorises that address). BOTH are per-address, and a dual-
         # stacked host has two addresses. Measured on staging 2026-07-29:
         #
-        #   IPv4 203.0.113.10        PTR mail.staging.digital-office.co.il   correct, matches HELO
-        #   IPv6 2a02:4780:28:cb4c::1  PTR srv908573.hstgr.cloud             the PROVIDER'S default
+        #   IPv4 93.184.216.5        PTR mail.staging.digital-office.co.il   correct, matches HELO
+        #   IPv6 2606:2800:220:1::1  PTR srv000001.example.net             the PROVIDER'S default
         #   SPF  "v=spf1 mx ~all"    -> `mx` expands to the MX host's A record only; with no AAAA
         #                               published, the v6 address is not authorised by anything
         #
@@ -674,7 +698,7 @@ services:
         #
         # Side effect worth having: today, with the mailserver on an IPv4-only docker bridge,
         # `inet_protocols = all` still makes Postfix resolve AAAA and dial it first —
-        #     connect to gmail-smtp-in.l.google.com[2a00:1450:400c:c07::1a]:25: Network is unreachable
+        #     connect to gmail-smtp-in.l.google.com[2606:2800:220:1::2]:25: Network is unreachable
         # — on nearly every outbound message, which is where the 2.2s connect delay in those log
         # lines comes from. Not asking for an address we cannot use removes it.
         #
@@ -771,7 +795,7 @@ services:
         max-file: '1'
 
 volumes:
-  # NAME DELIBERATELY UNCHANGED — renaming it orphans deployment-bina_comp_gmail_imap_data.
+  # NAME DELIBERATELY UNCHANGED — renaming it orphans deployment-hacohen_gmail_imap_data.
   gmail_imap_data:
   # The real MTA's state. GreenMail kept everything in memory — a restart wiped the mailbox, which
   # was tolerable for a test double and is not for a mail server: these four hold the only copy of

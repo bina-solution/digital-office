@@ -156,11 +156,36 @@ function missingNativeDeps() {
   return missing;
 }
 
+function missingConfigDeps() {
+  // `node_modules` EXISTING is not the same as it being usable: a directory left behind by a partial
+  // or interrupted install has no `@vitejs/plugin-react`, and every check above passes — so the build
+  // went straight to `vite build` and died there with `Cannot find package '@vitejs/plugin-react'`,
+  // which reads like a source problem rather than a missing install (measured 2026-10-13 in an
+  // office whose checkout carried an empty `node_modules`; the repair below never fired).
+  // The packages to ask about are the ones the sim's own config imports — read from the file, so a
+  // dependency added to the config is covered without a second list to remember.
+  const cfg = path.join(INDOX_DIR, 'vite.config.sim.ts');
+  if (!exists(cfg)) return [];
+  const nm = path.join(INDOX_DIR, 'node_modules');
+  const names = [...fs.readFileSync(cfg, 'utf8').matchAll(/\bfrom\s+['"]([^'"]+)['"]/g)]
+    .map(m => m[1])
+    .filter(n => !n.startsWith('.') && !n.startsWith('/') && !n.startsWith('node:') && !n.startsWith('virtual:'));
+  return [...new Set(names)].filter(n => {
+    const parts = n.startsWith('@') ? n.split('/').slice(0, 2) : [n.split('/')[0]];
+    return !exists(path.join(nm, ...parts));
+  });
+}
+
 function installIndoxDeps(why) {
   const cmd = exists(path.join(INDOX_DIR, 'package-lock.json')) ? 'ci' : 'install';
   console.log(`· ${why}\n· running \`npm ${cmd}\` in sim/apps/indox (one-time, ~1-2 min) …`);
   try {
-    run('npm', [cmd, '--no-audit', '--no-fund'], { cwd: INDOX_DIR, stdio: 'inherit' });
+    // `--include=dev` IS NOT OPTIONAL: the sim's build IS a devDependency build (`vite` and
+    // `@vitejs/plugin-react` are both dev), and an office whose environment exports
+    // NODE_ENV=production gets a silent prod-only install — 41 packages, no vite, and then
+    // `Cannot find package '@vitejs/plugin-react'` from inside `vite build` (measured 2026-10-13 on
+    // a staging office, NODE_ENV=production in both the shell and the container).
+    run('npm', [cmd, '--include=dev', '--no-audit', '--no-fund'], { cwd: INDOX_DIR, stdio: 'inherit' });
   } catch (e) {
     throw new Error(
       `INDOX fork dependencies could not be installed for ${process.platform}-${process.arch}.\n` +
@@ -182,6 +207,12 @@ function ensureIndox() {
       installIndoxDeps(
         `node_modules was installed on a different platform — no native build for ` +
         `${process.platform}-${process.arch}: ${missing.join('; ')}`);
+    } else {
+      const absent = missingConfigDeps();
+      if (absent.length) {
+        installIndoxDeps(`node_modules is incomplete — the sim's config imports what is not there: `
+                         + absent.join('; '));
+      }
     }
   }
   console.log('· compiling INDOX fork (sim/apps/indox) …');

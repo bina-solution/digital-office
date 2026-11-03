@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The i0 mark of digital-office/brand/io/final/logo-1.svg, in its own coordinates (the tile is
+     53.57–946.43, centred on 500). An adaptive icon shows about 72 of its 108 dp, so the mark is scaled
+     to 0.75 about the centre: in the visible tile it keeps the share of the designed one (0.48). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="1000"
+    android:viewportHeight="1000">
+    <group
+        android:pivotX="500"
+        android:pivotY="500"
+        android:scaleX="0.75"
+        android:scaleY="0.75">
+        <!-- the head -->
+        <path
+            android:fillColor="@color/mint"
+            android:pathData="M286.56,276.79H319.33A19.24,19.24 0 0 1 338.57,296.03V328.8A19.24,19.24 0 0 1 319.33,348.04H286.56A19.24,19.24 0 0 1 267.32,328.8V296.03A19.24,19.24 0 0 1 286.56,276.79Z" />
+        <!-- the body -->
+        <path
+            android:fillColor="@color/ink"
+            android:pathData="M286.56,419.29H319.33A19.24,19.24 0 0 1 338.57,438.53V685.05A19.24,19.24 0 0 1 319.33,704.29H286.56A19.24,19.24 0 0 1 267.32,685.05V438.53A19.24,19.24 0 0 1 286.56,419.29Z" />
+        <!-- the 0: the system around every need -->
+        <path
+            android:fillColor="@color/ink"
+            android:pathData="M429.06,276.79H675.59A19.24,19.24 0 0 1 694.82,296.02V685.05A19.24,19.24 0 0 1 675.59,704.29H429.06A19.24,19.24 0 0 1 409.82,685.05V296.02A19.24,19.24 0 0 1 429.06,276.79ZM500.31,348.04A19.24,19.24 0 0 0 481.07,367.27V613.8A19.24,19.24 0 0 0 500.31,633.04H604.34A19.24,19.24 0 0 0 623.57,613.8V367.27A19.24,19.24 0 0 0 604.34,348.04Z" />
+        <!-- the apps -->
+        <path
+            android:fillColor="@color/mint"
+            android:pathData="M535.94,419.29H568.71A19.24,19.24 0 0 1 587.95,438.53V542.55A19.24,19.24 0 0 1 568.71,561.79H535.94A19.24,19.24 0 0 1 516.7,542.55V438.53A19.24,19.24 0 0 1 535.94,419.29Z" />
+    </group>
+</vector>

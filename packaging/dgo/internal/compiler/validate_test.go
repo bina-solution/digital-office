@@ -14,10 +14,7 @@ import (
 // (the OK line names every provided capability, sorted), same exit code.
 func TestValidateMatchesPython(t *testing.T) {
 	py := python(t)
-	if py == nil {
-		t.Skip("no python with PyYAML on PATH")
-	}
-	root := repoRoot(t)
+	root := officeRoot(t)
 	cmd := exec.Command(py[0], append(py[1:], filepath.Join(root, "platform", "manager", "reconcile.py"), "validate")...)
 	cmd.Dir = root
 	cmd.Env = append(os.Environ(), "PYTHONUTF8=1", "PYTHONIOENCODING=utf-8")
@@ -95,7 +92,10 @@ func TestValidateRequiredUnknownAndTopLevelTypes(t *testing.T) {
 }
 
 func TestValidateSubObjectRequiredKeyAndNestedEnumAndType(t *testing.T) {
-	errs := validation(t, map[string]string{"apps/a/app.json": manifestRaw("a", 3, `"title":{"en":"A"},"kind":"service","routing":[{"host":"a.localhost","auth":"SSO"},{"host":"b.localhost","auth":null},{"host":12}]`)})
+	// host 0: a number the type check refuses and the route claims never hold (it is falsy) — a
+	// truthy one beside text hosts is where Python's sorted() of the claims raises
+	// (TestValidateReadsManifestsAsPythonDoes asks that one of reconcile.py itself)
+	errs := validation(t, map[string]string{"apps/a/app.json": manifestRaw("a", 3, `"title":{"en":"A"},"kind":"service","routing":[{"host":"a.localhost","auth":"SSO"},{"host":"b.localhost","auth":null},{"host":0}]`)})
 	// an explicit null fails BOTH walks in Python (the enum's and the type's) — two lines, as there
 	expectErrs(t, errs,
 		"a: field 'title' is missing required key 'he'",

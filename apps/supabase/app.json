@@ -59,6 +59,10 @@
     }
   ],
   "compose": "docker-compose.yml",
+  "agent": {
+    "context": "AGENT.md",
+    "order": 87
+  },
   "routing": [
     {
       "host": "supabase",

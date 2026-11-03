@@ -46,11 +46,13 @@ office's tiles and routes leave with it (`compiled` in the answer says how that 
 """
 from __future__ import annotations
 
+import ipaddress
 import os
 import re
 import secrets
 import threading
 import time
+import urllib.parse
 
 import declaration
 import pairing
@@ -70,6 +72,10 @@ LISTEN_PORT_ENV = "DGO_WG_PUBLISH_PORT"
 #: (`DGO_WG_DIAL_ONLY`), and `DGO_WG_AUTO=0` is the owner saying "this office only dials".
 DIAL_ONLY_ENV = "DGO_WG_DIAL_ONLY"
 AUTO_ENV = "DGO_WG_AUTO"
+#: The local UDP port a pair on the carriers' TCP path listens on (`DOOR_WG_BASE + slot`), on the side
+#: that is dialed — a pair that rides an HTTPS door, and since DGO-1080 any carried pair: its carrier
+#: hands the pair's datagrams to it, and nobody dials it from outside (net.pair_conf, app._link_pairs).
+DOOR_WG_BASE = 42800
 #: reason → (the cause, what to do). The words both screens show, after their own lead "this office
 #: only dials" — so each is a sentence about "her" (the office), never a second statement of the
 #: consequence. A `backticked` run is something a person types or looks for; the screens set it
@@ -135,8 +141,23 @@ def dials(record: dict | None, measured: dict) -> str:
     t = (record or {}).get("tunnel") or {}
     if not declaration.is_paired(record) or t.get("dial") != t.get("role"):
         return ""
+    # A pair on the carriers' TCP path (`tunnel.transport: tcp`) reaches its peer at its OWN carrier,
+    # 127.0.0.1 — an address of this machine, never one of the peer's. Said, it made the listening
+    # office adopt 127.0.0.1 as its own address (`listen_now`) and offer it to every new pair.
+    if str(t.get("transport") or "").strip().lower() == "tcp":
+        return ""
     m = (measured or {}).get(f"wg{int(t.get('slot') or 0)}") or {}
     return str(m.get("endpoint") or "") if m.get("alive") else ""
+
+
+def _a_lease(host: str) -> bool:
+    """An address a peer can have reached this office AT: not loopback (that is the reporter's own
+    machine — its carrier, 127.0.0.1) and not link-local (a machine that got no lease at all)."""
+    try:
+        addr = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return not (addr.is_loopback or addr.is_link_local or addr.is_unspecified)
 
 
 def listen_now(declared: dict, reached: dict) -> dict:
@@ -153,11 +174,14 @@ def listen_now(declared: dict, reached: dict) -> dict:
     declared ADDRESS is ever corrected: a declared name is somebody's decision, not a lease — a
     server that says `office.example.org` is reached at the number that name resolves to, and is
     exactly where it says it is."""
-    lease = re.compile(r"^\d{1,3}(\.\d{1,3}){3}$")
+    # `\Z`, not `$`: a peer's word arrives as "ip:port", and `$` also matches just BEFORE a trailing
+    # newline — so "192.168.16.100\n:51830" passed as an address, and this office went on to offer
+    # itself at one with a line break in it (DGO-615).
+    lease = re.compile(r"^\d{1,3}(\.\d{1,3}){3}\Z")
     seen = []
     for text in (reached or {}).values():
         host, _, port = str(text or "").strip().rpartition(":")
-        if lease.match(host) and port.isdigit() and 1 <= int(port) <= 65535:
+        if lease.match(host) and port.isdigit() and 1 <= int(port) <= 65535 and _a_lease(host):
             seen.append((host, int(port)))
     if not declared or not lease.match(str(declared.get("endpoint") or "")) or not seen \
             or any(host == declared["endpoint"] for host, _ in seen):
@@ -225,7 +249,7 @@ UNNAMED = ("", "הלשכה הזאת", "הלשכה הזו", "local")
 #: The `serve:` map's own vocabulary (catalog.py owns it; restated because this module's pure half
 #: imports nothing of the app): `"*"` = every app this office runs, and the keys that are not apps.
 WILDCARD = "*"
-SERVE_RESERVED = ("exclude", "only", "label", "identity")
+SERVE_RESERVED = ("exclude", "only", "label", "identity", "shared", "services")
 
 
 def own_label(home: dict) -> str:
@@ -265,6 +289,20 @@ class Pairing:
         if not (home.get("identity") or {}).get("ed25519"):
             raise PairError("אין זהות ללשכה הזאת — הריצו `bbox dgo identity mint`", 409)
         return home
+
+    def _dialed_on(self, port: int, except_id: str = "") -> str:
+        """The office that already dials THIS office over UDP on `port` (a paired record in which this
+        office listens), or "" — the port a second UDP pair cannot be given (`claim`)."""
+        for d in self.ports.declarations():
+            t = d.get("tunnel") or {}
+            if d.get("id") == except_id or not listens(d) or str(t.get("transport") or "udp").lower() == "tcp":
+                continue
+            try:
+                if int(t.get("listen_port") or t.get("port") or 0) == int(port):
+                    return str(d.get("id") or "")
+            except (TypeError, ValueError):
+                continue
+        return ""
 
     def _taken_slots(self, except_id: str = "") -> set[int]:
         """Every pair slot this office already uses: its records' (paired or installed), its own
@@ -314,6 +352,11 @@ class Pairing:
 
     def _write(self, record: dict, token: str, replace_id: str) -> dict:
         home = self._home()
+        # The owner's HERD mark on the peer (DGO-1003) is this office's word, not the pairing's: a
+        # re-confirm or a re-pair rebuilds the record from the grant, and must not drop it.
+        kept = (self._existing(record.get("id")) or {}).get("herd")
+        if kept and not record.get("herd"):
+            record = dict(record, herd=kept)
         clean, err = declaration.validate_paired(record, home["id"],
                                                  taken_slots=self._taken_slots(except_id=replace_id))
         if err:
@@ -357,7 +400,10 @@ class Pairing:
         return dict(doc) if isinstance(doc, dict) else {}
 
     def _gives_anything(self) -> bool:
-        return any(k not in SERVE_RESERVED for k in self._serve())
+        # …a door with no tile is giving too (DGO-945): an office that gives only its recordings has
+        # chosen, and a pairing must not widen it to `*`
+        serve = self._serve()
+        return any(k not in SERVE_RESERVED for k in serve) or bool(serve.get("services"))
 
     def _chose(self) -> bool:
         """Did a PERSON decide what this office gives? An empty `serve:` means two different things —
@@ -411,8 +457,11 @@ class Pairing:
         # `chosen`: false while an empty declaration is only "nobody was asked yet" — the next pairing
         # in which this office gives will then give everything, and the screen says so beforehand.
         only = serve.get("only") if isinstance(serve.get("only"), dict) else {}
+        doors = serve.get("services") if isinstance(serve.get("services"), dict) else {}
         return {"mode": mode, "count": count, "total": len(apps), "apps": apps,
                 "only": {str(o): list(names or []) for o, names in only.items()},
+                # the doors with no tile it gives (DGO-945), beside the apps: "none" is never a door open
+                "doors": sorted(str(d) for d in doors),
                 "chosen": bool(self._gives_anything() or self._chose())}
 
     def give(self, mode: str, apps=None) -> dict:
@@ -424,7 +473,7 @@ class Pairing:
         if mode == "all":
             new: dict = {WILDCARD: {}}
         elif mode == "none":
-            new = {}
+            new = {}                     # …its doors with no tile too: the writer reads `{}` as nothing at all
         elif mode == "some":
             rows = self._publishable()
             by_name = {}
@@ -480,6 +529,12 @@ class Pairing:
         if listen:
             extra["listen"] = {"endpoint": listen["endpoint"], "port": int(listen["port"])}
             endpoints = [f"{listen['endpoint']}:{int(listen['port'])}"]
+            # An office already dialed over UDP on its one published port says so, and by whom: a host
+            # that would dial it there carries the new pair instead (`claim`, DGO-1080). A host written
+            # before this field reads past it and dials as it always did.
+            held = self._dialed_on(int(listen["port"]))
+            if held:
+                extra["listen_held_by"] = held
         with self.lock:
             self.offers.gc()
             try:
@@ -505,7 +560,9 @@ class Pairing:
                 out.update({"code": row["claim"]["code"], "peer": row["claim"]["peer"]})
             return out
 
-    def offer_reply(self, text: str, rid: str = "") -> dict:
+    def offer_reply(self, text: str, rid: str = "", require_wg: bool = False) -> dict:
+        """`require_wg`: the reply must bind the host's WireGuard key inside what it signed — a join
+        (join_api.py) asks it, because nobody compares six digits there."""
         try:
             reply = pairing.parse_reply(text)
         except pairing.PairingError as e:
@@ -516,7 +573,8 @@ class Pairing:
         with self.lock:
             try:
                 row = self.offers.get(offer_id)
-                grant, code = pairing.open_reply(row["offer"], row["priv"], reply, now=self.now())
+                grant, code = pairing.open_reply(row["offer"], row["priv"], reply, now=self.now(),
+                                                 require_wg=require_wg)
                 home = self._home()
                 if grant.get("joiner") != home["id"]:
                     raise pairing.PairingError("התשובה נכתבה ללשכה אחרת")
@@ -551,7 +609,9 @@ class Pairing:
                       "pair_id": row["offer"]["offer_id"], "identity": claim["identity"],
                       "tunnel": {"slot": t.get("slot"), "side": 2, "role": "joiner",
                                  "dial": t.get("dial"), "endpoint": t.get("endpoint"),
-                                 "port": t.get("port")},
+                                 "port": t.get("port"),
+                                 # a join's pair rides the host's door: both ends say so
+                                 "transport": t.get("transport"), "door": t.get("door")},
                       # the record's link is written from the PEER's point of view (the convention
                       # every reader of `links[]` follows) — and the grant's direction IS the host's.
                       "links": [{"office": home["id"], "direction": grant.get("direction")}],
@@ -567,7 +627,11 @@ class Pairing:
         return {"ok": True}
 
     # ── the HOST: read an offer, show the reply, confirm ────────────────────────────────────────
-    def claim(self, text: str, direction: str = "", replace: bool = False) -> dict:
+    def claim(self, text: str, direction: str = "", replace: bool = False, door: str = "") -> dict:
+        """The host reads an offer and answers it. `door` is set by a JOIN (join_api.py): the pair then
+        rides this office's HTTPS door (`wss://<link host>/carry`) on the carriers' TCP path, the
+        joiner dials it, and no UDP address is decided at all — an office that only dials can always
+        reach a door, which is the point of one."""
         home = self._home()
         try:
             offer = pairing.parse_offer(text)
@@ -601,7 +665,9 @@ class Pairing:
         # address this office published), and when neither is possible it is refused in words.
         theirs = offer.get("listen") if isinstance(offer.get("listen"), dict) else {}
         mine = self.ports.listen() or {}
-        if theirs.get("endpoint") and theirs.get("port") \
+        if door:
+            dial, endpoint, port = "joiner", "", 0           # the door's host and port, below
+        elif theirs.get("endpoint") and theirs.get("port") \
                 and dialable(theirs["endpoint"], mine.get("endpoint") or ""):
             dial, endpoint, port = "host", str(theirs["endpoint"]).strip().lower(), theirs["port"]
         elif mine:
@@ -625,6 +691,23 @@ class Pairing:
 
         token = secrets.token_hex(32)
         tunnel = {"slot": slot, "dial": dial, "endpoint": endpoint, "port": int(port)}
+        # ONE PUBLISHED PORT, ONE PAIR DIALED ON IT OVER UDP (DGO-1080). This office publishes a single
+        # UDP port (`DGO_WG_PUBLISH_PORT`) and WireGuard binds one interface per port, so a second pair
+        # dialed on it never comes up over UDP — measured 2026-11-01 on the Dell: the HP dialed 51830,
+        # the MacBook's new pair was given 51830 too, and its interface failed «Address already in use»
+        # while both screens said paired. Such a pair is written on the carriers' TCP path, where its
+        # port is local (`DOOR_WG_BASE + slot`) and the carriers find each other. Either end can be the
+        # one already dialed: this office (its own records), or the joiner (its offer's
+        # `listen_held_by`, unless the office holding that port is this one, pairing again).
+        held_by = str(offer.get("listen_held_by") or "")
+        if not door and ((dial == "joiner" and self._dialed_on(int(port), except_id=joiner))
+                         or (dial == "host" and held_by and held_by != home["id"])):
+            tunnel["transport"] = "tcp"
+        if door:
+            # The listening side's "address" is the door's host; its port is LOCAL — where its carrier
+            # hands the pair's datagrams to the pair's interface — because nothing dials it over UDP.
+            tunnel = {"slot": slot, "dial": "joiner", "endpoint": urllib.parse.urlparse(door).hostname or "",
+                      "port": DOOR_WG_BASE + slot, "transport": "tcp", "door": door}
         try:
             reply = pairing.accept(offer, home["id"],
                                    pairing.ed25519_private_der(self.ports.identity_private()),
@@ -678,7 +761,8 @@ class Pairing:
             record = {"id": offer["office"], "label": c["peer"]["label"], "kind": declaration.PAIRED,
                       "pair_id": offer["offer_id"], "identity": _public(offer["identity"]),
                       "tunnel": {"slot": t["slot"], "side": 1, "role": "host", "dial": t["dial"],
-                                 "endpoint": t["endpoint"], "port": t["port"]},
+                                 "endpoint": t["endpoint"], "port": t["port"],
+                                 "transport": t.get("transport"), "door": t.get("door")},
                       "links": [{"office": home["id"], "direction": mirror(c["direction"])}],
                       "paired_at": int(self.now())}
             out = self._write(record, c["token"], replace_id=offer["office"])
@@ -763,6 +847,9 @@ class Pairing:
             raise PairError(f"{oid} היא לשכה שהותקנה מכאן, לא צימוד — מסירים אותה במסך הלשכות", 409)
         self.ports.delete(oid)
         self.ports.vault_delete(f"dgo_link-{oid}")
+        # …and the agent credentials this office took from her over the link (DGO-1127), which outlive
+        # the pair otherwise: a token of her agent with no pair to reach it by.
+        self.ports.vault_forget_agents(oid)
         # …and her tiles and routes with them (`compiled`): the tunnel first, then the compile
         return {"ok": True, "office": oid, "render": self.ports.render(), "compiled": self.ports.compile(),
                 "note": "הרשומה והאסימון הוסרו כאן. הלשכה השנייה מסירה את הצד שלה באותה פעולה אצלה."}
@@ -910,6 +997,9 @@ class _MemoryPorts:
     def delete(self, oid): self.records.pop(oid, None)
     def vault_put(self, name, secret, label): self.vault[name] = secret
     def vault_delete(self, name): self.vault.pop(name, None)
+    def vault_forget_agents(self, oid):
+        for name in [n for n in self.vault if n.startswith(f"dgo_link-serve-{oid}-") and n.endswith("-agent")]:
+            self.vault.pop(name)
     def listen(self): return self._listen
     def dial_only(self): return self.why
     def set_label(self, label): self._home["label"] = label
@@ -1069,12 +1159,15 @@ def selftest() -> list[str]:
         problems.append("`none` closes the doors: nothing is declared")
     if not joiner.giving()["chosen"]:
         problems.append("after a person chose `none`, the declaration reads as chosen")
+    mac.records["hp-laptop"]["herd"] = "Test herd"          # the owner's herd mark on the peer (DGO-1003)
     again = joiner.offer("serve")
     cl_again = host.claim(again["text"], replace=True)
     joiner.offer_reply(cl_again["reply_text"], again["rendezvous_id"])
     if joiner.offer_confirm(again["rendezvous_id"], cl_again["code"], replace=True).get("gave_all") or hp.served:
         problems.append("an office whose owner chose to give NOTHING is not made to give by a later pairing")
     host.claim_confirm(cl_again["rendezvous_id"], cl_again["code"], replace=True)
+    if mac.records["hp-laptop"].get("herd") != "Test herd":
+        problems.append("a re-pair keeps the owner's herd mark on the peer — the grant knows nothing of it")
     fresh = Pairing(_MemoryPorts("office-n", "N", 1, listen={"endpoint": "10.0.0.5", "port": 51820}))
     if fresh.giving()["chosen"] or fresh.giving()["mode"] != "none":
         problems.append("an office nobody asked reads as `none`, not chosen")
@@ -1127,6 +1220,44 @@ def selftest() -> list[str]:
             problems.append(f"every default id must be one pairing accepts: {ids}")
     except ImportError:
         pass        # the engine's pure half is importable without the app's own modules
+
+    # AN OFFICE ID THAT ENDS IN A LINE BREAK IS NOT ONE (DGO-615), whichever end of a pairing reads it.
+    # `$` matched just before the break, so `pairing.OFFICE_RE` read "vps1\n" as an id: the replace
+    # guard looked for a record of that name and found none, the record validator then STRIPPED it,
+    # and the pairing replaced the record and the vault token of the office really called vps1 —
+    # without `replace`. Each end below holds an INSTALLED vps1, and it must survive.
+    def holding_vps1(oid, label, listen=None):
+        ports = _MemoryPorts(oid, label, slot=1, listen=listen)
+        ports.records["vps1"] = {"id": "vps1", "machine": "computer_ssh-1", "tunnel": {"slot": 2}}
+        return ports
+    keeper = holding_vps1("macbook", "MacBook")
+    host_end = Pairing(keeper)
+    sly = Pairing(_MemoryPorts("vps2", "V2", slot=3, listen={"endpoint": "10.0.0.20", "port": 51820}))
+    try:
+        took = host_end.claim(pairing.offer_text(dict(sly.offer("serve")["offer"], office="vps1\n")))
+        host_end.claim_confirm(took["rendezvous_id"], took["code"])
+        problems.append("an offer whose office id ends in a line break must be refused when it is read")
+    except PairError:
+        pass
+    waiting = holding_vps1("hp-laptop", "HP", listen={"endpoint": "192.168.16.102", "port": 51830})
+    joiner_end = Pairing(waiting)
+    shown = joiner_end.offer("serve")
+    liar = _MemoryPorts("vps2", "V2", slot=3)
+    lie = pairing.accept(shown["offer"], "vps1\n", pairing.ed25519_private_der(liar.identity_private()),
+                         _public(liar.home()["identity"]), token="t" * 64, direction="use",
+                         tunnel={"slot": 4, "dial": "host", "endpoint": "192.168.16.102", "port": 51830})
+    try:
+        read = joiner_end.offer_reply(pairing.reply_text(lie), shown["rendezvous_id"])
+        joiner_end.offer_confirm(shown["rendezvous_id"], read["code"])
+        problems.append("a reply whose host id ends in a line break must be refused when it is read")
+    except PairError:
+        pass
+    for ports in (keeper, waiting):
+        if ports.records["vps1"].get("machine") != "computer_ssh-1" or "dgo_link-vps1" in ports.vault:
+            problems.append(f"{ports.home()['id']}: a pairing that named vps1 with a line break replaced "
+                            f"the installed vps1 and its token without `replace`")
+    refused("an office whose own id ends in a line break offering itself",
+            Pairing(_MemoryPorts("hp-laptop\n", "HP", 1)).offer)
 
     # nobody listens → no direct tunnel can exist. The refusal is a sentence a person can act on —
     # no variable name in it — and each office's own listing says why IT cannot be dialed.
@@ -1181,9 +1312,12 @@ def selftest() -> list[str]:
     refused("a reply to another office's offer", late.offer_reply, cl["reply_text"])
     # unpair: record and token go together, and only a PAIRED record can be unpaired this way
     refused("unpairing an installed office", host.unpair, "vps1")
+    mac.vault["dgo_link-serve-hp-laptop-bina-ds-agent"] = {"token": "a" * 64, "office": "hp-laptop"}
     gone = host.unpair("hp-laptop")
     if "hp-laptop" in mac.records or "dgo_link-hp-laptop" in mac.vault:
         problems.append("unpair removes the record and its token together")
+    if "dgo_link-serve-hp-laptop-bina-ds-agent" in mac.vault:
+        problems.append("unpair removes the agent credentials taken from that office over the link (DGO-1127)")
     if mac.compiles != 1 or not (gone.get("compiled") or {}).get("ok"):
         problems.append("unpair compiles once — the office's tiles and routes leave with its record — and says how it went")
     if listen_from_env({LISTEN_ENDPOINT_ENV: "192.168.16.102", LISTEN_PORT_ENV: "51830"}) != \
@@ -1202,8 +1336,12 @@ def selftest() -> list[str]:
         problems.append("an office reached only somewhere else listens THERE, and says where it used to")
     if listen_now({}, {"macbook": "192.168.16.100:51830"}):
         problems.append("an office that declares nothing only dials, whatever a peer reports")
+    # …and "an address" is the whole host: a peer's report with a line break before its port is none
+    # (DGO-615 — `$` read "192.168.16.100\n" as a lease, and the office moved itself there).
+    if listen_now(said, {"macbook": "192.168.16.100\n:51830"}) != said:
+        problems.append("a reported host that ends in a line break is not an address: the declaration stands")
     named = {"endpoint": "office.example.org", "port": 51830}
-    if listen_now(named, {"hp-laptop": "203.0.113.10:51830"}) != named:
+    if listen_now(named, {"hp-laptop": "93.184.216.5:51830"}) != named:
         problems.append("a declared NAME is a decision, not a lease: the number it resolves to does not replace it")
     # …and WHO says that address: the office that dials the pair, from its tunnel's own reading —
     # never the dialed end (what it measures is the dialer's own source), never a dead tunnel.
@@ -1217,6 +1355,57 @@ def selftest() -> list[str]:
     if dials(mine, {"wg4": {"endpoint": "192.168.16.100:51830", "alive": False}}) or dials(mine, {}) \
             or dials({"id": "vps1", "tunnel": {"slot": 4, "role": "joiner", "dial": "joiner"}}, live) or dials(None, live):
         problems.append("no address from a dead tunnel, an unmeasured one, or a record that is not a pair")
+    # THE TCP PATH (2026-10-19): a carried pair's interface reaches 127.0.0.1 — its own carrier. That
+    # is never said as the peer's address, and no office takes a loopback or link-local one as its own.
+    carried = {**mine, "tunnel": {**mine["tunnel"], "transport": "tcp"}}
+    if dials(carried, {"wg4": {"endpoint": "127.0.0.1:41804", "alive": True}}):
+        problems.append("a pair on the TCP path says nothing about where it reaches the peer")
+    if listen_now(said, {"macbook": "127.0.0.1:41805"}) != said \
+            or listen_now(said, {"macbook": "169.254.3.4:51830"}) != said:
+        problems.append("a loopback or link-local address is never this office's new lease")
+    # ONE PUBLISHED PORT, ONE UDP PAIR DIALED ON IT (DGO-1080, the Dell): an office the HP already
+    # dials on its one port writes the MacBook's new pair on the carriers' TCP path, not on that port.
+    def dell_dialed_by_hp():
+        d = _MemoryPorts("portable-ubuntu", "Dell", slot=0, listen={"endpoint": "192.168.16.105", "port": 51830})
+        d.records["hp-laptop"] = {"id": "hp-laptop", "kind": declaration.PAIRED, "pair_id": "cd" * 16,
+                                  "tunnel": {"slot": 4, "side": 2, "role": "joiner", "dial": "host",
+                                             "endpoint": "192.168.16.105", "port": 51830, "listen_port": 51830}}
+        return d
+    mac_ports, dell_ports = _MemoryPorts("macbook", "MacBook", slot=2), dell_dialed_by_hp()
+    mac_side, dell_side = Pairing(mac_ports), Pairing(dell_ports)
+    off2 = mac_side.offer("both")
+    second = dell_side.claim(off2["text"])
+    if second["tunnel"].get("transport") != "tcp" or second["tunnel"].get("dial") != "joiner":
+        problems.append(f"a second pair dialed on the office's one UDP port rides the TCP path: {second['tunnel']}")
+    mac_side.offer_reply(second["reply_text"], off2["rendezvous_id"])
+    mac_side.offer_confirm(off2["rendezvous_id"], second["code"])
+    dell_side.claim_confirm(second["rendezvous_id"], second["code"])
+    said = {((mac_ports.records.get("portable-ubuntu") or {}).get("tunnel") or {}).get("transport"),
+            ((dell_ports.records.get("macbook") or {}).get("tunnel") or {}).get("transport")}
+    if said != {"tcp"}:
+        problems.append(f"both records of that pair say tcp: {said}")
+    alone = Pairing(_MemoryPorts("portable-ubuntu", "Dell", slot=0, listen={"endpoint": "192.168.16.105", "port": 51830}))
+    first = alone.claim(Pairing(_MemoryPorts("macbook", "MacBook", slot=2)).offer("both")["text"])
+    if "transport" in first["tunnel"]:
+        problems.append(f"the first pair dialed on that port stays on UDP: {first['tunnel']}")
+    again = Pairing(dell_dialed_by_hp()).claim(Pairing(_MemoryPorts("hp-laptop", "HP", slot=1)).offer("both")["text"],
+                                               replace=True)
+    if "transport" in again["tunnel"]:
+        problems.append(f"the office that holds the port, pairing again, keeps it over UDP: {again['tunnel']}")
+    # …and the other direction: the Dell SHOWS the offer, and the host that would dial its one port
+    # (an office with no address of its own) carries the pair — unless it is the HP, which holds it.
+    shown = Pairing(dell_dialed_by_hp()).offer("both")
+    if shown["offer"].get("listen_held_by") != "hp-laptop":
+        problems.append(f"an office already dialed on its one port names who holds it in its offer: {shown['offer']}")
+    scanned = Pairing(_MemoryPorts("macbook", "MacBook", slot=2)).claim(shown["text"])
+    if scanned["tunnel"].get("dial") != "host" or scanned["tunnel"].get("transport") != "tcp":
+        problems.append(f"a host that would dial a held port carries the new pair: {scanned['tunnel']}")
+    holder = Pairing(_MemoryPorts("hp-laptop", "HP", slot=5)).claim(shown["text"])
+    if "transport" in holder["tunnel"]:
+        problems.append(f"the office that holds the port, scanning again, keeps it over UDP: {holder['tunnel']}")
+    if "listen_held_by" in Pairing(_MemoryPorts("portable-ubuntu", "Dell", slot=0, listen={
+            "endpoint": "192.168.16.105", "port": 51830})).offer("both")["offer"]:
+        problems.append("an office nobody dials yet names no holder")
     return problems
 
 

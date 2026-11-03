@@ -15,7 +15,7 @@
 #   AT ITERATION CAP  ITERATION_COUNT >= max_iterations_per_doc
 set -u
 DK="docker -H unix:///run/bbox-docker.sock"
-ENVF=/mnt/c/Users/user/Desktop/personalWorkspace/AutomateOs/deployment-bina-comp/.env
+ENVF=/mnt/c/Users/user/Desktop/personalWorkspace/AutomateOs/deployment-hacohen/.env
 RP=$(grep -E '^REDIS_PASSWORD=' "$ENVF" | head -1 | cut -d= -f2-)
 LOCKS=/tmp/ear_locks_$$.txt
 

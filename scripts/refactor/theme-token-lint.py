@@ -31,6 +31,15 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "platform-base/bina-ui/theme-tokens.css"
+
+
+def app_not_in_tree(rel: str) -> bool:
+    """A target of an app whose whole directory is absent: the app is not in this tree at all, and there is
+    no surface to check. The public export holds back a client's app (scripts/release/public/exclude.txt,
+    apps/chimney-services/, r030-301), and its CI runs this gate. A missing file in an app that IS here
+    still fails, below."""
+    parts = rel.split("/")
+    return len(parts) > 2 and parts[0] == "apps" and not (ROOT / "apps" / parts[1]).is_dir()
 START = "/* @bina-theme-tokens:start */"
 END = "/* @bina-theme-tokens:end */"
 
@@ -48,13 +57,37 @@ TARGETS = [
     "apps/mail/mailview/static/index.html",
     "apps/my-docs/static/style.css",
     "apps/computers/static/index.html",
+    "apps/dashboard/static/index.html",   # the control centre (DGO-1124)
     "apps/git/static/index.html",
     "apps/sites/static/index.html",
     "apps/domains/static/index.html",
     "apps/digital-assets/static/index.html",
     "apps/social-list/static/index.html",
     "apps/dgo-extend/static/index.html",
+    # [2026-10-22] the field-sales services app of The Fireplace Guys (FPG-15): its one stylesheet
+    "apps/chimney-services/static/app.css",
+    # [2026-11-01] the caps as digital replicas (DGO-1091): cad-api's gallery and cap pages share one stylesheet
+    "apps/cad-api/static/cad.css",
     "apps/telegram-tv/static/style.css",
+    # [2026-10-20] The video meetings' own pages (DGO-824, DGO-826): the recordings list, and the
+    # page a request without a signed-in person gets. Every other screen there is Jitsi's own.
+    "apps/meet/start/recordings.html",
+    "apps/meet/start/signin.html",
+    # [2026-10-12] The screens that carry the menu's MARKUP but copied only its stylesheet: they had
+    # the component's looks and none of its behaviour, and on a phone that was a 56px rail 127px tall
+    # with no way into the menu (the owner's screenshot; `sites`, `domains`, `drive`, `git`,
+    # `digital-assets`, `social-list`, `telegram-tv`). Listing them here is what makes --fix give
+    # them the component's SCRIPT as well — one behaviour for the office, kept by the gate that
+    # already keeps the stylesheet.
+    "apps/sites/static/index.html",
+    "apps/domains/static/index.html",
+    "apps/drive/static/index.html",
+    "apps/git/static/index.html",
+    "apps/digital-assets/static/index.html",
+    "apps/social-list/static/index.html",
+    # telegram-tv is NOT listed for its page: this app carries the palette in its stylesheet (listed
+    # below), and requiring the block in the page too would ask for a second copy of one palette.
+    "platform-base/connections/ui.html",
     # [2026-10-07] Six screens wrote the palette out themselves and carried no block, so a change
     # of palette passed them by (the office became «Olive Grove» that day, DGO-450).
     "apps/any-concurrency/static/index.html",
@@ -62,6 +95,8 @@ TARGETS = [
     "platform-base/connections/ui.html",
     "platform-base/machine/static/index.html",
     "platform-base/notifications/static/index.html",
+    # [2026-10-21] the security app (DGO-890): the office's main place for who reaches it and what it calls
+    "platform-base/security/static/index.html",
     "apps/archify/server.mjs",
     # [2026-10-07, later] …and four more that had done the same: the system-validation dashboard and
     # the three pages the chat service writes (sign-in, not-found, the admin itself).
@@ -75,6 +110,15 @@ TARGETS = [
     # …and INDOX, the one app that is compiled: its sheet said "light-only, deliberately" while the
     # console was, and kept the old palette when the console's changed.
     "apps/indox/app/webapp/src/index.css",
+    # [2026-10-29] the meeting-start "flow" screens (the host door's own pages). Five of them carry
+    # the block and were rows of nothing, so the gate said so on every run — the same "a copy nobody
+    # keeps" this file exists for, one level up. Listed, not silenced: the copies that had already
+    # drifted are reported as drift, and re-syncing them is the meet owner's (`--fix` there).
+    "apps/meet/start/flow/app.css",
+    "apps/meet/start/flow/bina-ui.css",
+    "apps/meet/start/flow/list.html",
+    "apps/meet/start/flow/live.html",
+    "apps/meet/start/flow/mf.css",
 ]
 
 
@@ -106,6 +150,7 @@ FONT_TARGETS = [
     "apps/indox/app/webapp/src/index.css",
     "apps/computers/static/index.html",
     "apps/git/static/index.html",
+    "platform-base/security/static/index.html",
 ]
 
 
@@ -123,6 +168,26 @@ NAV_JS_TARGETS: list[str] = [
     "platform-base/notifications/static/index.html",
     "apps/indox/app/webapp/index.html",
     "apps/digital-assets/static/index.html",
+    # These six CARRY the block and were not listed, so the gate said so on every run without the
+    # list ever growing: `apps/domains`, `apps/drive`, `apps/sites`, `apps/social-list`,
+    # `apps/telegram-tv` and the connections UI are one scrolling page each with a side menu built
+    # from the sections they already have — the same consumers as the eight above, under the same
+    # doctrine (one source, a byte-identical copy per app). Listed 2026-10-13; the lint now checks
+    # their copies too.
+    "apps/domains/static/index.html",
+    # [2026-10-29] `apps/drive` LEFT this row, deliberately. Its 2026-10-28 rebuild replaced the
+    # shared component with the app's own shell — a side column on a wide box, a drawer on a narrow
+    # one, bottom tabs on a phone (`apps/drive/static/js/shell.js`, its header states the choice) —
+    # and an icon rail was the thing it was built not to be. Keeping the row would have meant
+    # stamping ~750 lines of a component the screen does not use; a row that names a surface that
+    # has no copy is the mirror of the failure this gate catches, so the row goes with the copy.
+    # The theme tokens, the page chrome and the office's dialogs in drive are untouched by this.
+    "apps/sites/static/index.html",
+    "apps/social-list/static/index.html",
+    "apps/telegram-tv/static/index.html",
+    "platform-base/connections/ui.html",
+    "platform-base/security/static/index.html",
+    "apps/computers/static/index.html",
 ]
 
 # Apps that are one scrolling page: no router, no sections — their uniformity is the CHROME.
@@ -138,6 +203,10 @@ PAGE_TARGETS: list[str] = [
     "apps/any-concurrency/static/index.html",
     "platform-base/data-management/static/index.html",
     "apps/dgo-extend/static/index.html",
+    "platform-base/security/static/index.html",
+    # [2026-10-29] …and the meeting-start "flow" pages, whose copies of the chrome were unlisted.
+    "apps/meet/start/flow/bina-page.css",
+    "apps/meet/start/flow/mf.css",
 ]
 
 NAV_TARGETS: list[str] = [
@@ -145,7 +214,8 @@ NAV_TARGETS: list[str] = [
     "apps/dgo-extend/static/connect.html",
     "platform-base/data-management/static/index.html",
     "apps/mail/mailview/static/index.html",
-    "apps/drive/static/index.html",
+    # [2026-10-29] `apps/drive` LEFT this row with the one above it: its own shell (js/shell.js)
+    # draws the menu as rows with words, not this component's rail — see NAV_JS_TARGETS.
     "apps/indox/app/webapp/src/index.css",
     "apps/telegram-tv/static/style.css",
     "platform-base/app-management/static/index.html",
@@ -156,6 +226,8 @@ NAV_TARGETS: list[str] = [
     "apps/digital-assets/static/index.html",
     "apps/social-list/static/index.html",
     "platform-base/notifications/static/index.html",
+    "platform-base/security/static/index.html",
+    "apps/computers/static/index.html",
 ]
 
 BLOCKS = [
@@ -182,7 +254,9 @@ BLOCKS = [
      # link screen, whose cards name a linked office and draw THAT office's animal beside the name
      # (flt-004 — the animal half of the office's mark, which is a glyph of this set or nothing).
      "targets": ["platform-base/console/static/app.js", "platform-base/app-management/static/app.js",
-                 "platform-base/console/static/install.js", "apps/dgo-extend/static/app.js"]},
+                 "platform-base/console/static/install.js", "apps/dgo-extend/static/app.js",
+                 # [2026-10-29] the meeting-start flow pages carry their own copy of this set.
+                 "apps/meet/start/flow/bina-icons.js", "apps/meet/start/flow/mf.js"]},
     # What a failed request is CALLED when the service sent no sentence of its own. Eight request
     # helpers ended in `body.error || "HTTP " + r.status`, so a service that was down -- the one that
     # cannot send a sentence -- was reported as "HTTP 502"; five said the answer "is not JSON".
@@ -198,7 +272,10 @@ BLOCKS = [
                  "apps/digital-assets/static/app.js", "platform-base/connections/ui.html",
                  "platform-base/app-management/static/app.js", "apps/telegram-tv/static/app.js",
                  "apps/mail/mailview/static/app.js", "apps/chat/src/api/ui/chat.ejs",
-                 "apps/dgo-extend/static/app.js", "apps/apitools/feature-validation/api/dashboard.html"]},
+                 "apps/dgo-extend/static/app.js", "apps/apitools/feature-validation/api/dashboard.html",
+                 "platform-base/security/static/app.js",
+                 # [2026-10-29] the meeting-start flow pages ask and report in the page too.
+                 "apps/meet/start/flow/bina-ask.js", "apps/meet/start/flow/mf.js"]},
     # The office's ONE mark, drawn inline so its three parts wear the palette's tokens (the image
     # files beside the source carry the values, for a favicon and the site). Two screens drew their
     # own copies of it before (the shell, the first-run wizard); the simulator embeds the shell, and
@@ -206,6 +283,19 @@ BLOCKS = [
     {"name": "the office's mark", "source": "platform-base/bina-ui/brand/mark.html",
      "start": "<!-- @bina-brand:start -->", "end": "<!-- @bina-brand:end -->",
      "targets": ["platform-base/console/static/index.html", "platform-base/console/static/install.html"]},
+    # A DIALOG, BOUNDED BY ITS WINDOW (2026-10-10). Five surfaces carried their own copy of
+    # `.modal-ov/.modal/.modal-h` and they had drifted exactly as one would expect: two
+    # (computers, dgo-extend) had already learned that a card taller than the window must scroll
+    # INSIDE itself with its title stuck in sight; the console and INDOX had not, so their titles —
+    # and INDOX's buttons — began outside a short window with nothing to scroll (DGO-518, DGO-519).
+    # The rule is now one, and the five surfaces are its stamped copies. Width is deliberately NOT
+    # in the block (a surface sizes its own dialogs, after the block, where the cascade lets it win).
+    {"name": "a dialog", "source": "platform-base/bina-ui/bina-ui.css",
+     "start": "/* @bina-modal:start */", "end": "/* @bina-modal:end */",
+     "targets": ["platform-base/console/static/style.css",
+                 "apps/indox/app/webapp/src/index.css",
+                 "apps/computers/static/index.html",
+                 "apps/dgo-extend/static/index.html"]},
     {"name": "what a failed request is called", "source": "platform-base/bina-ui/bina-said.js",
      "start": "/* @bina-said:start */", "end": "/* @bina-said:end */",
      "targets": ["apps/dgo-extend/static/app.js", "apps/dgo-extend/static/connect.js", "apps/domains/static/app.js",
@@ -215,7 +305,8 @@ BLOCKS = [
                  "platform-base/data-management/static/index.html", "apps/telegram-tv/static/app.js",
                  "platform-base/console/static/install.js", "apps/my-docs/static/app.js",
                  "apps/drive/static/app.js", "apps/mail/mailview/static/app.js",
-                 "platform-base/connections/ui.html", "apps/apitools/feature-validation/api/dashboard.html"]},
+                 "platform-base/connections/ui.html", "apps/apitools/feature-validation/api/dashboard.html",
+                 "platform-base/security/static/app.js"]},
     # There WAS a "the screen in the address bar" block here (`platform-base/bina-ui/bina-route.js`),
     # stamped into each app so it could speak to the console about its route. It is gone: the shell
     # reads the frame's own URL instead (platform-base/console/static/app.js `watchFrameRoute`), so
@@ -263,6 +354,9 @@ def check_fonts(fix: bool) -> int:
     bad = 0
     for rel in FONT_TARGETS:
         p = ROOT / rel
+        if not p.exists() and app_not_in_tree(rel):
+            print(f"skip  {rel}: its app is not in this tree")
+            continue
         if not p.exists():
             print(f"FAIL  {rel}: file not found (listed as declaring --font)")
             bad += 1
@@ -306,11 +400,22 @@ def region(text: str, path: str, start: str = START, end: str = END) -> str:
     return text[i:j + len(end)]
 
 
+#: The kinds of file a block is ever written in — markup, style, script: the kinds this gate's own
+#: rows name as a source or as a target. A marker is TEXT, so a DOCUMENT that quotes one in a
+#: sentence is found by the scan exactly like a copy is, and `apps/project-pln/plans/office.yaml` — a
+#: plan that writes about this gate, naming `/* @bina-page:start */` in prose — was reported as a
+#: carrier of two blocks it never copied, on every run (2026-10-13). A document is not a surface: no
+#: block of ours is in it, `--fix` would have no region to rewrite, and the noise sits on top of
+#: whatever else the gate is saying. Derived from the rows above, so a block of a new kind declares
+#: its kind by being declared.
+SURFACE_KINDS = {Path(p).suffix for blk in BLOCKS for p in [blk["source"], *blk["targets"]]}
+
+
 def carriers(marker: str) -> set[str]:
     """Every tracked surface under apps/ and platform-base/ whose text holds `marker`."""
     found = subprocess.run(["git", "-C", str(ROOT), "grep", "-lF", marker, "--", "apps", "platform-base"],
                            capture_output=True, text=True).stdout
-    return set(found.splitlines())
+    return {line for line in found.splitlines() if Path(line).suffix in SURFACE_KINDS}
 
 
 def main() -> int:
@@ -342,6 +447,9 @@ def main() -> int:
                     bad += 1
         for rel in blk["targets"]:
             p = ROOT / rel
+            if not p.exists() and app_not_in_tree(rel):
+                print(f"skip  {rel}: its app is not in this tree")
+                continue
             if not p.exists():
                 print(f"FAIL  {rel}: file not found ({blk['name']})")
                 bad += 1

@@ -34,7 +34,7 @@ is the single highest-value fix for real users. Verified this session:
   poppler, WeasyPrint), `/health` 200.
 - **Hebrew OCR works locally, zero cloud**: `POST /documentOcr` on a real demo invoice
   (`demo-docs/invoice/files/mvral-1.pdf`, `OCR_ENGINE=local`) returned **1918 chars** with correct
-  structured fields — company `מוראל לב מוצרי איכות לבניה בע"מ`, `ח.פ 516711157`, invoice date `30/04/25`.
+  structured fields — company `מוראל לב מוצרי איכות לבניה בע"מ`, `ח.פ 500000104`, invoice date `30/04/25`.
   No Google Vision / Gemini billing needed (demo relies on the pre-seeded AI-extraction cache).
 
 Net: the flow no longer breaks at step 0 on a normal machine. **On plain internet, `bbox run` now builds +

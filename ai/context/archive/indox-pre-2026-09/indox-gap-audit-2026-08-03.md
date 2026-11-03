@@ -27,8 +27,8 @@ The work was directionally useful but incomplete and not production-ready.
 
 Observed on the local compiled stack on 2026-08-03:
 
-- Google source folder `1cUnUMkKRHd7L2xSl2SSWuRJwygtc6zfg`: **5 files**.
-- Google archive folder `1118ghrD6L-98vlaxafLQ2EUOZgedPvrD`: **0 files**.
+- Google source folder `1REDACTEDdrivexxxxxxxxxxxxxxx0050`: **5 files**.
+- Google archive folder `1REDACTEDdrivexxxxxxxxxxxxxxx0051`: **0 files**.
 - Registry: correct connection and source/archive IDs; `engine: "v3"`; no `processor_wf`; no
   `projection`; malformed `failed_folder`.
 - Board API: **0 items** in every state.

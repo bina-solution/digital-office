@@ -13,7 +13,7 @@ Companion documents: [`INDOX-UNIFIED-N8N-SPEC.md`](INDOX-UNIFIED-N8N-SPEC.md) (t
 
 ## The goal, in one paragraph
 
-A perfect, stable INDOX app, proven live for bina-comp, with **100% of incoming documents** from mail
+A perfect, stable INDOX app, proven live for hacohen, with **100% of incoming documents** from mail
 and drive reaching `COMPLETED`. Sustained **5,000+ documents/month**, 180,000 over three years.
 Unified logic, preferably in n8n, one pattern for data and API, ERP-grade UI that stays fast at scale.
 
@@ -49,7 +49,7 @@ the owner's ERCO invoice now carries `DOC_TO_SYNC`. Per-message triage indicator
 
 **Mail deposits.** All four mail registries lacked `drive_profile_id`/`drive_connection_id`, so every
 upload fell through to the service account, which by design refuses. Fixed at the data layer; real
-client documents now land in `automations/gmail-doc` (`מ.ש. בינה קומפ חומרי בנין`, `איטונג-22028`).
+client documents now land in `automations/gmail-doc` (`מ.ש. הכהנים חומרי בנין`, `איטונג-22028`).
 `drive api` errors **8/15min → 0**.
 
 **Throughput.** `syncV3Unit0001`'s "Deliver Each" ran in n8n's `mode:"each"` — a sequential `await`
@@ -108,7 +108,7 @@ Nothing here moves without you.
 
 1. **Drive folders.** `מסמכים כללים` does not exist in the 577-folder tree and the service account
    cannot create it — by design, it only moves files. Create it in your Drive and share it with
-   `person7@example.com`. Same for dedicated
+   `person6-x-x@example.com`. Same for dedicated
    `synced`/`failed` folders to resolve the `drive-gdoc-warehouse` / `drive-bs` collision.
 2. **`gh auth login`** — GitHub Actions status is otherwise unobtainable.
 3. **A real `TELEGRAM_BOT_TOKEN`** — `.env:299` is the literal placeholder; alerting is dead.

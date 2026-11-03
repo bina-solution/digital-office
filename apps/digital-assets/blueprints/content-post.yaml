@@ -1,0 +1,27 @@
+# פוסטים — social copy that points at a piece of the library: one file per piece, holding a variant for
+# LinkedIn, Facebook and X (40–220 words each). Posting itself goes through `POST /api/posts` and the
+# office browser (social-list), only on an action the owner started. Shape and rules: content/BRIEF.md
+# (`type: post`). Each piece: `content.post.<slug>-<lang>`, created under this blueprint by the importer.
+id: content-post
+version: 1
+order: 18
+extends:
+- content-library
+name:
+  he: פוסטים
+  en: Posts
+summary:
+  he: נוסח לכל רשת לכל יצירה בספרייה — LinkedIn, Facebook ו-X — שמפנה לעמוד באתר.
+  en: Copy per network for each piece of the library — LinkedIn, Facebook and X — pointing at its page.
+slots:
+- key: content.post.hub-he
+  section: content
+  group: post
+  kind: richtext
+  lang: he
+  label:
+    he: הקול ברשתות
+    en: The voice on social networks
+  constraints:
+    note: 40–90 words — how the business sounds in a post, for whoever writes the next one
+  targets: []

@@ -287,9 +287,27 @@ async function viewAccounts() {
  * is, so the owner can tell a duplicate from a mistake of the screen and disconnect the one he
  * does not need. */
 function twinsOf(a) {
-  const who = (x) => x.provider + '|' + String(x.login || x.account_hint || '').split('@')[0].toLowerCase();
-  if (who(a).endsWith('|')) return [];
-  return S.accounts.filter((x) => x.id !== a.id && who(x) === who(a)).map((x) => x.label || x.login);
+  /* The login a row can be compared on. `login` is the service's own word for it; a stored hint is
+   * "<login>@<host>" (app.py builds it so), so its local part is a login ONLY for that provider's
+   * own host — an address from anywhere else (an owner's mailbox, a forge the office does not own)
+   * says nothing about which user this credential is. */
+  const loginOf = (x) => {
+    const known = String(x.login || '').split('@')[0].trim().toLowerCase();
+    if (known) return known;
+    const hint = String(x.account_hint || '');
+    const at = hint.lastIndexOf('@');
+    if (at < 1) return '';
+    const host = String(x.host || (x.provider === 'github' ? 'github.com'
+      : x.provider === 'gitlab' ? 'gitlab.com' : '')).toLowerCase();
+    return host && hint.slice(at + 1).toLowerCase() === host ? hint.slice(0, at).toLowerCase() : '';
+  };
+  /* One provider, and the two cannot be told apart: two logins the provider gave must agree, and an
+   * unknown one is not evidence of a DIFFERENT person — reading it as one hides the duplicate the
+   * note exists to show. */
+  const me = loginOf(a);
+  return S.accounts
+    .filter((x) => x.id !== a.id && x.provider === a.provider && (!me || !loginOf(x) || loginOf(x) === me))
+    .map((x) => x.label || x.login || x.account_hint);
 }
 
 function renderAccounts(provs) {
@@ -437,7 +455,7 @@ async function viewMirrors() {
           <select id="m-acct">${S.accounts.filter((a) => a.provider !== 'forgejo')
             .map((a) => `<option value="${esc(a.id)}">${esc(a.label || a.login)} — ${esc(PROVIDER_HE[a.provider] || a.provider)}</option>`).join('')}</select></div>
         <div class="field"><label>מאגר (owner/repo)</label>
-          <input id="m-repo" dir="ltr" placeholder="solomonBoltin/deployment-bina-comp"></div>
+          <input id="m-repo" dir="ltr" placeholder="solomonBoltin/deployment-hacohen"></div>
         <div class="field check"><input type="checkbox" id="m-private" checked><label for="m-private">עותק פרטי בפורג'</label></div>
         <div class="row"><button class="btn primary" id="m-add">${ICO.plus} צור מראה</button>
           <span class="note">המאגר יימשך מהספק דרך ה-proxy של הלשכה — הטוקן לא נשמר בפורג'.</span></div>
@@ -485,11 +503,27 @@ async function viewMirrors() {
    only the fallback for the moment before that answer arrives. */
 let FORGE_URL = 'http://forge.localhost:8080';
 
+/* The address is the state (G83): the screen is the URL's PATH under this app's mount —
+   `/a/git-accounts/mirrors` framed, `/mirrors` on its own host — because that is what the console
+   mirrors into its own address. The mount is document.baseURI's folder. An old `#/mirrors` link still
+   lands on its screen; the next go() writes the path. */
+function mountPath() {
+  return new URL('.', document.baseURI).pathname;
+}
 function parseHash() {
-  const raw = location.hash.replace(/^#\/?/, '');
+  const mount = mountPath();
+  const own = location.pathname.startsWith(mount) ? location.pathname.slice(mount.length) : '';
+  const raw = own || location.hash.replace(/^#\/?/, '');
   const [pathPart, queryPart] = raw.split('?');
   return { parts: pathPart.split('/').filter((x) => x !== '').map(decodeURIComponent),
-           q: new URLSearchParams(queryPart || '') };
+           q: new URLSearchParams(queryPart || location.search.slice(1)) };
+}
+/** Go to a screen: one address per screen, written with pushState, then drawn. */
+function go(route) {
+  const to = mountPath() + route;
+  if (location.pathname === to && !location.hash) return;   // already there: no repaint, no refetch
+  history.pushState(null, '', to);
+  router();
 }
 
 async function router() {
@@ -519,7 +553,7 @@ function brandSub() {
 function openForge() { if (FORGE_URL) window.open(FORGE_URL, '_blank', 'noopener'); }
 /** The one action this app always has: connect an account. It lands ON the wizard, not near it. */
 function startConnect() {
-  location.hash = '#/accounts';
+  go('accounts');
   setTimeout(() => {
     const b = document.querySelector('#prov [data-p]');
     if (b) { b.scrollIntoView({ block: 'center' }); b.focus(); }
@@ -571,8 +605,8 @@ function renderNav() {
     sections: navSections(),
     footer: { items: [{ id: 'forge', label: "פתח את הפורג'", icon: 'repo', onClick: openForge }] },
     onPick: (id) => {
-      if (id === 'accounts') location.hash = '#/accounts';
-      else if (id === 'mirrors' || String(id).indexOf('mirror:') === 0) location.hash = '#/mirrors';
+      if (id === 'accounts') go('accounts');
+      else if (id === 'mirrors' || String(id).indexOf('mirror:') === 0) go('mirrors');
     },
   });
   const t = $('navToggle');
@@ -582,7 +616,8 @@ function renderNav() {
 }
 
 /* ── wiring ──────────────────────────────────────────────────────────────────────────────────── */
-window.addEventListener('hashchange', router);
+window.addEventListener('popstate', router);       // back and forward walk the screens
+window.addEventListener('hashchange', router);     // an old `#/…` link typed or pasted in place
 
 (async function boot() {
   renderNav();

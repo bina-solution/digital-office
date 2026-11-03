@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- the engine: a foreground service of the special-use type (a virtual machine fits no other), and its
+         notification -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- the CPU kept on while the office runs (EngineService): a phone with its screen off sleeps it -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- whether the network is metered: the machine (~1 GB) is fetched on Wi-Fi, never on the owner's data plan -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- usesCleartextTraffic: an office on this phone or on the local network answers on http
+         (console.localhost:8080); the herd's public doors are https. -->
+    <application
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher"
+        android:supportsRtl="true"
+        android:theme="@style/Office"
+        android:usesCleartextTraffic="true">
+
+        <!-- configChanges: a turn of the phone, split screen, a fold or dark mode keeps the screen
+             (and the dgo it already asked) -->
+        <activity
+            android:name=".MainActivity"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".OfficeActivity"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
+        <service
+            android:name=".EngineService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Runs this phone's office: a Linux virtual machine (QEMU) with its apps, while the user keeps it on" />
+        </service>
+
+        <!-- the office's core, natively (DGO-1090): identity and the console as two processes of the app's
+             own, no machine — started by the app; the machine above only for an app in a container -->
+        <service
+            android:name=".NativeService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Runs this phone's office: its sign-in and its console, two processes of the app's own, while the user keeps it on" />
+        </service>
+    </application>
+</manifest>

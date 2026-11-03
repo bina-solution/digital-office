@@ -1,197 +1,203 @@
-# AGENTS.md — deployment-bina-comp
+# AGENTS.md — the one entry file
 
-Canonical entry point for any AI agent (Copilot, Claude Code, OpenHands) working in this repo.
-Read this first, then the linked context below.
+Every agent that works in this repo loads this file, and only this file, when a session starts. That
+includes Azaria and Raphael (the office's own agents, on DeepSeek in `bina-ds`), Claude Code, Codex,
+and anyone else. It is kept short on purpose. Everything else is read when the task needs it, from the
+index at the end. Why this layout, with the measurements and the research behind it:
+[ai/context/azaria-context-architecture.md](ai/context/azaria-context-architecture.md).
+
+There is no `CLAUDE.md` any more. It was a second entry file covering the same ground (2026-10-15,
+DGO-646), and its operating sections now live in
+[ai/context/running-the-stack.md](ai/context/running-the-stack.md).
 
 ## What this is
-The complete infrastructure-as-code for **one live production VPS** (BINA Solutions / Bina-comp),
-served under `*.bina-comp.bina-solutions.co.il`. Core business: **automated Hebrew financial-document
-processing** (invoices, delivery notes, balance sheets) via n8n + apitools OCR + WhatsApp, plus an
-in-development **AI agent that builds and operates the deployment itself** (`apps/openhands`).
-Goal: **fully declarative** — `git clone` + `./bbox run` brings the whole stack live from `.env`.
 
-## Non-negotiables (operating rules)
+DGO is the digital office of BINA Solutions: a platform OS that runs an office's apps as containers
+compiled from declarations. The apps include n8n + apitools OCR + WhatsApp for Hebrew financial
+documents, mail, drive, INDOX, chat, the console and Plane. This repo is its infrastructure-as-code, and live
+offices run it:
+
+- the HP, on branch `hp-dgo`;
+- the Mac, on `mac-dgo`;
+- vps1, at `console.staging.digital-office.co.il`.
+
+The goal is fully declarative: `git clone` + `./bbox run` (on Windows `bbox.cmd run`) brings an
+office up from `.env`. `bbox help` lists every verb.
+
+## The DGOs
+
+"DGOs" (the owner's word, 2026-10-19) means the company's offices together, each linked to the
+others: **macbook** (the owner's MacBook, Lima engine), **hp-laptop** (the HP, WSL), **vps1**
+(`*.staging.digital-office.co.il`) and, since 2026-10-21, **dell** (the portable Dell,
+`portable-ubuntu`, being installed from the public release) — the "square herd" — plus
+**claude-cloud**, a sandbox office that joins vps1 by declaration. Both laptops reach vps1 over SSH
+(each office's Computers app) and link to it with DGO Extend; MacBook ↔ HP is a LAN pair. A link that
+drops is a bug, and so is one that does not come back by itself once the machines are on the same
+network again. Per office: `./bbox dgo link status`. The herd's security posture, every finding and
+the work plan: [ai/context/dgo-security.md](ai/context/dgo-security.md).
+
+## How a session works
+
+1. **One work item per session.** The item is the brief: its words, its acceptance and its
+   comments (`./bbox project-pln tasks show <REF>`, project `DGO`). Read the item, then only what it
+   needs. Open a doc when the task touches its subject, not before.
+2. **A request is a work item first.** When the owner asks for something:
+   - open an item with his own words;
+   - put every file he sent on it (`tasks attach <REF> <file…>`);
+   - answer him with the item's link first, at the top of the reply and through every channel that
+     reaches him;
+   - then run `tasks start` and work.
+
+   This does not apply to a question, a request for a report, or "wait".
+3. **Keep the item's notes in a file**: the plan, what was tried, what failed and why, and what is
+   left. Re-read it before each step. When a session grows long, write the notes and end it; the next
+   session starts from the item and the notes.
+4. **Change → verify against real output → second reader → gates → land → report on the item.**
+   - A second reader is a fresh session given only the diff.
+   - Gates run on a probe commit in a worktree ([scripts/refactor/GATES.md](scripts/refactor/GATES.md)).
+   - A commit names its paths explicitly. Other writers share the checkout, so never commit or
+     overwrite a file you did not change.
+   - The report on the item gives the commit, the proof and what is live.
+5. **Never edit an entry file in the middle of a work session.** That means this file, a `SKILL.md`
+   or a persona. The harness re-injects the whole file into the context. Change one as its own item.
+
+## Non-negotiables (what may be done to production)
+
 1. **This is production.** Real users depend on it. When in doubt, do nothing and report.
-2. **Never call `docker compose` directly — use `./scripts/dc` (or `bbox`).** Services are *compiled*
-   into `.generated/` from `apps/*/app.json` + `platform.state.yaml`; the root `compose.yml` holds
-   only the shared network. So a bare `docker compose <cmd>` resolves **zero services and exits 0** —
-   a silent no-op that looks like success. `./scripts/dc` passes the compiled file list and works
-   from anywhere. Enforced by gate G7 (`scripts/refactor/compose-invocation-lint.py`).
-3. **Explain dangerous commands before approval** (anything with `rm > >> mv dd chmod chown kill stop restart sudo --force DROP DELETE TRUNCATE`, or that writes/deletes files/services/DB): say in 1-2 lines what it does + what could break.
-4. **Back up before destruction**; **verify against real output before claiming done**; **one perfect example → review → scale**.
-5. **Language:** reply in the language the user wrote in; think/code/commits/docs always in English.
-6. **Version control — commit and push on the working branch; never touch branches or history.**
-   `add`/`commit`/`push` are allowed on the current working branch, because deploying is git-based:
-   staging and the VPS pull, so an agent that cannot push cannot deploy or test parity. Committing
-   is also what makes file MODES real — `/mnt/c` reports every file as 755, Debian honours what git
-   recorded, and `run_app_hooks` silently skips a non-executable hook, so an uncommitted mode is an
-   untested one. Use `git update-index --add --chmod=+x` for hooks.
-   **Still forbidden without an explicit request:** creating, renaming, switching or deleting
-   branches; `merge`/`rebase`/`reset --hard`/`tag`/force-push; anything that rewrites history.
-   Convention: all work lives on the single working branch `deployment-bina-comp` — the always-published
-   state; PR it into `main` to publish the public project state.
-   On the DGO line the working branch is the OFFICE's own, cut from `dgo` — `hp-dgo`, `mac-dgo`, … —
-   and an office's checkout commits and pushes on that branch only (the owner, 2026-10-08, after an
-   agent had opened a shared `dgo-pair` by itself). What an office has proven — the gates with only
-   the known reds, the windows suite, the simulation's flows — is merged into `dgo-stable`, and an
-   office takes the others' work by merging `dgo-stable`; nothing is written twice. Before a
-   session's first commit, `git rev-parse --abbrev-ref HEAD` names the office's branch.
-7. **Subagent discipline — never stall.** `runSubagent` blocks its caller and there is no timer or
-   wakeup mechanism, so stall-proof by construction: (a) every subagent task is read-only research,
-   time-boxed to ≤5 minutes, and its prompt ends with "return what you have if blocked"; (b) dispatch
-   all independent subagents in ONE parallel block — wall time is the longest one, never serial;
-   (c) long live work (browser42 flows, sync runs, rebuilds, docker) stays in the MAIN thread via
-   `run_in_terminal`, async mode for anything that keeps running — terminal notifications are the
-   only real "wakeup"; (d) never hand interactive browser42 driving to a subagent (one shared
-   browser, one task at a time); (e) never re-dispatch a duplicate task before reading the first
-   one's output.
-8. **Tightening a contract? Enumerate every caller MECHANICALLY, first — and prove the enumerator
-   works before you trust its zero.** Making an interface stricter (a new required parameter, a
-   refusal where there used to be a fallback, a narrowed accepted type) turns every existing caller
-   that omits it into a production failure the moment it lands. So the caller list is *part of the
-   change*, and it must come from a gate, not from `grep`: a manual survey silently misses whatever
-   its pattern misses and reports the miss as "no callers found".
-   The order is: **(1)** name the gate that enumerates callers of this interface; **(2)** check what
-   it actually scanned — the file count, not just the finding count; **(3)** prove it produces a
-   finding on the *pre-fix* code, then zero on the fixed code; **(4)** fix the callers; **(5)** then
-   land the guard. **No gate for step 1 → the enumeration is manual → the rollout is staged (warn,
-   then refuse).** Skipping the warn phase is licensed by a mechanical survey and by nothing else.
-   Also: **the guard's error message only exists if every hop preserves it** — a proxy that ends in
-   a bare `raise_for_status()` turns an actionable upstream 4xx into an opaque 500 with an empty log.
-   This is written from an outage, not from principle: `apps/drive` did all of the above on
-   2026-08-06 (repo-wide survey, ~44 call sites fixed first) and landed clean; `apps/mail` landed a
-   *wider* guard three days later with no equivalent survey, and 12 unmigrated call sites in
-   `apps/mail/mailview` took the client's whole mail page to 500 — while the gate that existed to
-   find them (G62) read green, because its glob had only ever matched one app. Full account and the
-   audit of every other gate's scan coverage: [scripts/refactor/GATES.md](scripts/refactor/GATES.md)
-   § "Tightening a contract: enumerate every caller MECHANICALLY, before you tighten it".
+2. **Never run `docker compose` directly; use `./scripts/dc` or `bbox`.** Services are compiled into
+   `.generated/` from `apps/*/app.json` + `platform.state.yaml`. A bare `docker compose` resolves
+   zero services and exits 0, a silent no-op (gate G7).
+3. **Explain a dangerous command before running it.** That covers `rm`, `mv`, `dd`, `chmod`,
+   `chown`, `kill`, `stop`, `restart`, `sudo`, `--force`, `DROP`/`DELETE`/`TRUNCATE`, and anything
+   that writes or deletes files, services or data. Say in a line what it does and what could break.
+4. **Back up before destruction. Verify against real output before claiming done.** One perfect
+   example, then review, then scale.
+5. **Language:** answer in the language the owner wrote in. Code, commits and docs are in English.
+6. **Git: commit and push on the office's own branch only.** `git rev-parse --abbrev-ref HEAD` names
+   it: `hp-dgo`, `mac-dgo` and so on. Deploying is git-based, so pushing is how an office deploys and
+   tests parity.
+   - Hook modes are real only once committed: `git update-index --add --chmod=+x`.
+   - Unless asked, never create, switch, rename or delete a branch, and never merge, rebase,
+     `reset --hard`, tag, force-push or rewrite history.
+   - Proven work is merged into `dgo-stable`, and offices take each other's work by merging it.
+     Nothing is written twice, and nothing is re-implemented from another office's description.
+   - Each office has one branch, cut from `dgo` (the owner, 2026-10-08, and again 2026-10-21: "you
+     should always stay on dgo-mac and same for every other dgo should stay on his branch"):
 
-## The owner's standing rules (each was said until it stuck)
+     | office | machine | branch |
+     |---|---|---|
+     | macbook | the owner's MacBook (Lima engine) | `mac-dgo` |
+     | hp-laptop | the HP (Windows/WSL) | `hp-dgo` |
+     | vps1 | `*.staging.digital-office.co.il` | `vps1-dgo` |
+     | dell | the portable Dell (`portable-ubuntu`) | `dell-dgo` |
+     | claude-cloud | a Claude cloud sandbox | `claude-dgo` |
 
-Collected 2026-10-06 from the owner's own messages in every session of every office, July → October
-2026: 37 asks that turned out to be nine rules. The number is how many times he had to say it; the
-quote is his. They do not loosen rules 1–8 above — those decide what may be DONE to production,
-these decide how work is carried. Where the two meet, both hold: take the path rule 1 allows, write
-down what is only the owner's, and keep going with everything else.
+   - The branch is declared per office, `DGO_BRANCH=<branch>` in its `.env`, and held by
+     `.claude/hooks/office-branch.py` (registered in `.claude/settings.json`). It refuses a commit,
+     push, switch, branch write, rebase, reset, or merge of anything but `dgo-stable` that breaks the
+     rule; it prints the office's branch at every session start; it only warns while `DGO_BRANCH` is
+     empty. The owner's explicit ask, in chat, for one of those acts runs as `DGO_GIT_OVERRIDE=1 git …`,
+     so the reason is on the command line.
+   - It is a security rule, not a tidiness rule: the DGOs review found three offices on three code
+     lines, so a fix proven on one office was absent on the others (S8,
+     [ai/context/dgo-security.md](ai/context/dgo-security.md)).
+7. **Never stall on a sub-agent.**
+   - Sub-agent tasks are read-only research, time-boxed, and told "return what you have if blocked".
+   - Independent sub-agents go out together, not one after another.
+   - Long live work (builds, browser flows, docker) stays in the main session as a background job you
+     watch.
+   - Interactive browser42 driving is never handed to a sub-agent: there is one shared browser.
+   - Never re-dispatch a task before reading the first run's output.
+8. **Tightening a contract? Enumerate every caller mechanically first.**
+   - Use a gate. Check what it scanned (the file count, not just the findings), and prove it finds
+     the callers in the pre-fix code and none after the fix.
+   - With no gate, stage the change: warn first, then refuse.
+   - The guard's error message must survive every hop.
+   - The outage behind this rule is in [GATES.md](scripts/refactor/GATES.md) § "Tightening a
+     contract".
 
-1. **Finish the work. Never stop, park it, or hand it back** (×117 — nothing was said more).
-   No "shall I proceed", no menu of options, no command for the owner to run, and no waiting for a
-   person who may never answer: choose, write down why, go on to the next item until nothing is
-   open. Open work lives in the hub (Plane project `DGO`, `./bbox project-pln tasks …`); what only
-   the owner can do — a password, a decision about production, a hand on a machine — is recorded
-   there under the label `בעלים` while everything around it continues. A side task goes to a
-   sub-agent, not to him. «לעולם אל תעביר לי משימות!!! יש לך את היכולת לעשות הכל!»
-2. **Watch what you started** (×46). No long sleeps and no waiting loops: read real progress — the
-   log, the counter, the sub-agent's output — every 15–60 seconds, 2–5 minutes at the very most for
-   a long job, and show it. «no long sleeps!! max 60s better 15s»
-3. **Fix the root, minimally and generically — regressions first** (×24). One simple, stable fix
-   where the defect is; nothing layered on top, nothing over-built. A test or a document is never
-   changed to make something pass, and when a test does change it is reported apart from the fix.
-   What used to work and broke is repaired before anything new.
-   «וגם הקוד צריך להיות מינימלי ונקי כמו זהב טהור»
-4. **See what the owner sees** (×29). QA in his own Chrome, through the console and the real
-   addresses — not an IP, not an app on its own, not a new tab per step (browser42 is for OAuth
-   flows). Notice a stall or a broken screen yourself, and prove its root, before he reports it.
-   «make sure you see the same thing i see and detect them on your own»
-5. **Answer short, and answer what was asked** (×30). Text, not report files; the result first; no
-   walls of words; a word limit he gives is the limit. And **a question is not an instruction**
-   (×4): asked "why" or "what", answer — do not change, delete or revert.
-   «no dont prune!!!! i asked a question»
-6. **Declarative, and part of the OS** (×6). Nothing the owner has to type: no manual command, no
-   firewall step, no SSH between offices — an office is installed and linked from its screens, in
-   any order. «הכל חייב להית דקלרטיבי וחלק מהOS»
-7. **The item is the boundary** (×19). Work inside the app the item names; its neighbours are not
-   diagnosed, rebuilt or restarted. Before a build check load and disk, one build at a time, prune
-   after; a compose edit is the whole file, then `dc config`, before anything else. Before a cycle
-   of runs every lock is released and nothing is still running (×6).
-8. **Hands off until he says otherwise.** An office is not unpaired and the MacBook's engine is not
-   restarted without him at the machine (×8). INDOX's drain stays on and drain B stays 500 (×2).
-   Files are edited with the file tools, never patched by a script (×8).
-9. **What he should not have to say again.** A link to every n8n execution you ran. The word is
-   *instance* (מופע), never tenancy. A substantive change nobody asked for is shown as a plan first;
-   a task that was given is carried to its end (×6). In a long session re-read his recent messages
-   and keep the list of what he asked (×7). A progress report carries every measure he asked for,
-   every time (×14).
-10. **A request is a work item first** (2026-10-07, said to every office's agent). When he asks for
-   something, before any of the work: open it as a work item in the hub with his own words, put
-   every file he sent on it (`./bbox project-pln tasks attach <REF> <file…>`), answer him with the
-   item's link, and only then start (`tasks start`). Not for a message that only asks a question,
-   asks for a report, or says to wait. «when I send request like this alwase mange it with an
-   workitem in projectpln with all my attachments and reply (also you also azaria) with the link to
-   the workitem and then start working on it»
-   **The link is the first thing he gets** (×2, the same evening): the address itself, at the top
-   of the reply, sent before any other step and through every channel that reaches him where he
-   is. A link written in the middle of a long turn did not reach him — «עדיין לא קיבלתי קישור!!!
-   … תמיד קודם תביא את הקישור».
+## The owner's standing rules (each said until it stuck; the count is how often)
+
+1. **Finish the work** (×117).
+   - No "shall I proceed", no menu of options, no command for the owner to run, and no waiting.
+     Choose, write down why, and continue until nothing is open.
+   - What only the owner can do (a password, a production decision, a hand on a machine) goes on an
+     item labelled `בעלים`, and everything around it goes on.
+   - A side task goes to a sub-agent, not to him.
+2. **Watch what you started** (×46). No long sleeps or waiting loops. Read real progress (the log,
+   the counter, the output) every 15–60 s, and show it.
+3. **Fix the root, minimally and generically, and fix regressions first** (×24). Never change a test
+   or a doc to make something pass. When a test does change, report it apart from the fix.
+4. **See what the owner sees** (×29). QA through the console and the real addresses, in his Chrome
+   for his flows: not an IP, not an app on its own (browser42 is for OAuth flows). Detect a stall or a broken screen, and prove its root, before he reports it.
+5. **Answer short, and answer what was asked** (×30). Give the result first, as text, not as report
+   files. A word limit he gives is the limit. A question is not an instruction (×4): answer it and
+   change nothing.
+6. **Declarative, and part of the OS** (×6). Nothing he has to type: no manual command, no firewall
+   step, no SSH between offices. Offices are installed and linked from their screens.
+7. **The item is the boundary** (×19).
+   - Work inside the app the item names. Do not diagnose, rebuild or restart its neighbours.
+   - Before a build, check load and disk; run one build at a time and prune after.
+   - A compose edit covers the whole file, then `dc config`.
+   - Before a cycle of runs, every lock is released and nothing is still running (×6).
+8. **Hands off until he says otherwise.**
+   - Never unpair an office or restart the MacBook's engine without him at the machine (×8).
+   - INDOX's drain stays on, and drain B stays 500 (×2).
+   - Files are edited with the file tools, never patched by a script (×8).
+9. **Do not make him say it again.**
+   - Link every n8n execution you ran.
+   - The word is *instance* (מופע), never tenancy.
+   - Show a substantive change nobody asked for as a plan first.
+   - Carry a given task to its end.
+   - In a long session, re-read his recent messages.
+   - A progress report carries every measure he asked for, every time (×14).
+10. **A request is a work item first** (2026-10-07). See How a session works, step 2.
+
 11. **A display change comes back as an interactive simulation, and its screenshots** (2026-10-12).
-   «תמיד כשאתה מציע שינויים שקשורים לתצוגה תתן חזרה צילום מסך הדמייה אינטרקטיבית» — a proposal about
-   what a screen looks like is not a paragraph and not a diagram of boxes: it is a mock he can drive,
-   plus the picture of it. **And when he presented the problem with a screenshot, the demo starts
-   from THAT screen** (×2, the same day): «הדמייה שכוללת את מה שהמסך הקיים שמופיע בצילום ואז את
-   השינויים והדגמה אינטרקטיבית» — his own pixels inside the frame, the change applied to them, and
-   only the shell chrome drawn (from its real CSS). A drawn stand-in for the app is what the first
-   version was, and it was not enough: the screen he sent IS the subject of the picture.
-   Two rules that follow: every number in such a demo is a measurement of the demo's own layout (never
-   a figure typed in by hand — this caught a rule the proposal was missing, `.embed{inset:0 0 60px 0}`
-   leaving a 60px hole the moment the tab bar went), and a band that a static crop cannot have — the
-   app's rail runs the whole height — is measured off the shot and drawn (`prep-screen-bands.py`).
-   The recipe: `prep-screen-bands.py <shot> --rows y0,y1` → `build-fullscreen-mock.py --app-shot …
-   --rail-gear …` → shots at the phone profile. Workbench: `digital-office/sim/`, output (gitignored):
-   `ci-artifacts/fullscreen-mock/` (montage + per-state PNGs). See `console-fullscreen-mock.src.html`.
+   - «תמיד כשאתה מציע שינויים שקשורים לתצוגה תתן חזרה צילום מסך הדמייה אינטרקטיבית»: a mock he
+     can drive, plus the picture of it — never a paragraph or a diagram of boxes.
+   - When he presented the problem with a screenshot, the demo starts from THAT screen (×2): his own
+     pixels inside the frame, the change applied to them, only the shell chrome drawn from its real CSS.
+   - Every number in the demo is a measurement of its own layout, and a band a static crop cannot have
+     is measured off the shot and drawn (`prep-screen-bands.py`).
+   - The recipe: `prep-screen-bands.py <shot> --rows y0,y1` → `build-fullscreen-mock.py --app-shot …
+     --rail-gear …` → shots at the phone profile. Workbench `digital-office/sim/`, output (gitignored)
+     `ci-artifacts/fullscreen-mock/`; see `console-fullscreen-mock.src.html`.
 
-## Layout
+## Layout: the directory is the layer (gate G9)
 
-Three layers, and **the directory is the layer** — where a file lives declares what it may depend on
-(enforced by gate G9, `layering-lint.py`).
+- `platform/` is layer 0, the compiler. `manager/reconcile.py` reads `apps/*/app.json` +
+  `platform.state.yaml` and renders `.generated/`, which you never edit or commit by hand. Its native
+  Go successor is `packaging/dgo`.
+- `platform-base/` is layers 1–2, what every office gets: traefik, authentik, postgres, redis, n8n,
+  connections, console, machine and the rest.
+- `apps/` is layer 3: one directory per app, each with its `app.json` and its `AGENT.md` brief. An
+  app never reaches into another.
+- `compose.yml` holds only the shared network, `platform.state.yaml` says which apps are enabled, and
+  `.env`/`.env.ex` hold config and secrets. `apitools` and `chat` are in-tree (no submodules).
+- The rest:
+  - `scripts/` holds `dc`, `lib.sh`, and `refactor/` (the gates);
+  - `issues/` holds defects;
+  - `legacy/` is the one retirement archive (G34);
+  - `ai/context/` holds the docs below;
+  - `ai/obsidian/` is the older memory vault (read only when an item points there);
+  - `digital-office/` is the dev-only UI workbench, not a layer.
 
-```
-platform/          LAYER 0  the compiler. manager/reconcile.py reads every apps/*/app.json plus
-                            platform.state.yaml, resolves capabilities, and renders .generated/.
-                            Depends on nothing above it.
-platform-base/     LAYER 1-2  the substrate every deployment gets: traefik, authentik, postgres,
-                            redis, n8n, connections (the credential broker), console, machine, …
-apps/              LAYER 3  the products, one directory per app, each with an app.json manifest:
-                            chat, indox, drive, mail, my-docs, apitools, supabase, openhands, …
-                            An app declares what it needs; it never reaches into another app.
+## Where context lives: read it when the task needs it
 
-.generated/        RENDERED OUTPUT — never edit, never commit-by-hand. compose.yml + overlays +
-                   registries + the authentik blueprint. Produced by `bbox reconcile`.
-compose.yml        the shared external network, and nothing else (see rule 2).
-platform.state.yaml  which apps are enabled, provider bindings, perf profile.
-.env / .env.ex     config + secrets (DEPLOYMENT_DOMAIN, *_BASE_URL, …)
-scripts/           dc (the compose wrapper), lib.sh, baseline.sh, refactor/ (the gate registry)
-ops/ packaging/    operational tooling and the measured optimisation study
-ai/context/        agent context: baseline, architecture reviews, plans (see ai/context/README.md)
-ai/obsidian/       persistent cross-session memory vault (the "brain")
-issues/            tracked defects with severity/status front-matter
-digital-office/    NOT A LAYER — the dev-only UI design/spec workbench (no app.json, no compose
-                   service, no bbox verbs, never shipped, never run by CI). sim/build.mjs bundles
-                   the REAL frontends + mocks into platform-sim.html (the spec the live UI is
-                   ported toward, see sim/PORT-PLAN.md); tooling/ assembles platform-mockup.html.
-                   Only scripts/ui-coverage/{live-ui-map,sim-live-parity,pixel-diff}.py read it.
-                   Full boundary: CLAUDE.md § "What digital-office/ is (and is not)".
-```
-
-`legacy/` is the **retirement archive** — workflows moved there are import-ineligible (the n8n
-blueprint loader only reads `apps/*/blueprint/n8n/`, and G34 `legacy-ref-lint` fails any live code
-that references `legacy/` without an explicit allowlist entry). What it holds is listed in
-[legacy/README.md](legacy/README.md) — among it `legacy/n8n/indox-sheets-era/` (5 retired
-Sheets-era workflows, 2026-08-04). `attic/` is gone: it came back as a second archive (211 files,
-2026-08-16 to 08-21) and was folded into `legacy/` on 2026-10-06 — one archive, one gate.
-`build.mjs` takes its feature-validation dashboard from `apps/apitools/feature-validation/`.
-
-`bbox` is the single entry point: `./bbox run` brings the stack up on any machine, `bbox help` lists
-the tree. n8n export/import is `bbox n8n pull|push` (the old `scripts/n8n-pull` / `n8n-push` no
-longer exist); n8n ops → [ai/context/n8n-cli.md](ai/context/n8n-cli.md).
-
-## Where context lives (each fact has one home)
 | Need | Source |
 |---|---|
-| **Healthy-baseline proof** (one-command fresh reset→build→up→tests→ui-map) | [ai/context/healthy-baseline.md](ai/context/healthy-baseline.md) (`bbox baseline`) |
-| Services, domains, ports, networks, run commands | [ai/context/deployment-context.txt](ai/context/deployment-context.txt) |
-| n8n operate (CLI/API/DB, workflow+credential IDs, MCP paths/gids, lessons) | [ai/context/n8n-cli.md](ai/context/n8n-cli.md) |
-| Everything else in `ai/context/` — agent-runner job-prompts, investigator persona, plans, OCR research | [ai/context/README.md](ai/context/README.md) (folder index) |
-| Operating charter, user profile, decisions, lessons, session log, **n8n System Map** | `ai/obsidian/` vault (start: `ai/obsidian/00 - START HERE.md`) |
-
-## Session start
-Read `ai/obsidian/00 - START HERE.md` and `ai/obsidian/_Hooks/ONBOARDING.md`; check `ai/obsidian/Sessions/Session Log.md` (top) and `ai/obsidian/Checkpoints/`. Write lessons/decisions back to the vault while working. Vault read/write is handled by the `obsidian-brain` skill (`.github/skills/obsidian-brain/`).
+| Take the lead on the plan: state, recipes, the 12 steps, owner decisions, budget | [ai/context/take-the-lead.md](ai/context/take-the-lead.md) |
+| The DGO herd as one business: what runs on each computer, where each app belongs (MacBook the interface, HP the always-on centre, Dell the heavy work, vps1 the public door), the HP's readiness before clients; `./bbox computers herd` checks it | [dgo-herd.md](ai/context/dgo-herd.md), [apps/computers/herd.yaml](apps/computers/herd.yaml), plan `apps/project-pln/plans/dgo-herd.yaml` (DGO-914…944) |
+| DGO security for the whole herd: every finding (S1–S22), the solutions weighed, the plan, the security app; the branch rule and its guard | [dgo-security.md](ai/context/dgo-security.md), plan `apps/project-pln/plans/dgo-security.yaml`, `.claude/hooks/office-branch.py` |
+| Run, build and test the stack: `bbox run`, the three environments, **Docker 29 fails silently (use 28.x)**, cloud sandboxes, `digital-office/` | [running-the-stack.md](ai/context/running-the-stack.md), [healthy-baseline.md](ai/context/healthy-baseline.md) |
+| How an agent's context is built and budgeted | [azaria-context-architecture.md](ai/context/azaria-context-architecture.md) |
+| Target architecture and plan, release, the native core, who owns what | [dgo-architecture-2026.md](ai/context/dgo-architecture-2026.md), [platform-os-release-plan.md](ai/context/platform-os-release-plan.md), [core-native-plan.md](ai/context/core-native-plan.md), [platform-os-consolidation.md](ai/context/platform-os-consolidation.md) |
+| Writing an app, its screen, and the one palette «Olive Grove» (only `theme-tokens.css` names a colour; G27/G82) | [build-your-first-app.md](ai/context/build-your-first-app.md) |
+| n8n development (export/import is `bbox n8n pull\|push`) and the raw CLI/API/DB appendix | [n8n-development.md](ai/context/n8n-development.md), [n8n-cli.md](ai/context/n8n-cli.md) |
+| Services, domains, ports, networks | [deployment-context.txt](ai/context/deployment-context.txt) |
+| Windows (the one way: `bbox.cmd`), macOS | [running-on-wsl.md](ai/context/running-on-wsl.md), [packaging/macos.md](packaging/macos.md) |
+| A fresh machine; a fresh office in a Claude cloud sandbox | [fresh-machine-findings.md](ai/context/fresh-machine-findings.md), [fresh-office-cloud-sandbox-2026-10-15.md](ai/context/fresh-office-cloud-sandbox-2026-10-15.md) |
+| Porting the simulation into the live UI; view profiles | [digital-office/sim/PORT-PLAN.md](digital-office/sim/PORT-PLAN.md), [view-profiles.yaml](scripts/ui-coverage/view-profiles.yaml) |
+| Every gate, and what it scans | [scripts/refactor/GATES.md](scripts/refactor/GATES.md) |
+| Everything else: the repo overview, and the folder index of `ai/context/` | [README.md](README.md), [ai/context/README.md](ai/context/README.md) |

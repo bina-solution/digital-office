@@ -1,0 +1,23 @@
+[Unit]
+Description=Office watch - severe events (CPU, services, disk, off-server backup) to the office notice centre
+Documentation=file:///usr/local/share/doc/office-watch/README.md
+After=docker.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/default/office-watch
+ExecStart=/usr/bin/python3 /usr/local/sbin/office-watch
+# low priority: never competes with the office's screens and calls (but is not starved: no SCHED_IDLE)
+Nice=19
+IOSchedulingClass=idle
+CPUWeight=20
+MemoryHigh=96M
+MemoryMax=128M
+TasksMax=32
+TimeoutStartSec=45
+StateDirectory=office-watch
+StateDirectoryMode=0700
+ProtectSystem=full
+ProtectHome=read-only
+PrivateTmp=yes
+NoNewPrivileges=yes

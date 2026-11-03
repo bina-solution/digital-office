@@ -46,7 +46,7 @@ changes surface either way. Fixing the pin = remove the id from `knownPins`.
   correctly DOUBLEs the second copy. Each suite's cleanup deletes ALL test prefixes it can
   collide with (`gdx_%`, `plx_%`, `plb_%`); run suites sequentially.
 - **Never seed extra companies** — `figure_company_id` matches against the whole companies
-  table; pollution flips its resolution (seen: dbf_ord 511234567→514947746). Seed only what
+  table; pollution flips its resolution (seen: dbf_ord 511234567→500000096). Seed only what
   the lane asserts on and clean up.
 - **n8n v1 execution order runs fan-out branches by node POSITION (topmost first)** —
   serialize lanes via connections when order matters (the summary must run last).

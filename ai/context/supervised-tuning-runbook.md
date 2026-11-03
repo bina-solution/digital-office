@@ -111,7 +111,7 @@ clear stale locks → recycle syncs → verify the specific docs reach COMPLETED
    invoice flows UNKNOWN→AI classify→TYPE=INVOICE→COMPLETED.
 
 2. **MISSING_COMPANY_ID on registered companies** (e.g. Fetaya — IS registered: companies id=40 "א. פתיה",
-   מזהה1=510564693). ROOT: two gaps. (i) tax-id extractor `Company Id AFTER Query` (in figure_company_id
+   מזהה1=500000112). ROOT: two gaps. (i) tax-id extractor `Company Id AFTER Query` (in figure_company_id
    indoxV2FigureCompanyId01) does "find after" only for labels `["ח.פ","ע.מ"]`, but Fetaya's invoice prints its
    number after `"עוסק מורשה"` (authorized-dealer) → tax-id never extracted. (ii) name match via `all_companies_
    identifiers` is exact-substring so `"א פתיה"` (no period) ≠ `"א. פתיה"` (registry, with period).

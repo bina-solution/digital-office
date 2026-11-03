@@ -1,0 +1,47 @@
+# cad-api — the office's parametric models (DGO-1076): a job's sizes in → the pieces to cut, their packing on stock
+# sheets, the bill of materials, the cost, and the 3D file. It answers agents, the CLI and other apps (the services app
+# asks it for a cap's BOM and prices it with its own Prices & setup).
+#
+# It runs without FreeCAD: an office that only prices caps enables this app alone, with CAD_KERNEL=0 (the quote-only
+# build, no OpenCascade: ~60 MB, ~40 MB RAM; /model then says the kernel is not here). With the cad app beside it,
+# both share `cad_projects`: a STEP this api writes opens in FreeCAD. No secret is mounted; `auth: sso` is the front door.
+services:
+  cad-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        KERNEL: ${CAD_KERNEL:-1}
+    container_name: cad-api-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: cad-api
+    restart: unless-stopped
+    environment:
+      - CAD_OUT=/projects/out
+      # the `cad` app's FreeCAD user, who must read (and may change) what this api writes
+      - CAD_PUID=${CAD_PUID:-1000}
+      - CAD_PGID=${CAD_PGID:-1000}
+      - CAD_SHEET_W=${CAD_SHEET_W:-48}
+      - CAD_SHEET_H=${CAD_SHEET_H:-120}
+    volumes:
+      - cad_projects:/projects
+    networks:
+      - traefik-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 768M
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://localhost:8996/healthz',timeout=8).status==200 else 1)"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+
+networks:
+  traefik-network:
+    external: true
+volumes:
+  cad_projects:

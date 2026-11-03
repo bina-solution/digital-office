@@ -341,7 +341,8 @@ def capture(name, prof, outdir):
             ctx = b.new_context(viewport=vp,
                                 device_scale_factor=prof.get('dsf', 1),
                                 is_mobile=prof.get('is_mobile', False),
-                                has_touch=prof.get('has_touch', False))
+                                has_touch=prof.get('has_touch', False),
+                                user_agent=prof.get('user_agent'))   # apps decide "phone" from the UA (DGO-576)
             pg = ctx.new_page()
             pg.goto(url, wait_until='load'); pg.wait_for_timeout(400)
             t0 = time.monotonic()
@@ -446,7 +447,8 @@ if __name__ == '__main__':
 
     if a.list:
         for n, pr in PROFILES.items():
-            print(f"{n:9s} {pr['width']:>5}x{pr['height']:<5} @{pr.get('dsf',1)}x  {pr.get('label','')}")
+            print(f"{n:9s} {pr['width']:>5}x{pr['height']:<5} @{pr.get('dsf',1)}x  {pr.get('label','')}"
+                  f"  ua: {pr.get('user_agent') or 'browser default'}")
         sys.exit(0)
 
     names = sorted(PROFILES) if a.all else [a.profile or DEFAULT]

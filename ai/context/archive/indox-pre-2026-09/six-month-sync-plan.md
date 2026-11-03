@@ -10,8 +10,8 @@ caught up, synced and COMPLETED.
   conn=None, counts 0 — **they have no real connection/folder binding yet.**
 - mailapi connections: only 2 LOCAL imap (admin/user2). **No real Gmail.**
 - drive connections: SA (`drive_google_service_account-ea660043`) + 2 local. **No OAuth.**
-- Legacy sheet `1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo` readable in browser42
-  (bina-comp@gmail session). Schemas already match (76 identical columns).
+- Legacy sheet `1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0049` readable in browser42
+  (hacohen@gmail session). Schemas already match (76 identical columns).
 
 ## Workstreams (run in parallel; wall-clock target 2h setup + overnight processing)
 
@@ -31,7 +31,7 @@ caught up, synced and COMPLETED.
 4. Run label engine against real gmail → past-6-months mail gets *_TO_SYNC labels.
 
 ### C. Drive live sync
-1. Verify SA can LIST the bina-comp folders (shared with SA) via drive app API.
+1. Verify SA can LIST the hacohen folders (shared with SA) via drive app API.
 2. Create/update drive-gdoc + drive-bs entries: SA connection + pairs from legacy
    settings folder IDs (to_sync/synced/failed per pair).
 3. drive-invoices: push through the 1 remaining item.

@@ -166,7 +166,8 @@ def capture(pw, url, panels, prof, is_live):
         ctx = b.new_context(viewport={"width": prof["width"], "height": prof["height"]},
                             device_scale_factor=prof.get("dsf", 1),
                             is_mobile=prof.get("is_mobile", False),
-                            has_touch=prof.get("has_touch", False))
+                            has_touch=prof.get("has_touch", False),
+                            user_agent=prof.get("user_agent"))      # apps decide "phone" from the UA (DGO-576)
         pg = ctx.new_page()
         errs = []
         pg.on("pageerror", lambda e: errs.append(str(e)))

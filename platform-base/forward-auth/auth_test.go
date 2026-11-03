@@ -35,6 +35,8 @@ func testServer(t *testing.T) *server {
 	return &server{
 		users:        &userStore{byName: map[string]*user{"owner": u}},
 		sign:         &signer{key: []byte(testSecret), ttl: time.Hour},
+		handoff:      newHandoff([]byte(testSecret)),
+		limit:        newLimiter(),
 		external:     "http://auth.localhost",
 		suffixes:     []string{".localhost"},
 		secureCookie: false,

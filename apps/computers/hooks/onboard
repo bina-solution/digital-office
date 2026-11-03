@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#: every bring-up: the machine this office runs on answers the computers app (hooks/door)
+# onboard — run by `bbox run` for every enabled app (run_app_hooks; bbox names no app). The computers app
+# declares its own door to the machine it runs on here: an sshd where the OS has none, and the office key
+# authorized from the engine's network only. Idempotent and silent when nothing changed. See hooks/door.
+exec bash "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/door" install

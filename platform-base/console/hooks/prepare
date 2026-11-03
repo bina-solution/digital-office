@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+#: decide whether the office's bare domain opens the console (data/.locks/apex-host)
+# prepare — the console's own bring-up step. Invoked generically by `bbox run` for every enabled app
+# that has one; bbox does not name this app.
+#
+# The console's compose file routes the office's BARE domain (https://fpg.digital-office.co.il — what
+# a person types; the owner did on 2026-10-22 and got NET::ERR_CERT_AUTHORITY_INVALID) to the console,
+# with a Let's Encrypt certificate of its own. Those routers match ${DGO_APEX_HOST:-apex.invalid}, so
+# they are CLOSED unless this hook decides the bare domain really points at this office: a router —
+# and so a certificate order — for an apex that points elsewhere, or nowhere, is refused by Let's
+# Encrypt on every configuration reload, DGO-901's storm again. vps1's `staging.digital-office.co.il`
+# has no A record at all; fpg's apex points at fireplace (measured 2026-10-22, the second reader).
+#
+# The decision: OPEN when the bare domain's A records equal the console host's (sorted SETS — a
+# round-robin answer rotates its order); CLOSED when they differ or either name has no address. Only a
+# DEFINITE answer decides — asked of getaddrinfo, not `getent`, which exits 2 for a SERVFAIL as well —
+# and a timeout or a SERVFAIL keeps the last decision, or a DNS hiccup would close the apex and
+# recreate the console for nothing. Written to data/.locks/apex-host (runtime state, gitignored);
+# scripts/lib.sh carries it to every compose call while it names this office's domain. A DNS change
+# flips it at the next `bbox run`: the apex follows the zone, with nothing to type.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # say, read_env
+LAST="${REPO_ROOT}/data/.locks/apex-host"
+d="$(read_env DEPLOYMENT_DOMAIN)"
+case "${d}" in *.*) ;; *) exit 0 ;; esac          # a `.localhost` office has no public apex
+c="$(read_env CONSOLE_BASE_URL)"; c="${c%%:*}"; c="${c:-console.${d}}"
+
+addrs() {   # the sorted A records of $1 on one line; returns 0, 2 (the name has no address), else no answer
+  timeout 3 python3 -c '
+import socket, sys
+try:
+    infos = socket.getaddrinfo(sys.argv[1], None, socket.AF_INET)
+except socket.gaierror as e:
+    none = {socket.EAI_NONAME} | {getattr(socket, "EAI_NODATA", socket.EAI_NONAME)}
+    sys.exit(2 if e.errno in none else 3)
+print(" ".join(sorted({i[4][0] for i in infos})))
+' "$1" 2>/dev/null
+}
+
+ra=0 rc=0 open=""
+apex="$(addrs "${d}")" || ra=$?
+host="$(addrs "${c}")" || rc=$?
+if [ "${ra}" = 0 ] && [ "${rc}" = 0 ]; then
+  [ "${apex}" = "${host}" ] && open="${d}"
+elif [ "${ra}" != 2 ] && [ "${rc}" != 2 ]; then
+  say "[console] https://${d}: DNS did not answer — the last decision stands ($(cat "${LAST}" 2>/dev/null || echo closed))"
+  exit 0
+fi
+if ! { mkdir -p "${LAST%/*}" && printf '%s\n' "${open:-closed}" > "${LAST}"; } 2>/dev/null; then
+  say "${cy}[console] could not write ${LAST} — the bare domain stays as it was${c0}"
+  exit 0
+fi
+if [ -n "${open}" ]; then
+  say "[console] https://${d} opens the console"
+else
+  say "[console] https://${d} is not routed — it does not point at this office (${apex:-no address})"
+fi
+exit 0

@@ -8,7 +8,7 @@ to learn what exists from app.json manifests, `platform.state.yaml` and the comp
 .generated/ — never from a name written into its own source.
 
 The concrete failure this exists to prevent: data-management (the backup service) discovered
-postgres instances with a hardcoded table of logins — supabase_admin/postgres, bina-comp/n8n,
+postgres instances with a hardcoded table of logins — supabase_admin/postgres, hacohen/n8n,
 authentik/authentik, glitchtip/glitchtip. Every entry was another app's private credential, so a
 newly installed app with its own database was simply NOT BACKED UP until somebody remembered to add
 a row. It now reads POSTGRES_USER from the container, which is both decoupled and more accurate.

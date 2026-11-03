@@ -82,7 +82,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
     /*__n8n__*/ meta: null,
     /*__n8n__*/ pinData: {},
     /*__n8n__*/ staticData: {"node:Every 5 min":{"recurrenceRules":[]},"global":{"lastFullSweepMs":1786873852538},"node:Lane 1 Schedule (nightly one-shot)":{"recurrenceRules":[]},"node:Lane 5 Tick (2m)":{"recurrenceRules":[]},"node:Tick (2m)":{"recurrenceRules":[]},"node:Nightly (one-shot)":{"recurrenceRules":[]}},
-    /*__n8n__*/ shared: [{"updatedAt":"2026-08-11T15:40:21.326Z","createdAt":"2026-08-11T15:40:21.326Z","role":"workflow:owner","workflowId":"indoxV2BaseDrain01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <shlomo@local.dev>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
+    /*__n8n__*/ shared: [{"updatedAt":"2026-08-11T15:40:21.326Z","createdAt":"2026-08-11T15:40:21.326Z","role":"workflow:owner","workflowId":"indoxV2BaseDrain01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
     id: 'indoxV2BaseDrain01',
     name: 'indox-v2 Drain (pool: P lanes x B documents)',
     active: true,
@@ -236,7 +236,7 @@ const fullMin = (function (v, d) { const n = Number(v); return (n > 0) ? Math.fl
 // minutes of a full_minutes block ran as the full pass. That was sound while this workflow owned
 // its own Tick (2m). The scheduler cutover DISABLED that trigger and handed dispatch to indox01,
 // whose spacing is ~4 minutes -- so a 2-minute window was tested against 4-minute fires and got
-// straddled. Measured, bina-comp, 3 hours: 46 ticks and ONE full sweep; the 08:00 one was skipped
+// straddled. Measured, hacohen, 3 hours: 46 ticks and ONE full sweep; the 08:00 one was skipped
 // outright (07:58:15 -> 118, no fire inside the window, 08:02:15 -> 2, and the test is < 2).
 // That matters because mode=all is the only pass that revisits a HEALTHY document quiet for
 // longer than changedMinutes. (Stalled IN_PROGRESS and ACTION_RESTART rows stopped depending on
@@ -308,7 +308,7 @@ if (mode === 'all') {
   listPipe = statuses.join(PIPE);
 } else if (mode === 'changed') {
   // [strand rescue 2026-08-31] The changed window alone leaks two classes of live work, both
-  // measured on bina-comp: 173 IN_PROGRESS rows untouched for 6-72 h (their drivers died with the
+  // measured on hacohen: 173 IN_PROGRESS rows untouched for 6-72 h (their drivers died with the
   // worker -- OOM, restart, the 2026-08-21 timeout class) and 2 ACTION_RESTART rows sitting
   // THREE DAYS after the user clicked restart. Both are eligible, neither is ever re-selected:
   // their updated_at fell out of the window, and the full pass is 120-minute-cadenced and

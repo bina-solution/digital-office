@@ -1,6 +1,7 @@
 package yamlish
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -85,8 +86,8 @@ func TestKnownAnswers(t *testing.T) {
 func TestRefusesWhatItDoesNotSpeak(t *testing.T) {
 	cases := []struct{ name, yaml, wantErr string }{
 		{"anchor", "a: &x 1\nb: *x\n", "anchors"},
-		{"alias", "a: *x\n", "anchors"},
-		{"tag", "a: !!str 1\n", "anchors, aliases and tags"},
+		{"alias", "a: *x\n", "names no anchor above it"},
+		{"tag", "a: !!str 1\n", "the tag !!str"},
 		{"merge key", "a:\n  <<: {b: 1}\n", "merge key"},
 		{"two documents", "a: 1\n---\nb: 2\n", "more than one document"},
 		{"directive", "%YAML 1.1\n---\na: 1\n", "directive"},
@@ -96,6 +97,18 @@ func TestRefusesWhatItDoesNotSpeak(t *testing.T) {
 		{"bad indent", "a:\n  b: 1\n c: 2\n", "indent"},
 		{"colon in plain continuation", "a: b\n  c: d\n", "mapping values"},
 		{"int overflow", "n: 99999999999999999999\n", "64 bits"},
+		// PyYAML refuses each of these outright (the line breaks it reads are in TestEdgesAgreeWithPyYAML)
+		{"control character", "a: x" + string(rune(1)) + "y\n", "not printable"},
+		{"DEL", "a: x" + string(rune(0x7f)) + "y\n", "not printable"},
+		{"not UTF-8", string([]byte{'a', ':', ' ', 0xff, '\n'}), "UTF-8"},
+		{"anchored scalar in a sequence", "- &a x\n", "anchors on a scalar"},
+		{"anchor before a compact mapping", "- &a k: v\n", "anchors on a scalar or a compact mapping"},
+		{"a second anchor of one name", "a: &x\n  k: 1\nb: &x\n  k: 2\n", "second anchor &x"},
+		{"alias with more after it", "a: &x []\nb: *x y\n", "more after the alias *x"},
+		{"alias before its anchor", "b: *x\na: &x []\n", "names no anchor above it"},
+		{"tag before a compact mapping", "- !!map k: v\n", "the tag !!map"},
+		{"anchor on a key", "&a k: v\n", "anchors, aliases and tags"},
+		{"anchor on a key inside a mapping", "a: 1\n&b k: v\n", "anchors, aliases and tags"},
 	}
 	for _, c := range cases {
 		_, err := Unmarshal([]byte(c.yaml))
@@ -106,6 +119,23 @@ func TestRefusesWhatItDoesNotSpeak(t *testing.T) {
 		if !strings.Contains(err.Error(), c.wantErr) {
 			t.Errorf("%s: error %q does not name %q", c.name, err, c.wantErr)
 		}
+	}
+}
+
+// FlaskJSON is json.dumps(…, ensure_ascii=True): everything outside space…tilde escaped, DEL too, a
+// character beyond the BMP as a surrogate pair — the answer below is Python's own.
+func TestFlaskJSONEscapesAsPythonDoes(t *testing.T) {
+	m := NewMap()
+	m.Set("שם", "בינה "+string(rune(0x1F418))+" a"+string(rune(0x7f))+"b"+string(rune(0x2028))+"\t\"\\")
+	m.Set("n", []any{int64(1), 1.5, nil, true})
+	u := func(hex string) string { return string(rune(92)) + "u" + hex } // a JSON escape, spelled out
+	want := `{"n":[1,1.5,null,true],"` + u("05e9") + u("05dd") + `":"` + u("05d1") + u("05d9") + u("05e0") +
+		u("05d4") + ` ` + u("d83d") + u("dc18") + ` a` + u("007f") + `b` + u("2028") + `\t\"\\"}`
+	if got := FlaskJSON(m); got != want {
+		t.Fatalf("FlaskJSON:\n got  %s\n want %s", got, want)
+	}
+	if got := CanonicalJSON("a" + string(rune(0x7f)) + "ש"); got != `"a`+string(rune(0x7f))+`ש"` {
+		t.Fatalf("CanonicalJSON escapes nothing beyond the controls, got %s", got)
 	}
 }
 
@@ -128,6 +158,127 @@ func TestPythonFloatRepr(t *testing.T) {
 	for f, want := range cases {
 		if got := pythonFloat(f); got != want {
 			t.Errorf("repr(%v) = %s, want %s", f, got, want)
+		}
+	}
+}
+
+// noPython skips a test whose oracle is not on this machine — or fails it where DGO_ORACLE_REQUIRED=1
+// (CI): a proof that does not run must not read as a proof that passed.
+func noPython(t *testing.T) {
+	t.Helper()
+	if os.Getenv("DGO_ORACLE_REQUIRED") == "1" {
+		t.Fatal("DGO_ORACLE_REQUIRED=1 and no python with PyYAML on PATH")
+	}
+	t.Skip("no python with PyYAML on PATH")
+}
+
+// TestJSONStylesMatchPython runs json.dumps itself for each spelling — CanonicalJSON, FlaskJSON
+// (Flask's jsonify) and SortedJSON (Python's default separators) — on one document holding what the
+// spellings treat differently: Hebrew, a character above U+FFFF, DEL, a control, quotes, a backslash,
+// floats and nesting.
+func TestJSONStylesMatchPython(t *testing.T) {
+	py := python(t)
+	if py == nil {
+		noPython(t)
+	}
+	doc := "b: \"א \U0001F600 \\x7f \\x01 \\t q\\\" \\\\ ok\"\na: [1.5, -0.0, 100, {z: null, y: true}]\n"
+	f := filepath.Join(t.TempDir(), "doc.yaml")
+	if err := os.WriteFile(f, []byte(doc), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	v, err := Unmarshal([]byte(doc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range []struct {
+		dump func(any) string
+		args string
+	}{
+		{FlaskJSON, `ensure_ascii=True, separators=(",", ":")`},
+		{SortedJSON, `ensure_ascii=False`},
+		{CanonicalJSON, `ensure_ascii=False, separators=(",", ":")`},
+	} {
+		code := `import sys, json, yaml
+d = yaml.safe_load(open(sys.argv[1], encoding="utf-8"))
+sys.stdout.write(json.dumps(d, sort_keys=True, ` + s.args + `))`
+		cmd := exec.Command(py[0], append(py[1:], "-c", code, f)...)
+		cmd.Env = append(os.Environ(), "PYTHONUTF8=1", "PYTHONIOENCODING=utf-8")
+		want, err := cmd.Output()
+		if err != nil {
+			t.Fatalf("python: %v", err)
+		}
+		if got := s.dump(v); got != string(want) {
+			t.Errorf("json.dumps(%s):\n got  %s\n want %s", s.args, got, want)
+		}
+	}
+}
+
+// TestIndentJSONIsPythons: IndentJSON is json.dumps(indent=2, ensure_ascii=False) — the registries'
+// and resolved.json's spelling — on what they hold: insertion order, empty and nested collections,
+// Hebrew and a character past U+FFFF as themselves, controls escaped, Python's floats, null.
+func TestIndentJSONIsPythons(t *testing.T) {
+	py := python(t)
+	if py == nil {
+		noPython(t)
+	}
+	docs := []string{
+		`{"z": 1, "a": [], "m": {}, "n": [[], {}, [1, [2, {"k": null}]]], "s": "א 😀 \u0001 \t \" \\ /", "f": [1.5, -0.0, 100.0, 1e-07, 1e+16]}`,
+		`[]`, `{}`, `"x"`, `[{"apps": [{"id": "a", "capabilities": [{"name": "x", "required_ops": ["r"]}], "endpoint": null}]}]`,
+	}
+	const pyIndent = `import sys, json
+sys.stdout.write(json.dumps([json.dumps(json.loads(d), indent=2, ensure_ascii=False) for d in json.load(sys.stdin)]))`
+	var want []string
+	if err := json.Unmarshal(pyRun(t, py, pyIndent, docs), &want); err != nil {
+		t.Fatal(err)
+	}
+	for i, d := range docs {
+		v, err := LoadJSON(d)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := IndentJSON(v); got != want[i] {
+			t.Errorf("doc %d:\n--- go ---\n%s\n--- python ---\n%s", i, got, want[i])
+		}
+	}
+	t.Logf("%d documents spelled as json.dumps(indent=2, ensure_ascii=False) spells them", len(docs))
+}
+
+// TestAnchorsAsSafeDumpWritesThem: the anchor and alias shapes PyYAML's safe_dump writes for an
+// object that appears twice — the compiler's console registry has one per linked-office tile (its
+// label) — against PyYAML itself.
+func TestAnchorsAsSafeDumpWritesThem(t *testing.T) {
+	py := python(t)
+	if py == nil {
+		noPython(t)
+	}
+	docs := []string{
+		"- id: bina.macbook\n  label: &id001\n    he: \u05d4\u05de\u05e7\u05d1\u05d5\u05e7\n    en: MacBook\n  remote:\n    office: macbook\n    label: *id001\n    commit: ''\n",
+		"- &id001\n  k: 1\n- *id001\n- k: 2\n",
+		"a: &id001 {}\nb: *id001\nc: &id002 []\nd: *id002\n",
+		"a: &id001\n- x\n- y\nb: *id001\n",
+		"a: &id001\n  - x\nb:\n  c: *id001\n",
+		"- &t {id: a}\n- *t\n",
+		"a: &x\nb: *x\n",
+	}
+	dir := t.TempDir()
+	for n, doc := range docs {
+		f := filepath.Join(dir, "doc.yaml")
+		if err := os.WriteFile(f, []byte(doc), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		cmd := exec.Command(py[0], append(py[1:], "-c", oracle, f)...)
+		cmd.Env = append(os.Environ(), "PYTHONUTF8=1", "PYTHONIOENCODING=utf-8")
+		want, err := cmd.Output()
+		if err != nil {
+			t.Fatalf("doc %d: PyYAML itself failed: %v", n, err)
+		}
+		v, err := Unmarshal([]byte(doc))
+		if err != nil {
+			t.Errorf("doc %d: %v", n, err)
+			continue
+		}
+		if got := CanonicalJSON(v); got != string(want) {
+			t.Errorf("doc %d:\n got  %s\n want %s", n, got, want)
 		}
 	}
 }

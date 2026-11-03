@@ -34,7 +34,7 @@
 set -u
 DK="docker -H unix:///run/bbox-docker.sock"
 PSQL="$DK exec -i supabase-db-shlomo-laptop psql -U postgres -tAc"
-ENVF=/mnt/c/Users/user/Desktop/personalWorkspace/AutomateOs/deployment-bina-comp/.env
+ENVF=/mnt/c/Users/user/Desktop/personalWorkspace/AutomateOs/deployment-hacohen/.env
 REPO=incoming-documents-main
 BFF=http://incoming-documents:8080/incomingDocuments
 

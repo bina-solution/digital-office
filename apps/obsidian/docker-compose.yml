@@ -1,0 +1,86 @@
+# obsidian — the owner's vault (Obsidian) served INSIDE the office, as a web app.
+#
+# WHAT RUNS HERE. Ignis (https://github.com/Nystik-gh/ignis, AGPL-3.0): a compatibility shim that
+# implements the Electron APIs Obsidian calls, so the REAL Obsidian — downloaded from its official
+# source on first start, never redistributed here — runs on this server and is served to the browser.
+# Not a remote desktop, not a clone: the app itself, with the community plugins it can load.
+#
+# THE VAULT IS ONE FOLDER, ONE COPY. `OBSIDIAN_VAULT_HOST` names it — an absolute path — when the
+# vault lives on the machine already (an owner's synced vault on a laptop). Left empty, the vault is
+# the named volume `obsidian_vault`: on a server office, that volume IS the vault, kept with the
+# office's data. There is no second copy and no sync job. A synced folder edited from two places at
+# once can produce a conflicted copy, so it is edited in one place at a time.
+#
+# NO SECRET IS MOUNTED HERE, and no authentication lives in this container: it answers on the office
+# network only, and the edge (Traefik + Authentik, `auth: sso` in app.json) is the front door.
+services:
+  obsidian:
+    # Pinned: an update is a decision, never a surprise (gate G-image-pin). The image is multi-arch
+    # (amd64 + arm64), so the same tag is the right one on this ARM64 host and on an x86 server.
+    image: nobbe/ignis:0.8.16
+    container_name: obsidian-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: obsidian
+    restart: unless-stopped
+    # The console frames this app on its own host, and Obsidian reads a property of its TOPMOST
+    # window at boot — a cross-origin parent makes that throw and the frame stays empty.
+    # frame-shim.sh adds the one line that fixes it to Ignis's page template, then hands over to the
+    # image's own entrypoint, named here because overriding `entrypoint` drops the image's. It is
+    # pinned with the image tag above: check it whenever that tag moves.
+    entrypoint: ["/bin/sh", "/office/frame-shim.sh", "/app/apps/ignis-server/scripts/entrypoint.sh"]
+    environment:
+      # The upstream defaults; stated because a host folder mounted through virtiofs or Windows arrives
+      # owned by root — Ignis must write as the identity that actually can (bina-ds does the same).
+      - PUID=${OBSIDIAN_PUID:-0}
+      - PGID=${OBSIDIAN_PGID:-0}
+      - TZ=${TZ:-UTC}
+      # A network filesystem (a synced folder via virtiofs) is slow at many small reads; more file
+      # operations in flight is what keeps the editor responsive.
+      - UV_THREADPOOL_SIZE=${OBSIDIAN_UV_THREADPOOL_SIZE:-32}
+      # A laptop office is HTTP on *.localhost (a secure context in the browser), so the TLS-only
+      # features of the shim must not refuse to start there; a server office is HTTPS at the edge.
+      - DEBUG=${OBSIDIAN_DEBUG:-}
+    volumes:
+      # The vault, the one Ignis serves: a host folder when OBSIDIAN_VAULT_HOST names one (a path), else
+      # the named volume — the short form decides by the source's shape. Its own `.obsidian` (plugins,
+      # themes, workspace) is the app's business — that is Obsidian's config, not ours.
+      - ${OBSIDIAN_VAULT_HOST:-obsidian_vault}:/vaults/vault
+      # Ignis state (server plugins, sync configuration) — ours, and it must survive the container.
+      - obsidian_state:/app/data
+      # The downloaded Obsidian + headless CLI: a cache, but re-downloading it on every recreate is
+      # a minute of downtime this volume removes.
+      - obsidian_app:/app/obsidian-app
+      - ./frame-shim.sh:/office/frame-shim.sh:ro
+    networks:
+      - traefik-network
+    # WHAT THIS APP COSTS - MEASURED, 2026-10-06, on the tablet (4 GB / 6-core VM) with the owner's
+    # vault open in a real browser: 0 % CPU and ~120 MiB, no Chromium in the container (Obsidian's UI
+    # runs in the VISITOR'S browser; this container only serves the app and the files). The vault is
+    # 116 files / 3 MB and a full walk through the `/mnt/c` bridge takes 0.13 s.
+    #
+    # An earlier version of this comment blamed this app (and "a second Chromium" here) for the
+    # tablet freezing at load 188. That was wrong: the freezes were the VM running out of memory as a
+    # whole - the office browser, the sign-in stack, the agent's builds and this app's first start
+    # all at once, with 3 GB already in swap. The fix for that lives on the machine (swappiness,
+    # earlyoom, the browser's memory limit), not here.
+    #
+    # The limits below are a seatbelt, not a diagnosis: no app on a 4 GB machine gets to grow unseen.
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 768M
+    healthcheck:
+      # `node`, never curl/wget: this is a Node image and the office's images are slim by design.
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      # The FIRST start downloads Obsidian from the official source before it binds the port.
+      start_period: ${OBSIDIAN_START_PERIOD:-180s}
+networks:
+  traefik-network:
+    external: true
+volumes:
+  obsidian_vault:
+  obsidian_state:
+  obsidian_app:

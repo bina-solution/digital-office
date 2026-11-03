@@ -25,8 +25,11 @@
 # room is a question for `docker stats` against the running 36-service render — measured evidence
 # this repo does not currently have (packaging/OPTIMISATION.md's numbers predate this app set).
 #
-# REDUCTION TARGET: every profile at <= 2.5x. The concentration is n8n (~17 GiB declared across its
-# containers) and glitchtip (~6 GiB, and a candidate for the gallery). Do the measurement first.
+# REDUCTION TARGET: every profile at <= 2.5x. The concentration is n8n and glitchtip; measured
+# 2026-10-16 against the ENABLED 22-app set, the declared sum is 38.2 GiB of which n8n is 20.5 GiB
+# (54%) and glitchtip 2.2 GiB — n8n was 27.5 GiB until that day's cap reduction (see `ci-small`).
+# Do the measurement first: that reduction came from the n8n file's own "limit >= heap x 1.3" rule
+# and from peaks measured on a running office, not from a target that the totals had to reach.
 # ────────────────────────────────────────────────────────────────────────────────────────────────
 #
 # Note what these profiles do NOT size: memory is parameterised for exactly one service
@@ -56,7 +59,28 @@
 ci-small:        # 2 vCPU GitHub runner
   requires: { cores: 1, mem_gb: 5 }   # floor profile — must match the weakest supported machine
   host_mem: 7G          # standard GitHub-hosted runner
-  mem_overcommit: 5.5   # today's reality on a 7G runner — see REDUCTION TARGET above
+  mem_overcommit: 5.5   # 7G x 5.5 = 38.5 GiB budget; the declared sum is 38.2 GiB (2026-10-16)
+  # ── WHY 5.5, re-derived 2026-10-16 ───────────────────────────────────────────────────────────
+  # It is the ratio the running set FITS INTO on this envelope, and the numbers were brought down
+  # TO it rather than it being raised to admit them: the n8n caps that were above their own rule
+  # came down (3 runner sidecars 4G -> 2G at heap 1536 x 1.3 = 1997M; 2 workers 4G -> 3.5G at
+  # 2600 x 1.3 = 3380M), which is 45.2 -> 38.2 GiB. Raising the ratio instead would be the mistake
+  # the `wsl-10g` note below records in full: a budget that starts selecting a memory limit stops
+  # measuring the machine and starts designing it, and it once put a measured OOM-storm
+  # configuration (5 PDF slots in a 4 GiB cgroup) into a live container. The ORDERING RULE stands:
+  # safety-critical limits are chosen from measured behaviour first, and the ratio is then set to
+  # whatever admits them.
+  # 5.5 is still not an endorsement — it is 5.5x on a 2-vCPU / 7.8 GiB box and the REDUCTION TARGET
+  # at the top of this file stands at <= 2.5x. What HAS been checked is the number that predicts
+  # real failure: G30b, observed peak vs PHYSICAL. MEASURED 2026-10-16 on the office this profile
+  # actually drives (scripts/ops/peak-sampler.sh run on the host; cgroup `memory.peak`, so a true
+  # kernel high-water and not a polling lower bound; 53 samples at 20 s over ~18 min, IT load
+  # generated through the office's own memory probe): the worst-case envelope over the 46 running
+  # `-staging` containers is 18794 MiB = 236% of that box's 7952 MiB, swap 100% full — and 205%
+  # even discounting the one container in it that no compose file declares any more. So on THIS
+  # machine the budget passing is not the binding constraint: DEMAND is, exactly as G30b's own
+  # remedy says. The answer is demand reduction (scripts/ops/quiet-mode.sh, and retiring containers
+  # the render no longer declares), NOT a larger ratio and NOT caps below their measured peaks.
   # host_cpus / cpu_overcommit — the CPU twin of host_mem / mem_overcommit, checked by gate G65
   # (scripts/refactor/cpu-budget-lint.py). scripts/perf-profile-apply renders the plan,
   # .generated/cpu-budget.yml: every enabled service's `cpus` cap scaled by budget/declared_sum
@@ -115,6 +139,77 @@ ci-small:        # 2 vCPU GitHub runner
     APITOOLS_MAX_CONCURRENT_OCR: 1
     APITOOLS_CPUS: '2.0'    # compose cpus is env-driven now — the CI cap step regex
     APITOOLS_MEM: '3G'      # no longer sees a literal, so every profile MUST set these
+  settings:
+    perf_extract_fanout: 2
+    perf_scan_take: 25
+    perf_sync_chunk: 10
+    perf_batch_upsert: 10
+    perf_main_jitter_max_s: 0
+    perf_line_poll_s: 15
+    perf_lock_ttl_s: 480
+    perf_test_budget_scale: 1.5
+
+vps-2core:       # 2-vCPU / 8 GiB VPS (fireplace, Hostinger KVM 2) — added 2026-10-26
+  # WHY THIS PROFILE EXISTS. The selector handed a 2-core / 7.8 GiB box `ci-small`, whose CPU
+  # envelope says host_cpus 4 x 4.0 = 16 vCPU — a budget EIGHT times the machine — and `vps`
+  # (requires 3 cores) could not fit. MEASURED on fireplace 2026-10-26 (cgroup cpu.stat and
+  # memory.stat of all 62 containers, 16 samples over 10 min, a transcription running):
+  #   * the recorder (meet-jibri) had been scaled to 0.48 of a core and lost 2.6% of a call
+  #     (issues/meet-recorder-throttled-to-half-a-core-recordings-lose-sound-and-time.yaml);
+  #   * every container but the transcriber used < 0.03 core, yet the 0.10-0.15 caps the plan
+  #     left them throttled their own health probes: meet-start 337 throttled periods, plane-db
+  #     240, app-management 187, plane-minio 163, connections 114 in 8 minutes; PSI cpu "some"
+  #     read 34-41% on a box whose containers summed 1.2 cores. A throttled task is a stalled
+  #     task, so the pressure the caps CAUSED was being read as the pressure they guard against;
+  #   * memory: containers held 4.9 GiB anonymous plus 3.9 GiB in swap (swap 4041/4095 MiB): the
+  #     set does not fit the box. apitools' 4 gunicorn workers (413 MiB) were swapped out whole,
+  #     idle; browser42 (720 MiB resident + 490 MiB swapped) was on against the owner's rule.
+  requires: { cores: 2, mem_gb: 7 }
+  host_mem: 8G
+  # 48 GiB of declared limits on 8 GiB (G30, 2026-10-26, browser42 on; 46.4 GiB with it off and
+  # APITOOLS_MEM at 2G). Written down as what the set IS, per the REDUCTION TARGET above — not an
+  # endorsement. On one host the caps protect nothing (G30); what fits is DEMAND, measured above,
+  # and the remedy is the demand reduction this profile and its env carry.
+  mem_overcommit: 6.0
+  host_cpus: 2
+  # cpu_overcommit — READ THIS BEFORE "FIXING" IT DOWN TO 3.0. The ratio is LARGER than on the big
+  # machines, on purpose, and on numbers:
+  #   * seven services declare a floor (reservations.cpus) — apitools 1, apitools-asr 1, jibri 2,
+  #     jvb 1, console 0.5, traefik 0.5, authentik-postgres 0.25 = 6.25 vCPU. The plan holds a floor
+  #     AT its value and scales the rest, so any budget under ~7 scales EVERY other service to the
+  #     0.1 floor: that is 0.1 of a core for the sign-in, the databases, n8n and Plane;
+  #   * on two cores the caps are not what protects the recorder — the weights are (jibri
+  #     cpu_shares 16384, jvb 8192, the transcriber 2) and the kernel can only hand out 2 cores
+  #     whatever the quotas sum to. A cap below a service's own probe cost adds throttling and
+  #     latency and protects nothing: the 2026-09-30 storm this gate was written for was 47 vCPU
+  #     of quota on 4 cores with health probes every 30 s; here the probes are 90 s apart and
+  #     the idle set uses 0.4 core;
+  #   * 2 x 10 = 20 vCPU: the floors (6.25) plus the rest at ~0.4 — the sign-in at ~0.8, Plane and
+  #     n8n's workers at ~0.8, a 0.5 service at ~0.2 — and every cap is still at most the box.
+  cpu_overcommit: 10.0
+  env:
+    HEALTHCHECK_INTERVAL: 90s   # see the note under ci-small: the probes were the storm
+    HEALTHCHECK_TIMEOUT: 30s
+    # n8n on fireplace runs ~500 executions a DAY (2026-10-22..26, execution_entity) — 20 an hour —
+    # on two workers of 4 slots each plus a webhook process. 2 x 2 slots is four parallel
+    # executions on two cores, which is already more than the cores can run at once.
+    N8N_WORKER_CONCURRENCY: 2
+    N8N_RUNNERS_MAX_CONCURRENCY: 2   # == N8N_WORKER_CONCURRENCY, per the compose rule
+    # apitools here serves the transcriber's sibling (ocr/ledger are not on this office's path):
+    # its 4 workers sat idle and swapped out whole (413 MiB of swap, 4 MiB resident). Two workers
+    # keep the OCR-slot invariant (slots < workers) and halve the idle footprint.
+    APITOOLS_GUNICORN_WORKERS: 2
+    APITOOLS_MAX_CONCURRENT_JSON_QUERY: 2
+    APITOOLS_MAX_CONCURRENT_OCR: 1
+    APITOOLS_CPUS: '1.0'    # its own floor; the plan gives it exactly this on two cores anyway
+    APITOOLS_MEM: '2G'      # OCR 1 slot, PDF slots derive to 1 (autoscale: (2-0.7)/0.9) — no storm shape
+    # authentik's worker forks AUTHENTIK_WORKER__CONCURRENCY celery processes (default 2, ~190 MiB
+    # each, measured 2026-10-26: 327 MiB resident for an office with one admin). One is enough.
+    AUTHENTIK_WORKER_CONCURRENCY: 1
+    # authentik-bootstrap is `sleep infinity` after bring-up, but its 10 s probe is a python
+    # interpreter plus an API call: 877 throttled periods in 8 minutes at its 0.15 cap, the busiest
+    # "idle" container on the box. A minute between probes costs bring-up nothing measurable.
+    AUTHENTIK_BOOTSTRAP_PROBE_INTERVAL: 60s
   settings:
     perf_extract_fanout: 2
     perf_scan_take: 25

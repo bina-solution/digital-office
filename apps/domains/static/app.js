@@ -194,6 +194,12 @@ async function api(path, opts) {
   if (!r.ok && !body.error && !body.detail) body = Object.assign({}, body, { error: binaSaid(r.status) });
   return { ok: r.ok, status: r.status, body };
 }
+// ONE IS SAID AS ONE (G86): a count of one is its own sentence — «1 דומיינים» is not Hebrew — and
+// every other count is the number with the plural. The rule is written out in
+// apps/mail/mailview/static/app.js.
+const num = (n) => Number(n).toLocaleString('he-IL');
+const one = (n, single, many) => (Number(n) === 1 ? single : `${num(n)} ${many}`);
+
 const esc = Store.esc;
 
 const ACCESS = { browser: ['מחובר בדפדפן', 'warn'], api: ['דרך API', 'plain'],
@@ -205,7 +211,9 @@ const accessChip = (a) => {
 function expiryCell(d) {
   const days = d.days_left;
   if (days == null) return '<span class="exp unknown">—</span>';
-  const label = days < 0 ? `פג לפני ${-days} ימים` : `${days} ימים`;
+  const label = days < 0
+    ? (-days === 1 ? 'פג לפני יום אחד' : `פג לפני ${-days} ימים`)
+    : (days === 1 ? 'יום אחד' : `${days} ימים`);
   return `<span class="exp ${esc(d.expiry_state || 'unknown')}">${esc(label)}</span>
     <div class="note ltr">${esc(d.expiry_iso || '')}</div>`;
 }
@@ -258,6 +266,21 @@ function errorTarget() {
 }
 const go = (hash) => { location.hash = hash; };
 window.addEventListener('hashchange', render);
+
+/* ── the screen the shell hands over is a PATH, and this app's route is its hash ───────────────────
+   The console's tail IS the app's own URL under its mount — `#/m/domains/a/1/d/x/records` arrives as
+   `/a/domains/a/1/d/x/records` — while everything above routes on `location.hash`. So the arriving
+   path is translated ONCE, on load, into the app's own grammar; from there nothing changes.
+   Measured 2026-10-12: without this the deep link opened the app and IGNORED the screen it named
+   (there was no reference to `location.pathname` in this file at all — gate G83 now asks for it). */
+(function adoptPath() {
+  try {
+    const mount = new URL(document.baseURI).pathname.replace(/\/+$/, "");
+    const p = location.pathname;
+    const rest = mount && p.indexOf(mount) === 0 ? p.slice(mount.length) : p;
+    if (rest && rest !== "/" && !location.hash) location.hash = rest;
+  } catch (e) { /* no path to adopt: the app opens where it always did */ }
+})();
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDrawer(); });
 
 // ── boot ─────────────────────────────────────────────────────────────────────────────────────────
@@ -372,7 +395,7 @@ async function homeView(accountId) {
   $('state').className = 'live';
   $('state').innerHTML = Store.fresh(a) + ' ';
   $('state').textContent = S.accounts.length
-    ? `${S.accounts.length} חשבונות · ${chosenLabel}` : 'אין חשבונות';
+    ? `${one(S.accounts.length, 'חשבון אחד', 'חשבונות')} · ${chosenLabel}` : 'אין חשבונות';
 
   const cards = S.accounts.map((x) => `
     <div class="acct ${x.id === chosen ? 'active' : ''}" data-aid="${esc(x.id)}">
@@ -450,7 +473,7 @@ async function loadAccountDomains(aid, sync) {
                 registry: 'נקרא מהרישום הציבורי' }[r.body.source] || r.body.source;
   box.innerHTML = `
     <h3>הדומיינים של החשבון ${r.body._fresh || ''}
-      <span class="hint">${esc(src)} · ${S.domains.length} דומיינים</span>
+      <span class="hint">${esc(src)} · ${one(S.domains.length, 'דומיין אחד', 'דומיינים')}</span>
       <button class="btn" id="do-sync">סנכרן למעקב</button></h3>
     ${sync && r.body.synced ? `<div class="out ok">נוספו: ${esc((r.body.synced.added || []).join(', ') || '—')} · עודכנו: ${esc((r.body.synced.updated || []).join(', ') || '—')}</div>` : ''}
     <table class="grid-t"><thead><tr><th>דומיין</th><th>תוקף</th><th>שרתי שמות</th>
@@ -659,6 +682,28 @@ function actionAllowed(d, action) {
   if (w.actions && w.actions[action] === false) return false;
   return !!w.enabled || (w.actions || {})[action] === true;
 }
+/** A write the source CAN do but whose script no person has yet watched succeed (DGO-1032). The
+ * server refuses it without `allow_draft_write`; the drawer asks for that consent BEFORE the save,
+ * because a refusal after the click reads as a bug. */
+function needsWatch(d, action) {
+  const w = d.write || {};
+  return w.enabled === false && ['draft', 'observed'].includes(w.state) &&
+    (w.actions || {})[action] === true && !(w.watched || {})[action];
+}
+/** The record types the source's writer fills whole (`write.types`); any type, when it does not say. */
+function typeWritable(d, type) {
+  const types = (d.write || {}).types;
+  return !Array.isArray(types) || types.includes(type);
+}
+function watchBox() {
+  return `<div class="issue warn" id="d-watch-box">
+      <label style="display:flex;gap:8px;align-items:center;margin:0 0 6px">
+        <input type="checkbox" id="d-watch" style="width:auto;flex:none;padding:0;margin:0">
+        <span>אני צופה בדפדפן של הלשכה — הרץ את השינוי הזה פעם אחת</span></label>
+      <div class="note">הפורטל נפתח בדפדפן של הלשכה והשינוי נעשה שם מול עיניך. בסוף הרשומות נקראות חזרה מהפורטל, וכך רואים אם השינוי נשמר. אחרי הצלחה אחת, הלשכה תוסיף רשומות בפורטל הזה בלי לשאול.</div>
+      <div style="margin-top:8px"><a class="btn" href="/a/browser42/" target="_blank" rel="noopener">
+        פתח את הדפדפן של הלשכה ↗</a></div></div>`;
+}
 
 // ── the drawer: ONE record, edited in place, saved once ─────────────────────────────────────────
 function drawerEl() {
@@ -710,6 +755,7 @@ function openDrawer(aid, domain, key) {
       <div class="note" id="d-ttl-why"></div>
       <div id="d-warn"></div>
       <div id="d-diff"></div>
+      ${needsWatch(d, isNew ? 'create' : 'update') ? watchBox() : ''}
       <div id="d-out" class="out hidden"></div>
     </div>
     <div class="drawer-foot">
@@ -735,6 +781,7 @@ function openDrawer(aid, domain, key) {
     $(id).oninput = refresh;
     $(id).onchange = refresh;
   });
+  if ($('d-watch')) $('d-watch').onchange = refresh;
   $('d-save').onclick = async () => {
     const v = read();
     const btn = $('d-save');
@@ -744,6 +791,7 @@ function openDrawer(aid, domain, key) {
                    before: isNew ? null : { id: rec.id, type: rec.type, name: rec.name,
                                             content: rec.content, ttl: rec.ttl } };
     if (v.priority) body.priority = Number(v.priority);
+    if ($('d-watch') && $('d-watch').checked) body.allow_draft_write = true;
     const res = await Store.run(
       `api/accounts/${encodeURIComponent(aid)}/domains/${encodeURIComponent(domain)}/records`,
       body, { title: `${isNew ? 'הוספת' : 'עדכון'} רשומה · ${domain}` });
@@ -754,10 +802,12 @@ function openDrawer(aid, domain, key) {
       waitForJob(res.id, () => {
         Store.invalidate('');
         go(`#/a/${aid}/d/${encodeURIComponent(domain)}/records`);
+      }, () => {                // a failed job says "try again": Save comes back by the rules (the reader) —
+        if ($('d-save') === btn) refresh();   // in THIS drawer only: another one opened since has its own
       });
       return;
     }
-    btn.disabled = false;
+    refresh();                  // every rule again — `disabled = false` ignored the watch box (the reader)
     if (res.ok && res.body.ok !== false) {
       out($('d-out'), 'נשמר — והרשומות נקראו חזרה מהספק.', 'ok');
       Store.invalidate('');
@@ -835,10 +885,20 @@ function paintWarnings(d, rec, v, isNew) {
   if (v.type === 'AAAA' && v.content && !v.content.includes(':')) {
     warn.push(['err', 'AAAA מקבלת כתובת IPv6 בלבד.']);
   }
+  // a type the source's writer does not fill is said here, not refused after the click (the second
+  // reader of DGO-1032: the watch box was offered for MX, NS, SRV and CAA)
+  const writable = !isNew || typeWritable(d, v.type);
+  if (!writable) {
+    warn.push(['err', `רשומת ${v.type} עוד לא ממופה לכתיבה כאן — אפשר להוסיף אותה ידנית בפורטל.`]);
+  }
+  if ($('d-watch-box')) $('d-watch-box').style.display = writable ? '' : 'none';
   box.innerHTML = warn.map(([k, t]) =>
     `<div class="issue ${k === 'err' ? 'err' : 'warn'}">${esc(t)}</div>`).join('');
   const save = $('d-save');
-  if (save) save.disabled = warn.some(([k]) => k === 'err') || !v.content;
+  // the rules here only ever ADD a reason to wait: an action the source cannot do, or a draft write
+  // nobody has said they are watching, stays disabled however valid the record is
+  if (save) save.disabled = warn.some(([k]) => k === 'err') || !v.content ||
+    !actionAllowed(d, isNew ? 'create' : 'update') || !!($('d-watch') && !$('d-watch').checked);
 }
 /** What the change will BE, before it is made — the single most useful block in a DNS editor. */
 function paintDiff(rec, v, isNew) {
@@ -850,7 +910,7 @@ function paintDiff(rec, v, isNew) {
   const changed = rows.filter(([, a, b]) => String(a) !== String(b));
   box.innerHTML = `<div class="diff">
     <div class="note" style="margin-bottom:6px">${isNew ? 'הרשומה שתיווצר'
-      : (changed.length ? `${changed.length} שדות משתנים` : 'אין שינוי')}</div>
+      : (changed.length ? one(changed.length, 'שדה אחד משתנה', 'שדות משתנים') : 'אין שינוי')}</div>
     <table>${rows.map(([k, a, b]) => `<tr class="${String(a) === String(b) ? '' : 'chg'}">
       <td class="note">${esc(k)}</td><td class="ltr old">${esc(a)}</td>
       <td class="ltr new">${String(a) === String(b) ? '' : '→ ' + esc(b)}</td></tr>`).join('')}</table></div>`;
@@ -880,8 +940,9 @@ function typedDelete(rec, run) {
   $('d-confirm').focus();
 }
 
-/** Follow a job to its end, then do `then` — the screen never guesses that a job finished. */
-function waitForJob(id, then) {
+/** Follow a job to its end, then do `then` (or `failed`, after the error is shown) — the screen never
+ * guesses that a job finished. */
+function waitForJob(id, then, failed) {
   const tick = setInterval(() => {
     const j = Store.jobById(id);
     if (!j) return;
@@ -890,6 +951,7 @@ function waitForJob(id, then) {
       clearInterval(tick);
       showError(errorTarget(), refusalOf(j) ||
         { error: j.error || j.message || 'העבודה נכשלה' });
+      if (failed) failed(j);
     }
   }, 800);
   return tick;
@@ -978,11 +1040,13 @@ async function tabActivity(d) {
     { ttl: 20 });
   const evs = ((res.value || {}).events) || [];
   const KIND = { dns_create: 'נוצרה רשומה', dns_update: 'עודכנה רשומה', dns_delete: 'נמחקה רשומה',
+                 dns_create_failed: 'הוספת רשומה — לבדוק בפורטל', dns_update_failed: 'עדכון רשומה — לבדוק בפורטל',
+                 dns_delete_failed: 'מחיקת רשומה — לבדוק בפורטל',
                  dns_write: 'כתיבה ברשומות', revert: 'בוטל שינוי', sync: 'סנכרון',
                  account_connected: 'חיבור חשבון', whois: 'בדיקת תוקף', remove: 'הסרה מהמעקב' };
   $('tab').innerHTML = `
     <div class="bar-row"><h3 style="font-size:14px;margin:0">יומן שינויים
-      <span class="hint">${Store.fresh(res)} · ${evs.length} רשומות</span></h3></div>
+      <span class="hint">${Store.fresh(res)} · ${one(evs.length, 'רשומה אחת', 'רשומות')}</span></h3></div>
     ${evs.length ? evs.map((e) => {
       const m = e.meta || {};
       const a = m.after || {}, b = m.before || {};
@@ -1097,7 +1161,7 @@ async function browserFlow(p) {
   const d = r.body || {};
   if (d.step === 'connected') {
     const n = (d.evidence || {}).count;
-    body.innerHTML = `<div class="out ok">החשבון מחובר ומאומת${n ? ` — נקראו ${n} דומיינים מהחשבון` : ''}.</div>`;
+    body.innerHTML = `<div class="out ok">החשבון מחובר ומאומת${n ? (n === 1 ? ' — נקרא דומיין אחד מהחשבון' : ` — נקראו ${n} דומיינים מהחשבון`) : ''}.</div>`;
     setTimeout(() => go('#/'), 1200);
     return;
   }

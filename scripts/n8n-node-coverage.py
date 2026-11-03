@@ -18,7 +18,7 @@ import os
 import subprocess
 import sys
 
-PG = ["docker", "exec", "n8n-postgres-shlomo-laptop", "psql", "-U", "bina-comp", "-d", "n8n",
+PG = ["docker", "exec", "n8n-postgres-shlomo-laptop", "psql", "-U", "hacohen", "-d", "n8n",
       "-t", "-A"]
 
 # The estate under the 85% bar: sync + state machine. Extractor/utility workflows are listed

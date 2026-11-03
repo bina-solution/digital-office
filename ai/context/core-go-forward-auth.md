@@ -272,7 +272,7 @@ $ cd platform-base/forward-auth
 $ gofmt -l .                        # (no output)
 $ go build ./...                    # BUILD OK
 $ go vet ./...                      # exit 0
-$ go test ./...                     # ok   github.com/solomonBoltin/deployment-bina-comp/platform-base/forward-auth   5.787s
+$ go test ./...                     # ok   github.com/solomonBoltin/deployment-hacohen/platform-base/forward-auth   5.787s
 $ go test -v ./...                  # 14 × --- PASS, then: ok … 5.787s
 $ docker build -t forward-auth:proposal .
     #11 [build 5/5] RUN CGO_ENABLED=0 go build … && CGO_ENABLED=0 go test ./...
@@ -642,7 +642,7 @@ $ cd platform-base/forward-auth
 $ gofmt -l .                    # (no output)
 $ go build ./...                # BUILD OK
 $ go vet ./...                  # exit 0
-$ go test ./...                 # ok  github.com/solomonBoltin/deployment-bina-comp/platform-base/forward-auth  21.303s
+$ go test ./...                 # ok  github.com/solomonBoltin/deployment-hacohen/platform-base/forward-auth  21.303s
 $ go test -v ./... | grep -c '^--- PASS'   → 28
 ```
 

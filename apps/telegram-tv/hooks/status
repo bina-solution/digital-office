@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+#: status — the Telegram account and the client: connected, and is it working:  ./bbox telegram-tv status
+# Pipes the app's own CLI (apps/telegram-tv/cli.py) into its container: no address, no key, no rebuild.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+dcx exec -T telegram-tv python - status < "$(npath "${REPO_ROOT}")/apps/telegram-tv/cli.py"

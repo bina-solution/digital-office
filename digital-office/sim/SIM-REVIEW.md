@@ -17,7 +17,7 @@ with `ALIGNMENT-CHANGELOG.md` (sim→live design port list) and `README.md` (arc
 - **Design is one system** — verified visually across all 15 panels of the generated UI-map: one
   dark-green sidebar, one accent, one Lucide-style stroke icon pack (no emoji-as-icons), one type
   stack, consistent card/topbar/RTL treatment. Business identity is consistent everywhere
-  (בינה פתרונות בע״מ · ת.פ 514789234 · person127@example.com).
+  (בינה פתרונות בע״מ · ת.פ 514789234 · person105@example.com).
 
 **Alignment layer (`align.js`, sim-only, tracked for live port):** canonical light-theme tokens +
 icon pack, applied at runtime, editing no real source. Every change catalogued in the changelog.

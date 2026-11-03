@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+#: read <message id> [--connection <id>] — one message: its headers, then its text quoted:  ./bbox mail read <id>
+# Pipes the app's own CLI (apps/mail/cli.py) into the mailview container, and its answer through the
+# operatives' formatter (apps/mail/operatives/lines.py --one), which quotes what the sender wrote.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+case "${1:-}" in -h|--help|"") sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+dcx exec -T mailview python - read "$@" < "$(npath "${REPO_ROOT}")/apps/mail/cli.py" \
+  | python3 "$(npath "${REPO_ROOT}/apps/mail/operatives/lines.py")" --one

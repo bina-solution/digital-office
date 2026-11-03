@@ -12,7 +12,7 @@ side — it hands one side's OUTPUT to the other side's READER:
   · the grouped display form (six groups, any spacing) survives the round trip in both directions;
   · a reply is routed by prefix on both sides and refused as an offer on both sides;
   · then the engine itself: two in-memory offices pair end to end (`pair_api.selftest`), and the
-    record validator's refusals hold (`declaration.selftest_paired`).
+    record validator's refusals hold (`declaration.selftest_paired`, `declaration.selftest_rules`).
 
     python3 apps/dgo-extend/tests/pair_contract.py        # non-zero exit on the first broken promise
 
@@ -131,6 +131,7 @@ def main() -> int:
 
     problems += [f"pairing.py: {x}" for x in pairing.selftest()]
     problems += [f"declaration.py: {x}" for x in declaration.selftest_paired()]
+    problems += [f"declaration.py: {x}" for x in declaration.selftest_rules()]
     problems += [f"pair_api.py: {x}" for x in pair_api.selftest()]
 
     # §9 (sec-010) — the trust boundary of a PAIRED office: what a peer may READ and DO over the link.

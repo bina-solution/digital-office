@@ -1,0 +1,12 @@
+[Unit]
+Description=Run the office watch once a minute
+
+[Timer]
+OnBootSec=2min
+OnCalendar=*-*-* *:*:30
+AccuracySec=5s
+Persistent=false
+Unit=office-watch.service
+
+[Install]
+WantedBy=timers.target

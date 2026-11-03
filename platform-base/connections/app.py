@@ -1,4 +1,4 @@
-"""connections — the single credential plane for deployment-bina-comp.
+"""connections — the single credential plane for deployment-hacohen.
 
 One declarative catalog (providers/*.yaml) describes EVERY secret/connection in the estate; a
 per-service manifest (manifests/*.yaml) declares what each service requires. Values are the only
@@ -13,15 +13,16 @@ state and warm-start from .env, resolved in a fixed order:
 
 Interfaces: HTTP API + this UI + cli.py (declarative-driven throughout).
 """
-import base64, glob, hashlib, html, json, os, secrets, socket, string, tempfile, threading, time, urllib.parse, urllib.request, urllib.error
+import base64, glob, hashlib, html, json, os, re, secrets, socket, string, tempfile, threading, time, urllib.parse, urllib.request, urllib.error
 from concurrent.futures import ThreadPoolExecutor
 
 import yaml
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 from flask import Flask, jsonify, request, Response
 
 import broker
 import identity
+import totp
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 VAULT_PATH = os.path.join(ROOT, "data", "vault.enc")
@@ -36,9 +37,36 @@ app = Flask(__name__)
 
 
 # ── vault: encrypted-at-rest KV, unlocked by ONE root key (secret-zero) ──
-def _fernet():
-    root = os.environ.get("CONNECTIONS_ROOT_KEY", "dev-root-key-not-for-production")
+#: The key a vault falls back to when CONNECTIONS_ROOT_KEY is unset. It is in this file, so a vault under it is
+#: readable by anyone who has the vault file (S26, hos-002); an office still on it is told so at start and moves
+#: off it with the two-key step below.
+DEV_ROOT_KEY = "dev-root-key-not-for-production"
+
+
+def _key(root):
     return Fernet(base64.urlsafe_b64encode(hashlib.sha256(root.encode()).digest()))
+
+
+def _fernet():
+    """The vault's keys. CONNECTIONS_ROOT_KEY encrypts; CONNECTIONS_ROOT_KEY_OLD (comma-separated) still
+    decrypts. That is how a key is REPLACED without losing a byte (hos-002): set the new key with the old
+    one beside it, restart, `rekey()` re-encrypts the vault under the new key, then drop the old."""
+    root = os.environ.get("CONNECTIONS_ROOT_KEY") or DEV_ROOT_KEY
+    olds = [k.strip() for k in (os.environ.get("CONNECTIONS_ROOT_KEY_OLD") or "").split(",") if k.strip()]
+    return MultiFernet([_key(root)] + [_key(k) for k in olds if k != root])
+
+
+class VaultUnreadable(RuntimeError):
+    """The vault file exists and none of the configured keys opens it."""
+
+
+#: Keys that are public: the code's fallback and .env.ex's placeholder.
+PUBLIC_ROOT_KEYS = {DEV_ROOT_KEY, "CHANGE_ME"}
+
+if (os.environ.get("CONNECTIONS_ROOT_KEY") or DEV_ROOT_KEY) in PUBLIC_ROOT_KEYS:
+    print("[connections] WARNING: the vault is encrypted with a PUBLIC key (the one in app.py or .env.ex's "
+          "placeholder): anyone with the vault file can open it. Replace it: a new CONNECTIONS_ROOT_KEY with the "
+          "old one in CONNECTIONS_ROOT_KEY_OLD, then restart — the vault re-encrypts itself (hos-002).", flush=True)
 
 
 # Connection ids that were RENAMED. {old: new} — applied on every read, so a deployment that predates
@@ -66,12 +94,31 @@ def _apply_renames(store):
 
 
 def vault_read():
+    """The vault's store. A vault the keys cannot open RAISES (VaultUnreadable): it used to read as `{}`, and
+    the next write persisted that empty store over every secret, so one changed CONNECTIONS_ROOT_KEY would
+    have wiped the vault with no error anywhere (found while making the key replaceable, hos-002)."""
     if not os.path.exists(VAULT_PATH):
         return {}
+    raw = open(VAULT_PATH, "rb").read()
     try:
-        return _apply_renames(json.loads(_fernet().decrypt(open(VAULT_PATH, "rb").read()).decode()))
-    except Exception:
-        return {}
+        plain = _fernet().decrypt(raw)
+    except InvalidToken:
+        raise VaultUnreadable(f"{VAULT_PATH}: no configured key opens the vault (CONNECTIONS_ROOT_KEY, "
+                              f"CONNECTIONS_ROOT_KEY_OLD) — refusing to read it as empty") from None
+    try:
+        return _apply_renames(json.loads(plain.decode()))
+    except ValueError:
+        raise VaultUnreadable(f"{VAULT_PATH}: decrypted but not a vault (not JSON)") from None
+
+
+def rekey() -> int:
+    """Re-encrypt the vault under CONNECTIONS_ROOT_KEY. Returns the number of top-level entries carried over.
+    Run by the SERVER itself at start while CONNECTIONS_ROOT_KEY_OLD is set (below), before it serves: a
+    `docker exec` process would hold its own lock, not the server's, and race a request's write."""
+    with _vault_lock:
+        store = vault_read()
+        vault_write(store)
+        return len(store)
 
 
 def vault_write(store):
@@ -85,6 +132,8 @@ def vault_write(store):
     try:
         with os.fdopen(fd, "wb") as f:
             f.write(_fernet().encrypt(json.dumps(store).encode()))
+            f.flush()
+            os.fsync(f.fileno())    # a sleep or a crash between write and rename must not leave a 0-byte vault
         os.replace(tmp, VAULT_PATH)
     except Exception:
         try:
@@ -252,7 +301,7 @@ def mask(v):
 
 
 # ── secret-base pillars: app-password | auth | infra (explicit `pillar:` or inferred) ──
-_AUTH_KINDS = {"oauth-client", "oauth-grant", "qr-session", "sa-key", "cert", "app-password"}
+_AUTH_KINDS = {"oauth-client", "oauth-grant", "qr-session", "sa-key", "cert", "app-password", "totp"}
 _APP_PW_HINTS = ("admin", "-auth", "bootstrap", "dashboard", "owner", "login")
 
 
@@ -318,7 +367,8 @@ def _resolve_app(prov):
 # The auth pillar is a protocol-aware credential manager; this names the protocol
 # so the UI can label it + pick the right connect/test lifecycle.
 _KIND_PROTOCOL = {"oauth-client": "oauth2", "oauth-grant": "oauth2", "qr-session": "qr",
-                  "sa-key": "service-account", "cert": "certificate", "app-password": "basic-auth"}
+                  "sa-key": "service-account", "cert": "certificate", "app-password": "basic-auth",
+                  "totp": "totp"}
 
 
 def _protocol(prov, pillar):
@@ -358,14 +408,14 @@ def _platform_protocols(prov):
 
 # ── multi-field credentials: a credential is its primary env + envs_extra companions.
 # The operator edits ALL of them here (n8n = email + password + names), never .env. ──
-_FIELD_LABELS = [("USERNAME", "שם משתמש"), ("_USER", "שם משתמש"), ("EMAIL", "אימייל"),
+_FIELD_LABELS = [("_TOTP", "סוד TOTP"), ("USERNAME", "שם משתמש"), ("_USER", "שם משתמש"), ("EMAIL", "אימייל"),
                  ("PASSWORD", "סיסמה"), ("_PASS", "סיסמה"), ("_PW", "סיסמה"),
                  ("FIRSTNAME", "שם פרטי"), ("LASTNAME", "שם משפחה"), ("_NAME", "שם"),
                  ("API_TOKEN", "טוקן API"), ("_TOKEN", "טוקן"), ("APIKEY", "מפתח API"),
                  ("API_KEY", "מפתח API"), ("_KEY", "מפתח"), ("SECRET", "סוד"),
                  ("_URL", "כתובת"), ("_HOST", "מארח"), ("_PORT", "פורט"),
                  ("_EMAIL", "אימייל"), ("_ID", "מזהה"), ("_IPS", "כתובות IP"), ("_DSN", "DSN")]
-_SECRET_HINT = ("PASSWORD", "_PASS", "_PW", "TOKEN", "SECRET", "_KEY", "APIKEY", "DSN")
+_SECRET_HINT = ("PASSWORD", "_PASS", "_PW", "TOKEN", "SECRET", "_KEY", "APIKEY", "DSN", "TOTP")
 
 
 def _field_label(key):
@@ -518,6 +568,14 @@ def probe(prov, source, value):
             return "needs_action", "scan QR to pair" if wa["has_qr"] else "bot connecting…"
         if prov.get("kind") in ("oauth-grant",):
             return ("healthy", "token stored") if source == "db" else ("needs_action", "click Connect")
+        if prov.get("kind") == "totp" and value:
+            # A stored secret that cannot mint a code is a failure the login would otherwise be the
+            # first to discover (a `.env`-seeded value is never validated on write). The parser
+            # names the fault, never the value.
+            try:
+                totp.parse(value)
+            except ValueError as e:
+                return "degraded", f"not a usable TOTP secret: {e}"
         if t == "http":
             with urllib.request.urlopen(p["url"], timeout=2.5) as r:
                 return ("healthy", f"HTTP {r.status}") if r.status < 400 else ("degraded", f"HTTP {r.status}")
@@ -588,7 +646,7 @@ def _row(cid, prov, reqs, store, minted=frozenset()):
             "kind": prov.get("kind"), "source": source, "masked": mask(value),
             "secret": secret, "clear": (None if (secret or is_derived) else value),
             "fields_count": (1 if prov.get("env") else 0) + n_extra,
-            "reveal_ok": prov.get("reveal_ok", True) and not is_derived,
+            "reveal_ok": prov.get("reveal_ok", True) and not is_derived and prov.get("kind") != "totp",
             "rotatable": ("automint" in prov) or bool(prov.get("rotate")),
             "impact": prov.get("impact") or cons, "rotate_warn": prov.get("rotate_warn"),
             "status": state, "detail": detail, "required": required, "optional": bool(prov.get("optional")),
@@ -630,8 +688,20 @@ def healthz():
     can still tell who is calling it" are different facts, and the second one degrading silently
     (docker socket gone -> every caller unidentified -> warn mode serves everyone) is precisely the
     failure this whole feature exists to prevent."""
-    return jsonify(ok=True, providers=len(catalog()),
+    try:
+        vault_read()
+        vault = "readable"
+    except VaultUnreadable:
+        vault = "unreadable"
+    return jsonify(ok=True, providers=len(catalog()), vault=vault,
                    broker={"mode": broker.MODE, "docker": identity.docker_available()})
+
+
+@app.errorhandler(VaultUnreadable)
+def _vault_unreadable(e):
+    """Every route that reads the vault says WHY when it cannot (a 503 with the reason), instead of a bare 500
+    that a consumer's inject.sh prints as HTML and boot-loops on (hos-002's second reader)."""
+    return jsonify(ok=False, error=str(e), vault="unreadable"), 503
 
 
 @app.get("/api/connections")
@@ -676,6 +746,17 @@ def api_reveal(cid):
     prov = catalog().get(cid) or custom_catalog(store).get(cid)
     if not prov:
         return jsonify(error="unknown connection"), 404
+    if prov.get("kind") == "totp":
+        # Write-once. A TOTP secret is never read back by a human — the plane mints codes from it —
+        # so the one route that returns real secrets refuses this kind over the network; only the
+        # operator inside this container (docker exec — the root key's holder anyway) still can.
+        # The screen never offers the button: `reveal_ok` is false for the kind (_row).
+        ident = broker.caller()
+        if ident.get("method") != "loopback":
+            broker.audit("reveal", "refuse", ident, connection=cid,
+                         reason="a TOTP secret is written once and never revealed over the network")
+            return jsonify(error="a TOTP secret is written once and never revealed over the network — "
+                                 "GET /api/totp/<id> mints its code; to move it, re-enrol at the provider"), 403
     field = (request.get_json(silent=True) or {}).get("field")
     if field and field != prov.get("env"):        # companion field
         dbv = store.get(f"{cid}:{field}")
@@ -695,6 +776,53 @@ def api_reveal(cid):
 def api_audit():
     """Recent secret-base events (reveal/edit/rotate/connect/revoke), newest first."""
     return jsonify(audit=list(reversed(vault_read().get("__audit__", [])))[:200])
+
+
+@app.get("/api/totp/<cid>")
+def api_totp(cid):
+    """Mint the CURRENT one-time code of a `totp` connection — `{code, next, expires_in}` — so a
+    consumer (the office browser passing «אימות דו-שלבי») types a code it was handed and never holds
+    the secret that makes it. The only read path for the kind: export and lease skip it, and `reveal`
+    stays the owner's deliberate, audited act.
+
+    Stricter than a lease, in EVERY mode: the caller must be identified from outside the request
+    (broker.caller — the docker socket, or loopback for the operator inside this container), must be
+    the service it names (`?service=`), and that service must declare this row in its own app.json
+    connections[]. `warn` mode's "serve the unidentified" exists for the boot injector's staged
+    rollout; a one-time code has no rollout. Every answer lands in the grant log; the code never does.
+
+    404 with the FIELD name when the row holds no secret yet — the consumer turns that into its named
+    refusal (`needs_totp_secret`) and the human handoff, instead of a guess."""
+    store = vault_read()
+    prov = catalog().get(cid) or custom_catalog(store).get(cid)
+    if not prov or prov.get("kind") != "totp":
+        return jsonify(error="not a totp connection", id=cid), 404
+    ident = broker.caller()
+    want = (request.args.get("service") or "").strip() or None
+    try:
+        if not ident.get("ok"):
+            # Before `authorize`, which serves an unidentified caller in warn mode: a caller the
+            # socket cannot name, or one presenting a container id it does not own, gets nothing
+            # here whatever the mode. The attempt is in the grant log.
+            raise broker.Refusal("caller could not be identified — a one-time code is never served to "
+                                 "an unidentified caller, in any mode: " + (ident.get("reason") or "unknown"))
+        svc, declared = broker.authorize(ident, want, service_requires)
+        if cid not in declared:
+            raise broker.Refusal(f"'{cid}' is not in {svc}'s declared connections[]")
+    except broker.Refusal as e:
+        broker.audit("totp", "refuse", ident, connection=cid, service_requested=want, reason=e.reason)
+        return jsonify(error=e.reason, decision="refuse", mode=broker.MODE), e.status
+    source, value = resolve(cid, prov, store)
+    if not value:
+        return jsonify(error="no TOTP secret stored", id=cid, field=prov.get("env")), 404
+    try:
+        minted = totp.mint(totp.parse(value))
+    except ValueError as e:
+        return jsonify(error=f"stored TOTP secret is not usable: {e}", id=cid, field=prov.get("env")), 409
+    # The grant log is this mint's record (who, which row, when). Not `_audit`: that is a whole-vault
+    # read-modify-write outside `_vault_lock`, racing every secret write — see api_instance_secret_put.
+    broker.audit("totp", "allow", ident, connection=cid, service_requested=svc, source=source)
+    return jsonify(id=cid, **minted)
 
 
 @app.post("/api/conn/<cid>/test")
@@ -720,9 +848,19 @@ def api_set(cid):
     v, field = b.get("value"), b.get("field")
     if v is None or v == "":
         return jsonify(error="value required"), 400
+    store = vault_read()
     prov = catalog().get(cid) or {}
     key = _field_store_key(cid, prov, field)
-    store = vault_read(); store[key] = v; vault_write(store)
+    kind = (prov or custom_catalog(store).get(cid) or {}).get("kind")    # a custom row has a kind too
+    if kind == "totp" and key == cid:
+        # Validated on WRITE and stored in ONE canonical form (an otpauth:// URI carrying digits /
+        # period / algorithm), so a login never meets a mistyped secret and an authenticator can
+        # import the value back. The refusal names the fault and the field, never the value.
+        try:
+            v = totp.canonical(v, digits=b.get("digits"), period=b.get("period"), algorithm=b.get("algorithm"))
+        except ValueError as e:
+            return jsonify(error=f"not a usable TOTP secret: {e}", id=cid, field=prov.get("env")), 400
+    store[key] = v; vault_write(store)
     _audit("edit", cid, **({"field": field} if field else {}))
     return jsonify(ok=True, id=cid, field=field, source="db", masked=mask(v))
 
@@ -747,6 +885,11 @@ def api_add():
     cid, v = b.get("id"), b.get("value")
     if not cid or not v:
         return jsonify(error="id and value required"), 400
+    if b.get("kind") == "totp":
+        try:
+            v = totp.canonical(v)                         # same rule as /api/set: validated, canonical
+        except ValueError as e:
+            return jsonify(error=f"not a usable TOTP secret: {e}", id=cid), 400
     store = vault_read()
     store[cid] = v
     store.setdefault("__custom__", {})[cid] = {"title": b.get("title", cid),
@@ -806,7 +949,7 @@ def api_export_all():
     out = {}
     for cid, prov in cat.items():
         env_key = prov.get("env")
-        if not env_key:
+        if not env_key or prov.get("kind") == "totp":     # a totp secret is minted, never exported
             continue
         _, val = resolve(cid, prov, store)
         if val and not str(val).startswith("derived:"):
@@ -829,8 +972,8 @@ def export_env(service, only=None):
         if only is not None and r["id"] not in only:
             continue
         prov = cat.get(r["id"])
-        if not prov:
-            continue
+        if not prov or prov.get("kind") == "totp":
+            continue        # a totp secret never leaves the plane — GET /api/totp/<id> mints the code
         prod = {}                                   # what this ONE connection produces (env -> value)
         _, val = resolve(r["id"], prov, store)
         if val and prov.get("env"):
@@ -959,6 +1102,23 @@ _ID_CHARS = set(string.ascii_lowercase + string.digits + "_.-")
 _vault_lock = threading.Lock()
 
 
+def _rekey_at_start():
+    """A key replacement finishes itself (hos-002): while CONNECTIONS_ROOT_KEY_OLD is set, the server
+    re-encrypts the vault under the new key once, before it serves; then the old key can be dropped from .env.
+    A vault no key opens is left as it is and said (every route answers 503 with the reason)."""
+    if not (os.environ.get("CONNECTIONS_ROOT_KEY_OLD") or "").strip() or not os.path.exists(VAULT_PATH):
+        return
+    try:
+        n = rekey()
+        print(f"[connections] the vault is re-encrypted under CONNECTIONS_ROOT_KEY ({n} entries); "
+              f"CONNECTIONS_ROOT_KEY_OLD can now be removed from .env", flush=True)
+    except VaultUnreadable as e:
+        print(f"[connections] ERROR: {e}", flush=True)
+
+
+_rekey_at_start()
+
+
 def _instances(store):
     return store.get(_INSTANCES) or {}
 
@@ -1049,6 +1209,30 @@ def api_instance_del(iid):
     return jsonify(ok=True)
 
 
+#: Headers only a RELAYED request carries: one that came through the edge (traefik), the console's app proxy
+#: or another office's link door. An instance's secret is for this office's own services, which call
+#: `connections:8990` directly and send none of them; a relayed caller is a browser or another office, and
+#: before this gate a linked office (mapped to akadmin) read and wrote every secret in the vault (hos-001,
+#: ai/context/dgo-herd-os.md §3).
+_RELAYED_BY = ("X-Forwarded-For", "X-Forwarded-Host", "X-Real-Ip", "X-authentik-username",
+               "X-DGO-Office", "X-Dgo-Identity", "X-DGO-From")
+
+
+def _relayed() -> str:
+    """The first relay header on this request, or "" for a direct in-network call."""
+    return next((h for h in _RELAYED_BY if request.headers.get(h)), "")
+
+
+def _refuse_relayed(action, iid):
+    """A 403 for a relayed request to an instance's secret, in the grant log; None when the call is direct."""
+    via = _relayed()
+    if not via:
+        return None
+    why = f"an instance's secret is for this office's own services, not a request relayed through {via}"
+    broker.audit(action, "refuse", broker.caller(), instance=iid, reason=why)
+    return jsonify(error=why, decision="refuse"), 403
+
+
 @app.get("/api/instances/<iid>/secret")
 def api_instance_secret(iid):
     """Service-only, in-network: platform services fetch the live secret here at op time, so
@@ -1058,13 +1242,53 @@ def api_instance_secret(iid):
     the reveal/edit history), but it IS written to the broker grant log with the caller's identity —
     a secret leaving the plane with no record of who took it is exactly what the grant log exists to
     end. ⚠ Not yet POLICY-gated: connection instances are per-account OAuth grants with no manifest
-    declaration to check against, and `drive` reads them live today. See README residual risks."""
+    declaration to check against, and `drive` reads them live today. See README residual risks.
+    Refused when RELAYED (`_relayed`): only a direct in-network call reads it."""
+    refused = _refuse_relayed("instance-secret", iid)
+    if refused:
+        return refused
     rec = _instances(vault_read()).get(iid)
     if not rec:
         return jsonify(error="unknown instance"), 404
     broker.audit("instance-secret", "allow", broker.caller(), instance=iid,
                  protocol=rec.get("protocol"), gated=False)
     return jsonify(protocol=rec.get("protocol"), secret=rec.get("secret") or {})
+
+
+#: Who may read an agent's action token here. One service: the link plane hands it to the offices this
+#: office serves its agent to (DGO-32, DGO-1127). Anything else asks the agent with its own token.
+AGENT_TOKEN_READERS = {"dgo-extend"}
+_SERVICE_NAME = re.compile(r"^[a-z0-9][a-z0-9_.\-]{0,63}$")
+
+
+@app.get("/api/agent-token/<service>")
+def api_agent_token(service):
+    """An `agent.v1` provider's action token, read out of its container (identity.agent_token).
+
+    Both factors in EVERY mode (container id AND address), or the operator on loopback: this token
+    drives the office's agent, and "warn" serving an unidentified caller would hand that to anyone on
+    the network. And THIS office's reader: the office network is shared by every office on one docker
+    host, so a dgo-extend of another compose project is refused too. Each answer is in the grant log."""
+    ident = broker.caller()
+    project = identity.own_project()
+    allowed = ident.get("method") == "loopback" or (
+        ident.get("ok") and ident.get("method") == "container-id+ip"
+        and ident.get("service") in AGENT_TOKEN_READERS
+        and bool(project) and ident.get("project") == project)
+    if not _SERVICE_NAME.match(service or ""):
+        return jsonify(error="not a service name"), 400
+    if not allowed:
+        why = (f"only this office's {', '.join(sorted(AGENT_TOKEN_READERS))}, identified by container id "
+               f"and address, reads an agent's token (caller: {ident.get('service') or 'unidentified'}, "
+               f"{ident.get('method')}, project {ident.get('project') or '?'})")
+        broker.audit("agent-token", "refuse", ident, agent=service, reason=why)
+        return jsonify(error=why, decision="refuse"), 403
+    token, why = identity.agent_token(service)
+    if not token:
+        broker.audit("agent-token", "miss", ident, agent=service, reason=why)
+        return jsonify(error=why), 404
+    broker.audit("agent-token", "allow", ident, agent=service)
+    return jsonify(service=service, token=token)
 
 
 @app.put("/api/instances/<iid>/secret")
@@ -1084,8 +1308,11 @@ def api_instance_secret_put(iid):
 
     Never returns the secret: this is the write half: reads have their own endpoint above. Audited
     (unlike the read) — a write is rare and rotation is exactly what the audit trail is for; the
-    logged key NAMES tell an operator what moved, the values never leave.
+    logged key NAMES tell an operator what moved, the values never leave. Refused when RELAYED.
     """
+    refused = _refuse_relayed("instance-secret-put", iid)
+    if refused:
+        return refused
     b = request.get_json(force=True, silent=True) or {}
     secret, replace = b.get("secret"), bool(b.get("replace"))
     if not isinstance(secret, dict) or not secret:
@@ -1156,7 +1383,14 @@ def api_vault_wipe():
     if body.get("confirm") != "wipe":
         return jsonify(ok=False, error="confirmation required",
                        hint='POST {"confirm":"wipe"} — this destroys every stored secret'), 400
-    before = vault_read()
+    try:
+        before = vault_read()
+    except VaultUnreadable:
+        # the one way back from a lost key: the unreadable file is set aside (never deleted — the key may yet
+        # be found) and the plane starts from an empty vault, as this button promises
+        aside = f"{VAULT_PATH}.unreadable-{int(time.time())}"
+        os.replace(VAULT_PATH, aside)
+        before = {}
     reserved = {"__audit__", "__minted__", "__custom__", "instances"}
     counts = {
         "overrides": sum(1 for k in before if k not in reserved),

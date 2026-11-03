@@ -31,6 +31,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
+import { checkCodeLiterals } from "./literal-check.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 // 9P TAX: when this repo lives on /mnt/c (Windows checkout run through WSL — the standard bbox
@@ -181,8 +183,47 @@ function renderDir(jsonFiles, outDir) {
   return outs;
 }
 
+// A blueprint that is not ONE well-formed TypeScript file is refused BEFORE the converter sees it.
+// The converter parses with ts-morph, whose parser is error-TOLERANT, and never asks it for
+// diagnostics — so a raw backtick inside a Code node's jsCode (a comment quoting `a name`) ENDED the
+// literal there, the rest of the body was error-recovered away, convert-batch exited 0, and n8n was
+// handed 1191 of 2161 chars under "ok update+activate" (DGO-584, twice in one day). Two readings,
+// ~6 ms a file together: literal-check.mjs names the backtick that closed a parameter literal early
+// (it sees the shapes TypeScript still parses — `` `x`<y>` `` is a comparison, `` `x``y` `` a tagged
+// template); then TypeScript's own syntax diagnostics, from the ts that ships inside the pinned
+// toolchain (it sees what a lexer cannot — a stray `}` that happened to close `parameters`, after
+// which the converter emitted the node with an EMPTY parameters object and exit 0). Nothing is
+// compiled while any file is bad; every finding carries file:line:col.
+function loadTs() {
+  const req = createRequire(path.join(TOOL_HOME, "package.json"));
+  for (const m of ["@ts-morph/common", "typescript"]) { try { const x = req(m); return x.ts || x; } catch { /* next */ } }
+  return null;
+}
+function refuseMalformed(tsFiles) {
+  const bad = new Map();   // file -> its lines
+  const say = (f, m) => bad.set(f, [...(bad.get(f) || []), m]);
+  let ts;
+  for (const f of tsFiles) {
+    const text = fs.readFileSync(f, "utf8");
+    const early = checkCodeLiterals(text, f);
+    if (early.length) { for (const x of early) say(f, x.message); continue; }   // the lexer's reading is the clearer one
+    // The syntax net going quiet is said ONCE and never fails a compile: the lexer still stands.
+    if (ts === undefined && !(ts = loadTs())) console.error(`[wrap] the TypeScript syntax net is off: neither @ts-morph/common nor typescript resolves from ${TOOL_HOME}`);
+    if (!ts) continue;
+    const sf = ts.createSourceFile(f, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    if (!sf.parseDiagnostics) { console.error(`[wrap] the TypeScript syntax net is off: SourceFile.parseDiagnostics is gone in TypeScript ${ts.version}`); ts = null; continue; }
+    for (const d of sf.parseDiagnostics.slice(0, 3)) {
+      const { line, character } = sf.getLineAndCharacterOfPosition(d.start);
+      say(f, `${f}:${line + 1}:${character + 1}: ${ts.flattenDiagnosticMessageText(d.messageText, " ")} — a TypeScript syntax error; the converter would have guessed past it`);
+    }
+  }
+  if (bad.size) throw new Error(`${bad.size} of ${tsFiles.length} blueprint(s) are not well-formed TypeScript — nothing compiled:\n  ` +
+    [...bad.values()].flat().join("\n  "));
+}
+
 function compileDir(tsFiles, outDir) {
   if (!tsFiles.length) return [];
+  refuseMalformed(tsFiles);
   const strip = fs.mkdtempSync(path.join(os.tmpdir(), "wrapstrip-"));
   const metas = new Map(); // stripped filename -> {wfMeta, nodeMeta, src}
   try {
@@ -243,11 +284,14 @@ const SKILLS = { validate: "validate", info: "node-info", schema: "node-schema",
 function main() {
   const [cmd, src, out] = process.argv.slice(2);
   if (!cmd) {
-    console.error("usage: wrap.mjs render|compile <src> <outDir> | verify <jsonDir> | validate|info|schema|search|docs|guides <args>");
+    console.error("usage: wrap.mjs render|compile <src> <outDir> | verify <json dir|.workflow.ts dir|file> | validate|info|schema|search|docs|guides <args>");
     process.exit(2);
   }
   ensureDeps();
   if (SKILLS[cmd]) {
+    // `validate` is the toolkit's schema lint; it parses as tolerantly as the converter and said
+    // "Workflow is valid!" of the file whose jsCode ended early (DGO-584). Well-formedness first.
+    if (cmd === "validate") refuseMalformed(process.argv.slice(3).filter((a) => a.endsWith(".ts") && fs.existsSync(a)));
     try {
       execFileSync(process.execPath, [N8NAC, "skills", SKILLS[cmd], ...process.argv.slice(3)],
         { stdio: "inherit", env: ENV });
@@ -264,11 +308,19 @@ function main() {
     return;
   }
   if (cmd === "verify") {
+    // A file or a directory, of JSON exports (render → compile → equal) or of .workflow.ts code
+    // (compile → render → compile → equal — so a blueprint whose jsCode ends early is red here
+    // before it is red in a push). The temp dirs exist from the start: renderDir() of an empty list
+    // writes nothing, and listTs() of a directory never created was the `ENOENT …/ts` that stopped
+    // verify on every code directory — as listJson() of a file was the `ENOTDIR` (DGO-584).
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "wrapverify-"));
-    const tsDir = path.join(tmp, "ts"), jsDir = path.join(tmp, "json");
+    const tsDir = path.join(tmp, "ts"), jsDir = path.join(tmp, "json"), baseDir = path.join(tmp, "base");
+    for (const d of [tsDir, jsDir, baseDir]) fs.mkdirSync(d);
     let ok = 0; const bad = [];
     try {
-      const files = listJson(src);
+      const isDir = fs.statSync(src).isDirectory();
+      const code = isDir ? listTs(src).length > 0 : src.endsWith(".ts");
+      const files = code ? compileDir(isDir ? listTs(src) : [src], baseDir) : (isDir ? listJson(src) : [src]);
       renderDir(files, tsDir);
       compileDir(listTs(tsDir), jsDir);
       for (const f of files) {
@@ -279,7 +331,7 @@ function main() {
         const d = firstDiff(orig, JSON.parse(fs.readFileSync(rp, "utf8")));
         if (d) bad.push(`${path.basename(f)}: ${d}`); else ok++;
       }
-    } catch (e) { bad.push(String(e.message || e).slice(0, 200)); }
+    } catch (e) { bad.push(String(e.message || e).slice(0, 600)); }
     finally { fs.rmSync(tmp, { recursive: true, force: true }); }
     console.log(`verify: ${ok}/${ok + bad.length} lossless`);
     for (const b of bad.slice(0, 20)) console.log("  DIFF " + b);

@@ -78,7 +78,7 @@ sys.exit(0 if n else 1)' || fail "/api/repos returned no repositories"
 
 repo_full="$(echo "${repos}" | python3 -c 'import json,sys
 d=json.load(sys.stdin); print((d.get("repos") or [{}])[0].get("full_name") or "")')"
-curl -s -m 60 "${GIT_URL}/api/repo?account=${fa}&repo=office/deployment-bina-comp" | python3 -c '
+curl -s -m 60 "${GIT_URL}/api/repo?account=${fa}&repo=office/deployment-hacohen" | python3 -c '
 import json,sys
 d=json.load(sys.stdin); s=d.get("sections") or {}
 assert d.get("ok"), d.get("error")
@@ -89,7 +89,7 @@ print("[verify] /api/repo — branches %d, commits %d, tree %d, readme %s" % (
   (s.get("readme") or {}).get("path")))' || fail "/api/repo did not answer"
 
 curl -s -m 30 -X POST "${GIT_URL}/listDir" -H 'content-type: application/json' \
-  -d "{\"account\":\"${fa}\",\"repo\":\"office/deployment-bina-comp\",\"path\":\"scripts\"}" \
+  -d "{\"account\":\"${fa}\",\"repo\":\"office/deployment-hacohen\",\"path\":\"scripts\"}" \
   | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d.get("ok"), d.get("error");
 print("[verify] listDir — %d entries" % len((d.get("data") or {}).get("entries") or []))' \
   || fail "listDir did not answer"

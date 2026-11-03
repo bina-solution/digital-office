@@ -222,11 +222,25 @@ onboard_fail="$(sed 's/\x1b\[[0-9;]*m//g' /tmp/baseline-run.log \
 if [ -z "${onboard_fail}" ]; then crit "P3 app-onboarding" pass "every enabled app's onboard hook succeeded (schema + first-run seeding)"
 else crit "P3 app-onboarding" fail "onboard hook(s) failed: ${onboard_fail}— see bring-up log above"
 fi
-# health census
-total=$(docker ps -a --format '{{.Names}}' | grep -c -- "-${DN}$" || true)
-upc=$(docker ps --format '{{.Status}}' | grep -c 'Up' || true)
-downlist="$(docker ps -a --format '{{.Names}}\t{{.Status}}' | grep -- "-${DN}" | grep -viE 'Up |Exited \(0\)' || true)"
-if [ -z "${downlist}" ]; then crit "P3 bring-up" pass "${upc}/${total} containers Up; no unhealthy/crashed"
+# health census — by COMPOSE PROJECT LABEL, never by a container-name suffix.
+#
+# It was `docker ps -a --format '{{.Names}}' | grep -c -- "-${DN}$"`, with DN from .env's
+# DEPLOYMENT_NAME — and a name is not an identity. Measured 2026-10-14: .env said `hacohen` while
+# every container ended in `-staging`, so the census counted 0 and this stage printed GREEN over an
+# estate it had never looked at. The engine already knows which containers are this office's — they
+# carry the compose project label — so it is asked directly. COMPOSE_PROJECT_NAME is the same value
+# compose itself reads from .env (compose's own default when unset: the project directory's basename).
+PPROJ="$(read_env COMPOSE_PROJECT_NAME)"; [ -n "${PPROJ}" ] || PPROJ="$(basename "${REPO_ROOT}")"
+_ps_ours() { docker ps -a --filter "label=com.docker.compose.project=${PPROJ}" --format '{{.Names}}\t{{.Status}}'; }
+total="$(_ps_ours | wc -l | tr -d ' ')"
+upc="$(_ps_ours | grep -c 'Up ' || true)"
+# A problem is anything not Up and not cleanly exited — including a container that IS up but unhealthy
+# or still starting, which the old `grep -viE 'Up |Exited \(0\)'` dropped silently while this stage's
+# own message claimed "no unhealthy/crashed".
+downlist="$(_ps_ours | awk -F'\t' '$2 !~ /^(Up |Exited \(0\))/ || $2 ~ /unhealthy|health: starting/')"
+if [ "${total:-0}" -eq 0 ]; then
+  crit "P3 bring-up" fail "census matched NO container of compose project '${PPROJ}' (DEPLOYMENT_NAME '${DN}' is not a container identity) — nothing was counted, so this is NOT green"
+elif [ -z "${downlist}" ]; then crit "P3 bring-up" pass "${upc}/${total} containers Up; no unhealthy/crashed"
 else crit "P3 bring-up" fail "${upc}/${total} Up — problems:\n$(echo "${downlist}" | sed 's/^/      /')"; fi
 # Does every probe in the LIVE stack use a binary its container actually has? G18 answers this
 # statically for images we build; only a running stack can answer it for vendor images. The bug it
@@ -368,7 +382,15 @@ if [ "${BASELINE_NO_UIMAP:-0}" = 1 ]; then crit "P8 ui-map" warn "skipped (BASEL
 else
   if "${REPO_ROOT}/bbox" ui-map >/tmp/baseline-uimap.log 2>&1; then :; else warn "ui-map exited non-zero (partial capture still composed)"; fi
   BIG="${ART}/ui-map/ui-map.png"
-  nshot="$(ls -1 "${ART}/screenshots-ui"/*.png 2>/dev/null | wc -l | tr -d ' ')"
+  # nshot is THIS run's captured views, read from the same results file as nfailed — never
+  # `ls *.png`, which counted a PREVIOUS run's screenshots and printed "big image + N views" for a
+  # run that captured nothing. It is the same on-disk-count bug ui-map.sh's own n_cap comment
+  # describes (fixed there, still here — measured 2026-10-14: 75 files on disk were reported as
+  # views while the capture results, the only record of what THIS run did, held 74 results).
+  nshot="$(python3 -c "import json,sys
+try: r=json.load(open(r'$(npath "${REPO_ROOT}")/data/ui-map/ui-capture-results.json'))['results']
+except Exception: print(0); sys.exit()
+print(sum(1 for x in r if x.get('status') != 'failed'))" 2>/dev/null)"
   cov="$(grep -oE 'visible-region coverage[^|]*\| \*\*[0-9.]+%' "${ART}/ui-coverage.md" 2>/dev/null | grep -oE '[0-9.]+%' | head -1)"
   # npath: python.exe is native and cannot open an MSYS-form /c/Users/... path, so on Windows this
   # one-liner hit FileNotFoundError, printed '?', and P8 warned "? first-party view(s) failed" even

@@ -68,7 +68,7 @@ State is deliberately in four separate places, by lifetime:
 | **Which apps exist / how they compose** | `apps/*/app.json`, `platform-base/*/app.json` | the repo | ✅ yes |
 | **Which apps are ON, and their instances** | `platform.state.yaml` | the deployment | ✅ yes |
 | **Secrets** | `.env` (+ the `connections` vault) | the machine | ❌ gitignored |
-| **Runtime data** | docker volumes (`deployment-bina_comp_*`) | until `bbox reset` | ❌ no |
+| **Runtime data** | docker volumes (`deployment-hacohen_*`) | until `bbox reset` | ❌ no |
 | **Compiled artefacts** | `.generated/` | rebuilt every run | ❌ gitignored |
 
 `platform.state.yaml` is the **only** file the console writes, and it holds exactly two kinds of

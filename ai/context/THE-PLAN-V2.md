@@ -142,7 +142,7 @@ Non-negotiable — running before these land produces garbage:
 
 1. **Drive folders** — `מסמכים כללים` does not exist and the service account cannot create it (by
    design: it only moves files). Create and share with
-   `person7@example.com`. Same for dedicated
+   `person6-x-x@example.com`. Same for dedicated
    `synced`/`failed` folders to resolve the `drive-gdoc-warehouse`/`drive-bs` collision.
 2. **`gh auth login`** — GitHub Actions status otherwise unobtainable.
 3. **A real `TELEGRAM_BOT_TOKEN`** — `.env:299` is the literal placeholder; Error Handler fires but

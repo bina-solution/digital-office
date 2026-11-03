@@ -145,7 +145,7 @@ if (sameHash || twoAgree) { MERGE }   // sameHash won ALONE, before any date/amo
 
 BS placeholders have no hash, so **every BS-vs-document group satisfied `sameHash` by construction**. And `fieldsAgree` could not catch it — it compared **raw** `DOC_DATE` strings, treated blank as agreement, and never read `BS_LINE_AMOUNT`; for a BS child both fields are empty, so it returned `true` unconditionally.
 
-**Real damage:** company `511495996`, four *different* invoices (`99400626/27/29`, `99403246`) each merged into a winner — and **all four winners now carry the identical amount 15,463.00**, one sales-order total. The correct per-invoice amounts (1454.94, 130, 0, 445.75) survive only on the losers.
+**Real damage:** company `500000963`, four *different* invoices (`99400626/27/29`, `99403246`) each merged into a winner — and **all four winners now carry the identical amount 15,463.00**, one sales-order total. The correct per-invoice amounts (1454.94, 130, 0, 445.75) survive only on the losers.
 
 **Fixed 2026-08-13:** a conflict veto now overrides both paths, comparing normalised dates (parsed calendar days, since the same day is stored `07/07/2025` by Drive and `2025-07-07T…` by Gmail) and normalised amounts (`abs(round(x,2))`, since 39 pairs are sign-flipped). 7/7 tests pass, including the four cases that must **not** veto. A full sweep on the old code would have auto-merged **253 conflict groups**.
 

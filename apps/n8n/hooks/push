@@ -21,8 +21,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 . "${REPO_ROOT}/scripts/lib.sh"   # read_env, DN, N8N_CONTAINER, PG_CONTAINER (overridable via env)
 
-# performance profile: refresh the .env block + perf_* settings rows (no-op if unset)
-( cd "${REPO_ROOT}" && python3 scripts/perf-profile-apply ) || true
 N8N_DIR="${REPO_ROOT}/apps/n8n"
 WF_DIR="${N8N_DIR}/blueprint/n8n"; CRED_DIR="${N8N_DIR}/credentials"
 # Reset-proof local cache of FULL (encrypted) credentials — git-ignored, written by n8n-pull. Lets OAuth
@@ -44,6 +42,50 @@ while [ "$#" -gt 0 ]; do
     *)       _rest="${_rest} $1"; shift ;;
   esac
 done
+
+# A SCOPED push of an app this office has switched OFF is refused, not honoured — and asked HERE, before
+# the lock and the instance-wide steps below (owner, credentials, reseed), which ran for a push that was
+# then refused (the second reader of DGO-998). The scoped door is `hooks/push-app`, where the same rule
+# stands with the measurement, and this one accepts `--app <id>` too, so the rule is asked at both doors
+# rather than at whichever one was used last time. An app is switched off when its state line says
+# `state: disabled` and not `workflows: here`, or names another office's n8n (`workflows: <office>`,
+# DGO-945) — unless the compiler lists it among the apps whose workflows THIS office holds (`reconcile.py
+# blueprints`): the workflow engine's own follow the engine wherever it runs, and n8n is `state:
+# disabled` on the HP and the Mac while bina-ds pulls it in (DGO-1001). `--for <app>` answers "where are
+# this app's blueprints", not "should they run here". An app absent from the state is not declared off,
+# and an unreadable state never invents a refusal.
+if [ -n "${APP_SCOPE}" ]; then
+  _off="$( cd "${REPO_ROOT}" && python3 -c 'import sys, yaml
+try:
+    apps = (yaml.safe_load(open(sys.argv[1], encoding="utf-8")) or {}).get("apps") or {}
+except Exception:
+    raise SystemExit            # unreadable state: never invent a refusal from it
+e = apps.get(sys.argv[2])
+w = str(e.get("workflows") or "").strip().lower() if isinstance(e, dict) else ""
+if w and w != "here":
+    print("elsewhere:" + w)
+elif not w and isinstance(e, dict) and (str(e.get("state") or "").strip().lower() in ("disabled", "archived")
+                                        or str(e.get("enabled")).strip().lower() == "false"):
+    print("1")       # every shape a state line switches an app off in, not `state: disabled` alone (DGO-998)' \
+    platform.state.yaml "${APP_SCOPE}" 2>/dev/null || true )"
+  if [ -n "${_off}" ] && ! { ( cd "${REPO_ROOT}" && python3 platform/manager/reconcile.py blueprints 2>/dev/null ) \
+                               | tr -d '\r' | cut -f1 | grep -Fxq "${APP_SCOPE}"; }; then
+    case "${_off}" in
+      elsewhere:*)
+        echo "Error: '${APP_SCOPE}' declares 'workflows: ${_off#elsewhere:}' — its workflows run in that office's n8n," >&2
+        echo "       not here; pushing them here would run them twice." >&2 ;;
+      *)
+        echo "Error: '${APP_SCOPE}' is disabled in platform.state.yaml — its workflows are not part of" >&2
+        echo "       this office, and pushing them would create and activate them in the live n8n." >&2
+        echo "       Enable it first (./bbox apps enable ${APP_SCOPE}), or push the app that can hold them." >&2 ;;
+    esac
+    exit 1
+  fi
+fi
+
+# performance profile: refresh the .env block + perf_* settings rows (no-op if unset) — after the guard, so
+# a refused push changes nothing (the second reader of DGO-998)
+( cd "${REPO_ROOT}" && python3 scripts/perf-profile-apply ) || true
 
 # ── Mutual exclusion — `flock`, not the `processLock01` Redis mechanism ──────────────────────────
 # processLock01 (Redis INCR + TTL, ~1,700 calls/day) is the right tool for locking BETWEEN n8n
@@ -447,7 +489,9 @@ rm -rf "${STAGE_DIR}" && mkdir -p "${STAGE_DIR}"
 # its own manifest (`blueprints.n8n`), and the compiler resolves them. The old
 # `apps/*/blueprint/n8n` glob could not respect platform.state.yaml enablement, could not tell an
 # app's dir from a stray one, and made this layer-2 hook enumerate layer-3 paths by hand.
-# APP_SCOPE (set by `bbox n8n <app> push`) narrows the push to one app; empty = every app.
+# APP_SCOPE (set by `bbox n8n <app> push`) narrows the push to one app; empty = every app — the apps
+# whose workflows this office holds, as the compiler lists them. A scope this office has switched off was
+# refused at the top, before anything ran.
 # tr -d '\r': python on Windows prints CRLF, and a trailing CR makes every path glob miss
 # (same trap compose_args() in scripts/lib.sh documents).
 _bp_list="$( cd "${REPO_ROOT}" && python3 platform/manager/reconcile.py blueprints \
@@ -455,6 +499,23 @@ _bp_list="$( cd "${REPO_ROOT}" && python3 platform/manager/reconcile.py blueprin
   echo "Error: could not resolve n8n blueprints from the app manifests." >&2; exit 1; }
 [ -n "${_bp_list}" ] || { echo "Error: no app declares blueprints.n8n${APP_SCOPE:+ for '${APP_SCOPE}'}." >&2; exit 1; }
 WRAP="${N8N_DIR}/tooling/wrap.mjs"
+# compile_in_engine <ts dir> <out dir> — `wrap.mjs compile`, run where node is when it is not HERE
+# (DGO-994). Convergence compiles from inside app-management, whose image has no node, so on a fresh
+# office the agent's blueprints were never imported and the error blamed the .workflow.ts. The engine's
+# own container runs node anyway. tar carries the toolchain in (never its node_modules: wrap.mjs
+# installs those once, in the engine's own cache) and the blueprints, and the JSON back out — no path
+# has to mean the same thing on both sides, and nothing lands as another user.
+compile_in_engine() {
+  local box="/tmp/bbox-wrap-$$" rc=0
+  docker exec "${N8N_CONTAINER}" sh -c "rm -rf '${box}' && mkdir -p '${box}/tooling' '${box}/src' '${box}/out'" || return 1
+  tar -C "${N8N_DIR}/tooling" --exclude=node_modules --exclude=test -cf - . \
+    | docker exec -i "${N8N_CONTAINER}" tar -C "${box}/tooling" -xf - || rc=1
+  [ "${rc}" = 0 ] && { tar -C "$1" -cf - . | docker exec -i "${N8N_CONTAINER}" tar -C "${box}/src" -xf - || rc=1; }
+  [ "${rc}" = 0 ] && { docker exec "${N8N_CONTAINER}" node "${box}/tooling/wrap.mjs" compile "${box}/src" "${box}/out" >/dev/null || rc=1; }
+  [ "${rc}" = 0 ] && { docker exec "${N8N_CONTAINER}" tar -C "${box}/out" -cf - . | tar -C "$2" --no-same-owner -xf - || rc=1; }
+  docker exec "${N8N_CONTAINER}" rm -rf "${box}" >/dev/null 2>&1 || true
+  return "${rc}"
+}
 while IFS="$(printf '\t')" read -r _aid _rel; do
   [ -n "${_rel}" ] || continue
   _dir="${REPO_ROOT}/${_rel}"
@@ -465,9 +526,18 @@ while IFS="$(printf '\t')" read -r _aid _rel; do
   if ls "${_dir}"/*.workflow.ts >/dev/null 2>&1; then
     _gen="${REPO_ROOT}/.generated/n8n/${_aid}"
     rm -rf "${_gen}" && mkdir -p "${_gen}"
-    "$(bbox_node)" "${WRAP}" compile "${_dir}" "${_gen}" >/dev/null || {
-      echo "Error: wrap.mjs compile failed for '${_aid}' (${_rel}) — fix the .workflow.ts before pushing." >&2
-      rm -rf "${STAGE_DIR}"; exit 1; }
+    # bbox_node dies when there is no node here; inside an `if` that is the else branch, not the end of
+    # the hook (set -e), and the else compiles in the engine instead of blaming the blueprint.
+    if _node="$(bbox_node 2>/dev/null)"; then
+      "${_node}" "${WRAP}" compile "${_dir}" "${_gen}" >/dev/null || {
+        echo "Error: wrap.mjs compile failed for '${_aid}' (${_rel}) — fix the .workflow.ts before pushing." >&2
+        rm -rf "${STAGE_DIR}"; exit 1; }
+    else
+      compile_in_engine "${_dir}" "${_gen}" || {
+        echo "Error: there is no node here, and compiling '${_aid}' (${_rel}) inside ${N8N_CONTAINER} failed too." >&2
+        echo "       Install node here or set NODE_BIN; the engine's own output is above." >&2
+        rm -rf "${STAGE_DIR}"; exit 1; }
+    fi
     _src="${_gen}"
   fi
   for _f in "${_src}"/*.json; do
@@ -497,6 +567,10 @@ EOF
 STAGED_N=$(ls "${STAGE_DIR}"/*.json 2>/dev/null | wc -l | tr -d ' ')
 echo "[n8n-push] staged ${STAGED_N} workflow(s) from $(printf '%s\n' "${_bp_list}" | wc -l | tr -d ' ') declared blueprint(s)${APP_SCOPE:+ [scope=${APP_SCOPE}]}"
 ( cd "${REPO_ROOT}" && python3 scripts/perf-profile-apply --stage .n8n-push-stage ) || true
+# An address of an app that runs in a LINKED office, not here, goes to that office's door (DGO-945).
+( cd "${REPO_ROOT}" && python3 "$(npath "${REPO_ROOT}")/scripts/link-endpoints-apply" --stage "$(npath "${STAGE_DIR}")" ) || {
+  echo "Error: the linked offices' addresses could not be applied — nothing imported." >&2
+  rm -rf "${STAGE_DIR}"; exit 1; }
 tar -C "${STAGE_DIR}" -cf - . | docker exec -i "${N8N_CONTAINER}" tar -C /tmp/n8n-push-wf -xf -
 # ── Pre-create every tag the staged workflows reference ──
 # n8n's bulk `import:workflow` creates a workflow's tags as it goes, and `tag_entity` has a UNIQUE
@@ -804,15 +878,33 @@ fi
 # (1,205 reporter errors vs 1,481 handler runs in one hour, 2026-08-06 01:10-01:45Z). Both ids are
 # excluded now: the current one to fix it, the old one kept so a stale DB row cannot resurrect it.
 # Verified live 2026-08-06: workflow_entity['glitchtipReporter01'].settings did carry the stamp.
+#
+# 2026-11-02 — A WRONG errorWorkflow WAS NEVER REPAIRED, ONLY A MISSING ONE. The 2026-08-05 fix
+# changed the default but left the 21 rows already naming 'RqAY1Z1i2F7ZaPbe'. On vps1, INDOX's
+# 2026-07-30 import then created a workflow under that id: the OLD Error Handler, whose Telegram node
+# answers 404 on every run. 46 active workflows named it, so each real failure made three more runs
+# (that handler failing, the old reporter it calls, errorHandler01 reporting the handler's own failure):
+# 4,380 of the day's 6,275 failures on 2026-10-31. So a workflow is wired here when its errorWorkflow is
+# empty, names a retired id (retired-workflows.txt) or names a workflow this instance does not have —
+# and only while the Error Handler itself is here, or a working (if noisy) row would be made dangling.
 EH_ID="${INDOX_ERROR_HANDLER_ID:-errorHandler01}"
-if docker exec -e PGPASSWORD="$(read_env POSTGRES_PASSWORD)" "${PG_CONTAINER}" \
+RETIRED_IDS="$(awk '!/^[[:space:]]*#/ && NF {printf "%s\047%s\047", (n++ ? "," : ""), $1}' \
+                 "${N8N_DIR}/retired-workflows.txt" 2>/dev/null || true)"
+if WIRED="$(docker exec -e PGPASSWORD="$(read_env POSTGRES_PASSWORD)" "${PG_CONTAINER}" \
      psql -U "$(read_env POSTGRES_USER)" -d "$(read_env POSTGRES_DB)" -tAc \
-     "UPDATE workflow_entity
+     "WITH u AS (UPDATE workflow_entity
         SET settings = jsonb_set(coalesce(settings::jsonb,'{}'::jsonb),'{errorWorkflow}',to_jsonb('${EH_ID}'::text))::json
-      WHERE active=true AND (settings->>'errorWorkflow') IS NULL
+      WHERE active=true
+        AND ((settings->>'errorWorkflow') IS NULL OR (settings->>'errorWorkflow') IN (${RETIRED_IDS:-''})
+             OR NOT EXISTS (SELECT 1 FROM workflow_entity h WHERE h.id = workflow_entity.settings->>'errorWorkflow'))
+        AND EXISTS (SELECT 1 FROM workflow_entity e WHERE e.id = '${EH_ID}')
         AND id NOT IN ('${EH_ID}','glitchtipReporter01','sAjhxlLTUq9vEL8L')
-        AND name !~ '(Test|_diag|\[FV\]|\[CI\]|Seed Fixtures|MCP Server)';" >/dev/null 2>&1; then
-  log "  wired Error Handler onto active workflows missing errorWorkflow (errors -> GlitchTip -> התראות)"
+        AND name !~ '(Test|_diag|\[FV\]|\[CI\]|Seed Fixtures|MCP Server)' RETURNING 1)
+      SELECT count(*) FROM u;" 2>/dev/null | tr -d ' \r')"; then
+  [ "${WIRED:-0}" = "0" ] || \
+    log "  wired Error Handler onto ${WIRED} active workflow(s) whose errorWorkflow was empty, retired or missing (errors -> GlitchTip -> התראות)"
+else
+  log "  WARN could not wire the Error Handler (the UPDATE failed) — workflows naming no, a retired or a missing errorWorkflow stay as they are"
 fi
 
 # ── 4) Restart so re-activated triggers register ──

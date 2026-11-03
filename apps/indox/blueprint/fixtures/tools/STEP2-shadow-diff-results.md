@@ -34,7 +34,7 @@ region). The fixture's inlined amount query differs from the live authoritative 
 order) FROM the live `indoxV2QueryTotalAmt01` SET nodes, not from the `q_*` settings.
 
 **C. Shipment inv3 (1)** — QUERY DRIFT.
-Engine `02-6507801,` vs live `1256001661` (different values). The fixture's shipment query lacks the
+Engine `02-0000003,` vs live `1256001661` (different values). The fixture's shipment query lacks the
 live node's `match_index` + per-doc `not_ends_with` (COMPANY_DOC_ID last-5) validation.
 → **Fix:** re-extract shipment query from live `indoxV2QueryShipmentId01` with its dynamic validation.
 

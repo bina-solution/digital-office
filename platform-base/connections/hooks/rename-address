@@ -1,0 +1,132 @@
+#!/usr/bin/env bash
+#: connections — the office moved to another domain: an address override in the vault follows its account
+#
+# rename-address — a connection's value can be held as an override in the vault (`<connection>` for its
+# primary key, `<connection>:<KEY>` for a companion such as N8N_OWNER_EMAIL), and an override wins over .env:
+# the app that owns the account moves the account and its key (its own rename-address), and the vault would
+# still hand out <local>@<old domain> for ever. So, in the SECOND pass of `bbox rename-address` — when every
+# app's first pass is in DGO_RENAME_LEDGER (rename_note) — an override of KEY on <local>@<old> follows from
+# the STATE of the app that owns KEY:
+#   that app failed (down, an error)          → waits: nothing is assumed about an app nobody could ask
+#   that app still has <local> on the old one → waits: it refused, and the vault keeps naming that account
+#   the key has no account behind it (`any`)  → follows
+#   otherwise                                 → follows
+# A KEY no app reports (a custom secret, an address nobody's hook owns) is named as a warning and left as it
+# is — never a wait that could not end (FPG-34's third and fourth readers). Run on its own (no ledger), an
+# override follows only where .env's KEY already names <local>@<new>.
+#
+# Read from the vault inside connections' container — a vault file that does not DECRYPT is a failure, an
+# empty one is not — and WRITTEN through the running service's own door (POST /api/set), never by a second
+# writer of the vault file. Addresses only: a value that is not <something>@<old domain> is never read out.
+# DGO_RENAME_DRY_RUN=1 only says.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # say, colors, running, read_env_value, DN
+C="connections-${DN}"
+OLD="$(printf '%s' "${DGO_RENAME_FROM:-}" | tr '[:upper:]' '[:lower:]')"
+NEW="$(printf '%s' "${DGO_RENAME_TO:-}" | tr '[:upper:]' '[:lower:]')"
+DRY="${DGO_RENAME_DRY_RUN:-0}"
+domain='^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$'
+if ! [[ "${OLD}" =~ ${domain} && "${NEW}" =~ ${domain} && "${OLD}" != "${NEW}" ]]; then
+  say "${cr}[connections] rename-address: DGO_RENAME_FROM and DGO_RENAME_TO must be two different domains${c0}"
+  exit 1
+fi
+LEDGER="${DGO_RENAME_LEDGER:-}"
+if [ -n "${LEDGER}" ] && [ "${DGO_RENAME_PASS:-CHANGE_ME}" = 1 ]; then
+  say "[connections] rename-address: the vault's overrides are decided in the second pass, once every app has spoken"
+  exit 0
+fi
+if ! running "${C}"; then
+  say "${cr}[connections] rename-address: connections is not running — the vault's overrides were not checked; run it and try again${c0}"
+  exit 1
+fi
+# The overrides that hold an address on the old domain: `CAND <connection> <field or -> <ENV KEY or -> <local>`.
+CANDS="$(docker exec -i -e DGO_RENAME_FROM="${OLD}" "${C}" python - 2>&1 <<'PY' | tr -d '\r'
+import json, os, re, sys
+sys.path.insert(0, "/app")
+import app
+old = os.environ["DGO_RENAME_FROM"]
+if os.path.exists(app.VAULT_PATH):
+    try:                                        # unreadable = does not decrypt; an empty vault is fine
+        json.loads(app._fernet().decrypt(open(app.VAULT_PATH, "rb").read()).decode())
+    except Exception:
+        print("VAULT_UNREADABLE")
+        raise SystemExit(0)
+store, cat = app.vault_read(), app.catalog()
+addr = re.compile(r"^([A-Za-z0-9._%+-]+)@" + re.escape(old) + r"$", re.I)
+for k, v in sorted(store.items()):
+    if not isinstance(v, str) or k.startswith("__"):
+        continue
+    m = addr.match(v.strip())
+    if not m:
+        continue
+    if ":" in k:
+        cid, field = k.split(":", 1)
+        envkey = field
+    else:
+        cid, field = k, "-"
+        envkey = (cat.get(cid) or {}).get("env") or "-"
+    print("CAND", cid, field, envkey, m.group(1).lower())
+print("SCANNED")
+PY
+)"
+if printf '%s\n' "${CANDS}" | grep -qxF 'VAULT_UNREADABLE' || ! printf '%s\n' "${CANDS}" | grep -qxF 'SCANNED'; then
+  say "${cr}[connections] rename-address FAILED — the vault could not be read; nothing was changed${c0}"
+  printf '%s\n' "${CANDS}" | grep -v '^CAND ' | grep -iv 'password\|secret\|token' | tail -4 | sed 's/^/  /'
+  exit 1
+fi
+verdict() {   # verdict <ENV KEY> <local> → follow | wait | unowned
+  local key="$1" who="$2"
+  # `-`: a value no key names (a custom secret, a primary with no env) — no app owns it, ever; and `-` is
+  # also the ledger's own placeholder (`- changed -`), which must never read as an owner (the fifth reader)
+  [ "${key}" = "-" ] && { echo unowned; return; }
+  if [ -z "${LEDGER}" ] || [ ! -f "${LEDGER}" ]; then
+    [ "$(read_env_value "${key}" | tr '[:upper:]' '[:lower:]')" = "${who}@${NEW}" ] && echo follow || echo unowned
+    return
+  fi
+  # by FIELD and as STRINGS, never as a pattern or a number: a key or a local part is data, and awk
+  # compares two numeric-looking fields as numbers ("007" == "7" — the sixth reader). ENVIRON, not -v,
+  # so a backslash in a value is not read as an escape.
+  K="${key}" awk '$1"" == ENVIRON["K"] { found = 1 } END { exit !found }' "${LEDGER}" || { echo unowned; return; }
+  if K="${key}" W="${who}" awk '$1"" == ENVIRON["K"] && ($2 == "failed" || ($2 == "behind" && $3"" == ENVIRON["W"])) { hit = 1 } END { exit !hit }' "${LEDGER}"; then
+    echo wait; return
+  fi
+  echo follow
+}
+moved="" waiting="" unowned=""
+while read -r tag cid field envkey local_part; do
+  [ "${tag}" = CAND ] || continue
+  label="${cid}${field:+:${field}}"; label="${label%:-}"
+  case "$(verdict "${envkey}" "${local_part}")" in
+    wait) waiting="${waiting:+${waiting},}${label}"; continue ;;
+    unowned) unowned="${unowned:+${unowned},}${label}"; continue ;;
+  esac
+  if [ "${DRY}" != 1 ]; then
+    if ! docker exec -e CID="${cid}" -e FIELD="${field}" -e VALUE="${local_part}@${NEW}" "${C}" python -c '
+import json, os, urllib.request
+body = {"value": os.environ["VALUE"]}
+if os.environ["FIELD"] != "-":
+    body["field"] = os.environ["FIELD"]
+req = urllib.request.Request("http://127.0.0.1:%s/api/set/%s" % (os.environ.get("PORT", "8990"), os.environ["CID"]),
+                             data=json.dumps(body).encode(), headers={"Content-Type": "application/json"}, method="POST")
+raise SystemExit(0 if json.load(urllib.request.urlopen(req, timeout=20)).get("ok") else 1)
+' >/dev/null 2>&1; then
+      say "${cr}[connections] the override ${label} could not be written${c0}"
+      exit 1
+    fi
+    rename_note - changed
+  fi
+  moved="${moved:+${moved},}${label}"
+done <<<"${CANDS}"
+if [ "${DRY}" = 1 ]; then
+  say "[connections] DRY RUN, nothing changed — overrides that would follow: ${moved:-none}; waiting: ${waiting:-none}; left (no app owns them): ${unowned:-none}"
+else
+  say "[connections] vault overrides moved to @${NEW}: ${moved:-none}"
+fi
+[ -z "${unowned}" ] || say "${cy}[connections] left on @${OLD} — no app here owns these, so nobody can say they may follow: ${unowned}${c0}"
+if [ -n "${waiting}" ]; then
+  say "${cy}[connections] still on @${OLD}, waiting for the app that owns the account: ${waiting}${c0}"
+  exit 1
+fi
+exit 0

@@ -52,31 +52,67 @@ _AT="$(cd "$(dirname "$0")/../scripts/ops" 2>/dev/null && pwd)/admission-thresho
 [ -r "$_AT" ] && . "$_AT"
 
 NEED_GB="${CI_WAITFREE_GB:-${ADMISSION_STACK_MIN_AVAIL_GB:-6}}"  # stack needs ~8; 6 free + cache is enough
+# The stack figure is for a job that brings the stack UP. go-test and gates-hosted bring up none —
+# `go test` and the static gates in the checkout — so they need the figure for starting heavy work,
+# rounded up to whole GB. Held at 6 GB, a go-test waited at this gate 13+ minutes on 2026-11-01 while
+# the machine's own office kept ~5.8 GB available, and every job queued behind it. The hook sees the
+# job's GITHUB_WORKFLOW; every other workflow keeps the stack figure.
+# The two classes are also the runner labels. The jobs of every other workflow say `ssd`, which only
+# the Dell's runner carries. go-test and gates-hosted say `portable` alone, so a second office runner
+# without `ssd` (the HP: the owner, 2026-11-02, «if Dell is not available, always use HP») takes them
+# while the Dell is down. The HP never takes a job that would sit at this gate waiting for the stack's
+# 6 GB, which it does not have.
+case "${GITHUB_WORKFLOW:-}" in
+  go-test|gates-hosted)
+    NEED_GB="${CI_WAITFREE_GB:-$(( (${ADMISSION_MIN_AVAIL_MIB:-1536} + 1023) / 1024 ))}" ;;
+esac
 TIMEOUT_S="${CI_WAITFREE_TIMEOUT:-2700}" # 45 min - longer than a full VM test run
 POLL_S=15                                # short poll: this must not add idle time of its own
 
+# HEAT AND A FRESH BOOT, not memory alone (2026-11-02, DGO-1122). The Dell, an i7-5500U laptop, froze three
+# times with 9 GB available: the CPU package read 93, 92, 96°C in the 20 s before the third, and the two freezes
+# a job can be named for were go-test starting straight after a boot, while the office's own containers were
+# still coming up (load 12). Memory let it in: the heavy-work figure is 2 GB. So a job also waits until the
+# package is under CI_MAX_START_C and the machine has been up CI_MIN_UPTIME_S: the office settles first.
+# A machine with no package sensor (a VM, WSL) is never held for heat.
+MAX_START_C="${CI_MAX_START_C:-80}"
+MIN_UPTIME_S="${CI_MIN_UPTIME_S:-600}"
+pkg_c() {
+  # a sysfs read can fail (EIO, ENODATA): an empty answer must read as "no reading", never as a shell error
+  # that holds every job until the timeout
+  for z in /sys/class/thermal/thermal_zone*; do
+    if [ "$(cat "$z/type" 2>/dev/null)" = x86_pkg_temp ]; then
+      t=$(cat "$z/temp" 2>/dev/null) && [ -n "$t" ] && { echo $((t / 1000)); return; }
+    fi
+  done
+  echo 0
+}
+up_s()     { awk '{printf "%d", $1}' /proc/uptime; }
 avail_gb() { awk '/MemAvailable/ {printf "%d", $2/1048576}' /proc/meminfo; }
 vm_up()    { pgrep -f 'qemu-system-x86_64' >/dev/null 2>&1; }
+ready()    { [ "$(avail_gb)" -ge "${NEED_GB}" ] && [ "$(pkg_c)" -lt "${MAX_START_C}" ] && [ "$(up_s)" -ge "${MIN_UPTIME_S}" ]; }
+state()    { echo "$(avail_gb) GB available (need ${NEED_GB}), CPU $(pkg_c)°C (under ${MAX_START_C}), up $(up_s)s (at least ${MIN_UPTIME_S})"; }
 
-if [ "$(avail_gb)" -ge "${NEED_GB}" ]; then exit 0; fi
+if ready; then exit 0; fi
 
-echo "prejob: not enough memory to start this job yet - waiting"
-echo "prejob:   memory available: $(avail_gb) GB (need ${NEED_GB} GB)"
+echo "prejob: this machine cannot take the job yet - waiting"
+echo "prejob:   $(state)"
 vm_up && echo "prejob:   qemu (the Windows test VM) is running - that is usually the reason"
 
 waited=0
 while [ "${waited}" -lt "${TIMEOUT_S}" ]; do
   sleep "${POLL_S}"; waited=$((waited + POLL_S))
-  if [ "$(avail_gb)" -ge "${NEED_GB}" ]; then
-    echo "prejob: machine free after ${waited}s ($(avail_gb) GB available) - starting the job"
+  if ready; then
+    echo "prejob: machine free after ${waited}s ($(state)) - starting the job"
     exit 0
   fi
-  [ $((waited % 300)) -eq 0 ] && echo "prejob:   still waiting (${waited}s), $(avail_gb) GB available, qemu $(vm_up && echo up || echo down)"
+  [ $((waited % 300)) -eq 0 ] && echo "prejob:   still waiting (${waited}s): $(state), qemu $(vm_up && echo up || echo down)"
 done
 
 echo "prejob: FAILING after ${TIMEOUT_S}s - the machine never freed up." >&2
-echo "prejob: qemu (the Windows test VM) is $(vm_up && echo STILL RUNNING || echo down), $(avail_gb) GB available." >&2
-echo "prejob: this job needs ~${NEED_GB} GB. Stop the VM, or run CI on a machine that is not also" >&2
-echo "prejob: hosting a 10 GB guest. Failing here rather than letting the stack fail to converge," >&2
-echo "prejob: which looks like a product bug and is not one." >&2
+echo "prejob: $(state); qemu (the Windows test VM) is $(vm_up && echo STILL RUNNING || echo down)." >&2
+echo "prejob: whichever of the three is short held it: memory (stop the VM, or use a machine not hosting a" >&2
+echo "prejob: 10 GB guest), heat (let it cool, open the lid, see DGO-1122) or a fresh boot (the office settling)." >&2
+echo "prejob: Failing here rather than letting the job run hot or the stack fail to converge, which looks like" >&2
+echo "prejob: a product bug and is not one." >&2
 exit 1

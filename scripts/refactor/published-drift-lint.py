@@ -88,7 +88,7 @@ def _docker_env() -> dict:
 def n8n_sql(sql: str, timeout: int = 120) -> str:
     dn = env("DEPLOYMENT_NAME", "bina-deployment")
     r = subprocess.run(
-        ["docker", "exec", "n8n-postgres-" + dn, "psql", "-U", env("N8N_DB_USER", "bina-comp"),
+        ["docker", "exec", "n8n-postgres-" + dn, "psql", "-U", env("N8N_DB_USER", "hacohen"),
          "-d", env("N8N_DB_NAME", "n8n"), "-tA", "-c", sql],
         capture_output=True, timeout=timeout, env=_docker_env())
     if r.returncode != 0:

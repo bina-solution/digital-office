@@ -6,7 +6,6 @@
    (+persistence), density toggle (+persistence), row numbers, virtualization,
    inline edit with VALIDATION + ROLLBACK + UNDO, THE RTL STRATEGY (LTR engine
    + reversed columns + RTL text), orchestrated first paint, quick-filter
-   chips, column picker, selection + bulk delete, per-row ACTIONS column,
    CSV export/import, client pagination, server mode.
 
    Usage (no build step):
@@ -104,28 +103,6 @@
     return distPromise;
   }
 
-  // minimal CSV parser (quotes, commas, newlines) for onImportRows
-  function parseCsv(text) {
-    const rows = []; let row = [], cur = '', inQ = false;
-    for (let i = 0; i < text.length; i++) {
-      const ch = text[i];
-      if (inQ) {
-        if (ch === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else inQ = false; }
-        else cur += ch;
-      } else if (ch === '"') inQ = true;
-      else if (ch === ',') { row.push(cur); cur = ''; }
-      else if (ch === '\n' || ch === '\r') {
-        if (ch === '\r' && text[i + 1] === '\n') i++;
-        row.push(cur); cur = '';
-        if (row.length > 1 || row[0] !== '') rows.push(row);
-        row = [];
-      } else cur += ch;
-    }
-    row.push(cur);
-    if (row.length > 1 || row[0] !== '') rows.push(row);
-    return rows;
-  }
-
   function h_(tag, cls, text) {
     const el = document.createElement(tag);
     if (cls) el.className = cls;
@@ -150,8 +127,7 @@
   function create(container, props) {
     const p = Object.assign({
       columns: [], data: [], rowKey: 'id', tableId: null, loading: false,
-      onEdit: null, onAddRow: null, onDeleteRow: null, onImportRows: null,
-      onDeleteRows: null, selectable: undefined, addLabel: 'שורה',
+      onEdit: null,
       searchable: true, searchPlaceholder: 'חיפוש בטבלה…', exportable: true,
       pageSize: null, onRowClick: null, quickFilters: null, columnPicker: undefined,
       actions: null, mode: 'client', rowCount: null, onState: null, height: 520,
@@ -161,7 +137,6 @@
     }, props);
 
     const server = p.mode === 'server';
-    const withSelection = p.selectable != null ? p.selectable : !!p.onDeleteRows;
     const prefs0 = loadPrefs(p.tableId);
 
     // ── state ──
@@ -178,7 +153,6 @@
       destroyed: false,
       focusRow: null,
       editCell: null,          // phantom-afteredit guard
-      importing: false,
     };
     let pageView = [];         // pristine rows of the current page (parent data)
     let grid = null;           // the <revo-grid> element
@@ -199,16 +173,6 @@
     const search = h_('input', 'bt-search');
     search.placeholder = p.searchPlaceholder;
     search.setAttribute('aria-label', 'חיפוש בטבלה');
-    const selCount = h_('span', 'bt-selcount');
-    const btnDelSel = h_('button', 'bt-btn sm ghost danger', 'מחק נבחרות');
-    const btnClearSel = h_('button', 'bt-btn sm ghost', 'נקה בחירה');
-    const btnSelAll = h_('button', 'bt-btn sm ghost', 'בחר הכל');
-    // The selection's controls and «בחר הכל» stand in ONE place of one size: both are laid in the same
-    // cell (.bt-selzone) and the one that is not said is hidden, not removed. Removed, the three that
-    // replace the one took a new line of a toolbar that wraps, and the first tick moved every row down
-    // under the finger that had made it.
-    const selZone = h_('span', 'bt-selzone'), selOn = h_('span'), selOff = h_('span');
-    selOn.append(selCount, btnDelSel, btnClearSel); selOff.append(btnSelAll); selZone.append(selOn, selOff);
     const spacer = h_('span', 'bt-spacer');
     const btnDensity = h_('button', 'bt-btn sm ghost'); btnDensity.title = 'צפיפות שורות';
     const colpick = h_('span', 'bt-colpick');
@@ -216,11 +180,6 @@
     const pickerMenu = h_('span', 'bt-colpick-menu'); pickerMenu.style.display = 'none';
     colpick.append(btnPicker, pickerMenu);
     const btnExport = h_('button', 'bt-btn sm ghost', 'ייצוא'); btnExport.title = 'ייצוא CSV (נפתח באקסל)';
-    const fileInput = h_('input'); fileInput.type = 'file'; fileInput.accept = '.csv,.xlsx,.xls'; fileInput.style.display = 'none';
-    const btnImport = h_('button', 'bt-btn sm ghost', 'ייבוא'); btnImport.title = 'ייבוא שורות מקובץ CSV / Excel';
-    const btnDelRow = h_('button', 'bt-btn sm ghost', 'מחק שורה'); btnDelRow.title = 'מחק את השורה שבמיקוד';
-    const btnAdd = h_('button', 'bt-btn sm bt-add'), addText = h_('span', null, p.addLabel);
-    btnAdd.append(ico_('plus'), addText);
     // The engine tints every cell that cannot be edited. Beside cells that can, that is information;
     // in a table where nothing can be edited it painted the whole body grey — a list that read as
     // switched off (the machine screen's services, 2026-10-07).
@@ -236,16 +195,16 @@
     const footHint = h_('span', 'bt-foot-hint', 'גלילה חופשית — כל הרשומות זמינות');
     foot.append(countEl, pagerEl, footHint);
 
-    // IN A NARROW CARD — a phone, a small window — what is done to ROWS stays in sight (the search, the
-    // selection, «הוסף») and what is done to the TABLE goes behind one control. The toolbar wrapped instead:
-    // five lines of it, and under them one row of the table on a phone. The card's own measured width decides
-    // (`bt-narrow`, at boot); wide, `.bt-tools` is not a box at all and nothing moved.
+    // IN A NARROW CARD — a phone, a small window — what is done to the TABLE goes behind one control:
+    // the toolbar used to wrap to five lines and leave one row of the table visible on a phone. The
+    // card's own measured width decides (`bt-narrow`, at boot); wide, `.bt-tools` is not a box at all
+    // and nothing moved.
     const btnMore = h_('button', 'bt-btn sm ghost bt-more', 'עוד');
-    btnMore.title = 'כלי הטבלה: צפיפות, עמודות, ייצוא, ייבוא'; btnMore.setAttribute('aria-expanded', 'false');
+    btnMore.title = 'כלי הטבלה: צפיפות, עמודות, ייצוא'; btnMore.setAttribute('aria-expanded', 'false');
     const tools = h_('span', 'bt-tools');
-    tools.append(btnDensity, colpick, btnExport, fileInput, btnImport, btnDelRow);
+    tools.append(btnDensity, colpick, btnExport);
     btnMore.addEventListener('click', () => btnMore.setAttribute('aria-expanded', String(tools.classList.toggle('open'))));
-    toolbar.append(search, selZone, spacer, btnMore, tools, btnAdd);
+    toolbar.append(search, spacer, btnMore, tools);
     wrap.append(gridBox, loadingEl, emptyEl);
     card.append(chipsRow, toolbar, wrap, foot);
     container.appendChild(card);
@@ -325,10 +284,9 @@
       const visible = p.columns.filter((c) => st.hiddenKeys.indexOf(c.key) < 0);
       // a declared width never cuts its own header; a width a person dragged (`saved`) is theirs
       const base = visible.map((c) => saved[c.key] || Math.max(c.width || 160, headNeed(c)));
-      const selW = withSelection ? 44 : 0;
       const actW = p.actions && p.actions.length ? Math.max(44, p.actions.length * 40 + 12) : 0;
       const total = base.reduce((a, b) => a + b, 0);
-      const fill = st.availW ? st.availW - selW - actW : 0;
+      const fill = st.availW ? st.availW - actW : 0;
       const factor = !manual && fill > 0 && total > 0 && total < fill ? fill / total : 1;
 
       const mapped = visible.map((c, i) => {
@@ -382,30 +340,6 @@
                 a.onClick(pr.model || {});
               },
             }))),
-        });
-      }
-      if (withSelection) {
-        // appended after the reverse → far RIGHT beside the row numbers
-        mapped.push({
-          prop: '__sel', name: '', size: 44,
-          sortable: false, readonly: true, filter: false,
-          cellProperties: () => ({ class: { 'bt-selcell': true } }),
-          cellTemplate: (h, pr) => {
-            const id = String((pr.model || {})[p.rowKey] == null ? '' : (pr.model || {})[p.rowKey]);
-            return h('input', {
-              type: 'checkbox', class: 'bt-selbox',
-              checked: st.sel.has(id),
-              // the box keeps the whole press. Passed on, it moved the grid's focus to this cell, and on a
-              // phone the grid draws its drag handle (30px) over the box before the press ends: the first
-              // tap ticked nothing, and a ticked box under the handle could not be unticked
-              onMouseDown: stop, onTouchStart: stop,
-              onClick: (e) => {
-                e.stopPropagation();
-                if (st.sel.has(id)) st.sel.delete(id); else st.sel.add(id);
-                updateToolbar();
-              },
-            });
-          },
         });
       }
       return mapped;
@@ -628,27 +562,11 @@
     }
 
     function updateToolbar() {
-      const hasSel = st.sel.size > 0;
       search.style.display = p.searchable ? '' : 'none';
-      selZone.style.display = withSelection ? '' : 'none';
-      selOn.className = hasSel ? '' : 'off';
-      selOff.className = !hasSel && view().length > 1 ? '' : 'off';
-      // (one is said as one: «1 נבחרו» stood here — and in as few letters as any other count: a longer sentence
-      //  for one widened the zone, sent «עוד» to a line of its own in a narrow card, and the rows moved 39px
-      //  under the finger that had ticked one. The number is its own token, and the element's `data-n`.)
-      selCount.dataset.n = st.sel.size;
-      selCount.replaceChildren(st.sel.size === 1 ? 'נבחרה ' : 'נבחרו ', h_('span', 'num', st.sel.size));
-      btnDelSel.style.display = p.onDeleteRows ? '' : 'none';
       btnDensity.textContent = st.rowSize === ROW_COMFORT ? 'צפוף' : 'מרווח';
       btnExport.style.display = p.exportable ? '' : 'none';
-      btnImport.style.display = p.onImportRows ? '' : 'none';
-      btnImport.textContent = st.importing ? 'מייבא…' : 'ייבוא';
-      btnImport.disabled = st.importing;
-      btnDelRow.style.display = p.onDeleteRow ? '' : 'none';
-      btnAdd.style.display = p.onAddRow ? '' : 'none';
-      addText.textContent = p.addLabel;
       toolbar.style.display =
-        (p.searchable || p.onAddRow || p.onDeleteRow || withSelection || p.exportable) ? '' : 'none';
+        (p.searchable || p.exportable) ? '' : 'none';
     }
 
     function updateFoot() {
@@ -769,37 +687,12 @@
       pickerMenu.style.display = pickerMenu.style.display === 'none' ? 'block' : 'none';
     });
     pickerMenu.addEventListener('mouseleave', () => { pickerMenu.style.display = 'none'; });
-    btnSelAll.addEventListener('click', () => {
-      st.sel = new Set(view().map((r) => String(r[p.rowKey])));
-      sync();
-    });
-    btnClearSel.addEventListener('click', () => { st.sel = new Set(); sync(); });
-    btnDelSel.addEventListener('click', async () => {
-      if (!p.onDeleteRows || st.sel.size === 0) return;
-      const ids = [...st.sel];
-      if (!await binaAsk({ title: 'למחוק ' + ids.length + ' שורות נבחרות?', ok: 'מחיקה', danger: true })) return;
-      const res = await p.onDeleteRows(ids);
-      st.sel = new Set();
-      pushToast(res.fail ? 'bad' : 'ok',
-        'נמחקו ' + res.ok + (res.fail ? ', ' + res.fail + ' נכשלו' : ''));
-      sync();
-    });
-    btnDelRow.addEventListener('click', () => {
-      const i = st.focusRow;
-      if (i == null) return pushToast('warn', 'בחרו תא בשורה למחיקה');
-      const row = pageView[i];
-      const id = row ? row[p.rowKey] : null;
-      if (id != null && p.onDeleteRow) p.onDeleteRow(id);
-    });
-    btnAdd.addEventListener('click', () => { if (p.onAddRow) p.onAddRow(); });
-
     btnExport.addEventListener('click', () => {
       const esc = (v) => {
         const s = v == null ? '' : typeof v === 'object' ? JSON.stringify(v) : String(v);
         return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
       };
-      const v = view();
-      const rows = st.sel.size > 0 ? v.filter((r) => st.sel.has(String(r[p.rowKey]))) : v;
+      const rows = view();
       const lines = [p.columns.map((c) => esc(c.label)).join(',')]
         .concat(rows.map((r) => p.columns.map((c) => esc(r[c.key])).join(',')));
       const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
@@ -808,48 +701,6 @@
       a.download = (p.tableId || 'table') + '.csv';
       a.click();
       URL.revokeObjectURL(a.href);
-    });
-
-    btnImport.addEventListener('click', () => fileInput.click());
-    fileInput.addEventListener('change', async () => {
-      const f = fileInput.files && fileInput.files[0];
-      if (!f || !p.onImportRows) return;
-      st.importing = true; updateToolbar();
-      try {
-        let raw; // array of {header: value}
-        if (/\.xlsx?$/i.test(f.name) && window.XLSX) {
-          const wb = window.XLSX.read(await f.arrayBuffer());
-          raw = window.XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' });
-        } else if (/\.xlsx?$/i.test(f.name)) {
-          throw new Error('קובצי Excel דורשים את ספריית XLSX — יש לייצא כ-CSV');
-        } else {
-          const cells = parseCsv(new TextDecoder('utf-8').decode(await f.arrayBuffer()).replace(/^﻿/, ''));
-          const head = cells.shift() || [];
-          raw = cells.map((rw) => {
-            const o = {};
-            head.forEach((hd, i) => { o[hd] = rw[i] == null ? '' : rw[i]; });
-            return o;
-          });
-        }
-        const byLabel = new Map(p.columns.map((c) => [c.label, c.key]));
-        const keys = new Set(p.columns.map((c) => c.key));
-        const rows = raw.map((r) => {
-          const out = {};
-          Object.entries(r).forEach(([hd, vv]) => {
-            const k = keys.has(hd) ? hd : byLabel.get(hd);
-            if (k && vv !== '') out[k] = vv;
-          });
-          return out;
-        }).filter((r) => Object.keys(r).length > 0);
-        if (!rows.length) { pushToast('warn', 'לא נמצאו שורות תואמות בקובץ'); return; }
-        const res = await p.onImportRows(rows);
-        pushToast(res.fail ? 'bad' : 'ok',
-          'ייבוא: ' + res.ok + ' נוספו' + (res.fail ? ', ' + res.fail + ' נכשלו' : ''));
-      } catch (e) {
-        pushToast('bad', e && e.message ? e.message : 'הייבוא נכשל');
-      } finally {
-        st.importing = false; fileInput.value = ''; updateToolbar();
-      }
     });
 
     // ── boot: measure, load the component, build, first sync ──────────────────
@@ -881,7 +732,6 @@
       update(patch) { Object.assign(p, patch); reindexCols(); if (grid) sync(); },
       getState() { return { page: safePage(), pageSize: effPageSize(), search: st.q, sort: st.sort }; },
       refresh() { if (grid) sync(); },
-      clearSelection() { st.sel = new Set(); if (grid) sync(); },
       destroy() {
         st.destroyed = true;
         cancelAnimationFrame(anchorRaf);

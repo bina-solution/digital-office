@@ -14,7 +14,7 @@
  * the docker network:
  *
  *   docker run --rm --network traefik-network \
- *     -v /path/to/deployment-bina-comp/apps/chat:/app -w /app \
+ *     -v /path/to/deployment-hacohen/apps/chat:/app -w /app \
  *     -e CHAT_RELAY_TEST=1 node:22-slim npx jest tests/buzz_backend.test.js
  *
  * Every identity it uses is minted fresh per run, so it can run against the live relay without
@@ -153,9 +153,9 @@ d('BuzzChatBackend against a live relay', () => {
   test('a bot-authored message is marked, so the receive path can refuse to answer it', async () => {
     const g = await alice.createGroup({ name: 'לולאה', members: ['bob'] });
     const human = await alice.sendMessage(g.id, { text: 'שלום' });
-    const bot = await alice.sendMessage(g.id, { text: 'אני בוט', botId: 'bina-comp-bot' });
+    const bot = await alice.sendMessage(g.id, { text: 'אני בוט', botId: 'hacohen-bot' });
     expect((await bob.inboundEnvelope(human.message.id)).botId).toBeNull();
-    expect((await bob.inboundEnvelope(bot.message.id)).botId).toBe('bina-comp-bot');
+    expect((await bob.inboundEnvelope(bot.message.id)).botId).toBe('hacohen-bot');
   });
 
   test('an unknown conversation is null, and an unknown send is notFound — never an outage', async () => {

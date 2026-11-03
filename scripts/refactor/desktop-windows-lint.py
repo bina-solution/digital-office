@@ -78,10 +78,18 @@ DIALOG_HEAD = r"(?m)^\.modal(?:-h| h3)\{([^}]*)\}"
 
 
 def dialog_pages() -> dict[str, str]:
-    """Every screen that has a dialog header of its own, by path -> its page."""
+    """Every screen that has a dialog header of its own, by path -> its text.
+
+    A dialog's stylesheet counts as much as its markup, and this gate used to read only markup
+    (`*/static/index.html`, `platform-base/*/ui.html`): the console's two dialogs — «מצב החיבורים» and
+    the account wizard — live in `platform-base/console/static/style.css` and app.js's own builders,
+    so the one surface the owner meets most often was the one shape this check never saw (DGO-518,
+    whose acceptance asks for exactly this). A `.css` under a surface's `static/` is read now, on the
+    same two questions: is the card bounded, and does its header stay in sight."""
     found: dict[str, str] = {}
     for pattern in ("apps/*/static/index.html", "apps/*/*/static/index.html", "platform-base/*/static/index.html",
-                    "platform-base/*/ui.html"):
+                    "platform-base/*/ui.html",
+                    "apps/*/static/*.css", "apps/*/*/static/*.css", "platform-base/*/static/*.css"):
         for p in sorted(REPO.glob(pattern)):
             text = p.read_text(encoding="utf-8", errors="replace")
             if re.search(DIALOG_HEAD, text):
@@ -226,6 +234,21 @@ def self_test() -> int:
          static_findings(SUITE_OK, BUILD_OK, PAGE_OK, NAV_OK, ASK_OK,
                          {"platform-base/x/ui.html": ".modal{padding:24px;width:min(460px,92vw)}\n.modal h3{margin:0 0 16px}\n"})
          [0].startswith("platform-base/x/ui.html: its dialog's card has no bound")),
+        # DGO-518's acceptance, as a case: a dialog's STYLESHEET is a dialog carrier too. The console's
+        # two dialogs are built in app.js and styled in its `static/style.css`, so a scan that reads
+        # only markup was blind to the surface whose dialogs the owner meets most often.
+        ("a dialog that lives in a stylesheet is checked, and refused when it scrolls whole",
+         static_findings(SUITE_OK, BUILD_OK, PAGE_OK, NAV_OK, ASK_OK,
+                         {"platform-base/console/static/style.css":
+                          ".modal{width:min(360px,92vw)}\n.modal.wide{width:min(600px,94vw);max-height:88vh;overflow:auto}\n"
+                          ".modal-h{display:flex}\n"})
+         == ["platform-base/console/static/style.css: its dialog's card has no bound — taller than its frame, "
+             "its title and its buttons are outside it and nothing scrolls"]),
+        ("…and the same stylesheet with a bound and a sticky header is accepted",
+         static_findings(SUITE_OK, BUILD_OK, PAGE_OK, NAV_OK, ASK_OK,
+                         {"platform-base/console/static/style.css":
+                          ".modal{max-height:92vh;overflow:auto}\n.modal-h{display:flex;position:sticky;top:-22px}\n"})
+         == []),
     ]
     for name, good in cases:
         print(f"  [{'ok ' if good else 'FAIL'}] {name}")

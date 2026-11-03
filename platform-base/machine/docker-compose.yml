@@ -7,6 +7,9 @@ services:
     # from a private repo is private, so `docker login ghcr.io` on a machine that must pull.
     image: ghcr.io/solomonboltin/digital-office/machine:${IMAGE_TAG:-latest}
     pull_policy: missing
+    # uvicorn forks workers; without an init they are never reaped. Measured 2026-09-29 (WSL2):
+    # "PID … is zombie and can not be killed. Use the --init option" from dockerd on recreate.
+    init: true
     build:
       context: .
       dockerfile: Dockerfile
@@ -32,7 +35,7 @@ services:
     - SENTRY_DSN=${MACHINE_SENTRY_DSN:-}
     - DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-bina-deployment}
     - HOST_ROOT=/host/root
-    - DEPLOYMENT_PATH=/host/root/root/deployment-bina-comp
+    - DEPLOYMENT_PATH=/host/root/root/deployment-hacohen
     - MACHINE_CLEANUP_ALLOWED_ACTIONS=${MACHINE_CLEANUP_ALLOWED_ACTIONS:-}
     - MACHINE_DU_TIMEOUT_S=${MACHINE_DU_TIMEOUT_S:-20}
     - MACHINE_STAT_WORKERS=${MACHINE_STAT_WORKERS:-8}

@@ -22,7 +22,7 @@ log() { echo "[glitchtip-push] $*"; }
 docker ps --format '{{.Names}}' | grep -Fxq "${GT}" || { echo "Error: '${GT}' not running." >&2; exit 1; }
 
 # Creds from .env, falling back to the shell environment (so CI / ad-hoc runs can pass them).
-ADMIN_EMAIL="$(read_env GLITCHTIP_ADMIN_EMAIL)"; ADMIN_EMAIL="${ADMIN_EMAIL:-${GLITCHTIP_ADMIN_EMAIL:-admin@local.dev}}"
+ADMIN_EMAIL="$(read_env GLITCHTIP_ADMIN_EMAIL)"; ADMIN_EMAIL="${ADMIN_EMAIL:-${GLITCHTIP_ADMIN_EMAIL:-person92@example.com}}"
 ADMIN_PASS="$(read_env GLITCHTIP_ADMIN_PASSWORD)"; ADMIN_PASS="${ADMIN_PASS:-${GLITCHTIP_ADMIN_PASSWORD:-}}"
 SECRET="$(read_env GLITCHTIP_SECRET_KEY)"; SECRET="${SECRET:-${GLITCHTIP_SECRET_KEY:-}}"
 # read_env resolves ${BUSINESS_NAME} inside .env, so the org is the business, not a past client.
@@ -53,6 +53,18 @@ if [ -z "${GLITCHTIP_PROJECTS:-}" ] && [ -z "$BP_PROJECTS" ]; then
   exit 1
 fi
 PROJECTS="${GLITCHTIP_PROJECTS:-$BP_PROJECTS}"
+# No admin password (a raw `cp .env.ex .env`: the template carries none, since its old literal was a
+# published one — DGO-980): mint one and keep it in .env, as the poller token below is kept. Never printed.
+ADMIN_ENV="${GLITCHTIP_DSN_ENV_FILE:-${REPO_ROOT}/.env}"
+if [ -z "$ADMIN_PASS" ] && [ -f "$ADMIN_ENV" ]; then
+  ADMIN_PASS="G$(openssl rand -hex 24)9x!"
+  if grep -qE '^GLITCHTIP_ADMIN_PASSWORD=' "$ADMIN_ENV"; then
+    sed -i "s#^GLITCHTIP_ADMIN_PASSWORD=.*#GLITCHTIP_ADMIN_PASSWORD=${ADMIN_PASS}#" "$ADMIN_ENV"
+  else
+    printf 'GLITCHTIP_ADMIN_PASSWORD=%s\n' "$ADMIN_PASS" >> "$ADMIN_ENV"
+  fi
+  log "minted GLITCHTIP_ADMIN_PASSWORD -> $(basename "$ADMIN_ENV")"
+fi
 [ -n "$ADMIN_PASS" ] || { echo "Error: GLITCHTIP_ADMIN_PASSWORD not set in .env" >&2; exit 1; }
 [ -n "$SECRET" ]     || { echo "Error: GLITCHTIP_SECRET_KEY not set in .env" >&2; exit 1; }
 
@@ -74,11 +86,20 @@ def log(m): print("[glitchtip-push]  " + m)
 User = get_user_model()
 email = os.environ["GT_ADMIN_EMAIL"]; secret = os.environ["GT_SECRET"]; host = os.environ["GT_HOST"]
 
-# 1) superuser (idempotent)
+# 1) superuser (idempotent) — and .env is its password's one source: a rotation is a new value in
+#    .env and this push, with no app disconnected (the DSN keys come from GT_SECRET, not from it).
+#    It used to be set once, at creation, so a rotated .env left the old password working (DGO-980).
+#    So a password changed in GlitchTip's own screen is set back on the next run (`prepare` runs this
+#    push on every `bbox run`) and the admin's sessions end: change it in .env. Only this email's
+#    account is kept: changing GLITCHTIP_ADMIN_EMAIL makes a second superuser, the first keeps its own.
 admin = User.objects.filter(email=email).first()
 if not admin:
     admin = User.objects.create_superuser(email=email, password=os.environ["GT_ADMIN_PASS"])
     log("created superuser " + email)
+elif not admin.check_password(os.environ["GT_ADMIN_PASS"]):
+    admin.set_password(os.environ["GT_ADMIN_PASS"])
+    admin.save(update_fields=["password"])
+    log("superuser exists " + email + " — its password set from .env")
 else:
     log("superuser exists " + email)
 

@@ -46,7 +46,7 @@ const psql = (container, user, db, sql) =>
 const GUARD_SQL = `select n->'parameters'->>'jsCode'
   from workflow_entity w, lateral jsonb_array_elements(w.nodes::jsonb) n
  where w.id='indoxV2Driver01' and n->>'name'='Dup Guard: Double Action'`;
-const src = psql(N8N_DB, 'bina-comp', 'n8n', GUARD_SQL);
+const src = psql(N8N_DB, 'hacohen', 'n8n', GUARD_SQL);
 if (!src || !src.trim()) {
   console.error('FATAL: could not read the live Dup Guard code from n8n');
   process.exit(1);

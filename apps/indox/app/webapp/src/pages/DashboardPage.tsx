@@ -120,7 +120,7 @@ function BarRow({
   if (!to) return <div className="barrow">{body}</div>;
   return (
     <Link className="barrow" to={to} style={{ textDecoration: 'none', color: 'inherit' }}
-          title={`הצג את ${he(value)} המסמכים האלה`}>
+          title={`הצג את ${value === 1 ? 'המסמך הזה' : `${he(value)} המסמכים האלה`}`}>
       {body}
     </Link>
   );
@@ -428,7 +428,7 @@ export default function DashboardPage() {
                 <div className="score-big num">{nn(d.extraction?.overall)}%</div>
                 <div className="score-sub">
                   {extScored != null
-                    ? `כיסוי הערכים הסופיים על פני השדות — ${he(extScored)} מסמכים שהושלמו`
+                    ? `כיסוי הערכים הסופיים על פני השדות — ${extScored === 1 ? 'מסמך אחד שהושלם' : `${he(extScored)} מסמכים שהושלמו`}`
                     : 'כיסוי הערכים הסופיים על פני השדות'}
                 </div>
                 {/* N9: "ודאות ההתאמה" — the mean SELECTION_CERTAINTY, beside the coverage score

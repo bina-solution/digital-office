@@ -12,7 +12,7 @@ ordered plan to finish — including the full live-QA proof plan.
 |---|---|---|
 | U01 | Every mail/drive document in the INDOX table; mail registries deposit to local drive `automations/<name>` | **partial** — pipeline now works, coverage still short |
 | U02 | Sync UI that actually shows what is going on | **done** — board rebuilt, DONE column added, timeouts fixed |
-| U03 | Full task list to a perfect INDOX + bina-comp live | this document |
+| U03 | Full task list to a perfect INDOX + hacohen live | this document |
 | U04 | The seven sync registries | **partial** — 6 live after the seed wipe; restore in flight; #4 blocked on Drive permission |
 | U05 | #6 is `יצוא צט`, not whatsapp | **done** — folders found and wired |
 | U06 | Clear last month's labels; explain 06/26; DONE column | **partial** — 06/26 explained, DONE column shipped, label clearing not run |
@@ -134,7 +134,7 @@ memory pressure. `drive-gdoc-warehouse`/`drive-bs` share destination folders.
 
 ### Blocked on you (nothing proceeds without these)
 1. **Drive write permission** — share a Shared Drive with
-   `person7@example.com`, or add an OAuth Drive
+   `person6-x-x@example.com`, or add an OAuth Drive
    connection. Blocks registry #4 (`מסמכים כללים` does not exist and cannot be created), the shared
    destination-folder collision, and the accelerating `drive api` 503s.
 2. **`gh auth login`** — GitHub Actions status is unobtainable otherwise.

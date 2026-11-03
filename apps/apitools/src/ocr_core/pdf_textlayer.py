@@ -204,7 +204,7 @@ def ocr_from_pdf_textlayer(pdf_path: str) -> dict:
                 w = heb_norm(w)
                 # Drop punctuation-only tokens (":.", ":", "-", "()" …). A PDF text layer
                 # emits them as standalone words; they then sit between a label and its
-                # value ("ח.פ" | ":." | "516587961") and a find-after lands on the
+                # value ("ח.פ" | ":." | "500000195") and a find-after lands on the
                 # punctuation, fails validation, and the whole extraction gives up.
                 # The engine's intro-skip only knows single characters, so filter here.
                 if w.strip() and any(c.isalnum() for c in w):

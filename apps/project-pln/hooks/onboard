@@ -50,7 +50,7 @@ ADMIN_EMAIL="${PLANE_OWNER_EMAIL:-$(read_env PLANE_OWNER_EMAIL)}"
 ADMIN_EMAIL="${ADMIN_EMAIL:-$(read_env N8N_OWNER_EMAIL)}"
 
 # A PLACEHOLDER OWNER IS NOT AN OWNER (DGO-13). The fallback chain ends in whatever this deployment
-# happened to mint for CI (`ci@local.dev`), and on the owner's own office that address became the
+# happened to mint for CI (`person5@example.com`), and on the owner's own office that address became the
 # instance administrator — an account nobody can read mail for, whose password lives in a vault row
 # beside a person who never asked for it. Refusing here is the difference between "the office has an
 # owner" and "the office has a login". Name the key, never guess the replacement.

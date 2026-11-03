@@ -19,7 +19,7 @@
 --       each reproduce exactly from AI_DOC_ID (02/008714, 02/198932, 234) — verified per row. So
 --       the stored label is already right and COMPANY_DOC_ID is the corrupted column. Repairing
 --       here would destroy a correct label and write a garbage one, on three real client documents
---       (COMPANY_ID 516128592 / 558283362 / 036973469).
+--       (COMPANY_ID 500001110 / 500001128 / 030000034).
 --
 --   (b) 13 drive-gdoc rows ingested 2026-08-06 10:10-11:27 (ids doc_msh*, STATUS ACTION_RESTART or
 --       OLD). Three of them share COMPANY_DOC_ID '1600326381' while holding three DIFFERENT labels

@@ -384,6 +384,22 @@ button.pg-live{cursor:pointer}
 @media (max-height:699px) and (max-width:430px){
   .pg-head:not([data-view]):has(.pg-actions) h1{display:none}
   .pg-actions{margin-inline-start:0}
+  /* THE HEADING IS ONE LINE, AND THE ROW OF ACTIONS SCROLLS INSIDE IT. With the title kept (the rule
+     above keeps it when it names a view) the row wrapped instead: on the sites screen at 380×224 the
+     buttons took three lines and the heading ended at 125px of the window's 224 — most of the smallest
+     window given to chrome (measured 2026-10-13, the windows suite). The title keeps its width, the row
+     takes what is left and scrolls sideways — the idiom this office already uses for a row of tools in
+     a short frame. A button does not wrap its own label either: with the row held to one line two
+     controls grew to 64px and 46px and the heading was still 73px. */
+  .pg-head{flex-wrap:nowrap;margin-bottom:6px;padding-bottom:6px}
+  .pg-head>:first-child{flex:none}
+  .pg-actions{flex:1 1 auto;min-width:0;justify-content:flex-end}
+  .pg-actions{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;max-width:100%}
+  .pg-actions::-webkit-scrollbar{display:none}
+  .pg-actions .btn,.pg-actions button,.pg-actions a.btn,.pg-actions select{white-space:nowrap}
+  /* …and the row's own status line ellipsises instead of stacking: `span.live` («2 אתרים · הכל עונה»)
+     was 59px WIDE and 83px TALL — the row's height was one line of text wrapping letter by letter. */
+  .pg-actions .live{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
   /* …and a line that reports (`data-live`) shares that line with them, as far as it fits */
   .pg-head:has(.pg-sub[data-live]){flex-wrap:nowrap}
   .pg-head>:first-child:has(.pg-sub[data-live]){flex:1 1 0;min-width:0}

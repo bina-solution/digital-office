@@ -5,7 +5,7 @@
 
 set -euo pipefail
 
-DEPLOY_DIR="/root/deployment-bina-comp"
+DEPLOY_DIR="/root/deployment-hacohen"
 REPORT_DATE=$(date +%Y-%m-%d)
 HOSTNAME=$(hostname)
 SAVE=false

@@ -8,7 +8,7 @@
  *                    built from the ABSTRACT backend (chatapi/adapters) and never from a transport.
  *
  * It knows nothing about Baileys, Telegram or the local chat tables. The whole point of this file is
- * that `bina-comp-bot` — a bot that does real document intake and dispatches agent jobs — was written
+ * that `hacohen-bot` — a bot that does real document intake and dispatches agent jobs — was written
  * against WhatsApp and now runs unchanged on any backend that can `sendMessage(conversationId, {text})`.
  *
  * The message and ctx shapes, and WHY each field exists, are in ./README.md. Read that before adding
@@ -36,13 +36,13 @@ const NO_BOT = { id: 'none', name: 'ללא בוט — שיחה ידנית', desc
  * these `'local-chat'`/`'wa-baileys'`, which matched no id the connections service ever issues, so
  * NEITHER default applied.
  *
- * The WhatsApp entry is not decoration: bina-comp-bot is live and answering a real phone. Without it
+ * The WhatsApp entry is not decoration: hacohen-bot is live and answering a real phone. Without it
  * this refactor silently switches the production number off the moment it deploys — the worst kind of
  * regression, because nothing errors, messages just stop being answered.
  */
 const DEFAULT_ATTACHMENTS = {
-  chat_local: 'bina-comp-bot',
-  chat_wa_baileys: 'bina-comp-bot',
+  chat_local: 'hacohen-bot',
+  chat_wa_baileys: 'hacohen-bot',
 };
 
 /** Connection ids are `<protocol>-<suffix>`; the protocol is what a default can be keyed on. */
@@ -200,7 +200,7 @@ function getBot(botId, dir) {
 /**
  * ONE bot per connection. Not a list: two bots on one conversation means two answers to one question,
  * and no ordering rule makes that read as anything but a broken service. If a connection needs several
- * behaviours, that is one bot with several branches — which is exactly what bina-comp-bot is.
+ * behaviours, that is one bot with several branches — which is exactly what hacohen-bot is.
  */
 function attach(connectionId, botId, dir) {
   if (!connectionId) throw new Error('attach: connectionId required');

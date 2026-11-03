@@ -65,7 +65,7 @@ THE RULES
       `__instance:'test'` (either quote style) at least once, must carry NO `__instance` literal
       naming any OTHER instance (expressions and variables are outside this rule — a literal is
       what makes the binding legible before anything runs; one call pinned to 'test' and another
-      pinned to 'bina-comp' is worse than pinning nothing, because the first green covers for the
+      pinned to 'hacohen' is worse than pinning nothing, because the first green covers for the
       second), and must not call drive DISCOVERY — `op:'connections'` in a driveApi01-calling
       blueprint, the raw `:8975/connections` endpoint, or `engine/profiles`. Test connections
       come from indox_test.settings key='test_connections'; discovery binds whatever identities
@@ -627,9 +627,9 @@ def self_test() -> int:
             {"name": "Call", "parameters": {"workflowInputs": {"value":
                 {"__instance": "test"}}}}]}, [], set(), prefix_owner=True)))
     chk("R7(b) fires on a literal pinning a DIFFERENT instance next to the correct one",
-        any("__instance:'bina-comp'" in f for f in check_blueprint("x.json", {"nodes": [
+        any("__instance:'hacohen'" in f for f in check_blueprint("x.json", {"nodes": [
             {"name": "N", "parameters": {"jsCode":
-                "a={__instance:'test'}; b={__instance:'bina-comp'};"}}]}, [], set(),
+                "a={__instance:'test'}; b={__instance:'hacohen'};"}}]}, [], set(),
             prefix_owner=True)))
     chk("R7(b) ignores expression/variable-valued __instance — a variable is not a literal",
         not any(f.startswith("R7 ") for f in check_blueprint("x.json", {"nodes": [

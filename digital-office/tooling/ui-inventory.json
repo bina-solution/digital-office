@@ -558,7 +558,7 @@
       "title": "בוט ווצאפ — התחברות",
       "kind": "route",
       "tier": "first_party",
-      "source": "production/whatsapp-bina-comp/src/api/api.js",
+      "source": "production/whatsapp-hacohanim/src/api/api.js",
       "url": "/#/m/whatsapp",
       "auth": "authentik",
       "framed": true,
@@ -579,7 +579,7 @@
       "title": "בוט ווצאפ — לוח בקרה",
       "kind": "route",
       "tier": "first_party",
-      "source": "production/whatsapp-bina-comp/src/api/api.js",
+      "source": "production/whatsapp-hacohanim/src/api/api.js",
       "url": "/#/m/whatsapp",
       "auth": "authentik",
       "framed": true,
@@ -596,7 +596,7 @@
       "title": "בוט ווצאפ — connect",
       "kind": "dom-state",
       "tier": "first_party",
-      "source": "production/whatsapp-bina-comp/src/api/ui/index.ejs",
+      "source": "production/whatsapp-hacohanim/src/api/ui/index.ejs",
       "url": "/#/m/whatsapp",
       "steps": [
         {
@@ -617,7 +617,7 @@
       "title": "בוט ווצאפ — actions",
       "kind": "dom-state",
       "tier": "first_party",
-      "source": "production/whatsapp-bina-comp/src/api/ui/index.ejs",
+      "source": "production/whatsapp-hacohanim/src/api/ui/index.ejs",
       "url": "/#/m/whatsapp",
       "steps": [
         {
@@ -638,7 +638,7 @@
       "title": "בוט ווצאפ — users",
       "kind": "dom-state",
       "tier": "first_party",
-      "source": "production/whatsapp-bina-comp/src/api/ui/index.ejs",
+      "source": "production/whatsapp-hacohanim/src/api/ui/index.ejs",
       "url": "/#/m/whatsapp",
       "steps": [
         {
@@ -659,7 +659,7 @@
       "title": "בוט ווצאפ — settings",
       "kind": "dom-state",
       "tier": "first_party",
-      "source": "production/whatsapp-bina-comp/src/api/ui/index.ejs",
+      "source": "production/whatsapp-hacohanim/src/api/ui/index.ejs",
       "url": "/#/m/whatsapp",
       "steps": [
         {

@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+#: share — lend a computer to another office over HTTPS: <computer-id|local> <public-key> <to> | list | revoke <share-id> | attach <door> [user] [label]
+#
+#   ./bbox computers share local "ssh-ed25519 AAAA… office-key@…" claude-cloud   # on the LENDING office
+#   ./bbox computers share list
+#   ./bbox computers share revoke share-1a2b3c4d
+#   ./bbox computers share attach wss://computers.<domain>/share/<token> root vps1   # on the BORROWING office
+#
+# `local` is the machine the office runs on (computer_local-local). The public key is the borrowing
+# office's own key: there, `./bbox computers share key` prints it — or, for an office that does not
+# outlive its session, the public half of COMPUTERS_SHARE_KEY (see `attach`).
+set -uo pipefail
+export PYTHONIOENCODING=utf-8
+VERB="${1:-list}"
+CONTAINER="$(docker ps --filter 'name=^computers-' --format '{{.Names}}' 2>/dev/null | head -1)"
+[ -n "${CONTAINER}" ] || { echo "computers is not running here (./bbox apps enable computers && ./bbox run)" >&2; exit 1; }
+
+api() {                    # api <method> <path> [json-body] — through the container: its name does not resolve on the host
+  docker exec -i "${CONTAINER}" python3 - "$1" "$2" "${3:-}" <<'PY'
+import json, sys, urllib.request
+method, path, body = sys.argv[1], sys.argv[2], (sys.argv[3] or "")
+data = body.encode() if body else None
+req = urllib.request.Request("http://127.0.0.1:8977" + path, data=data, method=method,
+                             headers={"content-type": "application/json"} if data else {})
+try:
+    print(json.dumps(json.loads(urllib.request.urlopen(req, timeout=120).read()), indent=1, ensure_ascii=False))
+except urllib.error.HTTPError as e:
+    print(e.read().decode() or json.dumps({"error": f"HTTP {e.code}"}))
+    sys.exit(1)
+PY
+}
+# api_on_stdin <method> <path> — the body arrives on STANDARD INPUT, so a value that must never
+# appear in a command line (a private key) never does: not in this shell's argv, not in `docker exec`'s,
+# not in the container's /proc/<pid>/cmdline. This is the same rule /exec's `stdin` exists for.
+api_on_stdin() {
+  docker exec -i "${CONTAINER}" python3 -c '
+import json, sys, urllib.request
+method, path = sys.argv[1], sys.argv[2]
+body = sys.stdin.read()
+data = body.encode() if body else None
+req = urllib.request.Request("http://127.0.0.1:8977" + path, data=data, method=method,
+                             headers={"content-type": "application/json"} if data else {})
+try:
+    print(json.dumps(json.loads(urllib.request.urlopen(req, timeout=120).read()), indent=1, ensure_ascii=False))
+except urllib.error.HTTPError as e:
+    print(e.read().decode() or json.dumps({"error": f"HTTP {e.code}"}))
+    sys.exit(1)' "$1" "$2"
+}
+json() { python3 -c 'import json,sys; print(json.dumps(dict(zip(sys.argv[1::2], sys.argv[2::2]))))' "$@"; }
+
+case "${VERB}" in
+  key)    api GET /api/office-key | python3 -c 'import json,sys; print(json.load(sys.stdin)["public_key"])' ;;
+  list)   api GET /api/shares ;;
+  revoke) [ -n "${2:-}" ] || { echo "usage: share revoke <share-id>" >&2; exit 2; }
+          api DELETE "/api/shares/$2" ;;
+  attach) [ -n "${2:-}" ] || { echo "usage: share attach <door> [user] [label]" >&2; exit 2; }
+          # An office that does not outlive its session (a cloud sandbox) cannot keep its minted key:
+          # COMPUTERS_SHARE_KEY (a private key, e.g. an environment secret) is then the machine's own
+          # key, the one whose public half was shared. Newlines flattened by a secret store are restored.
+          # The key travels on stdin only — see api_on_stdin.
+          printf '%s' "${COMPUTERS_SHARE_KEY:-}" | sed 's/\\n/\n/g' | python3 -c '
+import json, re, sys
+s = sys.stdin.read().strip()
+m = re.match(r"(-----BEGIN [A-Z ]+-----)(.*?)(-----END [A-Z ]+-----)", s, re.S)
+key = m.group(1) + "\n" + "\n".join(m.group(2).split()) + "\n" + m.group(3) if m else s
+body = {"door": sys.argv[1], "user": sys.argv[2], "label": sys.argv[3]}
+if key:
+    body["private_key"] = key
+print(json.dumps(body))' "$2" "${3:-root}" "${4:-}" | api_on_stdin POST /api/computers ;;
+  *)      CID="${VERB}"; [ "${CID}" = local ] && CID=computer_local-local
+          [ -n "${2:-}" ] && [ -n "${3:-}" ] || { echo "usage: share <computer-id|local> <public-key> <to>" >&2; exit 2; }
+          api POST "/api/computers/${CID}/shares" "$(json public_key "$2" to "$3")" ;;
+esac

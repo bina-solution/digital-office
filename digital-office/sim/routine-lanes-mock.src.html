@@ -1,0 +1,198 @@
+<!doctype html>
+<!--
+  routine-lanes-mock — «עזריה שגרה»: מסלולים במקום אלף שיחות, וכל עבודה משוקפת בעלותה.
+
+  Built by `digital-office/sim/build-routine-lanes-mock.py`. Two things it refuses to paraphrase:
+    * the money — computed IN THIS PAGE by the office's own `lib/pricing.js` + `lib/cost.js`
+      (inlined by the builder, loaded as Blob modules);
+    * the words — the sidebar's own strings («סביבות עבודה», «שיחות», «ללא קבוצה», «שיחה חדשה»)
+      are the harness's own Hebrew locale, so the drawn sidebar says what the product says.
+
+  States a shot can name: ?state=run · ?state=exhausted · ?state=unapproved
+-->
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <title>עזריה שגרה — מסלולים, תקציב ושיקוף עלות</title>
+  <link rel="stylesheet" href="../../platform-base/bina-ui/theme-tokens.css" />
+  <style>
+    body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font); display: flex; gap: 20px; padding: 20px; align-items: flex-start; }
+    h1 { font-size: 15px; margin: 0 0 6px; }
+    .sub { font-size: 12px; color: var(--muted); line-height: 1.7; margin: 0 0 12px; }
+    .side { width: 300px; flex: none; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); padding: 12px; font-size: 13px; }
+    .side h2 { font-size: 11.5px; color: var(--muted); margin: 14px 0 6px; font-weight: 600; }
+    .side h2:first-child { margin-top: 0; }
+    .row { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 8px; }
+    .row:hover { background: var(--surface-2); }
+    .row.on { background: var(--surface-2); font-weight: 600; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: #6f8f4a; flex: none; }
+    .dot.warn { background: #d9a441; } .dot.over { background: #c4553f; } .dot.idle { background: var(--border); }
+    .indent { padding-inline-start: 18px; }
+    .count { margin-inline-start: auto; color: var(--muted); font-size: 11.5px; }
+    .main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+    .card { border: 1px solid var(--border); border-radius: 14px; background: var(--surface); padding: 14px; }
+    .totals { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+    .tile { border: 1px solid var(--border); border-radius: 12px; padding: 8px 12px; min-width: 104px; background: var(--surface-2); }
+    .tile b { display: block; font-size: 17px; } .tile span { font-size: 11px; color: var(--muted); }
+    .gate { border: 1px solid var(--border); border-inline-start: 4px solid #6f8f4a; border-radius: 12px; padding: 12px 14px; }
+    .gate.warn { border-inline-start-color: #d9a441; } .gate.over { border-inline-start-color: #c4553f; }
+    .gate .v { font-size: 16px; font-weight: 700; }
+    .gate .why { font-size: 12.5px; color: var(--muted); line-height: 1.7; margin-top: 4px; }
+    .lane { border: 1px solid var(--border); border-radius: 12px; padding: 11px 13px; margin-bottom: 9px; }
+    .lane .top { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+    .lane .name { font-weight: 700; font-size: 14px; }
+    .lane .item { font-size: 12px; color: var(--muted); }
+    .lane .money { margin-inline-start: auto; font-weight: 700; }
+    .bar { height: 7px; border-radius: 999px; background: var(--border); overflow: hidden; margin: 8px 0 6px; }
+    .bar i { display: block; height: 100%; background: var(--accent, #6f8f4a); }
+    .bar.warn i { background: #d9a441; } .bar.over i { background: #c4553f; }
+    .meta { font-size: 11.5px; color: var(--muted); display: flex; gap: 12px; flex-wrap: wrap; }
+    .field { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; margin-bottom: 6px; }
+    .field span { color: var(--muted); }
+    input[type=number], input[type=text] { width: 104px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 8px; background: transparent; color: inherit; font: inherit; }
+    input[type=checkbox] { width: 16px; height: 16px; }
+    code { font-size: 11.5px; background: var(--surface-2); border-radius: 5px; padding: 1px 5px; direction: ltr; display: inline-block; }
+    .note { font-size: 11.5px; color: var(--muted); line-height: 1.7; }
+    .notify { font-size: 12.5px; border: 1px dashed var(--border); border-radius: 10px; padding: 10px 12px; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <div class="side">
+    <h2>סביבות עבודה</h2>
+    <div class="row"><span class="dot"></span>הלשכה הדיגיטלית<span class="count">18</span></div>
+    <div class="row on"><span class="dot warn"></span>עזריה שגרה<span class="count">3</span></div>
+    <div class="indent">
+      <div class="row" id="s-lane1"><span class="dot warn"></span>שגרה · ui2-060<span class="count">רץ</span></div>
+      <div class="row" id="s-lane2"><span class="dot idle"></span>בדיקות · qa-041<span class="count">ממתין</span></div>
+      <div class="row" id="s-lane3"><span class="dot over"></span>לילה · web-002<span class="count">נעצר</span></div>
+      <div class="row"><span class="dot idle"></span>ארכיון<span class="count">12</span></div>
+    </div>
+    <h2>שיחות</h2>
+    <div class="row"><span class="dot idle"></span>ללא קבוצה<span class="count">26</span></div>
+    <div class="row"><span class="dot idle"></span>שיחה חדשה</div>
+    <div class="note" style="margin-top:14px">המסלולים הם הפעילים היחידים. שיחה שסיימה פריט או עברה את תקרת ההקשר עוברת לארכיון — ולכן המספר כאן לא גדל עם כל פריט.</div>
+  </div>
+
+  <div class="main">
+    <div class="card">
+      <h1>עזריה שגרה</h1>
+      <p class="sub">כל עבודה אוטונומית של הסוכן: מסלול קבוע, פריט מאושר אחד בכל רגע, תקציב משלו — וכל שקל משוקף כאן ובפריט.</p>
+      <div class="totals" id="totals"></div>
+    </div>
+
+    <div class="card">
+      <h1>השער — מה יקרה בטיק הבא (כל 5 דקות)</h1>
+      <div class="gate" id="gate">
+        <div class="v" id="gate-v">—</div>
+        <div class="why" id="gate-why">—</div>
+        <div class="notify" id="gate-notify">—</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h1>המסלולים</h1>
+      <div id="lanes"></div>
+      <div class="note">תקרת ההקשר לשיחה: <b>250k</b> טוקנים. מסלול שמגיע אליה מוסר תקציר לפריט ופותח שיחה טרייה באותו מסלול — כך השיחה לא מגיעה ל-792k טוקנים כמו בלילה של 10-13.</div>
+    </div>
+
+    <div class="card">
+      <h1>מה בודקים (אפשר לשנות כאן)</h1>
+      <div class="field"><span>פריט בתור</span><input type="text" id="item" value="ui2-060" /></div>
+      <div class="field"><span>אושר על ידי אדם (`מאושר`)</span><input type="checkbox" id="approved" checked /></div>
+      <div class="field"><span>תקציב (₪, או inf)</span><input type="text" id="budget" value="5" /></div>
+      <div class="field"><span>הפריט כבר צרך (₪)</span><input type="number" id="spent" value="0" step="0.1" /></div>
+      <div class="field"><span>טוקנים בשיחה (cache-hit)</span><input type="number" id="cached" value="120000000" step="1000000" /></div>
+      <div class="field"><span>פלט</span><input type="number" id="output" value="240000" step="10000" /></div>
+      <div class="field"><span>שעה (UTC)</span><input type="number" id="hour" value="3" min="0" max="23" /></div>
+      <div class="note">העלות של השיחה מחושבת כאן בקוד של הלשכה (`pricing.js` + `cost.js`), והסכום שהפריט צבר = העלות הזאת ועוד מה שצבר קודם. אישור ותקציב נכתבים בפריט ב-DGO — הסוכן לא יכול להוסיף אותם ולא להעלות אותם.</div>
+    </div>
+  </div>
+
+  <script type="text/plain" id="pricing-src">__PRICING_SRC__</script>
+  <script type="text/plain" id="cost-src">__COST_SRC__</script>
+  <script type="module">
+    const blob = (text, map) => URL.createObjectURL(new Blob([map(text)], { type: 'text/javascript' }));
+    const pricingUrl = blob(document.getElementById('pricing-src').textContent, (t) => t);
+    const costUrl = blob(document.getElementById('cost-src').textContent, (t) => t.replace('./pricing.js', pricingUrl));
+    const { fold, initial, view } = await import(costUrl);
+    const $ = (id) => document.getElementById(id);
+    const money = (v) => '₪' + v.toFixed(2);
+
+    function sessionCost() {
+      const hour = Number($('hour').value) || 0;
+      const usage = { inputTokens: 0, outputTokens: Number($('output').value) || 0, cacheReadTokens: Number($('cached').value) || 0, cacheWriteTokens: 0 };
+      const state = fold(initial(), { type: 'assistant/message', time: Date.UTC(2026, 9, 13, hour, 0, 0), data: { turn: 1, step: 1, usage, message: { source: { provider: 'deepseek', model: 'deepseek-flash' } } } });
+      return view(state, { currency: '₪', usdRate: 3.7, peakPricing: true });
+    }
+
+    /** The gate, exactly as the pulse will evaluate it: approval → budget → room left. */
+    function gateState() {
+      const approved = $('approved').checked;
+      const raw = $('budget').value.trim().toLowerCase();
+      const budget = raw === 'inf' ? Infinity : Number(raw);
+      const before = Number($('spent').value) || 0;
+      const session = sessionCost();
+      const spent = before + session.amount;
+      const over = budget !== Infinity && spent >= budget;
+      const warn = budget !== Infinity && !over && spent / budget >= 0.8;
+      return { approved, budget, spent, session, over, warn, left: budget === Infinity ? Infinity : Math.max(0, budget - spent) };
+    }
+
+    function render() {
+      const g = gateState();
+      const item = $('item').value.trim() || '(בלי פריט)';
+      const state = !g.approved ? 'unapproved' : g.over ? 'exhausted' : 'run';
+      const cls = state === 'run' ? '' : state === 'exhausted' ? 'over' : 'warn';
+      const verdict = state === 'run'
+        ? (g.warn ? 'רץ — קרוב לתקרה' : 'רץ — יש תקציב מאושר')
+        : state === 'exhausted' ? 'נעצר — התקציב נגמר' : 'נעצר — הפריט לא מאושר';
+      const why = state === 'run'
+        ? 'הפריט ' + item + ' מאושר, יש לו תקציב, ונשארו ' + (g.left === Infinity ? 'ללא הגבלה' : money(g.left)) + '. הדופק יחזיר את השיחה לסבב נוסף וירשום את הצריכה.'
+        : state === 'exhausted'
+          ? 'הפריט ' + item + ' צבר ' + money(g.spent) + ' מתוך ' + money(g.budget) + '. הדופק לא יחזיר את השיחה לעבודה, ינקה את המטרה כדי שלא תקום לתחייה, ויודיע.'
+          : 'לפריט ' + item + ' אין תווית `מאושר`. עבודה אוטונומית לא מתחילה על פריט שהאדם לא אישר — גם אם יש לו תקציב.';
+      const notify = state === 'run' ? 'אין התראה — עבודה תקינה.' :
+        (state === 'exhausted'
+          ? 'התראה (error): «התקציב של ' + item + ' נגמר — ' + money(g.spent) + ' מתוך ' + money(g.budget) + '. השיחה נעצרה ולא תחזור עד שהתקציב יועלה בפריט.»'
+          : 'התראה (error): «' + item + ' אינו מאושר — אין עבודה אוטונומית על פריט בלי אישור ואישור הוא של הבעלים.»');
+
+      $('gate').className = 'gate ' + cls;
+      $('gate-v').textContent = verdict;
+      $('gate-why').textContent = why;
+      $('gate-notify').textContent = notify;
+
+      const lanes = [
+        { name: 'שגרה', item: item, session: 'session-6d2cab71 · 41 סבבים', ctx: 118000, cls: cls, verdict: verdict, spent: g.spent, budget: g.budget },
+        { name: 'בדיקות', item: 'qa-041', session: 'session-9f31a0 · 6 סבבים', ctx: 42000, cls: '', verdict: 'ממתין — הפריט הנוכחי לא הסתיים', spent: 0.42, budget: 3 },
+        { name: 'לילה', item: 'web-002', session: 'ארכיון · נפתחת מחדש ב-22:00', ctx: 0, cls: 'over', verdict: 'נעצר אתמול ב-₪25 (התקציב של התוכנית)', spent: 25, budget: 25 },
+      ];
+      $('lanes').innerHTML = lanes.map((l) => {
+        const share = l.budget === Infinity ? 0 : Math.min(1, l.spent / l.budget);
+        const pct = l.budget === Infinity ? 0 : (l.spent / l.budget) * 100;
+        return '<div class="lane"><div class="top"><span class="name">' + l.name + '</span><span class="item">' + l.item + '</span>' +
+          '<span class="money">' + money(l.spent) + (l.budget === Infinity ? ' · ללא הגבלה' : ' / ' + money(l.budget)) + '</span></div>' +
+          '<div class="bar ' + l.cls + '"><i style="width:' + (l.budget === Infinity ? 3 : share * 100).toFixed(1) + '%"></i></div>' +
+          '<div class="meta"><span>' + l.verdict + '</span><span>הקשר: ' + (l.ctx / 1000).toFixed(0) + 'k / 250k</span><span><code>' + l.session + '</code></span>' +
+          (l.budget === Infinity ? '' : '<span>' + pct.toFixed(0) + '% מהתקציב</span>') + '</div></div>';
+      }).join('');
+
+      $('s-lane1').className = 'row ' + (cls || 'on');
+      const totalSession = g.session.amount;
+      $('totals').innerHTML = [
+        [money(g.spent), 'הפריט הזה, מצטבר'],
+        [money(totalSession), 'השיחה הזאת'],
+        [(g.session.totalTokens / 1e6).toFixed(1) + 'M', 'טוקנים בשיחה'],
+        ['3 / 0', 'מסלולים פעילים / בלי אישור'],
+      ].map(([v, k]) => '<div class="tile"><b>' + v + '</b><span>' + k + '</span></div>').join('');
+      document.body.dataset.state = state;
+    }
+
+    for (const id of ['item', 'approved', 'budget', 'spent', 'cached', 'output', 'hour']) $(id).addEventListener('input', render);
+    const want = new URLSearchParams(location.search).get('state');
+    if (want === 'exhausted') { $('spent').value = '4.9'; render(); }
+    if (want === 'unapproved') { $('approved').checked = false; render(); }
+    if (want === 'ceiling') { $('cached').value = '780000000'; $('budget').value = 'inf'; render(); }
+    render();
+  </script>
+</body>
+</html>

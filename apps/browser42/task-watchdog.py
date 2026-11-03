@@ -2,8 +2,9 @@
 """Platform-owned Browser42 task watchdog.
 
 Tasks are durable JSON records on the Browser42 shared data volume. An active task that stops
-heartbeating is marked stalled; its native tab group and evidence remain intact for inspection.
-The watchdog intentionally never closes a tab or browser.
+heartbeating is marked stalled and its evidence remains intact for inspection. On a stall the task's
+tab group is RELEASED (the reaper reaps a terminal task's tab within its interval anyway, and a kept
+tab would hold a lane up to MAX_TABS) and the owner is told so; the browser itself is never touched.
 """
 
 import json
@@ -30,6 +31,13 @@ ACTIVE = {"allocated", "active", "verifying"}
 BROKER = os.environ.get("BROKER", "ws://browser42-browser:8765")
 SPANS_URL = os.environ.get("ANY_CONCURRENCY_SPANS_URL", "http://any-concurrency:8080/ingest/span")
 SPANS_ENABLED = os.environ.get("BROWSER42_SPANS_ENABLED", "1") not in {"0", "false", "no", ""}
+# A stalled task is a task nobody is driving: the owner gets ONE notice carrying the hand-off link
+# (handoff.py, mounted beside this file — DGO-571). Empty NOTIFICATIONS_URL = no notice.
+NOTIFICATIONS_URL = os.environ.get("NOTIFICATIONS_URL", "http://notifications:8977")
+try:
+    import handoff
+except ImportError:                                     # pragma: no cover - an older compose, no mount
+    handoff = None
 
 try:
     import fcntl
@@ -77,6 +85,20 @@ def span_watchdog_stale(slug: str, reason: str, stage: str, created_at: int,
         "meta": {"slug": slug, "reason": reason, "stage": stage, "created_at": created_at,
                  "first_activity_at": first_activity_at, "last_activity_at": last_activity_at},
     })
+
+
+def notify_stalled(task: dict, failure: dict) -> bool:
+    """Tell the owner the truth: the task stalled and its tab is being released (just below — and the
+    reaper would reap a terminal task's tab within its interval anyway; keeping it would hold a lane
+    up to MAX_TABS, a policy this file does not own). So the notice promises no tab in front: it links
+    to the live view, where the browser is. Best-effort, like the spans."""
+    if handoff is None or not NOTIFICATIONS_URL:
+        return False
+    slug = str(task.get("slug") or "")
+    body = (f"המשימה «{slug}» נעצרה בשלב «{failure.get('stage', '?')}» ({failure.get('code', '?')}) "
+            "והכרטיסייה שלה שוחררה. דפדפן הלשכה נמצא בקישור.")
+    return handoff.notify_human(slug, body, handoff.view_link(), url=NOTIFICATIONS_URL,
+                                since=task.get("updated_at"))
 
 
 @contextmanager
@@ -138,6 +160,12 @@ def mark_stale(path: Path, task: dict, current: int) -> bool:
         temporary.replace(path)
         with (path.parent / "events.jsonl").open("a", encoding="utf-8") as handle:
             handle.write(json.dumps({"at": current, "event": "watchdog_stalled", "state": "stalled", "failure": failure}, sort_keys=True) + "\n")
+        # The owner's notice — it says the tab is released, so it promises nothing the close below
+        # takes away. Best-effort, like everything after the record.
+        try:
+            notify_stalled(task, failure)
+        except Exception:
+            pass
         # Release the tab group and close its lane on any-concurrency. Best-effort.
         try:
             broker_command({"action": "close", "slug": task.get("slug")})

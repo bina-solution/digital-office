@@ -67,24 +67,24 @@ def _container(service: str) -> str:
 
 INDOX_DOCS = [
     {"ID": "demo-inv-1001", "TYPE": "INVOICE", "SHORT_DOC_ID": "06146",
-     "COMPANY_DOC_ID": "SI256006146", "COMPANY_ID": "570043745",
+     "COMPANY_DOC_ID": "SI256006146", "COMPANY_ID": "500000153",
      "COMPANY_NAME": "סבח סוכנויות בע\"מ", "NAME": "חשבונית מס 06146",
      "DOC_DATE": "12/06/2026", "DOC_TOTAL_AMOUNT": "5400"},
     {"ID": "demo-shp-5001", "TYPE": "SHIPMENT", "SHORT_DOC_ID": "05179",
-     "COMPANY_DOC_ID": "S0125005179", "COMPANY_ID": "513498345",
+     "COMPANY_DOC_ID": "S0125005179", "COMPANY_ID": "500000187",
      "COMPANY_NAME": "פוליראן תעשיות", "NAME": "תעודת משלוח 05179",
      "DOC_DATE": "03/06/2026", "SHIPMENT_DOC_ID": "S0125005179"},
     {"ID": "demo-ord-7001", "TYPE": "ORDER", "SHORT_DOC_ID": "10004",
-     "COMPANY_DOC_ID": "PO25010004", "COMPANY_ID": "511301129",
+     "COMPANY_DOC_ID": "PO25010004", "COMPANY_ID": "500000062",
      "COMPANY_NAME": "אגן שיווק", "NAME": "הזמנת רכש 10004",
      "DOC_DATE": "28/05/2026", "PURCHASE_ID": "PO25010004"},
     {"ID": "demo-inv-1002", "TYPE": "INVOICE", "SHORT_DOC_ID": "00818",
-     "COMPANY_DOC_ID": "SI266000818", "COMPANY_ID": "512093170",
+     "COMPANY_DOC_ID": "SI266000818", "COMPANY_ID": "500001003",
      "COMPANY_NAME": "ישראל קרטון", "NAME": "חשבונית מס 00818",
      "DOC_DATE": "14/05/2026", "DOC_TOTAL_AMOUNT": "12800"},
     {"ID": "demo-inv-1003", "TYPE": "INVOICE", "SHORT_DOC_ID": "01661",
-     "COMPANY_DOC_ID": "SI256001661", "COMPANY_ID": "511020471",
-     "COMPANY_NAME": "מ.ש. בינה קומפ בע\"מ", "NAME": "חשבונית מס 01661",
+     "COMPANY_DOC_ID": "SI256001661", "COMPANY_ID": "500001011",
+     "COMPANY_NAME": "מ.ש. הכהנים בע\"מ", "NAME": "חשבונית מס 01661",
      "DOC_DATE": "22/04/2026", "DOC_TOTAL_AMOUNT": "3120"},
 ]
 
@@ -163,6 +163,33 @@ print(json.dumps(out, ensure_ascii=False))
         got = {}
     if got:
         subs["incoming-documents"] = got
+
+
+def indox_instances(subs: dict) -> None:
+    """Resolve `:instance` — the id in INDOX's real addresses (`/i/<instance>/documents`).
+
+    The bare paths (`/repos`, `/documents`, `/sync` …) are redirects now: they resolve the instance
+    ONCE and send you to the scoped URL (App.tsx), which is why the scoped form is what a screen's
+    address is. The app's own `/instances` lists them with `enabled`; the console's live frame shows
+    the first enabled one, so that is the one filled here. `:repo` is a DIFFERENT thing — a repository
+    name from `/repos`, which is what the legacy deep links carry.
+    """
+    def build(B):
+        return f'''
+import urllib.request, json
+B = "{B}"
+got = json.loads(urllib.request.urlopen(B + "/instances", timeout=15).read()).get("instances", [])
+on = [i for i in got if i.get("enabled")] or got
+if on:
+    print(json.dumps({{":instance": on[0].get("id")}}))
+'''
+    out = indox_probe(build)
+    try:
+        got = json.loads(out.splitlines()[-1]) if out else {}
+    except Exception:
+        got = {}
+    if got:
+        subs.setdefault("incoming-documents", {}).update(got)
 
 
 def indox_extraction(subs: dict) -> None:
@@ -261,6 +288,7 @@ def main() -> int:
 
     subs: dict = {}
     indox(subs)
+    indox_instances(subs)
     indox_extraction(subs)
     simple(subs, "drive", "drive", 8975, "/api/folders", "folders",
            "{folder}", ("id", "folderId", "label", "name"))
@@ -277,6 +305,17 @@ def main() -> int:
            "{id}", ("id", "uid", "mid"))
     simple(subs, "mailview", "mailview", 8976, "/api/labels", "labels",
            "{label}", ("name", "label", "id"))
+    # [2026-10-13] notifications grew an address per alert (`#/m/alerts/<id>` — the row expands), so
+    # its alert view is declared with `{id}` in the map and this row is what fills it. Without it the
+    # capture falls back to the view's own step (the app's row click) — a real alert on any office,
+    # but the owner's rule is that the ADDRESS opens the screen, so the address is what is filled.
+    simple(subs, "notifications", "notifications", 8977, "/api/notifications", "notifications",
+           "{id}", ("id",))
+    # [2026-10-13] any-concurrency's window is not a lookup — it is one of the app's own values
+    # (`WINS`: 0.25 · 1 · 2 · 6 · 24 hours), so the placeholder is filled with a literal. Two hours is
+    # a real window on any office; if WINS ever loses it, the view's own step (the app's window
+    # control) is what the capture runs.
+    subs["hours"] = "2"
 
     # [2026-09-27] sites and domains joined the map. Their detail views are parameterised
     # (`#/s/{site}/<tab>`, `#/a/{account}/d/{domain}/<tab>`), so with no id every one of them is
@@ -290,6 +329,12 @@ def main() -> int:
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(subs, ensure_ascii=False, indent=1), encoding="utf-8")
     for app, d in sorted(subs.items()):
+        # A top-level key can be a LITERAL rather than an app's lookup (`hours` below, filled from the
+        # app's own WINS). Calling .items() on it crashed at the END of a run that had already
+        # resolved every app — after the file was written, so the crash was noise around real work.
+        if not isinstance(d, dict):
+            print(f"  {app:<20} {'(literal)':<10} -> {d}")
+            continue
         for k, v in d.items():
             print(f"  {app:<20} {k:<10} -> {v}")
     if not subs:

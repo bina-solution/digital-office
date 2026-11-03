@@ -28,10 +28,12 @@ declaring it does.
 Two harnesses, both of which already exist and both of which can point at your deployment:
 
 ```bash
-# every flow driven to its end, effect asserted — against the LIVE platform
-python3 digital-office/sim/flow-qa.py --url https://your-host
-python3 digital-office/sim/flow-qa.py --url https://your-host --mobile
-python3 digital-office/sim/flow-qa.py --url https://your-host layout scroll
+# every flow driven to its end, effect asserted — against the LIVE platform.
+# It runs INSIDE the image that declares the browser (scripts/ui-coverage/flow-qa.sh), so no host
+# needs playwright; `--live` with no address is the office running here, at http://console:8000.
+./bbox flow-qa --live
+./bbox flow-qa --live --mobile
+./bbox flow-qa layout scroll --live=https://your-host
 ```
 
 Non-zero exit on any failed flow or any JS error, so it drops straight into CI. The suites are

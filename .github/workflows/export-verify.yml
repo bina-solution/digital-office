@@ -1,0 +1,206 @@
+name: export-verify
+
+# The public copy proven BEFORE it is pushed anywhere (DGO-975): scripts/release/public-export.py makes it
+# from this commit and must pass its own checks; a fresh `git clone` of that copy — not the private
+# checkout — then brings an office up as ci-verify.yml does (the CI .env, identity first, then the rest)
+# and passes scripts/ci-verify.sh. Nothing here pushes: publishing the copy stays a person's step.
+#
+#   a push to mac-dgo or dgo-stable whose head commit says "[export-verify]"
+#
+# The office comes up in a BOX with a Docker of its own (android-engine's guest box image: Ubuntu 24.04 and
+# Docker 28.5.2), never on the runner's Docker: the Dell runs a live office on that one, and a second stack
+# there collides with it — run 41551732851: «another compose project holds container names this stack needs:
+# apitools (digital-office)». The box is held to what the Dell can spare, as android-engine.yml holds its own
+# (memory waited for and sized, the CPU's heat watched, a lower CPU share), and its Docker data lives on a
+# fixed-size disk of its own, so a build from zero cannot fill the disk the live office's databases are on.
+#
+# What comes up is the office's CORE — the console and app-management with everything they need (LANE_ROOTS,
+# the capability graph's closure: the sign-in, the database, connections) — not ci-verify's whole stack: that
+# one needs ~8 GB (ops/prejob_waitfree.sh) and the Dell keeps ~6 available beside its own office. The proof is
+# that core, from a fresh clone of the public copy: `bbox run` waits for every service healthy, and the console
+# answers through the edge.
+
+on:
+  push:
+    branches: [mac-dgo, dgo-stable]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    if: contains(github.event.head_commit.message, '[export-verify]')
+    concurrency:
+      group: export-verify
+      cancel-in-progress: false
+    runs-on: [self-hosted, portable, ssd]
+    timeout-minutes: 240   # 60 waiting for memory, 120 for the box, the rest for the export and the sweeps, + up to 45 of ops/prejob_waitfree.sh
+    env:
+      LANE_ROOTS: traefik,console,app-management   # the edge and the office's core, with their closure (scripts/ci/derive-services.sh)
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the export reads the commit through git
+          persist-credentials: false
+
+      - name: The box (android-engine's guest box image, built here as that job builds it), and what a run before left
+        run: |
+          set -euo pipefail
+          b=packaging/android/engine/box
+          tag="dgo-guest-box:$(sha256sum "${b}/Dockerfile" | cut -c1-12)"
+          docker build -q -t "${tag}" "${b}"
+          echo "BOX=${tag}" >> "${GITHUB_ENV}"
+          # a run that died (the Dell frozen, the runner killed) leaves root-owned files the runner's user cannot
+          # remove: swept here by a box, first — only once no box of an earlier run is still up
+          # one runner and one concurrency group: a box still up is an earlier run's orphan, removed before anything
+          for c in $(docker ps -aq --filter name=dgo-export-); do
+            echo "an earlier run's box, removed: $(docker inspect -f '{{.Name}}' "${c}")"; docker rm -f "${c}" >/dev/null || true
+          done
+          for d in ev public public-clone; do
+            [ -e "${RUNNER_TEMP}/${d}" ] || continue
+            docker run --rm --privileged --pull never -v "${RUNNER_TEMP}:/t" "${tag}" \
+              bash -c "umount /t/${d}/mnt 2>/dev/null; rm -rf /t/${d}" || true
+          done
+
+      # the export parses every JavaScript file it changed, and a file it could not check fails it — the
+      # Dell's runner has no node of its own (run 41541423988: "NOT CHECKED skipped: node (20 changed files)")
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: The public copy of this commit, and its own checks
+        run: |
+          set -euo pipefail
+          bash scripts/ci/pip-ensure.sh yaml:pyyaml
+          out="${RUNNER_TEMP}/public"
+          mkdir -p "${out}"
+          python3 scripts/release/public-export.py --rev "${GITHUB_SHA}" --out "${out}" --report "${RUNNER_TEMP}/export-report.json"
+          python3 -c "import json,sys; r=json.load(open(sys.argv[1])); print('export ok:', r.get('ok')); sys.exit(0 if r.get('ok') else 1)" "${RUNNER_TEMP}/export-report.json"
+          # a clean clone of it: its own history of one commit, nothing of the private checkout
+          git -C "${out}" init -q -b main
+          git -C "${out}" -c user.name=export -c user.email=export@localhost add -A
+          git -C "${out}" -c user.name=export -c user.email=export@localhost commit -q -m "the public copy of ${GITHUB_SHA::8}"
+          git clone -q "${out}" "${RUNNER_TEMP}/public-clone"
+          echo "clone: $(git -C "${RUNNER_TEMP}/public-clone" ls-files | wc -l) files"
+
+      - name: In the box — the clone's office brought up and verified
+        timeout-minutes: 180   # the memory wait's hour, then the box's two: a hang fails here, and the sweep below still has its time
+        run: |
+          set -euo pipefail
+          # The Dell's memory, measured, decides — android-engine.yml's own rule (it froze at 20:39 on 11-01 with
+          # no swap, DGO-1122/1123): with no swap the box takes 5 GB and 2 CPUs, with one 6 GB and 3; and it starts
+          # only once 8 GB are available, waiting up to an hour (the runner's own gate counts no Ollama)
+          if swapon --show --noheadings 2>/dev/null | grep . >/dev/null; then mem=6g cpus=3; else mem=5g cpus=2; fi
+          s=$(date +%s)
+          while :; do
+            avail="$(awk '/^MemAvailable:/ {print int($2 / 1048576)}' /proc/meminfo)"; avail="${avail:-0}"
+            [ "${avail}" -ge 8 ] && break
+            if [ $(( $(date +%s) - s )) -ge 3600 ]; then
+              echo "::error::the machine has ${avail} GB available after an hour's wait, and the box needs 8"; exit 1
+            fi
+            echo "[$(( $(date +%s) - s ))s] ${avail} GB available, waiting for 8"; sleep 30
+          done
+          # Its Docker data on a disk of its own, of a fixed size: what the live office's disk keeps is at least 20 GB
+          free="$(df -Pk "${RUNNER_TEMP}" | awk 'NR == 2 {print int($4 / 1048576)}')"
+          size=$(( free - 20 )); [ "${size}" -le 40 ] || size=40
+          # the core's ten images built from zero fit in 15 GB (the whole stack would not, and is not brought up here)
+          [ "${size}" -ge 15 ] || { echo "::error::${free} GB free in ${RUNNER_TEMP}: a 15 GB disk for the box and 20 left beside it do not fit"; exit 1; }
+          echo "the box: ${mem}, ${cpus} CPUs, a ${size} GB disk; ${avail} GB available, ${free} GB free, load $(cut -d' ' -f1-3 /proc/loadavg)"
+          mkdir -p "${RUNNER_TEMP}/ev"
+          # the CPU's heat, watched by the job itself, as android-engine.yml watches it: at 92°C one CPU, under 80°C its count again
+          heat() {
+            for z in /sys/class/thermal/thermal_zone*; do
+              if [ "$(cat "${z}/type" 2>/dev/null)" = x86_pkg_temp ]; then
+                t="$(cat "${z}/temp" 2>/dev/null)" && [ -n "${t}" ] && { echo $(( t / 1000 )); return; }
+              fi
+            done
+            echo 0
+          }
+          ( slow=""
+            while sleep 60; do
+              c="$(heat)"
+              if [ "${c}" -ge 92 ] && [ -z "${slow}" ]; then
+                docker update --cpus 1 "dgo-export-${GITHUB_RUN_ID}" >/dev/null 2>&1 && slow=1 && echo "heat: ${c}°C — the box down to 1 CPU"
+              elif [ "${c}" -gt 0 ] && [ "${c}" -lt 80 ] && [ -n "${slow}" ]; then
+                docker update --cpus "${cpus}" "dgo-export-${GITHUB_RUN_ID}" >/dev/null 2>&1 && slow="" && echo "heat: ${c}°C — the box back to ${cpus} CPUs"
+              fi
+            done ) &
+          hpid=$!
+          # one group under `|| true`: under bash -e a failing kill in an EXIT trap would be the step's status
+          trap '{ pkill -P "${hpid}"; kill "${hpid}"; } 2>/dev/null || true' EXIT
+          # dind first, as android-engine.yml runs the box: it nests the box's cgroups before anything forks
+          docker run --rm --privileged --pull never --cgroupns private --name "dgo-export-${GITHUB_RUN_ID}" \
+            --cpus "${cpus}" --cpu-shares 128 --memory "${mem}" --memory-swap "${mem}" \
+            -e LANE_ROOTS -e GITHUB_ACTIONS -e N8N_ENCRYPTION_KEY_SECRET= -e EV_SIZE="${size}" \
+            -v "${RUNNER_TEMP}/public-clone:/office" -v "${RUNNER_TEMP}/ev:/ev" -w /office \
+            "${BOX}" dind bash -c '
+              set -Eeuo pipefail
+              # a box'"'"'s /dev is a copy made as it starts: a loop device the kernel adds later has no node here
+              # (guest-box.sh makes them the same way)
+              for i in $(seq 0 127); do [ -e "/dev/loop${i}" ] || mknod -m 0660 "/dev/loop${i}" b 7 "${i}"; done
+              # the box'"'"'s Docker data and temporary files on a fixed-size disk of its own
+              truncate -s "${EV_SIZE}G" /ev/disk.img && mkfs.ext4 -q -F /ev/disk.img
+              mkdir -p /ev/mnt && mount -o loop /ev/disk.img /ev/mnt && mkdir -p /ev/mnt/docker /ev/mnt/tmp
+              export TMPDIR=/ev/mnt/tmp BBOX_TMP=/ev/mnt/tmp/bbox
+              # on failure, what is needed to read it, before the box goes
+              evidence() {
+                echo "--- containers"; docker ps -a --format "{{.Names}}  {{.Status}}" 2>/dev/null | sort || true
+                # two filters of different kinds would have to hold together: the unhealthy, then the exited
+                for c in $( { docker ps -aq --filter health=unhealthy; docker ps -aq --filter status=exited; } 2>/dev/null | sort -u); do
+                  echo "--- $(docker inspect -f "{{.Name}}" "${c}")"; docker logs --tail 30 "${c}" 2>&1 || true
+                done
+                echo "--- dockerd"; tail -n 20 /tmp/dockerd.log 2>/dev/null || true
+              }
+              trap "evidence; umount /ev/mnt 2>/dev/null || true" ERR
+              # the box'"'"'s own daemon, on bbox'"'"'s project socket too: bbox then finds its engine and starts none
+              DOCKER_MIN_API_VERSION=1.24 dockerd --data-root /ev/mnt/docker -H unix:///run/bbox-docker.sock \
+                -H unix:///var/run/docker.sock --pidfile /run/docker.pid > /tmp/dockerd.log 2>&1 &
+              dpid=$!
+              for _ in $(seq 60); do docker info >/dev/null 2>&1 && break; kill -0 "${dpid}" 2>/dev/null || break; sleep 1; done
+              docker info >/dev/null 2>&1 || { echo "the box'"'"'s Docker did not start:" >&2; tail -n 30 /tmp/dockerd.log >&2; exit 1; }
+              git config --global --add safe.directory "*"
+              python3 scripts/ci/cap-cpus.py
+              chmod +x scripts/ci-env.sh && ./scripts/ci-env.sh
+              ./scripts/dc config -q
+              GITHUB_ENV=/tmp/services.env bash scripts/ci/derive-services.sh
+              SERVICES="$(sed -n "s/^SERVICES=//p" /tmp/services.env)"
+              [ -n "${SERVICES}" ] || { echo "no services derived" >&2; exit 1; }
+              chmod +x bbox scripts/* 2>/dev/null || true
+              . ./scripts/lib.sh && ensure_network
+              export BBOX_WAIT_TIMEOUT=900
+              if grep -q "^DGO_IDENTITY=forward-auth$" .env; then
+                ./bbox run forward-auth
+              else
+                ./bbox run authentik-postgres authentik-server authentik-worker authentik-bootstrap redis
+              fi
+              # shellcheck disable=SC2086 — a list of service names
+              ./bbox run --build ${SERVICES}
+              ./bbox run ${SERVICES}
+              ./scripts/dc ps
+              # the proof: every container of the core up and none unhealthy, and the console through the edge
+              bad="$( { docker ps -a --filter health=unhealthy --format "{{.Names}}"; docker ps -a --filter status=exited --format "{{.Names}} {{.Status}}" | grep -v "Exited (0)"; } || true)"
+              [ -z "${bad}" ] || { echo "not healthy: ${bad}" >&2; evidence; exit 1; }
+              code="$(curl -s -o /dev/null -w "%{http_code}" -H "Host: console.localhost" http://127.0.0.1/ || true)"
+              echo "the console through the edge: HTTP ${code}"
+              case "${code}" in 200|302|303|307) ;; *) echo "the console did not answer through the edge" >&2; evidence; exit 1 ;; esac
+              ./bbox reset --force --remove-orphans || true
+              kill "${dpid}" 2>/dev/null || true; wait "${dpid}" 2>/dev/null || true
+              umount /ev/mnt || true
+            '
+
+      - name: The box and everything it wrote gone
+        if: always()
+        run: |
+          docker rm -f "dgo-export-${GITHUB_RUN_ID}" >/dev/null 2>&1 || true
+          # root-owned, written by the box (its disk, and the .env and .generated/ it made in the clone): removed by
+          # a box too — only once this run's box is gone — or the runner's user could not, and its next job would fail
+          if docker inspect "dgo-export-${GITHUB_RUN_ID}" >/dev/null 2>&1; then
+            echo "::warning::the box dgo-export-${GITHUB_RUN_ID} is still there — nothing swept"
+          elif [ -n "${BOX:-}" ]; then
+            for d in ev public public-clone; do
+              [ -e "${RUNNER_TEMP}/${d}" ] || continue
+              docker run --rm --privileged --pull never -v "${RUNNER_TEMP}:/t" "${BOX}" \
+                bash -c "umount /t/${d}/mnt 2>/dev/null; rm -rf /t/${d}" || true
+            done
+          fi
+          df -h "${RUNNER_TEMP}" | tail -1

@@ -1,10 +1,10 @@
-# Deployment Context — deployment-bina-comp (baseline inventory)
+# Deployment Context — deployment-hacohen (baseline inventory)
 
-Single Debian host, one Docker Compose project rooted at `/root/deployment-bina-comp`,
+Single Debian host, one Docker Compose project rooted at `/root/deployment-hacohen`,
 behind Traefik v3.3. Branch: `COPILOT`. Run ALL compose cmds from repo root.
 
 ## Domains
-- Prod:  `<svc>.${DEPLOYMENT_DOMAIN}`        (DEPLOYMENT_DOMAIN = bina-comp.bina-solutions.co.il)
+- Prod:  `<svc>.${DEPLOYMENT_DOMAIN}`        (DEPLOYMENT_DOMAIN = hacohen.bina-solutions.co.il)
 - Dev:   `<svc>.dev.${DEPLOYMENT_DOMAIN}`     (DEV_DOMAIN = dev.<…>)
 - Local: `<svc>.localhost`
 - Containers: `<svc>-${DEPLOYMENT_NAME:-bina-deployment}` (a few use bare names: `apitools`, `feature-validation-api`, `*-validator`)

@@ -42,6 +42,10 @@
     }
   ],
   "compose": "docker-compose.yml",
+  "agent": {
+    "context": "AGENT.md",
+    "order": 96
+  },
   "routing": [
     {
       "host": "openhands",

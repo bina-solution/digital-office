@@ -65,16 +65,16 @@ class TestMatchModeId(unittest.TestCase):
         ocr_data = _make_ocr_data([
             ("עוסק", 100, 40, 160, 70),
             ("מורשה", 170, 40, 230, 70),
-            ("514745819", 240, 40, 340, 70),
+            ("500000203", 240, 40, 340, 70),
         ])
         result = _query(ocr_data).json_query({
             "action": "find option",
-            "action_value": ["514745819", "000000000"],
+            "action_value": ["500000203", "000000000"],
             "match_mode": "id",
             "is_rtl": True,
         })
         matches = result["result"]["matches"]
-        self.assertEqual([m["option"] for m in matches], ["514745819"])
+        self.assertEqual([m["option"] for m in matches], ["500000203"])
 
     def test_position_ordering_not_lexicographic(self):
         """Two registered ids both appear on the page. The FIRST one in reading
@@ -101,14 +101,14 @@ class TestMatchModeId(unittest.TestCase):
 
     def test_exclude_near_vetoes_id_adjacent_to_recipient_marker(self):
         """An id sitting immediately next to a recipient marker (the client's own
-        name, 'בינה קומפ' in production per q_v3_company's calibrated exclude_near
+        name, 'הכהנים' in production per q_v3_company's calibrated exclude_near
         list) must not be picked when that marker is passed in exclude_near —
         without it, the same id IS picked (false positive), proving exclude_near
         is actually doing the vetoing rather than the id simply never matching."""
         words = [
             ("לכבוד", 100, 900, 200, 930),
             ("מ.ש", 100, 940, 150, 970),
-            ("בינה קומפ", 160, 940, 260, 970),
+            ("הכהנים", 160, 940, 260, 970),
             ("מס'", 100, 980, 150, 1010),
             ("לקוח", 160, 980, 220, 1010),
             ("603603603", 230, 980, 330, 1010),
@@ -130,7 +130,7 @@ class TestMatchModeId(unittest.TestCase):
             "action": "find option",
             "action_value": ["603603603"],
             "match_mode": "id",
-            "exclude_near": ["בינה קומפ"],
+            "exclude_near": ["הכהנים"],
             "is_rtl": True,
         })
         self.assertIsNone(result_excluded.get("result"))
@@ -152,12 +152,12 @@ class TestMatchModeNameSubstring(unittest.TestCase):
         result = _query(ocr_data).json_query({
             "action": "find option",
             "action_value": ["איש הכול ירוק"],
-            "option_map": {"איש הכול ירוק": "514194612"},
+            "option_map": {"איש הכול ירוק": "500000211"},
             "match_mode": "name_substring",
             "is_rtl": True,
         })
         matches = result["result"]["matches"]
-        self.assertEqual([m["option"] for m in matches], ["514194612"])
+        self.assertEqual([m["option"] for m in matches], ["500000211"])
 
     def test_exclude_near_vetoes_name_adjacent_to_recipient_marker(self):
         """A name fragment adjacent to the recipient marker must not be picked —
@@ -167,13 +167,13 @@ class TestMatchModeNameSubstring(unittest.TestCase):
         words = [
             ("לכבוד", 100, 900, 200, 930),
             ("מ.ש", 100, 940, 150, 970),
-            ("בינה קומפ", 160, 940, 260, 970),
+            ("הכהנים", 160, 940, 260, 970),
         ]
 
         result_no_exclude = _query(_make_ocr_data(words)).json_query({
             "action": "find option",
-            "action_value": ["בינה קומפ"],
-            "option_map": {"בינה קומפ": "SHOULD_NOT_SURVIVE_EXCLUSION"},
+            "action_value": ["הכהנים"],
+            "option_map": {"הכהנים": "SHOULD_NOT_SURVIVE_EXCLUSION"},
             "match_mode": "name_substring",
             "is_rtl": True,
         })
@@ -181,10 +181,10 @@ class TestMatchModeNameSubstring(unittest.TestCase):
 
         result_excluded = _query(_make_ocr_data(words)).json_query({
             "action": "find option",
-            "action_value": ["בינה קומפ"],
-            "option_map": {"בינה קומפ": "SHOULD_NOT_SURVIVE_EXCLUSION"},
+            "action_value": ["הכהנים"],
+            "option_map": {"הכהנים": "SHOULD_NOT_SURVIVE_EXCLUSION"},
             "match_mode": "name_substring",
-            "exclude_near": ["בינה קומפ"],
+            "exclude_near": ["הכהנים"],
             "is_rtl": True,
         })
         self.assertIsNone(result_excluded.get("result"))

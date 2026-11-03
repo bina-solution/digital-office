@@ -415,6 +415,7 @@ N8N_LANES_SCAN_S = max(5.0, float(os.getenv("N8N_LANES_SCAN_S", "45") or 45))
 # One ring for the whole section (it is one `src`). Sized for the whole worker set, not per lane.
 N8N_LANES_BUFFER = max(1000, int(os.getenv("N8N_LANES_BUFFER", "24000") or 24000))
 N8N_LANES_TAIL = max(0, int(os.getenv("N8N_LANES_TAIL", "5000") or 5000))
+N8N_LANES_STUCK_S = max(60.0, float(os.getenv("N8N_LANES_STUCK_S", "300") or 300))
 
 # ── per-TASK spans, from n8n's own event bus ─────────────────────────────────────────────────
 # The lanes above draw the launcher's state and the broker's complaints, which answers "is the
@@ -1564,7 +1565,12 @@ async def custom_log_loop(
     while True:
         try:
             try:
-                container = await docker.containers.get(source.container)
+                # BOUNDED. Measured 2026-10-21 on hp-laptop: one inspect of n8n-task-runners-hp timed
+                # out on 10-18 05:00 under load and the lane never got up again — ok:false for three
+                # days, raphael's "a source went silent" every hour, while the container was healthy
+                # and every other lane on the same client had recovered. An inspect that does not
+                # answer is an error to retry, not a place to stay.
+                container = await asyncio.wait_for(docker.containers.get(source.container), 30)
                 _mark_source(health, True)
             except Exception as exc:
                 _mark_source(health, False, repr(exc))
@@ -1750,11 +1756,19 @@ async def n8n_lanes_loop(
                         want[name] = lane
                         claimed.add(lane)
 
+                now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
                 for cname, lane in sorted(want.items()):
+                    key = f"{prefix}{lane}"
                     running = tails.get(cname)
                     if running is not None and not running.done():
-                        continue
-                    key = f"{prefix}{lane}"
+                        # A tail that fell and never got up is replaced, the same way a finished one
+                        # is: the container is RUNNING (it is in `names`), so a lane that has read
+                        # nothing successfully for N8N_LANES_STUCK_S is this process's fault, not n8n's.
+                        h = health.get(key) or {}
+                        if h.get("ok") is not False or now_ms - int(h.get("last_ok") or 0) < N8N_LANES_STUCK_S * 1000:
+                            continue
+                        running.cancel()
+                        print(f"[{N8N_LANES_SRC}] ~ lane {lane} <- {cname} (not ok for {N8N_LANES_STUCK_S:.0f}s+: {h.get('last_error')}) — re-attaching")
                     health.setdefault(key, _source_health(True))
                     lanes[key] = {"container": cname, "lane": lane}
                     cs = CustomSource(cname, N8N_LANES_SRC, key, lane, N8N_LANES_BUFFER)
@@ -2799,7 +2813,9 @@ async def get_sources() -> dict[str, Any]:
             "enabled": enabled,
             "ok": bool(h.get("ok")),
             "last_ok": h.get("last_ok"),
-            "error": h.get("error"),
+            # the health record keeps it as `last_error`; reading `error` made every reason null, so a
+            # lane down for three days reached raphael's notice as a bare "ok=false"
+            "error": h.get("last_error"),
             "config": conf,
         }
 
@@ -2811,7 +2827,18 @@ async def get_sources() -> dict[str, Any]:
         "custom": _detail("custom", ENABLE_CUSTOM, {
             "container": CUSTOM_CONTAINER, "alias": CUSTOM_ALIAS or None, "buffer": CUSTOM_BUFFER,
         }),
-        "webhook": _detail("webhook", ENABLE_WEBHOOK, {"buffer": WEBHOOK_BUFFER}),
+        # The webhook lane is a PUSH DOOR, and its health is the DOOR, not the traffic. An app posts a
+        # span when IT has something to say — `browser42` posts on task start/end and on reaps — so an
+        # office that has not driven the browser has `last_ok: null` for as long as that lasts, while
+        # the endpoint answers 202 all day. Reported as `ok: false` it made every watch read "a source
+        # in the collector has gone silent for ever" (measured 2026-10-10: raphael's collector watch
+        # raised that error on every tick, in an office whose collector was healthy and whose
+        # /api/overview map had ALREADY said `"webhook": true` — the docstring above claims `ok: true`
+        # here too, so the code was the one out of step). `mode: "push"` names what this lane is,
+        # `last_ok` still says when anything last arrived, and `ok` answers what every other lane's
+        # `ok` answers: can this source still be read or written?
+        "webhook": {**_detail("webhook", ENABLE_WEBHOOK, {"buffer": WEBHOOK_BUFFER}),
+                    "ok": ENABLE_WEBHOOK, "mode": "push"},
         **{
             cs.key: _detail(cs.key, True, {"container": cs.container, "buffer": cs.buffer})
             for cs in EXTRA_CUSTOM_SOURCES

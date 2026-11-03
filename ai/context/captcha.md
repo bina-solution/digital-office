@@ -80,7 +80,9 @@ which the vendor's own troubleshooting names as the common cause of first-visit 
   (`_human_click`), then reports what it caused. Kinds recognised: turnstile, recaptcha, hcaptcha,
   datadome, altcha.
 - **After 3 clicks the verb refuses by name** (`captcha_attempts_exhausted`) and names the hand-off:
-  the owner at `http://browser42.localhost:8080/view/`. A challenge is a security control; an agent
+  the task's own address (`bbox b42 handoff <slug>` — a console deep link that wakes the browser and
+  brings the task's tab to the front, `apps/browser42/README.md`), and the owner is notified with it.
+  A challenge is a security control; an agent
   that keeps clicking is how an account gets flagged, and an account lockout costs the owner far more
   than one unsolved round.
 - A page whose own address merely *names* a widget is not a challenge — measured bug, kept as a test

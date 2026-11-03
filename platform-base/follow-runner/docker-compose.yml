@@ -1,0 +1,62 @@
+# follow-runner — the follow cycle's schedule for an office whose `bbox` runs inside containers (r030-205). runner.sh
+# says why it exists, why each cycle runs in a container of its own, and as whom. Off by default: an office with a host
+# timer (scripts/follow.sh, installed by a host `bbox run`) has no use for it. Not `follow`: that is the CLI's own verb
+# (`bbox follow`, which the host timer runs), and an app id or service name in the CLI is app knowledge there (G31).
+services:
+  follow-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        COMPOSE_VERSION: ${BBOX_COMPOSE_VERSION:-2.40.3}
+    container_name: follow-runner-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: follow-runner
+    restart: unless-stopped
+    environment:
+      - DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-bina-deployment}
+      # where the checkout is on the HOST (the cycle mounts it at that same path, as bina-ds does) …
+      - BBOX_REPO_HOST=${BBOX_REPO_HOST:-/workspace/office}
+      # … and the engine socket's host path, for the cycle's own mount and for what its `bbox run` compiles
+      - BBOX_HOST_DOCKER_SOCK=${BBOX_DOCKER_SOCK:-/var/run/docker.sock}
+      # … and the host's zone: what a cycle's `bbox run` compiles into other containers (app-management's file says why)
+      - BBOX_HOST_TZ=${TZ:-UTC}
+      # the cycle's writer: empty = root, as bina-ds writes the checkout on an office operated from containers
+      - FOLLOW_USER=${FOLLOW_USER:-}
+      # a host file in git's `store` format, when the checkout's own config carries no credential (runner.sh)
+      - DGO_FOLLOW_GIT_CREDENTIALS=${DGO_FOLLOW_GIT_CREDENTIALS:-}
+      - FOLLOW_EVERY=${FOLLOW_EVERY:-1800}
+    volumes:
+      # the checkout, READ-ONLY, at its host path: this loop only reads .env (is DGO_FOLLOW declared) and the folder's
+      # owner; the cycle it starts mounts the checkout read-write
+      - type: bind
+        source: ${BBOX_REPO_HOST:-../../}
+        target: ${BBOX_REPO_HOST:-/workspace/office}
+        read_only: true
+      # The engine socket, READ-WRITE: this service's one job is `docker run` of the cycle container, a write. A socket
+      # in a container is root on the engine — the same door bina-ds's `./bbox run` uses (gate G84, JUSTIFIED).
+      - ${BBOX_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock
+    networks:
+      - traefik-network
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/follow.heartbeat') < 120 else 1)\""]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 45s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.05'
+          memory: 48M
+        reservations:
+          cpus: '0.01'
+          memory: 16M
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+
+networks:
+  traefik-network:
+    external: true

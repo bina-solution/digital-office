@@ -276,7 +276,7 @@ fi
 #      same caveat error-pulse.sh's own header documents for ...Test/E2E workflows) ----
 echo
 echo "--- Sensor A: failure rate, core pipeline workflows, last ${WINDOW_MIN}m ---"
-READ=$(docker exec "$N8N_PG" psql -U bina-comp -d n8n -tAc "
+READ=$(docker exec "$N8N_PG" psql -U hacohen -d n8n -tAc "
   select
     count(*) filter (where e.status in ('crashed','error')) as bad,
     count(*) as total
@@ -304,13 +304,13 @@ fi
 # ---- Sensor A2: restart-orphan signature (crashed, no error payload, clustered same-second stop) ----
 echo
 echo "--- Sensor A2: restart-orphan shape (crashed executions with no error payload) last ${WINDOW_MIN}m ---"
-ORPHAN_COUNT=$(docker exec "$N8N_PG" psql -U bina-comp -d n8n -tAc "
+ORPHAN_COUNT=$(docker exec "$N8N_PG" psql -U hacohen -d n8n -tAc "
   select count(*) from execution_entity e
   where e.status='crashed' and e.\"startedAt\" > now() - interval '${WINDOW_MIN} minutes'
     and not exists (select 1 from execution_data d where d.\"executionId\"=e.id and d.data like '%\"error\":%')
 " | tr -d ' ')
 ORPHAN_COUNT="${ORPHAN_COUNT:-0}"
-CLUSTER=$(docker exec "$N8N_PG" psql -U bina-comp -d n8n -tAc "
+CLUSTER=$(docker exec "$N8N_PG" psql -U hacohen -d n8n -tAc "
   select date_trunc('second', \"stoppedAt\") ts, count(*) c from execution_entity
   where status='crashed' and \"startedAt\" > now() - interval '${WINDOW_MIN} minutes'
   group by 1 having count(*) >= 5 order by c desc limit 1
@@ -329,7 +329,7 @@ fi
 # ---- Sensor A3: is the dominant failure a single named downstream instead? ----
 echo
 echo "--- Sensor A3: top failing workflow this window (downstream-vs-engine classifier) ---"
-TOP_FAIL=$(docker exec "$N8N_PG" psql -U bina-comp -d n8n -tAc "
+TOP_FAIL=$(docker exec "$N8N_PG" psql -U hacohen -d n8n -tAc "
   select w.name, count(*) c from execution_entity e join workflow_entity w on w.id=e.\"workflowId\"
   where e.status in ('crashed','error') and e.\"startedAt\" > now() - interval '${WINDOW_MIN} minutes'
   group by 1 order by 2 desc limit 1

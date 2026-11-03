@@ -131,7 +131,7 @@ appeared mid-sweep, presumably from a concurrent fix agent):
 | 4. drive gdoc (מסמכים כללים) | `drive-gdoc` (3 pairs) | enabled | folder ids **not** in the connection's 577-folder enumeration, but `/list` on each returns **200 OK** (real, accessible, currently empty) — a Drive API enumeration quirk (see below), not a broken source |
 | 5. drive bs | `drive-bs` | enabled | same pattern as #4 — resolves via `/list` (200, empty), absent from enumeration |
 | 6. drive gdoc — יצוא צט | `drive-gdoc-tzat` | enabled, **new** | all 3 folder ids (to_sync/synced/failed) found in the live 577-folder tree with matching names: `"יצוא צט 2026 לפני"`, `"יצוא צט 2026 אחרי "`, `"יצוא צט 2026 נכשל"` — clean |
-| 7. drive gdoc — warehouse scans | `drive-gdoc-warehouse` | enabled, **new** | `to_sync` resolves (`"סרוקות מהמחסן 2026"`); **`synced` = `1HoBifHSHmzk4cuaw6L98lwwTfQvyIdvH`, which is IDENTICAL to `drive-bs`'s `synced` folder id** — likely copy/paste bug, needs its own destination folder |
+| 7. drive gdoc — warehouse scans | `drive-gdoc-warehouse` | enabled, **new** | `to_sync` resolves (`"סרוקות מהמחסן 2026"`); **`synced` = `1REDACTEDdrivexxxxxxxxxxxxxxx0001`, which is IDENTICAL to `drive-bs`'s `synced` folder id** — likely copy/paste bug, needs its own destination folder |
 | (extra, not in owner's 7) | `mail-private` | enabled | local IMAP attachment sync, `connection_id=mail_imap_local-local` |
 
 Enumeration quirk, explained: `GET /api/folders` (Drive `files.list` with `mimeType='folder'`) returns 577 folders for the
@@ -144,8 +144,8 @@ shared-item quirk), not at broken sources.
 **Confirmed gap, live right now:** `drive-gdoc-warehouse.synced` and `drive-bs.synced` share one destination folder id.
 Any document the warehouse pipe marks "synced" lands in the same physical Drive folder as balance-sheet "synced" output.
 
-Legacy `WarehouseScansSourceFolder` setting (`1YpapJ3vJDYo_idP3aZiFJR_1WoEaCNhu`, folder name `"סרוקות הצליח"`) is a
-**different** folder from the new `drive-gdoc-warehouse.to_sync` (`1Lmhka14VGQMVGr4VQFRpF1YDEdOUnUhM`, `"סרוקות מהמחסן 2026"`)
+Legacy `WarehouseScansSourceFolder` setting (`1REDACTEDdrivexxxxxxxxxxxxxxx0002`, folder name `"סרוקות הצליח"`) is a
+**different** folder from the new `drive-gdoc-warehouse.to_sync` (`1REDACTEDdrivexxxxxxxxxxxxxxx0003`, `"סרוקות מהמחסן 2026"`)
 — worth a sanity check with the owner on which is actually correct, not necessarily a bug.
 
 Did **not** confirm: that the 3 MAIL registries deposit into the local drive connection under

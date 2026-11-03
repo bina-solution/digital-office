@@ -35,7 +35,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
     /*__n8n__*/ meta: null,
     /*__n8n__*/ pinData: {},
     /*__n8n__*/ staticData: null,
-    /*__n8n__*/ shared: [{"updatedAt":"2026-08-25T13:36:11.806Z","createdAt":"2026-08-25T13:36:11.806Z","role":"workflow:owner","workflowId":"SelectType01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <shlomo@local.dev>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
+    /*__n8n__*/ shared: [{"updatedAt":"2026-08-25T13:36:11.806Z","createdAt":"2026-08-25T13:36:11.806Z","role":"workflow:owner","workflowId":"SelectType01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
     id: 'SelectType01',
     name: 'SelectType01 — per-type selection + scoring',
     active: true,
@@ -183,7 +183,7 @@ function normalizeAmount(val) {
 // [six-digit collision 2026-09-02, owner Decision 5] The company key is the FULL significant digit
 // string, not the last six. Truncating to six let two unrelated companies whose numbers share a
 // tail read as the same company — in the corroboration test (a false "agree") and in the trusted
-// lookup (the wrong company vouched for). Leading zeros are dropped so '050-000-0016' and
+// lookup (the wrong company vouched for). Leading zeros are dropped so '0500000012' and
 // '514855800' still meet, which is the only tolerance the truncation was buying.
 function normalizeCompanyID(val) {
   if (!hasReal(val)) return null;

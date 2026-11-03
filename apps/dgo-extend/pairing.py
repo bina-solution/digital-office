@@ -67,7 +67,11 @@ PREFIX = "DGOPAIR1:"
 #: prefix on purpose: both texts are pasted into the same box, and a reply read as an offer (or the
 #: reverse) must be refused by name instead of failing three fields later.
 REPLY_PREFIX = "DGOPAIRR1:"
-OFFICE_RE = re.compile(r"^[a-z][a-z0-9-]{1,30}$")
+#: An office id. `\Z`, never `$`: Python's `$` also matches just BEFORE a trailing newline, and the id
+#: in an offer (or a grant) is another machine's word, read here unstripped — "vps1\n" passed, slipped
+#: past the replace guard (a lookup by exact id) and was stripped only when the record was written,
+#: over the record of the office really called vps1 (DGO-615; pair_api.selftest shows it).
+OFFICE_RE = re.compile(r"^[a-z][a-z0-9-]{1,30}\Z")
 
 
 class PairingError(RuntimeError):
@@ -351,9 +355,15 @@ def accept(offer: dict, host_office: str, host_identity_private: bytes, host_ide
     # the reply's cleartext. What it does carry is the host's identity KEY, inside the seal — so the
     # cleartext identity cannot be swapped for another one without the opened grant saying so. Kept
     # small on purpose: this text is a QR a laptop camera has to read off another screen.
+    #
+    # …and its WireGuard key as well (2026-10-19, the second reader of the join): the signature covers
+    # the seal, and the seal named only the Ed25519 key, so a party between the offices could swap the
+    # cleartext `identity.wg` — every check passed, and the joiner's tunnel then took the swapper's key
+    # for the host's. Over an intercepting proxy (a cloud sandbox's) that party exists. 44 characters.
     grant = {"v": 1, "offer_id": offer["offer_id"], "joiner": offer["office"],
              "host": host_office, "direction": direction, "token": token,
              "host_ed25519": host_identity_public.get("ed25519", ""),
+             "host_wg": host_identity_public.get("wg", ""),
              "tunnel": tunnel or {}}
     for key, value in (extra or {}).items():
         grant.setdefault(key, value)
@@ -372,7 +382,7 @@ def accept(offer: dict, host_office: str, host_identity_private: bytes, host_ide
 
 
 def open_reply(offer: dict, ephemeral_private: bytes, reply: dict,
-               now: float | None = None) -> tuple[dict, str]:
+               now: float | None = None, require_wg: bool = False) -> tuple[dict, str]:
     """The JOINER reads the host's reply: (grant, six-digit code). Nothing is written by this.
 
     The order is the security property. The SIGNATURE is verified first, against the identity key
@@ -405,6 +415,13 @@ def open_reply(offer: dict, ephemeral_private: bytes, reply: dict,
         raise PairingError("ה-grant שנפתח אינו של ההצעה הזאת")
     if grant.get("host_ed25519") and grant["host_ed25519"] != host_identity.get("ed25519"):
         raise PairingError("הזהות שבתשובה אינה הזהות שחתמה על ה-grant — הצימוד בוטל")
+    # The WireGuard key is bound the same way. A host older than the binding sends none, which a
+    # pairing between two screens still accepts (its six digits are compared by people); a join,
+    # where nobody compares anything, demands it (`require_wg`).
+    if grant.get("host_wg") and grant["host_wg"] != host_identity.get("wg"):
+        raise PairingError("מפתח ה-WireGuard שבתשובה אינו המפתח שהמארחת חתמה עליו — מישהו באמצע. הצימוד בוטל")
+    if require_wg and not grant.get("host_wg"):
+        raise PairingError("התשובה אינה קושרת את מפתח ה-WireGuard של המארחת — הצימוד בוטל")
     return grant, code
 
 
@@ -584,6 +601,16 @@ def selftest() -> list[str]:
             pass
     if kind_of(text) != "offer" or kind_of(grouped) != "reply" or kind_of("hello") != "":
         problems.append("kind_of must tell the two codes apart by prefix")
+    # a reply whose cleartext WireGuard key was swapped (everything signed left alone) is refused —
+    # the second reader's finding of 2026-10-19; and a join, which demands the binding, refuses a
+    # reply that carries none
+    swapped = json.loads(json.dumps(reply))
+    swapped["identity"] = dict(swapped["identity"], wg=base64.b64encode(b"S" * 32).decode())
+    try:
+        open_reply(offer, eph_priv, swapped)
+        problems.append("a reply whose WireGuard key is not the one the host sealed must be refused")
+    except PairingError:
+        pass
     # a reply signed by ANOTHER key than the identity it names is refused before anything is derived
     forged = json.loads(json.dumps(reply))
     forged["identity"] = dict(forged["identity"], ed25519=base64.b64encode(b"X" * 32).decode())
@@ -618,6 +645,17 @@ def selftest() -> list[str]:
     try:
         new_offer("portable", joiner_identity, [], extra={"token": "x"})
         problems.append("an offer must refuse anything that looks like a secret")
+    except PairingError:
+        pass
+    # an office id that ENDS in a line break is no id, minted or read (DGO-615: `$` passed both)
+    try:
+        new_offer("portable\n", joiner_identity, [])
+        problems.append("an offer must not be minted for an office id that ends in a line break")
+    except PairingError:
+        pass
+    try:
+        parse_offer(offer_text(dict(offer, office="portable\n")))
+        problems.append("an offer whose office id ends in a line break must be refused when it is read")
     except PairingError:
         pass
 

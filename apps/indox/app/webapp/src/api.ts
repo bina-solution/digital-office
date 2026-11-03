@@ -733,11 +733,11 @@ export function setInstance(id: string | null): void {
  *
  *  READS AND WRITES BOTH, as of 2026-08-28. It was reads-only for a few hours, and the reason is
  *  worth keeping: PostgREST serves only the schemas in PGRST_DB_SCHEMAS, so a write to a instance
- *  schema went out as `Content-Profile: indox_bina_comp` and came back 406 PGRST106 — scoping writes
+ *  schema went out as `Content-Profile: indox_hacohen` and came back 406 PGRST106 — scoping writes
  *  then would not have written to the wrong instance, it would have failed every settings save in
  *  the console. The transport now routes upsert/update/insert/delete through `public.run_sql` the
  *  same way it already routed select/count, so both halves are scoped and the method check is
- *  gone. Verified end to end: an upsert against indox_levi lands in levi and not in bina-comp. */
+ *  gone. Verified end to end: an upsert against indox_levi lands in levi and not in hacohen. */
 
 function withInstance(path: string, init?: RequestInit): string {
   if (!CURRENT_INSTANCE) return path;
@@ -1330,9 +1330,9 @@ export const api = {
      2026-08-28; PostgREST answered 404, Flask's catch-all turned that into a bare
      500, and the viewer, seeing an image that would not decode, fell back to a
      preview and captioned the document "no extraction drawing was produced".
-     Measured live 2026-09-02 against doc_mtk56k1zbq1ws3 (console.bina-comp):
+     Measured live 2026-09-02 against doc_mtk56k1zbq1ws3 (console.hacohen):
 
-         draw   500 application/json  →  200 image/png  33 KB   with ?instance=bina-comp
+         draw   500 application/json  →  200 image/png  33 KB   with ?instance=hacohen
          file   500 application/json  →  200 image/png  30 KB
          tokens 500 application/json  →  200 image/png  43 KB
 

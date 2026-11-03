@@ -28,7 +28,7 @@ from typing import Any
 from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
 
-from .engine import ENGINE
+from .engine import ENGINE, ENGINES
 from .formats import to_docx_bytes, to_srt, to_txt, to_vtt
 from .jobs import JOBS, QueueFull, TooLong
 from .sessions import SESSIONS
@@ -123,8 +123,38 @@ def _enqueue(source: dict[str, Any], options: dict[str, Any]) -> Any:
         raise HTTPException(429, str(exc), headers={"retry-after": "30"}) from None
 
 
-def _options(language: str | None, beam_size: int | None, vad: bool | None, words: bool | None) -> dict[str, Any]:
+def _model(name: str | None, *, strict: bool) -> str:
+    """The engine a request names (`ivrit`, `whisper`, or either's repo id); none = the default. The
+    office's own op refuses a name it does not serve; the OpenAI surface takes its clients' names
+    ("whisper-1") as the default, as it always did."""
+    name = (name or "").strip()
+    for key, engine in ENGINES.items():
+        if name in (key, engine.repo):
+            return key
+    if name and strict:
+        raise HTTPException(400, f"unknown model '{name}' (use one of {', '.join(ENGINES)})")
+    return ENGINE.name
+
+
+# The words the audio is likely to hold, given to the model as the text before the first words (faster-whisper's
+# `initial_prompt`; OpenAI's audio API calls the field `prompt`). Without one the office's Hebrew model wrote «DGO fee»
+# as «DGOP» and «Zelle» as «Zelt» in a meeting's live captions (FPG-471, measured 2026-10-29); the caller that knows
+# the meeting's words (meet-start, from its vocabulary file) sends them. None: as before, nothing is prepended.
+# A prompt also conditions the style, so it is kept short (the window has 448 tokens) — at most PROMPT_MAX characters.
+PROMPT_MAX = 600
+
+
+def _prompt(text: str | None) -> str | None:
+    text = " ".join((text or "").split())
+    return text[:PROMPT_MAX] or None
+
+
+def _options(language: str | None, beam_size: int | None, vad: bool | None, words: bool | None,
+             model: str | None = None, prompt: str | None = None) -> dict[str, Any]:
     return {
+        "prompt": _prompt(prompt),
+        "model": model or ENGINE.name,
+        # `auto`: each stretch in the language it is spoken (meant for `whisper`; DGO-955)
         "language": (language or DEFAULT_LANGUAGE).strip() or DEFAULT_LANGUAGE,
         "beam_size": beam_size or JOBS.beam_size,
         # DEFAULT OFF, and this is a measured decision, not a preference: on the office's own
@@ -151,7 +181,8 @@ def healthz() -> dict[str, Any]:
     (Same rule as sites-render: a probe that fails because an idle worker is idle puts the
     container into an unhealthy/autoheal restart loop for no reason.)
     """
-    return {"status": "ok", "service": SERVICE, "model": ENGINE.state(), "jobs": JOBS.stats()}
+    return {"status": "ok", "service": SERVICE, "model": ENGINE.state(),
+            "models": {key: engine.state() for key, engine in ENGINES.items()}, "jobs": JOBS.stats()}
 
 
 @app.get("/speechHealth")
@@ -179,6 +210,7 @@ def manifest() -> dict[str, Any]:
         "formats": list(FORMATS),
         "capabilities": {"speech": {"ops": OPS, "optional_ops": LIVE_OPS}},
         "model": ENGINE.state(),
+        "models": {key: engine.state() for key, engine in ENGINES.items()},
         "limits": JOBS.stats()["limits"],
     }
 
@@ -189,13 +221,16 @@ def models() -> dict[str, Any]:
         "object": "list",
         "data": [
             {
-                "id": ENGINE.repo,
+                "id": engine.repo,
+                "name": key,
                 "object": "model",
-                "owned_by": "ivrit-ai",
-                "revision": ENGINE.revision,
-                "compute_type": ENGINE.compute_type,
-                "language": DEFAULT_LANGUAGE,
+                "owned_by": engine.repo.split("/")[0],
+                "revision": engine.revision,
+                "compute_type": engine.compute_type,
+                "language": DEFAULT_LANGUAGE if engine is ENGINE else "auto",
+                "default": engine is ENGINE,
             }
+            for key, engine in ENGINES.items()
         ],
     }
 
@@ -223,8 +258,10 @@ async def _handle_transcribe(
     vad: bool | None,
     words: bool | None,
     async_flag: bool,
+    model: str | None = None,
+    prompt: str | None = None,
 ) -> Response:
-    options = _options(language, beam_size, vad, words)
+    options = _options(language, beam_size, vad, words, model, prompt)
     if file is not None and file.filename:
         try:
             source = JOBS.save_upload(file.file, file.filename)
@@ -275,10 +312,11 @@ async def _handle_transcribe(
 async def openai_transcriptions(
     request: Request,
     file: UploadFile | None = File(None),
-    model: str = Form("ivrit-ai/whisper-large-v3-turbo-ct2"),
+    model: str | None = Form(None),
     language: str | None = Form(None),
     response_format: str = Form("json"),
     temperature: float | None = Form(None),
+    prompt: str | None = Form(None),
     path: str | None = Form(None),
     beam_size: int | None = Query(None),
     vad: bool | None = Query(None),
@@ -288,8 +326,9 @@ async def openai_transcriptions(
     fmt = (response_format or "json").lower()
     if fmt not in FORMATS:
         raise HTTPException(400, f"unsupported response_format '{response_format}' (use one of {', '.join(FORMATS)})")
-    del model, temperature  # one model is served; a client's temperature is not used by this engine
-    return await _handle_transcribe(request, file, path, language, fmt, beam_size, vad, words, async_)
+    del temperature  # a client's temperature is not used by this engine
+    return await _handle_transcribe(request, file, path, language, fmt, beam_size, vad, words, async_,
+                                    _model(model, strict=False), prompt)
 
 
 @app.post("/transcribe")
@@ -299,6 +338,8 @@ async def op_transcribe(
     path: str | None = Form(None),
     language: str | None = Form(None),
     response_format: str = Form("json"),
+    model: str | None = Form(None),
+    prompt: str | None = Form(None),
     beam_size: int | None = Query(None),
     vad: bool | None = Query(None),
     words: bool | None = Query(None),
@@ -307,7 +348,8 @@ async def op_transcribe(
     fmt = (response_format or "json").lower()
     if fmt not in FORMATS:
         raise HTTPException(400, f"unsupported response_format '{response_format}' (use one of {', '.join(FORMATS)})")
-    return await _handle_transcribe(request, file, path, language, fmt, beam_size, vad, words, async_)
+    return await _handle_transcribe(request, file, path, language, fmt, beam_size, vad, words, async_,
+                                    _model(model, strict=True), prompt)
 
 
 @app.get("/v1/audio/transcriptions/{job_id}")
@@ -509,7 +551,16 @@ def main() -> None:
     if os.environ.get("SPEECH_PREFETCH", "0") == "1":
         import threading
 
-        threading.Thread(target=lambda: ENGINE.ensure_model(), name="asr-prefetch", daemon=True).start()
+        # each model in turn, on one thread (two downloads at once only race for the same disk); one
+        # that fails does not keep the next from being fetched
+        def _prefetch() -> None:
+            for engine in ENGINES.values():
+                try:
+                    engine.ensure_model()
+                except Exception:  # noqa: BLE001 - ensure_model logged it; the first job tries again
+                    pass
+
+        threading.Thread(target=_prefetch, name="asr-prefetch", daemon=True).start()
     uvicorn.run(app, host="0.0.0.0", port=port, log_level=os.environ.get("LOG_LEVEL", "info").lower(),
                 timeout_keep_alive=75)
 

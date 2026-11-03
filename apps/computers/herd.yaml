@@ -1,0 +1,97 @@
+# apps/computers/herd.yaml — where each app of the business runs: ONE office per app (DGO-911).
+#
+# The owner, 2026-10-21: "look at it as one business divided on four computers … no duplication,
+# everything very clear". The picture, the measurements and the reasons are ai/context/dgo-herd.md;
+# this file is the same target as data, read by `./bbox computers herd`. That verb reads what really
+# runs on this office and on every linked office (each one's own `machine`, through its door), and
+# prints each difference. A change of target is made HERE, in one commit — never in a session's notes.
+
+offices:
+  macbook:
+    label: MacBook
+    role:
+      he: 'השולחן — הממשק: קונסול, קישורים ו-Claude; בלי נתונים עסקיים'
+      en: 'the desk — the interface: console, links and Claude; no business data'
+  hp-laptop:
+    label: HP
+    role:
+      he: 'המשרד — דלוק תמיד: כל אפליקציה עסקית, כל אוטומציה וכל הנתונים'
+      en: 'the office — always on: every business app, every automation, all the data'
+  dell:
+    label: Dell
+    aliases: [portable-ubuntu, portable]     # the office id the Dell declares is matched by any of these
+    role:
+      he: 'בית המלאכה — עבודה כבדה שרצה לפעמים: מודלים, תמלול, OCR, CI ומאגר הגיבוי'
+      en: 'the workshop — heavy work that runs sometimes: models, transcription, OCR, CI, the backup store'
+  vps1:
+    label: vps1
+    role:
+      he: 'החלון והדלת — ציבורי: אתרים, Meet, דואר והכניסה לכל העדר'
+      en: 'the storefront and the door — public: websites, Meet, mail, the entrance to the whole herd'
+
+# The herd's HUB: the public office every other office keeps a pair with, so it is reachable from anywhere
+# (DGO-1092; the owner, 2026-11-01: «when I'm working out of home, I want VPS to serve my entire office
+# herd»). Pairs are two by two and nothing relays between them yet, so a laptop away from home reaches
+# the offices at home THROUGH the hub: `bbox via <hub> …` runs a command there, and project-pln falls
+# back to it by itself when the office that runs Plane does not answer directly (apps/project-pln/where.sh).
+hub: vps1
+
+# Every office runs these: its own door and its own guard. Running them everywhere is not duplication.
+base: [traefik, authentik, forward-auth, console, connections, app-management, dgo-extend, security,
+       computers, notifications, machine, postgres, redis, autoheal, office-routes]
+
+# Containers whose app this line's manifests do not declare (an app that lives on another office's
+# line, or a helper container): the compose service → the app it belongs to.
+names:
+  meet: meet
+  meet-jibri: meet
+  meet-jicofo: meet
+  meet-jvb: meet
+  meet-prosody: meet
+  meet-start: meet
+  meet-turn: meet
+  docker-socket-proxy: traefik     # the edge's read-only door to the engine (hp-dgo's traefik)
+  forward-auth: forward-auth
+  office-routes: office-routes     # DGO-543's routes screen; its source is on no pushed branch yet
+  raphael: raphael
+
+# An office's own timeline: kept where jobs run, absent where none run.
+per_office:
+  any-concurrency: [hp-laptop, vps1, dell]
+
+# Each business app and the ONE office that runs it.
+apps:
+  n8n: hp-laptop                 # the one automation engine; an office without n8n hands its workflows here (DGO-923)
+  supabase: hp-laptop
+  indox: hp-laptop
+  drive: hp-laptop
+  project-pln: hp-laptop
+  bina-ds: hp-laptop             # one Azaria; it operates the other offices through the links (DGO-926)
+  browser42: hp-laptop
+  data-management: hp-laptop     # the nightly backup to the Dell (DGO-920)
+  digital-assets: hp-laptop
+  social-list: hp-laptop
+  telegram-tv: hp-laptop         # or retired — decided on DGO-936
+  chat: hp-laptop                # its webhooks enter at vps1's edge and cross the link
+  git: hp-laptop                 # if it holds what GitHub lacks — decided on DGO-935
+  glitchtip: hp-laptop           # or retired — decided on DGO-927
+  archify: hp-laptop
+  my-docs: hp-laptop
+  google-workspace-agent: hp-laptop
+  raphael: hp-laptop
+  apitools: dell                 # OCR and ASR, after the measurement of DGO-930
+  ollama: dell
+  sites: vps1
+  domains: vps1
+  mail: vps1
+  meet: vps1
+
+# Retired: no office runs them. (Not `off:` — YAML reads that key as the boolean false.)
+retired: [hello-bina, portainer, openhands, redisinsight]
+
+# Volumes whose app this line's manifests do not declare: the volume's compose key or its name → the app.
+volume_names:
+  apitools_asr_data: apitools
+  asr-models: apitools             # a second copy of the ASR models on vps1, mounted by nothing (DGO-928)
+  meet_recordings: meet
+  meet_prosody_data: meet

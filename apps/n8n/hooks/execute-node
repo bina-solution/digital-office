@@ -55,7 +55,10 @@ done
 
 API_KEY="$(read_env N8N_API_KEY)"
 [ -n "${API_KEY}" ] || { echo "Error: N8N_API_KEY not in .env — run any 'bbox n8n push <app>' once (it mints one)." >&2; exit 1; }
-BASE="http://127.0.0.1:5678"
+# The host reaches n8n on its published loopback port; an agent INSIDE the office (bina-ds, which
+# runs the same `bbox`) reaches that instance by its service name — so the base is overridable, and
+# the default is exactly what it was for a host-side run.
+BASE="${N8N_BASE:-http://127.0.0.1:5678}"
 TMP="$(mktemp -d)"; trap 'rm -rf "${TMP}"' EXIT
 
 # ---- assemble the throwaway workflow -------------------------------------------------------

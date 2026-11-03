@@ -442,8 +442,10 @@ async def api_export(mode: str = Query("full", pattern="^(full|config)$"),
     # manifest — could never see any of them. A backup you cannot enumerate is one you will not
     # restore. `resume` re-opens a named run on purpose, which is what resumability actually needs.
     if resume:
-        target = (ARCHIVE_ROOT / resume).resolve()
-        if not str(target).startswith(str(ARCHIVE_ROOT.resolve())):
+        # DGO-620: UNDER the archive root by path, not by string prefix ("../archives-evil" passed), and never the root itself.
+        root = ARCHIVE_ROOT.resolve()
+        target = (root / resume).resolve()
+        if not target.is_relative_to(root) or target == root:
             raise HTTPException(status_code=400, detail="resume must name a directory under the archive root")
     else:
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -558,9 +560,13 @@ def api_job(job_id: str, tail: int = Query(80, ge=1, le=400)):
 def api_download(name: str, artifact: str):
     """Stream one artifact out. Whole-archive download is deliberately NOT a single HTTP response:
     50GB through a proxy with an auth timeout is a download that fails at 94%."""
-    base = (ARCHIVE_ROOT / name).resolve()
+    # DGO-620: `name` is an archive's name (pull's rule) and the file lies INSIDE it by path, not by string prefix.
+    root = ARCHIVE_ROOT.resolve()
+    if not PULL.ARCHIVE.match(name):
+        raise HTTPException(status_code=404, detail="no such artifact")
+    base = (root / name).resolve()
     target = (base / artifact).resolve()
-    if not str(target).startswith(str(base)) or not target.is_file():
+    if not (base.is_relative_to(root) and target.is_relative_to(base)) or not target.is_file():
         raise HTTPException(status_code=404, detail="no such artifact")
     return FileResponse(target, filename=target.name)
 
@@ -572,6 +578,41 @@ if _STATIC.is_dir():
 
 @app.get("/")
 def index():
+    idx = _STATIC / "index.html"
+    if not idx.is_file():
+        return JSONResponse({"error": "no static/index.html"}, status_code=500)
+    return FileResponse(idx)
+
+
+# ── the screen lives in its own URL, so a deep link is a PAGE and not a file ────────────────────
+#
+# static/index.html carries its own router (places summary|byapp|unclaimed|archives|raw) and writes
+# the section in view to `/a/data-management/<place>`. That contract is worthless unless the address
+# it writes can be OPENED: with only `/` served, every deep path was a 404 — a router that is green
+# in the gate and dead in the address bar.
+#
+# WHAT IT ANSWERS: a GET/HEAD for a path that is none of this app's own surfaces and does not look
+# like a file — with static/index.html. The page then reads its own path and opens that section.
+#
+# WHAT IT MUST NEVER ANSWER: anything an earlier route already owns. FastAPI matches in REGISTRATION
+# ORDER, so `/api/...`, `/healthz`, `/` and the `/static` mount are all decided before this function
+# is ever reached — this is the last route in the file by construction, and it must stay that way.
+# The refusals below exist for what is left: an unknown `/api/...`, `/healthz/...` or `/static/...`
+# path is a 404 in the API's own voice, never an HTML page a JSON client would try to parse.
+#
+# A path that LOOKS LIKE A FILE — it has an extension — is a request for a file, and a missing file
+# is a real 404. Answering `missing.js` or `logo.png` with the page would hand an <img>/<script> HTML
+# and turn a broken asset into a silent, unparseable success.
+_NO_PAGE_AT = frozenset({"api", "healthz", "static"})
+
+
+@app.api_route("/{full_path:path}", methods=["GET", "HEAD"], include_in_schema=False)
+def page_for(full_path: str):
+    """The SPA fallback: the one page, for a page path. See the note above for what it refuses."""
+    if full_path.split("/", 1)[0] in _NO_PAGE_AT:
+        raise HTTPException(status_code=404, detail=f"no such path: /{full_path}")
+    if pathlib.PurePosixPath(full_path).suffix:
+        raise HTTPException(status_code=404, detail=f"no such file: /{full_path}")
     idx = _STATIC / "index.html"
     if not idx.is_file():
         return JSONResponse({"error": "no static/index.html"}, status_code=500)

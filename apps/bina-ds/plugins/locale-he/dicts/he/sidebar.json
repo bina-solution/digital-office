@@ -1,7 +1,7 @@
 {
  "session.new": "שיחה חדשה",
  "session.new.label": "שיחה חדשה",
- "toggle.open": "פתיחת סרגל הצד",
- "toggle.collapse": "כיווץ סרגל הצד",
+ "toggle.open": "פתיחת סרגל ימין",
+ "toggle.collapse": "כיווץ סרגל ימין",
  "panels.label": "לוחות כלליים"
 }

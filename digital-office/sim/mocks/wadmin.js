@@ -50,7 +50,7 @@
     { id: 'chat-local', provider: 'local', label: 'צ׳אט מקומי', identity: 'שירות פנימי · הלשכה', color: 'var(--olive)', builtin: true,
       status: 'ok', reason: '', checked: 1, activeBot: 'menu',
       log: [{ mins: 1, level: 'info', msg: 'השירות המקומי פעיל' }, { mins: 180, level: 'info', msg: 'הופעל בוט תפריט בסיסי' }] },
-    { id: 'wa-biz', provider: 'whatsapp', label: 'וואטסאפ עסקי', identity: '050-000-0007', color: '#25d366',
+    { id: 'wa-biz', provider: 'whatsapp', label: 'וואטסאפ עסקי', identity: '+972 50-123-4567', color: '#25d366',
       status: 'ok', reason: '', checked: 2, activeBot: 'menu',
       log: [{ mins: 2, level: 'info', msg: 'המכשיר מקושר ומסונכרן' }, { mins: 1440, level: 'info', msg: 'קוד QR נסרק בהצלחה' }] },
     { id: 'tg-bot', provider: 'telegram', label: 'טלגרם — לשכה', identity: '@BinaOfficeBot', color: '#2aabee',
@@ -71,17 +71,17 @@
   function gm(sender, color, text, mins) { return { id: uid(), dir: 'in', sender: sender, scolor: color, text: text, mins: mins, status: 'in' }; }
   var THREADS = {
     'wa-biz': [
-      { id: 'c_carton', name: 'ישראל קרטון בע״מ', handle: '+972 3-555-2040', initials: 'יק', color: 'var(--sky-d)', tag: 'ספק', unread: 2, pinned: true, online: true, mins: 6,
+      { id: 'c_carton', name: 'ישראל קרטון בע״מ', handle: '+972 3-000-0032', initials: 'יק', color: 'var(--sky-d)', tag: 'ספק', unread: 2, pinned: true, online: true, mins: 6,
         msgs: [ m('in', 'שלום, שלחנו את חשבונית 20458 במייל. אפשר לאשר קבלה?', 55),
                 m('out', 'התקבלה, תודה. נעביר לתשלום שוטף+30.', 40),
                 m('in', 'מעולה. מצרף גם תעודת משלוח לחודש הבא.', 8),
                 m('in', 'מתי צפוי התשלום להיכנס?', 6) ] },
-      { id: 'c_moshe', name: 'משה כהן', handle: '050-000-0006', initials: 'מכ', color: 'var(--violet)', tag: 'לקוח', unread: 0, pinned: false, mins: 26,
+      { id: 'c_moshe', name: 'משה כהן', handle: '+972 50-111-2233', initials: 'מכ', color: 'var(--violet)', tag: 'לקוח', unread: 0, pinned: false, mins: 26,
         msgs: [ m('in', 'היי, אפשר לקבל הצעת מחיר לשירות החודשי?', 60),
                 m('out', 'בטח! שולח לך עכשיו הצעה מסודרת.', 52),
                 m('out', 'הצעת מחיר OT-2026-00001 — מצורפת. תקפה ל-14 יום.', 51, 'delivered'),
                 m('in', 'קיבלתי, תודה רבה 🙏', 26) ] },
-      { id: 'c_bakery', name: 'מאפיית הבוקר', handle: '050-000-0018', initials: 'מה', color: 'var(--lime-d)', tag: 'לקוח', unread: 1, pinned: false, online: true, mins: 95,
+      { id: 'c_bakery', name: 'מאפיית הבוקר', handle: '+972 50-000-0033', initials: 'מה', color: 'var(--lime-d)', tag: 'לקוח', unread: 1, pinned: false, online: true, mins: 95,
         msgs: [ m('in', 'הזמנה שבועית קבועה — אפשר לחדש?', 130),
                 m('out', 'חידשנו! קבלה IR-2026-00001 נשלחה.', 120),
                 m('in', 'תודה, נתראה בשבוע הבא', 95) ] },
@@ -212,7 +212,7 @@
     }
 
     // ── legacy bot-admin no-ops (kept so any lingering probe doesn't error) ──
-    if (/api\/bot\/state(\?|$)/.test(u)) return J({ is_connected: true, botNumber: '050-000-0007', users_len: 0, qr_text: null });
+    if (/api\/bot\/state(\?|$)/.test(u)) return J({ is_connected: true, botNumber: '972501234567', users_len: 0, qr_text: null });
     if (/api\/subscribers(\?|$)/.test(u)) return J([]);
 
     return realFetch ? realFetch(url, opts) : Promise.reject(new Error('mock: no route ' + u));

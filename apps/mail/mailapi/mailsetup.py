@@ -53,7 +53,7 @@ DKIM_DIR = os.environ.get("MAIL_DKIM_DIR", "/mailconfig/opendkim/keys")
 # Trust and IPv6 is the failure this exists to catch, and it is invisible by construction. PTR and
 # SPF are facts about ONE address; a dual-stacked host has two, and a receiver checks whichever one
 # we happened to connect from. On staging the v4 PTR was right and the v6 PTR was still the
-# provider's default (srv908573.hstgr.cloud), while `v=spf1 mx ~all` covered only the MX host's A
+# provider's default (srv000001.example.net), while `v=spf1 mx ~all` covered only the MX host's A
 # record — so any delivery that went out over v6 failed FCrDNS *and* SPF, and Gmail rejects that
 # outright rather than spam-filing it. Nothing in the configuration chose v4; Postfix's address
 # selection did, per remote MX, and it could have chosen otherwise on the next message.
@@ -93,7 +93,7 @@ except Exception:                                       # pragma: no cover - imp
 # upstream — and the mail server's hostname IS the mail FQDN. So a lookup of mail.<domain> from
 # inside this container returns the container's bridge address, and the A check reported:
 #
-#     [bad] כתובת השרת (A)   need 203.0.113.10   found 172.21.0.22
+#     [bad] כתובת השרת (A)   need 93.184.216.5   found 172.21.0.22
 #
 # on a deployment whose A record was perfectly correct. Every operator would have been sent to
 # "fix" DNS that was already right — the single most damaging thing a setup checker can do, because
@@ -206,7 +206,7 @@ _ZONE_NS = {}
 def _zone_nameservers(name):
     """Addresses of the nameservers authoritative for the closest zone at or above `name`.
 
-    Walks up the labels because the zone cut is not knowable in advance — `82.196.97.31.in-addr.arpa`
+    Walks up the labels because the zone cut is not knowable in advance — `93.184.216.14.in-addr.arpa`
     has no NS of its own, the delegation lives at `196.97.31.in-addr.arpa` (the VPS provider), and
     the same is true of `_dmarc.<domain>` versus `<domain>`."""
     parts = name.rstrip(".").split(".")
@@ -230,7 +230,7 @@ def _authoritative_views(name, rdtype, txt=False):
     """What the zone's OWN nameservers answer — one view per server, `[]` if unobtainable.
 
     EVERY server, not the first one that responds, and the reason is measured rather than
-    theoretical. The reverse zone for 203.0.113.10 is delegated to two anycast addresses, and while
+    theoretical. The reverse zone for 93.184.216.5 is delegated to two anycast addresses, and while
     an rDNS edit was in flight the SAME address answered `mail.staging.digital-office.co.il` and
     `mail.digital-office.co.il` on consecutive queries — different backends of one "authoritative"
     server, mid-update. A tiebreaker that asks once and believes the answer is then just another
@@ -437,8 +437,8 @@ def public_ip6():
 
 
 def _v6(addr):
-    """An IPv6 address as bytes, or None. Text comparison is wrong here: 2a02:4780:28:cb4c::1 and
-    2a02:4780:28:cb4c:0:0:0:1 are the same address and only one of them is what someone typed."""
+    """An IPv6 address as bytes, or None. Text comparison is wrong here: 2606:2800:220:1::1 and
+    2606:2800:220:1::1 are the same address and only one of them is what someone typed."""
     try:
         return socket.inet_pton(socket.AF_INET6, (addr or "").strip())
     except Exception:

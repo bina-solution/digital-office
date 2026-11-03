@@ -140,7 +140,7 @@ services:
     - traefik.tcp.routers.n8n-postgres.service=n8n-postgres
     - traefik.tcp.routers.n8n-postgres.middlewares=db-ipallowlist
     - traefik.tcp.routers.n8n-postgres.tls=true
-    - traefik.tcp.routers.n8n-postgres.tls.certresolver=myresolver
+    - traefik.tcp.routers.n8n-postgres.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
     - traefik.tcp.services.n8n-postgres.loadbalancer.server.port=5432
     environment:
     - TZ=${TZ:-UTC}
@@ -161,7 +161,7 @@ services:
     container_name: n8n-${DEPLOYMENT_NAME:-bina-deployment}
     # ONE image for the main process and both workers. They are the SAME build - same context,
     # same Dockerfile, same args - and without an explicit tag compose gives each service its
-    # own image (deployment-bina-comp-n8n, -n8n-worker-1, -n8n-worker-2): three separate 1.79 GB
+    # own image (deployment-hacohen-n8n, -n8n-worker-1, -n8n-worker-2): three separate 1.79 GB
     # entries for identical content. Naming it here lets the workers reference it instead of
     # redeclaring the build.
     #
@@ -354,7 +354,7 @@ services:
     - traefik.http.routers.n8n-https.entrypoints=websecure
     - traefik.http.routers.n8n-https.tls=true
     - traefik.http.routers.n8n-https.service=n8n
-    - traefik.http.routers.n8n-https.tls.certresolver=myresolver
+    - traefik.http.routers.n8n-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
     - traefik.http.services.n8n.loadbalancer.server.port=5678
     # The console's desktop mode opens n8n as a window (console/static/desktop.js openExternal).
     # n8n answers `X-Frame-Options: SAMEORIGIN`, which forbids exactly that; this drops it and lets
@@ -368,7 +368,7 @@ services:
     - traefik.http.routers.n8n-push-https.entrypoints=websecure
     - traefik.http.routers.n8n-push-https.tls=true
     - traefik.http.routers.n8n-push-https.service=n8n
-    - traefik.http.routers.n8n-push-https.tls.certresolver=myresolver
+    - traefik.http.routers.n8n-push-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
     - traefik.http.routers.n8n-push-https.priority=200
     - traefik.http.routers.n8n-push-https.middlewares=n8n-push-origin@docker
     - traefik.http.middlewares.n8n-push-origin.headers.customrequestheaders.Origin=${N8N_PROTOCOL:-https}://${N8N_BASE_URL}
@@ -377,6 +377,40 @@ services:
     - traefik.http.routers.n8n-push-http.service=n8n
     - traefik.http.routers.n8n-push-http.priority=200
     - traefik.http.routers.n8n-push-http.middlewares=n8n-push-origin@docker
+    # The console's n8n TILE (DGO-907, the owner: «open … console > n8n and see the automations
+    # running and be able to edit them»). The module is `external` (app.json), so the shell frames
+    # n8n on the host it derives for an app of its own host — `n8n.<console host>` (console/static/
+    # app.js externalUrl) — and these routers answer it: the same editor, the same frame-ancestors,
+    # and its live updates (/rest/push). The host is spelled from DEPLOYMENT_DOMAIN, the console's
+    # own `console.${DEPLOYMENT_DOMAIN}` (.env.ex): CONSOLE_BASE_URL carries the edge's port on the
+    # Mac (`console.localhost:8080`), and traefik compares a Host rule without the request's port.
+    # The live updates are a same-origin EventSource, which a browser sends with no Origin, and n8n
+    # refuses a push whose Origin is not the host it was forwarded for (push/origin-validator.js): the
+    # two are written here as one host, so that holds on any port.
+    - traefik.http.routers.n8n-frame.rule=Host(`n8n.console.${DEPLOYMENT_DOMAIN:-localhost}`)
+    - traefik.http.routers.n8n-frame.entrypoints=web
+    - traefik.http.routers.n8n-frame.service=n8n
+    - traefik.http.routers.n8n-frame.middlewares=n8n-embed@docker
+    - traefik.http.routers.n8n-frame-https.rule=Host(`n8n.console.${DEPLOYMENT_DOMAIN:-localhost}`)
+    - traefik.http.routers.n8n-frame-https.entrypoints=websecure
+    - traefik.http.routers.n8n-frame-https.tls=true
+    - traefik.http.routers.n8n-frame-https.tls.certresolver=myresolver
+    - traefik.http.routers.n8n-frame-https.service=n8n
+    - traefik.http.routers.n8n-frame-https.middlewares=n8n-embed@docker
+    - traefik.http.routers.n8n-frame-push-https.rule=Host(`n8n.console.${DEPLOYMENT_DOMAIN:-localhost}`) && PathPrefix(`/rest/push`)
+    - traefik.http.routers.n8n-frame-push-https.entrypoints=websecure
+    - traefik.http.routers.n8n-frame-push-https.tls=true
+    - traefik.http.routers.n8n-frame-push-https.tls.certresolver=myresolver
+    - traefik.http.routers.n8n-frame-push-https.service=n8n
+    - traefik.http.routers.n8n-frame-push-https.priority=200
+    - traefik.http.routers.n8n-frame-push-https.middlewares=n8n-frame-origin@docker
+    - traefik.http.routers.n8n-frame-push-http.rule=Host(`n8n.console.${DEPLOYMENT_DOMAIN:-localhost}`) && PathPrefix(`/rest/push`)
+    - traefik.http.routers.n8n-frame-push-http.entrypoints=web
+    - traefik.http.routers.n8n-frame-push-http.service=n8n
+    - traefik.http.routers.n8n-frame-push-http.priority=200
+    - traefik.http.routers.n8n-frame-push-http.middlewares=n8n-frame-origin@docker
+    - traefik.http.middlewares.n8n-frame-origin.headers.customrequestheaders.Origin=${N8N_PROTOCOL:-https}://n8n.console.${DEPLOYMENT_DOMAIN:-localhost}
+    - traefik.http.middlewares.n8n-frame-origin.headers.customrequestheaders.X-Forwarded-Host=n8n.console.${DEPLOYMENT_DOMAIN:-localhost}
     depends_on:
       redis:
         condition: service_healthy
@@ -457,6 +491,13 @@ services:
     - QUEUE_BULL_REDIS_PORT=6379
     - QUEUE_BULL_REDIS_PASSWORD=${REDIS_PASSWORD}
     - QUEUE_HEALTH_CHECK_ACTIVE=true
+    # Behind the edge like main, so it trusts the one hop main does: without it every caller of a
+    # public /webhook/* is the edge's private address, and a webhook's own IP allow-list lets the
+    # whole internet in (measured on vps1, 2026-10-21: the meet webhook answered a public POST 200
+    # here and 403 through main). With it the caller is its real address; traefik drops a client's
+    # own X-Forwarded-For, so the address cannot be forged from outside.
+    - N8N_TRUST_PROXY=true
+    - N8N_PROXY_HOPS=${N8N_PROXY_HOPS:-1}
     logging:
       driver: json-file
       options:
@@ -476,7 +517,7 @@ services:
     - traefik.http.routers.n8n-hooks-https.rule=Host(`${N8N_BASE_URL}`) && (PathPrefix(`/webhook/`) || PathPrefix(`/webhook-waiting/`) || PathPrefix(`/form/`))
     - traefik.http.routers.n8n-hooks-https.entrypoints=websecure
     - traefik.http.routers.n8n-hooks-https.tls=true
-    - traefik.http.routers.n8n-hooks-https.tls.certresolver=myresolver
+    - traefik.http.routers.n8n-hooks-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
     - traefik.http.routers.n8n-hooks-https.service=n8n-hooks
     - traefik.http.routers.n8n-hooks-https.priority=150
     depends_on:
@@ -549,19 +590,35 @@ services:
       resources:
         limits:
           cpus: '1.5'
-          # HELD AT 1.5G — a planned cut to 768M was WITHDRAWN, 2026-08-06.
+          # 4G -> 2G, 2026-10-16. HELD AT 2G — the cap is derived from THIS service's own heap,
+          # which is what the rule below says it must be.
           #
-          # These services declare NODE_OPTIONS=--max-old-space-size=1024 (above in this same
-          # service). A 768M cgroup ceiling sits BELOW the 1024M heap the runtime is told it may
-          # allocate, so the container would be OOM-killed the moment V8 actually used the heap it
-          # was granted — and only under load, which is when it matters. Observed peaks (10 /
-          # 135 / 293 MiB) say nothing about this: they are what the heap happened to reach, not
-          # what it is permitted to reach.
+          # A planned cut to 768M was WITHDRAWN, 2026-08-06, and that reason still holds: a cgroup
+          # ceiling BELOW the heap the runtime is told it may allocate gets the container
+          # OOM-killed the moment V8 uses the heap it was granted — and only under load, which is
+          # when it matters. Observed peaks say nothing about this: they are what the heap
+          # happened to reach, not what it is permitted to reach.
           #
           # RULE FOR THIS FILE: cgroup memory limit >= NODE heap x 1.3. The extra 30% is V8
           # overhead, native buffers and RSS outside old-space — a Node process is never just its
-          # heap. 1024 x 1.3 = 1331M, so 1.5G is the floor here, not a generous allowance.
-          memory: 4G
+          # heap. This service's heap is NODE_OPTIONS=--max-old-space-size=${N8N_RUNNERS_HEAP_MB:-
+          # 1536} in this same service and NO profile sets N8N_RUNNERS_HEAP_MB, so the live heap is
+          # 1536M: 1536 x 1.3 = 1997M. 2G is that floor, not a generous allowance.
+          #
+          # WHY IT WAS 4G — the defect this line carried. a2fd66199 (2026-08-19) raised this cap
+          # 2G -> 4G in the same pass that raised the heaps of OTHER services (main 1536 -> 2048,
+          # the workers 1536 -> 2600). No heap changed HERE, no comment was written, and the note
+          # above still read "HELD AT 1.5G": the cap ended at 2x its own rule and nothing in the
+          # repo could see it. Three sidecars at 4G = 12 GiB of a 45.2 GiB declared sum on a box
+          # with 7.8 GiB — the largest single reason gate G30 (memory-budget-lint) was red.
+          # MEASURED BEFORE CUTTING, this deployment, 2026-10-16, kernel high-water (cgroup
+          # memory.peak — a true maximum, not a polling lower bound): task-runners 8 MiB,
+          # worker-1-runners 635 MiB, worker-2-runners 623 MiB. The load was real and labelled:
+          # 6 runs of the office's own memory probe (indoxMemProbeEmit01 via
+          # POST /webhook/indox-mem-probe, n=50000 w=30 each; plus one smoke run at n=1000)
+          # through the app's normal webhook path.
+          # 2G is ~3.2x the worst measured peak and still admits the whole permitted heap.
+          memory: 2G
         reservations:
           cpus: '0.25'
           memory: 256M
@@ -629,7 +686,19 @@ services:
           # This is the "sized from a floor, not a maximum" trap, caught by measuring instead of
           # assuming. Do not cut this without a sample taken under load.
           # [decide 30k 2026-08-18 #2] 2.5G -> 3.25G with heap 2048 -> 2600 (see NODE_OPTIONS note).
-          memory: 4G
+          # 4G -> 3.5G, 2026-10-16. The 4G that followed that note was never derived from it: the
+          # note's own arithmetic is 2600 x 1.3 = 3380M, and 4G is that rounded up in the same
+          # pass (a2fd66199) that raised every other n8n cap. 3.5G is the SAME rule with the
+          # round-up kept — 2600 x 1.3 = 3380M <= 3584M — so the whole heap the runtime is
+          # permitted to allocate still fits; what is given back is the half-GiB of allowance
+          # nobody derived. MEASURED BEFORE CUTTING, this deployment, 2026-10-16, kernel
+          # high-water (cgroup memory.peak — a true maximum, not a polling lower bound):
+          # worker-1 1585 MiB, worker-2 1966 MiB. That is the maximum over BOTH workers, not the
+          # average, per the note above. The load was real and labelled: 6 runs of the office's
+          # own memory probe (indoxMemProbeEmit01 via POST /webhook/indox-mem-probe,
+          # n=50000 w=30 each; plus one smoke run at n=1000) through the app's normal webhook
+          # path. 3.5G is 1.8x the worst peak.
+          memory: 3.5G
         reservations:
           cpus: '0.5'
           # 1G reservation under a (previously) 2G limit was half the ceiling soft-reserved per
@@ -705,7 +774,9 @@ services:
     # 3/3 runs co-resident, other worker idle), so the caller's table copy + decide's retained
     # sets share one heap — exactly like the real driver sweep will. Only the sweep worker
     # balloons; the other worker idles ~200MB, so host exposure is one worker's peak.
-    - N8N_MEMORY_LIMIT=4G
+    # Mirrors deploy.resources.limits.memory below: this file keeps the pair equal, and both
+    # moved 4G -> 3.5G on 2026-10-16 (the measurement is on that line).
+    - N8N_MEMORY_LIMIT=3.5G
     - NODE_OPTIONS=--max-old-space-size=2600
     # [2026-08-18] internal-mode experiment REVERTED same hour (owner order: no settings
     # fiddling — external mode worked for weeks). The ack-drop stalls traced instead to NEW
@@ -884,19 +955,35 @@ services:
       resources:
         limits:
           cpus: '1.5'
-          # HELD AT 1.5G — a planned cut to 768M was WITHDRAWN, 2026-08-06.
+          # 4G -> 2G, 2026-10-16. HELD AT 2G — the cap is derived from THIS service's own heap,
+          # which is what the rule below says it must be.
           #
-          # These services declare NODE_OPTIONS=--max-old-space-size=1024 (above in this same
-          # service). A 768M cgroup ceiling sits BELOW the 1024M heap the runtime is told it may
-          # allocate, so the container would be OOM-killed the moment V8 actually used the heap it
-          # was granted — and only under load, which is when it matters. Observed peaks (10 /
-          # 135 / 293 MiB) say nothing about this: they are what the heap happened to reach, not
-          # what it is permitted to reach.
+          # A planned cut to 768M was WITHDRAWN, 2026-08-06, and that reason still holds: a cgroup
+          # ceiling BELOW the heap the runtime is told it may allocate gets the container
+          # OOM-killed the moment V8 uses the heap it was granted — and only under load, which is
+          # when it matters. Observed peaks say nothing about this: they are what the heap
+          # happened to reach, not what it is permitted to reach.
           #
           # RULE FOR THIS FILE: cgroup memory limit >= NODE heap x 1.3. The extra 30% is V8
           # overhead, native buffers and RSS outside old-space — a Node process is never just its
-          # heap. 1024 x 1.3 = 1331M, so 1.5G is the floor here, not a generous allowance.
-          memory: 4G
+          # heap. This service's heap is NODE_OPTIONS=--max-old-space-size=${N8N_RUNNERS_HEAP_MB:-
+          # 1536} in this same service and NO profile sets N8N_RUNNERS_HEAP_MB, so the live heap is
+          # 1536M: 1536 x 1.3 = 1997M. 2G is that floor, not a generous allowance.
+          #
+          # WHY IT WAS 4G — the defect this line carried. a2fd66199 (2026-08-19) raised this cap
+          # 2G -> 4G in the same pass that raised the heaps of OTHER services (main 1536 -> 2048,
+          # the workers 1536 -> 2600). No heap changed HERE, no comment was written, and the note
+          # above still read "HELD AT 1.5G": the cap ended at 2x its own rule and nothing in the
+          # repo could see it. Three sidecars at 4G = 12 GiB of a 45.2 GiB declared sum on a box
+          # with 7.8 GiB — the largest single reason gate G30 (memory-budget-lint) was red.
+          # MEASURED BEFORE CUTTING, this deployment, 2026-10-16, kernel high-water (cgroup
+          # memory.peak — a true maximum, not a polling lower bound): task-runners 8 MiB,
+          # worker-1-runners 635 MiB, worker-2-runners 623 MiB. The load was real and labelled:
+          # 6 runs of the office's own memory probe (indoxMemProbeEmit01 via
+          # POST /webhook/indox-mem-probe, n=50000 w=30 each; plus one smoke run at n=1000)
+          # through the app's normal webhook path.
+          # 2G is ~3.2x the worst measured peak and still admits the whole permitted heap.
+          memory: 2G
         reservations:
           cpus: '0.25'
           memory: 256M
@@ -958,7 +1045,19 @@ services:
           # This is the "sized from a floor, not a maximum" trap, caught by measuring instead of
           # assuming. Do not cut this without a sample taken under load.
           # [decide 30k 2026-08-18 #2] 2.5G -> 3.25G with heap 2048 -> 2600 (see NODE_OPTIONS note).
-          memory: 4G
+          # 4G -> 3.5G, 2026-10-16. The 4G that followed that note was never derived from it: the
+          # note's own arithmetic is 2600 x 1.3 = 3380M, and 4G is that rounded up in the same
+          # pass (a2fd66199) that raised every other n8n cap. 3.5G is the SAME rule with the
+          # round-up kept — 2600 x 1.3 = 3380M <= 3584M — so the whole heap the runtime is
+          # permitted to allocate still fits; what is given back is the half-GiB of allowance
+          # nobody derived. MEASURED BEFORE CUTTING, this deployment, 2026-10-16, kernel
+          # high-water (cgroup memory.peak — a true maximum, not a polling lower bound):
+          # worker-1 1585 MiB, worker-2 1966 MiB. That is the maximum over BOTH workers, not the
+          # average, per the note above. The load was real and labelled: 6 runs of the office's
+          # own memory probe (indoxMemProbeEmit01 via POST /webhook/indox-mem-probe,
+          # n=50000 w=30 each; plus one smoke run at n=1000) through the app's normal webhook
+          # path. 3.5G is 1.8x the worst peak.
+          memory: 3.5G
         reservations:
           cpus: '0.5'
           # 1G reservation under a (previously) 2G limit was half the ceiling soft-reserved per
@@ -1029,7 +1128,9 @@ services:
     # 3/3 runs co-resident, other worker idle), so the caller's table copy + decide's retained
     # sets share one heap — exactly like the real driver sweep will. Only the sweep worker
     # balloons; the other worker idles ~200MB, so host exposure is one worker's peak.
-    - N8N_MEMORY_LIMIT=4G
+    # Mirrors deploy.resources.limits.memory below: this file keeps the pair equal, and both
+    # moved 4G -> 3.5G on 2026-10-16 (the measurement is on that line).
+    - N8N_MEMORY_LIMIT=3.5G
     - NODE_OPTIONS=--max-old-space-size=2600
     # [2026-08-18] internal-mode experiment REVERTED same hour (owner order: no settings
     # fiddling — external mode worked for weeks). The ack-drop stalls traced instead to NEW
@@ -1144,19 +1245,35 @@ services:
       resources:
         limits:
           cpus: '1.5'
-          # HELD AT 1.5G — a planned cut to 768M was WITHDRAWN, 2026-08-06.
+          # 4G -> 2G, 2026-10-16. HELD AT 2G — the cap is derived from THIS service's own heap,
+          # which is what the rule below says it must be.
           #
-          # These services declare NODE_OPTIONS=--max-old-space-size=1024 (above in this same
-          # service). A 768M cgroup ceiling sits BELOW the 1024M heap the runtime is told it may
-          # allocate, so the container would be OOM-killed the moment V8 actually used the heap it
-          # was granted — and only under load, which is when it matters. Observed peaks (10 /
-          # 135 / 293 MiB) say nothing about this: they are what the heap happened to reach, not
-          # what it is permitted to reach.
+          # A planned cut to 768M was WITHDRAWN, 2026-08-06, and that reason still holds: a cgroup
+          # ceiling BELOW the heap the runtime is told it may allocate gets the container
+          # OOM-killed the moment V8 uses the heap it was granted — and only under load, which is
+          # when it matters. Observed peaks say nothing about this: they are what the heap
+          # happened to reach, not what it is permitted to reach.
           #
           # RULE FOR THIS FILE: cgroup memory limit >= NODE heap x 1.3. The extra 30% is V8
           # overhead, native buffers and RSS outside old-space — a Node process is never just its
-          # heap. 1024 x 1.3 = 1331M, so 1.5G is the floor here, not a generous allowance.
-          memory: 4G
+          # heap. This service's heap is NODE_OPTIONS=--max-old-space-size=${N8N_RUNNERS_HEAP_MB:-
+          # 1536} in this same service and NO profile sets N8N_RUNNERS_HEAP_MB, so the live heap is
+          # 1536M: 1536 x 1.3 = 1997M. 2G is that floor, not a generous allowance.
+          #
+          # WHY IT WAS 4G — the defect this line carried. a2fd66199 (2026-08-19) raised this cap
+          # 2G -> 4G in the same pass that raised the heaps of OTHER services (main 1536 -> 2048,
+          # the workers 1536 -> 2600). No heap changed HERE, no comment was written, and the note
+          # above still read "HELD AT 1.5G": the cap ended at 2x its own rule and nothing in the
+          # repo could see it. Three sidecars at 4G = 12 GiB of a 45.2 GiB declared sum on a box
+          # with 7.8 GiB — the largest single reason gate G30 (memory-budget-lint) was red.
+          # MEASURED BEFORE CUTTING, this deployment, 2026-10-16, kernel high-water (cgroup
+          # memory.peak — a true maximum, not a polling lower bound): task-runners 8 MiB,
+          # worker-1-runners 635 MiB, worker-2-runners 623 MiB. The load was real and labelled:
+          # 6 runs of the office's own memory probe (indoxMemProbeEmit01 via
+          # POST /webhook/indox-mem-probe, n=50000 w=30 each; plus one smoke run at n=1000)
+          # through the app's normal webhook path.
+          # 2G is ~3.2x the worst measured peak and still admits the whole permitted heap.
+          memory: 2G
         reservations:
           cpus: '0.25'
           memory: 256M

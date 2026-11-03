@@ -828,7 +828,7 @@ class HttpxSupabaseTransport:
     # blocking the tenancy cutover. Measured on the live stack:
     #
     #   Content-Profile: public         -> 201
-    #   Content-Profile: indox_bina_comp  -> 406 PGRST106 "Only the following schemas are exposed"
+    #   Content-Profile: indox_hacohen  -> 406 PGRST106 "Only the following schemas are exposed"
     #
     # So every upsert/update/insert/delete against a tenant schema failed outright, while reads
     # succeeded — which meant the webapp could not send `?instance=` on writes without turning

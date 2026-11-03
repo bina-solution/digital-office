@@ -164,7 +164,7 @@ def main():
     ap.add_argument("--zombie-minutes", type=int, default=20, help="a 'running' execution older than this (minutes) with no stoppedAt is flagged a zombie")
     ap.add_argument("--n8n-container", type=str, default="n8n-postgres", help="container name prefix for the n8n postgres db")
     ap.add_argument("--n8n-db", type=str, default="n8n")
-    ap.add_argument("--n8n-user", type=str, default="bina-comp")
+    ap.add_argument("--n8n-user", type=str, default="hacohen")
     ap.add_argument("--ledger-container", type=str, default="supabase-db", help="container name prefix for the ledger/supabase postgres db")
     ap.add_argument("--ledger-db", type=str, default="postgres")
     ap.add_argument("--ledger-user", type=str, default="postgres")

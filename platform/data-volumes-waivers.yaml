@@ -11,6 +11,18 @@
 #
 # Format:  <app id>: [ <volume name or bind source>, ... ]
 
+dashboard:
+  # The LAN switch's unix socket (Caddy ↔ the collector, /run/lan/api.sock): a rendezvous, rebuilt by the
+  # collector on every start; nothing in it is state. The switch's state itself (policy.json, status.json)
+  # is ../../data/lan, declared in dashboard's data.volumes.
+  - "dashboard_lan_sock"
+
+lan-console:
+  # forward-auth's own volume (the office's users file), mounted READ-ONLY by lan-signin so the sign-in on
+  # the LAN reads the office's one set of accounts, never a copy of the hashes (r030-002). forward-auth
+  # declares it in its own data.volumes and the backup carries it from there; lan-console writes nothing to it.
+  - "forward_auth_data"
+
 app-management:
   # Mounts the repository root so it can render and converge the deployment — that IS its job.
   # The repo is in git; a backup of it would be a backup of the source tree.
@@ -23,6 +35,12 @@ data-management:
   # (/archives), deliberately outside the repo; the archiver refuses to write anywhere git does not
   # ignore. Backing this mount up would archive the source tree a clone already provides.
   - "../../"
+  # The archive root as a DEFAULT (`${DATA_ARCHIVE_ROOT:-/var/backups/bbox}`). Waived, not declared,
+  # because it is the backup destination itself: a backup that includes its own output is circular,
+  # and the live office overrides the variable to its own path anyway. G26 could not see this line
+  # before 2026-10-25 (it read the raw spec, which starts with `$`); it is named here at its default
+  # so the reading is recorded instead of silent.
+  - "/var/backups/bbox"
 
 bina-ds:
   # The office agent's workspace: the repository, bind-mounted at its HOST path (BBOX_REPO_HOST, the
@@ -37,13 +55,13 @@ openhands:
   # but the gate cannot prove that statically because the path is absolute and does not resolve on
   # any other machine. That non-portability is a real wart (this app cannot run on a host where the
   # repo lives anywhere else); it is tracked separately, not hidden by this waiver.
-  - "/root/deployment-bina-comp"
-  - "/root/deployment-bina-comp/ai/obsidian"
+  - "/root/deployment-hacohen"
+  - "/root/deployment-hacohen/ai/obsidian"
   # Scratch: files the agent downloaded while working. Untracked and regenerable — losing it costs
   # nothing a re-run does not replace. (The path used to say `development/openhands/downloads`,
   # naming a directory the platform refactor deleted; docker would have silently created an empty
   # one. G26 found that, and it now points at apps/openhands/downloads.)
-  - "/root/deployment-bina-comp/apps/openhands/downloads"
+  - "/root/deployment-hacohen/apps/openhands/downloads"
 
 portainer:
   # A single generated file holding portainer's bootstrap admin password. Gitignored, so the gate is
@@ -62,5 +80,12 @@ portainer:
 # identity is not backed up, which is the one thing this file must never say about it.
 # (The gate is G26, `scripts/refactor/data-volumes-lint.py`; the round trip — export, restore, same
 # fingerprint — is the DGO-22 check in `apps/dgo-extend/tests/phase1.py`.)
-dgo-extend: []
+dgo-extend:
+  # NOT the identity volume — that one stays declared in app.json (see above). This is the CARRIED
+  # DOORS directory: `./bbox export` writes a peer's door record under
+  # `${BBOX_REPO_HOST:-/var/lib/bbox}/.dgo/doors`, a path the app cannot name in `data.volumes`
+  # without lying about the machine it runs on (the live office overrides the variable to its own
+  # checkout). Waived at the DEFAULT a clone runs, which is what G26 can read from the tree alone;
+  # the door record is carried by `bbox export` beside the identity, not by a data backup.
+  - "/var/lib/bbox/.dgo/doors"
 

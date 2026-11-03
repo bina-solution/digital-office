@@ -31,6 +31,24 @@ http:
           X-authentik-email: akadmin@localhost
           X-authentik-groups: authentik Admins
           X-authentik-uid: dev
+{{- else if eq (env "DGO_IDENTITY") "forward-auth" }}
+      # forward-auth (platform-base/forward-auth, DGO-1090): the same five headers, under the same
+      # middleware name, so no router and no app changes. trustForwardHeader false: traefik writes the
+      # X-Forwarded-* it sends from the request it received, never a client's own.
+      forwardAuth:
+        address: http://forward-auth:9078/auth/traefik
+        trustForwardHeader: false
+        authResponseHeaders:
+          - X-authentik-username
+          - X-authentik-groups
+          - X-authentik-email
+          - X-authentik-name
+          - X-authentik-uid
+          # a phone's machine behind its native core: forward-auth reads the core's signature of the request
+          # and never answers it, so traefik removes it from what the app receives (android-path.md)
+          - X-DGO-Edge-At
+          - X-DGO-Edge-Nonce
+          - X-DGO-Edge-Sig
 {{- else }}
       forwardAuth:
         address: http://authentik-server:9000/outpost.goauthentik.io/auth/traefik

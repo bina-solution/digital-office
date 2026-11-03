@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+#: model <family> step|glb k=v … — the 3D file on stdout:  ./bbox cad-api model chase step L=40 W=30 > chase.step
+# Runs cad-api's own CLI (api/cli.py) inside its container: no address, no key.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+dcx exec -T cad-api python /app/cli.py model "$@"

@@ -102,8 +102,8 @@ Each is green on its own before the next starts.
 | **P0** | the module is `#/m/chat`, and `#/m/whatsapp` still resolves (an additive redirect — never a removed route) | — |
 | **P1** | full chat UI between two local profiles at `console.localhost/#/m/chat` — send both ways, unread clears, an attachment, a group | stages 1–4 |
 | **P2** | cleanup done: `local.js` and the 7 tables gone, `bbox baseline` green | stage 6 |
-| **P3** | a third declared profile `binacompbot1`, with `bina-comp-bot` attached to its connection | stage 5 |
-| **P4** | user1 messages binacompbot1 → the bot answers, on the relay | stage 5 |
+| **P3** | a third declared profile `hacohenbot1`, with `hacohen-bot` attached to its connection | stage 5 |
+| **P4** | user1 messages hacohenbot1 → the bot answers, on the relay | stage 5 |
 | **P5** | the SAME bot answers on a Telegram profile | stage 7 + an owner-supplied bot token |
 | **P6** | the SAME bot answers on a Baileys profile | a QR pairing from a residential IP |
 

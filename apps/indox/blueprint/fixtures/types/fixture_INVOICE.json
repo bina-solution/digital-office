@@ -75,8 +75,8 @@
    "_bust_note": "LIVE cache key does NOT include version or model -> does NOT invalidate on prompt/model change. (Draft proposed sha256 + version/model bust; PROPOSED change, not live.)"
   },
   "constants": {
-   "own_company_vat": "515561520",
-   "own_company_name": "בינה קומפ חומרי בניין בע\"מ"
+   "own_company_vat": "500000088",
+   "own_company_name": "הכהנים חומרי בניין בע\"מ"
   },
   "response_schema": {
    "AI_COMPANY_ID": {

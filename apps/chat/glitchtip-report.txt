@@ -1,10 +1,10 @@
 GlitchTip Error Tracking Report — chat v0.7
 ========================================================
 Generated: 2025-07-21
-Platform: GlitchTip @ https://glitchtip.bina-comp.bina-solutions.co.il
+Platform: GlitchTip @ https://glitchtip.hacohen.bina-solutions.co.il
 Project: chat (project ID: 3)
 
-1. WHATSAPP-BINA_COMP ISSUES (2 total — all test events)
+1. WHATSAPP-HACOHANIM ISSUES (2 total — all test events)
 ---------------------------------------------------------
 Issue #321 — Error: Direct Sentry test error from bot container
   Type: Test event (manual docker exec)

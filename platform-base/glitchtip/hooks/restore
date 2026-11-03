@@ -33,8 +33,8 @@ docker exec -i "${C}" pg_restore -U "${U}" -d "${D}" --no-owner --no-acl < "${IN
   echo "[glitchtip/restore] diagnostics (last 5):" >&2; tail -5 "${BBOX_TMP}/glitchtip-restore.err" >&2; }
 
 q() { docker exec "${C}" psql -U "${U}" -d "${D}" -tAc "$1" 2>/dev/null | tr -d '\r' | tr -d ' '; }
-echo "FACT organizations $(q 'select count(*) from organizations_organization;')"
-echo "FACT projects $(q 'select count(*) from projects_project;')"
-echo "FACT project_keys $(q 'select count(*) from projects_projectkey;')"
-echo "FACT issues $(q 'select count(*) from issue_events_issue;')"
+factq organizations "$(q 'select count(*) from organizations_organization;')"
+factq projects "$(q 'select count(*) from projects_project;')"
+factq project_keys "$(q 'select count(*) from projects_projectkey;')"
+factq issues "$(q 'select count(*) from issue_events_issue;')"
 exit 0

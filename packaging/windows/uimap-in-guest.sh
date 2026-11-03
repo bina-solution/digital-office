@@ -25,7 +25,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 GUEST_PORT=2222
 GUEST_USER=binaos
-GUEST_PASS='BinaOS!test1'
+GUEST_PASS='CHANGE_ME'
 DISTRO=BinaOS
 REPO_SRC="${REPO_SRC:-/home/shlomy/binaos-repo}"
 

@@ -94,7 +94,7 @@ def reset() -> None:
 # 1. every account contributes, and a LOCAL repository sorts first
 reset()
 ACCOUNT_ROWS[:] = [
-    {"id": "gh1", "label": "GitHub — solomon", "protocol": "git_github_pat", "account_hint": "solomonBoltin@github.com"},
+    {"id": "gh1", "label": "GitHub — solomon", "protocol": "git_github_pat", "account_hint": "person40@example.com"},
     {"id": "lc1", "label": "פורג' מקומי", "protocol": "git_forge_local", "account_hint": "office@forge"},
 ]
 REPOS["gh1"] = [{"full_name": "solomonBoltin/b", "description": "", "default_branch": "main"},
@@ -130,14 +130,14 @@ truthy("…and says why", "קוד בלבד" in (out["errors"][0]["error"] or "")
 # 4. a mirror is attached to the repository it copies, and is not a row of its own
 reset()
 ACCOUNT_ROWS[:] = [{"id": "gh1", "label": "GitHub", "protocol": "git_github_pat"}]
-REPOS["gh1"] = [{"full_name": "solomonBoltin/deployment-bina-comp", "description": ""}]
-MIRRORS[:] = [{"id": "m1", "source_account": "gh1", "source_repo": "solomonBoltin/deployment-bina-comp",
-               "target_owner": "office", "target_repo": "deployment-bina-comp", "last_status": "ok"}]
+REPOS["gh1"] = [{"full_name": "solomonBoltin/deployment-hacohen", "description": ""}]
+MIRRORS[:] = [{"id": "m1", "source_account": "gh1", "source_repo": "solomonBoltin/deployment-hacohen",
+               "target_owner": "office", "target_repo": "deployment-hacohen", "last_status": "ok"}]
 out = repoindex.index()
 check("the list is still one repository", len(out["repos"]), 1)
 check("the mirror is attached", (out["repos"][0]["mirror"] or {}).get("id"), "m1")
 check("…and browses into the forge",
-      (out["repos"][0]["mirror"] or {}).get("browse_url"), PUBLIC_BASE + "/office/deployment-bina-comp")
+      (out["repos"][0]["mirror"] or {}).get("browse_url"), PUBLIC_BASE + "/office/deployment-hacohen")
 
 # 5. searching filters on the name AND the description
 reset()

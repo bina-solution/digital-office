@@ -6,10 +6,10 @@
   },
   "layer": 3,
   "kind": "service",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "summary": {
-    "he": "OCR, חילוץ ערכים ושירות המסמכים העסקיים",
-    "en": "OCR, value extraction and the document ledger"
+    "he": "OCR, חילוץ ערכים, תמלול עברית ופנקס המסמכים",
+    "en": "OCR, value extraction, Hebrew speech-to-text and the document ledger"
   },
   "capabilities": [
     {
@@ -34,6 +34,28 @@
         "documents",
         "issue",
         "download"
+      ]
+    },
+    {
+      "name": "speech",
+      "type": "protocol",
+      "endpoint": "http://apitools-asr:8987",
+      "link": true,
+      "required_ops": [
+        "transcribe",
+        "transcriptionStatus",
+        "transcriptionResult",
+        "transcriptionCancel",
+        "speechHealth",
+        "speechModels"
+      ],
+      "optional_ops": [
+        "voiceExport",
+        "voiceStart",
+        "voiceSegment",
+        "voiceStatus",
+        "voiceFinish",
+        "voiceCancel"
       ]
     }
   ],
@@ -76,6 +98,10 @@
     }
   ],
   "compose": "docker-compose.yml",
+  "agent": {
+    "context": "AGENT.md",
+    "order": 36
+  },
   "routing": [
     {
       "host": "apitools",
@@ -99,7 +125,12 @@
     }
   },
   "data": {
-    "volumes": [],
+    "volumes": [
+      "apitools_asr_data"
+    ],
+    "cache": [
+      "apitools_asr_data"
+    ],
     "on_uninstall": "prompt",
     "paths": [
       "apps/apitools/storage",

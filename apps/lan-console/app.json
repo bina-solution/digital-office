@@ -1,0 +1,38 @@
+{
+  "id": "lan-console",
+  "title": {
+    "he": "הקונסול ברשת המקומית",
+    "en": "Console on the LAN"
+  },
+  "layer": 3,
+  "kind": "service",
+  "version": "0.1.0",
+  "summary": {
+    "he": "הקונסול של הלשכה בכתובת ה-IP שלה, לטלפון ולמחשבים באותה רשת, עם אותה התחברות",
+    "en": "This office's console at its LAN address, for a phone on the same Wi-Fi, with the same sign-in"
+  },
+  "capabilities": [],
+  "use": [
+    {
+      "capability": "identity",
+      "strength": "requires",
+      "after": true,
+      "own_instance": true,
+      "reason": "the office's forward-auth hands a browser to signin.<domain>, which a phone on the LAN cannot resolve; lan-signin is the same image signing in at auth.<LAN_DOMAIN>, reading the office's one users file read-only"
+    }
+  ],
+  "connections": [],
+  "compose": "docker-compose.yml",
+  "agent": {
+    "context": "AGENT.md",
+    "order": 96
+  },
+  "data": {
+    "volumes": [],
+    "on_uninstall": "keep"
+  },
+  "resources": {
+    "cpus": "0.2",
+    "memory": "96M"
+  }
+}

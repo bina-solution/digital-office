@@ -10,7 +10,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://apitools.bina-comp.bina-solutions.co.il/documentJsonQuery",
+        "url": "https://apitools.hacohen.bina-solutions.co.il/documentJsonQuery",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
@@ -52,7 +52,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://apitools.bina-comp.bina-solutions.co.il/documentJsonQuery",
+        "url": "https://apitools.hacohen.bina-solutions.co.il/documentJsonQuery",
         "sendBody": true,
         "specifyBody": "=json",
         "bodyParameters": {
@@ -197,14 +197,14 @@
       "credentials": {
         "googleDriveOAuth2Api": {
           "id": "KirWFwoFdEFmnN0R",
-          "name": "Google Drive person17@example.com"
+          "name": "Google Drive person17.x@example.com"
         }
       }
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "https://apitools.bina-comp.bina-solutions.co.il/documentOcr",
+        "url": "https://apitools.hacohen.bina-solutions.co.il/documentOcr",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
@@ -420,7 +420,7 @@
     },
     {
       "parameters": {
-        "content": "## I'm a note \nFails list \nhttps://drive.google.com/file/d/1mImvW8W9ouc4L1WAly4gjtpBgZN-gaZi/edit below\nhttps://drive.google.com/file/d/1kHzfaokXgcWEY-Jh9tVxpPckl1F-5vHe/edit below\nhttps://drive.google.com/file/d/1AfPV9WiCY7xx_X1S5XlmSyzqhzotqZFE/view after \nhttps://drive.google.com/file/d/1hw5bJlSPf2Kvt8xA1Qobfz8X9OsrlF6d/view?usp=drivesdk after ",
+        "content": "## I'm a note \nFails list \nhttps://drive.google.com/file/d/1REDACTEDdrivexxxxxxxxxxxxxxx0076/edit below\nhttps://drive.google.com/file/d/1REDACTEDdrivexxxxxxxxxxxxxxx0077/edit below\nhttps://drive.google.com/file/d/1REDACTEDdrivexxxxxxxxxxxxxxx0078/view after \nhttps://drive.google.com/file/d/1REDACTEDdrivexxxxxxxxxxxxxxx0079/view?usp=drivesdk after ",
         "height": 224,
         "width": 720
       },
@@ -669,15 +669,7 @@
   },
   "staticData": null,
   "meta": null,
-  "pinData": {
-    "When Executed by Another Workflow": [
-      {
-        "json": {
-          "LINK": "https://drive.google.com/file/d/1SC_J3k4LwcTPoougG0QLyLKIgi7URUMt/edit"
-        }
-      }
-    ]
-  },
+  "pinData": {},
   "versionId": "c313e570-c8c1-4b4d-8939-f97b4ff5c9f0",
   "activeVersionId": "c313e570-c8c1-4b4d-8939-f97b4ff5c9f0",
   "versionCounter": 122,

@@ -50,13 +50,32 @@ rm -f /tmp/applied /tmp/outpost-token /tmp/outpost-hosts
 # are gated, with a NON-EXPIRING API token of the admin account that this script minted and kept in
 # /tmp. The probe reads the compiled blueprint now, so the token is a standing credential nobody
 # uses — removed here, on every office that still holds one.
+#
+# …and so do the applications of a linked office's apps that the render no longer names. A
+# `dgo-remote-*` slug is the compiler's (platform/manager/serve.py); when a linked office renames an
+# app's alias, the new slug's provider has the SAME display name, so the importer finds the old
+# provider by name and the new application is refused — "Application with this provider already
+# exists" — which fails the whole generated blueprint. Measured on the MacBook, 2026-10-21: vps1's
+# `pinkas` had become `my-docs`, the two old applications held both providers, and this container
+# restarted once a minute (4,832 times) at ~2 vCPU across authentik. The render is the truth for this
+# prefix, so a slug it does not name is removed before anything is applied (its provider stays and
+# is taken over by name) — but only while the render names some, so a link that is down cannot
+# empty the prefix.
 ak shell -c '
+import re
 from authentik.blueprints.models import BlueprintInstance
-from authentik.core.models import Token
+from authentik.core.models import Application, Token
 n = BlueprintInstance.objects.filter(path__startswith="custom/").exclude(path="custom/zz-generated-apps.yaml").update(last_applied_hash="")
 print("cleared last_applied_hash on", n, "committed blueprint(s)")
 gone, _ = Token.objects.filter(identifier="outpost-ready-probe").delete()
 print("retired probe token(s) removed:", gone)
+try:
+    named = set(re.findall(r"^\s+slug: (dgo-remote-\S+)\s*$", open("/blueprints/custom/zz-generated-apps.yaml", encoding="utf-8").read(), re.M))
+except OSError:
+    named = None
+if named:   # a render that names no remote app at all (a link down) retires nothing
+    stale, _ = Application.objects.filter(slug__startswith="dgo-remote-").exclude(slug__in=named).delete()
+    print("retired remote application(s) removed:", stale)
 ' 2>/dev/null | grep -E '^(cleared|retired) ' || true
 
 #
@@ -117,18 +136,66 @@ for i in $(seq 1 60); do
   # while the bring-up reported "SSO fully ready".
   #
   # `bps` empty is now a hard error for the same reason: an empty loop must never read as success.
-  if bps="$(ls /blueprints/custom/*.yaml 2>/dev/null | sort)" && [ -n "${bps}" ]      && for bp in ${bps}; do
+  #
+  # A REFUSED APPLY IS RETRIED HERE, never by docker. The loop used to read `|| exit 1` in this
+  # shell, so one blueprint authentik refuses (the CLI does exit non-zero on "Blueprint invalid")
+  # ended the script on attempt 1 and `unless-stopped` started it again — a full authentik boot a
+  # minute, for as long as the refusal stood. In a subshell the `exit` ends only the apply pass.
+  if bps="$(ls /blueprints/custom/*.yaml 2>/dev/null | sort)" && [ -n "${bps}" ]      && ( for bp in ${bps}; do
        ak apply_blueprint "${bp}" || exit 1
-     done && blueprints_ok; then
-    # akadmin's password is set by the worker (AUTHENTIK_BOOTSTRAP_* in its env); set it
-    # best-effort here too, once the user exists.
-    ak shell -c "from authentik.core.models import User; import os; u=User.objects.filter(username=os.environ.get('AUTHENTIK_BOOTSTRAP_USER','akadmin')).first(); pw=os.environ.get('AUTHENTIK_BOOTSTRAP_PASSWORD',''); [ (u.set_password(pw), u.save()) for _ in [0] if u and pw ]" >/dev/null 2>&1 || true
+     done ) && blueprints_ok; then
+    # A PASSWORD READ ONCE AT CREATION AND KEPT IN A DATABASE (eng-013, instance 2). The worker sets
+    # akadmin from AUTHENTIK_BOOTSTRAP_* when it CREATES the user; every later .env edit was inert and
+    # NOTHING SAID SO — `bbox status` cannot see it either, because no container is stale: the wrong
+    # value lives only in authentik's database. So the value is reconciled here on every boot and then
+    # VERIFIED against what .env declares, with `check_password` — the same check a sign-in makes. A
+    # password that cannot be brought in line is a hard failure, which is the record's own proposal:
+    # "reconcile it on every boot, or the deployment should refuse to start when the declared value is
+    # not the live one". Silence is the failure this replaced.
+    _pass_check="$(cat <<'PYPASS'
+from authentik.core.models import User
+import os, sys
+name = os.environ.get("AUTHENTIK_BOOTSTRAP_USER", "akadmin")
+pw = os.environ.get("AUTHENTIK_BOOTSTRAP_PASSWORD", "")
+u = User.objects.filter(username=name).first()
+if not pw:
+    print(f"{name}: no AUTHENTIK_BOOTSTRAP_PASSWORD declared - its password is not managed from .env here")
+    sys.exit(0)
+if not u:
+    print(f"{name}: not created yet - the worker creates it from AUTHENTIK_BOOTSTRAP_*, nothing to reconcile")
+    sys.exit(0)
+if u.check_password(pw):
+    print(f"{name}: the live password is the one .env declares")
+    sys.exit(0)
+u.set_password(pw)
+u.save()
+if u.check_password(pw):
+    print(f"{name}: password re-applied from .env - the live one differed")
+    sys.exit(0)
+print(f"ERROR: {name}: the live password does not match .env and could not be set from it", file=sys.stderr)
+sys.exit(1)
+PYPASS
+)"
+    _ak_out="$(ak shell -c "${_pass_check}" 2>&1)"; _ak_rc=$?
+    # `ak shell` mixes its own JSON log lines into stdout; only this check's sentence is ours.
+    printf '%s\n' "${_ak_out}" | grep -v '^{' || true
+    if [ "${_ak_rc}" != 0 ]; then
+      echo "ERROR: the sign-in password could not be reconciled with .env - refusing to report this bring-up ready" >&2
+      exit 1
+    fi
     echo "all custom blueprints applied (attempt $i)"; applied=1; break
   fi
   echo "authentik not ready yet (attempt $i/60) — retrying in 5s"; sleep 5
 done
-[ "$applied" = 1 ] || { echo "ERROR: deployment-apps not applied after retries" >&2; exit 1; }
 [ -n "${bps:-}" ] || { echo "ERROR: no blueprints found at /blueprints/custom/*.yaml — the bind mount is missing" >&2; exit 1; }
+# Not applied after every retry: say so and STAY, for the reason the outpost wait below gives — a
+# restart re-applies the same refused file and cures nothing. /tmp/applied is not written, so
+# hooks/refresh still sees "not applied".
+if [ "$applied" != 1 ]; then
+  echo "ERROR: the custom blueprints were not applied after 60 attempts (see 'blueprint not applied' above)." >&2
+  echo "       Staying up without /tmp/applied; fix the refused entry, then recreate this container." >&2
+  exec sleep infinity
+fi
 
 # Every blueprint reads `successful`, by this run. The hook that restarted this container to have
 # that done (hooks/refresh, when a declared host is not served) waits on this file and on nothing

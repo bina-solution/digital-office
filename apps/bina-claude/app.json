@@ -1,0 +1,135 @@
+{
+  "id": "bina-claude",
+  "title": {
+    "he": "בינה קלוד",
+    "en": "Bina Claude"
+  },
+  "layer": 3,
+  "kind": "service",
+  "version": "0.1.0",
+  "summary": {
+    "he": "Claude Code בתוך הלשכה — כניסה לחשבון Claude מתוך הלשכה, מסוף בקונסול, ו-agent.v1 לסוכנים האחרים",
+    "en": "Claude Code inside the office — sign in to your Claude account from the office, a terminal in the console, and agent.v1 for the other agents"
+  },
+  "capabilities": [
+    {
+      "name": "claude-agent",
+      "type": "protocol",
+      "interface": "agent.v1",
+      "endpoint": "http://bina-claude:3091",
+      "required_ops": [
+        "health",
+        "listSessions",
+        "createSession",
+        "getSession",
+        "sendMessage",
+        "listMessages"
+      ]
+    }
+  ],
+  "use": [
+    {
+      "capability": "identity",
+      "strength": "requires",
+      "after": true
+    }
+  ],
+  "connections": [],
+  "compose": "docker-compose.yml",
+  "agent": {
+    "context": "AGENT.md",
+    "order": 4
+  },
+  "routing": [
+    {
+      "host": "claude",
+      "port": 3000,
+      "auth": "sso",
+      "service": "bina-claude-desktop",
+      "emit_labels": true,
+      "module": {
+        "group": "ראשי",
+        "icon": "sparkles",
+        "embed": true,
+        "alias": "bina-claude",
+        "id": "bina-claude",
+        "name": "בינה קלוד",
+        "desc": "אפליקציית Claude המקורית, בתוך הלשכה",
+        "order": 2,
+        "url": "http://bina-claude-desktop:3000/",
+        "url_env": "BINA_CLAUDE_URL",
+        "passthrough": [
+          {
+            "path": "/api",
+            "transport": "websocket",
+            "match": "prefix",
+            "strip_mount_prefix": true
+          }
+        ]
+      },
+      "sso": {
+        "slug": "bina-claude",
+        "display_name": "Bina Claude",
+        "default_host": "claude.localhost",
+        "base_url_env": "BINA_CLAUDE_BASE_URL",
+        "local_twin": true
+      }
+    },
+    {
+      "host": "claude-terminal",
+      "name": "claude-terminal",
+      "port": 7681,
+      "auth": "sso",
+      "service": "bina-claude",
+      "emit_labels": true,
+      "module": {
+        "group": "ראשי",
+        "icon": "sparkles",
+        "embed": true,
+        "alias": "claude-terminal",
+        "id": "claude-terminal",
+        "name": "בינה קלוד · מסוף",
+        "desc": "Claude Code במסוף",
+        "order": 3,
+        "url": "http://bina-claude:7681",
+        "url_env": "BINA_CLAUDE_TERMINAL_URL",
+        "passthrough": [
+          {
+            "path": "/ws",
+            "transport": "websocket",
+            "strip_mount_prefix": true
+          },
+          {
+            "path": "/token",
+            "transport": "http",
+            "strip_mount_prefix": true
+          }
+        ]
+      },
+      "sso": {
+        "slug": "bina-claude-terminal",
+        "display_name": "Bina Claude terminal",
+        "default_host": "claude-terminal.localhost",
+        "base_url_env": "BINA_CLAUDE_TERMINAL_BASE_URL",
+        "local_twin": true
+      }
+    }
+  ],
+  "health": {
+    "structural": "auto",
+    "probe": {
+      "http": "http://bina-claude:3091/v1/health",
+      "interval": "30s"
+    }
+  },
+  "data": {
+    "volumes": [
+      "bina_claude_home"
+    ],
+    "on_uninstall": "keep"
+  },
+  "resources": {
+    "cpus": "2",
+    "memory": "1536m"
+  }
+}

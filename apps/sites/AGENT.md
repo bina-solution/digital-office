@@ -68,6 +68,10 @@ The same surface exists as canonical ops (`POST /listSites`, `/getSite`, `/check
   container name, not `site-<id>`. Do not assume the pattern's container name for an adopted site.
 - **Beauty needs the renderer.** `sites-render` owns Chromium; when it is unhealthy the beauty check
   reports „שירות הרינדור אינו זמין” and the rest of the app is unaffected. That is not a site finding.
+- **The SEO check talks to other people's servers.** It reads the WHOLE sitemap (`seo_pages` is a
+  floor), then asks once per external link — rate-limited and cached per host, never a private address.
+  404/410/5xx is `broken_external`; 401/403/429 is `external_blocked` (info). Limits: top of
+  `checks/seo.py`; tests: `cd apps/sites && python3 -m checks.test_seo`.
 - **Visits come from the site's own log.** For an adopted site that is the container's stdout, so the
   numbers start at the moment it was adopted — history cannot be recovered from a log that was never
   kept, and no check should claim otherwise.

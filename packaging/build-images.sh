@@ -64,7 +64,7 @@ for name, svc in sorted((data.get("services") or {}).items()):
         ctx = b.get("context", "."); df = b.get("dockerfile", "Dockerfile"); args = b.get("args") or {}
     if isinstance(args, list):
         args = {k: v for a in args for k, _, v in [a.partition("=")]}
-    img = svc.get("image") or ("deployment-bina-comp-" + name)
+    img = svc.get("image") or ("deployment-hacohen-" + name)
     # compose resolves context to an absolute host path; make it repo-relative so the command is
     # portable and readable, and so it works the same on a Linux runner as on a Windows dev box.
     try:

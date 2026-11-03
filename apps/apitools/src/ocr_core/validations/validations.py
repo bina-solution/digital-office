@@ -117,7 +117,7 @@ def validation_not_starts_with(value: Any, validation_value: Any) -> bool:
     """True when the token does NOT start with the given prefix.
 
     An Israeli company/VAT id never begins with 0, but a phone number always does — and a
-    phone like ``03-7797090`` carries exactly 9 digits, so it sails through a 9-digit test
+    phone like ``03-0000006`` carries exactly 9 digits, so it sails through a 9-digit test
     and gets returned as the supplier id. This rejects it.
     """
     return not str(value or '').strip().startswith(str(validation_value))

@@ -10,12 +10,22 @@ never hammer), `not_found`, or a plain provider error.
 from __future__ import annotations
 
 import json
+import re
 
 import requests
 
 from adapters.base import SocialError
 
 TIMEOUT = 30
+# A connection error's text names the URL it failed on, and Graph takes its token in the query string
+# (facebook_graph.py); an invalid header's names the header's value (`Bearer <token>`). The detail is
+# kept in the activity log, so a credential's value never is.
+SECRET_IN_URL = re.compile(r"([A-Za-z_]*(?:token|secret|key|signature|password|proof|sig|code))=[^&\s'\"]+", re.I)
+SECRET_IN_HEADER = re.compile(r"\b(bearer|bot|oauth)\s+[^\s'\"\\]{12,}", re.I)    # a token, not a word
+
+
+def scrub(text: str) -> str:
+    return SECRET_IN_HEADER.sub(r"\1 …", SECRET_IN_URL.sub(r"\1=…", text))
 
 
 def _message(payload) -> str:
@@ -44,7 +54,7 @@ def call(method: str, url: str, platform_name: str, *, ok=(200, 201, 202, 204), 
         r = requests.request(method, url, **kw)
     except requests.RequestException as e:
         raise SocialError(f"{platform_name}: אין תשובה מהשרת", status=502,
-                          kind="network", detail=str(e)[:300]) from e
+                          kind="network", detail=scrub(str(e))[:300]) from e
     try:
         body = r.json() if r.content else None
     except ValueError:

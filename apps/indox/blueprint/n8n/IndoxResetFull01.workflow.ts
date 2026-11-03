@@ -63,7 +63,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
     /*__n8n__*/ meta: null,
     /*__n8n__*/ pinData: null,
     /*__n8n__*/ staticData: null,
-    /*__n8n__*/ shared: [{"updatedAt":"2026-07-31T00:59:54.840Z","createdAt":"2026-07-31T00:59:54.840Z","role":"workflow:owner","workflowId":"IndoxResetFull01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <shlomo@local.dev>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
+    /*__n8n__*/ shared: [{"updatedAt":"2026-07-31T00:59:54.840Z","createdAt":"2026-07-31T00:59:54.840Z","role":"workflow:owner","workflowId":"IndoxResetFull01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
     id: 'IndoxResetFull01',
     name: 'INDOX Reset + Setup',
     active: true,
@@ -231,7 +231,17 @@ export class IndoxResetSetupWorkflow {
         position: [2420, 100],
     })
     Norm3 = {
-        jsCode: "return [{ json: { step: 'drive-reset', __instance: $('Reset Scope').first().json.__instance } }];",
+        jsCode: `// 'Call Drive Reset' continues on error, so a failed RESET arrived here indistinguishable from
+// a good one and the step chain marched on to the gmail pass and the locks with the run looking
+// finished — a suite would then seed and lock against a reset that never happened. Read it and
+// stop here: the throw is what makes the run fail. The locks left behind expire on the Redis TTL
+// (600s), and a fixture reset is the one thing a suite may not carry on without.
+const failed = (typeof $input !== 'undefined' ? $input.all() : [])
+  .map(i => (i && i.json) || {})
+  .filter(j => j.error || j.errorMessage)
+  .map(j => String(j.error || j.errorMessage).slice(0, 200));
+if (failed.length) throw new Error('the drive reset failed — ' + failed.join(' | '));
+return [{ json: { step: 'drive-reset', __instance: $('Reset Scope').first().json.__instance } }];`,
     };
 
     @node({

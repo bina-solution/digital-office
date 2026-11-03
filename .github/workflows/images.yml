@@ -11,7 +11,7 @@ name: images
 #     `./scripts/dc up -d`. Every app compose names the published image beside its `build:` with
 #     `pull_policy: missing`, so an image that is not present locally is fetched and one that is, is
 #     used as it is. `console` is the one app still outside that: its compose names the local tag
-#     `deployment-bina-comp-console`, so it keeps building.
+#     `deployment-hacohen-console`, so it keeps building.
 #   * a DEVELOPER does nothing differently: edit, `./bbox run`, the `build:` fallback compiles.
 #
 # WHICH TAG IS WHICH — `IMAGE_TAG` in .env picks one (`.env.ex` defaults it to `latest`):
@@ -100,7 +100,7 @@ jobs:
           WANT: ${{ github.event.inputs.apps }}
         run: |
           set -euo pipefail
-          skip="apitools n8n indox chat autoheal"
+          skip="apitools n8n indox chat autoheal follow-runner"
           list=""
           for d in apps/*/ platform-base/*/; do
             id="$(basename "$d")"

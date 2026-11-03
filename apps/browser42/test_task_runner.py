@@ -111,5 +111,77 @@ class TaskRunnerTests(unittest.TestCase):
         self.assertIn("queueWaitSeconds", health)
 
 
+class RunnerTokenTests(unittest.TestCase):
+    """DGO-1152: /v1/task needs the runner's own token; warn serves and logs, refuse answers 401."""
+
+    def setUp(self):
+        import tempfile
+        from http.server import ThreadingHTTPServer
+        self.dir = tempfile.mkdtemp()
+        self.path = str(Path(self.dir) / "task-runner" / "api-token")
+        self.token = MODULE.load_or_mint_token(self.path)
+        self.saved = (MODULE.TOKEN, MODULE.TASK_AUTH)
+        MODULE.TOKEN = self.token
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), MODULE.Handler)
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        self.url = f"http://127.0.0.1:{self.server.server_address[1]}"
+
+    def tearDown(self):
+        import shutil
+        self.server.shutdown()
+        self.server.server_close()
+        MODULE.TOKEN, MODULE.TASK_AUTH = self.saved
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def post(self, headers=None):
+        from urllib.error import HTTPError
+        from urllib.request import Request, urlopen
+        req = Request(self.url + "/v1/task", data=b'{"argv": ["status", "t"]}', method="POST",
+                      headers={"Content-Type": "application/json", **(headers or {})})
+        try:
+            with urlopen(req, timeout=10) as r:
+                return r.status
+        except HTTPError as e:
+            return e.code
+
+    def test_the_token_is_minted_once_kept_and_private(self):
+        import os
+        import stat
+        self.assertGreaterEqual(len(self.token), 32)
+        self.assertEqual(MODULE.load_or_mint_token(self.path), self.token)
+        self.assertEqual(stat.S_IMODE(os.stat(self.path).st_mode), 0o600)
+
+    def test_refuse_stage_answers_401_without_the_token_or_with_a_wrong_one(self):
+        MODULE.TASK_AUTH = "refuse"
+        with patch.object(MODULE, "build_response", return_value=(200, {"ok": True})) as served:
+            self.assertEqual(self.post(), 401)
+            self.assertEqual(self.post({"Authorization": "Bearer " + "x" * 43}), 401)
+            self.assertEqual(self.post({"Authorization": self.token}), 401)      # no Bearer
+            served.assert_not_called()
+
+    def test_refuse_stage_serves_the_token(self):
+        MODULE.TASK_AUTH = "refuse"
+        with patch.object(MODULE, "build_response", return_value=(200, {"ok": True})) as served:
+            self.assertEqual(self.post({"Authorization": f"Bearer {self.token}"}), 200)
+            served.assert_called_once()
+
+    def test_refuse_stage_with_no_token_file_refuses_everyone(self):
+        MODULE.TASK_AUTH, MODULE.TOKEN = "refuse", ""
+        with patch.object(MODULE, "build_response", return_value=(200, {"ok": True})):
+            self.assertEqual(self.post({"Authorization": "Bearer "}), 401)
+
+    def test_warn_stage_serves_a_caller_without_the_token(self):
+        MODULE.TASK_AUTH = "warn"
+        with patch.object(MODULE, "build_response", return_value=(200, {"ok": True})) as served:
+            self.assertEqual(self.post(), 200)
+            served.assert_called_once()
+
+    def test_healthz_stays_open(self):
+        from urllib.request import urlopen
+        MODULE.TASK_AUTH = "refuse"
+        with urlopen(self.url + "/healthz", timeout=10) as r:
+            self.assertEqual(r.status, 200)
+
+
 if __name__ == "__main__":
     unittest.main()

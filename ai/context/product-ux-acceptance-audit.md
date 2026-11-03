@@ -59,4 +59,4 @@ a green checkmark over a broken thing. CI proves the machine is up. **This audit
 is usable** — it is the only check aimed at the human.
 
 Related: [[platform-service-contract]] §4b/§4c/§5, [[fresh-vps-staging-bringup]],
-[[bina-comp-legacy-migration-spec]].
+[[hacohen-legacy-migration-spec]].

@@ -15,9 +15,10 @@
 #                               database, and each office's operator chooses when.
 #   G38 dangling-workflow-ref   an id here must have no blueprint file — and so nothing may call it.
 #
-# Each of these was inactive, called by no node of any shipped blueprint (measured from the
+# Each of the first group was inactive, called by no node of any shipped blueprint (measured from the
 # compiled blueprints), and its id is quoted by no tracked code or configuration — the second
 # check is what caught indoxApiRouter01 below. Their files are in legacy/n8n/retired-20261007/.
+# The later entries say where they differ (active where they still exist, quoted by the hooks).
 
 # scratch and probes that were never part of anything
 IPqTtikNP1sLxoka           "Batching loop issue" - a demonstration of the loop-drain defect G45 guards
@@ -42,3 +43,25 @@ indoxV2QueryInvoiceId01    Query INVOICE_ID
 indoxV2QueryPurchaseId01   Query PURCHASE_ID
 indoxV2QueryShipmentId01   Query SHIPMENT_ID
 indoxV2QueryTotalAmt01     Query DOCUMENT_TOTAL_AMOUNT
+
+# ACTIVE where it still exists, unlike the rest of this list, so `unpush --retired` restarts n8n on an
+# office that still runs it. It never had a file under this id: INDOX's 2026-07-30 import of its Gmail
+# Actions Scanner, older than the indoxGmailActionsScanner01 in legacy/blueprints-json-20260816/ (which
+# resolves a mail connection; this copy never did). Its copy, from vps1, is in
+# legacy/n8n/retired-20261101/. Tagged `archive`, it calls `gmail api` with no `connection_id`, which
+# mailapi refuses, so every three-minute fire fails three executions and queues five Error Handler
+# runs (vps1, 2026-11-01: all of that instance's failures since 11:10 UTC; deactivated there 12:05).
+# issues/vps1-n8n-workers-lost-their-code-runners-and-every-code-node-timed-out-for-six-days.yaml
+UjIsYslUa3he7EbA           "Gmail Actions Scanner" - an archived import that can only fail
+
+# The OLD error path, ACTIVE where it still exists: the one error handler is errorHandler01 since
+# 2026-08-06 (the reporter merged into it, the owner's "one error handler workflow"). INDOX's 2026-07-30
+# import brought both back under their old ids on vps1, and 46 workflows there named the old handler as
+# their errorWorkflow. Its Telegram node answers 404 on every run, so it failed every time (0 successes
+# in 7 days) and errorHandler01 then reported THAT failure. Push's step 3b points every active workflow
+# naming them at errorHandler01 (test and CI ones aside), and unpush does it for any that still do
+# before removing them. Both ids stay in the hooks' exclusion lists. Copies (sentry_key and Telegram
+# chat ids redacted), from vps1: legacy/n8n/retired-20261102/.
+# issues/vps1-n8n-seven-in-ten-executions-fail-and-the-error-workflows-fail-too.yaml
+RqAY1Z1i2F7ZaPbe           "Error Handler" - the pre-2026-08-06 handler, failing on its Telegram node
+sAjhxlLTUq9vEL8L           "GlitchTip Error Reporter" - the old reporter, called only by RqAY1Z1i2F7ZaPbe

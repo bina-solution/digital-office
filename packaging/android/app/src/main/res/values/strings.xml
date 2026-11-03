@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">הלשכה הדיגיטלית</string>
+    <!-- the one screen before the console (DGO-1084): the office's machine unpacked, started, coming up.
+         Invisible LRM marks (U+200E) on both sides of each Latin run keep a Hebrew line's order around it:
+         4 in setup_no_room, 2 in each webview_old/webview_failed — count them after an edit -->
+    <string name="setup_unpacking">מכין את הלשכה בטלפון… %1$d%%</string>
+    <string name="setup_starting">מפעיל את הלשכה…</string>
+    <string name="setup_first_up">הלשכה עולה בפעם הראשונה. זה ארוך: לטלפון אין האצת חומרה לאפליקציות, והלשכה מעלה את כל האפליקציות שלה. השורות למטה הן ההתקדמות שלה; המסך נשאר דולק בינתיים.</string>
+    <string name="setup_coming_up">הלשכה עולה…</string>
+    <string name="setup_engine_stopped">המנוע של הלשכה נעצר. השורות למטה אומרות למה; פתיחה מחדש של האפליקציה מפעילה אותו שוב.</string>
+    <string name="setup_no_engine">המנוע של הלשכה לא נכלל בגרסה הזו של האפליקציה.</string>
+    <string name="setup_no_guest">המכונה של הלשכה לא נכללה בגרסה הזו של האפליקציה.</string>
+    <string name="setup_no_room">אין מספיק מקום בטלפון: הלשכה צריכה ‎%1$d GB‎ פנויים, ויש ‎%2$d GB‎.</string>
+    <string name="setup_failed">ההכנה של הלשכה נכשלה:</string>
+    <!-- the engine's notification -->
+    <string name="engine">הלשכה בטלפון</string>
+    <string name="engine_running">הלשכה בטלפון רצה</string>
+    <string name="engine_stop">עצירה</string>
+    <!-- the console -->
+    <string name="no_download">את הקובץ הזה אי אפשר להוריד מכאן</string>
+    <string name="webview_old_title">רכיב התצוגה של הטלפון ישן</string>
+    <string name="webview_old">הלשכה לא תיפתח ברכיב התצוגה של הטלפון הזה (‎Android System WebView %1$s‎). עדכן אותו בחנות ופתח שוב.</string>
+    <string name="webview_failed">הדף של הלשכה לא נטען ברכיב התצוגה של הטלפון הזה (‎Android System WebView %1$s‎). עדכון שלו בחנות פותר את זה בדרך כלל.</string>
+    <string name="webview_update">עדכון</string>
+    <string name="webview_continue">להמשיך בכל זאת</string>
+    <string name="webview_no_store">אין בטלפון חנות או דפדפן שיפתחו את העדכון</string>
+</resources>

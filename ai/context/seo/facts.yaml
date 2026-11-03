@@ -1,0 +1,147 @@
+# ai/context/seo/facts.yaml — THE facts of DGO that every page, article, tutorial, post, news item and
+# report cites (seo-002, DGO-661). One list, dated: a sentence on either site or in any content item
+# that states one of these must agree with it, and a number that is not here is either measured and
+# added here first, or cited with its own dated source in the text (style-guide.md, the checklist).
+#
+# Each fact: `id` (stable, never reused), `he` / `en` (the sentence as content may state it),
+# `value` (what a check compares), `measured` (the date it was true), `how` (the measurement or the
+# source). `open:` lists what must be measured before any content states it.
+
+as_of: 2026-10-20
+
+facts:
+- id: license
+  he: DGO משוחרר בקוד פתוח ברישיון GNU AGPL v3.
+  en: DGO is released as open source under the GNU AGPL v3.
+  value: GNU AGPL v3
+  measured: 2026-10-20
+  how: the LICENSE of github.com/bina-solution/digital-office (main), read from raw.githubusercontent.com
+
+- id: release
+  he: הגרסה הראשונה של DGO שוחררה לציבור ב-19 באוקטובר 2026.
+  en: The first public release of DGO went out on 19 October 2026.
+  value: 2026-10-19
+  measured: 2026-10-19
+  how: DGO-656 (done) — dgo-stable published to the public repository under AGPL v3
+
+- id: public-repo
+  he: הקוד נמצא במאגר הציבורי github.com/bina-solution/digital-office (ענף main).
+  en: The code is in the public repository github.com/bina-solution/digital-office (branch main).
+  value: { url: https://github.com/bina-solution/digital-office, default_branch: main, created: 2026-10-04, topics: 20 }
+  measured: 2026-10-19
+  how: GitHub API, DGO-661 (the anonymous API refused a re-read on 2026-10-20 with 403; the LICENSE read succeeded)
+
+- id: provider
+  he: את DGO מפתחת ומספקת בינה סולושנס (Bina Solutions).
+  en: DGO is built and provided by Bina Solutions.
+  value: Bina Solutions
+  measured: 2026-10-19
+  how: the owner's request of 2026-10-19 (DGO-659) — "always reference back to Bina Solutions as the company providing DGO"
+
+- id: agpl-section-13
+  he: הקונסול עוד לא מציע למשתמשים את קוד המקור של הגרסה שרצה (סעיף 13 של AGPL) — זה בעבודה.
+  en: The console does not yet offer users the source of the running version (AGPL section 13) — this is in progress.
+  value: not yet
+  measured: 2026-10-19
+  how: DGO-657 open; the license page states section 13 as the license's rule, not as a feature that exists
+
+- id: runs-on
+  he: לשכה רצה על Mac, על Windows (דרך WSL), על Linux ועל VPS.
+  en: An office runs on a Mac, on Windows (through WSL), on Linux and on a VPS.
+  value: [mac, windows-wsl, linux, vps]
+  measured: 2026-10-19
+  how: DGO-661; Mac on the Lima (vz) engine with Docker CE 28.5.2 and no Docker Desktop (packaging/macos.md), Windows through bbox.cmd into WSL (ai/context/running-on-wsl.md)
+
+- id: one-command
+  he: 'לשכה עולה בפקודה אחת — `./bbox run` (ב-Windows `bbox.cmd run`) — מתוך הקובץ `.env`.'
+  en: An office comes up with one command — `./bbox run` (on Windows `bbox.cmd run`) — from its `.env`.
+  value: ./bbox run
+  measured: 2026-10-20
+  how: AGENTS.md; this office (claude-cloud) came back after a reboot with exactly this command
+
+- id: docker-engine
+  he: DGO דורש Docker 28.x; ב-Docker 29 הניתוב נשבר בלי הודעה.
+  en: DGO needs Docker 28.x; on Docker 29 routing breaks silently.
+  value: docker 28.x
+  measured: 2026-10-19
+  how: AGENTS.md and ai/context/running-the-stack.md (traefik v3.3 under Docker 29)
+
+- id: linked-offices
+  he: לשכות מתחברות זו לזו (DGO Extend), ואפליקציה שרצה בלשכה אחת נפתחת מהקונסול של לשכה אחרת. ארבע לשכות של בינה סולושנס מקושרות היום — MacBook, מחשב HP, שרת VPS ולשכה בסביבת ענן.
+  en: Offices link to each other (DGO Extend), and an app running in one office opens from another office's console. Four Bina Solutions offices are linked today — a MacBook, an HP laptop, a VPS and an office in a cloud sandbox.
+  value: { offices: [macbook, hp-laptop, vps1, claude-cloud], lan_pair: macbook-hp-laptop (TCP path), hub: vps1 }
+  measured: 2026-10-20
+  how: ./bbox dgo link status on vps1 and on claude-cloud; DGO-820
+
+- id: handed-on-apps
+  he: לשכה יכולה להעביר הלאה את מה שלשכה אחרת נתנה לה — כך הלשכה בענן פותחת את Plane ואת הדפדפן שרצים במחשב ה-HP, דרך ה-VPS, בלי חיבור ישיר ביניהן.
+  en: An office can hand on what another office gave it — this is how the cloud office opens the Plane and the browser that run on the HP laptop, through the VPS, with no direct link between them.
+  value: serve.shared
+  measured: 2026-10-20
+  how: DGO-820 — plane.hp-laptop and browser42.hp-laptop answer 200 from claude-cloud through vps1
+
+- id: app-manifests
+  he: במאגר יש 42 אפליקציות מוצהרות — 28 אפליקציות ו-14 שירותי פלטפורמה.
+  en: The repository declares 42 apps — 28 apps and 14 platform services.
+  value: { apps: 28, platform: 14, total: 42 }
+  measured: 2026-10-20
+  how: count of apps/*/app.json and platform-base/*/app.json at claude-dgo 9d4d6506
+
+- id: open-source-wrapped
+  he: 18 פרויקטי קוד פתוח רצים היום כאפליקציות DGO, ועוד 16 רצים בתוך אפליקציות.
+  en: 18 open-source projects run as DGO apps today, and 16 more run inside apps.
+  value: { as_apps: 18, inside_apps: 16, wrapped_and_retired: 9, named_in_docs: 53 }
+  measured: 2026-10-19
+  how: the repo survey behind apps/project-pln/plans/seo.yaml (its header)
+
+- id: ci-gates
+  he: כל שינוי עובר יותר מ-60 שערים אוטומטיים לפני שהוא נכנס.
+  en: Every change passes more than 60 automated gates before it lands.
+  value: 60+
+  measured: 2026-10-19
+  how: 68 gates in the CI path of scripts/refactor/GATES.md (DGO-683)
+
+- id: sites
+  he: לאתר digital-office.co.il יש 37 עמודים ולאתר bina-solutions.co.il יש 133, לפי מפות האתר.
+  en: digital-office.co.il has 37 pages and bina-solutions.co.il has 133, by their sitemaps.
+  value: { digital-office.co.il: 37, bina-solutions.co.il: 133, app_pages: 25 }
+  measured: 2026-10-19
+  how: both sitemaps crawled (plans/seo.yaml header; DGO-661, DGO-683)
+
+- id: small-vps
+  he: לשכה שלמה רצה על VPS של 2 ליבות ו-8 GB זיכרון, עם יותר מ-50 שירותים.
+  en: A whole office runs on a VPS with 2 cores and 8 GB of memory, with more than 50 services.
+  value: { cores: 2, memory_gb: 8, disk_gb: 99, os: Debian 12, services_compiled: 51, memory_in_use: 75%, disk_in_use: 80% }
+  measured: 2026-10-19
+  how: vps1 (srv000001) through its Computers app, 2026-10-19 22:27 UTC; services compiled per DGO-683
+
+- id: cloud-sandbox-office
+  he: לשכה רצה גם בסביבת ענן של סוכן AI — 4 ליבות ו-15 GB זיכרון, 28 קונטיינרים בפרופיל ci-small — ועולה מחדש אחרי אתחול בפקודה אחת, ב-23 דקות.
+  en: An office also runs in an AI agent's cloud sandbox — 4 cores and 15 GB of memory, 28 containers on the ci-small profile — and comes back after a reboot with one command, in 23 minutes.
+  value: { cores: 4, memory_gb: 15, containers: 28, profile: ci-small, restart_minutes: 23 }
+  measured: 2026-10-20
+  how: claude-cloud — nproc, free, docker ps; `./bbox run` 07:20:26 → 07:43:41 UTC after the VM rebooted
+
+- id: browser42-version
+  he: הדפדפן של הלשכה (browser42) בגרסה 2.0.
+  en: The office browser (browser42) is at version 2.0.
+  value: "2.0"
+  measured: 2026-10-19
+  how: DGO-683 (the site's number, corrected)
+
+- id: cloud-offer
+  he: אין עדיין הצעת ענן מנוהלת של DGO; לשכה רצה על חומרה של הלקוח או על VPS שלו.
+  en: There is no managed DGO cloud offer yet; an office runs on the customer's own hardware or VPS.
+  value: none yet
+  measured: 2026-10-19
+  how: DGO-683, owner decision (2) still open — any price on the site waits for it
+
+open:
+- id: store-installs
+  what: how many apps the store installs end to end, today (DGO-599, DGO-514) — "one click" is written only after this
+- id: first-install-time
+  what: a fresh office's first `./bbox run`, timed on a clean Mac, a clean Windows and a clean VPS
+- id: minimum-hardware
+  what: the smallest machine an office runs on with the default apps (memory, cores, disk) — measured, not estimated
+- id: small-vps-price
+  what: the monthly price of the VPS class vps1 is, from the provider's page, dated

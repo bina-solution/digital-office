@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>פגישות</title>
+<script>
+/* «פגישות» — the office's meetings app (apps/meet/start/flow/). One page for the meetings centre (…/flow/) and for
+   every meeting (…/flow/<room>/). Its files are asked for from the app's root, read off the address itself, so the
+   page works the same inside the console (…/a/meet/flow/…) and on the app's own host (…/flow/…). Added as elements
+   (scripts in order, async = false), never written into the page: the app draws once its styles are in. */
+(function () {
+  var root = location.pathname.replace(/flow(\/.*)?$/, ""), head = document.head, css = 0;
+  window.MF_ROOT = root;
+  window.MF_STYLES = new Promise(function (done) {
+    ["mf.css"].forEach(function (n, i, all) {
+      var l = document.createElement("link");
+      l.rel = "stylesheet"; l.href = root + "flow/app/" + n;
+      l.onload = l.onerror = function () { if (++css === all.length) { done(); } };
+      head.appendChild(l);
+    });
+    setTimeout(done, 4000);            // a style that never answers must not keep the meetings away
+  });
+  ["mf.js"]                             // the sources, joined (flow/build.sh): two requests, not twelve
+    .forEach(function (n) {
+      var s = document.createElement("script");
+      s.src = root + "flow/app/" + n; s.async = false;
+      head.appendChild(s);
+    });
+})();
+</script>
+</head>
+<body data-config="{{CONFIG}}">
+<div id="app" class="mf"><div class="mf-boot" role="status">טוען את הפגישות…</div></div>
+</body>
+</html>

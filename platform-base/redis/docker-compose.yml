@@ -20,6 +20,12 @@ services:
     - 'no'
     - --save
     - 300 1 60 1000
+    # STAGED: this belongs below the container's 256M (192mb). A BGSAVE forks, and the child's copy-on-write pages
+    # count against the same cgroup; at maxmemory = the limit a full redis (972k probe sessions, MacBook 2026-11-02)
+    # sat at its cap with a save running 2¼ hours. But redis reloads its dump whatever maxmemory says, so an office
+    # whose db1 still holds the probe's sessions would come back above 192mb and refuse every write (noeviction).
+    # The probe no longer mints them (outpost-ready.py) and they expire within a day; lowered once every office's
+    # db1 is measured small (issues/sso-readiness-probe-filled-redis-with-a-million-sessions-and-jammed-the-engine.yaml).
     - --maxmemory
     - 256mb
     - --maxmemory-policy
@@ -47,7 +53,7 @@ services:
     - traefik.tcp.routers.redis.service=redis
     - traefik.tcp.routers.redis.middlewares=redis-ipallowlist
     - traefik.tcp.routers.redis.tls=true
-    - traefik.tcp.routers.redis.tls.certresolver=myresolver
+    - traefik.tcp.routers.redis.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
     - traefik.tcp.services.redis.loadbalancer.server.port=6379
     healthcheck:
       test:

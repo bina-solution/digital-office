@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The mark's colourway for an app icon and the light surfaces around it:
+     digital-office/brand/io/final/logo-1.svg (README "The chosen mark": green tile, white i0, mint). -->
+<resources>
+    <color name="tile">#1b5e4a</color>
+    <color name="ink">#fbfcfc</color>
+    <color name="mint">#7ecfad</color>
+</resources>

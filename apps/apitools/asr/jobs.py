@@ -30,7 +30,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, BinaryIO
 
-from .engine import ENGINE
+from .engine import ENGINE, ENGINES
 
 LOG = logging.getLogger("asr.jobs")
 
@@ -55,6 +55,64 @@ def _now() -> str:
 def _env(name: str, default: str) -> str:
     v = os.environ.get(name)
     return v if v not in (None, "") else default
+
+
+def _pieces(path: str, seconds: float, search: float = 20.0, rate: int = 16000):
+    """A long recording's sound, a piece at a time: (offset in seconds, float32 mono at `rate`). A
+    piece ends at the quietest tenth of a second in the `search` seconds after its `seconds` mark, so
+    a cut falls between words, not inside one. Only one piece (~40 MB for ten minutes) is held,
+    whatever the recording's length. Decoded as faster-whisper decodes (PyAV, s16 mono, invalid
+    frames skipped)."""
+    import av
+    import numpy as np
+
+    target, window, step = int(seconds * rate), int(search * rate), rate // 10
+    resampler = av.AudioResampler(format="s16", layout="mono", rate=rate)
+    held: list[Any] = []
+    size = 0
+    offset = 0
+
+    def quiet_cut(data: Any) -> int:
+        tail = data[target:target + window]
+        frames = len(tail) // step
+        if frames < 1:
+            return len(data)
+        energy = np.abs(tail[: frames * step].reshape(frames, step).astype(np.int32)).mean(axis=1)
+        return target + int(energy.argmin()) * step
+
+    def frames(container: Any):
+        it = container.decode(audio=0)
+        while True:
+            try:
+                frame = next(it)
+            except StopIteration:
+                return
+            except av.error.InvalidDataError:
+                continue
+            frame.pts = None
+            yield frame
+
+    with av.open(path, mode="r", metadata_errors="ignore") as container:
+        for frame in _with_flush(frames(container)):
+            for resampled in resampler.resample(frame):
+                block = resampled.to_ndarray().reshape(-1)
+                held.append(block)
+                size += block.size
+            while size >= target + window:
+                data = np.concatenate(held)
+                at = quiet_cut(data)
+                yield offset / rate, data[:at].astype(np.float32) / 32768.0
+                offset += at
+                rest = data[at:]
+                held, size = [rest], rest.size
+    if size:
+        yield offset / rate, np.concatenate(held).astype(np.float32) / 32768.0
+
+
+def _with_flush(frames: Any):
+    """The decoded frames, then None: the resampler's call to give back what it still holds."""
+    yield from frames
+    yield None
 
 
 def probe_duration(path: str) -> float | None:
@@ -132,6 +190,8 @@ class Jobs:
         self.uploads_max_bytes = int(_env("SPEECH_UPLOADS_MAX_BYTES", str(5 * 1024**3)))
         self.job_timeout = float(_env("SPEECH_JOB_TIMEOUT_SECONDS", str(2 * 3600)))
         self.beam_size = int(_env("SPEECH_BEAM_SIZE", "5"))
+        # a recording longer than this and a half is transcribed in pieces of about this length (_pieces)
+        self.chunk_seconds = max(60.0, float(_env("SPEECH_CHUNK_SECONDS", "600")))
         os.makedirs(self.jobs_dir, exist_ok=True)
         os.makedirs(self.uploads_dir, exist_ok=True)
         self._jobs: dict[str, Job] = {}
@@ -307,59 +367,100 @@ class Jobs:
         beam = int(opts.get("beam_size") or self.beam_size)
         vad = bool(opts.get("vad", True))
         word_timestamps = bool(opts.get("word_timestamps", True))
+        # the model the job asked for (a job from before there were two names none: the default);
+        # language `auto` = each stretch in the language it is spoken (faster-whisper's multilingual
+        # mode finds it per 30 s window; 1.2.1 does not say which, so the segments do not either)
+        chosen = ENGINES.get(opts.get("model") or "", ENGINE)
+        auto = language == "auto"
+        # the caller's words for this audio (app._options `prompt`, FPG-471): the text before the first words of
+        # each piece — with condition_on_previous_text off, only the first 30-s window of a piece sees it, which
+        # is a live caption's whole segment. None (every job before it, and every caller that sends none): unchanged.
+        prompt = opts.get("prompt") or None
 
-        with ENGINE.session() as engine:
+        # A LONG RECORDING IS TRANSCRIBED IN PIECES. faster-whisper decodes a file whole and computes
+        # its features whole: a 68-minute meeting took the worker past its 2.5 GB cap within seconds,
+        # every attempt (vps1, 2026-10-22: the Chimney Guys call, killed by the kernel five times). A
+        # recording longer than SPEECH_CHUNK_SECONDS and a half is decoded a piece at a time (_pieces:
+        # each cut at a quiet moment), each piece transcribed alone and its times moved by its offset,
+        # so memory holds one piece, whatever the length.
+        path = job.source["path"]
+        duration = float(job.source.get("duration") or probe_duration(path) or 0.0)
+        whole = not duration or duration <= self.chunk_seconds * 1.5
+        pieces = [(0.0, path)] if whole else _pieces(path, self.chunk_seconds)
+        info = None
+        out: list[dict[str, Any]] = []
+        job.progress = {"audio_seconds": round(duration, 2), "processed_seconds": 0.0, "percent": 0.0}
+
+        with chosen.session() as engine:
             loaded_now = engine.loaded_just_now
             inference_started = time.time()
-            segments_iter, info = engine.transcribe(
-                job.source["path"],
-                language=language,
-                beam_size=beam,
-                word_timestamps=word_timestamps,
-                # WhisperX's default, and the fix for the repetition/hallucination loop that
-                # Whisper's own sliding window is prone to at chunk boundaries.
-                condition_on_previous_text=False,
-                vad_filter=vad,
-                vad_parameters={"min_silence_duration_ms": 500} if vad else None,
-            )
-            duration = float(getattr(info, "duration", None) or job.source.get("duration") or 0.0)
-            job.progress = {"audio_seconds": round(duration, 2), "processed_seconds": 0.0, "percent": 0.0}
-            out: list[dict[str, Any]] = []
-            for seg in segments_iter:
-                if job.cancel_requested:
-                    job.status = "cancelled"
-                    job.ended = _now()
-                    job._done.set()
-                    self._persist(job)
-                    return
-                if time.time() - started > self.job_timeout:
-                    self._fail(job, "timeout", f"job exceeded SPEECH_JOB_TIMEOUT_SECONDS ({self.job_timeout:.0f}s)")
-                    return
-                item: dict[str, Any] = {
-                    "id": seg.id,
-                    "start": round(float(seg.start), 3),
-                    "end": round(float(seg.end), 3),
-                    "text": (seg.text or "").strip(),
-                    "revision": 1,
-                    "confidence": round(float(getattr(seg, "avg_logprob", 0.0) or 0.0), 4),
-                }
-                words = getattr(seg, "words", None)
-                if words:
-                    item["words"] = [
-                        {"w": w.word, "start": round(float(w.start), 3), "end": round(float(w.end), 3),
-                         "confidence": round(float(getattr(w, "probability", 0.0) or 0.0), 4)}
-                        for w in words
-                    ]
-                out.append(item)
-                processed = min(duration, float(seg.end)) if duration else None
-                job.progress = {
-                    "audio_seconds": round(duration, 2),
-                    "processed_seconds": round(processed, 2) if processed is not None else None,
-                    "percent": round(100.0 * processed / duration, 1) if duration and processed else 0.0,
-                    "segments": len(out),
-                }
-                if len(out) % 5 == 0:
-                    self._persist(job)
+            for offset, audio in pieces:
+                # faster-whisper's word alignment can fail on a stretch it heard as no words (IndexError
+                # in find_alignment, 1.2.1; measured 2026-10-22 on a minute of hum, the same with and
+                # without the pieces): such a recording failed every attempt. That piece is transcribed
+                # again without word times — its segments, their times and text, are what items are made of.
+                kept = len(out)
+                for aligned in ((True, False) if word_timestamps else (False,)):
+                    del out[kept:]
+                    segments_iter, piece_info = engine.transcribe(
+                        audio,
+                        language=None if auto else language,
+                        multilingual=auto,
+                        beam_size=beam,
+                        word_timestamps=aligned,
+                        # WhisperX's default, and the fix for the repetition/hallucination loop that
+                        # Whisper's own sliding window is prone to at chunk boundaries.
+                        condition_on_previous_text=False,
+                        initial_prompt=prompt,
+                        vad_filter=vad,
+                        vad_parameters={"min_silence_duration_ms": 500} if vad else None,
+                    )
+                    info = info or piece_info
+                    if whole:
+                        duration = float(getattr(piece_info, "duration", None) or duration or 0.0)
+                    try:
+                        for seg in segments_iter:
+                            if job.cancel_requested:
+                                job.status = "cancelled"
+                                job.ended = _now()
+                                job._done.set()
+                                self._persist(job)
+                                return
+                            if time.time() - started > self.job_timeout:
+                                self._fail(job, "timeout", f"job exceeded SPEECH_JOB_TIMEOUT_SECONDS ({self.job_timeout:.0f}s)")
+                                return
+                            item: dict[str, Any] = {
+                                "id": len(out) + 1,
+                                "start": round(offset + float(seg.start), 3),
+                                "end": round(offset + float(seg.end), 3),
+                                "text": (seg.text or "").strip(),
+                                "revision": 1,
+                                "confidence": round(float(getattr(seg, "avg_logprob", 0.0) or 0.0), 4),
+                            }
+
+                            words = getattr(seg, "words", None)
+                            if words:
+                                item["words"] = [
+                                    {"w": w.word, "start": round(offset + float(w.start), 3), "end": round(offset + float(w.end), 3),
+                                     "confidence": round(float(getattr(w, "probability", 0.0) or 0.0), 4)}
+                                    for w in words
+                                ]
+                            out.append(item)
+                            processed = min(duration, item["end"]) if duration else None
+                            job.progress = {
+                                "audio_seconds": round(duration, 2),
+                                "processed_seconds": round(processed, 2) if processed is not None else None,
+                                "percent": round(100.0 * processed / duration, 1) if duration and processed else 0.0,
+                                "segments": len(out),
+                            }
+                            if len(out) % 5 == 0:
+                                self._persist(job)
+                        break
+                    except IndexError:   # the alignment's, raised while the segments are made
+                        if not aligned:
+                            raise
+                        LOG.warning("job %s: the piece at %.0fs failed with word times; again without them", job.id, offset, exc_info=True)
+                del audio
 
         inference = time.time() - inference_started
         wall = time.time() - started
@@ -371,7 +472,8 @@ class Jobs:
             "source": job.source,
             "language": getattr(info, "language", language),
             "language_probability": round(float(getattr(info, "language_probability", 0.0) or 0.0), 3),
-            "model": {"name": ENGINE.repo, "revision": ENGINE.revision, "compute": ENGINE.compute_type},
+            "model": {"name": chosen.repo, "revision": chosen.revision, "compute": chosen.compute_type,
+                      "id": chosen.name},
             "duration": round(duration, 2),
             "text": " ".join(s["text"] for s in out if s["text"]).strip(),
             "segments": out,
@@ -382,7 +484,7 @@ class Jobs:
                 "inference_seconds": round(inference, 1),
                 "wall_seconds": round(wall, 1),
                 "rtf": round(duration / inference, 2) if inference else None,
-                "model_load_seconds": round(ENGINE.state().get("load_seconds") or 0.0, 1) if loaded_now else 0.0,
+                "model_load_seconds": round(chosen.state().get("load_seconds") or 0.0, 1) if loaded_now else 0.0,
             },
         }
         job.usage = job.result["usage"]

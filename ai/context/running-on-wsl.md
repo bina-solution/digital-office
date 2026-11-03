@@ -4,8 +4,8 @@ There is **one** way to run this stack on Windows. If you find another set of in
 (a different doc, a comment, an old habit) — they are wrong; this is the only path.
 
 ```
-git clone <repo> C:\path\you\like\deployment-bina-comp
-cd C:\path\you\like\deployment-bina-comp
+git clone <repo> C:\path\you\like\deployment-hacohen
+cd C:\path\you\like\deployment-hacohen
 bbox.cmd run
 ```
 
@@ -39,7 +39,7 @@ the project engine, minus the data. Not worth it; deliberately not done.
 
 It is a thin forwarder: it resolves the directory it's sitting in to a WSL path and hands the rest of
 the command line to the real `bbox` (a bash script) inside the `Ubuntu` distro, running against that
-same directory — not a copy, not a clone. Whatever you edit in your `C:\...\deployment-bina-comp`
+same directory — not a copy, not a clone. Whatever you edit in your `C:\...\deployment-hacohen`
 checkout is exactly what `bbox run` builds and serves.
 
 ```
@@ -287,7 +287,7 @@ under `<hash>_<name>` because it could not cleanly replace them. Those decorated
 anything that looks a container up by name, including healthchecks and capture tooling, which is a
 second failure that looks nothing like the first.
 
-Always drive the stack through `bbox`/`scripts/dc` so the project name stays `deployment-bina-comp`.
+Always drive the stack through `bbox`/`scripts/dc` so the project name stays `deployment-hacohen`.
 If decorated names appear, they are leftovers — remove them and recreate:
 
 ```bash

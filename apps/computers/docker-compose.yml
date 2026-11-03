@@ -40,10 +40,40 @@ services:
       - COMPUTERS_LOCAL_PORT=${COMPUTERS_LOCAL_PORT:-22}
       - COMPUTERS_PROBE_TTL=${COMPUTERS_PROBE_TTL:-20}
       - COMPUTERS_STATE_DIR=/data
+      # the herd (DGO-890): every office's computer, read from its own `machine` (resources) and
+      # `security` (network) — here at their own addresses, at a linked office through the door
+      - MACHINE_URL=${MACHINE_URL:-http://machine:8080}
+      - SECURITY_URL=${SECURITY_URL:-http://security:8995}
+      - DGO_OFFICE_ID=${DGO_OFFICE_ID:-}
+      - COMPUTERS_REGISTRY=/registry
+      # the host another office reaches a SHARED computer's door at (share.py), and the domain its
+      # fallback derives it from when that is empty
+      - COMPUTERS_PUBLIC_HOST=${COMPUTERS_BASE_URL:-computers.${DEPLOYMENT_DOMAIN:-localhost}}
+      - DEPLOYMENT_DOMAIN=${DEPLOYMENT_DOMAIN:-}
+    labels:
+      # THE SHARE DOOR (/share/<token>) — no authentik, by design: the caller is another office's
+      # ssh, which cannot sign in. The token opens the stream and sshd's key check authenticates;
+      # every other path on this host stays behind the gated routers the compiler emits
+      # (manifest: auth_exclude ["/share/"]). Higher priority so it wins over the gated rule.
+      - traefik.http.routers.computers-share.rule=(Host(`computers.localhost`) || Host(`${COMPUTERS_BASE_URL:-computers.${DEPLOYMENT_DOMAIN:-localhost}}`)) && PathPrefix(`/share/`)
+      - traefik.http.routers.computers-share.entrypoints=web
+      - traefik.http.routers.computers-share.priority=200
+      - traefik.http.routers.computers-share.service=computers
+      - traefik.http.routers.computers-share-https.rule=Host(`${COMPUTERS_BASE_URL:-computers.${DEPLOYMENT_DOMAIN:-localhost}}`) && PathPrefix(`/share/`)
+      - traefik.http.routers.computers-share-https.entrypoints=websecure
+      - traefik.http.routers.computers-share-https.tls=true
+      # the resolver NAME comes from the environment like every other emitted router's: scripts/lib.sh
+      # empties it on a `.localhost` office, and a literal here would ask ACME for computers.localhost
+      # on the Mac/WSL/sandbox offices — the DGO-901 refusal storm, on the machines this door is for
+      - traefik.http.routers.computers-share-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
+      - traefik.http.routers.computers-share-https.priority=200
+      - traefik.http.routers.computers-share-https.service=computers
     volumes:
       # the office keypair, known_hosts and the probe cache — losing this volume means re-approving
       # the key on every machine, so it is kept (data.on_uninstall: prompt)
       - computers_state:/data
+      # which offices are linked and which of their apps they give (the compiled registry), read-only
+      - ../../.generated/registry:/registry:ro
     networks:
       - traefik-network
     healthcheck:

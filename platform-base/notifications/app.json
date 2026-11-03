@@ -24,6 +24,11 @@
       "strength": "wants",
       "after": false,
       "dependency": "weak"
+    },
+    {
+      "capability": "identity",
+      "strength": "requires",
+      "after": true
     }
   ],
   "connections": [
@@ -33,6 +38,10 @@
     }
   ],
   "compose": "docker-compose.yml",
+  "agent": {
+    "context": "AGENT.md",
+    "order": 8
+  },
   "routing": [
     {
       "host": "alerts-svc",

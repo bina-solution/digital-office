@@ -1,7 +1,7 @@
 {
- "chrome.expand": "פתיחת סרגל הצד",
+ "chrome.expand": "פתיחת סרגל שמאל",
  "chrome.expandAria": "פתיחת סרגל הצד הימני",
- "chrome.collapse": "כיווץ סרגל הצד",
+ "chrome.collapse": "כיווץ סרגל שמאל",
  "chrome.collapseAria": "כיווץ סרגל הצד הימני",
  "chrome.toFullscreen": "מסך מלא",
  "chrome.exitFullscreen": "יציאה ממסך מלא",

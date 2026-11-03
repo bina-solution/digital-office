@@ -20,6 +20,7 @@ services:
     init: true
     environment:
       VNC_PASSWORD: ${BROWSER42_VNC_PASSWORD:-}
+      BROWSER42_MAX_TABS: ${BROWSER42_MAX_TABS:-6}   # group-manager's refusal cap (hooks run here)
       SCREEN_WIDTH: ${BROWSER42_SCREEN_WIDTH:-1920}
       SCREEN_HEIGHT: ${BROWSER42_SCREEN_HEIGHT:-1080}
       PRESENTATION_MODE: ${BROWSER42_PRESENTATION_MODE:-compact}
@@ -30,11 +31,28 @@ services:
       CLOAK_EXTRA_ARGS: ${BROWSER42_CLOAK_EXTRA_ARGS:---load-extension=/extension --renderer-process-limit=12 --mute-audio --restore-last-session}
       CLOAKBROWSER_BINARY_PATH: ${BROWSER42_CHROME:-/usr/bin/chromium}
       LOCAL_PROXY_TARGET: traefik-${DEPLOYMENT_NAME:-bina-deployment}
+      # CDP, the broker, noVNC and the hand-off listen on loopback, and on the address of this alias
+      # only — declared on browser42's network below, so a container on the shared network reaches
+      # none of them (start-browser.sh §4a, DGO-983). The drivers use the alias, never the bare
+      # service name: caddy, the reaper, the watchdog and the runner sit on both networks, where the
+      # bare name may resolve to this container's shared-network address, on which nothing listens.
+      BROWSER42_BIND_ALIAS: browser42-browser-internal
+      # Every interface HERE, and §4a narrows it to loopback in an image that has §4a. An older image
+      # recreated without a rebuild has no forwarder, and its broker must still answer the drivers.
       BROWSER42_BROKER_HOST: 0.0.0.0
+      # …and the tools `bbox b42` runs HERE with docker exec (group-manager.py) drive the local one.
+      CDP: http://127.0.0.1:9222
       # Idle sleep (start-browser.sh §4k, reaper.py): seconds without use before Chrome exits
       # gracefully and stays down until the next use. 0 = never. `bbox b42 sleep after N` overrides
       # at runtime (data/browser42/settings.json).
       BROWSER42_IDLE_SLEEP_S: ${BROWSER42_IDLE_SLEEP_S:-120}
+      # The human hand-off (handoff.py, :8767 behind Caddy's /handoff/*): its link is a CONSOLE deep
+      # link derived from what the office declares, the way a project-pln work item's link is.
+      CONSOLE_BASE_URL: ${CONSOLE_BASE_URL:-}
+      AUTH_PROTOCOL: ${AUTH_PROTOCOL:-http}
+      # The hand-off route refuses a request that does not carry this token (Caddy adds it on
+      # /handoff/*), on browser42's network as well. Same token Caddy holds.
+      BROWSER42_MCP_TOKEN: ${BROWSER42_MCP_TOKEN:-}
     volumes:
     - cloakprofile:/profile
     - ../../data/browser42:/data
@@ -44,10 +62,15 @@ services:
     # identity for `task login`, has no access to the profile, and this one has no access to that
     # connection. Read-only: the file is app source, the profile is the state.
     - ./logins.py:/logins.py:ro
+    # The human hand-off route + link (DGO-571). Mounted like group-manager.py — app source, read-only —
+    # so a fix lands without a rebuild; the same file is mounted into the task runner and the watchdog,
+    # which only BUILD the link and post the notice, so every hand-off says one thing.
+    - ./handoff.py:/handoff.py:ro
     shm_size: 4gb
     expose:
     - '9222'
     - '6080'
+    - '8767'
     healthcheck:
       # Asleep is healthy (start-browser.sh §4k): /data/.sleeping means Chrome exited on purpose, and
       # probing /json/version would relaunch it — cloakserve's handler calls get_or_launch, which is
@@ -61,11 +84,19 @@ services:
       retries: 3
       start_period: 45s
     networks:
-    - browser42-internal
-    - traefik-network
+      browser42-internal:
+        aliases:
+        - browser42-browser-internal     # BROWSER42_BIND_ALIAS: the one address the four listen on
+      traefik-network: {}                # its own calls out: Traefik, connections, notifications
     deploy:
       resources:
         limits:
+          # 6 -> 2 BY DEFAULT, 2026-10-11 (eng-012): the office's browser is the platform's biggest
+          # single consumer, and 6 on a 4-core machine let it hold 3.63 cores of 4 — the documented
+          # posture is 2 (`apps/bina-ds/harness/.../office-browser/SKILL.md`, the resource table), and
+          # this is the knob the owner turns when the office feels slow. The value stays env-driven so
+          # a bigger machine can hand it more (`BROWSER42_CPUS` in .env; `bbox_clamp_cpus_to_host`
+          # rewrites it on a host with fewer cores).
           # 6 -> env-driven, 2026-09-17. A hard-coded 6 is a HOST-dependent value in the one place
           # docker refuses rather than warns:
           #     Error response from daemon: range of CPUs is from 0.01 to 4.00,
@@ -75,7 +106,7 @@ services:
           # started. `bbox_clamp_cpus_to_host` (scripts/lib.sh) exists for exactly this class and
           # only rewrites `*_CPUS=` keys in .env, so an env-driven key is what makes browser42
           # portable like apitools (`cpus: ${APITOOLS_CPUS:-0}`).
-          cpus: ${BROWSER42_CPUS:-6}
+          cpus: ${BROWSER42_CPUS:-2}
           # 4G -> 1536M, 2026-08-06. Measured high-water 788MiB with a live Chromium tree (7+
           # renderer processes); 1536M is ~1.95x that. Cut harder than most because browser42 is
           # QA tooling that must NOT be running during a pipeline proof anyway (quiet mode stops
@@ -103,7 +134,7 @@ services:
     depends_on:
     - browser42-browser
     environment:
-      PLAYWRIGHT_MCP_CDP_ENDPOINT: http://browser42-browser:9222
+      PLAYWRIGHT_MCP_CDP_ENDPOINT: http://browser42-browser-internal:9222
       # A bounded, GENEROUS heap: an accessibility snapshot of a big page (Facebook) is megabytes,
       # and with Node's default heap for a 512M cgroup the process died "JavaScript heap out of
       # memory" twice in 15 minutes of real use (2026-09-29) — every in-flight call dropped, callers
@@ -157,7 +188,7 @@ services:
     - python3
     - /reaper.py
     environment:
-      CDP: http://browser42-browser:9222
+      CDP: http://browser42-browser-internal:9222
       MAX_TABS: ${BROWSER42_MAX_TABS:-6}
       INTERVAL: ${BROWSER42_REAP_INTERVAL:-30}
       TASKS_DIR: /data/tasks
@@ -196,12 +227,18 @@ services:
       BROWSER42_TASK_STALL_SECONDS: ${BROWSER42_TASK_STALL_SECONDS:-300}
       BROWSER42_TASK_TOTAL_SECONDS: ${BROWSER42_TASK_TOTAL_SECONDS:-1800}
       BROWSER42_TASK_WATCHDOG_INTERVAL: ${BROWSER42_TASK_WATCHDOG_INTERVAL:-5}
-      BROKER: ws://browser42-browser:8765
+      BROKER: ws://browser42-browser-internal:8765
       ANY_CONCURRENCY_SPANS_URL: http://any-concurrency:8080/ingest/span
       BROWSER42_SPANS_ENABLED: ${BROWSER42_SPANS_ENABLED:-1}
+      # A stalled task tells the owner, with the hand-off link (handoff.py): the notice centre it
+      # posts to (empty = no notice) and the console address the link is built from.
+      NOTIFICATIONS_URL: http://notifications:8977
+      CONSOLE_BASE_URL: ${CONSOLE_BASE_URL:-}
+      AUTH_PROTOCOL: ${AUTH_PROTOCOL:-http}
     volumes:
     - ../../data/browser42:/data
     - ./task-watchdog.py:/task-watchdog.py:ro
+    - ./handoff.py:/handoff.py:ro
     networks:
     - browser42-internal
     - traefik-network
@@ -231,9 +268,10 @@ services:
     - python3
     - /task-runner.py
     environment:
-      CDP: http://browser42-browser:9222
-      BROKER: ws://browser42-browser:8765
+      CDP: http://browser42-browser-internal:9222
+      BROKER: ws://browser42-browser-internal:8765
       BROWSER42_TASK_REQUEST_SECONDS: ${BROWSER42_TASK_REQUEST_SECONDS:-300}
+      BROWSER42_MAX_TABS: ${BROWSER42_MAX_TABS:-6}   # the same cap group-manager refuses at
       # ONE CDP work command at a time: the lanes are parallel (tabs/lanes stay open
       # concurrently) but the single shared Chrome saturates when two heavy ad-heavy
       # evaluates run at once (0805g death spiral). Serialize work; queue the rest.
@@ -251,14 +289,33 @@ services:
       # browser42's app.json names on the connection (connections[].service).
       CONNECTIONS_URL: http://connections:8990
       CONN_SERVICE: browser42-task-runner
+      # agent.v1 (DGO-1152): the runner mints its action token into this file on the data volume. The vault
+      # reads it from here for a linked office (connections `agent_token`), and task-client.py reads it for
+      # `bbox b42 task`. A caller without it is served and logged (warn) or answered 401 (refuse).
+      AGENT_TOKEN_FILE: /data/task-runner/api-token
+      BROWSER42_TASK_AUTH: ${BROWSER42_TASK_AUTH:-warn}
+      # The captcha refusal hands the owner the hand-off link and posts the notice (handoff.py).
+      NOTIFICATIONS_URL: http://notifications:8977
+      CONSOLE_BASE_URL: ${CONSOLE_BASE_URL:-}
+      AUTH_PROTOCOL: ${AUTH_PROTOCOL:-http}
     volumes:
     - ../../data/browser42:/data
     - ./group-manager.py:/group-manager.py:ro
     - ./task-runner.py:/task-runner.py:ro
     - ./task-client.py:/task-client.py:ro
+    - ./handoff.py:/handoff.py:ro
+    # A mapping, not a list: the alias below needs one, and a list item followed by a key at the same
+    # indent made `traefik-network` a key of the SERVICE — invalid for compose (29dfc7ae, 10-14 to
+    # 10-22), so every office that enabled browser42 failed its whole `dc up` (DGO-983).
     networks:
-    - browser42-internal
-    - traefik-network
+      browser42-internal: {}
+      # The runner answers on the app's OWN name, because that is what the link's door delivers to:
+      # an agent door is rendered as `target: "<app>:<port>"` (`dgo-extend` `linkproxy._serve_doors`),
+      # and every other service here is named `browser42-<part>` — so without this alias the door a
+      # linked office opens for `browser42` would open onto a name nobody answers (lnk-037).
+      traefik-network:
+        aliases:
+        - browser42
     deploy:
       resources:
         limits:
@@ -284,6 +341,21 @@ services:
       SITE_ADDRESS: :80
       MCP_TOKEN: ${BROWSER42_MCP_TOKEN:?set BROWSER42_MCP_TOKEN in .env (openssl rand
         -hex 32)}
+      # The browser's noVNC and hand-off, by the alias that exists on browser42's network only
+      # (DGO-983): Caddy is on both networks, where the bare service name may resolve to the
+      # shared-network address, on which nothing listens. Declared HERE, not in the Caddyfile, so a
+      # change of it changes this service and `dc up -d` recreates Caddy — the Caddyfile is a
+      # single-file mount, which a running Caddy never re-reads.
+      BROWSER42_UPSTREAM: browser42-browser-internal
+      # THE GATE ON /view/*, /websockify AND /handoff/* (DGO-988 — the Caddyfile's `gate` snippet):
+      # Caddy asks the office's OWN identity provider, with the request's own cookie — the call the
+      # edge's `authentik@file` forwardAuth makes — and refuses what the provider does not answer for.
+      # WHICH provider is the PLATFORM's choice, not this app's: the office's one switch, DGO_IDENTITY,
+      # the value the edge's own middleware reads (platform-base/traefik/config/authentik-forwardauth.yaml)
+      # — the Caddyfile picks that provider's endpoint by it (r030-002). There is no "off": a provider
+      # that cannot be reached REFUSES the door (502 naming it) instead of opening it, because the
+      # alternative is the silent open door this gate removes.
+      DGO_IDENTITY: ${DGO_IDENTITY:-authentik}
     volumes:
     - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
     - browser42_caddy_data:/data
@@ -319,15 +391,13 @@ services:
     - traefik.http.routers.browser42-https.rule=Host(`${BROWSER42_BASE_URL}`)
     - traefik.http.routers.browser42-https.entrypoints=websecure
     - traefik.http.routers.browser42-https.tls=true
-    - traefik.http.routers.browser42-https.tls.certresolver=myresolver
+    - traefik.http.routers.browser42-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
     - traefik.http.routers.browser42-https.service=browser42
     - traefik.http.routers.browser42-https.middlewares=authentik@file
-    - traefik.http.routers.browser42-mcp-https.rule=Host(`${BROWSER42_BASE_URL}`)
-      && PathPrefix(`/mcp`)
-    - traefik.http.routers.browser42-mcp-https.entrypoints=websecure
-    - traefik.http.routers.browser42-mcp-https.tls=true
-    - traefik.http.routers.browser42-mcp-https.tls.certresolver=myresolver
-    - traefik.http.routers.browser42-mcp-https.service=browser42
+    # There was a second https router here for /mcp with no sign-in, a bearer token only: a
+    # remotely drivable browser on the public internet. Nothing in the office used it - the agent
+    # and the task runner reach http://browser42-mcp:8931 on the office network - so it is gone;
+    # /mcp on the public host now falls under the router above like every other path.
     - traefik.http.services.browser42.loadbalancer.server.port=80
 networks:
   browser42-internal:

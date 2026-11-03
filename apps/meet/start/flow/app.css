@@ -1,0 +1,275 @@
+/* meet-flow — a meeting's whole life on one time axis (apps/meet). The office palette, then meet-flow's names for it. */
+:root { --radius: 14px; --font: "Segoe UI",system-ui,-apple-system,"Noto Sans Hebrew","Assistant",Arial,sans-serif; }
+/* @bina-theme-tokens:start */
+/* OLIVE GROVE — the one palette of the office (the owner, 2026-10-07 · DGO-450). Four hues, sampled
+   from his mock-up, and the ground they stand on. A screen never writes a colour: it names one of
+   these. Each hue is the colour itself (a FILL — a button, a bar, a dot), «-d» for text and thin
+   lines on the ground (4.5:1 or more), «-soft» and «-line» for a tint and its hairline, and «-ink»
+   for what is written ON the fill. The role names every screen already uses point at them:
+   (no backtick in this block: one of its copies lives inside a script's template string)
+     olive  the brand and the main action · what is well, what is done
+     sky    what is in motion, what only informs · a link
+     lime   look here — a warning, something waiting
+     plum   a person must act — a failure, a removal, the one final action
+   Contrast, measured (WCAG): ink on the ground 13.7 · muted 4.65 · light text on olive 5.51 and on
+   plum 9.54 · ink on lime 6.88 · its ink on sky 6.32 · sky-d 4.61 · lime-d 4.70 · violet 5.32 ·
+   on the desk: its ink 6.32 (dark: 13.96), and 11.2 where the sky pales (dark: 5.12). */
+:root,:root[data-theme="light"]{
+  color-scheme:light;
+  accent-color:var(--accent);   /* the browser's OWN controls - a checkbox, a radio, a range, a progress bar - on both grounds: said once, here (it was said for eight single controls, and every other one was the browser's blue) */
+  --bg:#f3f5f7; --surface:#fff; --surface-2:#f9fafb; --ink:#1f2a17; --muted:#6a7068; --line:#dcdfde;
+  --olive:#56693f; --olive-d:#475734; --olive-soft:#e7eae4; --olive-line:#bfc6b6; --olive-ink:#f3f5f7;
+  --sky:#7baae3; --sky-d:#2a6fc4; --sky-soft:#edf3fb; --sky-line:#cddff4; --sky-ink:#13263f;
+  --lime:#a9b84c; --lime-d:#69732e; --lime-soft:#f3f5e6; --lime-line:#dee4bb; --lime-ink:#1f2a17;
+  --plum:#5b3349; --plum-d:#4a303b; --plum-soft:#e8e2e6; --plum-line:#c1b1ba; --plum-ink:#f3f5f7;
+  --accent:var(--olive); --accent-d:var(--olive-d); --accent-soft:var(--olive-soft); --accent-ink:var(--olive-ink);
+  --blue:var(--sky-d); --amber:var(--lime-d); --red:var(--plum);
+  --violet:#7c5c6d;   /* plum, lifted a fifth toward white: someone has to look — nothing has failed */
+  --ok:var(--olive); --warn:var(--lime-d); --danger:var(--plum); --info:var(--sky-d);
+  --ok-soft:var(--olive-soft); --warn-soft:var(--lime-soft); --danger-soft:var(--plum-soft); --info-soft:var(--sky-soft);
+  --red-soft:var(--plum-soft); --amber-soft:var(--lime-soft); --blue-soft:var(--sky-soft); --violet-soft:var(--plum-soft);
+  --side:var(--olive); --side-ink:#f3f5f7; --side-mut:#dce1da; --side-line:#788765;
+  --desk:var(--sky); --desk-ink:var(--sky-ink);   /* desktop mode's ground is the sky (the owner, DGO-452), and what is written straight on it */
+  --scrim:rgba(31,42,23,.5);                      /* what dims a screen behind a pop-up */
+  --shadow:0 1px 3px rgba(31,42,23,.08),0 6px 24px rgba(31,42,23,.06);
+  --shadow-lg:0 20px 60px rgba(31,42,23,.28);
+  /* ONE COLOUR AND ONE ANIMAL PER OFFICE (the owner, 2026-10-09 · flt-002). When offices are linked,
+     a person reads WHICH office a thing belongs to without opening it, so each office gets a hue of
+     its own. The hue is an IDENTITY and never a health state: an office that stopped answering keeps
+     its colour, and the quiet mark is the one that says "not answering". Each is an ALIAS of the
+     palette's own hue — no fourth value is invented, and because the ground re-points the hue, the
+     office mark follows the ground by itself. Each office's animal (elephant, deer, eagle) is a
+     glyph of bina-icons.js. */
+  --office-hp:var(--muted);   /* hp · elephant — grey: the heavy laptop at home, in the palette's own grey */
+  --office-mac:var(--lime);   /* macbook · deer — yellow: the palette has one yellow and it is lime. A FILL, so what is written ON it is --lime-ink, never this */
+  --office-vps:var(--sky-d);  /* vps · eagle — deep sky blue, «the eagle in the clouds». THE OWNER'S OWN CHOICE (2026-10-09, in writing: vps = נשר + כחול-שמיים) — this line is the colour he picked, not a default kept for him */
+}
+
+/* ── A LINKED OFFICE'S MARK, BY NAME (flt-004) ───────────────────────────────────────────────
+   The link carries a NAME — mark: {color, animal} in the catalog, from the office's own identity
+   — and never a value: the office that DRAWS a linked tile owns the pixels, so it paints the name
+   with its own palette. These seven rules are that translation, one per family above; a screen sets
+   data-office-hue="lime" and paints var(--office-hue).
+   A name this file does not know paints nothing, which is why the vocabulary in
+   apps/dgo-extend/identity.py may only name families that exist here — and why --red and --ok
+   are not among them: they mean «danger» and «it is well» on every screen in the office. */
+[data-office-hue="grey"]   { --office-hue:var(--muted); }
+[data-office-hue="lime"]   { --office-hue:var(--lime); }
+[data-office-hue="sky"]    { --office-hue:var(--sky-d); }
+[data-office-hue="olive"]  { --office-hue:var(--olive-d); }
+[data-office-hue="plum"]   { --office-hue:var(--plum); }
+[data-office-hue="blue"]   { --office-hue:var(--blue); }
+[data-office-hue="violet"] { --office-hue:var(--violet); }
+/* the dark ground is the same four hues on the palette's own ink, and the SAME legend. Olive on that
+   ink is 2.5:1, so its text step there is olive LIFTED — its own hue and saturation, lighter (7.14
+   on a card, 4.82 on its own tint) — and the brand, the main action and «it is well» take that step.
+   Lime stays «look here» and the sky «in motion», as on the light ground: were lime the accent here
+   (it was, for a day), a warning, a selection and «it is well» were one colour. Each «-d» on its
+   own «-soft» there, measured: olive 4.82 · sky 4.62 · lime 4.63 · plum 4.71. */
+@media (prefers-color-scheme:dark){
+  :root{ color-scheme:dark;
+         --bg:#141b0f; --surface:#1f2a17; --surface-2:#192213; --ink:#f3f5f7; --muted:#a2a8a2; --line:#414a3b;
+         --olive-d:#a5ba8c; --olive-soft:#384629; --olive-line:#56693f;
+         --sky-d:#7baae3; --sky-soft:#2e3f38; --sky-line:#4d6a8c;
+         --lime-d:#a9b84c; --lime-soft:#3b4622; --lime-line:#69732e;
+         --plum-d:#ad99a4; --plum-soft:#402f33; --plum-line:#7c5c6d;
+         --accent:var(--olive-d); --accent-ink:var(--surface);
+         --red:#ad99a4; --violet:#bdadb6; --danger:#ad99a4; --ok:var(--olive-d); --side:var(--surface);
+         --desk:var(--sky-ink); --desk-ink:var(--ink); --scrim:rgba(0,0,0,.6);
+         --shadow:0 1px 3px rgba(0,0,0,.4),0 6px 24px rgba(0,0,0,.3);
+         --shadow-lg:0 20px 60px rgba(0,0,0,.55); }
+}
+:root[data-theme="midnight"]{
+  color-scheme:dark;
+  --bg:#141b0f; --surface:#1f2a17; --surface-2:#192213; --ink:#f3f5f7; --muted:#a2a8a2; --line:#414a3b;
+  --olive-d:#a5ba8c; --olive-soft:#384629; --olive-line:#56693f;
+  --sky-d:#7baae3; --sky-soft:#2e3f38; --sky-line:#4d6a8c;
+  --lime-d:#a9b84c; --lime-soft:#3b4622; --lime-line:#69732e;
+  --plum-d:#ad99a4; --plum-soft:#402f33; --plum-line:#7c5c6d;
+  --accent:var(--olive-d); --accent-ink:var(--surface);
+  --red:#ad99a4; --violet:#bdadb6; --danger:#ad99a4; --ok:var(--olive-d); --side:var(--surface);
+  --desk:var(--sky-ink); --desk-ink:var(--ink); --scrim:rgba(0,0,0,.6);
+  --shadow:0 1px 3px rgba(0,0,0,.4),0 6px 24px rgba(0,0,0,.3);
+  --shadow-lg:0 20px 60px rgba(0,0,0,.55);
+}
+/* THE KEYBOARD'S RING - what the browser draws around the stop the keyboard is on, in the palette, wherever
+   a part draws none of its own. It has no specificity at all (:where), so any rule of a part wins. Two
+   screens said this for themselves; on the others nearly every stop wore the browser's ring (DGO-455).
+   A field keeps the offset it has - fourteen rules draw a field's own outline and say no offset. An area
+   (a scroll box, a table) takes the ring inside, where nothing clips it; a control takes it outside,
+   where a filled button does not hide it. */
+:where(:focus-visible){outline:2px solid var(--accent)}
+:where(:focus-visible:not(a,button,summary,[role=button],input,select,textarea)){outline-offset:-2px}
+:where(a,button,summary,[role=button]):focus-visible{outline-offset:2px}
+/* HEBREW AT A HEAVY WEIGHT - on Windows, where the first family of --font is installed. "Segoe UI" has its
+   Hebrew in Light, Regular, Semibold and Bold. Asked for 800 or 900 the browser takes the family's Black
+   face, which has none, and so has every family after it - so the Hebrew of every title at 800 was drawn in
+   the system's last-resort serif, thin, beside Latin in Black: «חשבונות ומראות» at 20px is 150px wide at 700
+   and 120px at 800 (Chrome 154; the screens ask for 800 in 167 places, the question's title among them).
+   These faces give the family's HEBREW RANGE the faces that have it. A family a sheet names is no longer the
+   system's for those characters, so every weight and both styles are named, each as the system resolves it:
+   measured, only upright 800 and 900 change. Any other character is not theirs and goes on to the next
+   family the screen names - system-ui in --font, on Windows the same faces, Black included - which is why
+   G27 asks that system-ui follows wherever a screen names this family itself. Where the family is not
+   installed nothing here resolves and nothing changes. */
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Light");font-weight:100 300;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI");font-weight:400;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Semibold");font-weight:500 600;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Bold");font-weight:700 900;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Light Italic");font-weight:100 300;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Italic");font-weight:400;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Semibold Italic");font-weight:500 600;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Bold Italic");font-weight:700 900;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+/* @bina-theme-tokens:end */
+
+/* meet-flow's own names, each pointing at the office palette above (no colour is written here) */
+:root {
+  --panel: var(--surface); --panel2: var(--surface-2); --ink2: var(--muted);
+  --acc: var(--olive-d); --acc2: var(--olive); --warn: var(--lime-d); --bad: var(--plum-d); --mark: var(--lime-soft); --cur: var(--olive-soft);
+  --onblock: var(--sky-ink); --cap: var(--sky-soft); --scr: var(--olive-soft); --scrline: var(--olive-line); --cam: var(--surface-2); --camline: var(--line);
+  --topic: var(--plum-soft); --q: var(--sky); --like: var(--olive); --ins: var(--violet); --playhead: var(--plum); --tipbg: var(--surface);
+  --wave: var(--olive); --wave2: var(--sky-d); --waveoff: var(--line); --presence: var(--olive-line); --tick: var(--line); --after: var(--lime-d);
+  --head: 158px; --laneH: 34px;
+  /* A recording is shown on BLACK, in a light office and in a dark one (telegram-tv's --film, G82). */
+  --film:#000;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--bg); color: var(--ink); font: 14px/1.5 var(--font);
+  display: grid; grid-template-rows: auto auto minmax(220px, 46vh) auto 1fr; overflow: hidden; }
+button, select, input { font: inherit; color: var(--ink); }
+button { background: var(--panel2); border: 1px solid var(--line); border-radius: 7px; padding: 3px 10px; cursor: pointer; }
+button:hover { border-color: var(--acc2); }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--acc); outline-offset: 1px; }
+button.on { border-color: var(--acc); color: var(--acc); }
+.muted { color: var(--ink2); }
+.hidden { display: none !important; }
+a { color: var(--acc); }
+
+/* header */
+.top { display: flex; gap: 16px; align-items: center; justify-content: space-between; padding: 8px max(16px, env(safe-area-inset-right, 0px)) 8px max(16px, env(safe-area-inset-left, 0px));
+  border-bottom: 1px solid var(--line); background: var(--panel); flex-wrap: wrap; }
+.top h1 { font-size: 17px; margin: 0; }
+.top .back { font-size: 13px; }
+.search { display: flex; align-items: center; gap: 8px; }
+.search input { width: min(340px, 60vw); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 5px 10px; }
+.docs { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.docs a { font-size: 12.5px; padding: 2px 10px; border-radius: 999px; background: var(--sky-soft); border: 1px solid var(--sky-line); color: var(--sky-d); text-decoration: none; font-weight: 600; }
+.docs a:hover { border-color: var(--sky-d); }
+.note { padding: 6px max(16px, env(safe-area-inset-left, 0px)); background: var(--panel2); border-bottom: 1px solid var(--line); font-size: 13px; color: var(--ink2); }
+body:not(:has(.note)) { grid-template-rows: auto minmax(220px, 46vh) auto 1fr; }
+
+/* stage: video + side panel */
+.stage { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); min-height: 0; border-bottom: 1px solid var(--line); }
+.viewer { position: relative; background: var(--film); min-height: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.viewer video, .viewer .still { width: 100%; height: 100%; object-fit: contain; }
+.after { position: absolute; inset: auto 0 44% 0; text-align: center; color: var(--after); font-size: 15px; }
+.now { position: absolute; left: 0; right: 0; bottom: 0; padding: 8px 14px; background: linear-gradient(transparent, color-mix(in srgb, var(--sky-ink) 88%, transparent) 28%);
+  font-size: 15px; line-height: 1.45; min-height: 44px; color: var(--olive-ink); text-shadow: 0 1px 2px color-mix(in srgb, var(--film) 60%, transparent); }
+.now b { margin-left: 6px; }
+.now .cw { background: var(--acc); color: var(--onblock); border-radius: 3px; padding: 0 2px; }
+.side { display: grid; grid-template-rows: auto 1fr; min-height: 0; background: var(--panel); }
+.tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+.tabs button { font-size: 13px; }
+.panes { min-height: 0; position: relative; }
+.pane { position: absolute; inset: 0; overflow: auto; padding: 6px 10px; display: none; }
+.pane.on { display: block; }
+.chk { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; color: var(--ink2); cursor: pointer; }
+.list .it { padding: 6px 6px; border-bottom: 1px solid var(--line); cursor: pointer; border-radius: 6px; }
+.list .it:hover { background: var(--panel2); }
+.list .it.cur { background: var(--cur); box-shadow: inset -3px 0 0 var(--acc); }
+.list .tm { color: var(--ink2); font-size: 12px; direction: ltr; display: inline-block; min-width: 56px; unicode-bidi: isolate; margin-left: 6px; font-variant-numeric: tabular-nums; }
+.list .it > b, .list .it > span, .list .it > .tx { unicode-bidi: isolate; }
+.list .who { font-weight: 700; margin-left: 6px; }
+.list .alts { display: none; font-size: 12.5px; color: var(--ink2); margin-top: 3px; }
+.showorig .list .alts { display: block; }
+.list .alts div { margin-top: 2px; }
+.list .flag { display: inline-block; font-size: 11.5px; border: 1px solid var(--line); border-radius: 9px; padding: 0 7px; margin: 3px 0 0 4px; color: var(--ink2); }
+.list .sub { color: var(--ink2); font-size: 12.5px; }
+mark { background: var(--mark); color: inherit; border-radius: 3px; }
+.q { background: var(--mark); border-radius: 3px; }
+.sel h3 { margin: 4px 0; font-size: 15px; }
+.sel img { max-width: 100%; border-radius: 8px; border: 1px solid var(--line); }
+.sel .body { white-space: pre-wrap; color: var(--ink); }
+
+/* transport */
+.transport { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px max(12px, env(safe-area-inset-left, 0px)); background: var(--panel); border-bottom: 1px solid var(--line); }
+.transport .big { font-size: 16px; min-width: 42px; }
+.transport .clock { font-variant-numeric: tabular-nums; }
+.transport .sep { width: 1px; height: 22px; background: var(--line); }
+.transport .lbl { color: var(--ink2); font-size: 13px; }
+.transport select { background: var(--panel2); border: 1px solid var(--line); border-radius: 7px; }
+.transport input[type=range] { width: 180px; max-width: 40vw; accent-color: var(--acc); }
+#audioBtns button { font-size: 12.5px; margin-right: 4px; }
+
+/* timeline */
+.tl { display: grid; grid-template-columns: var(--head) 1fr; min-height: 0; }
+.heads { background: var(--panel); border-right: 1px solid var(--line); overflow: hidden; }
+.heads .h { height: var(--laneH); display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 0 8px;
+  border-bottom: 1px solid var(--line); font-size: 12.5px; direction: rtl; white-space: nowrap; overflow: hidden; }
+.heads .h.r { height: 26px; }
+.heads .h.tall { height: calc(var(--laneH) * 1.6); }
+.lanes { overflow: auto; position: relative; }
+.inner { position: relative; min-height: 100%; }
+.ruler { display: block; height: 26px; position: sticky; top: 0; z-index: 3; background: var(--panel); cursor: pointer; }
+.lane { position: relative; height: var(--laneH); border-bottom: 1px solid var(--line); }
+.lane.tall { height: calc(var(--laneH) * 1.6); }
+.lane canvas { position: absolute; top: 0; left: 0; height: 100%; }
+.it2 { position: absolute; top: 3px; bottom: 3px; left: calc(var(--s) * var(--pps) * 1px); width: max(3px, calc(var(--d) * var(--pps) * 1px));
+  border-radius: 5px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 11.5px; line-height: 26px;
+  padding: 0 5px; cursor: pointer; direction: rtl; color: var(--onblock); }
+.lane.tall .it2 { line-height: 1.35; white-space: normal; padding-top: 2px; }
+.it2:hover { outline: 2px solid var(--ink); z-index: 2; }
+.it2.hit { outline: 2px solid var(--warn); }
+.it2.cap { background: var(--cap); color: var(--ink); }
+.it2.scr { background: var(--scr); color: var(--ink); border: 1px solid var(--scrline); }
+.it2.scr.camera { background: var(--cam); border-color: var(--camline); }
+.it2.top { background: var(--topic); color: var(--ink); }
+.it2.flr { top: 9px; bottom: 9px; padding: 0; }
+.mk { position: absolute; top: 4px; width: 14px; height: 14px; margin-left: -7px; left: calc(var(--s) * var(--pps) * 1px);
+  border-radius: 50%; cursor: pointer; border: 2px solid var(--bg); }
+.mk.dec { background: var(--warn); transform: rotate(45deg); border-radius: 2px; }
+.mk.task { background: var(--acc); }
+.mk.q { background: var(--q); }
+.mk.like { background: var(--like); } .mk.rej { background: var(--bad); }
+.mk.ins { background: var(--ins); }
+.mk:hover { outline: 2px solid var(--ink); }
+.fr { position: absolute; top: 2px; bottom: 2px; left: calc(var(--s) * var(--pps) * 1px); width: max(2px, calc(var(--d) * var(--pps) * 1px));
+  background-size: cover; background-position: center; border-right: 1px solid var(--bg); cursor: pointer; }
+.playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--playhead); left: calc(var(--t) * var(--pps) * 1px); z-index: 4; pointer-events: none; }
+.tip { position: fixed; z-index: 10; max-width: min(460px, 90vw); background: var(--tipbg); color: var(--ink); border: 1px solid var(--line); border-radius: 8px;
+  padding: 7px 10px; font-size: 13px; pointer-events: none; white-space: pre-wrap; direction: rtl; box-shadow: var(--shadow); }
+
+
+/* A PHONE OR A NARROW WINDOW: one column. The picture keeps its 16:9 and the line being said sits UNDER it
+   (over it, it covered the whole picture at 412 px); the tabs are one row that scrolls sideways; the page
+   scrolls, the transcript and the timeline scroll inside their own boxes. */
+@media (max-width: 820px) {
+  body { display: block; overflow: auto; height: auto; }
+  .top { gap: 8px; }
+  .top .ttl { flex: 1 1 100%; }
+  .search { flex: 1 1 100%; }
+  .search input { width: 100%; }
+  .stage { grid-template-columns: 1fr; }
+  .viewer { display: block; aspect-ratio: auto; background: var(--surface-2); }
+  .viewer video, .viewer .still { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; background: var(--film); }
+  .viewer video[hidden] { display: none; }   /* a page without the video shows the screenshot alone */
+  .now { position: static; background: var(--surface-2); color: var(--ink); text-shadow: none; font-size: 14px; min-height: 0;
+    padding: 6px 12px; border-bottom: 1px solid var(--line); display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+  .after { inset: 8px 0 auto 0; }
+  .tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tabs button { flex: none; }
+  .side { height: 56vh; }
+  .transport { gap: 6px; }
+  .transport .sep { display: none; }
+  .transport input[type=range] { flex: 1 1 120px; width: auto; max-width: none; }
+  .tl { height: 72vh; }
+  :root { --head: 96px; --laneH: 32px; }
+  .heads .h { font-size: 12px; padding: 0 6px; }
+}
+@media (max-width: 420px) {
+  .transport .lbl { display: none; }
+  .list .it { padding: 6px 4px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }

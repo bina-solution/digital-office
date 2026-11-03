@@ -25,7 +25,7 @@ a reason, so "we thought about it" and "we forgot" stop looking identical.
 
 Exit 0 = every app's declaration matches its compose. Exit 1 = at least one does not.
 """
-import sys, pathlib, json, subprocess
+import sys, pathlib, json, subprocess, re
 
 try:
     import yaml
@@ -37,6 +37,18 @@ ROOTS = ("apps", "platform-base")
 
 # Pseudo-paths and host devices: real, but not this app's state to back up.
 SKIP_PREFIX = ("/var/run", "/proc", "/sys", "/dev", "/etc/localtime", "/etc/timezone")
+
+_COMPOSE_DEFAULT = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*):-([^}]*)\}")
+
+
+def compose_default(spec):
+    """A compose value with every `${VAR:-default}` replaced by its DEFAULT.
+
+    The default is what a clone with no `.env` override actually mounts, so it is the reading this
+    gate can make from the tree alone. A bare `${VAR}` (no `:-`) is left untouched: unresolvable
+    here, and skipped by the caller rather than guessed.
+    """
+    return _COMPOSE_DEFAULT.sub(lambda m: m.group(2), spec)
 
 
 def tracked_paths():
@@ -108,6 +120,11 @@ def bind_is_state(source, mount, app_dir):
         except ValueError:
             return True
 
+    if rel in ("", "."):
+        # The CHECKOUT itself. bina-ds mounts `../..` to run `./bbox` in the office it manages, and
+        # the repo root is not "a directory git happens not to track" — it is the repo, and a clone
+        # always has it. Reading it as state asked for a `data.paths: .` declaration.
+        return False
     return rel not in TRACKED    # tracked by git => config being injected, not state
 
 
@@ -141,9 +158,19 @@ def scan(app_dir):
             for m in svc.get("volumes") or []:
                 if isinstance(m, dict):
                     src = m.get("source")
+                    if src:
+                        src = compose_default(src)
                     if m.get("type") == "bind" and src and bind_is_state(src, m, app_dir):
                         binds.add(src.replace("\\", "/"))
                 elif isinstance(m, str):
+                    # THE DEFAULT IS WHAT A CLONE RUNS. `${WHATSAPP_DATA_DIR:-./data}:/app/data` is
+                    # a bind of `apps/chat/data` on every machine whose `.env` does not override it,
+                    # and reading the raw spec dropped it (it starts with `$`, so it was neither a
+                    # path nor a volume) — then `data.paths: apps/chat/data` looked like a
+                    # declaration about nothing. Expand `:-` defaults before splitting on `:`; a
+                    # `${VAR}` with NO default stays unresolved and is still skipped, which is the
+                    # honest answer for a path this gate cannot know.
+                    m = compose_default(m)
                     src = m.split(":")[0]
                     if src.startswith((".", "/")) and bind_is_state(src, m, app_dir):
                         binds.add(src)

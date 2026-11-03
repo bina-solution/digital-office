@@ -26,6 +26,10 @@ services:
       - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY:-}
       - PGHOST=supabase-db
       - STORAGE_URL=http://storage:5000
+      # the drive's ceiling is the store's: one setting, so the two can never disagree about a file
+      - DRIVE_MAX_UPLOAD=${SUPABASE_FILE_SIZE_LIMIT:-2147483648}
+      # resumable upload sessions live on the drive's own volume (the bytes so far + who/where)
+      - DRIVE_UPLOAD_DIR=/data/uploads
       - DRIVE_PUBLIC_HOST=drive.${DEV_DOMAIN:-localhost}
       # credential plane (secret-base): drive connections live there, only the pointer lives here
       - CONNECTIONS_URL=${CONNECTIONS_URL:-http://connections:8990}
@@ -63,7 +67,7 @@ services:
       - traefik.http.routers.drive-ui-https.rule=Host(`${DRIVE_BASE_URL:-drive.${DEPLOYMENT_DOMAIN:-localhost}}`)
       - traefik.http.routers.drive-ui-https.entrypoints=websecure
       - traefik.http.routers.drive-ui-https.tls=true
-      - traefik.http.routers.drive-ui-https.tls.certresolver=myresolver
+      - traefik.http.routers.drive-ui-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
       - traefik.http.routers.drive-ui-https.priority=1
       - traefik.http.routers.drive-ui-https.middlewares=authentik@file
       - traefik.http.routers.drive-ui-https.service=drive-ui
@@ -72,7 +76,7 @@ services:
       - traefik.http.routers.drive-file-https.rule=Host(`${DRIVE_BASE_URL:-drive.${DEPLOYMENT_DOMAIN:-localhost}}`) && PathPrefix(`/file/d/`)
       - traefik.http.routers.drive-file-https.entrypoints=websecure
       - traefik.http.routers.drive-file-https.tls=true
-      - traefik.http.routers.drive-file-https.tls.certresolver=myresolver
+      - traefik.http.routers.drive-file-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
       - traefik.http.routers.drive-file-https.priority=200
       - traefik.http.routers.drive-file-https.service=drive-ui
       - traefik.http.services.drive-ui.loadbalancer.server.port=8975
@@ -90,7 +94,10 @@ services:
           # 2 workers were fully occupied streaming downloads. Threads (Dockerfile) fix the concurrency
           # model; this gives the process enough CPU/memory headroom to actually use them.
           cpus: '1.0'
-          memory: 384M
+          # 384M -> 768M, 2026-10-28: the drive now draws its own thumbnails (Pillow, pdfium) and runs
+          # ffmpeg for frames, covers and waveforms — one job at a time, but a decoded photo plus an
+          # ffmpeg process does not fit beside two workers in 384M. A ceiling, not a reservation.
+          memory: 768M
     logging:
       driver: ${LOGGING_DRIVER:-json-file}
       options:
@@ -99,7 +106,7 @@ services:
 
 volumes:
   # NAME DELIBERATELY UNCHANGED. The service is `drive` now, but renaming this volume
-  # would orphan every byte already in deployment-bina_comp_localdrive_data.
+  # would orphan every byte already in deployment-hacohen_localdrive_data.
   localdrive_data:
 
 networks:

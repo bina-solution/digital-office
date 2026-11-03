@@ -4,7 +4,7 @@
 # Run weekly during low-activity hours (e.g., Saturday 3 AM)
 #
 # Schedule via crontab:
-#   0 3 * * 6 /root/deployment-bina-comp/scripts/pg-maintenance.sh >> /var/log/pg-maintenance.log 2>&1
+#   0 3 * * 6 /root/deployment-hacohen/scripts/pg-maintenance.sh >> /var/log/pg-maintenance.log 2>&1
 
 set -euo pipefail
 
@@ -12,7 +12,7 @@ set -euo pipefail
 # maintain the WRONG database on any other deployment — or, more often, exit at the first
 # docker exec because the container does not exist.
 CONTAINER="${PG_CONTAINER:-n8n-postgres-${DEPLOYMENT_NAME:-bina-deployment}}"
-DB_USER="bina-comp"
+DB_USER="hacohen"
 DB_NAME="n8n"
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
 

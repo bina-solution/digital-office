@@ -40,7 +40,7 @@ describe('API Endpoints', () => {
   it('should render the login page', async () => {
     const response = await request.get('/login');
     expect(response.status).toBe(200);
-    // expect(response.text).toContain('WhatsApp Bina-comp');
+    // expect(response.text).toContain('WhatsApp Hacohanim');
   });
 });
 

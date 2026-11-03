@@ -3,7 +3,7 @@
 Scope: the full sync path from source (Gmail / Drive) to a `COMPLETED` row in
 `public.incoming_documents`. Read-only review; no code or workflows changed.
 
-Live scale at review time (bina-comp, `supabase-db-shlomo-laptop`):
+Live scale at review time (hacohen, `supabase-db-shlomo-laptop`):
 
 | Fact | Value | Source |
 |---|---|---|
@@ -108,7 +108,7 @@ flowchart TD
 | `(source, platform_id)` | `source` = `<instance>/<pipe>` (`_ns()`, `api/__init__.py:1724-1737`); `platform_id` = raw Drive file id / Gmail message id | `sync_ledger` / `sync_attempt` PK (`syncLedgerApi01`) | Sound. Namespacing was added specifically because two instances' identically-named pipes shared ledger rows before phase 6b. |
 | `SOURCE_ID` | Delivery layer: Drive → file id; Gmail → **message id**, identical across every attachment of one email | `indoxApiSupabase01` GET filters; `indoxV2FigureCompanyId01`'s `company_id_by_mail` (`SOURCE_ID.endsWith(domain)`) | `FigureCompanyId` assumes `SOURCE_ID` is an email address; for every gmail-sourced row it is actually the message id, so that lookup path never fires for those rows. Confirmed live: only **555 distinct `SOURCE_ID`** across 6,207 rows — the legacy corpus stored the *folder* id for Drive rows and the *sender email* for Gmail rows (documented in `api/__init__.py:2092-2097`), so `SOURCE_ID` alone identifies nothing for most of the table. |
 | `HASH` | md5 of the delivered file | DB partial unique index `uq_incdoc_hash` (excludes null/empty/`'unknown'`); `Resolve IDs` fallback match; `indoxV2Decide01` dedup (skipped when `LINKED_BS` is set) | Sound as content identity **except**: 495 live rows have no `HASH` at all and get zero duplicate protection; a `HASH` literally equal to `'unknown'` is deliberately excluded from the unique index, so such rows can duplicate freely; delivery throws and drops the item if no md5 is available at all (`syncV3Deliver0001`'s `Drive Row`/`Gmail Row` nodes). |
-| `SHORT_DOC_ID` | **Three divergent formulas**: (a) v2 Actions (`indoxV2ActionsGDoc01`/`Ship01`/`BS01`, 6+ call sites): `String(COMPANY_DOC_ID).replace(/[^a-zA-Z0-9]/g,'').slice(-5).padStart(5,'0')`; (b) `indoxGmailDocDownloader01`: `.padStart(5,0).slice(-5)` (no punctuation strip); (c) `indoxGmailLinkDownloader01`: `.slice(-5)` (no strip, no pad) | Composite dedupe key `COMPANY_ID+SHORT_DOC_ID` in `indoxV2Decide01` and `indoxApiSupabase01`'s `Resolve IDs` | **The single largest identity risk in the system.** Only the **last 5 alphanumeric characters** of a document/invoice/shipment number survive. `indoxV2Decide01.json`'s own comments document *confirmed live collisions* (`'22026'`, `'55526'`, `'61520'`) from "a mis-read date or a vendor-template constant" — explicitly called out as not fixable by better key-filtering. The `'00000'` all-zero placeholder (the pad fallback for an unextracted id) is separately guarded after causing a confirmed collision between two real companies (`516511375`/`513825943`). Three different derivation formulas across ingestion paths also mean the *same* logical document id can produce different `SHORT_DOC_ID` values depending which path ingested it. |
+| `SHORT_DOC_ID` | **Three divergent formulas**: (a) v2 Actions (`indoxV2ActionsGDoc01`/`Ship01`/`BS01`, 6+ call sites): `String(COMPANY_DOC_ID).replace(/[^a-zA-Z0-9]/g,'').slice(-5).padStart(5,'0')`; (b) `indoxGmailDocDownloader01`: `.padStart(5,0).slice(-5)` (no punctuation strip); (c) `indoxGmailLinkDownloader01`: `.slice(-5)` (no strip, no pad) | Composite dedupe key `COMPANY_ID+SHORT_DOC_ID` in `indoxV2Decide01` and `indoxApiSupabase01`'s `Resolve IDs` | **The single largest identity risk in the system.** Only the **last 5 alphanumeric characters** of a document/invoice/shipment number survive. `indoxV2Decide01.json`'s own comments document *confirmed live collisions* (`'22026'`, `'55526'`, `'61520'`) from "a mis-read date or a vendor-template constant" — explicitly called out as not fixable by better key-filtering. The `'00000'` all-zero placeholder (the pad fallback for an unextracted id) is separately guarded after causing a confirmed collision between two real companies (`500000047`/`500000054`). Three different derivation formulas across ingestion paths also mean the *same* logical document id can produce different `SHORT_DOC_ID` values depending which path ingested it. |
 | `COMPANY_ID` | `indoxV2FigureCompanyId01`: mail-domain match → name-substring match → OCR (`apitools /documentJsonQuery`) | Composite dedupe key; normalized to **last 6 digits**, `padStart(6,'0')` in `indoxV2ActionsGDoc01`'s scoring logic | Same truncation risk class as `SHORT_DOC_ID`, one digit more headroom. |
 | `ID` (row PK) | `'doc_' + Date.now().toString(36) + Math.random().toString(36).slice(2,8)` | Primary key everywhere downstream; `processLock01` lock key | No realistic collision at this scale. |
 
@@ -143,7 +143,7 @@ def _get_cached_row_count(cfg_name: str, repo_obj) -> int | None:
 `params["limit"]` `if limit is not None` — so no `limit` param is sent at all, and
 PostgREST applies its server-side default, **`PGRST_DB_MAX_ROWS=1000`**
 (`apps/supabase/docker-compose.yml:24`, `apps/supabase/.env.example` mirrors it). This
-endpoint (`GET /repos/<repo>/stats`) is what feeds `row_count` in the UI — at bina-comp's
+endpoint (`GET /repos/<repo>/stats`) is what feeds `row_count` in the UI — at hacohen's
 live 6,207-row `incoming_documents` table, it silently reports **≈1000, not 6,207 — an
 ~84% undercount**, and does so *forever* (30s TTL cache just re-runs the same
 truncated read). The fix is a two-line change: this exact class already has a correct,
@@ -175,7 +175,7 @@ short page. The pattern is understood and fixed in three places and missed in tw
 
 ### 2.2 Every other bounded query treated as complete truth
 
-| # | File:Line | Cap | Caller's wrong conclusion | Blast radius at bina-comp scale |
+| # | File:Line | Cap | Caller's wrong conclusion | Blast radius at hacohen scale |
 |---|---|---|---|---|
 | 1 | `api/__init__.py:1758` `_claimed_ids` | `limit=1000` on `sync_ledger` per pipe | "this is every claim this pipe holds" | Not binding today (274 total ledger rows), but no pagination loop exists — a bulk backfill that raises `batch.take` past ~1000 concurrent claims would silently drop the excess from "in flight" accounting. |
 | 2 | `api/__init__.py:1951` `_ledger_rows` | `limit=5000` per pipe | reconcile's full per-pipe ledger | Same — fine now, silent past 5,000 ledger rows for one pipe. |

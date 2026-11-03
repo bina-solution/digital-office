@@ -35,9 +35,14 @@
   60px are its CSS. Removing the browser's bars is what the Fullscreen API does, which this page
   calls for real when you press «מסך מלא».
 
-  IMPLEMENTED (2026-10-12) — this stopped being a proposal the day it was built: the console now
-  carries it (platform-base/console/static/app.js: focusInit/applyFocus, the #focusBtn in index.html,
-  the chip and the one line that gives the embed its reserved 60px back in style.css). One button
+  IMPLEMENTED (2026-10-12) — this stopped being a proposal the day it was built. Both halves are in:
+  · the console — platform-base/console/static/app.js (focusInit/applyFocus, `focusToFrame`), the
+    #focusBtn in index.html, the chip, and the one line in style.css that gives the embed its
+    reserved 60px back;
+  · the app's own navigation — apps/bina-ds/plugins/nav-collapse (the state `html[data-bina-compact]`,
+    the 44px handle, Shift+Cmd/Ctrl+B; it folds automatically with the shell's own full screen, which
+    declares itself on the app's document as `data-shell-focus`). Measured on a real instance: the
+    conversation's column 334px → 390px, i.e. the whole frame. One button
   does both layers, and the chip keeps its words for five seconds and then folds to a 44px circle —
   an app's own top corner is where its search lives, and that refinement came from driving the live
   shell, not from here. This file stays the workbench the next display change starts from.
@@ -98,16 +103,11 @@ html.mock-fs .mock-slot{inset:0}
 /* the way back — the ONE thing focus mode must never lose. Shown while `bare` is on, i.e. exactly
    while the shell has hidden its own chrome, so it is never absent when it is needed. */
 .mock-exit{display:none;position:absolute;inset-block-start:10px;inset-inline-end:10px;z-index:65;
-  align-items:center;justify-content:center;gap:6px;min-height:40px;width:40px;padding:0;cursor:pointer;overflow:hidden;
+  align-items:center;justify-content:center;width:44px;height:44px;padding:0;cursor:pointer;
   background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:var(--radius-pill);
   box-shadow:var(--elev-2);font-family:inherit;font-size:13px;font-weight:700}
 html.bare .mock-exit{display:inline-flex}
-.mock-exit::before{content:"▾";font-size:14px;line-height:1}
-.mock-exit .txt{display:none;white-space:nowrap}
-/* folded by default, unfolded while the mode is being entered — the live console's own behaviour
-   (app.js: FOCUS_LABEL_MS 5000, `html.focus-armed`), kept identical so the demo cannot drift from it */
-html.focus-armed .mock-exit,.mock-exit:hover{width:auto;padding:0 15px;gap:6px}
-html.focus-armed .mock-exit .txt,.mock-exit:hover .txt{display:block}
+.mock-exit svg{width:18px;height:18px}
 
 /* the simulator's control bar — its own chrome, never part of the proposal. A floating panel (the
    ground is the palette's scrim, not `--ink`: ink flips with the theme and a bar written on it turns
@@ -248,7 +248,9 @@ html.has-shot .gear{display:block}
   </div>
 
   <!-- the way back -->
-  <button class="mock-exit" id="mockExit" type="button" title="יציאה ממיקוד" aria-label="יציאה ממיקוד"><span class="txt">יציאה ממיקוד</span></button>
+  <!-- the same glyph the live console's way back carries (the bracket that entered the mode), and
+     nothing else: no words, no second symbol — owner, 2026-10-13 -->
+<button class="mock-exit" id="mockExit" type="button" title="יציאה ממסך מלא" aria-label="יציאה ממסך מלא"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5"/><path d="M20 9V4h-5"/><path d="M4 15v5h5"/><path d="M20 15v5h-5"/></svg></button>
 </div>
 
 <div class="mock-nav" aria-hidden="true"><span>▤</span><span>○</span><span>‹</span></div>
@@ -322,7 +324,6 @@ html.has-shot .gear{display:block}
     H.classList.toggle("bare", next !== "now");        // ← the production rule of desktop.css
     H.classList.toggle("appclean", next === "app" || next === "full");   // the app's own columns
     H.classList.toggle("mock-fs", next === "full");     // ← the browser's own fullscreen
-    armLabel(next !== "now");                           // ← the five seconds, as in app.js
     report();
   }
 
@@ -335,13 +336,6 @@ html.has-shot .gear{display:block}
     }
   }
 
-  // the same five seconds the console uses: the words are for learning where the way back is
-  var armedT = 0;
-  function armLabel(on) {
-    H.classList.toggle("focus-armed", on);
-    clearTimeout(armedT);
-    if (on) armedT = setTimeout(function () { H.classList.remove("focus-armed"); }, 5000);
-  }
 
   function exitFullscreen() {
     if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(function () {});

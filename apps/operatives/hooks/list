@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+#: list [<group>] — every operative of this office and where it runs: here, through a linked office, or not reachable
+# The Operative Collective (DGO-948): see apps/operatives/README.md.
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # npath
+exec python3 "$(npath "${REPO_ROOT}/apps/operatives")/ops.py" list "$@"

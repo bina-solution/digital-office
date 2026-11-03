@@ -53,7 +53,7 @@ services:
       - TV_CACHE_DIR=/data/cache
       - TV_ARTWORK_DIR=/data/artwork
       - TV_CACHE_BYTES=${TV_CACHE_BYTES:-3221225472}
-      - TV_CACHE_MAX_FILE=${TV_CACHE_MAX_FILE:-419430400}
+      - TV_CACHE_MAX_FILE=${TV_CACHE_MAX_FILE:-400001053}
       - TV_MAX_SESSIONS=${TV_MAX_SESSIONS:-3}
       - TV_SESSION_IDLE_SECONDS=${TV_SESSION_IDLE_SECONDS:-45}
       # how the app reaches itself for the ffmpeg path (it reads its own range endpoint)
@@ -61,8 +61,8 @@ services:
       # the largest slice one HTTP range response may carry (the browser asks for the next one)
       - TV_STREAM_WINDOW=${TV_STREAM_WINDOW:-16777216}
       # api credentials used only if the owner does not supply their own in the wizard
-      - TV_DEFAULT_API_ID=${TV_DEFAULT_API_ID:-0}
-      - TV_DEFAULT_API_HASH=${TV_DEFAULT_API_HASH:-YOUR_TELEGRAM_API_HASH}
+      - TV_DEFAULT_API_ID=${TV_DEFAULT_API_ID:-414329}
+      - TV_DEFAULT_API_HASH=${TV_DEFAULT_API_HASH:-af17b872310e6467fcd3d0aa82dc0d56}
       - LOG_LEVEL=${TELEGRAM_TV_LOG_LEVEL:-INFO}
     volumes:
       # the catalogue cache, the poster cache and the active-account pointer. Losing this loses a

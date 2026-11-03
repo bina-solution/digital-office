@@ -347,7 +347,7 @@
       align-items:center;justify-content:center;color:var(--olive-ink);font-size:10px;font-weight:800;line-height:1}   /* a provider's letter on the provider's colour */
     .acct-tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
     .acct-lbl{display:block;font-weight:700;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-    /* (a line with no letter of its own — a phone number — reads left to right: «050-000-0007» stood «50-123-4567 972+») */
+    /* (a line with no letter of its own — a phone number — reads left to right: «+972 50-123-4567» stood «50-123-4567 972+») */
     .acct-hint{display:block;color:var(--muted);font-size:11px;min-width:0;overflow:hidden;
       text-overflow:ellipsis;white-space:nowrap;unicode-bidi:plaintext;text-align:right}
     .acct-chev{flex:none;color:var(--muted);font-size:10px;margin-inline-start:auto;line-height:1}
@@ -1121,7 +1121,7 @@ var binaAsk, binaTell;
        mail's do, and since c80af853 chat's does as well (routing[0].module.service = "chat" in
        apps/chat/app.json). So showEmbed() lights #acctChip and there are TWO controls on screen.
        Both are legitimate and neither is going away: this app is also served at its own origin
-       (chat.bina-comp.bina-solutions.co.il) where there is no console around it, and the shell owns
+       (chat.hacohen.bina-solutions.co.il) where there is no console around it, and the shell owns
        "which account" for every embedded service by design. Making them agree is the fix; removing
        one is a different product.
 
@@ -1658,7 +1658,7 @@ var binaAsk, binaTell;
           '<div class="bcard"><p>שליחה למספר טלפון שאין לו שיחה פתוחה. אין לזה מקבילה בשכבת הפעולות '+
           '(היא מכירה שיחות, לא כתובות), ולכן זה עובר במסלול הוואטסאפ הישיר — אותו מסלול ש-n8n משתמש בו.</p>'+
           '<div class="bset-row"><span class="bset-x"><label class="bset-lbl" for="tDocTo">מספר טלפון</label>'+
-            '<span class="bset-hint">לדוגמה 050-000-0007</span></span>'+
+            '<span class="bset-hint">לדוגמה 972501234567</span></span>'+
             '<span class="bset-ctl"><input type="text" id="tDocTo" dir="ltr" inputmode="tel"></span></div>'+
           '<div class="bset-row"><span class="bset-x"><label class="bset-lbl" for="tDocCap">כיתוב</label></span>'+
             '<span class="bset-ctl"><input type="text" id="tDocCap"></span></div>'+

@@ -93,9 +93,9 @@
     "name": "whatsapp-send",
     "type": "whatsapp",
     "integration": "whatsapp",
-    "description": "WhatsApp send document to 050-000-0002",
+    "description": "WhatsApp send document to +972500000002",
     "action": "send",
-    "phone": "050-000-0002",
+    "phone": "972500000002",
     "message": "Integration test – feature validation ✓",
     "test_file": "fixtures/test-image.png",
     "assertions": [

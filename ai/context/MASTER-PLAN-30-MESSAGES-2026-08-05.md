@@ -1,7 +1,7 @@
 # Master plan — every objective from the owner's last 30 messages
 
 **Date:** 2026-08-05 · **Scope:** get INDOX to a perfect, stable, best-practiced state AND prove it
-live for bina-comp, with every document from their mail and drive reaching `COMPLETED`.
+live for hacohen, with every document from their mail and drive reaching `COMPLETED`.
 
 This document is the single forward plan. It maps each of the owner's last 30 messages to a
 numbered objective, states the objective's real status, names the work stream that closes it, and

@@ -30,7 +30,13 @@ CONNECTIONS_URL = os.environ.get("CONNECTIONS_URL", "http://connections:8990").r
 
 
 class LinkError(RuntimeError):
-    """The credential plane refused or was unreachable — never silently treated as "no token"."""
+    """The credential plane refused or was unreachable — never silently treated as "no token".
+    `status` is the vault's HTTP answer (0 when it did not answer): a 404 is "no such row", which a
+    lookup by several names may skip; anything else is the vault failing, which it may not."""
+
+    def __init__(self, message: str, status: int = 0):
+        super().__init__(message)
+        self.status = status
 
 
 def _call(method: str, path: str, body: dict | None = None, timeout: float = 20) -> dict:
@@ -45,8 +51,10 @@ def _call(method: str, path: str, body: dict | None = None, timeout: float = 20)
             detail = json.loads(e.read() or b"{}")
         except ValueError:
             detail = {}
+        if not isinstance(detail, dict):
+            detail = {}
         raise LinkError(f"כספת האישורים השיבה {e.code}: "
-                        f"{detail.get('error') or detail.get('detail') or ''}".strip())
+                        f"{detail.get('error') or detail.get('detail') or ''}".strip(), e.code)
     except (urllib.error.URLError, TimeoutError, OSError) as e:
         raise LinkError("כספת האישורים אינה זמינה") from e
 
@@ -97,6 +105,99 @@ def ensure(office: str, peer: str, direction: str, label: str = "") -> dict:
 def token(instance_id: str) -> str:
     got = _call("GET", f"/api/instances/{instance_id}/secret")
     return ((got.get("secret") or {})).get("token", "")
+
+
+def pair_names(home: str, peer: str) -> list[str]:
+    """Every instance id under which THIS office may hold the secret it shares with `peer`.
+
+    A pairing writes `dgo_link-<peer>` on both ends with one token (`pair_api._write`); a converged
+    link writes `token_name(office, peer, direction)`, from either end's point of view. Exact names,
+    in that order, never a substring match: `hp-laptop` is two dash-separated words."""
+    names = [f"{PROTOCOL}-{peer}"]
+    for direction in ("use", "serve", "both"):
+        names += [token_name(home, peer, direction), token_name(peer, home, direction)]
+    return names
+
+
+def pair_tokens(home: str, peer: str) -> list[tuple[str, str]]:
+    """(instance id, token) for every secret this office holds for its link with `peer`. A name the
+    vault does not hold is skipped; a vault that fails raises, so it is never read as "no pair"."""
+    out = []
+    for name in pair_names(home, peer):
+        try:
+            tok = token(name)
+        except LinkError as e:
+            if e.status == 404:
+                continue
+            raise
+        if tok:
+            out.append((name, tok))
+    return out
+
+
+def agent_token(service: str, container_id: str) -> str:
+    """An `agent.v1` provider's action token, read by the vault out of its container (DGO-1127).
+
+    The vault holds the docker socket and reads with GETs; this app holds neither, and reading it
+    over ssh to its own machine is impossible on a machine with no sshd. `container_id` is this
+    app's own (`converge.own_container_id`), the second factor the vault asks of its one reader.
+    Raises `LinkError` with the vault's own sentence."""
+    req = urllib.request.Request(f"{CONNECTIONS_URL}/api/agent-token/{service}",
+                                 headers={"X-Conn-Container": container_id})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            return str((json.loads(r.read() or b"{}")).get("token") or "").strip()
+    except urllib.error.HTTPError as e:
+        try:
+            detail = json.loads(e.read() or b"{}").get("error") or ""
+        except ValueError:
+            detail = ""
+        raise LinkError(f"כספת האישורים השיבה {e.code}: {detail}".strip(), e.code)
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        raise LinkError("כספת האישורים אינה זמינה") from e
+
+
+def put(instance: dict) -> bool:
+    """Write one instance into THIS office's vault: its secret replaced when the row exists, created
+    when it does not. True when the stored secret changed.
+
+    A row that holds ANOTHER office's secret is never replaced (`secret.office`): names are joined
+    with dashes, and so are office and app ids, so `hp` + `laptop-bina-ds` names the row of
+    `hp-laptop` + `bina-ds`, and the second would otherwise take the first's place every hour."""
+    iid = instance["id"]
+    try:
+        have = (_call("GET", f"/api/instances/{iid}/secret").get("secret") or {})
+    except LinkError as e:
+        if e.status != 404:
+            raise
+        have = None
+    if have is None:
+        _call("POST", "/api/instances", instance)
+        return True
+    mine = str((instance.get("secret") or {}).get("office") or "")
+    if have.get("office") and mine and str(have["office"]) != mine:
+        raise LinkError(f"{iid} holds the credential of {have['office']}, not of {mine} — not replaced")
+    same = {k: v for k, v in have.items() if k != "created_at"} \
+        == {k: v for k, v in (instance.get("secret") or {}).items() if k != "created_at"}
+    if same:
+        return False
+    _call("PUT", f"/api/instances/{iid}/secret", {"secret": instance["secret"], "replace": True})
+    return True
+
+
+def forget(instance_id: str, office: str) -> bool:
+    """Remove one agent credential this office took from `office` — only if its secret names that office
+    (`put`'s rule: a row of another office is never touched). True when a row went."""
+    try:
+        have = (_call("GET", f"/api/instances/{instance_id}/secret").get("secret") or {})
+    except LinkError as e:
+        if e.status == 404:
+            return False
+        raise
+    if str(have.get("office") or "") != office:
+        return False
+    _call("DELETE", f"/api/instances/{instance_id}")
+    return True
 
 
 def revoke(instance_id: str) -> bool:

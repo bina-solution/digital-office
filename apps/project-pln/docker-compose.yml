@@ -64,7 +64,7 @@ services:
       - DATABASE_URL=postgresql://plane:${PLANE_DB_PASSWORD:?set PLANE_DB_PASSWORD in .env — scripts/ci-env.sh mints it on a fresh machine}@plane-db:5432/plane
       - REDIS_URL=redis://plane-redis:6379/0
       - AWS_REGION=${PLANE_S3_REGION:-us-east-1}
-      - AWS_ACCESS_KEY_ID=${PLANE_S3_ACCESS_KEY:-plane-access-key}
+      - AWS_ACCESS_KEY_ID=${PLANE_S3_ACCESS_KEY:-CHANGE_ME}
       - AWS_SECRET_ACCESS_KEY=${PLANE_S3_SECRET_KEY:?set PLANE_S3_SECRET_KEY in .env — scripts/ci-env.sh mints it on a fresh machine}
       - AWS_S3_BUCKET_NAME=uploads
       - AWS_S3_ENDPOINT_URL=http://plane-minio:9000
@@ -97,6 +97,20 @@ services:
       # Off unless the operator says otherwise, in .env. See patches/no-phone-home.py: this
       # is the layer that survives a database flag, a restored archive or a UI toggle.
       - PLANE_TELEMETRY=${PLANE_TELEMETRY:-0}
+      # ── the office's own sign-in, asked by the app itself (DGO-371) ──────────────────────────
+      # `plane/middleware/office_identity.py` asks the identity service who the browser is, with
+      # the browser's OWN cookie — the same endpoint, and the same call, the edge's `authentik@file`
+      # forwardAuth makes before it lets a request through to this app. Declared here rather than
+      # left to the module's own default, because "this app depends on the office's identity
+      # service" is a fact of the deployment and not a detail of one file. In-network only. WHICH
+      # service is the office's one switch, DGO_IDENTITY — the value the edge's middleware reads — and
+      # the module picks that service's endpoint; PLANE_SSO_OUTPOST, set in .env, still wins (r030-002).
+      - DGO_IDENTITY=${DGO_IDENTITY:-authentik}
+      - PLANE_SSO_OUTPOST=${PLANE_SSO_OUTPOST:-}
+      # Where the DECLARED office-identity → Plane-account map is applied (bootstrap.yaml `sso:`,
+      # written by bootstrap.py into this app's own volume). No file = no SSO: Plane's own sign-in
+      # is then the only door, exactly as before this change.
+      - PLANE_SSO_MAP=${PLANE_SSO_MAP:-/app/data/office-identity.json}
       # The credential plane, for the one thing this app does in it: `bootstrap.py` stores the
       # owner's sign-in and the office's API key as INSTANCES there (so they are readable in the
       # console's account screen and nowhere else), the same way apps/git stores its forge account.
@@ -203,7 +217,7 @@ services:
     restart: unless-stopped
     command: server /export --console-address ":9090"
     environment:
-      MINIO_ROOT_USER: ${PLANE_S3_ACCESS_KEY:-plane-access-key}
+      MINIO_ROOT_USER: ${PLANE_S3_ACCESS_KEY:-CHANGE_ME}
       MINIO_ROOT_PASSWORD: ${PLANE_S3_SECRET_KEY:?set PLANE_S3_SECRET_KEY in .env — scripts/ci-env.sh mints it on a fresh machine}
     volumes:
       - project_pln_minio:/export

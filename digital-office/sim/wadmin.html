@@ -57,10 +57,10 @@
     .connftr .provico{width:30px;height:30px;border-radius:9px;flex:none;display:inline-flex;align-items:center;justify-content:center;color:var(--olive-ink);font-size:13px;position:relative}
     .connftr .provico .pdot{position:absolute;inset-inline-end:-2px;bottom:-2px;width:11px;height:11px;border-radius:50%;border:2px solid var(--surface-2)}
     /* (the name OVER its line, as the live page's account bar stands them: two inline spans read «וואטסאפ
-       עסקי050-000-0007» on one line, the number past the card's edge, and their ellipsis never applied) */
+       עסקי+972 50-123-4567» on one line, the number past the card's edge, and their ellipsis never applied) */
     .connftr .cx{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
     .connftr .cn{font-size:12.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    /* (a line with no letter of its own — a phone number — reads left to right: «050-000-0007» stood «50-123-4567 972+») */
+    /* (a line with no letter of its own — a phone number — reads left to right: «+972 50-123-4567» stood «50-123-4567 972+») */
     .connftr .cs{font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;unicode-bidi:plaintext;text-align:right}
 
     /* ── conversation list ───────────────────────────────────────────────── */
@@ -191,12 +191,91 @@
       .th-head{padding:10px 12px}
       .th-head .ha button{padding:10px}  /* 44px touch targets */
     }
+    /* The connection where the side panel is folded away — the live page's chip (apps/chat/src/api/ui/chat.ejs,
+       #mConn). «בוט פעיל בחיבור זה» lives only in that panel: without the chip no bot could be chosen in a phone's
+       frame, or in the window desktop mode opens this screen in (580px on a laptop). It opens the live page's
+       «חיבור פעיל» window, and that one «בוטים וחיבורים» — a bot for every connection. 30px under a finger, 28 of
+       them in the row, as «שיחה חדשה» beside it: the live chip is 29.25px high (its line and padding), under the
+       office's least, and a 30px one with no margin given back made the head taller and the smallest window's list shorter. */
+    .mconn{display:none;align-items:center;gap:6px;margin-inline-start:auto;max-width:52%;min-height:30px;margin-block:-1px;
+      background:var(--surface-2);border:1px solid var(--line);border-radius:999px;color:var(--ink);
+      font:inherit;font-size:11.5px;font-weight:700;padding:5px 11px;cursor:pointer;
+      white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    /* (the dot says a state once one is read: green before that said «well» of nothing) */
+    .mconn .mdot{width:7px;height:7px;border-radius:50%;flex:none;background:var(--line)}
+    /* (the label is what gives way, and says so: the chip's own ellipsis cannot reach a part of a flex box — and, a
+       name someone gave, it carries dir=auto and is cut at ITS end) */
+    .mconn #mConnName{min-width:0;overflow:hidden;text-overflow:ellipsis}
+    @media (max-width:820px){.mconn{display:inline-flex}}
     /* «שיחה חדשה» where the side panel is folded away (the list's head; the panel's own button is the wide frame's).
        34px under a finger, 28 of them in the row: the head keeps its height — 5px more of it squeezed the list
        shut in the smallest window, and the windows suite said so. */
-    .mnew{display:none;flex:none;align-items:center;justify-content:center;width:34px;height:34px;margin-block:-3px;margin-inline-start:auto;
+    .mnew{display:none;flex:none;align-items:center;justify-content:center;width:34px;height:34px;margin-block:-3px;margin-inline-start:8px;
       border:none;border-radius:999px;background:var(--accent);color:var(--accent-ink);cursor:pointer}
     @media (max-width:820px){.mnew{display:inline-flex}}
+
+    /* ── the connection's window and the bots' window (the live page's modal, its rows and its matrix) ── */
+    .ov{position:fixed;inset:0;background:var(--scrim);display:flex;align-items:center;justify-content:center;z-index:90;padding:20px}
+    .ov.hidden{display:none}
+    .modal{background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow-lg);
+      width:min(580px,100%);max-height:86vh;display:flex;flex-direction:column}
+    .modal .mh{padding:15px 20px 12px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
+    .modal .mh h3{margin:0;font-size:16.5px;font-weight:800;flex:1;letter-spacing:-.02em}
+    /* (flex:1 + min-height:0 is what lets the body scroll inside a window held to 86vh) */
+    .modal .mb{padding:15px 20px;flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;font-size:13px}
+    .modal .mf{padding:12px 20px 15px;border-top:1px solid var(--line);display:flex;gap:8px}
+    .btn{border:1px solid var(--line);background:var(--surface-2);color:var(--ink);font:inherit;font-size:13px;
+      font-weight:700;padding:9px 16px;border-radius:11px;cursor:pointer;transition:.14s}
+    .btn:hover{border-color:var(--accent)}
+    .btn.pri{background:var(--accent);border-color:transparent;color:var(--accent-ink)}
+    .btn.pri:hover{background:var(--accent-d)}
+    /* (30px each way under a finger: its glyph and padding make it 28 high) */
+    .xbtn{background:transparent;border:none;color:var(--muted);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;
+      min-width:30px;min-height:30px;padding:5px 8px;border-radius:8px}
+    .xbtn:hover{background:var(--surface-2);color:var(--ink)}
+    /* (no capitals: the bots' heading holds a connection's own name — «WhatsApp» read «WHATSAPP») */
+    .mlbl{font-size:10.5px;font-weight:800;letter-spacing:.08em;color:var(--muted);margin:2px 0 6px}
+    /* the connections as rows: dot, name, a check on the active one; its line; what it is and the bot that answers on it */
+    .acct-item{display:flex;align-items:center;gap:4px;border-radius:8px;min-width:0}
+    .acct-item:hover{background:var(--accent-soft)}
+    .acct-pick{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;background:transparent;border:none;
+      padding:8px 10px;border-radius:8px;cursor:pointer;text-align:start;color:inherit;font:inherit}
+    .acct-l1{display:flex;align-items:center;gap:7px;min-width:0}
+    .acct-lbl{display:block;font-weight:700;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .acct-l1 .acct-lbl{font-size:12.5px}
+    .acct-dot{width:8px;height:8px;border-radius:50%;flex:none}
+    /* (a line with no letter of its own — a phone number — reads left to right) */
+    .acct-hint{display:block;color:var(--muted);font-size:11px;min-width:0;overflow:hidden;
+      text-overflow:ellipsis;white-space:nowrap;unicode-bidi:plaintext;text-align:right}
+    .acct-proto{display:block;font-size:10.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .acct-on{margin-inline-start:auto;color:var(--accent-d);font-weight:800;flex:none;font-size:12px}
+    .acct-empty{padding:10px;font-size:11.5px;color:var(--muted)}
+    /* a bot for every connection: the row is the connection (a press shows its bot below), the select is its bot */
+    .brow{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
+    .brow:last-of-type{border-bottom:none}
+    /* (the row's name is its button: drawn as the text it is, pressed to show the connection's bot below) */
+    .brow .bx{flex:1;min-width:0;display:block;padding:0;border:none;border-radius:8px;background:transparent;color:inherit;
+      font:inherit;text-align:start;cursor:pointer}
+    .brow .pic{cursor:pointer}
+    /* (a connection's name carries dir=auto and is cut at ITS end — in this right-to-left box «WhatsApp Cloud API» lost
+       its beginning — and stays on the row's reading edge whichever way it reads) */
+    .brow .bn{display:block;font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+      text-align:-webkit-match-parent;text-align:match-parent}
+    .brow .bs{display:block;font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .brow select{padding:7px 10px;border:1px solid var(--line);border-radius:10px;font:inherit;font-size:12.5px;
+      font-weight:600;background:var(--surface);color:var(--ink);max-width:190px;cursor:pointer}
+    .brow{border-radius:11px;padding-inline:8px;margin-inline:-8px}
+    .brow.on{background:var(--accent-soft)}
+    /* In a narrow frame the select goes under its connection's name: beside it, in a phone's frame (a 350px window)
+       and in desktop mode's smallest window, it left the name 86px — «וואטסאפ ע…», «טלגרם — ל…». */
+    @media (max-width:520px){.brow{flex-wrap:wrap}.brow select{flex:1 1 100%;max-width:none;margin-inline-start:40px}}
+    .pic{width:32px;height:32px;border-radius:10px;flex:none;display:inline-flex;align-items:center;justify-content:center;color:var(--olive-ink);font-size:14px;font-weight:800}
+    .brow .pic{width:30px;height:30px;border-radius:9px;font-size:13px}
+    .bcard{margin-top:14px;padding:13px 14px;border:1px solid var(--line);border-radius:13px;background:var(--surface-2)}
+    .bcard h4{margin:0 0 5px;font-size:13.5px;font-weight:800}
+    .bcard p{margin:0 0 10px;font-size:12.5px;color:var(--muted);line-height:1.55}
+    .bcard p:last-child{margin-bottom:0}
+    .hidden{display:none}
 
     /* toast */
     #toast{position:fixed;bottom:20px;inset-inline-start:20px;background:var(--ink);color:var(--surface);padding:11px 18px;border-radius:12px;font-size:13px;font-weight:600;z-index:100;opacity:0;transform:translateY(12px);transition:.28s cubic-bezier(.2,.9,.3,1);box-shadow:var(--shadow-lg);pointer-events:none;display:flex;align-items:center;gap:9px}
@@ -237,6 +316,9 @@
     <div class="conv-col">
       <div class="conv-head">
         <div class="r"><h2>שיחות</h2><span class="cnt" id="convCount"></span>
+          <!-- the narrow frame's door to the connection and its bot (the live page's chip): under 820px aside.side is
+               hidden, and «בוט פעיל בחיבור זה» with it -->
+          <button class="mconn" id="mConn" type="button" title="חיבור פעיל · החלפה"><span class="mdot" id="mConnDot"></span><span id="mConnName" dir="auto">—</span><svg class="mk" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
           <!-- the narrow frame's twin of «שיחה חדשה»: under 820px aside.side is hidden, and a conversation could
                not be started from a phone - or from the window desktop mode opens this screen in (580px on a laptop) -->
           <button class="mnew" id="mNew" type="button" title="שיחה חדשה" aria-label="שיחה חדשה"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
@@ -256,6 +338,11 @@
 
     <div class="thread-col"><div id="thread"></div></div>
   </div>
+  <div class="ov hidden" id="ov"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="mTitle">
+    <div class="mh"><h3 id="mTitle"></h3><button class="xbtn" id="mX" type="button" title="סגירה" aria-label="סגירה"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+    <div class="mb" id="mBody"></div>
+    <div class="mf" id="mFoot"></div>
+  </div></div>
 
   <script>
   (function(){
@@ -265,7 +352,9 @@
        threw the parser's complaint about «<», the page stood empty and said nothing, and «החיבור חודש בהצלחה»
        was said off any answer at all (flow-qa.py, rule 15). Said once, by the office's notice, with the way
        to ask again. */
-    function api(p,o){return fetch('api'+p,o).then(function(r){ if(!r.ok) throw new Error('status '+r.status); return r; });}
+    // (…and a refusal keeps the service's own words, where its answer gives them, `error`: for whoever says it)
+    function api(p,o){return fetch('api'+p,o).then(function(r){ if(r.ok) return r;
+      return r.json().catch(function(){return {};}).then(function(d){ var e=new Error('status '+r.status); e.said=(d&&d.error)||''; throw e; }); });}
     function jf(p,o){return api(p,o).then(function(r){return r.json();});}
     function post(p,body){return api(p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});}
     var UNSAID=null;
@@ -280,12 +369,17 @@
     var STCOL={ok:'var(--ok)',warning:'var(--lime)',error:'var(--red)'};   // the palette's: well · look here · failed
     var STHE={ok:'מחובר',warning:'דורש תשומת לב',error:'שגיאת חיבור'};
     var PROVICO={local:'💬',whatsapp:'W',telegram:'T',whatsapp_cloud:'W',messenger:'M'};
+    var PROVHE={local:'צ׳אט מקומי',whatsapp:'וואטסאפ · Baileys',telegram:'טלגרם · בוט',whatsapp_cloud:'WhatsApp Cloud API',messenger:'Facebook Messenger'};
+    function provName(a){ return PROVHE[a&&a.provider]||(a&&a.provider)||'—'; }
     /* The page's MARKS are drawn, never typed — the live chat's helper (apps/chat, `mark()`), with the
        shapes this copy uses. A mark that tells something carries the words for it in `say`. */
     var MARK={check:'M20 6 9 17l-5-5',checks:'M18 6 7 17l-5-5M22 10l-7.5 7.5L13 16',
-      bot:'M12 8V4H8M6 8h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2zM2 14h2M20 14h2M15 13v2M9 13v2'};
+      bot:'M12 8V4H8M6 8h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2zM2 14h2M20 14h2M15 13v2M9 13v2',
+      message:'M7.9 20A9 9 0 1 0 4 16.1L2 22z'};
     function mark(n,say){ return '<svg class="mk" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" '+
       (say?'role="img" aria-label="'+esc(say)+'"><title>'+esc(say)+'</title>':'aria-hidden="true">')+'<path d="'+MARK[n]+'"/></svg>'; }
+    /* a provider's chip: its initial — and the built-in chat, which has none, is the drawn bubble (the live page's) */
+    function provIco(p){ return p==='local'?mark('message'):(PROVICO[p]||'·'); }
     function tagClass(t){return t==='לקוח'?'tag-cust':t==='ספק'?'tag-supp':t==='קבוצה'?'tag-grp':'tag-bot';}
     function tagHtml(t){return t?'<span class="tag '+tagClass(t)+'">'+esc(t)+'</span>':'';}
     /* A sent message's three states: one check, two, and two that are heavier and in the read colour. */
@@ -293,17 +387,31 @@
       :status==='delivered'?'<span class="tick gray">'+mark('checks','נמסרה')+'</span>'
       :status==='sent'?'<span class="tick gray">'+mark('check','נשלחה')+'</span>':''; }
 
-    var S={accounts:[],active:null,activeAcct:null,bots:[],convs:[],filter:'all',q:'',openId:null,openContact:null};
+    /* `read`: was the list of connections ever read — a list that was not read is not an empty one. `botConn`: the
+       connection whose bot the bots' window shows, which is not necessarily the active one. */
+    var S={accounts:[],active:null,activeAcct:null,bots:[],convs:[],filter:'all',q:'',openId:null,openContact:null,read:false,botConn:null};
 
+    // -> true once the connections are read and drawn, false when they could not be (and that was said)
     function boot(){
-      Promise.all([jf('/accounts'),jf('/bots')]).then(function(r){
-        S.accounts=r[0].accounts||[]; S.active=r[0].active; S.bots=r[1].bots||[];
+      return Promise.all([jf('/accounts'),jf('/bots')]).then(function(r){
+        S.accounts=r[0].accounts||[]; S.active=r[0].active; S.bots=r[1].bots||[]; S.read=true;
         S.activeAcct=S.accounts.filter(function(a){return a.id===S.active;})[0]||S.accounts[0]||null;
-        renderBotCard(); renderConn(); loadConvs();
-      }).catch(function(){ if(!S.activeAcct) $('#connState').textContent='לא נטען';   // not «טוען…» for good
-        unsaid('הצ׳אט לא נטען')(); });
+        renderBotCard(); renderConn(); loadConvs(); return true;
+      }).catch(function(){ if(!S.activeAcct){ $('#connState').textContent='לא נטען';   // not «טוען…» for good
+          $('#mConnName').textContent='לא נטען'; $('#mConnDot').style.background='var(--muted)'; }   // …nor a well connection's dot
+        unsaid('הצ׳אט לא נטען')(); return false; });
     }
-    window.__chatReload=function(){ S.openId=null; S.openContact=null; boot(); };
+    /* A reload starts over — whoever asks for it (the console's chip, the chip's own window, «נסה שוב»), as the live
+       page's resetForConnection: the window over the list closes (it named the connection left as the active one, and
+       its row switched the office BACK to it), and the search, the tab and an open conversation are let go («משה» went
+       on filtering the next connection's list to «אין שיחות תואמות»). */
+    window.__chatReload=function(){
+      closeModal(); S.openId=null; S.openContact=null; S.filter='all'; S.q=''; S.botConn=null;
+      $('#convSearch').value='';
+      document.querySelectorAll('#segtabs .seg').forEach(function(x,i){ x.classList.toggle('on',i===0); });
+      document.querySelector('.chat').classList.remove('mob-thread');
+      return boot();
+    };
 
     function loadConvs(){ jf('/conversations').then(function(d){ S.convs=d.conversations||[]; renderList(); if(!S.openId) renderThreadState(); }).catch(unsaid('השיחות לא נטענו')); }
 
@@ -315,21 +423,168 @@
       if(!a){sel.innerHTML='';return;}
       sel.innerHTML=S.bots.map(function(b){return '<option value="'+b.id+'"'+(b.id===a.activeBot?' selected':'')+'>'+esc(b.name)+'</option>';}).join('');
       var cur=S.bots.filter(function(b){return b.id===a.activeBot;})[0]; $('#botDesc').textContent=cur?cur.desc:'';
-      sel.onchange=function(){ var bot=sel.value;
-        post('/account/bot',{id:a.id,bot:bot})
-          .then(function(){return jf('/accounts');}).then(function(d){
-            S.accounts=d.accounts||[]; S.activeAcct=S.accounts.filter(function(x){return x.id===S.active;})[0]||S.activeAcct; a=S.activeAcct;
-            var c=S.bots.filter(function(b){return b.id===a.activeBot;})[0]; $('#botDesc').textContent=c?c.desc:'';
-            toast('הבוט הפעיל עודכן: '+(c?c.name:bot)); if(S.openId) renderBotnote();
-          }).catch(unsaid('הבוט הפעיל לא עודכן'));
-      };
+      sel.onchange=function(){ setBot(a.id,sel.value); };
+    }
+    /** Attach `bot` to `connId`, then read the connections again: the service owns that mapping, not a select — this
+     *  panel's and the bots' window's alike (the live page's setBot). A refusal is said in the service's words (or the
+     *  live page's), and what IS attached is drawn: read again, or — where the list cannot be read — what the service
+     *  last said, so a select and the text under it never disagree. */
+    function setBot(connId,bot){
+      return post('/account/bot',{id:connId,bot:bot}).then(function(){
+          var c=S.accounts.filter(function(x){return x.id===connId;})[0]; if(c) c.activeBot=bot;   // (the service took it)
+        },function(e){ binaTell((e&&e.said)||'שיוך הבוט נכשל','bad'); })
+        .then(function(){ return jf('/accounts'); })
+        .then(function(d){ S.accounts=d.accounts||[]; return true; },function(){ unsaid('החיבורים לא נטענו')(); return false; })
+        .then(function(read){
+          S.activeAcct=S.accounts.filter(function(x){return x.id===S.active;})[0]||S.activeAcct;
+          var target=S.accounts.filter(function(x){return x.id===connId;})[0];
+          renderBotCard();
+          if(read&&target&&target.activeBot===bot) toast('הבוט בחיבור «'+(target.label||connId)+'»: '+botNameOf(bot));
+          if(S.openId) renderBotnote();
+        });
     }
     function renderConn(){
       var a=S.activeAcct; if(!a)return;
+      $('#mConnName').textContent=a.label||a.id; $('#mConnDot').style.background=STCOL[a.status]||'var(--line)';
       $('#connName').textContent=a.label;
       var stx=$('#connState'); stx.textContent=(a.status==='ok'?a.identity:(a.reason||STHE[a.status])); stx.style.color=a.status==='ok'?'var(--muted)':STCOL[a.status];
       var ico=$('#provIco'); ico.firstChild.textContent=PROVICO[a.provider]||'·'; ico.style.background=a.color||'var(--olive)';
       $('#provDot').style.background=STCOL[a.status]||'var(--line)';
+    }
+
+    /* ── the chip's window and the bots' window, where the side panel is folded away ─────────────
+       The live page's (apps/chat/src/api/ui/chat.ejs: openConnPicker, openBots), on this page's mock. Its chip opens
+       «חיבור פעיל»: the connections, each with the bot that answers on it, and the way to «בוטים וחיבורים» — a bot
+       for every connection, and the one picked shown below. What the live window offers that this page has no screen
+       for is not offered: connecting an account (the console's chip does it here), the private engine's profiles,
+       tools and exports, a connection's removal, and a bot's own settings. */
+    function botOf(id){ return S.bots.filter(function(b){return b.id===id;})[0]||null; }
+    function botNameOf(id){ var b=botOf(id); return b?b.name:(id||'—'); }
+    function connLabel(id){ var c=S.accounts.filter(function(x){return x.id===id;})[0]; return (c&&(c.label||c.id))||id||'—'; }
+    function node(tag,cls,html){ var e=document.createElement(tag); e.className=cls; e.innerHTML=html; return e; }
+    // what a list says where it has no row: that there is none — or, where it was never read, that
+    function noRows(none){ return S.read?none:'רשימת החיבורים לא נטענה'; }
+    function acctRows(host,after){
+      if(!S.accounts.length) host.appendChild(node('div','acct-empty',noRows('אין חיבורים זמינים')));
+      S.accounts.forEach(function(c){
+        var item=node('div','acct-item','');
+        var pick=document.createElement('button');
+        // (buttons, the active one marked current: the live rows are menuitemradio — right in its sidebar's menu, and a
+        //  role with no menu around it in this window)
+        pick.className='acct-pick'; pick.type='button';
+        if(c.id===S.active) pick.setAttribute('aria-current','true');
+        pick.innerHTML='<span class="acct-l1"><span class="acct-dot" style="background:'+(STCOL[c.status]||'var(--line)')+'"></span>'+
+          '<b class="acct-lbl" dir="auto">'+esc(c.label||c.id)+'</b>'+(c.id===S.active?'<span class="acct-on">'+mark('check','החיבור הפעיל')+'</span>':'')+'</span>'+
+          (c.identity ? '<small class="acct-hint">'+esc(c.identity)+'</small>' : '')+
+          '<small class="acct-proto">'+esc(provName(c))+' · בוט: '+esc(botNameOf(c.activeBot))+'</small>';
+        pick.title=c.status==='ok'?STHE.ok:(c.reason||STHE[c.status]||'');
+        pick.onclick=function(e){ e.stopPropagation(); if(after)after(); selectConn(c.id); };
+        item.appendChild(pick);
+        host.appendChild(item);
+      });
+    }
+    function openConnPicker(){
+      modal('חיבור פעיל','<div id="connRows" role="group" aria-label="החיבורים"></div>',
+        [{label:'בוטים וחיבורים',onclick:function(){ closeModal(); openBots(); }},{label:'סגירה',pri:true,onclick:closeModal}]);
+      acctRows($('#connRows'),closeModal);
+    }
+    /* Another connection, through the door the console's chip uses (__chatReload) — and that chip, which names the
+       connection too, reads it again (sim/overlay/switcher.js), so the two never name different connections. */
+    function selectConn(id){
+      if(id===S.active) return;
+      post('/account/select',{id:id}).then(function(){
+        if(window.__simSwitcherReload) window.__simSwitcherReload();
+        return window.__chatReload();
+      },function(e){ binaTell((e&&e.said)||'החלפת החיבור נכשלה','bad'); return false; })   // (the live page's words)
+        .then(function(ok){ if(ok) toast('החיבור הוחלף: '+(S.activeAcct?S.activeAcct.label:id)); });
+    }
+
+    /* The window takes the focus and gives it back, and what is behind it is inert while it is open: opened from the
+       chip by a keyboard, the focus stayed on the chip behind the window — its controls lay past the whole list — and
+       «בוטים וחיבורים», pressed, took the focused button away with it. */
+    var OPENER=null;
+    function modal(title,bodyHtml,buttons){
+      var ov=$('#ov');
+      if(ov.classList.contains('hidden')) OPENER=document.activeElement;
+      $('#mTitle').textContent=title; $('#mBody').innerHTML=bodyHtml;
+      var f=$('#mFoot'); f.innerHTML='';
+      (buttons||[]).forEach(function(b){
+        var el=document.createElement('button'); el.type='button'; el.className='btn'+(b.pri?' pri':'');
+        el.textContent=b.label; el.onclick=b.onclick; f.appendChild(el);
+      });
+      ov.classList.remove('hidden'); $('.chat').inert=true;
+      $('#mX').focus();
+    }
+    function closeModal(){
+      var ov=$('#ov'); if(ov.classList.contains('hidden')) return;
+      ov.classList.add('hidden'); $('.chat').inert=false;
+      if(OPENER&&OPENER.isConnected) OPENER.focus();
+    }
+
+    function openBots(){
+      modal('בוטים וחיבורים','<div class="mlbl">בוט לכל חיבור</div><div id="botMatrix"></div><div id="botDetail"></div>',
+        [{label:'סגירה',pri:true,onclick:closeModal}]);
+      S.botConn=(S.activeAcct&&S.activeAcct.id)||null;
+      drawBotMatrix();
+    }
+    function drawBotMatrix(){
+      var host=$('#botMatrix'); if(!host)return;
+      if(!S.accounts.filter(function(x){return x.id===S.botConn;}).length)
+        S.botConn=(S.activeAcct&&S.activeAcct.id)||(S.accounts[0]&&S.accounts[0].id)||null;
+      // A row is a connection: its name is the row's own button (pressed: its bot is shown below), its select is its bot
+      // — two controls side by side. (The live row is a role=button holding the select: a control inside a control,
+      // named by the select's option, and its Enter and Space took the select's keys.)
+      host.innerHTML=S.accounts.map(function(c){
+        return '<div class="brow'+(c.id===S.botConn?' on':'')+'" data-conn="'+esc(c.id)+'">'+
+          '<span class="pic" style="background:'+esc(c.color||'var(--muted)')+'">'+provIco(c.provider)+'</span>'+
+          '<button class="bx" type="button" aria-pressed="'+(c.id===S.botConn?'true':'false')+'" title="הבוט שעונה בחיבור זה">'+
+            '<span class="bn" dir="auto">'+esc(c.label||c.id)+'</span><span class="bs">'+
+            // (the protocol's name is the built-in connection's label: under itself it reads as a fault, not a fact —
+            //  and the identity reads its own way: «@BinaOfficeBot» stood «BinaOfficeBot@», «Phone ID 104229…» «…Phone ID 104229»)
+            (provName(c)===(c.label||'')?'':esc(provName(c))+(c.identity?' · ':''))+(c.identity?'<bdi>'+esc(c.identity)+'</bdi>':'')+'</span></button>'+
+          '<select data-conn="'+esc(c.id)+'" aria-label="הבוט בחיבור «'+esc(c.label||c.id)+'»">'+S.bots.map(function(b){
+            return '<option value="'+esc(b.id)+'"'+(b.id===c.activeBot?' selected':'')+'>'+esc(b.name)+'</option>';
+          }).join('')+'</select></div>';
+      }).join('')||'<div class="acct-empty">'+noRows('אין חיבורים')+'</div>';
+      host.querySelectorAll('select').forEach(function(sel){
+        sel.onchange=function(){ sel.disabled=true; var cid=sel.getAttribute('data-conn');
+          // what the select shows afterwards is what is attached — a refused choice does not stay in it — and the
+          // keyboard that changed it has it again (a select made disabled under the focus gave the focus to the page)
+          setBot(cid,sel.value).then(function(){ var c=S.accounts.filter(function(x){return x.id===cid;})[0];
+            if(c) sel.value=c.activeBot; sel.disabled=false;
+            if(!document.activeElement||document.activeElement===document.body) sel.focus();
+            pickBotConn(cid,true); });
+        };
+      });
+      host.querySelectorAll('.brow').forEach(function(row){
+        var pick=function(){ pickBotConn(row.getAttribute('data-conn')); };
+        row.querySelector('.bx').onclick=pick;
+        row.querySelector('.pic').onclick=pick;   // (the badge belongs to the name it stands beside)
+      });
+      drawBotDetail(S.botConn);
+    }
+    /** Show `connId`'s bot below. `force` draws it again when the row did not change (its bot did). */
+    function pickBotConn(connId,force){
+      if(!force&&connId===S.botConn) return;
+      S.botConn=connId;
+      var host=$('#botMatrix');
+      if(host) host.querySelectorAll('.brow').forEach(function(r){
+        var on=r.getAttribute('data-conn')===connId;
+        r.classList.toggle('on',on); r.querySelector('.bx').setAttribute('aria-pressed',on?'true':'false');
+      });
+      drawBotDetail(connId);
+    }
+    /** The bot attached to `connId`: its name and what it does. */
+    function drawBotDetail(connId){
+      var d=$('#botDetail'); if(!d)return;
+      var c=S.accounts.filter(function(x){return x.id===connId;})[0]||null;
+      var botId=(c&&c.activeBot)||'none', b=botOf(botId);
+      var head='<div class="mlbl">ההתנהגות בחיבור «'+esc(connLabel(connId))+'»</div>';
+      // (where the connections were never read the list above says so, and there is no «none chosen» to say)
+      if(!c){ d.innerHTML=S.read?'<div class="bcard"><h4>אין חיבור נבחר</h4><p>בחר/י חיבור מהרשימה שלמעלה.</p></div>':''; return; }
+      if(!b){ d.innerHTML=head+'<div class="bcard"><h4>'+esc(botNameOf(botId))+'</h4>'+
+        '<p>לא יופעל מענה אוטומטי בחיבור הזה. כל ההודעות הנכנסות ממתינות לצוות.</p></div>'; return; }
+      d.innerHTML=head+'<div class="bcard"><h4>'+esc(b.name)+'</h4><p>'+esc(b.desc||'')+'</p></div>';
     }
 
     /* conversation list */
@@ -456,6 +711,24 @@
     var deb; $('#convSearch').addEventListener('input',function(e){clearTimeout(deb);deb=setTimeout(function(){S.q=e.target.value.trim();renderList();},110);});
     $('#newChat').onclick=newChat;
     $('#mNew').onclick=newChat;
+    $('#mConn').onclick=function(e){ e.stopPropagation(); openConnPicker(); };
+    $('#mX').onclick=closeModal;
+    // (the backdrop closes the window on a press that BEGAN on it: one begun inside and let go outside is not one)
+    var onScrim=false;
+    $('#ov').addEventListener('pointerdown',function(e){ onScrim=e.target===$('#ov'); });
+    $('#ov').onclick=function(e){ if(e.target===$('#ov')&&onScrim) closeModal(); };
+    // (an Escape another window has already answered — the console chip's connect window, over this one — is not ours:
+    //  one press closed both)
+    document.addEventListener('keydown',function(e){ if(e.key==='Escape'&&!e.defaultPrevented) closeModal(); });
+    // The window keeps the keyboard, as the office's question does (bina-ask.js): Tab and Shift+Tab go round its own
+    // controls. Past «סגירה» the focus left the frame for the console, and back from ✕ it landed on the console's chip.
+    $('#ov').addEventListener('keydown',function(e){
+      if(e.key!=='Tab') return;
+      var ring=[].slice.call($('#ov').querySelectorAll('button,select,input')).filter(function(n){ return !n.disabled&&n.getClientRects().length; });
+      if(!ring.length) return;
+      var n=ring.length, i=ring.indexOf(document.activeElement); e.preventDefault();
+      ring[i<0?(e.shiftKey?n-1:0):(i+(e.shiftKey?n-1:1))%n].focus();
+    });
 
     boot();
   })();

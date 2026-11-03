@@ -463,7 +463,7 @@ class PleskAdapter(BaseAdapter):
     exactly two things from the provider (an API key, and our egress IP on their allowlist).
 
     The refusal message names the IP to allowlist, and this adapter SURFACES it rather than
-    paraphrasing: "access disabled for 203.0.113.11" is the difference between a support ticket
+    paraphrasing: "access disabled for 93.184.216.8" is the difference between a support ticket
     that gets answered and one that says "the API does not work".
     """
     provider = "plesk"
@@ -600,16 +600,8 @@ class PortalAdapter(BaseAdapter):
     def list_records(self, domain: str) -> list[dict]:
         return RegistryAdapter(self.secret).list_records(domain)
 
-    def write_record(self, domain: str, rec: dict) -> dict:
-        import portal as portal_mod
-        res = portal_mod.run(self.portal_id, "write_record",
-                             {"domain": domain, "type": rec.get("type"), "name": rec.get("name"),
-                              "value": rec.get("content"), "ttl": rec.get("ttl")})
-        if not res.get("ok"):
-            raise DomainError(res.get("error") or "הפעולה בפורטל נכשלה",
-                              status=409 if res.get("state") == "needs_verification" else 502,
-                              detail=res.get("how") or res.get("why"), kind="portal")
-        return res
+    # (no write_record: a panel record is written by app.py's `_portal_written` only — one door, with its
+    # consent, its history and its mark; this second door had none of them, and no caller (DGO-1032))
 
     def check_availability(self, domain: str) -> dict:
         return _registry_availability(domain)

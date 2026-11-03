@@ -116,7 +116,8 @@ async function allocate(command) {
       groupId,
       policy: command.policy || 'single',
       generation,
-      ownedTabIds: existing?.session?.ownedTabIds || [tab.id]
+      ownedTabIds: existing?.session?.ownedTabIds || [tab.id],
+      lastUrl: command.url            // kept current by onUpdated; how frontSession finds the tab after a sleep
     }
   });
   await claimTab(tab.id, command.slug);
@@ -163,6 +164,99 @@ async function claimSession(command) {
   return { ok: true, tabId };
 }
 
+async function knownSlugs() {
+  const all = await chrome.storage.local.get(null);
+  return new Set(Object.keys(all).filter(key => key.startsWith('session_')).map(key => key.slice('session_'.length)));
+}
+
+async function recoverSession(slug, stored, command) {
+  // After an idle sleep Chrome comes back from --restore-last-session with NEW tab ids and no
+  // window.name tag (group-manager's cmd_await documents it), so the stored session points at
+  // nothing. The tab itself is back — in its restored GROUP (Chrome restores a group's title and
+  // colour) and at its last address. After a wake EVERY restored tab is ownerless, and two sessions
+  // on one address (two WhatsApp pairings) must never swap tabs, so the rule is, in this order:
+  //   1. the restored group whose title is this slug — the group IS the name on the strip;
+  //   2. else by address — the session's last known URL, then the record's start URL — among tabs
+  //      that have no owner and sit in no group titled with ANOTHER known session's slug; the exact
+  //      address first, then the origin; and only when exactly ONE tab remains.
+  // Two tabs with nothing to tell them apart are answered as "lost", never with a guess.
+  const others = await knownSlugs();
+  others.delete(slug);
+  const titleOf = async (tab) => {
+    if (!Number.isInteger(tab.groupId) || tab.groupId < 0) return '';
+    try { return (await chrome.tabGroups.get(tab.groupId)).title || ''; } catch (_) { return ''; }
+  };
+  const wanted = [stored?.lastUrl, command.url].filter(Boolean);
+  const free = [];
+  for (const tab of await chrome.tabs.query({})) {
+    const owner = await ownerForTab(tab.id);
+    if (owner && owner !== slug) continue;                 // another session's LIVE tab
+    const title = await titleOf(tab);
+    if (title && others.has(title)) continue;              // another session's RESTORED tab
+    free.push({ tab, title });
+  }
+  let chosen = null;
+  const named = free.filter(entry => entry.title === slug);
+  if (named.length) {
+    chosen = named.find(entry => wanted.includes(entry.tab.url)) || named[0];
+  } else {
+    const originOf = (url) => { try { return new URL(url).origin; } catch (_) { return null; } };
+    for (const url of wanted) {
+      const exact = free.filter(entry => entry.tab.url === url);
+      if (exact.length > 1) return null;                   // ambiguous: say so, do not guess
+      if (exact.length === 1) { chosen = exact[0]; break; }
+      const origin = originOf(url);
+      const same = origin ? free.filter(entry => originOf(entry.tab.url) === origin) : [];
+      if (same.length === 1) { chosen = same[0]; break; }
+    }
+  }
+  if (!chosen) return null;
+  const found = chosen.tab;
+  // Session restore brings the group back too (new id, same name); reuse it rather than add one,
+  // and a group that has a name of its own keeps it — the record's label is for a group made here.
+  const groupId = (Number.isInteger(found.groupId) && found.groupId >= 0)
+    ? found.groupId
+    : await bounded('tabs.group', chrome.tabs.group({ tabIds: [found.id] }));
+  try {
+    await chrome.tabGroups.update(groupId, {
+      title: chosen.title || command.label || slug,
+      ...(command.color && !chosen.title ? { color: command.color } : {}),
+      collapsed: false
+    });
+  } catch (_) {}
+  const owned = named.length ? (await chrome.tabs.query({ groupId })).map(tab => tab.id) : [found.id];
+  const session = {
+    tabId: found.id,
+    groupId,
+    policy: stored?.policy || 'single',
+    generation: stored?.generation || crypto.randomUUID(),
+    ownedTabIds: owned.length ? owned : [found.id],
+    lastUrl: found.url
+  };
+  await chrome.storage.local.set({ [`session_${slug}`]: session });
+  for (const id of session.ownedTabIds) await claimTab(id, slug);
+  return { tab: found, groupId, session, recovered: true };
+}
+
+async function frontSession(command) {
+  // The human hand-off (handoff.py, DGO-571): bring THIS group's tab to the front of the one shared
+  // window — never a new window — and open its group on the strip, so the person who follows the
+  // hand-off link lands on the page that needs him, with the group's name above it.
+  const slug = command.slug;
+  const key = `session_${slug}`;
+  const stored = (await chrome.storage.local.get(key))[key];   // read BEFORE existingSession can drop it
+  const existing = (await existingSession(slug)) || (await recoverSession(slug, stored, command));
+  if (!existing) {
+    return { ok: false, error: { code: 'tab_lost', message: `no live tab for ${slug}, and none at its last address` } };
+  }
+  const tab = await bounded('tabs.update', chrome.tabs.update(existing.tab.id, { active: true }));
+  try { await chrome.windows.update(tab.windowId, { focused: true }); } catch (_) {}
+  if (Number.isInteger(existing.groupId) && existing.groupId >= 0) {
+    try { await chrome.tabGroups.update(existing.groupId, { collapsed: false }); } catch (_) {}
+  }
+  return { ok: true, tabId: tab.id, groupId: existing.groupId, windowId: tab.windowId, recovered: Boolean(existing.recovered) };
+}
+
 async function listSessions() {
   const all = await chrome.storage.local.get(null);
   const sessions = [];
@@ -201,6 +295,8 @@ chrome.runtime.onConnect.addListener((port) => {
             ? listSessions()
             : command.action === 'claim'
               ? claimSession(command)
+              : command.action === 'front'
+                ? frontSession(command)
         : Promise.reject(new Error(`unknown action: ${command.action}`));
     operation.then(
       (result) => port.postMessage({ ...result, requestId: command.requestId }),
@@ -220,12 +316,22 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
 });
 
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
-  if (!changeInfo.status) return;
+  if (!changeInfo.status && !changeInfo.url) return;
   const slug = await ownerForTab(tabId);
   if (!slug) return;
+  const key = `session_${slug}`;
+  if (changeInfo.url) {
+    // Where the anchor tab IS, for the hand-off: after an idle sleep the tab comes back with a new
+    // id and no tag, and its last address is the only way frontSession finds it again.
+    const current = (await chrome.storage.local.get(key))[key];
+    if (current && current.tabId === tabId) {
+      current.lastUrl = changeInfo.url;
+      await chrome.storage.local.set({ [key]: current });
+    }
+  }
+  if (!changeInfo.status) return;
   await claimTab(tabId, slug);
   if (changeInfo.status !== 'complete') return;
-  const key = `session_${slug}`;
   const session = (await chrome.storage.local.get(key))[key];
   if (session?.pendingParentTabId && session.tabId === tabId) {
     const parentId = session.pendingParentTabId;

@@ -109,15 +109,8 @@ ALL_SINKS: dict[str, str] = {**SINKS, **EXTERNAL_SINKS}
 #: sink walk, FAILS. Delete an entry the moment its route refuses the link — that is how this list
 #: shrinks itself (G31/G34's rule: a declaration matching nothing is stale).
 JUSTIFIED: dict[str, dict] = {
-    "api_catalog_preview": {
-        "writes": False,
-        "reason":
-            "a POST that writes no state: it fetches, verifies and validates a candidate into a "
-            "private temp dir and STAGES the bytes under a token; `apps/` and platform.state.yaml "
-            "are untouched. `catalog/install` is the route that completes it, and it refuses a "
-            "linked caller. If this route ever reaches a sink the reason stops being true and the "
-            "entry fails.",
-    },
+    # Empty since DGO-604. `catalog/preview` was the one entry: it fetched from the network for a linked
+    # caller too. It refuses the link now, so the entry was deleted, as this table's own rule asks.
 }
 
 

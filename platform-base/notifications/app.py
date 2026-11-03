@@ -25,6 +25,8 @@ from urllib.parse import urlsplit
 import requests
 from flask import Flask, request, jsonify, send_from_directory
 
+import push  # the office's notices on the owners' phones (Web Push) — push.py
+
 # ── Sentry/GlitchTip error reporting (platform standard) ──────────────────────────
 # Wired declaratively: glitchtip-push mints this service's project + deterministic DSN into
 # NOTIFICATIONS_SENTRY_DSN in .env; compose maps it to SENTRY_DSN. No-op if unset. (Yes, the
@@ -51,7 +53,7 @@ DB_PATH = os.getenv("NOTIFICATIONS_DB", "/data/notifications.db")
 # GlitchTip on the shared traefik-network. Internal DNS `glitchtip:8000` is proven to
 # resolve (apps/connections/providers/40-apps.yaml probes http://glitchtip:8000/_health/).
 GLITCHTIP_URL = os.getenv("GLITCHTIP_URL", "http://glitchtip:8000").rstrip("/")
-# Slug of GLITCHTIP_ORG_NAME. The default was the literal "bina-comp": on any other company the
+# Slug of GLITCHTIP_ORG_NAME. The default was the literal "hacohen": on any other company the
 # poller asked GlitchTip for an org that does not exist, got 404 on every page, and rendered an
 # EMPTY alerts screen rather than a failing one. compose passes ${GLITCHTIP_ORG_SLUG}, which
 # derives from COMPANY_SLUG — the same slug that names every host.
@@ -240,6 +242,7 @@ def create_notification(source, title, *, source_id=None, body="", level="info",
         except Exception:
             return 0
 
+    recurred, prev_level = False, None
     with _db() as c:
         cur = c.execute(
             """INSERT OR IGNORE INTO notifications
@@ -250,9 +253,10 @@ def create_notification(source, title, *, source_id=None, body="", level="info",
         created = cur.rowcount == 1
         if not created:  # already exists
             prev = c.execute(
-                "SELECT meta, last_seen FROM notifications WHERE source=? AND source_id IS ?",
+                "SELECT meta, last_seen, level FROM notifications WHERE source=? AND source_id IS ?",
                 (source, source_id),
             ).fetchone()
+            prev_level = prev["level"] if prev else None
             recurred = (
                 _cnt(meta) > _cnt(prev["meta"] if prev else "{}")
                 or (last_seen and prev and (prev["last_seen"] or "") and last_seen > prev["last_seen"])
@@ -273,7 +277,10 @@ def create_notification(source, title, *, source_id=None, body="", level="info",
         row = c.execute(
             "SELECT id FROM notifications WHERE source=? AND source_id IS ?", (source, source_id)
         ).fetchone()
-        return (row["id"] if row else None, created)
+    nid = row["id"] if row else None
+    # after the write is committed (outside the `with`): the phones, on push.py's own thread
+    push.notice_written(nid, source, source_id, title, body, level, link, meta, created, prev_level, bool(recurred))
+    return (nid, created)
 
 
 # ── background poller: GlitchTip issues → notifications ───────────────────────────
@@ -286,7 +293,7 @@ def poll_glitchtip_once():
 
     Each issue → create_notification(source='glitchtip-issue', source_id=issue['id']).
     Dedup by issue id means only genuinely-new issues become unread notifications;
-    re-seen issues just refresh count/last-seen in `meta`."""
+    re-seen issues just refresh count/last-seen in `meta`; an issue no longer unresolved is read."""
     global _warned_no_token
     if not GLITCHTIP_TOKEN:
         if not _warned_no_token:
@@ -297,7 +304,7 @@ def poll_glitchtip_once():
             _warned_no_token = True
         return 0
     # An empty org slug would build .../organizations//issues/ and 404 forever, which is exactly
-    # the silent-empty-screen failure the old literal "bina-comp" default produced on every other
+    # the silent-empty-screen failure the old literal "hacohen" default produced on every other
     # company. Say so once, then idle — the same contract as a missing token.
     if not GLITCHTIP_ORG:
         if not _warned_no_token:
@@ -335,6 +342,20 @@ def poll_glitchtip_once():
         )
         if created:
             new += 1
+    # A notice mirrors an UNRESOLVED issue, so once GlitchTip resolves (or ignores) it the notice is
+    # read — before, a fixed error stayed unread for ever (vps1, 2026-10-21: 44 of 67 unread notices
+    # were GlitchTip issues, the oldest from July). Only a COMPLETE answer can say an issue is gone, so
+    # a full page retires nothing; a regression reopens the issue and create_notification() re-surfaces it.
+    if len(issues) < params["limit"]:
+        live = {str(i.get("id")) for i in issues}
+        with _db() as c:
+            unread = c.execute(
+                "SELECT source_id FROM notifications WHERE source=? AND is_read=0", (SOURCE_GLITCHTIP,)
+            ).fetchall()
+            c.executemany(
+                "UPDATE notifications SET is_read=1, updated_at=? WHERE source=? AND source_id=?",
+                [(_now(), SOURCE_GLITCHTIP, r["source_id"]) for r in unread if r["source_id"] not in live],
+            )
     return new
 
 
@@ -548,6 +569,10 @@ try:
     init_db()
 except Exception as e:  # pragma: no cover — never block startup on a transient FS error
     app.logger.warning("init_db at import failed (will retry in poller): %s", e)
+try:
+    push.setup(app)   # its two tables, /api/push/*, and the VAPID key made at the first start
+except Exception as e:  # pragma: no cover — the notices work whatever push does
+    app.logger.warning("push setup failed (notices still work): %s", e)
 
 
 if __name__ == "__main__":

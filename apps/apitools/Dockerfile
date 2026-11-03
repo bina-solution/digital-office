@@ -45,30 +45,26 @@ COPY requirements.txt .
 
 # Install Python dependencies.
 #
-# The uninstall/reinstall is not belt-and-braces, it is the fix for a crash loop. `requirements.txt`
-# asks for opencv-python-headless, but `layoutparser` depends on plain `opencv-python`, and pip
-# installs it too. Both ship the SAME `cv2` package, so whichever lands last wins — and the GUI
-# build did. It links libGL.so.1, which the X11 libs were deliberately dropped from this image
-# above, so `import cv2` raised ImportError and gunicorn crash-looped every worker on any machine
-# whose image cache predated the layoutparser pin.
+# THE CONFLICT THAT MADE THIS LINE NECESSARY IS GONE (DGO-438). `requirements.txt` asked for
+# opencv-python-headless while `layoutparser` — a package nothing in this tree imports; its one user
+# was an exploratory test file, removed 2026-10-07, and it reached for a Detectron2 model that is not
+# installed — depended on plain `opencv-python`. Both ship the same `cv2` package, so whichever
+# landed last won, and the GUI build did: it links libGL.so.1, which the X11 libs were deliberately
+# dropped from this image above, so `import cv2` raised ImportError and gunicorn crash-looped every
+# worker. The fix at the time was to force the headless build back over it, with `--no-deps` because
+# re-resolving pulled numpy 2.x over the pinned 1.26.4 and `cv2` then died on
+# "numpy.core.multiarray failed to import". With layoutparser out of the file, nothing pulls the GUI
+# build at all and there is nothing to undo.
 #
-# Adding libgl1 back would also silence it, at the cost of carrying X11 libs to satisfy a package
-# nothing imports (layoutparser's one user was an exploratory test file, removed 2026-10-07; it
-# reached for a Detectron2 model that is not installed). Making headless authoritative removes the
-# conflict instead of paying for it.
-#
-# `--no-deps` on the reinstall is load-bearing. Without it, --force-reinstall re-resolves the
-# dependency tree and pulls numpy 2.x over the pinned 1.26.4, after which cv2 — compiled against
-# numpy 1 — dies with "numpy.core.multiarray failed to import". Every dependency is already
-# satisfied at that point; the only thing that needs restoring is the cv2 files the uninstall
-# above removed.
-#
+# WHAT STAYS, AND WHY: the import below is a build-time assertion, not decoration — it fails the image
+# HERE rather than in a crash loop on the machine where it is deployed, which is exactly the failure
+# this whole comment describes. If a future dependency ever drags `opencv-python` back in, the build
+# stops with "import without libGL" missing instead of shipping a broken worker.
 # The final import is a build-time assertion, not decoration: it fails the image here rather than
 # in a crash loop on the machine where it is deployed.
 RUN pip install --no-cache-dir -r requirements.txt \
-    && pip uninstall -y opencv-python opencv-contrib-python \
-    && pip install --no-cache-dir --force-reinstall --no-deps opencv-python-headless==4.9.0.80 \
-    && python -c "import cv2, numpy; print('cv2', cv2.__version__, '+ numpy', numpy.__version__, 'import without libGL')"
+    && python -c "import cv2, numpy; print('cv2', cv2.__version__, '+ numpy', numpy.__version__, 'import without libGL')" \
+    && python -c "import importlib.util,sys; sys.exit(1 if importlib.util.find_spec('layoutparser') else 0)" 
 
 # Copy application code
 COPY . .

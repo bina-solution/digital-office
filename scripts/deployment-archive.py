@@ -5,7 +5,7 @@
     bbox import [DIR] [--force]
     bbox export --verify [DIR]        # re-read the live estate and diff it against a manifest
 
-THE PROBLEM THIS EXISTS FOR. `zip -r deployment.zip deployment-bina-comp/` looks like a backup and is
+THE PROBLEM THIS EXISTS FOR. `zip -r deployment.zip deployment-hacohen/` looks like a backup and is
 not one. Every database, every n8n workflow and credential, every document, every auth user and
 every sync cursor lives in DOCKER NAMED VOLUMES under /var/lib/docker — outside the folder. Measured
 on this host: the repo folder is 7.3 GB and the volumes are another ~6.2 GB, and the 6.2 GB is the

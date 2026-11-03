@@ -10,7 +10,7 @@ PDF's %%EOF, which every reader tolerates) and carries the run TAG in its subjec
 turned on, a sync pass is started, and the run is polled until every item is delivered and every
 document reached a terminal status — then the timeline prints.
 
-    python3 scripts/ops/indox-e2e-real.py --tenant bina-comp --per-pipe 3 --wait-min 60
+    python3 scripts/ops/indox-e2e-real.py --tenant hacohen --per-pipe 3 --wait-min 60
 
 Runs on the docker host (laptop: WSL). Talks to the mail / drive apps through their containers
 (no host port is needed), to Postgres through supabase-db, to the BFF through its container.
@@ -70,7 +70,7 @@ def now_iso() -> str:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--tenant", default="bina-comp")
+    ap.add_argument("--tenant", default="hacohen")
     ap.add_argument("--instance", default="incoming-documents-main")
     ap.add_argument("--per-pipe", type=int, default=3)
     ap.add_argument("--tag", default="e2e-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M"))

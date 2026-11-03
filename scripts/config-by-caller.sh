@@ -67,10 +67,12 @@ sys.exit(1 if bad else 0)
 PY
 rc=$?
 
-again="$(stale_containers | tr '\n' ' ')"
-echo "2. a bring-up from here would re-create: ${again:-none}"
+again_known=1
+again="$(stale_containers | tr '\n' ' ')" || again_known=0
+if [ "${again_known}" = 1 ]; then echo "2. a bring-up from here would re-create: ${again:-none}"
+else echo "2. a bring-up from here would re-create: UNKNOWN — compose's dry run did not answer in time"; fi
 
 off="$( cd "${REPO_ROOT}" && _dcx_run ps --format '{{.ID}} {{.Service}}' 2>/dev/null \
           | python3 scripts/refactor/cpu-budget-lint.py --apply .generated/cpu-budget.yml --dry-run 2>/dev/null | tr '\n' ';' )"
 echo "3. containers whose CPU quota is not the budget's: ${off:-none}"
-[ "${rc}" = 0 ] && [ -z "${again}" ] && [ -z "${off}" ]
+[ "${rc}" = 0 ] && [ "${again_known}" = 1 ] && [ -z "${again}" ] && [ -z "${off}" ]

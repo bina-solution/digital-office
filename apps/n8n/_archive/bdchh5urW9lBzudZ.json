@@ -120,16 +120,7 @@
   },
   "staticData": null,
   "meta": null,
-  "pinData": {
-    "When Executed by Another Workflow": [
-      {
-        "json": {
-          "ID": "1450762820b906b",
-          "SECONDS": 1
-        }
-      }
-    ]
-  },
+  "pinData": {},
   "tags": [
     {
       "updatedAt": "2026-06-18T12:36:08.448Z",
@@ -161,7 +152,7 @@
         "updatedAt": "2026-06-18T15:08:18.056Z",
         "createdAt": "2026-06-18T15:07:27.086Z",
         "id": "e0VPSSkEh9XxPMfC",
-        "name": "Shlomo Laptop <shlomo@local.dev>",
+        "name": "Shlomo Laptop <person2@example.com>",
         "type": "personal",
         "icon": null,
         "description": null,

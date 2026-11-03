@@ -107,7 +107,7 @@ services:
       SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
       SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY}
       DASHBOARD_USERNAME: ${SUPABASE_DASHBOARD_USERNAME:-supabase}
-      DASHBOARD_PASSWORD: ${SUPABASE_DASHBOARD_PASSWORD:-supabase}
+      DASHBOARD_PASSWORD: ${SUPABASE_DASHBOARD_PASSWORD:-CHANGE_ME}
     entrypoint: /home/kong/kong-entrypoint.sh
     networks:
       supabase-net: { aliases: [api-gw] }
@@ -203,7 +203,7 @@ services:
     - traefik.http.routers.supabase-studio-https.rule=Host(`${SUPABASE_STUDIO_BASE_URL}`)
     - traefik.http.routers.supabase-studio-https.entrypoints=websecure
     - traefik.http.routers.supabase-studio-https.tls=true
-    - traefik.http.routers.supabase-studio-https.tls.certresolver=myresolver
+    - traefik.http.routers.supabase-studio-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
     - traefik.http.routers.supabase-studio-https.service=supabase-studio
     - traefik.http.routers.supabase-studio-https.middlewares=authentik@file
     - traefik.http.services.supabase-studio.loadbalancer.server.port=3000

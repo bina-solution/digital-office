@@ -40,8 +40,8 @@
 set -u
 DK="docker -H unix:///run/bbox-docker.sock"
 PSQL="$DK exec -i supabase-db-shlomo-laptop psql -U postgres -tAc"
-PSQL_N8N="$DK exec -i n8n-postgres-shlomo-laptop psql -U bina-comp -d n8n -tAc"
-ENVF=/mnt/c/Users/user/Desktop/personalWorkspace/AutomateOs/deployment-bina-comp/.env
+PSQL_N8N="$DK exec -i n8n-postgres-shlomo-laptop psql -U hacohen -d n8n -tAc"
+ENVF=/mnt/c/Users/user/Desktop/personalWorkspace/AutomateOs/deployment-hacohen/.env
 REPO=incoming-documents-main
 BFF=http://incoming-documents:8080/incomingDocuments
 TERMINAL="'COMPLETED','MERGED','ACTION_RESTART','GARBAGE'"

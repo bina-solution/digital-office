@@ -16,7 +16,7 @@ logger = get_logger('apitools.pdf_to_jpg')
 
 # DPI at which PDFs are rasterized before OCR. 96 DPI was far too low for reliable
 # text recognition — small Hebrew glyphs and digits turn to mush (e.g. tax-id
-# 510564693 was misread as 510564699, and multi-word phrases like "חשבונית זיכוי"
+# 500000112 was misread as 510564699, and multi-word phrases like "חשבונית זיכוי"
 # fragmented), causing UNKNOWN types / missing company-id / failed amount extraction.
 # Empirical dataset sweep (96/120/150/200/250/300): tax-id digits become correct from
 # 120 DPI; type/amount accuracy plateaus at 150 (amount 50%→100%, type 66%→~80%);

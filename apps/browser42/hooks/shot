@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+#: shot <url> [full] — open one page in the office browser, screenshot it, close it: prints the image's path
+# shot — one picture of one page, in one command, for an agent that needs exactly that (DGO-909). The
+# task verbs take a slug that must be lowercase kebab-case and is never rewritten; a small local model
+# named its task "google.com" and gave up on the refusal (2026-10-21). This verb picks its own slug,
+# opens the URL with no extraction minimums, waits for the page's DOM (`start` returns once it owns the
+# tab, not once the page has loaded; a `goto` that times out still leaves what loaded to photograph),
+# takes the screenshot (`full`: the whole page, not only the ~780x395 window), closes the tab, and
+# prints the PNG's path. Nothing else of the task protocol.
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+URL="${1:-}"
+[ -n "${URL}" ] || { echo "usage: bbox b42 shot <url> [full]" >&2; exit 2; }
+case "${URL}" in http://*|https://*) ;; *) URL="https://${URL}" ;; esac
+FULL=()
+[ "${2:-}" = "full" ] && FULL=(full)
+SLUG="shot-$(date +%Y%m%d-%H%M%S)-$((RANDOM % 1000))"
+PNG="data/browser42/tasks/${SLUG}/screenshots/page.png"
+# The tab is closed however this ends. An agent's tool kills a command at its timeout, and a killed
+# shot left its tab and its lock behind (2026-10-21); a `task start` still running in the container
+# may only own its tab after this script is gone, so a killed shot also leaves a close for later.
+close_now() { "${SCRIPT_DIR}/close" "${SLUG}" >/dev/null 2>&1 || true; }
+# (340 s: the task client's own limit — a queued start plus its 240 s ownership wait — is over by then)
+close_later() { nohup setsid bash -c 'sleep 340; "$0" "$1"' "${SCRIPT_DIR}/close" "${SLUG}" >/dev/null 2>&1 & }
+trap close_now EXIT
+trap 'close_later; exit 143' TERM INT HUP
+started="$("${SCRIPT_DIR}/task" start "${SLUG}" "${URL}" '{"minimum_extractions":0,"minimum_records":0}' 2>&1 || true)"
+if ! printf '%s' "${started}" | grep -q '"ok": true'; then
+  echo "could not open ${URL}: $(printf '%s' "${started}" | tail -1 | cut -c1-300)" >&2
+  exit 1
+fi
+"${SCRIPT_DIR}/task" goto "${SLUG}" "${URL}" >/dev/null 2>&1 || true
+shot="$("${SCRIPT_DIR}/task" screenshot "${SLUG}" page ${FULL[@]+"${FULL[@]}"} 2>&1 || true)"
+if [ -s "${REPO_ROOT}/${PNG}" ]; then
+  echo "${PNG}"
+else
+  echo "no screenshot of ${URL}: $(printf '%s' "${shot}" | tail -1 | cut -c1-300)" >&2
+  exit 1
+fi

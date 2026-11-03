@@ -21,6 +21,10 @@
   "use": [],
   "connections": [],
   "compose": "docker-compose.yml",
+  "agent": {
+    "context": "AGENT.md",
+    "order": 22
+  },
   "routing": [
     {
       "host": "machine",
@@ -30,6 +34,7 @@
         "group": "תשתית",
         "icon": "server",
         "embed": true,
+        "tile": false,
         "alias": "machine",
         "id": "machine",
         "name": "מכונה",

@@ -34,10 +34,12 @@ GATEWAY of the `traefik-network` bridge, read from the engine at startup rather 
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
 import re
+import shlex
 import socket
 import subprocess
 import threading
@@ -45,13 +47,38 @@ import time
 from pathlib import Path
 
 import requests
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("computers")
+
+
+class _RedactDoorPath(logging.Filter):
+    """Never print a door token — the whole promise of a share is that it is shown ONCE.
+
+    The token IS a path segment (`/share/<token>`), and uvicorn logs every WebSocket path on its
+    `uvicorn.error` logger ('%s - "WebSocket %s" [accepted]'), which `--no-access-log` does NOT
+    silence — so this app's own container log carried a working door. The path is rewritten here
+    before any handler formats the record: the door still opens, the log says only whose.
+    """
+    _RE = re.compile(r"/share/[A-Za-z0-9_\-]{8,}")
+
+    def filter(self, record: logging.LogRecord) -> bool:      # True = let it through, redacted
+        if isinstance(record.msg, str) and "/share/" in record.msg:
+            record.msg = self._RE.sub("/share/<token>", record.msg)
+        if isinstance(record.args, tuple) and record.args:
+            record.args = tuple(self._RE.sub("/share/<token>", a) if isinstance(a, str) else a
+                                for a in record.args)
+        return True
+
+
+for _name in ("uvicorn.error", "uvicorn.access"):
+    _lg = logging.getLogger(_name)
+    if not any(isinstance(f, _RedactDoorPath) for f in _lg.filters):
+        _lg.addFilter(_RedactDoorPath())
 
 # ── configuration ───────────────────────────────────────────────────────────────
 STATE_DIR = Path(os.environ.get("COMPUTERS_STATE_DIR", "/data"))
@@ -66,6 +93,7 @@ NETWORK = os.environ.get("COMPUTERS_NETWORK", "traefik-network")
 FALLBACK_GATEWAY = os.environ.get("COMPUTERS_LOCAL_HOST", "172.18.0.1")
 MAX_TIMEOUT = 600
 DEFAULT_TIMEOUT = 60
+STDIN_MAX = 1024 * 1024      # a script or a secret, not a file transfer (that is `transfer`)
 PROBE_TTL = float(os.environ.get("COMPUTERS_PROBE_TTL", "20"))
 
 KEY_DIR = STATE_DIR / "ssh"
@@ -404,6 +432,8 @@ def computer_record(inst: dict, host: str) -> dict:
             "host": sec.get("host"), "port": int(sec.get("port") or 22),
             "user": sec.get("user") or "root",
             "has_own_key": bool(sec.get("private_key")),
+            # lent by another office, reached through its door (the door's token is never shown)
+            "shared": bool(sec.get("door")),
             "builtin": False, "removable": True}
 
 
@@ -427,6 +457,29 @@ SSH_BASE = [
 def _known_hosts_opt() -> list[str]:
     KEY_DIR.mkdir(parents=True, exist_ok=True)
     return ["-o", f"UserKnownHostsFile={KNOWN_HOSTS}"]
+
+
+DOOR_RE = re.compile(r"^wss?://([A-Za-z0-9.-]+(?::\d+)?)/share/[A-Za-z0-9_-]{32,}\Z")
+
+
+def _door_opts(cid: str, secret: dict) -> list[str]:
+    """A computer another office SHARED with this one is reached through its door (share.py), with
+    ssh's host key pinned under the instance id — the door's hostname is the lender's, not the
+    machine's, and two machines lent by one office must not share a known_hosts line.
+
+    The door is re-checked HERE, at the point of use, and not only where it was typed: ssh runs
+    `ProxyCommand` through `/bin/sh`, and the value comes back from the credential plane, so a `;`
+    or a space in that secret would otherwise be command execution inside this container — the one
+    container that holds the engine socket.
+    """
+    door = (secret.get("door") or "").strip()
+    if not door:
+        return []
+    if not DOOR_RE.match(door):
+        raise ValueError("door is not a share address (wss://<host>/share/<token>)")
+    return ["-o", f"ProxyCommand=python3 {shlex.quote(str(Path(__file__).parent / 'door_client.py'))} "
+                  f"{shlex.quote(door)}",
+            "-o", f"HostKeyAlias={cid}"]
 
 
 # The remote probe: ONE round trip, and no dependency on anything but sh and /proc. The far side is
@@ -499,20 +552,25 @@ def ssh_argv(cid: str, host: str, port: int, user: str, secret: dict,
     same pinned host key, same BatchMode — because a copy that used a looser connection would be a
     second answer to "how do we reach a machine", and the loose one is the one that drifts.
     """
-    return ["ssh", *SSH_BASE, *_known_hosts_opt(), "-i", _key_path_for({**secret, "_instance": cid}),
+    return ["ssh", *SSH_BASE, *_known_hosts_opt(), *_door_opts(cid, secret),
+            "-i", _key_path_for({**secret, "_instance": cid}),
             "-p", str(int(port or 22)),
             "-o", f"ConnectTimeout={min(8, max(3, int(timeout or 8)))}",
             f"{user}@{host}", command]
 
 
 def ssh_run(cid: str, host: str, port: int, user: str, secret: dict,
-            command: str, timeout: int) -> dict:
+            command: str, timeout: int, stdin: bytes | None = None) -> dict:
     """Run a command on a machine. Always returns a dict — never raises into a route.
 
     {code, stdout, stderr, timed_out, reason, action, state}. `code` is the remote command's own
     exit code when the connection was made (including 255 if the far side's command exits 255), and
     255 when ssh itself failed — an ambiguity ssh itself has, which is why the reason is derived
     from stderr rather than from the number.
+
+    `stdin` is handed to the remote command's standard input. It is how a SECRET reaches a machine:
+    the command line travels as an argument — in this container's `ssh` argv and in the far side's
+    `bash -c` argv, which any local user there can read in /proc/<pid>/cmdline — and stdin does not.
     """
     ensure_key()
     key = _key_path_for({**secret, "_instance": cid})
@@ -520,9 +578,14 @@ def ssh_run(cid: str, host: str, port: int, user: str, secret: dict,
         return {"code": 255, "stdout": "", "stderr": "", "timed_out": False, "state": "needs_action",
                 "reason": "לא נוצר עדיין מפתח SSH ללשכה",
                 "action": "רענן את הדף — המפתח נוצר אוטומטית עם עליית השירות."}
-    cmd = (["ssh", *SSH_BASE, *_known_hosts_opt(), "-i", key, "-p", str(int(port or 22)),
-            "-o", f"ConnectTimeout={min(8, max(3, int(timeout or 8)))}",
-            f"{user}@{host}", command])
+    try:
+        cmd = ["ssh", *SSH_BASE, *_known_hosts_opt(), *_door_opts(cid, secret), "-i", key,
+               "-p", str(int(port or 22)),
+               "-o", f"ConnectTimeout={min(8, max(3, int(timeout or 8)))}",
+               f"{user}@{host}", command]
+    except ValueError as e:            # a `door` in the vault that is not a share address
+        return {"code": 255, "stdout": "", "stderr": "", "timed_out": False, "state": "error",
+                "reason": "כתובת השיתוף של המחשב אינה תקינה", "action": str(e)}
     started = time.time()
     try:
         # BYTES, decoded with errors="replace" — never `text=True`.
@@ -533,7 +596,8 @@ def ssh_run(cid: str, host: str, port: int, user: str, secret: dict,
         # /exec answer 500 "Internal Server Error" — a transport-level failure reported for a command
         # that ran perfectly. Found by apps/sites on 2026-09-23, on a `docker exec … wget … | head -c
         # 300` whose 300th byte landed inside a Hebrew character.
-        p = subprocess.run(cmd, capture_output=True, timeout=max(1, int(timeout)))
+        p = subprocess.run(cmd, capture_output=True, timeout=max(1, int(timeout)),
+                           input=stdin if stdin is not None else b"")
     except subprocess.TimeoutExpired as e:
         return {"code": None, "stdout": _text(e.stdout), "stderr": _text(e.stderr),
                 "timed_out": True, "state": "error", "elapsed": round(time.time() - started, 2),
@@ -710,6 +774,73 @@ def _err(message: str, status: int, **extra) -> JSONResponse:
     return JSONResponse({"error": message, **extra}, status_code=status)
 
 
+# ── the herd: every office's computer (DGO-890) ─────────────────────────────────────────────────
+# The resource view and the network view of a computer are what its own `machine` and `security`
+# services say, read through `herd.Herd` — here, or through the door when it belongs to a linked
+# office. Both are BASE services this app USES (app.json `use`), reached at their own addresses.
+from herd import ALLOW as HERD_ALLOW, Herd  # noqa: E402 — the routes below are the only users
+
+MACHINE_URL = os.environ.get("MACHINE_URL", "http://machine:8080").rstrip("/")
+HERD = Herd(os.environ.get("COMPUTERS_REGISTRY", "/registry"),
+            {"machine": MACHINE_URL, "security": os.environ.get("SECURITY_URL", "http://security:8995")},
+            office=os.environ.get("DGO_OFFICE_ID", ""))
+_CLEANUP_ID = re.compile(r"^[a-z][a-z0-9_]{2,63}$")
+
+
+def _lean_overview(ov: dict, brief: bool) -> dict:
+    """machine's overview, without what no screen shows. Every container carries its compose LABELS
+    (about 2 KB each: vps1's 74 containers made a 150 KB answer, through the link, every five seconds);
+    the fleet list (`brief`) needs the figures and the last ten minutes of history, not the services."""
+    out = dict(ov)
+    out["containers"] = [] if brief else [{k: v for k, v in c.items() if k != "labels"}
+                                          for c in (ov.get("containers") or []) if isinstance(c, dict)]
+    if brief:
+        out["history"] = (ov.get("history") or [])[-60:]
+        st = dict(ov.get("storage") or {})
+        st.pop("docker_df", None)
+        st.pop("top_paths", None)
+        out["storage"] = st
+    return out
+
+
+@app.get("/api/herd")
+def api_herd():
+    """This office's computer and every linked office's, with which of the two services each gives."""
+    return {"office": HERD.office, "computers": HERD.computers(), "reads": {k: list(v) for k, v in HERD_ALLOW.items()}}
+
+
+@app.get("/api/hosts/{where}/{svc}/{path:path}")
+async def api_host_read(where: str, svc: str, path: str, request: Request):
+    """ONE allowlisted read of `machine` or `security` on a computer of the herd (`where` = `local` or
+    an office id). The answer is the service's own JSON, passed through; a refusal says why in Hebrew."""
+    if where != "local" and not re.match(r"^[a-z0-9][a-z0-9-]{0,62}$", where):
+        return _err("מחשב לא מוכר", 404)
+    status, body, why = await run_in_threadpool(HERD.get, where, svc, path, dict(request.query_params))
+    if status == 200 and body is not None:
+        if (svc, path.strip("/")) in (("machine", "api/overview"), ("security", "api/host/overview")) and isinstance(body, dict):
+            body = _lean_overview(body, brief=request.query_params.get("brief") == "1")
+        return JSONResponse(body, headers={"Cache-Control": "no-store"})
+    return _err(why or "הקריאה נכשלה", status if status >= 400 else 502, where=where, service=svc)
+
+
+@app.post("/api/hosts/local/machine/cleanup/{action_id}")
+async def api_host_cleanup(action_id: str):
+    """The ONE write of the merged screen, and only on THIS computer: one of machine's own cleanups,
+    which machine itself allows or refuses (`MACHINE_CLEANUP_ALLOWED_ACTIONS`). A linked office's
+    computer is cleaned from its own office — this door never reaches through the link."""
+    if not _CLEANUP_ID.match(action_id or ""):
+        return _err("פעולת ניקוי לא מוכרת", 400)
+    try:
+        r = await run_in_threadpool(lambda: requests.post(f"{MACHINE_URL}/api/cleanup/{action_id}", timeout=300))
+    except requests.RequestException:
+        return _err("שירות המכונה אינו זמין כרגע", 502)
+    try:
+        body = r.json()
+    except ValueError:
+        body = {"error": (r.text or "")[:300]}
+    return JSONResponse(body, status_code=r.status_code)
+
+
 def _resolve(cid: str, host: str) -> tuple[dict | None, JSONResponse | None]:
     """(computer, error_response). Everything that mutates or probes a machine goes through here,
     so no route invents its own idea of what a computer is."""
@@ -879,6 +1010,14 @@ async def api_computers_post(request: Request):
     host = (body.get("host") or "").strip()
     user = (body.get("user") or "root").strip() or "root"
     label = (body.get("label") or "").strip()
+    door = (body.get("door") or "").strip()
+    if door:
+        # A computer another office shared with this one: its address IS the door the lender
+        # printed (POST /api/computers/<id>/shares there). The host is the door's, for display.
+        m = DOOR_RE.match(door)          # ONE definition of a door (see _door_opts), used twice
+        if not m:
+            return _err("הדלת אינה כתובת שיתוף תקינה (wss://<host>/share/<token>)", 400)
+        host = host or m.group(1).split(":")[0]
     if not host:
         return _err("חסרה כתובת (host)", 400)
     if re.search(r"[\s;|&$`'\"]", host) or host.startswith("-"):
@@ -890,9 +1029,11 @@ async def api_computers_post(request: Request):
     if not (1 <= port <= 65535):
         return _err("הפורט מחוץ לטווח", 400)
     secret = {"host": host, "port": port, "user": user}
+    if door:
+        secret["door"] = door
     if (body.get("private_key") or "").strip():
         secret["private_key"] = body["private_key"]
-    if host == local_gateway() and user == LOCAL_USER and port == LOCAL_PORT:
+    if not door and host == local_gateway() and user == LOCAL_USER and port == LOCAL_PORT:
         # The machine we are running on is BUILT IN and already registered — adding it again would
         # create a second row for one machine, which is exactly the drift the local instance exists
         # to prevent.
@@ -904,9 +1045,11 @@ async def api_computers_post(request: Request):
     cid = res.get("id")
     forget_secret(cid)
     log.info("computer added: %s (%s@%s:%s)", cid, user, host, port)
-    st = probe(cid, host, port, user, secret, max_age=0)
+    # off the event loop, like /exec: a probe is an SSH round trip, and a shared computer's round
+    # trip may come back through this very app's door
+    st = await run_in_threadpool(probe, cid, host, port, user, secret, max_age=0)
     return {"id": cid, "label": label or f"{user}@{host}", "host": host, "port": port, "user": user,
-            "status": "ok", "removable": True, "builtin": False, "probe": st}
+            "status": "ok", "removable": True, "builtin": False, "shared": bool(door), "probe": st}
 
 
 @app.delete("/api/computers/{cid}")
@@ -953,11 +1096,22 @@ async def api_computer_exec(cid: str, request: Request):
     except (TypeError, ValueError):
         return _err("ה־timeout אינו מספר", 400)
     timeout = max(1, min(MAX_TIMEOUT, timeout))
+    # the command's standard input — how a secret reaches the machine (ssh_run's docstring): never
+    # logged, never echoed back; only its length is said
+    stdin, raw = body.get("stdin"), None
+    if stdin is not None:
+        try:                                      # once: a lone surrogate is a 400, not a 500
+            raw = stdin.encode() if isinstance(stdin, str) else None
+        except UnicodeEncodeError:
+            raw = None
+        if raw is None or len(raw) > STDIN_MAX:
+            return _err(f"stdin חייב להיות טקסט של עד {STDIN_MAX} בתים", 400)
     rec, bad = _resolve(cid, local_gateway())
     if bad:
         return bad
     sec, _ = _computer_ctx(rec, local_gateway())
-    log.info("exec on %s: %s", cid, command.strip().splitlines()[0][:200])
+    log.info("exec on %s: %s%s", cid, command.strip().splitlines()[0][:200],
+             f" (stdin {len(raw)} bytes)" if raw is not None else "")
     # OFF THE EVENT LOOP, always. `ssh_run` blocks for as long as the command runs — up to
     # MAX_TIMEOUT — and this handler is `async`, so it ran INSIDE the single uvicorn worker's loop:
     # one long command made every other request wait, including `/healthz`. Measured 2026-10-04:
@@ -965,8 +1119,9 @@ async def api_computer_exec(cid: str, request: Request):
     # 8 s budget) while a long `exec` was in flight — an office whose door to its machines reports
     # unhealthy exactly when it is being used, and restarts itself under `autoheal`.
     res = await run_in_threadpool(ssh_run, cid, rec["host"], rec["port"], rec["user"], sec,
-                                  command, timeout)
-    return {"id": cid, "command": command, "timeout": timeout, **res}
+                                  command, timeout, raw)
+    return {"id": cid, "command": command, "timeout": timeout,
+            **({"stdin_bytes": len(raw)} if raw is not None else {}), **res}
 
 
 @app.post("/api/computers/{cid}/stream")
@@ -1045,8 +1200,9 @@ def api_office_key():
     host = local_gateway()
     pub = public_key()
     user, port = LOCAL_USER, LOCAL_PORT
+    import share
     return {"public_key": pub, "fingerprint": key_fingerprint(),
-            "authorize_command": (f"mkdir -p ~/.ssh && chmod 700 ~/.ssh && "
+            "authorize_command": (f"mkdir -p ~/.ssh && chmod 700 ~/.ssh && {share.END_LAST_LINE} && "
                                   f"echo '{pub}' >> ~/.ssh/authorized_keys && "
                                   f"chmod 600 ~/.ssh/authorized_keys") if pub else "",
             "local": {"id": LOCAL_INSTANCE, "label": LOCAL_LABEL, "host": host, "user": user,
@@ -1069,17 +1225,185 @@ async def api_authorize_command(cid: str):
     pub = public_key()
     if not pub:
         return _err("המפתח של הלשכה טרם נוצר", 503)
+    import share
     return {"id": cid, "user": rec.get("user"), "host": rec.get("host"),
             "public_key": pub, "fingerprint": key_fingerprint(),
-            "command": (f"mkdir -p ~/.ssh && chmod 700 ~/.ssh && "
+            "command": (f"mkdir -p ~/.ssh && chmod 700 ~/.ssh && {share.END_LAST_LINE} && "
                         f"echo '{pub}' >> ~/.ssh/authorized_keys && "
                         f"chmod 600 ~/.ssh/authorized_keys")}
 
 
+# ── sharing a computer with another office (share.py) ─────────────────────────────
+
+def _public_host() -> str:
+    """The host the door is reached at from outside: this app's own public host."""
+    v = os.environ.get("COMPUTERS_PUBLIC_HOST", "").strip()
+    if not v:
+        domain = os.environ.get("DEPLOYMENT_DOMAIN", "").strip()
+        v = f"computers.{domain}" if domain else "computers.localhost"
+    return re.sub(r"^https?://", "", v).rstrip("/")
+
+
+@app.post("/api/computers/{cid}/shares")
+async def api_share_create(cid: str, request: Request):
+    """Lend this computer to another office: `{to, public_key}` → the door, shown ONCE.
+
+    `public_key` is the BORROWING office's office key (its GET /api/office-key). It is put in the
+    machine's authorized_keys through this office's own access — so a machine is shareable exactly
+    when this office can already reach it, the built-in host included."""
+    import share
+    body = (await request.json()) if await request.body() else {}
+    body = body or {}
+    to = (body.get("to") or "").strip()
+    blob = share.key_blob(body.get("public_key") or "")
+    if not share.TO_RE.match(to):
+        return _err("חסר שם הלשכה שמקבלת את השיתוף (to): אותיות, ספרות, ._-", 400)
+    if not blob:
+        return _err("המפתח הציבורי אינו תקין (ssh-ed25519 …)", 400)
+    rec, bad = _resolve(cid, local_gateway())
+    if bad:
+        return bad
+    if rec.get("shared"):
+        return _err("מחשב ששותף עם הלשכה הזאת אינו ניתן לשיתוף הלאה", 409)
+    sec, _ = _computer_ctx(rec, local_gateway())
+    sid = share.new_id()
+    # The record FIRST, the key second, and the record is pulled back if the key does not land:
+    # the one state this must never reach is a root key in authorized_keys that no row names,
+    # because nothing could then list it or revoke it.
+    row, token = await run_in_threadpool(share.create, STATE_DIR, sid, rec["id"], to, blob)
+    res = await run_in_threadpool(ssh_run, rec["id"], rec["host"], rec["port"], rec["user"], sec,
+                                  share.authorize_command(sid, to, blob), 30)
+    if res.get("code") != 0:
+        await run_in_threadpool(share.drop, STATE_DIR, sid)
+        return _err("לא ניתן היה להוסיף את המפתח במחשב", 502, reason=res.get("reason"),
+                    action=res.get("action"), stderr=(res.get("stderr") or "")[:1000])
+    log.info("computer %s shared with %s as %s", rec["id"], to, sid)
+    return {"share": row, "user": rec["user"], "door": f"wss://{_public_host()}/share/{token}",
+            "note": "הדלת מוצגת פעם אחת בלבד. בלשכה המקבלת: POST /api/computers "
+                    "{\"door\": …, \"user\": …, \"label\": …}"}
+
+
+@app.get("/api/shares")
+def api_shares(computer: str = ""):
+    import share
+    return {"shares": share.rows(STATE_DIR, computer or None)}
+
+
+@app.delete("/api/shares/{sid}")
+async def api_share_revoke(sid: str):
+    """Revoke a share: the borrower's key leaves the machine, then the door closes.
+
+    `key_removed` is the machine's own count of the lines left tagged with this share — NOT ssh's
+    exit code, which the removal command used to make zero whatever happened. When the key could not
+    be removed the row is KEPT: dropping it would leave a key with root login and nothing that names
+    it. A live door already relaying is not cut here (OpenSSH keeps established sessions either way);
+    what closes is every new one.
+    """
+    import share
+    row = await run_in_threadpool(share.get, STATE_DIR, sid)
+    if not row:
+        return _err("אין שיתוף כזה", 404)
+    computer = row.get("computer")
+    if not computer:
+        return _err("השיתוף חסר את המחשב שלו — הסר אותו ידנית מ־shares.json", 409, id=sid)
+    rec, bad = _resolve(computer, local_gateway())
+    removed = False
+    if not bad:
+        sec, _ = _computer_ctx(rec, local_gateway())
+        res = await run_in_threadpool(ssh_run, rec["id"], rec["host"], rec["port"], rec["user"], sec,
+                                      share.revoke_command(sid), 30)
+        removed = (res.get("stdout") or "").strip() == "0" and res.get("code") == 0
+    if removed:
+        await run_in_threadpool(share.drop, STATE_DIR, sid)
+    log.info("share %s revoked (key removed from the machine: %s)", sid, removed)
+    return {"ok": True, "id": sid, "key_removed": removed, "still_listed": not removed,
+            **({} if removed else {"warning": "הדלת נסגרה לחיבורים חדשים, אך המפתח לא הוסר מהמחשב — "
+                                              f"הסר את השורה '{share.TAG}:{sid}:' מ־authorized_keys; "
+                                              "השיתוף נשאר ברשימה כדי שלא ייעלם בלי עקבה"})}
+
+
+@app.get("/share/{path:path}")
+def share_http(path: str):
+    """The door is a WEBSOCKET. A plain request — a browser tab, a curl — is refused with 403 and
+    nothing else: not the app's SPA (this app serves its screens from a catch-all, which would answer
+    200 here) and not a sign-in redirect. A 403 is the honest answer, and it says the door is routed.
+
+    The whole `/share/` prefix, not one segment: `/share/` and `/share/<token>/x` reached the SPA
+    through the catch-all on an unauthenticated public path until this route was widened.
+    """
+    return _err("הדלת נפתחת רק בחיבור WebSocket", 403)
+
+
+@app.websocket("/share/{token}")
+async def share_door(ws: WebSocket, token: str):
+    """The door: one SSH connection, relayed byte for byte to the shared machine's sshd.
+
+    Every socket this opens is closed on every path, including the ones that leave early: the sshd
+    connection is opened BEFORE `accept()` (a door that cannot reach sshd must not look open), so the
+    two live in one `try/finally` rather than in a sequence of early returns.
+    """
+    import share
+    row = await run_in_threadpool(share.find, STATE_DIR, token)
+    rec = None
+    if row:
+        rec, _ = await run_in_threadpool(_resolve, row.get("computer"), local_gateway())
+    if not rec:
+        await ws.close(code=1008)
+        return
+    try:
+        reader, writer = await asyncio.wait_for(
+            asyncio.open_connection(rec["host"], int(rec["port"] or 22)), 10)
+    except (OSError, asyncio.TimeoutError) as e:
+        log.warning("share %s: %s:%s unreachable: %s", row["id"], rec["host"], rec["port"], e)
+        await ws.close(code=1011)
+        return
+
+    tasks: list[asyncio.Task] = []
+    try:
+        await ws.accept()
+        log.info("share %s: open (%s → %s)", row["id"], row.get("to"), row.get("computer"))
+
+        async def up():
+            try:
+                while True:
+                    writer.write(await ws.receive_bytes())
+                    await writer.drain()
+            except (WebSocketDisconnect, RuntimeError, KeyError, ConnectionError):
+                pass
+
+        async def down():
+            # a client that vanishes mid-relay raises HERE; unretrieved, it is a warning on every
+            # dropped session and nothing else — the finally below is what actually cleans up
+            try:
+                while chunk := await reader.read(65536):
+                    await ws.send_bytes(chunk)
+            except (WebSocketDisconnect, RuntimeError, ConnectionError):
+                pass
+
+        tasks = [asyncio.create_task(up()), asyncio.create_task(down())]
+        await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+    finally:
+        for t in tasks:
+            t.cancel()
+        writer.close()
+        try:
+            await writer.wait_closed()
+        except (OSError, RuntimeError):
+            pass
+        try:
+            await ws.close()
+        except RuntimeError:
+            pass
+        log.info("share %s: closed", row.get("id"))
+
+
 @app.post("/api/computers/{cid}/probe")
-async def api_computer_probe(cid: str):
+def api_computer_probe(cid: str):
+    # A plain def, like the status route it calls: FastAPI runs it in its threadpool, so the ssh round
+    # trip never blocks the event loop. `await` on that plain function was a TypeError — every «בדוק
+    # מחדש» answered 500 (measured on the MacBook 2026-10-30, DGO-1037).
     invalidate(cid)
-    return await api_computer_status(cid, fresh=1)
+    return api_computer_status(cid, fresh=1)
 
 
 # ── /audit: is the MACHINE itself secure? ────────────────────────────────────────────────────────
@@ -1352,6 +1676,17 @@ def index():
 
 
 app.mount("/static", StaticFiles(directory=str(_STATIC)), name="static")
+
+
+@app.get("/{path:path}")
+def page(path: str):
+    """Every screen of this app is an address (the console's route contract, G83): the fleet `/`, a
+    computer of the herd `/c/<where>/<tab>`, an SSH machine's dialog `/<id>`. Opened in a new tab or
+    reloaded, such a path is the page, which reads it back. Declared last, so every API answers
+    first; an unknown `api/…` stays a JSON 404, so a client never reads HTML as an answer."""
+    if path.startswith(("api/", "static/")):
+        return _err("לא נמצא", 404)
+    return FileResponse(_STATIC / "index.html")
 
 
 @app.on_event("startup")

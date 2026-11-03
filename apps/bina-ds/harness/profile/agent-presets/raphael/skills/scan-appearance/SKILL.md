@@ -14,8 +14,8 @@ whenToUse: כשצריך להעריך את המראֶה של אפליקציה/מ�
 |---|---|
 | ציון יופי לדף (מנוע beautiful-score) | `POST http://sites-render:8981/score {url, viewports, mode, site, run}` → score/factors/hints/penalties + PNGs (Chromium אחד ברגע) |
 | מפת אריחים חיה של הלשכה | `python3 scripts/ui-coverage/live-ui-map.py --tiles --profile mobile|tablet|desktop` |
-| QA של זרימות (מול לשכה חיה) | `python3 digital-office/sim/flow-qa.py --url <console>` · `--mobile` · `windows` |
-| מצב שולחן עבודה — כל מסך בחלון שלו ובקטן ביותר | `flow-qa.py windows` (ראה [[desktop-mode-qa]] של הבעלים) |
+| QA של זרימות (מול לשכה חיה) | `./bbox flow-qa console --live` · `--mobile` · `windows` (הרצה בתוך image שמצהיר על הדפדפן — אין מה להתקין על המכונה) |
+| מצב שולחן עבודה — כל מסך בחלון שלו ובקטן ביותר | `./bbox flow-qa windows` (ראה [[desktop-mode-qa]] של הבעלים) |
 | פרופילי התצוגה | `scripts/ui-coverage/view-profiles.yaml` |
 | מבט LLM | קרא בעצמך את ה-PNG שהרינדור החזיר — תאר מה בולט לרעה, לא רק את הציון |
 

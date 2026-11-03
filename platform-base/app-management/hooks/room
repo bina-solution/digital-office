@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+#: room <id> — does this machine have room for the app (cpu, memory):  ./bbox app-management room <id>
+# Pipes the app's own CLI (platform-base/app-management/cli.py) into its container: no address, no key, no rebuild.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+case "${1:-}" in -h|--help|"") sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+dcx exec -T app-management python - room "$@" < "$(npath "${REPO_ROOT}")/platform-base/app-management/cli.py"

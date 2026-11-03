@@ -45,8 +45,8 @@
         "display_name": "משתמש 2"
       },
       {
-        "id": "binacompbot1",
-        "display_name": "בוט בינה קומפ"
+        "id": "hacohenbot1",
+        "display_name": "בוט הכהנים"
       }
     ]
   },
@@ -124,6 +124,10 @@
     "n8n": "blueprint/n8n"
   },
   "compose": "docker-compose.yml",
+  "agent": {
+    "context": "AGENT.md",
+    "order": 55
+  },
   "routing": [
     {
       "host": "chat",

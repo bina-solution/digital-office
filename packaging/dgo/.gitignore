@@ -3,3 +3,6 @@
 /dgo.exe
 /dgo-*
 /dist/
+# the console's files a release build copies in for -tags consoleembed (internal/console/builtin.go):
+# platform-base/console is their one source, so a copy of them is never tracked
+/internal/console/snapshot/

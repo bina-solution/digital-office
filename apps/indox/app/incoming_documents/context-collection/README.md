@@ -52,7 +52,7 @@ Settings, Upload Doc To API TOOLS, Search File, Search File In Warehouse Scans, 
 - `sample-data/incoming-documents.csv` — full export of the production sheet `AutomationValues / מסמכים נכנסים` (52-column header, 39,582 data rows).
 
 ### Config
-- `config/production-config.md` — live spreadsheet ID `1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo`, tab `מסמכים נכנסים` (gid 542119184), n8n Google credential `e2knIZpw8YF0QBAB`.
+- `config/production-config.md` — live spreadsheet ID `1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0049`, tab `מסמכים נכנסים` (gid 542119184), n8n Google credential `e2knIZpw8YF0QBAB`.
 - `config/placeholders.env` — env-var template with `__PLACEHOLDER__` markers for unprovisioned secrets.
 
 ## Gaps / things the plan calls for that don't exist yet
@@ -61,7 +61,7 @@ Settings, Upload Doc To API TOOLS, Search File, Search File In Warehouse Scans, 
 | `Incoming Documents 0.1.6` | ✅ Found (`xWM5NQjGxl0qAhHg`, inactive in n8n). Already exposes a `Webhook` trigger — natural place to insert the Kafka consumer. Still needs its `Call 'Incoming Document Batch Update'` nodes re-pointed at the new Python API in phase 4. |
 | Supabase batch upsert workflow | ✅ Found (`OtbKllH7OGAlUVDQ` — *Batch Upsert Supabase (untested example)*, inactive). Implements the same Webhook contract as `Batch Upsert` over PostgREST, plus auto-introspection / schema DDL and a built-in batch-get webhook. |
 | Kafka broker | ⚠️ Not deployed in `compose.yml`. Phase 2 must decide: deploy Redpanda/Kafka, or fall back to Redis Streams. |
-| Google Service Account JSON | ⚠️ Today n8n uses an **OAuth2 user** (`person17@example.com`). The Python service should switch to a service account with explicit sheet sharing. |
+| Google Service Account JSON | ⚠️ Today n8n uses an **OAuth2 user** (`person17.x@example.com`). The Python service should switch to a service account with explicit sheet sharing. |
 | `INCOMING_DOCS_REPO_REGISTRY` storage location | ⚠️ Plan does not specify. Tentatively local file in `.storage/`. |
 
 ## Phase 1 — Done. Ready for Phase 2.

@@ -1,7 +1,7 @@
 # OpenHands — AI Coding Platform
 
 Self-hosted [OpenHands](https://github.com/All-Hands-AI/OpenHands) (v1.8.0)
-for the deployment-bina-comp stack. MIT-licensed, 76K+ GitHub stars.
+for the deployment-hacohen stack. MIT-licensed, 76K+ GitHub stars.
 
 ## Architecture
 
@@ -23,14 +23,14 @@ Dispatcher → agent-runner (7700) → DeepSeek V4 Pro / Claude
 
 ## URLs
 
-- **Web UI**: https://openhands.bina-comp.bina-solutions.co.il
+- **Web UI**: https://openhands.hacohen.bina-solutions.co.il
 - **Dispatcher health**: http://dispatcher:8800/healthz (internal only)
 
 ## Configuration
 
 ```env
 # .env
-OPENHANDS_BASE_URL=openhands.bina-comp.bina-solutions.co.il
+OPENHANDS_BASE_URL=openhands.hacohen.bina-solutions.co.il
 OPENHANDS_JWT_SECRET=<secret>
 DISPATCHER_TOKEN=<token>
 ```
@@ -64,6 +64,6 @@ claude-haiku-4-6, claude-sonnet-4-6, claude-opus-4-6.
 ## Deploy
 
 ```bash
-cd /root/deployment-bina-comp
+cd /root/deployment-hacohen
 docker compose up -d --build openhands dispatcher
 ```

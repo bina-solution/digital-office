@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+#: attach — the console tile's own terminal, from this one (the same tmux session; Ctrl-b d detaches):  ./bbox bina-claude attach
+# Sign in here the way you would in the tile: type /login in Claude Code and follow its link.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+dcx exec bina-claude sh -c 'cd "${BBOX_REPO_HOST:-/workspace/office}" 2>/dev/null; exec tmux new-session -A -s main "claude; exec bash -l"'

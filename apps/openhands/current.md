@@ -51,7 +51,7 @@ entire deployment for you:
 
 The Dispatcher is the **product surface**. OpenHands is its **power tool** —
 the development/execution toolkit it pilots. The deployment itself
-(`/root/deployment-bina-comp`, ~60 services behind Traefik) is the **workspace**
+(`/root/deployment-hacohen`, ~60 services behind Traefik) is the **workspace**
 the agent develops, including its own code (self-improving deployment).
 
 ### Non-negotiable product properties
@@ -76,7 +76,7 @@ the agent develops, including its own code (self-improving deployment).
 ## 2. Architecture as deployed today
 
 ```
-User ── Telegram ──► Dispatcher (Node.js, dispatch.bina-comp.bina-solutions.co.il)
+User ── Telegram ──► Dispatcher (Node.js, dispatch.hacohen.bina-solutions.co.il)
 User ── Web UI  ──►   ├─ webhook + queue (per-chat serialization)
                       ├─ dispatcher LLM loop (classify → answer or delegate)
                       ├─ vision call (Gemini 2.5 Flash) for media
@@ -86,18 +86,18 @@ User ── Web UI  ──►   ├─ webhook + queue (per-chat serialization)
                       └─ OpenHands client (REST: start-tasks, messages, events)
                                    │
                   OpenHands app server (ghcr.io/openhands/openhands:1.8.0)
-                  openhands.bina-comp.bina-solutions.co.il
+                  openhands.hacohen.bina-solutions.co.il
                                    │ spawns via docker.sock
                   Agent-server sandboxes (custom image `openhands-agent-fixed`,
                   based on ghcr.io/openhands/agent-server:1.27.0-python)
-                      ├─ /workspace/project ⇄ /root/deployment-bina-comp (rw)
+                      ├─ /workspace/project ⇄ /root/deployment-hacohen (rw)
                       ├─ docker via host.docker.internal:2375 (docker-proxy)
                       └─ browser + VNC (noVNC at /agent/<port>/vnc.html)
 
 openhands-init (one-shot container): generate-settings.py reads *_API_KEY
 from .env → writes settings.json (LLM profiles) into the shared
 openhands_state volume. Dispatcher reads the same file to list models.
-Shared file plane: /root/deployment-bina-comp/downloads/  (host)
+Shared file plane: /root/deployment-hacohen/downloads/  (host)
                  = /workspace/project/downloads/        (sandbox)
                  = served at dispatch.../downloads/<file> (HTTP)
 ```
@@ -118,7 +118,7 @@ context-caching URL bug workaround).
 image call (HTTP 200). Designed capacity: 9.
 
 **Legacy still in the tree (to be retired):** `agent-runner`,
-`anthropic-proxy`, the WhatsApp bot path (`whatsapp-binacompim`) — WhatsApp is
+`anthropic-proxy`, the WhatsApp bot path (`whatsapp-hacohenim`) — WhatsApp is
 currently dead (QR re-auth needed) and explicitly out of scope this cycle.9 agent containers running (some paused) — auto-cleanup interval exists
 but effectiveness unverified.
 ---
@@ -304,13 +304,13 @@ Disk at 93% (14G free).
 
 ## 7. Glossary / key paths
 
-- Repo root (host): `/root/deployment-bina-comp` — also the agent workspace.
+- Repo root (host): `/root/deployment-hacohen` — also the agent workspace.
 - Dispatcher service: `openhands/dispatcher/` (Node.js; `server.js` +
   `lib/telegram.js`, `lib/openhands.js`).
 - OpenHands compose + env: `openhands/docker-compose.yml`, `openhands/.env`,
   init generator `openhands/generate-settings.py` (run by `openhands-init`).
-- Shared state volume: `deployment-bina_comp_openhands_state`
+- Shared state volume: `deployment-hacohen_openhands_state`
   (contains `settings.json`).
 - File plane: `downloads/` at repo root = `/workspace/project/downloads/` in
   sandbox = `https://dispatch…/downloads/…` over HTTP.
-- Public URLs: `dispatch.…`, `openhands.…`, apps at `*.bina-comp.bina-solutions.co.il`.
+- Public URLs: `dispatch.…`, `openhands.…`, apps at `*.hacohen.bina-solutions.co.il`.

@@ -266,7 +266,7 @@ export default function InstanceSwitcher({
             {/* ONLY THIS INSTANCE'S OWN NUMBERS. `detail` survives an instance change while the
                 refetch is in flight, so the panel used to paint the PREVIOUS instance's figures
                 under the new one's name — observed: לוי's panel reading 26,006 מסמכים, which is
-                בינה קומפ's count, for as long as the request took. The payload names the instance it
+                הכהן's count, for as long as the request took. The payload names the instance it
                 describes, so the render simply waits until that name is the one on screen. */}
             {detail && detail.account.id === active ? (
               <dl className="kv" style={{ padding: '0 6px' }}>

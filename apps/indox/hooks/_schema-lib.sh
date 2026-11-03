@@ -14,7 +14,7 @@
 #    v_indox_priority_local_dupes — with unqualified table names in their bodies. Applied under
 #    `search_path = <instance>, public`, every apply silently repointed the shared view at
 #    whichever tenant ran last (measured: after `apply-schema levi`, public.company_registry
-#    read indox_levi and returned 0 rows where bina-comp has 1,180 — and the live pipeline reads
+#    read indox_levi and returned 0 rows where hacohen has 1,180 — and the live pipeline reads
 #    that view).
 #
 #    [cutover 2026-08-31] Those three are now declared TENANT-LOCAL in schema.sql (unqualified,

@@ -109,11 +109,11 @@ if [ -n "$N8N_MAIN" ]; then
   docker inspect "$N8N_MAIN" --format 'main container StartedAt: {{.State.StartedAt}}  (Created: {{.Created}})'
 fi
 echo -n "workflow_history 'import' rows in last ${MINUTES}m (redeploy proxy): "
-docker exec "$N8N_PG" psql -U bina-comp -d n8n -tAc "
+docker exec "$N8N_PG" psql -U hacohen -d n8n -tAc "
   select count(*) from workflow_history
   where \"createdAt\" > now() - interval '${MINUTES} minutes'"
 echo "  by workflow:"
-docker exec "$N8N_PG" psql -U bina-comp -d n8n -tAc "
+docker exec "$N8N_PG" psql -U hacohen -d n8n -tAc "
   select w.name, count(*) from workflow_history h
   join workflow_entity w on w.id = h.\"workflowId\"
   where h.\"createdAt\" > now() - interval '${MINUTES} minutes'
@@ -122,7 +122,7 @@ docker exec "$N8N_PG" psql -U bina-comp -d n8n -tAc "
 # ---- 2. error/crash counts by workflow, last N minutes ----
 echo
 echo "--- status counts, last ${MINUTES}m (by workflow) ---"
-docker exec "$N8N_PG" psql -U bina-comp -d n8n -tAc "
+docker exec "$N8N_PG" psql -U hacohen -d n8n -tAc "
   select w.name, e.status, count(*)
   from execution_entity e join workflow_entity w on w.id = e.\"workflowId\"
   where e.\"startedAt\" > now() - interval '${MINUTES} minutes'
@@ -132,7 +132,7 @@ docker exec "$N8N_PG" psql -U bina-comp -d n8n -tAc "
 
 echo
 echo "--- crashed executions with NO error payload recorded (pure orphan signature), last ${MINUTES}m ---"
-docker exec "$N8N_PG" psql -U bina-comp -d n8n -tAc "
+docker exec "$N8N_PG" psql -U hacohen -d n8n -tAc "
   select count(*) from execution_entity e
   where e.status = 'crashed' and e.\"startedAt\" > now() - interval '${MINUTES} minutes'
     and not exists (select 1 from execution_data d where d.\"executionId\" = e.id and d.data like '%\"error\":%')"
@@ -141,7 +141,7 @@ docker exec "$N8N_PG" psql -U bina-comp -d n8n -tAc "
 echo
 echo "--- error/crash fingerprints seen in last ${MINUTES}m ---"
 CUR_FILE=$(mktemp)
-docker exec "$N8N_PG" psql -U bina-comp -d n8n -tAc "
+docker exec "$N8N_PG" psql -U hacohen -d n8n -tAc "
   select e.id, w.name
   from execution_entity e join workflow_entity w on w.id = e.\"workflowId\"
   where e.\"startedAt\" > now() - interval '${MINUTES} minutes' and e.status in ('error','crashed')
@@ -156,7 +156,7 @@ while IFS='|' read -r EID WFNAME; do
   # always shaped "<ErrorClassName>: <message>\n    at ...". Grep that shape directly instead of
   # trying to resolve the index. Empty for pure orphan-crashes (no error recorded at all) -- those
   # correctly collapse to one "<workflow>|" fingerprint instead of drowning out real classes.
-  MSG=$(docker exec "$N8N_PG" psql -U bina-comp -d n8n -tAc \
+  MSG=$(docker exec "$N8N_PG" psql -U hacohen -d n8n -tAc \
     "select data from execution_data where \"executionId\"=$EID" 2>/dev/null \
     | grep -oE '"(NodeApiError|WorkflowCrashedError|ExpressionError|NodeOperationError|Error): [^\\"]{5,120}' \
     | head -1 | sed 's/^"//')
@@ -240,7 +240,7 @@ if [ -n "${CENSUS_HOURS:-}" ]; then
   echo
   echo "--- error-class census + teardown-orphan correlation (last ${CENSUS_HOURS}h) ---"
   # Chance that a uniformly-random timestamp lands within +/-2s of one of N mass-stop instants.
-  MS=$(docker exec "$N8N_PG" psql -U bina-comp -d n8n -tAc "
+  MS=$(docker exec "$N8N_PG" psql -U hacohen -d n8n -tAc "
     select count(*) from (
       select date_trunc('second', \"stoppedAt\")
       from execution_entity
@@ -260,7 +260,7 @@ if [ -n "${CENSUS_HOURS:-}" ]; then
   # class unreadable. Set CENSUS_ALL=1 to include them.
   EXCL="and e.\"workflowId\" not in ('glitchtipReporter01','errorHandler01')"
   [ -n "${CENSUS_ALL:-}" ] && EXCL=""
-  docker exec "$N8N_PG" psql -U bina-comp -d n8n -c "
+  docker exec "$N8N_PG" psql -U hacohen -d n8n -c "
     with stops as (
       select date_trunc('second', \"stoppedAt\") as s
       from execution_entity

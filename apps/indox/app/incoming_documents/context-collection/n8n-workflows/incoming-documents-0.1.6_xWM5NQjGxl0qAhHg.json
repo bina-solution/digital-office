@@ -288,17 +288,17 @@
         "operation": "delete",
         "documentId": {
           "__rl": true,
-          "value": "1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo",
+          "value": "1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0049",
           "mode": "list",
           "cachedResultName": "AutomationValues",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo/edit?usp=drivesdk"
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0049/edit?usp=drivesdk"
         },
         "sheetName": {
           "__rl": true,
           "value": 542119184,
           "mode": "list",
           "cachedResultName": "מסמכים נכנסים",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo/edit#gid=542119184"
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0049/edit#gid=542119184"
         },
         "startIndex": "={{ $json.startIndex }}",
         "numberToDelete": "={{ $json.amount }}"
@@ -314,7 +314,7 @@
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "e2knIZpw8YF0QBAB",
-          "name": "Google Sheets person17@example.com"
+          "name": "Google Sheets person17.x@example.com"
         }
       }
     },
@@ -322,17 +322,17 @@
       "parameters": {
         "documentId": {
           "__rl": true,
-          "value": "1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo",
+          "value": "1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0049",
           "mode": "list",
           "cachedResultName": "AutomationValues",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo/edit?usp=drivesdk"
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0049/edit?usp=drivesdk"
         },
         "sheetName": {
           "__rl": true,
           "value": 542119184,
           "mode": "list",
           "cachedResultName": "מסמכים נכנסים",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo/edit#gid=542119184"
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0049/edit#gid=542119184"
         },
         "filtersUI": {
           "values": [
@@ -355,7 +355,7 @@
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "e2knIZpw8YF0QBAB",
-          "name": "Google Sheets person17@example.com"
+          "name": "Google Sheets person17.x@example.com"
         }
       }
     },
@@ -4086,17 +4086,17 @@
       "parameters": {
         "documentId": {
           "__rl": true,
-          "value": "1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo",
+          "value": "1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0049",
           "mode": "list",
           "cachedResultName": "AutomationValues",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo/edit?usp=drivesdk"
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0049/edit?usp=drivesdk"
         },
         "sheetName": {
           "__rl": true,
           "value": 542119184,
           "mode": "list",
           "cachedResultName": "מסמכים נכנסים",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo/edit#gid=542119184"
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0049/edit#gid=542119184"
         },
         "options": {}
       },
@@ -4111,7 +4111,7 @@
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "e2knIZpw8YF0QBAB",
-          "name": "Google Sheets person17@example.com"
+          "name": "Google Sheets person17.x@example.com"
         }
       }
     },
@@ -4856,17 +4856,17 @@
         },
         "documentId": {
           "__rl": true,
-          "value": "1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo",
+          "value": "1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0049",
           "mode": "list",
           "cachedResultName": "AutomationValues",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo/edit?usp=drivesdk"
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0049/edit?usp=drivesdk"
         },
         "sheetName": {
           "__rl": true,
           "value": 542119184,
           "mode": "list",
           "cachedResultName": "מסמכים נכנסים",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo/edit#gid=542119184"
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0049/edit#gid=542119184"
         },
         "options": {
           "dataLocationOnSheet": {
@@ -4888,7 +4888,7 @@
       "credentials": {
         "googleSheetsTriggerOAuth2Api": {
           "id": "DfQPc6wpof8GdkFo",
-          "name": "Google Sheets Trigger person17@example.com"
+          "name": "Google Sheets Trigger person17.x@example.com"
         }
       }
     },
@@ -12606,7 +12606,7 @@
             {
               "id": "f48a7419-096a-4e57-9ee8-cc9aa6aa1688",
               "leftValue": "={{ $json.COMPANY_ID }}",
-              "rightValue": "514745819",
+              "rightValue": "500000203",
               "operator": {
                 "type": "string",
                 "operation": "equals",
@@ -14911,7 +14911,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://n8n.bina-comp.bina-solutions.co.il/webhook/incoming-documents-016",
+        "url": "https://n8n.hacohen.bina-solutions.co.il/webhook/incoming-documents-016",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpBasicAuth",
         "sendBody": true,
@@ -19068,7 +19068,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://testbinacomp.macomp.vip/odata/Priority/tabula.ini/binacomp/SHIM_RECEIVE_SUPDOC",
+        "url": "https://testhacohanim.macomp.vip/odata/Priority/tabula.ini/mscohen/SHIM_RECEIVE_SUPDOC",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpBasicAuth",
         "sendBody": true,
@@ -19191,7 +19191,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://testbinacomp.macomp.vip/odata/Priority/tabula.ini/binacomp/SHIM_RECEIVE_SUPDOC",
+        "url": "https://testhacohanim.macomp.vip/odata/Priority/tabula.ini/mscohen/SHIM_RECEIVE_SUPDOC",
         "authentication": "genericCredentialType",
         "genericAuthType": "=httpBasicAuth",
         "sendHeaders": true,
@@ -21712,208 +21712,16 @@
       ]
     },
     "node:Google Sheets Trigger": {
-      "documentId": "1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo",
+      "documentId": "1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0049",
       "sheetId": 542119184,
       "lastRevision": 294623,
-      "lastRevisionLink": "https://docs.google.com/spreadsheets/export?id=1Wu3hyF_4TvfU41xCGaINtJD81Or0wBSwD1djp4tVJEo&revision=294623&exportFormat=xlsx"
+      "lastRevisionLink": "https://docs.google.com/spreadsheets/export?id=1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0049&revision=294623&exportFormat=xlsx"
     }
   },
   "meta": {
     "templateCredsSetupCompleted": true
   },
-  "pinData": {
-    "Webhook": [
-      {
-        "json": {
-          "headers": {
-            "host": "n8n.bina-comp.bina-solutions.co.il",
-            "user-agent": "axios/1.12.0",
-            "content-length": "1413",
-            "accept": "application/json,text/html,application/xhtml+xml,application/xml,text/*;q=0.9, image/*;q=0.8, */*;q=0.7",
-            "accept-encoding": "gzip, compress, deflate, br",
-            "authorization": "Basic YWRtaW46d2Rua2pkNzI4NzYyODczYmhqZDM4NjIxM2hqZzM3ZGtzeGk3MnNo",
-            "content-type": "application/json",
-            "x-forwarded-for": "172.18.0.1",
-            "x-forwarded-host": "n8n.bina-comp.bina-solutions.co.il",
-            "x-forwarded-port": "443",
-            "x-forwarded-proto": "https",
-            "x-forwarded-server": "84fa546d83cd",
-            "x-real-ip": "172.18.0.1"
-          },
-          "params": {},
-          "query": {},
-          "body": {
-            "ACTION_LINES": [
-              {
-                "ACTION": "extract_balance_sheet",
-                "DOC_TYPE": "bs_doc",
-                "row_number": 13357,
-                "change_type": "updated",
-                "NAME": "גולמט.pdf",
-                "COMPANY_ID": "511058984",
-                "SHORT_DOC_ID": "",
-                "TYPE": "BALANCE_SHEET",
-                "STATUS": "IN_PROGRESS",
-                "COMPANY_DOC_ID": "",
-                "LINK": "https://drive.google.com/file/d/1NyzH0iE-fZbKT0ITNFvgroyVHjVlPH2X/view?usp=drivesdk",
-                "PURCHASE_ID": "",
-                "SHIPMENT_DOC_ID": "",
-                "LINKED_BS": "",
-                "BS_LINE_DATE": "",
-                "BS_LINE_AMOUNT": "",
-                "SOURCE_TYPE": "GOOGLE_DRIVE_FOLDER",
-                "SOURCE_ID": "119r4fttLl9OeEfxdGVT-G3sVIkLiZbYv",
-                "SOURCE_LINK": "https://drive.google.com/drive/folders/119r4fttLl9OeEfxdGVT-G3sVIkLiZbYv",
-                "SIZE": 266918,
-                "HASH": "6abe1b5c54925a97081f9c32cea6f341",
-                "TIMESTAMP": "2025-12-22T07:42:36.046Z",
-                "COMPANY_NAME": "גולמט",
-                "REQUIRED_ACTION": "",
-                "BS_EXTRACTED_LINES": "",
-                "TOTAL_AMOUNT": "",
-                "BS_EXTRACTION_VERIFIED": "",
-                "BS_LINE_NOTE": "",
-                "FROM_OFFICE": "",
-                "FROM_OFFICE_CHECK": "",
-                "BS_LINK_DOCUMENTS_COMPLETED": "",
-                "SEARCH_IN_DRIVE_COMPLETED": "",
-                "PURCHASE_ID_COMPLETED": "",
-                "SHIPMENT_ID_COMPLETED": "",
-                "COMPANY_NAME_COMPLETED": "",
-                "API_TOOLS_ID_COMPLETED": "",
-                "API_TOOLS_ID": "",
-                "ID": "1766085539696fdebzu",
-                "EMPTY": "",
-                "סימון כרטסת עדכנית": "",
-                "BS_EXTRACTED_LINES_COMPLETED": "",
-                "BS_EXTRACTION_USE_CACHE": "FALSE",
-                "DOC_DATE": "",
-                "EX_INVOICE_ID": "",
-                "INVOICE_ID_COMPLETED": "",
-                "EX_IS_BS": "",
-                "EX_IS_BS_COMPLETED": "",
-                "FIGURE_TYPE_COMPLETED": "",
-                "DOUBLE_LINE_CONTEXT": "",
-                "FIGURE_COMPANY_COMPLETED": true,
-                "": "",
-                "LOCKED": false
-              }
-            ]
-          },
-          "webhookUrl": "https://n8n.bina-comp.bina-solutions.co.il/webhook/incoming-docs-x",
-          "executionMode": "production"
-        }
-      }
-    ],
-    "When Executed by Another Workflow": [
-      {
-        "json": {
-          "ID": null,
-          "ACTION_LINE": null,
-          "ACTION_LINES": [
-            {
-              "ACTION": "query_doc_date",
-              "DOC_TYPE": "gdoc",
-              "row_number": 865,
-              "NAME": "א. פתיה-04293",
-              "COMPANY_ID": "510564693",
-              "SHORT_DOC_ID": "04293",
-              "TYPE": "INVOICE",
-              "STATUS": "IN_PROGRESS",
-              "COMPANY_DOC_ID": "IN254004293",
-              "LINK": "https://drive.google.com/file/d/1gmYc9WyfkS9vFp0NcEB2UccU8bK1jSTi",
-              "DOC_DATE": "",
-              "PURCHASE_ID": "",
-              "SHIPMENT_DOC_ID": "IN254004293",
-              "LINKED_BS": "א. פתיה 07.25.pdf",
-              "BS_LINE_DATE": "2025-05-06",
-              "BS_LINE_AMOUNT": 2263,
-              "SOURCE_TYPE": "GOOGLE_DRIVE_FILE",
-              "SOURCE_ID": "1gmYc9WyfkS9vFp0NcEB2UccU8bK1jSTi",
-              "SOURCE_LINK": "https://drive.google.com/file/d/1gmYc9WyfkS9vFp0NcEB2UccU8bK1jSTi",
-              "SIZE": 98298,
-              "HASH": "b58bc2452dc0e94a75b8c69b93e97479",
-              "TIMESTAMP": "2026-02-14T11:10:44.246Z",
-              "COMPANY_NAME": "א. פתיה",
-              "REQUIRED_ACTION": "",
-              "BS_EXTRACTED_LINES": "",
-              "TOTAL_AMOUNT": "",
-              "BS_EXTRACTION_VERIFIED": "",
-              "BS_LINE_NOTE": "חשבונית מס",
-              "FROM_OFFICE": true,
-              "FROM_OFFICE_CHECK": false,
-              "BS_LINK_DOCUMENTS_COMPLETED": "",
-              "SEARCH_IN_DRIVE_COMPLETED": false,
-              "DOC_DATE_COMPLETED": "",
-              "PURCHASE_ID_COMPLETED": false,
-              "SHIPMENT_ID_COMPLETED": false,
-              "COMPANY_NAME_COMPLETED": false,
-              "API_TOOLS_ID_COMPLETED": false,
-              "API_TOOLS_ID": "b58bc2452dc0e94a75b8c69b93e97479",
-              "ID": "140414870y6s4q5",
-              "EMPTY": "",
-              "סימון כרטסת עדכנית": "",
-              "BS_EXTRACTED_LINES_COMPLETED": "",
-              "BS_EXTRACTION_USE_CACHE": "",
-              "EX_INVOICE_ID": "",
-              "INVOICE_ID_COMPLETED": false,
-              "EX_IS_BS": "",
-              "EX_IS_BS_COMPLETED": "",
-              "FIGURE_TYPE_COMPLETED": false,
-              "DOUBLE_LINE_CONTEXT": "",
-              "FIGURE_COMPANY_COMPLETED": "",
-              "col_48": "",
-              "col_49": "",
-              "LOCKED": false
-            }
-          ]
-        },
-        "pairedItem": {
-          "item": 0
-        }
-      }
-    ],
-    "When clicking ‘Execute workflow’": [
-      {
-        "json": {
-          "SELECTED_COMPANY_ID": "513327064",
-          "SELECTED_DOC_DATE": "22/01/2026",
-          "AI_DOC_ID": "264003007",
-          "SELECTED_DOC_ID": "03007",
-          "SELECTED_DOC_AMOUNT": "45.00",
-          "SELECTED_DOC_SHIPMENT_ID": "",
-          "SELECTED_DOC_ORDER_ID": "26000806",
-          "LINK": "https://drive.google.com/file/d/1y4RvRILF_guIz7IevHHeDHN_3-MYfaWq/view?usp=drivesdk",
-          "TYPE": "INVOICE",
-          "SOURCE_TYPE": "GOOGLE_DRIVE_FOLDER",
-          "FROM_OFFICE_CHECK": true,
-          "SELECTION_CERTAINTY": 100,
-          "ID": "test_1"
-        }
-      }
-    ],
-    "map response": [
-      {
-        "json": {
-          "IDSUP": "513327064",
-          "DATEDOC": "22/01/26",
-          "DOCNAME": "264003007",
-          "DOCSHORT": "03007",
-          "TOTPRICE": 45,
-          "DOC_INV": "",
-          "PORDNAME": "26000806",
-          "LINKDOC": "https://drive.google.com/file/d/1y4RvRILF_guIz7IevHHeDHN_3-MYfaWq/view?usp=drivesdk",
-          "TYPEDOC": "INVOICE",
-          "SOURCE": "GOOGLE_DRIVE_FOLDER",
-          "FROMWAREHOUSE": "Y",
-          "PROPORTZ_CERTAINTY": 100
-        },
-        "pairedItem": {
-          "item": 0
-        }
-      }
-    ]
-  },
+  "pinData": {},
   "versionId": "5752f4e5-cc52-4419-aade-57cbbec27537",
   "activeVersionId": null,
   "versionCounter": 15185,

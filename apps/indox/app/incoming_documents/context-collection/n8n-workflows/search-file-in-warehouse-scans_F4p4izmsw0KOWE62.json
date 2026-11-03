@@ -16,10 +16,10 @@
         "filter": {
           "folderId": {
             "__rl": true,
-            "value": "1YpapJ3vJDYo_idP3aZiFJR_1WoEaCNhu",
+            "value": "1REDACTEDdrivexxxxxxxxxxxxxxx0002",
             "mode": "list",
             "cachedResultName": "סרוקות הצליח",
-            "cachedResultUrl": "https://drive.google.com/drive/folders/1YpapJ3vJDYo_idP3aZiFJR_1WoEaCNhu"
+            "cachedResultUrl": "https://drive.google.com/drive/folders/1REDACTEDdrivexxxxxxxxxxxxxxx0002"
           }
         },
         "options": {}
@@ -36,7 +36,7 @@
       "credentials": {
         "googleDriveOAuth2Api": {
           "id": "KirWFwoFdEFmnN0R",
-          "name": "Google Drive person17@example.com"
+          "name": "Google Drive person17.x@example.com"
         }
       }
     },
@@ -373,16 +373,7 @@
   },
   "staticData": null,
   "meta": null,
-  "pinData": {
-    "Start": [
-      {
-        "json": {
-          "COMPANY_NAME": "פזקר",
-          "SHORT_DOC_ID": 75522
-        }
-      }
-    ]
-  },
+  "pinData": {},
   "versionId": "625cab02-f77c-478e-b9c6-ace2c7f774ef",
   "activeVersionId": "625cab02-f77c-478e-b9c6-ace2c7f774ef",
   "versionCounter": 70,

@@ -1,0 +1,69 @@
+{
+  "id": "obsidian",
+  "title": {
+    "he": "אובסידיאן",
+    "en": "Obsidian"
+  },
+  "layer": 3,
+  "kind": "service",
+  "version": "0.1.0",
+  "summary": {
+    "he": "הכספת של הלשכה — Obsidian אמיתי בדפדפן, על תיקיית הכספת של הלשכה",
+    "en": "The office's vault — real Obsidian in the browser, on the office's vault folder"
+  },
+  "capabilities": [],
+  "use": [],
+  "connections": [],
+  "compose": "docker-compose.yml",
+  "routing": [
+    {
+      "host": "obsidian",
+      "port": 8080,
+      "auth": "sso",
+      "emit_labels": true,
+      "module": {
+        "group": "ראשי",
+        "icon": "book",
+        "embed": true,
+        "alias": "obsidian",
+        "id": "obsidian",
+        "external": true,
+        "name": "אובסידיאן",
+        "desc": "הכספת — פתקים, יומנים ופרויקטים",
+        "order": 5,
+        "url": "http://obsidian:8080",
+        "url_env": "OBSIDIAN_URL"
+      },
+      "sso": {
+        "slug": "obsidian",
+        "display_name": "Obsidian",
+        "default_host": "obsidian.localhost",
+        "base_url_env": "OBSIDIAN_BASE_URL",
+        "local_twin": true
+      }
+    }
+  ],
+  "data": {
+    "volumes": [
+      "obsidian_vault",
+      "obsidian_state",
+      "obsidian_app"
+    ],
+    "on_uninstall": "keep"
+  },
+  "resources": {
+    "cpus": "1.5",
+    "memory": "768M"
+  },
+  "agent": {
+    "context": "AGENT.md",
+    "order": 30
+  },
+  "health": {
+    "structural": "auto",
+    "probe": {
+      "http": "http://obsidian:8080/",
+      "interval": "30s"
+    }
+  }
+}

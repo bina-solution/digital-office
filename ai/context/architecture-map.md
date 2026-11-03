@@ -1,4 +1,4 @@
-# bbox / deployment-bina-comp — architecture map (domains · dependency tree · INDOX inner layers · consolidation)
+# bbox / deployment-hacohen — architecture map (domains · dependency tree · INDOX inner layers · consolidation)
 
 Living map of the whole deployment, with deep focus on INDOX. Companion to the API-routing rule:
 **nothing talks to a datastore directly outside the API layer** (see §4).

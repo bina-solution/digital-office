@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+#: traefik — the office moved to another domain: the ACME contact address moves with it
+#
+# rename-address — TRAEFIK_ACME_EMAIL is the address Let's Encrypt writes to about this office's
+# certificates. No account stands behind it here, and the office's mail answers on the new domain now, so
+# <local>@<old domain> simply becomes <local>@<new domain>; any other address is left as it is. The domains
+# come from the environment (DGO_RENAME_FROM, DGO_RENAME_TO, DGO_RENAME_DRY_RUN), set by `bbox
+# rename-address [--dry-run]`. The next `bbox run` hands it to traefik (its prepare reads the key). The key
+# is noted `any` (rename_note): no account stands behind it, so a vault override of it follows as it is.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # say, colors, read_env_value, env_set, rename_note
+OLD="$(printf '%s' "${DGO_RENAME_FROM:-}" | tr '[:upper:]' '[:lower:]')"
+NEW="$(printf '%s' "${DGO_RENAME_TO:-}" | tr '[:upper:]' '[:lower:]')"
+domain='^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$'
+if ! [[ "${OLD}" =~ ${domain} && "${NEW}" =~ ${domain} && "${OLD}" != "${NEW}" ]]; then
+  say "${cr}[traefik] rename-address: DGO_RENAME_FROM and DGO_RENAME_TO must be two different domains${c0}"
+  exit 1
+fi
+# no account behind it: a vault override of the contact follows whatever its local part (`any`)
+rename_note TRAEFIK_ACME_EMAIL any
+acme="$(read_env_value TRAEFIK_ACME_EMAIL | tr '[:upper:]' '[:lower:]')"
+case "${acme}" in
+  *@"${OLD}")
+    if [ "${DGO_RENAME_DRY_RUN:-0}" = 1 ]; then
+      say "[traefik] DRY RUN, nothing changed — the ACME contact would become ${acme%@*}@${NEW}"
+      exit 0
+    fi
+    env_set TRAEFIK_ACME_EMAIL "${acme%@*}@${NEW}" || { say "${cr}[traefik] TRAEFIK_ACME_EMAIL could not be written${c0}"; exit 1; }
+    rename_note - changed
+    say "[traefik] the ACME contact is now ${acme%@*}@${NEW}" ;;
+  *) say "[traefik] rename-address: the ACME contact is not on @${OLD} — left as it is" ;;
+esac
+exit 0

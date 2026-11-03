@@ -1,0 +1,32 @@
+# כרטיסי פרויקטים בקוד פתוח — about 200 projects beyond the flagships, 450–650 words each, in 21
+# categories (CAD, design, video, creative AI, office, accounting, CRM, marketing, sites, commerce,
+# communication, knowledge, data, security, networks, infrastructure, files, home servers, automation,
+# OCR, Israeli open source). Shape and rules: content/BRIEF.md (`type: project`).
+# Each piece: `content.project.<slug>-<lang>`, created under this blueprint by the content importer.
+id: content-project
+version: 1
+order: 12
+extends:
+- content-library
+name:
+  he: כרטיסי פרויקטים
+  en: Project profiles
+summary:
+  he: כ-200 פרויקטי קוד פתוח לעסק וליצירה, 450–650 מילים לכל אחד — מה הוא, למי, מה הוא מחליף, איך מריצים
+    אותו, והמגבלה שכדאי לדעת.
+  en: About 200 open-source projects for business and creative work, 450–650 words each — what it is, for
+    whom, what it replaces, how to run it, and the catch worth knowing.
+slots:
+- key: content.project.hub-he
+  section: content
+  group: project
+  kind: richtext
+  lang: he
+  label:
+    he: פתיח עמוד הפרויקטים
+    en: Projects hub — opening text
+  constraints:
+    note: 60–120 words — the hub of the open-source project profiles
+  targets:
+  - channel: website
+  - channel: google-search

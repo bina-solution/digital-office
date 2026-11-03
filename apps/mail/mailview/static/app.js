@@ -460,9 +460,13 @@ const pathFor = () =>
   : CURLABEL ? "/label/" + enc(CURLABEL)
   : QUERY ? "/?q=" + enc(QUERY) : "/";
 function reportRoute(inner) {
-  if (!EMBEDDED) return;
-  try { window.parent.postMessage({ type: "bina:route", path: inner }, location.origin); }
-  catch (e) { /* opaque parent — nothing to mirror */ }
+  // NOTHING IS POSTED, AND THAT IS THE CHANGE (2026-10-13). The console mirrors the frame's own URL
+  // by itself now (platform-base/console/static/app.js `watchFrameRoute`), so this app — like every
+  // other one — has no one to tell: its address IS its route and the shell reads it. The function and
+  // its calls stay because the route they compute is what the address holds; the `bina:route`
+  // postMessage they used to send is gone, and the console's listener goes with it once `incoming`
+  // (the last other carrier) is converted too.
+  void inner;
 }
 const nav = replace => {
   const inner = pathFor();
@@ -2232,7 +2236,7 @@ async function renderSetup(seq) {
     ? `<div class="cw-msg soft">${ic("info")}<div><b>התקנה מקומית</b><span class="sub">הדואר עובד במלואו בתוך המערכת. כדי לקבל ולשלוח דואר מהאינטרנט נדרש דומיין אמיתי.</span></div></div>`
     : bad === 0
       ? `<div class="cw-msg ok">${ic("check-circle")}<div><b>הדואר הפרטי מוגדר במלואו</b><span class="sub"><bdi class="ltr">${esc(s.domain)}</bdi> · מזהה חתימה <bdi class="ltr">${esc(s.selector)}</bdi>${propNote}</span></div></div>`
-      : `<div class="cw-msg err">${ic("alert")}<div><b>נותרו ${bad} דברים להשלמה</b><span class="sub"><bdi class="ltr">${esc(s.domain)}</bdi> · מזהה חתימה <bdi class="ltr">${esc(s.selector)}</bdi>${s.public_ip ? " · " + esc(s.public_ip) : ""}${propNote}</span></div></div>`;
+      : `<div class="cw-msg err">${ic("alert")}<div><b>נותרו ${one(bad, 'דבר אחד', 'דברים')} להשלמה</b><span class="sub"><bdi class="ltr">${esc(s.domain)}</bdi> · מזהה חתימה <bdi class="ltr">${esc(s.selector)}</bdi>${s.public_ip ? " · " + esc(s.public_ip) : ""}${propNote}</span></div></div>`;
   body.innerHTML = `<div class="set-h">דואר פרטי — בדיקת הגדרות</div>
     <div class="set-sub">האם שרת הדואר הפרטי באמת יכול לשלוח ולקבל דואר מהאינטרנט — ואם לא, מה חסר. כל שורה אדומה מציינת את הרשומה שיש לפרסם.</div>
     ${head}

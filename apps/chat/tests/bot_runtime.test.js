@@ -32,10 +32,10 @@ function fakeBackend() {
 function inbound(over = {}) {
   return {
     id: 'wamid.1',
-    conversationId: 'person32@example.com',
+    conversationId: '972501112233@s.whatsapp.net',
     isGroup: false,
     fromMe: false,
-    sender: { id: '050-000-0006', name: 'משה' },
+    sender: { id: '972501112233', name: 'משה' },
     text: 'hello',
     timestamp: new Date(),
     attachments: [],
@@ -65,7 +65,7 @@ beforeAll(() => {
     };
   `);
 
-  // opts in to everything — the bina-comp-bot posture
+  // opts in to everything — the hacohen-bot posture
   writeBot('loud-bot', `
     module.exports = {
       id: 'loud-bot', name: 'Loud', desc: 'accepts groups and chatter',
@@ -432,7 +432,7 @@ describe('the auto-reply gate', () => {
     const r = await runtime.dispatch(inbound({ text: 'מתי צפוי התשלום להיכנס?' }), { connectionId: 'c', backend, botsDir: TMP });
     expect(r).toMatchObject({ handled: true, reason: 'ok', botId: 'quiet-bot' });
     expect(backend.sent).toHaveLength(1);
-    expect(backend.sent[0].conversationId).toBe('person32@example.com');
+    expect(backend.sent[0].conversationId).toBe('972501112233@s.whatsapp.net');
   });
 
   test('short chatter does NOT get an auto-reply', async () => {
@@ -588,8 +588,8 @@ describe('ctx', () => {
   test('sendTo addresses a different conversation', async () => {
     const backend = fakeBackend();
     const ctx = runtime.buildCtx(inbound(), { bot, connectionId: 'c', backend });
-    await ctx.sendTo('person37@example.com', 'come to the DM');
-    expect(backend.sent[0].conversationId).toBe('person37@example.com');
+    await ctx.sendTo('other@s.whatsapp.net', 'come to the DM');
+    expect(backend.sent[0].conversationId).toBe('other@s.whatsapp.net');
   });
 
   test('sendLong chunks and numbers the parts', async () => {

@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+#: ocr-health — the OCR/ledger container's health (storage writable; not the OCR key; a full pool is "busy"):  ./bbox apitools ocr-health
+# Pipes the app's own CLI (apps/apitools/cli.py) into its container: no address, no key, no rebuild.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+dcx exec -T apitools python - ocr-health < "$(npath "${REPO_ROOT}")/apps/apitools/cli.py"

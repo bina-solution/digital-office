@@ -65,12 +65,13 @@ services:
     - traefik.http.routers.glitchtip-https.rule=Host(`${GLITCHTIP_BASE_URL}`)
     - traefik.http.routers.glitchtip-https.entrypoints=websecure
     - traefik.http.routers.glitchtip-https.tls=true
-    - traefik.http.routers.glitchtip-https.tls.certresolver=myresolver
+    - traefik.http.routers.glitchtip-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
     - traefik.http.routers.glitchtip-https.service=glitchtip
     - traefik.http.services.glitchtip.loadbalancer.server.port=8000
     - traefik.http.services.glitchtip.loadbalancer.healthcheck.path=/_health/
-    - traefik.http.services.glitchtip.loadbalancer.healthcheck.interval=30s
-    - traefik.http.services.glitchtip.loadbalancer.healthcheck.timeout=10s
+    # the office's probe knobs, as platform-base/authentik's (a single slow answer must not 503 the app)
+    - traefik.http.services.glitchtip.loadbalancer.healthcheck.interval=${HEALTHCHECK_INTERVAL:-30s}
+    - traefik.http.services.glitchtip.loadbalancer.healthcheck.timeout=${HEALTHCHECK_TIMEOUT:-10s}
   glitchtip-worker:
     image: glitchtip/glitchtip:6.2.2
     container_name: glitchtip-worker-${DEPLOYMENT_NAME:-bina-deployment}

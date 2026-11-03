@@ -29,6 +29,7 @@ ANSWERS = {"known.t": 302, "open.t": 200, "refused.t": 403, "unknown.t": 404, "b
            "ported.t:8080": 302}
 MODE = {"starting": False}
 ASKED = []
+MINTED = []        # hosts a NEW session was opened for (a 302 to a visitor with no session cookie)
 
 
 class _Outpost(http.server.BaseHTTPRequestHandler):
@@ -39,6 +40,9 @@ class _Outpost(http.server.BaseHTTPRequestHandler):
         self.send_response(code)
         if code == 302:
             self.send_header("Location", "http://sign-in.t/start")
+            if "authentik_proxy_t=" not in (self.headers.get("Cookie") or ""):
+                MINTED.append(host)       # what the real outpost does: a session in redis, and its cookie
+                self.send_header("Set-Cookie", f"authentik_proxy_t=s{len(MINTED)}; Path=/; HttpOnly")
         self.send_header("Content-Length", "0")
         self.end_headers()
 
@@ -46,8 +50,12 @@ class _Outpost(http.server.BaseHTTPRequestHandler):
         pass
 
 
+COOKIES = os.path.join(tempfile.mkdtemp(), "outpost-ready-cookies.json")
+
+
 def _probe(server_url, blueprint):
-    os.environ.update(AUTHENTIK_READY_SERVER=server_url, OUTPOST_HOSTS_BLUEPRINT=blueprint)
+    os.environ.update(AUTHENTIK_READY_SERVER=server_url, OUTPOST_HOSTS_BLUEPRINT=blueprint,
+                      OUTPOST_READY_COOKIES=COOKIES)
     spec = importlib.util.spec_from_file_location("outpost_ready", HERE / "outpost-ready.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
@@ -79,6 +87,14 @@ def main():
     check("…and so is a page it lets through, or refuses", (probe._served("open.t"), probe._served("refused.t")), (True, True))
     check("a 404 is a host it does not know", probe._served("unknown.t"), False)
     check("a 5xx is not an answer about the host at all", probe._served("broken.t"), False)
+
+    # one session per host, ever: the probe sends back the cookie it was given, in this run and the next
+    # (each healthcheck run is a new process, so the cookie lives in a file) — not a new session per ask
+    del MINTED[:]
+    probe._served("ported.t:8080"); probe._served("ported.t:8080")         # a host not asked before
+    again = _probe(f"http://127.0.0.1:{srv.server_port}", blueprint)
+    again._served("ported.t:8080"); again._served("ported.t:8080")
+    check("asking a host four times, over two runs, opens ONE session", MINTED, ["ported.t:8080"])
 
     compiled("known.t", "open.t", "ported.t:8080")
     del ASKED[:]

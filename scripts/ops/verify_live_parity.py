@@ -108,7 +108,7 @@ def repo_bodies(path):
 
 def live_bodies(wf_id):
     raw = subprocess.run(
-        DOCKER + ["exec", "-i", "n8n-postgres-shlomo-laptop", "psql", "-U", "bina-comp",
+        DOCKER + ["exec", "-i", "n8n-postgres-shlomo-laptop", "psql", "-U", "hacohen",
                   "-d", "n8n", "-tAc",
                   "SELECT nodes::text FROM workflow_entity WHERE id='%s'" % wf_id],
         capture_output=True, text=True, encoding="utf-8", errors="replace").stdout.strip()

@@ -66,7 +66,7 @@ two-tab split where a pipe's health and a pipe's definition lived apart.
 | `connection` | which Drive/Mail account this pipe pulls from | today implied by workflow wiring; make it explicit so the editor can browse the right account |
 | `enabled` | pause a noisy source without deleting its config | scheduler + SCAN must skip disabled entries |
 | `fallback_type` | **the highest-value field.** When extraction can't classify a document, the pipe's own location answers it — anything in `נכנס/קבלות` is a receipt (the real `bs-gdrive-sync` case). Converts a whole failure class into a one-click fix. | additive; `type_hint` already exists and can carry it, but a *separate* field keeps "hint for the classifier" distinct from "assume this when classification fails" |
-| `failed_folder` | drive pipes need a failed destination like gmail's failed label | gmail already has `labels.failed`; drive only has `pairs{from,to}` |
+| `pairs[].failed_to` (the engine's `failed`) | drive pipes need a failed destination like gmail's failed label | **landed as a key of the pair, not a field of the pipe** (there is no `failed_folder`): the editor writes `failed_to`, the engine reads `failed`, and the service fills each from the other (`_normalise_entry`, `_PAIR_ALIASES`) — the card's «כשלים» fact reads `failed || failed_to`; a pipe's failed folder is its own (sync_registry.example.json) |
 
 ## 4 · New item fields — and where each really comes from
 

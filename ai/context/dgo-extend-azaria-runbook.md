@@ -44,7 +44,7 @@ mine and a fresh subagent's, fails before it runs). Nothing below has been execu
    `curl -H 'Host: bina.localhost' -H 'X-authentik-username: akadmin' http://10.79.2.1:3080/` → 200
    (the served app answers over the tunnel under the identity the edge writes).
 3. **Prove the agent** (`DGO-32`'s acceptance): on vps1,
-   `cd /root/deployment-bina-comp && ./bbox agent list` → the Mac's session ids
+   `cd /root/deployment-hacohen && ./bbox agent list` → the Mac's session ids
    (`b9987618`, `7d332102`, `b2b527d3` were the ones measured on 2026-10-01).
 4. Only then: the phase-3 gate's two live checks (`apps/dgo-extend/tests/phase3.py`,
    `c_live_tile` / `c_agent_list`) get their real probes and `bbox dgo test 3` goes 11/11.

@@ -1,3 +1,3 @@
-module github.com/solomonBoltin/deployment-bina-comp/platform-base/forward-auth
+module github.com/solomonBoltin/deployment-hacohen/platform-base/forward-auth
 
 go 1.22

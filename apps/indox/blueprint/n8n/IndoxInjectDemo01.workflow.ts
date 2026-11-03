@@ -92,13 +92,13 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 @workflow({
     /*__n8n__*/ description: null,
     /*__n8n__*/ isArchived: false,
-    /*__n8n__*/ connections: {"When clicking Execute":{"main":[[{"node":"Read Blueprint","type":"main","index":0}]]},"When Called":{"main":[[{"node":"Read Blueprint","type":"main","index":0}]]},"Req Tag Rules":{"main":[[{"node":"Req Settings","type":"main","index":0}]]},"Req Settings":{"main":[[{"node":"Get Settings","type":"main","index":0}]]},"Get Settings":{"main":[[{"node":"Plan","type":"main","index":0}]]},"Read Companies":{"main":[[{"node":"Build Companies","type":"main","index":0}]]},"Build Companies":{"main":[[{"node":"Seed Companies","type":"main","index":0}]]},"Read gmail-doc":{"main":[[{"node":"Build gmail-doc","type":"main","index":0}]]},"Build gmail-doc":{"main":[[{"node":"Send gmail-doc","type":"main","index":0}]]},"Read gmail-bs":{"main":[[{"node":"Build gmail-bs","type":"main","index":0}]]},"Build gmail-bs":{"main":[[{"node":"Send gmail-bs","type":"main","index":0}]]},"Read drive-gdoc":{"main":[[{"node":"Build drive-gdoc","type":"main","index":0}]]},"Build drive-gdoc":{"main":[[{"node":"Send drive-gdoc","type":"main","index":0}]]},"Read drive-bs":{"main":[[{"node":"Build drive-bs","type":"main","index":0}]]},"Build drive-bs":{"main":[[{"node":"Send drive-bs","type":"main","index":0}]]},"Plan":{"main":[[{"node":"Read Companies","type":"main","index":0}]]},"Seed Companies":{"main":[[{"node":"Read gmail-doc","type":"main","index":0},{"node":"Read e2e-mail","type":"main","index":0}]]},"Send gmail-doc":{"main":[[{"node":"Read gmail-bs","type":"main","index":0}]]},"Send gmail-bs":{"main":[[{"node":"Read drive-gdoc","type":"main","index":0}]]},"Send drive-gdoc":{"main":[[{"node":"Read drive-bs","type":"main","index":0}]]},"Read gmail-link":{"main":[[{"node":"Build gmail-link","type":"main","index":0}]]},"Build gmail-link":{"main":[[{"node":"Send gmail-link","type":"main","index":0}]]},"Send drive-bs":{"main":[[{"node":"Read gmail-link","type":"main","index":0}]]},"Read Blueprint":{"main":[[{"node":"Parse Blueprint","type":"main","index":0}]]},"Parse Blueprint":{"main":[[{"node":"Req Tag Rules","type":"main","index":0}]]},"Read e2e-mail":{"main":[[{"node":"Build e2e-mail","type":"main","index":0}]]},"Build e2e-mail":{"main":[[{"node":"Send e2e-mail","type":"main","index":0}]]},"Send e2e-mail":{"main":[[{"node":"Read e2e-drive-gdoc","type":"main","index":0}]]},"Read e2e-drive-gdoc":{"main":[[{"node":"Build e2e-drive-gdoc","type":"main","index":0}]]},"Build e2e-drive-gdoc":{"main":[[{"node":"Send e2e-drive-gdoc","type":"main","index":0}]]},"Send e2e-drive-gdoc":{"main":[[{"node":"Read e2e-drive-bs","type":"main","index":0}]]},"Read e2e-drive-bs":{"main":[[{"node":"Build e2e-drive-bs","type":"main","index":0}]]},"Build e2e-drive-bs":{"main":[[{"node":"Send e2e-drive-bs","type":"main","index":0}]]}},
+    /*__n8n__*/ connections: {"When clicking Execute":{"main":[[{"node":"Read Blueprint","type":"main","index":0}]]},"When Called":{"main":[[{"node":"Read Blueprint","type":"main","index":0}]]},"Req Tag Rules":{"main":[[{"node":"Req Settings","type":"main","index":0}]]},"Req Settings":{"main":[[{"node":"Get Settings","type":"main","index":0}]]},"Get Settings":{"main":[[{"node":"Plan","type":"main","index":0}]]},"Read Companies":{"main":[[{"node":"Build Companies","type":"main","index":0}]]},"Build Companies":{"main":[[{"node":"Seed Companies","type":"main","index":0}]]},"Read gmail-doc":{"main":[[{"node":"Build gmail-doc","type":"main","index":0}]]},"Build gmail-doc":{"main":[[{"node":"Send gmail-doc","type":"main","index":0}]]},"Read gmail-bs":{"main":[[{"node":"Build gmail-bs","type":"main","index":0}]]},"Build gmail-bs":{"main":[[{"node":"Send gmail-bs","type":"main","index":0}]]},"Read drive-gdoc":{"main":[[{"node":"Build drive-gdoc","type":"main","index":0}]]},"Build drive-gdoc":{"main":[[{"node":"Send drive-gdoc","type":"main","index":0}]]},"Read drive-bs":{"main":[[{"node":"Build drive-bs","type":"main","index":0}]]},"Build drive-bs":{"main":[[{"node":"Send drive-bs","type":"main","index":0}]]},"Plan":{"main":[[{"node":"Read Companies","type":"main","index":0}]]},"Seed Companies":{"main":[[{"node":"Read gmail-doc","type":"main","index":0},{"node":"Read e2e-mail","type":"main","index":0}]]},"Send gmail-doc":{"main":[[{"node":"Read gmail-bs","type":"main","index":0}]]},"Send gmail-bs":{"main":[[{"node":"Read drive-gdoc","type":"main","index":0}]]},"Send drive-gdoc":{"main":[[{"node":"Read drive-bs","type":"main","index":0}]]},"Read gmail-link":{"main":[[{"node":"Build gmail-link","type":"main","index":0}]]},"Build gmail-link":{"main":[[{"node":"Send gmail-link","type":"main","index":0}]]},"Send drive-bs":{"main":[[{"node":"Read gmail-link","type":"main","index":0}]]},"Read Blueprint":{"main":[[{"node":"Parse Blueprint","type":"main","index":0}]]},"Parse Blueprint":{"main":[[{"node":"Req Tag Rules","type":"main","index":0}]]},"Read e2e-mail":{"main":[[{"node":"Build e2e-mail","type":"main","index":0}]]},"Build e2e-mail":{"main":[[{"node":"Send e2e-mail","type":"main","index":0}]]},"Send e2e-mail":{"main":[[{"node":"Read e2e-drive-gdoc","type":"main","index":0}]]},"Read e2e-drive-gdoc":{"main":[[{"node":"Build e2e-drive-gdoc","type":"main","index":0}]]},"Build e2e-drive-gdoc":{"main":[[{"node":"Send e2e-drive-gdoc","type":"main","index":0}]]},"Send e2e-drive-gdoc":{"main":[[{"node":"Read e2e-drive-bs","type":"main","index":0}]]},"Read e2e-drive-bs":{"main":[[{"node":"Build e2e-drive-bs","type":"main","index":0}]]},"Build e2e-drive-bs":{"main":[[{"node":"Send e2e-drive-bs","type":"main","index":0}]]},"Send e2e-drive-bs":{"main":[[{"node":"Verify Sends","type":"main","index":0}]]},"Send gmail-link":{"main":[[{"node":"Verify Sends","type":"main","index":0}]]}},
     /*__n8n__*/ tags: [{"updatedAt":"2026-08-05T22:56:59.007Z","createdAt":"2026-08-05T22:56:59.007Z","id":"edad0600-cc86-4f33-b016-311b555b8f4e","name":"indox-app"},{"updatedAt":"2026-08-05T22:56:59.007Z","createdAt":"2026-08-05T22:56:59.007Z","id":"de8accc1-f4e8-4a42-887e-4545f489893f","name":"role:infra"},{"updatedAt":"2026-08-16T14:20:49.737Z","createdAt":"2026-08-16T14:20:49.737Z","id":"93ff3a3f-6b78-5d0a-a4de-2948ea161953","name":"app:indox"}],
     /*__n8n__*/ versionMetadata: {"name":null,"description":null},
     /*__n8n__*/ meta: null,
     /*__n8n__*/ pinData: null,
     /*__n8n__*/ staticData: null,
-    /*__n8n__*/ shared: [{"updatedAt":"2026-07-30T23:42:27.037Z","createdAt":"2026-07-30T23:42:27.037Z","role":"workflow:owner","workflowId":"IndoxInjectDemo01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <shlomo@local.dev>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
+    /*__n8n__*/ shared: [{"updatedAt":"2026-07-30T23:42:27.037Z","createdAt":"2026-07-30T23:42:27.037Z","role":"workflow:owner","workflowId":"IndoxInjectDemo01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
     id: 'IndoxInjectDemo01',
     name: 'INDOX Inject Demo Blueprint',
     active: false,
@@ -305,7 +305,7 @@ for(const r of wi){
   const buf=await this.helpers.getBinaryDataBuffer(r.i,'data');
   const _co=_coById[String(_idByName[r.fn])]||{}; const _from=(_co.name||'Demo Supplier')+' <'+(_co.email||('demo+'+r.i+'@example.com'))+'>';
   const cn=r.fn.replace(/\\.[^.]+$/,'');
-  const mime=buildMime({from:_from,to:'person2@example.com',subject:'חשבונית '+cn,body:'חשבונית (demo inject).',filename:r.fn,contentB64:buf.toString('base64')});
+  const mime=buildMime({from:_from,to:'person3@example.com',subject:'חשבונית '+cn,body:'חשבונית (demo inject).',filename:r.fn,contentB64:buf.toString('base64')});
   out.push({json:{op:'append',params:{raw_base64:mime,labels:[labelName],folder:'INBOX',connection_id:connId}}});
 }
 return out;`,
@@ -379,7 +379,7 @@ for(const r of wi){
   const buf=await this.helpers.getBinaryDataBuffer(r.i,'data');
   const _co=_coById[String(_idByName[r.fn])]||{}; const _from=(_co.name||'Demo Supplier')+' <'+(_co.email||('demo+'+r.i+'@example.com'))+'>';
   const cn=r.fn.replace(/\\.[^.]+$/,'');
-  const mime=buildMime({from:_from,to:'person2@example.com',subject:'דוח גיול '+cn,body:'דוח גיול (demo inject).',filename:r.fn,contentB64:buf.toString('base64')});
+  const mime=buildMime({from:_from,to:'person3@example.com',subject:'דוח גיול '+cn,body:'דוח גיול (demo inject).',filename:r.fn,contentB64:buf.toString('base64')});
   out.push({json:{op:'append',params:{raw_base64:mime,labels:[labelName],folder:'INBOX',connection_id:connId}}});
 }
 return out;`,
@@ -597,7 +597,7 @@ for (const r of wi) {
   const body = ['שלום,', 'מצורף קישור למסמך לטיפול אוטומציה:', url, 'תודה.'].join(NL);
   const L = [
     'From: Demo Link <demolink+' + r.i + '@example.com>',
-    'To: person2@example.com',
+    'To: person3@example.com',
     'Date: ' + new Date().toUTCString(),
     'Subject: ' + enchdr('קישור למסמך - ' + stem),
     'MIME-Version: 1.0',
@@ -921,6 +921,33 @@ return wi.map(r=>{
     // ROUTAGE ET CONNEXIONS
     // =====================================================================
 
+    @node({
+        id: 'ij000000-0000-0000-0000-0000000000ff',
+        name: 'Verify Sends',
+        type: 'n8n-nodes-base.code',
+        version: 2,
+        position: [2960, 0],
+    })
+    VerifySends = {
+        jsCode: `// Every call below continues on error, so a failed injection left the run looking successful and
+// the demo looking complete — and the runner reads the run's STATUS, so it saw neither. Read the
+// failures and fail the run: an injection demo that cannot fail is not a demo.
+const sends = ['Seed Companies','Send drive-bs','Send drive-gdoc','Send e2e-drive-bs','Send e2e-drive-gdoc',
+  'Send e2e-mail','Send gmail-bs','Send gmail-doc','Send gmail-link'];
+const failed = [];
+for (const n of sends) {
+  let items = [];
+  try { items = $('' + n).all(); } catch (e) { continue; }
+  for (const i of items) {
+    const j = (i && i.json) || {};
+    if (j.error || j.errorMessage) failed.push(n + ': ' + String(j.error || j.errorMessage).slice(0, 160));
+  }
+}
+if (failed.length) throw new Error('the injection failed in ' + failed.length + ' call(s) — ' + failed.join(' | '));
+return [{ json: { injected: true, sends: sends.length } }];
+`,
+    };
+
     @links()
     defineRouting() {
         this.WhenClickingExecute.out(0).to(this.ReadBlueprint.in(0));
@@ -957,5 +984,7 @@ return wi.map(r=>{
         this.SendE2eDriveGdoc.out(0).to(this.ReadE2eDriveBs.in(0));
         this.ReadE2eDriveBs.out(0).to(this.BuildE2eDriveBs.in(0));
         this.BuildE2eDriveBs.out(0).to(this.SendE2eDriveBs.in(0));
+        this.SendE2eDriveBs.out(0).to(this.VerifySends.in(0));
+        this.SendGmailLink.out(0).to(this.VerifySends.in(0));
     }
 }

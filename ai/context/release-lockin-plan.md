@@ -7,7 +7,7 @@ machine), `indox-sync-control-plane.md` (sync design), `api-abstraction-refactor
 ## The goal (agreed 2026-07-07)
 
 Lock all refactor gains into ONE clean, stable, releasable version — same functionality as the live
-bina-comp-VPS deployment, but on the refactored stack (v2 state machine, db/gmail API layers, sync_registry,
+hacohen-VPS deployment, but on the refactored stack (v2 state machine, db/gmail API layers, sync_registry,
 config-driven behaviour). **Definition of done (verbatim bar):** run locally and prove all syncs working
 short- and long-term + high load; full document pipeline verified; a **full clean 100-document sync-to-rest
 run with no issues/mistakes — smooth, fast, exactly-as-expected results** (all documents through sync, full
@@ -25,7 +25,7 @@ produces the proven-ready version + migration plan, not the swap.
 | Clean minimal + tags (added 2026-07-07) | **IN.** No legacy/redundant workflows in the release set; every workflow tag-organized under one canonical taxonomy. |
 | CI hard-lock (added 2026-07-07) | **IN.** Router E2E suites + the Driver full-pipeline suite run in GitHub Actions ci-verify — fully declarative, zero manual work. |
 | Driver full-pipeline E2E clone (added 2026-07-07) | **IN.** A 1:1 clone of the action-router E2E suites that drives the SAME tests through the main Driver (real full pipeline, all types). Main indox = hard-locked by router suites + Driver suite together. |
-| Repo re-context (added 2026-07-07) | **IN.** Entire deployment-bina-comp re-contexted: every production file explained, cleaned, dead files removed, context docs de-drifted. |
+| Repo re-context (added 2026-07-07) | **IN.** Entire deployment-hacohen re-contexted: every production file explained, cleaned, dead files removed, context docs de-drifted. |
 | VPS swap strategy | Later, separate: deploy dormant → shadow-diff vs 0.1.7 on real traffic → flip with 0.1.7 kept dormant for instant rollback. Documented in Phase 5 deliverable, not executed now. |
 
 ## What ships (the release set)
@@ -180,7 +180,7 @@ verified by re-running `bbox indox test all` + a sync smoke after every batch of
 
 ### Phase 4 — Re-context + package the release  [~1–1.5 days]
 Per `release.md` runbook, plus the full re-context pass:
-1. **Re-context the entire deployment-bina-comp**: refresh `architecture-map.md` to as-built; a per-file
+1. **Re-context the entire deployment-hacohen**: refresh `architecture-map.md` to as-built; a per-file
    explanation of everything under `production/` (compose files, services, n8n blueprint groups, fixtures,
    scripts) — what it is, why it exists, what calls it; delete dead files/scripts found on the way
    (superseded by the CLI consolidation and the prune); de-drift every `ai/context/` doc against reality
@@ -190,7 +190,7 @@ Per `release.md` runbook, plus the full re-context pass:
    extraction table, per-sync drain rates, soak notes, CI run link. This + the run IS the client-billable
    deliverable.
 4. Secret hygiene pass (`git grep --cached` patterns clean; `.env` only), version bump, PR
-   `deployment-bina-comp → main` per runbook when told to.
+   `deployment-hacohen → main` per runbook when told to.
 
 **Gate 4:** report written, evidence attached, docs match reality, branch clean + pushable. Client
 demo/billing ready.

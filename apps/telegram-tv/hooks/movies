@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+#: movies [query] [N] — the films it knows, matching a query (default 50):  ./bbox telegram-tv movies "" 20
+# Pipes the app's own CLI (apps/telegram-tv/cli.py) into its container: no address, no key, no rebuild.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+dcx exec -T telegram-tv python - movies "$@" < "$(npath "${REPO_ROOT}")/apps/telegram-tv/cli.py"

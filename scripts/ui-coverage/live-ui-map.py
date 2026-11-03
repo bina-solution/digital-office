@@ -91,7 +91,7 @@ an operator's password.
 On this laptop Docker lives in WSL and the 172.x bridge is not routable from Windows, so the natural
 place to run this is inside WSL, where the container IP resolves directly:
 
-    wsl -d Ubuntu -- bash -lc 'cd /mnt/c/…/deployment-bina-comp && python3 scripts/ui-coverage/live-ui-map.py'
+    wsl -d Ubuntu -- bash -lc 'cd /mnt/c/…/deployment-hacohen && python3 scripts/ui-coverage/live-ui-map.py'
 
 From Windows instead, forward the port first (any loopback tunnel will do) and pass --url.
 """
@@ -743,6 +743,11 @@ class Panel:
                        mobile=bool(profile.get("is_mobile", False)))
         if profile.get("has_touch"):
             self.page.call("Emulation.setTouchEmulationEnabled", enabled=True, maxTouchPoints=5)
+        if profile.get("user_agent"):
+            # A viewport is not a phone: apps decide "phone" from navigator.userAgent (view-profiles.yaml
+            # says which, and what was measured on this office, DGO-576). Set before the first navigation,
+            # like the metrics above, so the page's first read of it is already the profile's.
+            self.page.call("Emulation.setUserAgentOverride", userAgent=profile["user_agent"])
 
     def close(self):
         try:
@@ -1001,7 +1006,8 @@ def main():
 
     chrome = find_chrome(a.chrome)
     port = free_port()
-    print(f"══ live-ui-map   profile {a.profile} ({prof['width']}x{prof['height']} @{prof.get('dsf',1)}x)")
+    print(f"══ live-ui-map   profile {a.profile} ({prof['width']}x{prof['height']} @{prof.get('dsf',1)}x)"
+          + (f"\n   user agent: {prof['user_agent']}" if prof.get("user_agent") else ""))
     print(f"   console : {url}")
     print(f"   chrome  : {chrome}")
     print(f"   out     : {rel(out)}\n")

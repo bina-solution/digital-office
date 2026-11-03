@@ -14,6 +14,13 @@
 # CI still declares one STEP per gate, because a named step is what turns a failure into a
 # readable check rather than one red blob. That enumeration is now checked against this list by
 # --verify-ci, so the two cannot drift apart silently.
+# A GATE PRINTS THE SENTENCES OF THE THINGS IT JUDGES, and several of those are Hebrew. Without a
+# UTF-8 io encoding python writes them in the host's default (cp1252 on Windows) and the gate dies on
+# its own output before it can report anything — `portability-lint` (G10) refuses exactly that. The
+# library exports it; `set -u`-safe sourcing is not needed here because no variable is read.
+export PYTHONIOENCODING="${PYTHONIOENCODING:-utf-8}"
+export LC_ALL="${LC_ALL:-C.UTF-8}"
+
 set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
@@ -84,7 +91,7 @@ GATES=(
   undefined-name-lint       # G80  a name a python file reads is a name it binds (the rare branch's NameError)
   desktop-windows-lint      # G81  every screen is looked at in desktop mode's window: the suite, the builder and the short tiers are there (static half)
   palette-lint              # G82  a screen names no colour of its own: the office's one palette, and a count that only falls
-  embed-route-lint          # G83  every app the shell frames takes part in the route contract (one address per screen) — MIGRATING, see gate
+  embed-route-lint          # G83  every app the shell frames keeps its screen in its own URL (one address per screen)
   plane-tests-lint          # G72  a test that lives beside a plane or an app is run (7 of the planes' 10 and 20 of the apps' 21 ran nowhere)
   manifest-lint             # G73  every app manifest is one the compiler accepts (a refused one stops every render)
   compose-pin-lint          # G74  everyone who runs docker compose runs the same one (three versions among four callers)
@@ -120,13 +127,30 @@ GATES=(
   # the pairing contract says a request that crossed a link cannot write this office's own state and
   # named the class; measured 2026-10-09 (DGO-49) EIGHT of its routes answered a linked caller while
   # the §9 tests asked about two. Static, office-free, ~1 s — GREEN once each of the eight refuses
-  # the link, with one written justification (`catalog/preview`, which writes nothing).
+  # the link, with no written justification left: `catalog/preview` refuses it too since DGO-604.
   link-write-guard-lint     # G85  every state-writing route of the app plane refuses a linked caller
+  counted-plural-lint       # G89  a count of one is said as one («1 קונטיינרים», «1 פריטים»): the number only falls
+  # ── A webhook's pinned test data is the request it captured, headers included: three INDOX exports
+  # kept a working `authorization: Basic` there, published with the public repo from 2026-10-19 until
+  # the export's second reader found it (DGO-975 → DGO-980). Static, office-free, ~1 s.
+  pinned-credential-lint    # G87  no committed n8n workflow pins a credential its trigger captured
+  # ── A help text is not code — until a here-document makes it code. `bbox help`'s `usage()` is one
+  # unquoted `cat <<EOF` (it must expand ${c1}/${c0}/${DN}), so a backtick written in the help text
+  # as if it were a sentence RAN: `hooks/update`, on every `bbox help`, measured 2026-10-24. Static,
+  # office-free, ~1 s over 206 shell files — and a file with no extension whose shebang names a
+  # shell is one of them, wherever it lives under `apps/` or `platform-base/` (that is where the
+  # defect was born: `apps/n8n/hooks/pull`).
+  heredoc-substitution-lint # G88  an unquoted here-document's TEXT is never executed
+  # ── The private repo is read by every office's checkout, a client's server included, and nothing
+  # asked it what the public export asks of what it publishes: on its first run (2026-11-03) this
+  # found an OpenSSH private key in ai/context/, its public half still trusted on the Dell (DGO-1223).
+  # The export's own definition of a secret, over every tracked text file — ~35 s for 4,300 files.
+  tracked-secret-lint       # G92  no tracked file carries a private key or a provider's token
 )
 
 #: Gates that also ship a --self-test. Proving a gate CAN fail is part of running it: a gate only
 #: ever observed passing has not been tested (GATES.md, "Adding a gate", step 3).
-SELF_TESTED=(image-pin-lint capability-use-lint stalled-pagination-lint unread-error-lint undefined-name-lint desktop-windows-lint palette-lint embed-coverage-lint embed-route-lint route-claim-lint screen-words-lint registry-drift-lint raw-exception-lint issue-file-lint manifest-lint layer0-lint engine-bypass-lint state-writer-lint legacy-ref-lint browser42-site-neutrality-lint paginated-list-lint source-id-lint dangling-workflow-ref-lint trigger-schema-drift-lint fixture-live-key-lint switch-fallback-lint dead-activation-lint n8n-loop-order-lint drive-connection-lint app-tag-lint noop-success-lint dropped-signal-lint node-credential-lint swallowed-subcall-lint fixture-delete-scope-lint credential-blank-lint plane-tests-lint compose-pin-lint endpoint-credential-lint open-destructive-webhook-lint identity-header-lint exposure-lint link-write-guard-lint)
+SELF_TESTED=(image-pin-lint capability-use-lint stalled-pagination-lint unread-error-lint undefined-name-lint desktop-windows-lint palette-lint embed-coverage-lint embed-route-lint route-claim-lint screen-words-lint registry-drift-lint raw-exception-lint issue-file-lint manifest-lint layer0-lint engine-bypass-lint state-writer-lint legacy-ref-lint browser42-site-neutrality-lint paginated-list-lint source-id-lint dangling-workflow-ref-lint trigger-schema-drift-lint fixture-live-key-lint switch-fallback-lint dead-activation-lint n8n-loop-order-lint drive-connection-lint app-tag-lint noop-success-lint dropped-signal-lint node-credential-lint swallowed-subcall-lint fixture-delete-scope-lint credential-blank-lint plane-tests-lint compose-pin-lint endpoint-credential-lint open-destructive-webhook-lint identity-header-lint exposure-lint link-write-guard-lint counted-plural-lint pinned-credential-lint heredoc-substitution-lint cpu-budget-lint tracked-secret-lint)
 
 #: Gates CI runs with --strict: the end state, not the scoreboard a migration reads. This runner
 #: called every gate bare, so for as long as they had findings G9 (layering) and G25 (capability

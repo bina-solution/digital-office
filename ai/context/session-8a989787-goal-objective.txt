@@ -1,0 +1,9 @@
+The goal this session carried until it was stopped by the owner on 2026-10-11, kept here because the
+goal itself was CLEARED (a paused goal was re-armed after the container was recreated on 2026-10-13,
+so pausing was not a stop). Restore it with:
+
+    ./bbox agent goal session-8a989787-b95e-4b97-90ae-d60051a5baf6 set "<the line below>" --rounds 400
+
+--- the objective, verbatim ---
+DGO-56 חסום על הקישור ללשכת המק (502 הלילה) — עד שהקישור חוזר: לקחת את הפריט הפתוח הבא בלוח DGO שאינו של הבעלים ואינו תלוי בקישור או ב-VPS (למשל מהרשימה: flt-004 המשטחים בקונסול, swallowed-subcall-lint לירוק, 36 הממצאים ב-DGO-350, rap-006 התראות סף, rap-003/004/005 סריקות מתוזמנות), לבצע, להוכיח ולסגור עם הערה. כשהקישור חוזר — DGO-56 לפי המתכון בשלושה צעדים ב-from-azaria.md §38. בלי לעצור, בלי לשאול; כל 'בוצע' נושא הוכחה.
+--- end ---

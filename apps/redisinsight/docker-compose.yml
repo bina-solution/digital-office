@@ -33,7 +33,7 @@ services:
     - traefik.http.routers.redisinsight-https.rule=Host(`${REDISINSIGHT_BASE_URL}`)
     - traefik.http.routers.redisinsight-https.entrypoints=websecure
     - traefik.http.routers.redisinsight-https.tls=true
-    - traefik.http.routers.redisinsight-https.tls.certresolver=myresolver
+    - traefik.http.routers.redisinsight-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
     - traefik.http.routers.redisinsight-https.service=redisinsight
     - traefik.http.routers.redisinsight-https.middlewares=authentik@file
     - traefik.http.services.redisinsight.loadbalancer.server.port=5540

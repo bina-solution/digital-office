@@ -1,4 +1,4 @@
-Deploy a new app, declaratively, into deployment-bina-comp.
+Deploy a new app, declaratively, into deployment-hacohen.
 
 Read first: compose.yml, production/ (or development/) compose.yml + compose.override.yml,
 .env / .env.ex, and context/deployment-context.txt (layout, domains, networks, conventions).

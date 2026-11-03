@@ -1,0 +1,52 @@
+# cad — FreeCAD in the office (DGO-1076).
+#
+# FreeCAD 1.1 (LGPL), the open-source parametric CAD closest to Fusion 360 / SolidWorks: solids, assemblies, TechDraw
+# production drawings, STEP, and sheet metal (unfold, K-factor, DXF flat patterns) through the SheetMetal workbench. The
+# linuxserver image streams the real desktop app to the browser (Selkies, :3000), so a person designs and checks a model
+# from the console; `freecadcmd` in the same image is its headless side.
+#
+# The parametric models themselves (sizes in → pieces, sheets, BOM, cost, STEP) are the cad-api app, which runs without
+# this one. Both share `cad_projects`: a STEP the api writes opens here, a model saved here is a file the api can read.
+# No secret is mounted; the edge (`auth: sso`) is the front door.
+services:
+  cad:
+    # Pinned: an update is a decision, never a surprise. freecad/Dockerfile = linuxserver 1.1.4-ls157
+    # (FreeCAD 1.1.4, 2026-09-28) + the SheetMetal workbench at a fixed commit, with the networkx it needs.
+    build:
+      context: ./freecad
+      dockerfile: Dockerfile
+    container_name: cad-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: cad
+    restart: unless-stopped
+    environment:
+      - PUID=${CAD_PUID:-1000}
+      - PGID=${CAD_PGID:-1000}
+      - TZ=${TZ:-UTC}
+    volumes:
+      - cad_config:/config
+      - cad_projects:/config/projects
+    # Chromium-class streaming and Qt's GL want shared memory; the default 64 MB stalls the stream.
+    shm_size: "1gb"
+    networks:
+      - traefik-network
+    # A desktop app with a GL viewport: heavy. Run where the herd puts heavy work.
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 3G
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:3000/"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 120s
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+
+networks:
+  traefik-network:
+    external: true
+volumes:
+  cad_config:
+  cad_projects:

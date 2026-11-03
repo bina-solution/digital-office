@@ -58,7 +58,7 @@ collapses into a single '00000' bucket and matches every other one.
 PROVEN LIVE, from the rows' own audit column, 2026-08-06 — 11 rows carry
     DOUBLE_LINE_CONTEXT = {"idMatch":false,"hashMatch":false,"compShortDocMatch":"<other row>","match":true}
 i.e. neither the id nor the content hash matched and the ONLY thing that made them DOUBLE
-was the '00000' label: 10 rows on COMPANY_ID 516511375 and 1 on 513825943, all
+was the '00000' label: 10 rows on COMPANY_ID 500000047 and 1 on 500000054, all
 SOURCE_TYPE='BALANCE_SHEET' with no COMPANY_DOC_ID, no DOC_ID and no HASH.
 
 The fix is one line — make the canonical formula return '' rather than '00000' when the

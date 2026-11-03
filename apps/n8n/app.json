@@ -33,6 +33,15 @@
         "process_lock",
         "Batch Upsert"
       ]
+    },
+    {
+      "name": "workflow-hooks",
+      "type": "protocol",
+      "endpoint": "http://n8n-webhook:5678",
+      "link": true,
+      "required_ops": [
+        "webhook"
+      ]
     }
   ],
   "use": [
@@ -91,6 +100,10 @@
     }
   ],
   "compose": "docker-compose.yml",
+  "agent": {
+    "context": "AGENT.md",
+    "order": 45
+  },
   "blueprints": {
     "n8n": "blueprint/n8n"
   },
@@ -101,11 +114,13 @@
       "auth": "none",
       "emit_labels": false,
       "module": {
+        "id": "n8n",
         "group": "תשתית",
         "icon": "workflow",
         "embed": false,
+        "external": true,
         "name": "n8n",
-        "desc": "מנוע האוטומציה והתהליכים",
+        "desc": "מנוע האוטומציה והתהליכים: האוטומציות של האפליקציות, הרצות ועריכה",
         "order": 210
       }
     }

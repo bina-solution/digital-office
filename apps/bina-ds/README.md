@@ -7,7 +7,7 @@ What is ours, and where:
 
 | Piece | Path | What it does |
 |---|---|---|
-| Hebrew language pack | `plugins/locale-he/` | Adds the `he` language to the harness web client — one Hebrew dictionary per UI namespace (`dicts/he/*.json`, checked against the pinned English source in `dicts/en/`) and right-to-left document direction while Hebrew is active. `build-client.mjs` generates the browser bundle. |
+| Hebrew language pack | `plugins/locale-he/` | Adds the `he` language to the harness web client — one Hebrew dictionary per UI namespace (`dicts/he/*.json`, checked against the pinned English source in `dicts/en/`) and right-to-left document direction while Hebrew is active. `build-client.mjs` generates the browser bundle. The node half also DECLARES the office's language, once (`declareOfficeLocale`: the harness's own `locale` setting, written only while it holds no preference) — adding a language is not selecting one, and until DGO-550 nothing selected one, so the interface opened in whatever the browser asked for with stock `en` as the fallback. `node test/locale-default.test.mjs` pins that write and its three refusals. |
 | Random Hebrew wording | `plugins/locale-he/phrases.json` | The keys whose Hebrew value is drawn at random instead of being one fixed sentence: the blank-session hero title (`conversation/hero.headline`) and the turn-status verb shown while the agent works (`chat/chat.deepDiving`). One pick per page load, validated against both dictionaries at build time. Owner decision 2026-09-25. |
 | Bina brand | `plugins/brand-bina/` | The sidebar name and mark and the blank-session hero mark, in place of the harness vendor's wordmark and whale — and hides the harness's own "preview" pill beside the hero title (matched by the CSS-module suffix `_previewBadge`). |
 | The conversation in the address bar | `plugins/session-link/` | The harness was the one embedded app that took no part in the shell's route contract: its URL was `#/m/bina` whatever conversation was open, because the browser half has no URL routing and keeps its selection in the browser's storage. This plugin opens `?s=<sessionId>` off its own URL when the shell hands one over (the console's `#/m/bina?s=<id>`, or `bina.<domain>/?s=<id>` standalone) and reports every change of the open conversation back with `bina:route`, which the shell mirrors into the address bar. Owner request 2026-10-12. |
@@ -65,36 +65,75 @@ out of this container once (`bbox agent login`, via the engine) and is cached at
 happen; `bbox agent new -F - < brief.md` hands a brief to עזריה and stays attached until the turn
 ends. Ctrl-C detaches; the session keeps running.
 
-## The office pulse — the reminder that outlives a turn (`pulse.sh`)
+## Local models — every Ollama in reach is in the model picker (`tools/llm-routes.mjs`)
 
-The owner's standing ask (2026-10-09): *"set yourself a reminder every 5 minutes to verify that
-development is progressing as well as possible … keep working until everything is perfect"*, and *"give
-Azaria automations like Raphael's, so he can trigger himself on a schedule and continue a specific
-session"*. A reminder cannot live inside a turn: the turn that was building exactly this was cut
-mid-work when this container was recreated at 04:53, and the reminder died with it. So the timer lives
-in the container and starts with it (`harness/entrypoint.sh`, `BINA_DS_PULSE=0` disables).
+The harness mounts its pi-ai adapter dormant. It has no routes until a `llm-pi-ai:` section in
+`settings.yaml` declares them, and it re-reads that section on every request. The
+`bina-ds-llm-routes` container (same image, same volume, the checkout read-only) writes that
+section once a minute.
+- **Sources:** this office's `ollama` app (route `dgo-ollama-local`), and every paired office's
+  (`.generated/registry/remote.<office>.ollama.json`), route `dgo-ollama-<office>`. A paired
+  office's Ollama is reached at `http://ollama.<office>:<link_port>/v1`, its door on the link.
+  The name is the office id this office paired with, never a label the peer gave itself.
+- Each model that declares tool calling joins the route, beside DeepSeek in the picker.
+- **What the writer owns:** only those routes, and one placeholder credential, `DGO_OLLAMA_KEY`.
+  pi-ai refuses a route without a key, and Ollama ignores it.
+- **What it never does:** create `settings.yaml`, or touch a section it cannot read as a map.
+- **Silence:** an Ollama that stops answering keeps its route for 30 minutes. A route that
+  `agent-default-model` names is never removed.
+- **A silent stream is not a dead one:** a CPU reads the whole prompt before its first token, so
+  every route says `streamIdleTimeoutMs: 2700000` (45 minutes; pi-ai's default is 300 s). The
+  owner's first local session, on the full preset, ended on six 300-s timeouts in a row
+  (2026-10-21).
+- **The relay:** every route's `baseURL` is the writer itself
+  (`http://bina-ds-llm-routes-<office>:11435/<route>/v1`). Ollama sends its headers with the first
+  token, and Node's fetch drops a response whose headers have not come in 300 s ("Request timed
+  out.", the HP asking the Dell over the link). The relay answers a streamed request at once and
+  sends an SSE comment every 15 s until the model's stream starts. An Ollama error comes back as an
+  SSE `error` event, and a client that goes away cancels the request at Ollama.
+- **Thinking is off unless a session asks for it:** a model whose `/api/show` says `thinking`
+  gets `reasoningEfforts: {off: none, low, medium, high}`, so a request with no level sends
+  `reasoning_effort: "none"`. qwen3.5:2b on the Dell answered a sum in 1.5 s that way, and in
+  273.5 s by default.
 
-Every `BINA_DS_PULSE_EVERY` (default 300 s) it:
+**`עזריה · מקומי` (`presets/azaria-local`)** is installed into `$DSH_HOME/.agent-presets` once the
+office has a local route. It keeps a short persona, bash, the file tools and compaction.
+- Measured against a stub model on the Dell: a session on it sends 4.5k characters of messages and
+  5 tools (6.7k characters). The full preset sends 67.7k characters and 26 tools (28.5k).
+- That is the difference between a few minutes and the better part of an hour, cold, on a laptop
+  CPU.
+- Measured on the Dell (DGO-825): the route is live in the catalog on the next request, a session
+  that selects it sends its whole turn there, and the turn completes.
 
-1. asks the agent API on loopback — with **this container's own** token — which sessions exist and how
-   many are actually running;
-2. if something is running, says so and stops (the office is working);
-3. if nothing has run for `BINA_DS_PULSE_IDLE_TICKS` ticks (default 4 ≈ 20 min) **while a session still
-   holds an active goal**, it nudges that session to carry on — and the nudge names the next work item
-   from the hub (`bbox project-pln tasks list --as azaria --state unstarted`), so the continuation starts
-   on an item rather than on a shrug;
-4. handles the **wake queue** (below), and posts a notice when it nudges.
+**Choosing the model also changes the default.** `session/selectModel`, which the web model
+picker sends, rewrites `agent-default-model` in `settings.yaml` too. Every new session then
+starts on the chosen route. On an office whose agent works on its own (goals, the pulse), choose
+the local model for the conversation and put the default back afterwards.
 
-### The wake queue — how an automation outside the container gets work moving
+## The clock — n8n, declared with this app (`blueprint/n8n/`)
 
-An outside app cannot hold the agent token (it is root-only here, by the contract), and handing it out
-would mean "any container may drive the agent" — a design decision nobody asked for. So the door is a
-queue nobody needs a secret to write: the **notice centre**. Any n8n workflow (Raphael's scans already
-post there) can ask for work by posting a notice whose `source_id` starts with `wake`; this timer,
-which *does* hold the token, reads it, wakes the session the notice names — or the one holding an active
-goal — and marks the notice read. Every wake is an auditable row, and no credential crosses a container
-boundary. `BINA_DS_PULSE_ONCE=1` runs a single tick, `BINA_DS_PULSE_DRY=1` prints what it would do.
+The owner's ruling, 2026-10-14: *«use n8n automation blueprinted inside bina-ds app. And remove pulse and
+all of this mod bullshit, keep clean and official like dsreleased»*. What used to be a shell loop inside
+this container — `pulse.sh`, a 5-minute timer that nudged conversations, re-armed goals and consumed a
+"wake queue" of notices — is **deleted**. Nothing in this container polls, sleeps or wakes on a timer.
 
-The other half of the same idea lives outside: `n8n`'s `raphaelPulse00001` (every 5 minutes, no token)
-reads `/v1/health?deep=1`, the containers and the notice centre, reports what is broken, and posts the
-wake request that this timer acts on.
+The schedule lives where the office declares automations: `apps/bina-ds/blueprint/n8n/`, imported into
+the office's n8n with `./bbox n8n push bina-ds`.
+
+| workflow | fires (Asia/Jerusalem) | does |
+|---|---|---|
+| `binaSeder00001` | 07:00 · 13:00 · 21:00 | `POST http://bina-ds:3081/v1/seder/<cycle>` — opens the day's סדר |
+
+### The door a workflow may call
+
+`POST /v1/seder/<cycle>` (`shacharit` · `mincha` · `arvit`), served by this app's adapter, is **one verb
+wide on purpose**: it opens a new session titled `סדר <name> · <date> · <time>`, hands it the `seder`
+brief, posts a notice with the link, and answers `{started, session, link}`. It refuses a second start of
+the same cycle on the same day, so two triggers — or a second clock somebody adds later — cannot run a
+cycle twice.
+
+It is deliberately **outside the Bearer-token gate**: the agent token can list, read and drive every
+conversation, and an n8n workflow must not hold it. Everything else on `bina-ds:3081` still answers 401
+without the token. The one thing that survived from the pulse is the harness's own behaviour: an active
+goal is continued by the harness itself. Nothing re-arms a goal that was disarmed — a סדר that stopped
+resumes from the day's page (`data/bina-ds/sedarim/<date>/`), or when the owner says its name.

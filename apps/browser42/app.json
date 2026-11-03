@@ -11,6 +11,8 @@
     "he": "דפדפן סטלת' שיתופי לאוטומציה ול-QA, עם לוח משותף למחשב של המשתמש ותצוגה חיה",
     "en": "Shared stealth browser for automation and QA, with a shared clipboard and a live view"
   },
+  "agent_api_port": 8766,
+  "agent_api_service": "browser42-task-runner",
   "capabilities": [
     {
       "name": "browser",
@@ -48,6 +50,13 @@
         "browser42-task-runner",
         "browser42-browser"
       ]
+    },
+    {
+      "id": "browser42-totp-facebook",
+      "required": false,
+      "service": [
+        "browser42-task-runner"
+      ]
     }
   ],
   "contributes": {
@@ -67,6 +76,18 @@
         },
         "now": "Type the account ONCE, here — user + password. `bbox b42 task login <slug> facebook` then leases it from the credential plane under the task runner's own container identity, types it into the page over CDP and never prints, journals or returns it: the agent that drives the browser says which SITE, never which secret. Because it is re-derived at every login, it survives a container recreate, an image rebuild and a profile wipe — the three events that used to cost the owner a re-login. Companion keys: BROWSER42_LOGIN_FACEBOOK_USER (the email/phone) and an optional BROWSER42_LOGIN_FACEBOOK_URL. The lease is granted only to the `browser42-task-runner` service, which is what the `service` field on this app's connections[] entry pins down.",
         "wizard": "fill שם משתמש + סיסמה once; then sign in from the browser task: bbox b42 task login <slug> facebook"
+      },
+      {
+        "id": "browser42-totp-facebook",
+        "title": "Facebook one-time code (TOTP) — the office browser passes the second step by itself",
+        "title_he": "קוד חד-פעמי לפייסבוק (TOTP) — הדפדפן של הלשכה עובר את השלב השני לבד",
+        "kind": "totp",
+        "env": "BROWSER42_LOGIN_FACEBOOK_TOTP",
+        "probe": {
+          "type": "present"
+        },
+        "now": "The second step of the Facebook sign-in, passed by the office itself. Paste the TOTP secret ONCE — the otpauth:// URI an authenticator exports, or the base32 key Facebook shows under «אימות דו-שלבי → אפליקציית אימות»; connections validates it on write (RFC 6238, totp.py) and keeps it in the vault only — export and lease skip the kind, so no container ever holds it. When the login page asks for a code, `bbox b42 task login <slug> facebook` asks the plane for the CURRENT code (GET /api/totp/browser42-totp-facebook, gated to the `browser42-task-runner` service this entry names) and types it: no agent, log, journal or response carries the secret or the code. Without this row the login stops with a NAMED refusal (`needs_totp_secret`) that carries the handoff link to the live view, where a human finishes the step.",
+        "wizard": "סוד ה-TOTP מתוך «אימות דו-שלבי → אפליקציית אימות» — paste the otpauth:// URI or the base32 key once; from then on the browser passes the second step by itself"
       }
     ]
   },
@@ -76,9 +97,6 @@
       "host": "browser42",
       "port": 80,
       "auth": "sso",
-      "auth_exclude": [
-        "/mcp"
-      ],
       "service": "browser42-caddy",
       "emit_labels": false,
       "sso": {
@@ -102,6 +120,12 @@
             "path": "/websockify",
             "transport": "websocket",
             "strip_mount_prefix": true
+          },
+          {
+            "path": "/handoff",
+            "transport": "http",
+            "match": "prefix",
+            "strip_mount_prefix": true
           }
         ]
       }
@@ -124,5 +148,9 @@
   "cli": {
     "alias": "b42",
     "fallback": "state"
+  },
+  "agent": {
+    "context": "AGENT.md",
+    "order": 50
   }
 }

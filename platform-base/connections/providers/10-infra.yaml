@@ -40,9 +40,23 @@
   kind: config
   env: DBS_ALLOWED_IPS
   # consumers: DERIVED from each app\'s connections[] (see catalog()) — do not author
-  now: "literal operator IPs in .env -> traefik ipallowlist middleware on :5432/:6379 (Bina-comp-locked)"
+  now: "literal operator IPs in .env -> traefik ipallowlist middleware on :5432/:6379 (Hacohen-locked)"
   probe: {type: present}
   wizard: "text field (advanced)"
+
+- id: forward-auth-secret
+  # NOT automint: the key forward-auth reads is .env's (scripts/ci-env.sh, or the office's own swap), and
+  # a value minted here for an office that has none yet would be a second key nothing reads — which a
+  # later .env value would not replace in the vault (the second reader, r030-002)
+  title: forward-auth session signing key
+  kind: text-secret
+  env: FORWARD_AUTH_SECRET
+  # consumers: DERIVED from each app\'s connections[] (see catalog()) — do not author
+  impact: [forward-auth]
+  now: "plain env -> forward-auth (the cookie signing key, >= 32 bytes; it refuses to start without one).
+        Changing it signs every browser out, and forward-auth reads it only when it starts."
+  probe: {type: http, url: "http://forward-auth:9078/healthz"}
+  wizard: "from .env (FORWARD_AUTH_SECRET)"
 
 - id: authentik-secret-key
   automint: {type: hex, bytes: 50}

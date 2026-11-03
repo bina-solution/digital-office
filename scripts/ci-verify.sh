@@ -50,7 +50,14 @@ pg()      { docker exec -e PGPASSWORD="$2" -i "$1" psql -U "$3" -d "$4" -tAc "$5
 
 echo "### ci-verify — DEPLOYMENT_NAME=${DN}"
 
-# ── authentik ───────────────────────────────────────────────────────────────
+# ── identity: the one the edge asks (.env's DGO_IDENTITY; forward-auth by default since 0.3.0) ──
+if [ "$(read_env DGO_IDENTITY)" = forward-auth ]; then
+gh "forward-auth"
+FA="$(cn forward-auth)"
+if [ -n "$FA" ]; then assert forward-auth health-forward-auth 300 "forward-auth healthy" is_up "$FA"
+else ko forward-auth health-forward-auth "forward-auth container not found"; fi
+ghend
+else
 gh "authentik"
 AK_SRV="$(cn authentik-server)"; AK_PG="$(cn authentik-postgres)"; AK_PGPW="$(read_env AUTHENTIK_POSTGRES_PASSWORD)"
 if [ -n "$AK_SRV" ] && assert authentik health-authentik 600 "authentik-server healthy" is_up "$AK_SRV"; then
@@ -60,6 +67,7 @@ if [ -n "$AK_SRV" ] && assert authentik health-authentik 600 "authentik-server h
   assert authentik integration-authentik-providers 300 "SSO proxy providers applied from deployment-apps.yaml" prov_ok
 else [ -z "$AK_SRV" ] && ko authentik health-authentik "authentik-server container not found"; fi
 ghend
+fi
 
 # ── n8n (blueprint push + verify) ────────────────────────────────────────────
 gh "n8n"

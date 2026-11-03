@@ -1,0 +1,502 @@
+# apps/meet — the office's video meetings: Jitsi Meet (docker-jitsi-meet stable-11248), wrapped.
+#
+#   meet          the web front (nginx + the meeting app), routed at meet.<domain>, OPEN: guests join
+#                 a room by its link; only a signed-in host can open one (JWT, below)
+#   meet-prosody  XMPP — signalling, chat, the room roster
+#   meet-jicofo   the focus — runs each conference, picks the bridge
+#   meet-jvb      the video bridge — the media. Its UDP port is the only media path and is published
+#                 on the machine; hooks/prepare opens it on an office with a public domain
+#   meet-jibri    the recorder (Jitsi's own, Jibri): joins a room as a hidden participant when a
+#                 recording starts and writes it to the volume meet_recordings — the office's copy
+#   meet-start    the host's door, no screen of its own: the console tile lands on Jitsi's welcome
+#                 page; "I am the host" and the welcome card's "new meeting" come here for a short
+#                 JWT and go straight back into Jitsi; it also lists the recordings
+#
+# Config is environment + the read-only files in web/ (Jitsi appends custom-config.js and
+# custom-interface_config.js to its own; plugin.head.html and title.html are its include points; the
+# Hebrew catalogue lang/main-he.json replaces the image's partial one). Nothing is written to the repo.
+# Secrets (MEET_JWT_SECRET, MEET_JICOFO_PASSWORD, MEET_JVB_PASSWORD, MEET_JIBRI_XMPP_PASSWORD,
+# MEET_JIBRI_RECORDER_PASSWORD, MEET_RECORDER_WATCH_SECRET) are minted into .env by hooks/prepare; a
+# service that finds one empty refuses to start and says which (the watchdog's: its doors stay shut).
+
+# The five Jitsi services share their XMPP settings (TZ … ENABLE_IPV6) and every service its logging,
+# WRITTEN OUT in each, not as a YAML anchor and merge key: the native compiler (packaging/dgo) reads
+# plain YAML, and an anchor here refused every office that enables Meet (DGO-945). ENABLE_IPV6 is
+# "0" because nginx and prosody listen on [::] when it is on, and a machine without IPv6 (this
+# sandbox's kernel) refuses the socket outright; browsers reach the office over IPv4 at its edge.
+
+services:
+  meet:
+    image: ghcr.io/jitsi/web:stable-11248
+    container_name: meet-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: meet
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /run:size=16M,mode=1750,exec
+      - /tmp:size=16M,mode=1777,noexec
+    # Paths are this file's own directory's (compose resolves an included file's relative paths there).
+    volumes:
+      - ./web:/config:ro
+      - ./web/plugin.head.html:/usr/share/jitsi-meet/plugin.head.html:ro
+      - ./web/title.html:/usr/share/jitsi-meet/title.html:ro
+      - ./web/welcomePageAdditionalCard.html:/usr/share/jitsi-meet/static/welcomePageAdditionalCard.html:ro
+      - ./lang/main-he.json:/usr/share/jitsi-meet/lang/main-he.json:ro
+    environment:
+      TZ: Asia/Jerusalem
+      PUBLIC_URL: https://${MEET_BASE_URL:-meet.${DEPLOYMENT_DOMAIN:-localhost}}
+      XMPP_SERVER: xmpp.meet.jitsi
+      ENABLE_AUTH: "1"
+      AUTH_TYPE: jwt
+      ENABLE_GUESTS: "1"
+      ENABLE_P2P: "false"
+      ENABLE_RECORDING: "1"
+      ENABLE_IPV6: "0"
+      DISABLE_HTTPS: "1"
+      ENABLE_HTTP_REDIRECT: "0"
+      ENABLE_LETSENCRYPT: "0"
+      DEFAULT_LANGUAGE: he
+      ENABLE_PREJOIN_PAGE: "true"
+      ENABLE_WELCOME_PAGE: "true"
+      ENABLE_REQUIRE_DISPLAY_NAME: "true"
+      ENABLE_THIRD_PARTY_REQUESTS: "false"
+      # "I am the host" (Jitsi's tokenAuthUrl) goes to the host's door THROUGH THE CONSOLE (/a/meet/):
+      # the console already knows who is signed in, so inside its frame no sign-in page is shown
+      # (one would refuse to be framed); outside it, the console's own sign-in comes first.
+      TOKEN_AUTH_URL: ${AUTH_PROTOCOL:-https}://${CONSOLE_BASE_URL:-console.${DEPLOYMENT_DOMAIN:-localhost}}/a/meet/r/{room}
+    labels:
+      - traefik.docker.network=traefik-network
+    networks:
+      - traefik-network
+      - meet-net
+    depends_on:
+      - meet-prosody
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost:8000/"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits: { cpus: "0.25", memory: 128M }
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  meet-prosody:
+    image: ghcr.io/jitsi/prosody:stable-11248
+    container_name: meet-prosody-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: meet-prosody
+    restart: unless-stopped
+    read_only: true
+    # An empty secret would start an XMPP server that accepts no host (or, for the JWT secret, signs
+    # nothing): refuse instead, by name. exec keeps s6's /init as PID 1.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        for v in JWT_APP_SECRET JICOFO_AUTH_PASSWORD JVB_AUTH_PASSWORD JIBRI_XMPP_PASSWORD JIBRI_RECORDER_PASSWORD TURN_CREDENTIALS; do
+          [ -n "$$(printenv $$v)" ] || { echo "meet: $$v is empty — apps/meet/hooks/prepare mints it into .env"; exit 1; }
+        done
+        exec /init
+    tmpfs:
+      - /run:size=16M,mode=1750,exec
+      - /tmp:size=16M,mode=1777,noexec
+      - /config:size=1M,mode=1755
+    volumes:
+      - meet_prosody_data:/var/lib/prosody
+      # Every meeting a host opens is recorded from its start, from any client (DGO-831), whoever
+      # shares a screen is told by the server that it is shared (DGO-832), and whoever's microphone
+      # is on but sends nothing is told that too (DGO-959): the image's own plugin folder, loaded on
+      # the conference component by XMPP_MUC_MODULES.
+      - ./prosody/mod_meet_auto_record.lua:/prosody-plugins-custom/mod_meet_auto_record.lua:ro
+      - ./prosody/mod_meet_share_notice.lua:/prosody-plugins-custom/mod_meet_share_notice.lua:ro
+      - ./prosody/mod_meet_silent_mic.lua:/prosody-plugins-custom/mod_meet_silent_mic.lua:ro
+      # …and the recorder's watchdog (jibri/watch.py) speaks to the recorded room through a door here
+      # (HTTP on 5280, meet-net only, a bearer secret): «⚠️ ההקלטה מאבדת קול/תמונה», the captions.
+      - ./prosody/mod_meet_recorder_watch.lua:/prosody-plugins-custom/mod_meet_recorder_watch.lua:ro
+      # …and the live captions every browser sends (web/plugin.head.html) are written down as they are
+      # said, one file per meeting, read by meet-start through a door here (fireplace, 2026-10-27).
+      - ./prosody/mod_meet_captions.lua:/prosody-plugins-custom/mod_meet_captions.lua:ro
+    environment:
+      TZ: Asia/Jerusalem
+      PUBLIC_URL: https://${MEET_BASE_URL:-meet.${DEPLOYMENT_DOMAIN:-localhost}}
+      XMPP_SERVER: xmpp.meet.jitsi
+      ENABLE_AUTH: "1"
+      AUTH_TYPE: jwt
+      ENABLE_GUESTS: "1"
+      ENABLE_P2P: "false"
+      ENABLE_RECORDING: "1"
+      ENABLE_IPV6: "0"
+      XMPP_MUC_MODULES: meet_auto_record,meet_share_notice,meet_silent_mic,meet_recorder_watch,meet_captions
+      MEET_AUTO_RECORD: ${MEET_AUTO_RECORD:-1}
+      # The silent-microphone guard (DGO-959): how long a microphone that is on may send nothing
+      # before its owner is told (0 = off), and where the bridge's debug REST answers.
+      MEET_SILENT_MIC_SECONDS: ${MEET_SILENT_MIC_SECONDS:-20}
+      # …and how long after joining a person with no microphone track (no browser permission, no
+      # device) or an unmuted one the bridge never hears is told (fireplace, 2026-10-26).
+      MEET_NO_MIC_SECONDS: ${MEET_NO_MIC_SECONDS:-10}
+      # M5-4.1-13 (the «barking» of call 5): 0 = a voice that stops (and comes back) is told to that person
+      # only, quietly (kept in the chat, no pop-up, no sound); 1 = pop-up + sound to everyone, as before.
+      # And at most once per person per MEET_SILENT_MIC_REPEAT_SECONDS.
+      MEET_SILENT_MIC_RING: ${MEET_SILENT_MIC_RING:-0}
+      MEET_SILENT_MIC_REPEAT_SECONDS: ${MEET_SILENT_MIC_REPEAT_SECONDS:-600}
+      MEET_JVB_DEBUG_URL: http://meet-jvb:8080
+      MEET_RECORDER_WATCH_SECRET: ${MEET_RECORDER_WATCH_SECRET:-}
+      # How long the live captions' files are kept (prosody/mod_meet_captions.lua).
+      MEET_CAPTIONS_KEEP_DAYS: ${MEET_CAPTIONS_KEEP_DAYS:-30}
+      JWT_APP_ID: dgo
+      JWT_APP_SECRET: ${MEET_JWT_SECRET:-}
+      JWT_ACCEPTED_ISSUERS: dgo
+      JWT_ACCEPTED_AUDIENCES: jitsi
+      JICOFO_AUTH_PASSWORD: ${MEET_JICOFO_PASSWORD:-}
+      JVB_AUTH_PASSWORD: ${MEET_JVB_PASSWORD:-}
+      JIBRI_XMPP_PASSWORD: ${MEET_JIBRI_XMPP_PASSWORD:-}
+      JIBRI_RECORDER_PASSWORD: ${MEET_JIBRI_RECORDER_PASSWORD:-}
+      # Offered to every participant (XEP-0215), with credentials that expire: turns:<host>:443.
+      TURNS_HOST: ${MEET_TURN_BASE_URL:-meet-turn.${DEPLOYMENT_DOMAIN:-localhost}}
+      TURNS_PORT: "443"
+      TURN_CREDENTIALS: ${MEET_TURN_SECRET:-}
+      TURN_TTL: "43200"
+    networks:
+      meet-net:
+        aliases: [xmpp.meet.jitsi]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost:5280/health"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: 192M }
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  meet-jicofo:
+    image: ghcr.io/jitsi/jicofo:stable-11248
+    container_name: meet-jicofo-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: meet-jicofo
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /run:size=32M,mode=1750,exec
+      - /tmp:size=16M,mode=1777,noexec
+      - /config:size=1M,mode=1755
+    environment:
+      TZ: Asia/Jerusalem
+      PUBLIC_URL: https://${MEET_BASE_URL:-meet.${DEPLOYMENT_DOMAIN:-localhost}}
+      XMPP_SERVER: xmpp.meet.jitsi
+      ENABLE_AUTH: "1"
+      AUTH_TYPE: jwt
+      ENABLE_GUESTS: "1"
+      ENABLE_P2P: "false"
+      ENABLE_RECORDING: "1"
+      ENABLE_IPV6: "0"
+      JICOFO_AUTH_PASSWORD: ${MEET_JICOFO_PASSWORD:-}
+      JICOFO_MAX_MEMORY: 256m
+      JICOFO_ENABLE_REST: "1"
+      # /about/health exists only with these on: it asks the focus whether it can run a conference
+      # (an XMPP connection and a healthy bridge), which is what the healthcheck should mean.
+      JICOFO_ENABLE_HEALTH_CHECKS: "1"
+    networks:
+      - meet-net
+    depends_on:
+      - meet-prosody
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost:8888/about/health"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 5
+      start_period: 60s
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: 448M }
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  meet-jvb:
+    image: ghcr.io/jitsi/jvb:stable-11248
+    container_name: meet-jvb-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: meet-jvb
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /run:size=32M,mode=1750,exec
+      - /tmp:size=16M,mode=1777,noexec
+      - /config:size=1M,mode=1755
+    ports:
+      # The media path. Loopback by default (gate G84); hooks/prepare publishes it on every interface
+      # on an office with a public domain, and declares the address the bridge advertises.
+      - "${MEET_JVB_BIND:-127.0.0.1}:${MEET_JVB_PORT:-10000}:${MEET_JVB_PORT:-10000}/udp"
+    environment:
+      TZ: Asia/Jerusalem
+      PUBLIC_URL: https://${MEET_BASE_URL:-meet.${DEPLOYMENT_DOMAIN:-localhost}}
+      XMPP_SERVER: xmpp.meet.jitsi
+      ENABLE_AUTH: "1"
+      AUTH_TYPE: jwt
+      ENABLE_GUESTS: "1"
+      ENABLE_P2P: "false"
+      ENABLE_RECORDING: "1"
+      ENABLE_IPV6: "0"
+      JVB_AUTH_PASSWORD: ${MEET_JVB_PASSWORD:-}
+      JVB_PORT: ${MEET_JVB_PORT:-10000}
+      JVB_ADVERTISE_IPS: ${MEET_JVB_ADVERTISE_IPS:-}
+      JVB_DISABLE_STUN: "true"
+      VIDEOBRIDGE_MAX_MEMORY: 512m
+      COLIBRI_REST_ENABLED: "true"
+    networks:
+      - meet-net
+    depends_on:
+      - meet-prosody
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost:8080/about/health"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 5
+      start_period: 60s
+    # The media path is held at its whole cap and weighed above everything but the recorder (see
+    # meet-jibri): the bridge forwards every participant's sound to the recorder, and a bridge the
+    # budget had scaled to 0.32 vCPU (fireplace, 2026-10-26) is the second place a recording breaks.
+    cpu_shares: 8192
+    deploy:
+      resources:
+        limits: { cpus: "1.0", memory: 768M }
+        # memory: `memory.low` for the bridge too (see meet-jibri) — 235 MiB resident idle, 2026-10-26.
+        reservations: { cpus: "1.0", memory: 384M }
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  meet-turn:
+    # TURN over TLS on 443 for a browser whose network lets no UDP out (turn/turn.sh says why and
+    # how it is fenced): the edge ends TLS for meet-turn.<domain> (a TCP router by SNI — the one
+    # route here the compiler does not write, because routing[] is HTTP only) and hands the stream
+    # to port 3478; relays go to the video bridge and nowhere else.
+    image: coturn/coturn:4.7.0
+    container_name: meet-turn-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: meet-turn
+    restart: unless-stopped
+    read_only: true
+    entrypoint: ["/bin/bash", "/turn/turn.sh"]
+    tmpfs:
+      - /tmp:size=16M,mode=1777
+      - /var/lib/coturn:size=4M,mode=1777
+    volumes:
+      - ./turn:/turn:ro
+    environment:
+      MEET_TURN_SECRET: ${MEET_TURN_SECRET:-}
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik-network
+      - traefik.tcp.routers.meet-turn.rule=HostSNI(`${MEET_TURN_BASE_URL:-meet-turn.${DEPLOYMENT_DOMAIN:-localhost}}`)
+      - traefik.tcp.routers.meet-turn.entrypoints=websecure
+      - traefik.tcp.routers.meet-turn.tls=true
+      - traefik.tcp.routers.meet-turn.tls.certresolver=myresolver
+      - traefik.tcp.routers.meet-turn.service=meet-turn
+      - traefik.tcp.services.meet-turn.loadbalancer.server.port=3478
+    networks:
+      - traefik-network
+      - meet-net
+    depends_on:
+      - meet-jvb
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/3478"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: 96M }
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  meet-jibri:
+    image: ghcr.io/jitsi/jibri:stable-11248
+    container_name: meet-jibri-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: meet-jibri
+    restart: unless-stopped
+    read_only: true
+    # Chrome renders the meeting into a virtual screen and ffmpeg records it: the image refuses to
+    # start on a smaller /dev/shm.
+    shm_size: 2gb
+    tmpfs:
+      - /run:size=256M,mode=1750,exec
+      - /tmp:size=256M,mode=1777,noexec
+      - /config:size=1M,mode=1755
+    volumes:
+      # /storage is owned by the image's own user, so the volume is too: recordings/<session>/*.mp4
+      # and the session's metadata.json (the room, who was there), and Jibri's logs.
+      - meet_recordings:/storage
+      # Run by Jibri after each recording: the meeting's audio beside the video (DGO-834).
+      - ./jibri/finalize.sh:/usr/local/bin/meet-finalize.sh:ro
+      # …which rebuilds an mp4 left with no index by a killed ffmpeg (MEET-48): python3 + ffmpeg only.
+      - ./tools/restore/rebuild_moov.py:/usr/local/bin/meet-rebuild-moov.py:ro
+      # The recorder's own watchdog and the live captions (jibri/watch.py), an s6 longrun beside Jibri
+      # (s6-overlay v3 compiles /etc/s6-overlay/s6-rc.d at boot; the marker in user/contents.d starts
+      # it). It reads Jibri's logs, its REST and this cgroup — no docker socket — and speaks through
+      # prosody's door and meet-start's (fireplace, 2026-10-26: a starved recorder told nobody).
+      - ./jibri/watch.py:/usr/local/bin/meet-watch.py:ro
+      - ./jibri/s6/60-meet-watch:/etc/s6-overlay/s6-rc.d/60-meet-watch:ro
+      - ./jibri/s6/contents.d/60-meet-watch:/etc/s6-overlay/s6-rc.d/user/contents.d/60-meet-watch:ro
+      # The recorder's Chrome asks no outside DNS (CHROMIUM_FLAGS below): its secure-DNS probes to dns.google
+      # and Cloudflare go around a proxy, so they are turned off by policy. The image's Chrome is Chrome for
+      # Testing, which reads policies from /etc/opt/chrome_for_testing — not /etc/opt/chrome, where the
+      # image puts its own (never read).
+      - ./jibri/chrome-policy.json:/etc/opt/chrome_for_testing/policies/managed/dgo-recorder.json:ro
+    environment:
+      TZ: Asia/Jerusalem
+      PUBLIC_URL: https://${MEET_BASE_URL:-meet.${DEPLOYMENT_DOMAIN:-localhost}}
+      XMPP_SERVER: xmpp.meet.jitsi
+      ENABLE_AUTH: "1"
+      AUTH_TYPE: jwt
+      ENABLE_GUESTS: "1"
+      ENABLE_P2P: "false"
+      ENABLE_RECORDING: "1"
+      ENABLE_IPV6: "0"
+      DISPLAY: ":0"
+      JIBRI_FINALIZE_RECORDING_SCRIPT_PATH: /usr/local/bin/meet-finalize.sh
+      JIBRI_XMPP_PASSWORD: ${MEET_JIBRI_XMPP_PASSWORD:-}
+      JIBRI_RECORDER_PASSWORD: ${MEET_JIBRI_RECORDER_PASSWORD:-}
+      JIBRI_RECORDING_RESOLUTION: 1280x720
+      # 15 frames a second, not Jibri's 30: half the encoding and capture work for the recorder on a 2-core
+      # box, and a meeting (faces, a shared document) reads the same (measured 2026-10-27, load ramps).
+      JIBRI_RECORDING_FRAMERATE: ${MEET_RECORDING_FRAMERATE:-15}
+      JIBRI_STRIP_DOMAIN_JID: muc
+      # THE RECORDER'S CHROME TALKS TO THE OFFICE ONLY (`meet verify --call`'s local.sockets, vps1
+      # 2026-11-01: it reached Google — mtalk.google.com:5228, and 443 over TCP and QUIC). Chrome calls
+      # Google by itself even with chromedriver's --disable-background-networking: GCM
+      # (android.clients.google.com, mtalk), component updates (update.googleapis.com, edgedl.me.gvt1.com),
+      # the sign-in check (accounts.google.com), network time (clients2.google.com), autofill — a NetLog
+      # of this image's own Chrome for two minutes, 2026-11-01. So every request goes to a proxy that is
+      # not there (127.0.0.1:9, refused inside the container) except the office's own names, which go
+      # direct; the media to the bridge is WebRTC, never proxied. Measured: every Google request ended on
+      # 127.0.0.1:9 and the meeting page loaded from the office. CHROMIUM_FLAGS replaces Jibri's own
+      # flags, so they come first (the image's jibri.conf, which adds --no-sandbox and --disable-infobars
+      # itself); the image splits the value on ",", so the bypass list is ";"-separated. It names the
+      # meeting's host and its TURN host (TURN over TLS is a TCP connection, which the proxy would take),
+      # either of which may sit outside the office's domain, then the domain, then dot-less names.
+      CHROMIUM_FLAGS: "--use-fake-ui-for-media-stream,--start-maximized,--kiosk,--enabled,--autoplay-policy=no-user-gesture-required,--disable-component-update,--proxy-server=127.0.0.1:9,--proxy-bypass-list=${MEET_BASE_URL:-meet.${DEPLOYMENT_DOMAIN:-localhost}};${MEET_TURN_BASE_URL:-meet-turn.${DEPLOYMENT_DOMAIN:-localhost}};*.${DEPLOYMENT_DOMAIN:-localhost};<local>"
+      # The watchdog's doors and switches (jibri/watch.py). MEET_LIVE_CAPTIONS: on | off | auto (on
+      # only with MEET_LIVE_CAPTIONS_MIN_CORES cores AND a healthy recorder: on a 2-core box the
+      # transcriber and the recorder share the same cores). Language `auto` = whisper, as spoken;
+      # `he` = the office's ivrit model.
+      MEET_RECORDER_WATCH_SECRET: ${MEET_RECORDER_WATCH_SECRET:-}
+      MEET_PROSODY_HTTP: http://meet-prosody:5280
+      MEET_START_MACHINES: http://meet-start:8001
+      MEET_LIVE_CAPTIONS: ${MEET_LIVE_CAPTIONS:-auto}
+      MEET_LIVE_CAPTIONS_LANGUAGE: ${MEET_LIVE_CAPTIONS_LANGUAGE:-auto}
+      MEET_LIVE_CAPTIONS_MIN_CORES: ${MEET_LIVE_CAPTIONS_MIN_CORES:-4}
+    networks:
+      - meet-net
+    depends_on:
+      - meet-jicofo
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost:2222/jibri/api/v1.0/health"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 5
+      start_period: 60s
+    # THE RECORDER IS NEVER THROTTLED (fireplace, 2026-10-26, rooms fpg103 and fpg104): the CPU budget
+    # (gate G65) had scaled this cap to 0.48 on the 2-vCPU box, the kernel then held the container
+    # back in 41% of its scheduling periods, ffmpeg ran at 0.97x of real time, and 2.6% of the call
+    # (23 s of fpg103's 14 minutes) never reached the file: sound in pieces, a picture that runs
+    # fast. A floor equal to the cap keeps the cap whole (the budget holds a declared floor AT its
+    # value and scales the rest), and the weight (cpu_shares, 16x a container that declares none)
+    # wins the scheduler against everything but the bridge when the machine is full. Chrome and
+    # ffmpeg at 720p want the whole of a 2-vCPU machine while a meeting is recorded; the others wait.
+    cpu_shares: 16384
+    deploy:
+      resources:
+        limits: { cpus: "2.0", memory: 1792M }
+        # memory: the kernel's `memory.low` (docker maps the reservation to it on cgroup v2) — while
+        # the box is short of memory, the recorder's pages are reclaimed LAST. Measured 2026-10-26
+        # on fireplace (8 GiB, swap 4041/4095 MiB full): the idle recorder had 199 MiB swapped out,
+        # and a recording (Chrome + ffmpeg + a 512m JVM, ~1.3 GiB) would have paged in against the
+        # transcriber (1.5 GiB) and 50 idle services. A quota keeps the CPU; this keeps the RAM.
+        reservations: { cpus: "2.0", memory: 1280M }
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  meet-start:
+    image: python:3.12-alpine
+    container_name: meet-start-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: meet-start
+    restart: unless-stopped
+    read_only: true
+    working_dir: /app
+    command: ["python", "-u", "server.py"]
+    volumes:
+      - ./start:/app:ro
+      - meet_recordings:/recordings:ro
+    environment:
+      MEET_JWT_SECRET: ${MEET_JWT_SECRET:-}
+      MEET_HOST: ${MEET_BASE_URL:-meet.${DEPLOYMENT_DOMAIN:-localhost}}
+      MEET_RECORDINGS: /recordings/recordings
+      # The only callers whose X-authentik-* headers are believed: the edge (it strips a browser's
+      # own and writes the signed-in person's) and the console's proxy (which carries them to the
+      # tile). By container name: that is what they answer to on the shared network.
+      MEET_TRUSTED_PEERS: traefik-${DEPLOYMENT_NAME:-bina-deployment},console-${DEPLOYMENT_NAME:-bina-deployment}
+      # The machines' door (port 8001, routed by nobody): the recordings as data for the workflow
+      # that transcribes them (blueprint/n8n, DGO-834). Only n8n's own containers get an answer.
+      MEET_MACHINE_PEERS: n8n-${DEPLOYMENT_NAME:-bina-deployment},n8n-worker-1-${DEPLOYMENT_NAME:-bina-deployment},n8n-worker-2-${DEPLOYMENT_NAME:-bina-deployment},n8n-webhook-${DEPLOYMENT_NAME:-bina-deployment},n8n-task-runners-${DEPLOYMENT_NAME:-bina-deployment},n8n-worker-1-runners-${DEPLOYMENT_NAME:-bina-deployment},n8n-worker-2-runners-${DEPLOYMENT_NAME:-bina-deployment}
+      # …and the link door (dgo-net), through which the n8n of the office that runs Meet's workflows
+      # calls it when that is another office (the `recordings` door this office gives by name, DGO-945).
+      # It is let in by the office check alone — the office Meet's workflows run in (hooks/prepare,
+      # from `workflows:`), as the door writes it (x-dgo-office, the peer's own claim removed). None
+      # named: no linked office is.
+      MEET_LINK_PEERS: dgo-net-${DEPLOYMENT_NAME:-bina-deployment}
+      MEET_WORKFLOWS_OFFICE: ${MEET_WORKFLOWS_OFFICE:-}
+      # Whose recordings are tests (DGO-959): never handed to the workflow, so no work item is made.
+      MEET_QUIET_INITIATORS: ${MEET_QUIET_INITIATORS:-qa-host}
+      MEET_CONSOLE_URL: ${AUTH_PROTOCOL:-https}://${CONSOLE_BASE_URL:-console.${DEPLOYMENT_DOMAIN:-localhost}}
+      # Where the office's Plane answers (hooks/prepare derives it from the link registry).
+      MEET_PLANE_API_URL: ${MEET_PLANE_API_URL:-}
+      MEET_PLANE_API_KEY: ${MEET_PLANE_API_KEY:-}
+      # The recordings' workflow, called the moment a recording ends (DGO-907): n8n's webhook
+      # service, as INDOX calls it. Empty: the workflow's own five-minute clock alone.
+      MEET_WORKFLOW_HOOK: ${MEET_WORKFLOW_HOOK-http://n8n-webhook:5678/webhook/meet-recordings}
+      # The recorder's door (/api/recorder/*, the machines' port): meet-jibri's watchdog, by its
+      # container's address and the secret prosody's door takes, and nobody else. Through it the
+      # watchdog reaches the notice centre and the transcriber, which live on the shared network
+      # the recorder is not on; this container is on both.
+      MEET_RECORDER_PEERS: meet-jibri-${DEPLOYMENT_NAME:-bina-deployment}
+      MEET_RECORDER_WATCH_SECRET: ${MEET_RECORDER_WATCH_SECRET:-}
+      MEET_NOTIFY_URL: ${MEET_NOTIFY_URL:-http://notifications:8977}
+      # The meetings' watch and the live transcripts (start/server.py, fireplace 2026-10-27): whether a
+      # meeting should be recording (as prosody does), and how long a recorded meeting's live transcript
+      # waits for the workflow's item before it becomes an item of its own.
+      MEET_AUTO_RECORD: ${MEET_AUTO_RECORD:-1}
+      MEET_LIVE_WAIT_HOURS: ${MEET_LIVE_WAIT_HOURS:-6}
+      MEET_SPEECH_URL: ${MEET_SPEECH_URL:-http://apitools-asr:8987}
+      TZ: Asia/Jerusalem
+    networks:
+      - traefik-network
+      - meet-net
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/healthz', timeout=5)"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits: { cpus: "0.1", memory: 48M }
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+volumes:
+  meet_prosody_data:
+  meet_recordings:
+
+networks:
+  traefik-network:
+    external: true
+  meet-net:

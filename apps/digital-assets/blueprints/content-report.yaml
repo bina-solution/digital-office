@@ -1,0 +1,32 @@
+# דוחות — dated, recurring reports, 1,000–2,500 words with data tables and their method: what is new in
+# the flagship projects (weekly), the 200 projects (monthly), regulation and law (monthly), Hebrew
+# language models measured on the office's own tasks (monthly). Shape and rules: content/BRIEF.md
+# (`type: report`). Each piece: `content.report.<slug>-<lang>`, one slug per edition (e.g.
+# `oss-weekly-2026-10-19`), created under this blueprint by the content importer.
+id: content-report
+version: 1
+order: 17
+extends:
+- content-library
+name:
+  he: דוחות
+  en: Reports
+summary:
+  he: דוחות מתוארכים — חידושים בקוד פתוח, רגולציה ומשפט, ומדד מודלי השפה בעברית — עם הנתונים ועם הדרך
+    שבה נמדדו.
+  en: Dated reports — what is new in open source, regulation and law, and the Hebrew language-model index —
+    with the data and how it was measured.
+slots:
+- key: content.report.hub-he
+  section: content
+  group: report
+  kind: richtext
+  lang: he
+  label:
+    he: פתיח עמוד הדוחות
+    en: Reports hub — opening text
+  constraints:
+    note: 60–120 words — the hub of the reports
+  targets:
+  - channel: website
+  - channel: google-search

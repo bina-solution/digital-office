@@ -25,7 +25,7 @@ N8N_WEBHOOK_BASE = os.getenv("N8N_WEBHOOK_BASE", "http://n8n:5678/webhook")
 N8N_URL = os.getenv("N8N_URL", "http://n8n:5678")
 N8N_API_KEY = os.getenv("N8N_API_KEY", "")
 N8N_EXTERNAL_URL = os.getenv(
-    "N8N_EXTERNAL_URL", "https://n8n.bina-comp.bina-solutions.co.il"
+    "N8N_EXTERNAL_URL", "https://n8n.hacohen.bina-solutions.co.il"
 )
 BS_WEBHOOK_USER = os.getenv("BS_WEBHOOK_USER", "")
 BS_WEBHOOK_PASS = os.getenv("BS_WEBHOOK_PASS", "")

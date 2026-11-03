@@ -1,0 +1,478 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>מרכז הבקרה · Bina Solutions</title>
+<style>
+/* @bina-theme-tokens:start */
+/* OLIVE GROVE — the one palette of the office (the owner, 2026-10-07 · DGO-450). Four hues, sampled
+   from his mock-up, and the ground they stand on. A screen never writes a colour: it names one of
+   these. Each hue is the colour itself (a FILL — a button, a bar, a dot), «-d» for text and thin
+   lines on the ground (4.5:1 or more), «-soft» and «-line» for a tint and its hairline, and «-ink»
+   for what is written ON the fill. The role names every screen already uses point at them:
+   (no backtick in this block: one of its copies lives inside a script's template string)
+     olive  the brand and the main action · what is well, what is done
+     sky    what is in motion, what only informs · a link
+     lime   look here — a warning, something waiting
+     plum   a person must act — a failure, a removal, the one final action
+   Contrast, measured (WCAG): ink on the ground 13.7 · muted 4.65 · light text on olive 5.51 and on
+   plum 9.54 · ink on lime 6.88 · its ink on sky 6.32 · sky-d 4.61 · lime-d 4.70 · violet 5.32 ·
+   on the desk: its ink 6.32 (dark: 13.96), and 11.2 where the sky pales (dark: 5.12). */
+:root,:root[data-theme="light"]{
+  color-scheme:light;
+  accent-color:var(--accent);   /* the browser's OWN controls - a checkbox, a radio, a range, a progress bar - on both grounds: said once, here (it was said for eight single controls, and every other one was the browser's blue) */
+  --bg:#f3f5f7; --surface:#fff; --surface-2:#f9fafb; --ink:#1f2a17; --muted:#6a7068; --line:#dcdfde;
+  --olive:#56693f; --olive-d:#475734; --olive-soft:#e7eae4; --olive-line:#bfc6b6; --olive-ink:#f3f5f7;
+  --sky:#7baae3; --sky-d:#2a6fc4; --sky-soft:#edf3fb; --sky-line:#cddff4; --sky-ink:#13263f;
+  --lime:#a9b84c; --lime-d:#69732e; --lime-soft:#f3f5e6; --lime-line:#dee4bb; --lime-ink:#1f2a17;
+  --plum:#5b3349; --plum-d:#4a303b; --plum-soft:#e8e2e6; --plum-line:#c1b1ba; --plum-ink:#f3f5f7;
+  --accent:var(--olive); --accent-d:var(--olive-d); --accent-soft:var(--olive-soft); --accent-ink:var(--olive-ink);
+  --blue:var(--sky-d); --amber:var(--lime-d); --red:var(--plum);
+  --violet:#7c5c6d;   /* plum, lifted a fifth toward white: someone has to look — nothing has failed */
+  --ok:var(--olive); --warn:var(--lime-d); --danger:var(--plum); --info:var(--sky-d);
+  --ok-soft:var(--olive-soft); --warn-soft:var(--lime-soft); --danger-soft:var(--plum-soft); --info-soft:var(--sky-soft);
+  --red-soft:var(--plum-soft); --amber-soft:var(--lime-soft); --blue-soft:var(--sky-soft); --violet-soft:var(--plum-soft);
+  --side:var(--olive); --side-ink:#f3f5f7; --side-mut:#dce1da; --side-line:#788765;
+  --desk:var(--sky); --desk-ink:var(--sky-ink);   /* desktop mode's ground is the sky (the owner, DGO-452), and what is written straight on it */
+  --scrim:rgba(31,42,23,.5);                      /* what dims a screen behind a pop-up */
+  --shadow:0 1px 3px rgba(31,42,23,.08),0 6px 24px rgba(31,42,23,.06);
+  --shadow-lg:0 20px 60px rgba(31,42,23,.28);
+  /* ONE COLOUR AND ONE ANIMAL PER OFFICE (the owner, 2026-10-09 · flt-002). When offices are linked,
+     a person reads WHICH office a thing belongs to without opening it, so each office gets a hue of
+     its own. The hue is an IDENTITY and never a health state: an office that stopped answering keeps
+     its colour, and the quiet mark is the one that says "not answering". Each is an ALIAS of the
+     palette's own hue — no fourth value is invented, and because the ground re-points the hue, the
+     office mark follows the ground by itself. Each office's animal (elephant, deer, eagle) is a
+     glyph of bina-icons.js. */
+  --office-hp:var(--muted);   /* hp · elephant — grey: the heavy laptop at home, in the palette's own grey */
+  --office-mac:var(--lime);   /* macbook · deer — yellow: the palette has one yellow and it is lime. A FILL, so what is written ON it is --lime-ink, never this */
+  --office-vps:var(--sky-d);  /* vps · eagle — deep sky blue, «the eagle in the clouds». THE OWNER'S OWN CHOICE (2026-10-09, in writing: vps = נשר + כחול-שמיים) — this line is the colour he picked, not a default kept for him */
+}
+
+/* ── A LINKED OFFICE'S MARK, BY NAME (flt-004) ───────────────────────────────────────────────
+   The link carries a NAME — mark: {color, animal} in the catalog, from the office's own identity
+   — and never a value: the office that DRAWS a linked tile owns the pixels, so it paints the name
+   with its own palette. These seven rules are that translation, one per family above; a screen sets
+   data-office-hue="lime" and paints var(--office-hue).
+   A name this file does not know paints nothing, which is why the vocabulary in
+   apps/dgo-extend/identity.py may only name families that exist here — and why --red and --ok
+   are not among them: they mean «danger» and «it is well» on every screen in the office. */
+[data-office-hue="grey"]   { --office-hue:var(--muted); }
+[data-office-hue="lime"]   { --office-hue:var(--lime); }
+[data-office-hue="sky"]    { --office-hue:var(--sky-d); }
+[data-office-hue="olive"]  { --office-hue:var(--olive-d); }
+[data-office-hue="plum"]   { --office-hue:var(--plum); }
+[data-office-hue="blue"]   { --office-hue:var(--blue); }
+[data-office-hue="violet"] { --office-hue:var(--violet); }
+/* the dark ground is the same four hues on the palette's own ink, and the SAME legend. Olive on that
+   ink is 2.5:1, so its text step there is olive LIFTED — its own hue and saturation, lighter (7.14
+   on a card, 4.82 on its own tint) — and the brand, the main action and «it is well» take that step.
+   Lime stays «look here» and the sky «in motion», as on the light ground: were lime the accent here
+   (it was, for a day), a warning, a selection and «it is well» were one colour. Each «-d» on its
+   own «-soft» there, measured: olive 4.82 · sky 4.62 · lime 4.63 · plum 4.71. */
+@media (prefers-color-scheme:dark){
+  :root{ color-scheme:dark;
+         --bg:#141b0f; --surface:#1f2a17; --surface-2:#192213; --ink:#f3f5f7; --muted:#a2a8a2; --line:#414a3b;
+         --olive-d:#a5ba8c; --olive-soft:#384629; --olive-line:#56693f;
+         --sky-d:#7baae3; --sky-soft:#2e3f38; --sky-line:#4d6a8c;
+         --lime-d:#a9b84c; --lime-soft:#3b4622; --lime-line:#69732e;
+         --plum-d:#ad99a4; --plum-soft:#402f33; --plum-line:#7c5c6d;
+         --accent:var(--olive-d); --accent-ink:var(--surface);
+         --red:#ad99a4; --violet:#bdadb6; --danger:#ad99a4; --ok:var(--olive-d); --side:var(--surface);
+         --desk:var(--sky-ink); --desk-ink:var(--ink); --scrim:rgba(0,0,0,.6);
+         --shadow:0 1px 3px rgba(0,0,0,.4),0 6px 24px rgba(0,0,0,.3);
+         --shadow-lg:0 20px 60px rgba(0,0,0,.55); }
+}
+:root[data-theme="midnight"]{
+  color-scheme:dark;
+  --bg:#141b0f; --surface:#1f2a17; --surface-2:#192213; --ink:#f3f5f7; --muted:#a2a8a2; --line:#414a3b;
+  --olive-d:#a5ba8c; --olive-soft:#384629; --olive-line:#56693f;
+  --sky-d:#7baae3; --sky-soft:#2e3f38; --sky-line:#4d6a8c;
+  --lime-d:#a9b84c; --lime-soft:#3b4622; --lime-line:#69732e;
+  --plum-d:#ad99a4; --plum-soft:#402f33; --plum-line:#7c5c6d;
+  --accent:var(--olive-d); --accent-ink:var(--surface);
+  --red:#ad99a4; --violet:#bdadb6; --danger:#ad99a4; --ok:var(--olive-d); --side:var(--surface);
+  --desk:var(--sky-ink); --desk-ink:var(--ink); --scrim:rgba(0,0,0,.6);
+  --shadow:0 1px 3px rgba(0,0,0,.4),0 6px 24px rgba(0,0,0,.3);
+  --shadow-lg:0 20px 60px rgba(0,0,0,.55);
+}
+/* THE KEYBOARD'S RING - what the browser draws around the stop the keyboard is on, in the palette, wherever
+   a part draws none of its own. It has no specificity at all (:where), so any rule of a part wins. Two
+   screens said this for themselves; on the others nearly every stop wore the browser's ring (DGO-455).
+   A field keeps the offset it has - fourteen rules draw a field's own outline and say no offset. An area
+   (a scroll box, a table) takes the ring inside, where nothing clips it; a control takes it outside,
+   where a filled button does not hide it. */
+:where(:focus-visible){outline:2px solid var(--accent)}
+:where(:focus-visible:not(a,button,summary,[role=button],input,select,textarea)){outline-offset:-2px}
+:where(a,button,summary,[role=button]):focus-visible{outline-offset:2px}
+/* HEBREW AT A HEAVY WEIGHT - on Windows, where the first family of --font is installed. "Segoe UI" has its
+   Hebrew in Light, Regular, Semibold and Bold. Asked for 800 or 900 the browser takes the family's Black
+   face, which has none, and so has every family after it - so the Hebrew of every title at 800 was drawn in
+   the system's last-resort serif, thin, beside Latin in Black: «חשבונות ומראות» at 20px is 150px wide at 700
+   and 120px at 800 (Chrome 154; the screens ask for 800 in 167 places, the question's title among them).
+   These faces give the family's HEBREW RANGE the faces that have it. A family a sheet names is no longer the
+   system's for those characters, so every weight and both styles are named, each as the system resolves it:
+   measured, only upright 800 and 900 change. Any other character is not theirs and goes on to the next
+   family the screen names - system-ui in --font, on Windows the same faces, Black included - which is why
+   G27 asks that system-ui follows wherever a screen names this family itself. Where the family is not
+   installed nothing here resolves and nothing changes. */
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Light");font-weight:100 300;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI");font-weight:400;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Semibold");font-weight:500 600;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Bold");font-weight:700 900;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Light Italic");font-weight:100 300;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Italic");font-weight:400;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Semibold Italic");font-weight:500 600;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Bold Italic");font-weight:700 900;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+/* @bina-theme-tokens:end */
+:root{ --r:12px; --gap:16px; font-family:"Segoe UI",system-ui,-apple-system,"Noto Sans Hebrew","Assistant",Arial,sans-serif; }
+*{ box-sizing:border-box; }
+html,body{ margin:0; height:100%; }
+body{ background:var(--bg); color:var(--ink); font-size:15px; line-height:1.45; }
+.shell{ display:grid; grid-template-columns:300px 1fr; min-height:100vh; }
+
+/* the side: every computer of every office, one dot each */
+.side{ background:var(--surface); color:var(--ink); border-inline-end:1px solid var(--line); padding:18px 14px; display:flex; flex-direction:column; gap:14px; }
+.brand{ display:flex; align-items:center; gap:10px; font-weight:700; font-size:17px; padding:0 6px; }
+.brand .mark{ width:30px; height:30px; border-radius:8px; background:var(--accent); color:var(--accent-ink); display:grid; place-items:center; font-weight:800; }
+.brand small{ display:block; font-weight:400; font-size:12px; color:var(--muted); }
+.station{ background:var(--olive-soft); border:1px solid var(--olive-line); color:var(--olive-d); border-radius:10px; padding:10px 12px; font-size:13px; }
+.station.bad{ background:var(--plum-soft); border-color:var(--plum-line); color:var(--plum-d); }
+.station b{ display:block; font-size:14px; }
+.group{ font-size:12px; color:var(--muted); padding:6px 6px 2px; letter-spacing:.02em; }
+.pc{ display:grid; grid-template-columns:14px 1fr auto; align-items:center; gap:10px; width:100%; text-align:start;
+     background:none; border:0; color:inherit; font:inherit; padding:9px 8px; border-radius:9px; cursor:pointer; }
+.pc:hover,.pc[aria-current="true"]{ background:var(--surface-2); outline:1px solid var(--line); }
+.pc .name{ font-weight:600; font-size:14px; }
+.pc .role{ display:block; font-size:12px; color:var(--muted); font-weight:400; }
+.pc .when{ font-size:11px; color:var(--muted); white-space:nowrap; }
+.dot{ width:12px; height:12px; border-radius:50%; background:var(--muted); }
+.dot.up{ background:var(--ok); box-shadow:0 0 0 3px var(--ok-soft); }
+.dot.half{ background:var(--sky); box-shadow:0 0 0 3px var(--sky-soft); }
+.dot.down{ background:var(--plum); box-shadow:0 0 0 3px var(--plum-soft); animation:pulse 1.4s infinite; }
+.dot.none{ background:transparent; border:2px solid var(--muted); }
+@keyframes pulse{ 50%{ box-shadow:0 0 0 7px transparent; } }
+.legend{ margin-top:auto; font-size:11.5px; color:var(--muted); display:grid; gap:4px; padding:0 6px; }
+.legend span{ display:flex; align-items:center; gap:8px; }
+.legend .dot{ width:9px; height:9px; box-shadow:none; animation:none; }
+
+/* the main column */
+main{ padding:22px 26px 40px; display:flex; flex-direction:column; gap:var(--gap); min-width:0; }
+.top{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+.top h1{ margin:0; font-size:22px; }
+.top .clock{ color:var(--muted); font-size:14px; }
+.top .tools{ margin-inline-start:auto; display:flex; gap:8px; }
+.btn{ border:1px solid var(--line); background:var(--surface); color:var(--ink); font:inherit; font-size:13px; padding:7px 12px; border-radius:9px; cursor:pointer; }
+.btn.on{ background:var(--olive-soft); border-color:var(--olive-line); color:var(--olive-d); }
+.btn.act{ background:var(--accent); color:var(--accent-ink); border-color:var(--accent); }
+a.btn{ display:inline-block; text-decoration:none; }
+.btn.danger{ background:var(--plum); color:var(--plum-ink); border-color:var(--plum); }
+
+.alert{ display:grid; grid-template-columns:auto 1fr auto; gap:14px; align-items:start; background:var(--plum-soft);
+        border:1px solid var(--plum-line); border-inline-start:6px solid var(--plum); border-radius:var(--r); padding:14px 16px; }
+.alert .big{ font-size:26px; line-height:1; color:var(--danger); }
+.alert h2{ margin:0 0 4px; font-size:16px; color:var(--plum-d); }
+.alert p{ margin:2px 0; font-size:14px; }
+.alert .k{ color:var(--muted); }
+.okbar{ background:var(--olive-soft); border:1px solid var(--olive-line); border-inline-start:6px solid var(--olive); border-radius:var(--r);
+        padding:12px 16px; color:var(--olive-d); font-weight:600; }
+
+.okbar.info{ background:var(--sky-soft); border-color:var(--sky-line); border-inline-start-color:var(--sky); color:var(--sky-ink); }
+.tiles{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
+.tile{ background:var(--surface); border:1px solid var(--line); border-radius:var(--r); padding:12px 14px; box-shadow:var(--shadow); }
+.tile .n{ font-size:26px; font-weight:700; }
+.tile .l{ font-size:13px; color:var(--muted); }
+.tile.warn .n{ color:var(--danger); }
+
+.card{ background:var(--surface); border:1px solid var(--line); border-radius:var(--r); box-shadow:var(--shadow); }
+.card > h3{ margin:0; padding:14px 16px 6px; font-size:16px; display:flex; align-items:baseline; gap:8px; }
+.card > h3 small{ font-weight:400; color:var(--muted); font-size:13px; }
+.cols{ display:grid; grid-template-columns:3fr 2fr; gap:var(--gap); align-items:start; }
+
+.topic{ display:grid; grid-template-columns:minmax(0,1fr) 140px 82px; gap:12px; align-items:center; padding:10px 16px; border-top:1px solid var(--line); cursor:pointer; }
+.topic:hover{ background:var(--surface-2); }
+.topic .t{ font-weight:600; font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.topic .s{ font-size:12px; color:var(--muted); }
+.bar{ height:9px; border-radius:6px; background:var(--olive-soft); overflow:hidden; display:flex; }
+.bar i{ display:block; height:100%; background:var(--ok); }
+.bar i.mv{ background:var(--sky); }
+.topic .pct{ font-variant-numeric:tabular-nums; font-size:12px; color:var(--muted); text-align:end; line-height:1.2; }
+.topic .pct b{ display:block; font-size:16px; color:var(--ink); }
+.topic.open + .more{ display:block; }
+.more{ display:none; padding:2px 16px 12px; font-size:13px; color:var(--muted); }
+
+.feed{ list-style:none; margin:0; padding:4px 0 8px; max-height:70vh; overflow-y:auto; }
+.feed li{ display:grid; grid-template-columns:52px 22px 1fr; gap:6px; padding:8px 16px; border-top:1px solid var(--line); font-size:13.5px; align-items:start; }
+.feed .tm{ color:var(--muted); font-variant-numeric:tabular-nums; }
+.feed .ic{ width:18px; height:18px; border-radius:50%; display:grid; place-items:center; font-size:11px; font-weight:700; margin-top:1px; }
+.ic.open{ background:var(--sky-soft); color:var(--sky-d); border:1px solid var(--sky-line); }
+.ic.done{ background:var(--olive-soft); color:var(--olive-d); border:1px solid var(--olive-line); }
+.ic.bad{ background:var(--plum-soft); color:var(--plum); border:1px solid var(--plum-line); }
+.ic.start{ background:var(--sky-soft); color:var(--sky-d); border:1px solid var(--sky-line); }
+.ic.cancel{ background:transparent; color:var(--muted); border:1px solid var(--line); }
+.feed .ref{ display:block; color:var(--sky-d); font-size:12px; margin-top:2px; direction:ltr; text-align:end; }
+
+/* the console on the LAN (DGO-1125) */
+.lan > h3{ align-items:center; }
+.switch{ margin-inline-start:auto; position:relative; width:48px; height:28px; border-radius:999px; border:0; background:var(--line); cursor:pointer; flex:none; }
+.switch::after{ content:""; position:absolute; top:3px; inset-inline-start:3px; width:22px; height:22px; border-radius:50%; background:var(--surface); box-shadow:var(--shadow); transition:inset-inline-start .15s; }
+.switch[aria-checked="true"]{ background:var(--ok); } .switch[aria-checked="true"]::after{ inset-inline-start:23px; }
+.lan-body{ display:flex; gap:14px; padding:4px 16px 14px; align-items:flex-start; flex-wrap:wrap; }
+.lan.off .lan-body > *:not(.lan-main), .lan.off .lan-url, .lan.off .lan-warn, .lan.off .lan-who{ display:none; }
+.qr{ width:132px; height:132px; flex:none; background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:6px; }
+.qr svg{ width:100%; height:100%; display:block; } .qr svg rect{ fill:var(--surface); } .qr svg path{ fill:var(--ink); }
+.lan-main{ flex:1; min-width:220px; display:flex; flex-direction:column; gap:8px; }
+.lan-url{ direction:ltr; text-align:left; font-size:19px; font-weight:700; background:var(--surface-2); border:1px solid var(--line); border-radius:9px; padding:6px 10px; }
+.lan-row{ display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+.lan-k{ font-size:13px; color:var(--muted); }
+.lan select{ font:inherit; font-size:13px; padding:4px 6px; border-radius:7px; border:1px solid var(--line); background:var(--surface); color:var(--ink); }
+.lan-warn{ font-size:12.5px; background:var(--lime-soft); border:1px solid var(--lime-line); color:var(--lime-ink); border-radius:8px; padding:6px 10px; }
+.lan-who{ list-style:none; margin:0; padding:0; font-size:13px; }
+.lan-who li{ padding:4px 0; border-top:1px solid var(--line); display:flex; gap:8px; align-items:center; }
+.lan-who .ip{ direction:ltr; unicode-bidi:isolate; font-variant-numeric:tabular-nums; }
+
+/* a computer, opened */
+.scrim{ position:fixed; inset:0; background:var(--scrim); display:none; }
+.drawer{ position:fixed; top:0; bottom:0; inset-inline-start:0; width:min(420px,92vw); background:var(--surface); box-shadow:var(--shadow-lg);
+         transform:translateX(-105%); transition:transform .2s; padding:20px; display:flex; flex-direction:column; gap:12px; overflow:auto; }
+[dir="rtl"] .drawer{ transform:translateX(105%); }
+body.dr .scrim{ display:block; } body.dr .drawer{ transform:none; }
+.drawer h2{ margin:0; font-size:20px; display:flex; align-items:center; gap:10px; }
+.drawer .dot{ box-shadow:none; }
+.facts{ display:grid; grid-template-columns:auto 1fr; gap:6px 14px; font-size:14px; margin:0; }
+.facts dt{ color:var(--muted); }
+.facts dd{ margin:0; }
+.drawer .why{ background:var(--surface-2); border:1px solid var(--line); border-radius:10px; padding:10px 12px; font-size:13.5px; }
+.drawer .acts{ display:flex; gap:8px; flex-wrap:wrap; }
+.nav-note{ font-size:12px; color:var(--muted); }
+
+@media (max-width:860px){
+  .shell{ grid-template-columns:1fr; }
+  .side{ padding:12px; }
+  .pcs{ display:grid; grid-template-columns:1fr 1fr; gap:2px; }
+  .legend{ display:none; }
+  main{ padding:14px 16px 30px; }
+  .tiles{ grid-template-columns:1fr 1fr; }
+  .cols{ grid-template-columns:1fr; }
+  .topic{ grid-template-columns:minmax(0,1fr) 72px; }
+  .topic .bar{ grid-column:1 / -1; grid-row:2; }
+  .alert{ grid-template-columns:auto 1fr; }
+  .alert .btn{ grid-column:1 / -1; justify-self:start; }
+}
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="side" aria-label="המחשבים">
+    <div class="brand"><div class="mark">B</div><div>Bina Solutions<small>מרכז הבקרה · MacBook</small></div></div>
+    <div class="station" id="station"></div>
+    <div id="pcs"></div>
+    <div class="legend">
+      <span><i class="dot up"></i>מחובר, ואפשר להריץ בו פקודות</span>
+      <span><i class="dot half"></i>מחובר, אבל בלי גישה לפקודות</span>
+      <span><i class="dot down"></i>לא ברשת: תקלה קריטית</span>
+      <span><i class="dot none"></i>עוד לא מקושר למק</span>
+    </div>
+  </aside>
+
+  <main>
+    <div class="top">
+      <h1>בוקר טוב</h1>
+      <span class="clock" id="clock"></span>
+      <div class="tools">
+        <button class="btn" id="theme">כהה</button>
+      </div>
+    </div>
+
+    <div id="status"></div>
+
+    <div class="tiles" id="tiles"></div>
+
+    <section class="card lan" id="lan" hidden>
+      <h3>הקונסול ברשת המקומית <small>לטלפון ולמחשבים באותה רשת, עם אותה התחברות</small>
+        <button class="switch" id="lan-sw" role="switch" aria-checked="false" aria-label="לפתוח לרשת המקומית"></button></h3>
+      <div class="lan-body">
+        <div class="qr" id="lan-qr" aria-label="QR לכתובת"></div>
+        <div class="lan-main">
+          <div class="lan-url" id="lan-url"></div>
+          <div class="lan-row">
+            <label class="lan-k">כיבוי אוטומטי
+              <select id="lan-hours"><option value="8">אחרי 8 שעות</option><option value="24">אחרי יום</option><option value="0">אף פעם</option></select></label>
+            <span class="lan-k" id="lan-state"></span>
+          </div>
+          <div class="lan-warn">החיבור ברשת הוא HTTP לא מוצפן: הסיסמה עוברת ב-Wi-Fi כמו שהיא. רק ברשת הבית או המשרד שלך.</div>
+          <ul class="lan-who" id="lan-who"></ul>
+        </div>
+      </div>
+    </section>
+
+    <div class="cols">
+      <section class="card">
+        <h3>על מה עובדים עכשיו <small>לפי נושא · לחיצה פותחת</small></h3>
+        <div id="topics"></div>
+      </section>
+      <section class="card">
+        <h3>היום <small id="feed-sum">מה נפתח, מה נסגר, מה נפל</small></h3>
+        <ul class="feed" id="feed"></ul>
+      </section>
+    </div>
+  </main>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-label="המחשב"></aside>
+
+<script src="vendor/qrcode/qrcode.min.js"></script>
+<script>
+// data/state.json is written every 20 s by dashboard-feed (feed.py). `?state=<name>` reads data/<name>.json
+// instead: how the workbench mock (digital-office/sim/build-dashboard-mock.py) shows a measured day.
+const q = new URLSearchParams(location.search);
+const SRC = `data/${(q.get("state") || "state").replace(/[^a-z0-9-]/gi, "")}.json`;
+let DATA = {computers: [], feed: [], topics: [], totals: null, clock: ""};
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function computers(){ return DATA.computers || []; }
+// the collector writes epoch seconds; the reader's own clock says them (a written offset was an hour off)
+const hm = (ts, s) => ts ? new Date(ts * 1000).toLocaleTimeString("he-IL", {hour: "2-digit", minute: "2-digit"}) : (s || "");
+
+async function load(){
+  try {
+    const r = await fetch(SRC, {cache: "no-store"});
+    if (r.ok) { DATA = await r.json(); render(); }
+  } catch (e) { /* the last good reading stays on the screen */ }
+}
+
+function render(){
+  const pcs = computers();
+  const live = pcs.filter((c) => c.state === "up").length, linked = pcs.filter((c) => c.state !== "none").length;
+  const down = pcs.filter((c) => c.state === "down");
+  // the collector could not read the links at all: say so, never draw that as «everything is green»
+  const blind = !!(DATA.errors && DATA.errors.map);
+  $("#clock").textContent = DATA.at ? new Date(DATA.at * 1000).toLocaleString("he-IL",
+    {weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit"}) : (DATA.clock || "");
+  $("#station").className = "station" + (down.length || blind ? " bad" : "");
+  $("#station").innerHTML = `<b>${blind ? "אין קריאה מהקישורים" : down.length ? `${down.map((c) => esc(c.name)).join(", ")} לא ברשת` : "כל העדר מחובר"}</b>` +
+    `תחנת העבודה (MacBook) תקינה · ` + (linked === 1
+      ? (live === 1 ? "המחשב המקושר עובד במלואו" : "המחשב המקושר לא עובד במלואו")
+      : `${live} מתוך ${linked} המחשבים המקושרים עובדים במלואם`);
+
+  const groups = [...new Set(pcs.map((c) => c.group))];
+  $("#pcs").innerHTML = groups.map((g) => `<div class="group">${esc(g)}</div><div class="pcs">` +
+    pcs.filter((c) => c.group === g).map((c) => `
+      <button class="pc" data-id="${esc(c.id)}"><i class="dot ${esc(c.state)}"></i>
+        <span><span class="name">${esc(c.name)}</span><span class="role">${esc(c.role)}</span></span>
+        <span class="when">${esc(hm(c.when_ts, c.when))}</span></button>`).join("") + `</div>`).join("");
+
+  $("#status").innerHTML = down.length ? down.map((c) => `
+    <div class="alert" role="alert"><div class="big">●</div>
+      <div><h2>${esc(c.name)} לא ברשת מאז ${esc(hm(c.since_ts, c.since))}: תקלה קריטית</h2>
+        <p>${esc(c.why || "")}</p>
+        ${c.stuck ? `<p><span class="k">מה נתקע:</span> ${esc(c.stuck)}</p>` : ""}
+        ${c.moved ? `<p><span class="k">מה עבר ל-HP:</span> ${esc(c.moved)}</p>` : ""}
+        ${c.ask ? `<p><span class="k">מה צריך ממך:</span> ${esc(c.ask)}</p>` : ""}</div>
+      <button class="btn danger" data-id="${esc(c.id)}">פתח את ${esc(c.name)}</button></div>`).join("")
+    : blind ? `<div class="alert" role="alert"><div class="big">●</div><div><h2>אין קריאה מהקישורים</h2>
+        <p>${esc(DATA.errors.map)}</p><p>המצב של המחשבים לא ידוע עד שהקריאה תחזור.</p></div></div>`
+    : pcs.some((c) => c.state === "half")
+    ? `<div class="okbar info">${pcs.filter((c) => c.state === "half").map((c) => esc(c.name)).join(", ")}: מחובר, אבל עוד בלי גישה לפקודות מכאן. כל השאר ירוקים.</div>`
+    : `<div class="okbar">כל המחשבים מחוברים וירוקים. אין שום דבר שמחכה לך.</div>`;
+
+  const t = DATA.totals;
+  $("#tiles").innerHTML = [
+    [`${live}/${linked}`, "מחשבים עובדים במלואם", down.length ? "warn" : ""],
+    ...(t ? [[t.started, "משימות בעבודה עכשיו", ""], [t.completed, `נסגרו מתוך ${t.all}`, ""],
+             [t.owner, "מחכות לך (בעלים)", t.owner ? "warn" : ""]] : []),
+  ].map(([n, l, k]) => `<div class="tile ${k}"><div class="n">${n}</div><div class="l">${l}</div></div>`).join("");
+
+  $("#topics").innerHTML = !(DATA.topics || []).length
+    ? `<div class="more" style="display:block">ההתקדמות לפי נושא מ-Plane נכנסת בשלב הבא (DGO-1124).</div>`
+    : DATA.topics.map((p, i) => {
+    const d = Math.round(100 * p.done / p.total), m = Math.round(100 * p.started / p.total);
+    return `<div class="topic" data-i="${i}"><div><div class="t">${esc(p.name)}</div>
+        <div class="s">${p.started} בעבודה · ${p.total - p.done - p.started} ממתינות</div></div>
+      <div class="bar" title="${d}% נסגרו, ${m}% בעבודה"><i style="width:${d}%"></i><i class="mv" style="width:${m}%"></i></div>
+      <div class="pct"><b>${d}%</b>${p.done} מתוך ${p.total}</div></div>
+      <div class="more">${esc(p.now || "")} <a href="#" class="ref">פתח ב-Plane</a></div>`;
+  }).join("");
+
+  // the whole last day, live (feed.py asks Plane every 30 s): the work items of each kind are counted in the
+  // header; a link that came back is a «✓» line too, so only lines that name an item count, and only 24 hours
+  const day = (DATA.feed || []).filter((f) => f.ts > (DATA.at || 0) - 86400);
+  const n = (k) => day.filter((f) => f.kind === k && f.ref).length;
+  const sum = [["נסגרו", n("done")], ["נפתחו", n("open")], ["התחילו", n("start")], ["בוטלו", n("cancel")],
+               ["נפלו קישורים", day.filter((f) => f.kind === "bad").length]]
+    .filter(([, c]) => c).map(([w, c]) => `${w}: ${c}`).join(" · ");
+  $("#feed-sum").textContent = sum ? `${sum} · ב-24 השעות האחרונות` : "מה נפתח, מה נסגר, מה נפל";
+  $("#feed").innerHTML = (DATA.feed || []).map((f) => `
+    <li><span class="tm">${esc(hm(f.ts, f.t))}</span><span class="ic ${esc(f.kind)}">${{open:"+",done:"✓",bad:"!",start:"▸",cancel:"×"}[f.kind] || "·"}</span>
+      <span>${esc(f.text)}${f.ref ? `<span class="ref">${esc(f.ref)}</span>` : ""}</span></li>`).join("");
+}
+
+function open(id){
+  const c = computers().find((x) => x.id === id); if (!c) return;
+  document.querySelectorAll(".pc").forEach((b) => b.setAttribute("aria-current", b.dataset.id === id));
+  $("#drawer").innerHTML = `
+    <h2><i class="dot ${esc(c.state)}"></i>${esc(c.name)}</h2>
+    <div class="nav-note">${esc(c.role)} · ${esc(c.office)}</div>
+    <dl class="facts">${(c.facts || []).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}</dl>
+    <div class="why">${esc(c.note)}</div>
+    <div class="acts">
+      ${String(c.link || "").startsWith("/a/")
+        ? `<a class="btn act" target="_top" href="/#/m${esc(c.link.slice(2))}">פתח במחשבים של המק</a>` : ""}
+      <button class="btn" id="close">סגור</button></div>`;
+  document.body.classList.add("dr");
+  $("#close").onclick = shut;
+}
+function shut(){ document.body.classList.remove("dr"); document.querySelectorAll(".pc").forEach((b) => b.removeAttribute("aria-current")); }
+
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-id]"); if (b) return open(b.dataset.id);
+  const t = e.target.closest(".topic"); if (t) t.classList.toggle("open");
+});
+$("#scrim").onclick = shut;
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") shut(); });
+// the office's explicit dark ground is «midnight» (theme-tokens.css); «light» beats a dark OS preference
+$("#theme").onclick = () => { const dark = document.documentElement.dataset.theme !== "midnight"; document.documentElement.dataset.theme = dark ? "midnight" : "light"; $("#theme").textContent = dark ? "בהיר" : "כהה"; };
+if (q.get("theme") === "dark") $("#theme").click();
+// ── the console on the LAN: the switch, the address and its QR, who came in (DGO-1125) ──
+let LAN = null;
+function lanDraw(){
+  const card = $("#lan"); if (!LAN) return;
+  const p = LAN.policy || {}, st = LAN.status || {};
+  const on = p.on === true, addr = p.address || st.address || "", port = p.port || 8080;
+  // the console's NAME, not the bare address: under a name every shared app opens too (DGO-1126)
+  const name = LAN.domain || (addr ? addr.replace(/\./g, "-") + ".sslip.io" : "");
+  const url = name ? `http://console.${name}:${port}` : "";
+  card.hidden = false;
+  card.classList.toggle("off", !on);
+  $("#lan-sw").setAttribute("aria-checked", on);
+  $("#lan-url").textContent = url;
+  if (on && url && window.qrcode) { const qr = qrcode(0, "M"); qr.addData(url); qr.make(); $("#lan-qr").innerHTML = qr.createSvgTag({cellSize: 4, margin: 2, scalable: true}); }
+  $("#lan-state").textContent = !on ? "כבוי: הקונסול נפתח רק במחשב הזה."
+    : st.open ? (p.until ? `פתוח עד ${hm(p.until)}` : "פתוח, בלי כיבוי אוטומטי")
+    : (st.error ? `לא נפתח: ${st.error}` : "נפתח בשניות הקרובות…");
+  $("#lan-who").innerHTML = (st.sources || []).slice(0, 6).map((s) => `<li><i class="dot ${s.admitted ? "up" : "down"}"></i>
+    <span class="ip">${esc(s.ip)}</span><span class="lan-k">${s.admitted ? "נכנס" : "נדחה"} · ${esc(hm(s.last))}${s.connections ? " · מחובר עכשיו" : ""}</span></li>`).join("");
+}
+async function lanLoad(){
+  try { const r = await fetch("api/lan", {cache: "no-store"}); if (r.ok) { LAN = await r.json(); lanDraw(); } } catch (e) {}
+}
+$("#lan-sw").onclick = async () => {
+  const on = $("#lan-sw").getAttribute("aria-checked") !== "true";
+  const p = (LAN && LAN.policy) || {}, st = (LAN && LAN.status) || {};
+  const body = on ? {on: true, port: p.port || 8080, hours: +$("#lan-hours").value} : {on: false};   // the address is the door's, never the page's
+  try {
+    const r = await fetch("api/lan", {method: "PUT", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+    const j = await r.json(); if (r.ok) { LAN = j; lanDraw(); } else { $("#lan-state").textContent = j.error || "לא נשמר"; }
+  } catch (e) { $("#lan-state").textContent = "לא נשמר"; }
+};
+
+render();
+load().then(() => { if (q.get("open")) open(q.get("open")); });
+setInterval(load, 20000);
+lanLoad(); setInterval(lanLoad, 10000);
+</script>
+</body>
+</html>

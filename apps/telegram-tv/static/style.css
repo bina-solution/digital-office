@@ -459,14 +459,11 @@ svg{width:1em;height:1em}
 .app .side .brand-mark{width:28px;height:28px;border-radius:8px}
 .app .side .chip{margin-inline-start:0}
 
-/* one column on a phone: the menu keeps its icons only, like the console's rail */
-@media (max-width:900px){
-  .app .side{width:64px}
-  .app .side .bnv-label{display:none}
-  .app .side .bnv-item{width:44px;height:44px;min-height:44px;justify-content:center;padding:0;gap:0}
-  .app .side .bnv-foot-text{display:none}
-}
-@media (max-width:560px){ .app .side{width:56px} }
+/* the phone's side menu is the COMPONENT's (platform-base/bina-ui/bina-nav.css, gate G27):
+   a rail under 840px of its own container and a drawer with a way in under 600 — one
+   behaviour for every app. What stood here was this screen's own 900/560px copy of it,
+   which left the rail 127px tall and the menu unreachable on a phone (measured
+   2026-10-12). Owner: «חייב פיתרון אחיד לניווט צד שמתפקד אותו דבר בכל האפלקציות». */
 
 /* ── the shared side menu (platform-base/bina-ui/bina-nav.css, gate G27) ── */
 /* @bina-nav:start */
@@ -725,10 +722,19 @@ svg{width:1em;height:1em}
    font — the shortest tag that still names an office — and it leaves the label 107px, its full
    width. The percentage half keeps a WIDE rail from giving the office an unbounded share; `flex:0 8`
    then resolves what is left in the label's favour. `.is-remote` and not every meta on purpose: a
-   count has no office to name, and its fixed slot is what makes a column of them line up. */
+   count has no office to name, and its fixed slot is what makes a column of them line up.
+
+   …and it reads the way its WORDS do. An office's name is a Latin one («claude-cloud»), and in the
+   row's right-to-left direction this box cut it on the side it starts: «…laude-cloud» was drawn on
+   six screens of the live office (2026-11-02 — drive, mail, concurrency, alerts, connections, apps),
+   the same row every time. `direction:ltr` puts the cut on the name's own end, and `plaintext` takes
+   the box's direction from its first strong character, so an office named in Hebrew keeps its
+   beginning too. The `5em` cap stays as measured: it is what leaves the app's name its full width,
+   and a name cut at its END is what the row's tooltip (`remoteTip`) is for. */
 .bnv-item.is-remote .bnv-meta{
   flex:0 8 auto;min-width:0;max-inline-size:min(40%,5em);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  direction:ltr;unicode-bidi:plaintext;
 }
 /* trailing slot: a badge, a dot, a chevron. `nowrap` so it can never wrap into a second line. */
 .bnv-tail{flex:none;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;color:var(--bnv-ink-2);font-size:12px}
@@ -844,6 +850,19 @@ svg{width:1em;height:1em}
 .bnv-burger:hover{background:color-mix(in srgb, currentColor 8%, transparent)}
 .bnv-burger:focus-visible{outline:2px solid currentColor;outline-offset:-2px}
 .bnv-burger svg{width:20px;height:20px}
+/* The burger the BASE draws for a page that placed none (the script adds `html.bnv-float` once it
+   has): the same 44/48px target, parked in the corner a phone leaves free and ABOVE the scrim, so
+   the one button both opens the menu and shuts it. Its own test is the window and not a container —
+   the button lives on `body`, outside the menu's container, and a container query cannot see it.
+   Measured 2026-10-12: without this, `sites`, `domains` and `drive` had no way into their menu on a
+   phone at all. */
+.bnv-burger.is-float{
+  display:none;position:fixed;z-index:56;
+  inset-block-end:calc(12px + env(safe-area-inset-bottom, 0px));inset-inline-start:12px;
+  width:48px;height:48px;border-radius:50%;
+  background:var(--surface);color:var(--ink);border:1px solid var(--line);box-shadow:var(--elev-2);
+}
+@media (max-width:599px){ html.bnv-float .bnv-burger.is-float{display:inline-flex} }
 .bnv-scrim{
   position:fixed;inset:0;z-index:55;border:0;padding:0;
   background:var(--scrim);   /* the palette's own: mixed from the menu's ink it was a WHITE veil wherever that ink is light */

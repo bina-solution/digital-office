@@ -7,12 +7,14 @@ A one-off cleanup decays. This makes app-ownership an ENFORCED invariant instead
 when something that should be an app is defined anywhere else. Run it in CI so the platform
 cannot silently regrow a second home for services.
 
-It reports four debts, each of which must reach ZERO for the transformation to be complete:
+It reports five debts, each of which must reach ZERO for the transformation to be complete:
 
   1. services defined outside an app dir   (production/, development/, root compose)
   2. capability bridges still open         (platform/legacy-capabilities.yaml)
   3. acknowledged external paths           (platform/external-paths.yaml)
   4. apps whose build source is outside    (an app that cannot be moved is not an app)
+  5. compose files their manifest never names (the compiler leaves them out, yet renders the app's
+     routing: enabling the app makes the office's whole compose project invalid)
 
 --strict makes any non-zero debt an error (the end-state gate). Without it the debts are
 printed as a progress scoreboard, which is what you want mid-migration.
@@ -72,6 +74,29 @@ def apps_with_external_source():
     return out
 
 
+def apps_with_unnamed_compose():
+    """An app whose compose file its own manifest never names. The compiler includes an app's services
+    only through `app.json` `compose` — yet still renders its routing and cpu-budget overrides — so the
+    office's WHOLE compose project becomes invalid the moment the app is enabled («service X has neither
+    an image nor a build context specified»), and every compose call on that office fails. Measured on
+    fireplace, 2026-10-22: chimney-services, enabled by rel10, stopped every `dc` there (FPG-35's run).
+    A blueprint or a library runs no services (the compiler's validate refuses `compose` on them), so
+    they are not asked. Returns (each finding as the line that fixes it, how many manifests were read)."""
+    out, scanned = [], 0
+    for m in sorted(list(REPO.glob("apps/*/app.json")) + list(REPO.glob("platform-base/*/app.json"))):
+        scanned += 1
+        app = json.loads(m.read_text(encoding="utf-8"))
+        if app.get("compose") or app.get("kind") in ("blueprint", "library"):
+            continue
+        rel = m.parent.relative_to(REPO).as_posix()
+        out += [f"{rel}/{f.name} — add \"compose\": \"{f.name}\" to {rel}/app.json"
+                for f in sorted(m.parent.iterdir()) if f.name in COMPOSE_NAMES]
+    return out, scanned
+
+
+COMPOSE_NAMES = ("docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml")
+
+
 def yaml_keys(path):
     p = REPO / path
     if not p.exists():
@@ -89,6 +114,7 @@ def main():
     bridges = yaml_keys("platform/legacy-capabilities.yaml")
     external = yaml_keys("platform/external-paths.yaml")
     ext_src = apps_with_external_source()
+    unnamed, manifests = apps_with_unnamed_compose()
 
     n_out = sum(len(s) for _, s in outside)
     debts = [
@@ -98,6 +124,8 @@ def main():
         ("acknowledged external paths", len(external), ", ".join(external)),
         ("apps with build source outside an app dir", len(ext_src),
          ", ".join(f"{a}->{c}" for a, _, c in ext_src)),
+        # a list: each finding on its own line, whole — the fix it names must survive the report
+        ("compose files their manifest never names", len(unnamed), unnamed),
     ]
 
     total = sum(n for _, n, _ in debts)
@@ -106,9 +134,11 @@ def main():
     for label, n, detail in debts:
         print(f"{label:38} {n:>6}")
         if n and detail:
-            print(f"    {detail[:150]}")
+            for line in (detail if isinstance(detail, list) else [detail[:150]]):
+                print(f"    {line}")
     print("-" * 46)
     print(f"{'TOTAL':38} {total:>6}")
+    print(f"(read {manifests} app manifests under apps/ and platform-base/)")
 
     if total == 0:
         print("\nG5 PASS — every service lives in an app; nothing outside. Transformation complete.")

@@ -8,16 +8,16 @@
 
 ## Prerequisites
 
-- Access to the chat app: `https://chat.bina-comp.bina-solutions.co.il`
+- Access to the chat app: `https://chat.hacohen.bina-solutions.co.il`
   - Credentials: configured in `.env` (`AUTH_USERNAME` / `AUTH_PASSWORD`, fed from the `chat-auth`
     connection as `CHAT_AUTH_USER` / `CHAT_AUTH_PASS`)
-- A WhatsApp account that is **not** the bot number (050-000-0013)
+- A WhatsApp account that is **not** the bot number (972500000009)
 - The tester's phone number should be listed as an admin in settings (via n8n webhook or `ADMIN_PHONE_*` env vars) to test admin-only features (options 10, 11)
 
 ## Part 1: The chat app
 
 ### 1.1 Login
-1. Open `https://chat.bina-comp.bina-solutions.co.il/login`
+1. Open `https://chat.hacohen.bina-solutions.co.il/login`
 2. Enter credentials → should redirect to the chat app at `/`
 3. Verify: conversation list on the right, the connection switcher at the foot of the sidebar
 
@@ -38,7 +38,7 @@
 # abstract: goes through whichever connection is active
 curl -X POST -H "Content-Type: application/json" -u <user>:<pass> \
   -d '{"to":"all","text":"Test broadcast"}' \
-  https://chat.bina-comp.bina-solutions.co.il/api/broadcast
+  https://chat.hacohen.bina-solutions.co.il/api/broadcast
 ```
 - Verify: `to:"all"` must be typed explicitly; a partial fan-out returns **207** with per-recipient results
 
@@ -53,7 +53,7 @@ Open WhatsApp (phone app or web.whatsapp.com) and message the bot number.
 
 ### 2.1 Welcome Flow (New User)
 1. If this is your first message to the bot, send any text (e.g., "hi")
-2. **Expected**: Welcome message "ברוכים הבאים לבוט בינה קומפ..." followed by the menu
+2. **Expected**: Welcome message "ברוכים הבאים לבוט הכהנים..." followed by the menu
 
 ### 2.2 Menu Display
 After welcome, the menu should show:

@@ -54,6 +54,34 @@ projects:
       - { name: "להזמין את מי שצריך לעקוב אחרי הפרויקט",          state: "לביצוע", labels: ["בדיקות"] }
       - { name: "לסמן משימה כבוצעת ולבדוק שהלוח מתעדכן",           state: "בתהליך", priority: medium }
 
+# ── the office's OWN sign-in, as Plane's sign-in (DGO-371) ──────────────────────────────────────
+#
+# The office has one door — its identity provider — and Plane is an app behind it. Both halves are
+# already true at the edge: every host of this app is `auth: sso` in app.json, so a browser that
+# reaches Plane was authenticated before anything of Plane's was served. What was missing is that
+# Plane did not KNOW that, so it asked for a second, e-mail-and-password sign-in of its own.
+#
+# WHAT MAKES IT WORK. `plane/middleware/office_identity.py` (installed by the Dockerfile, wired by
+# patches/sso-identity.py) asks the identity provider — with the BROWSER's own cookie, the same call
+# the edge's `authentik@file` forwardAuth makes — who that browser is, and signs that person into
+# their Plane account. No header is trusted, and Plane's own password keeps working: it stays a way
+# in, it is just no longer the one the owner meets inside the office.
+#
+# WHO, is this block, and nothing is guessed from it: an office identity that is not named here gets
+# Plane's own sign-in page (the safe default for a name nobody declared).
+#
+#   authentik   the office's identity — username, e-mail or uid (any of them matches)
+#   plane       the Plane account it IS. `owner` is the account declared above (.env's
+#               PLANE_OWNER_EMAIL), so the address is never written twice.
+#
+# `akadmin` is this deployment's own admin on every office (`AUTHENTIK_BOOTSTRAP_USER` in .env,
+# minted by scripts/ci-env.sh), and its e-mail is listed beside it because that is what a person
+# sees in the identity provider — a renamed admin then still lands in his own workspace.
+sso:
+  users:
+    - authentik: [akadmin, ci@example.com]
+      plane: owner
+
 # Accounts for the AGENTS of this office — created the same way the owner is, so a plan file can
 # assign work to a name instead of a person having to hand out a token. The vault instance is
 # `plane_local_api_token-<slug>`, and its secret carries `token` AND `user_id`, which is what

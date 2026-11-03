@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-indox-migrate-legacy.py — load the Bina-comp LEGACY Google-Sheet CSV exports into supabase.
+indox-migrate-legacy.py — load the Hacohen LEGACY Google-Sheet CSV exports into supabase.
 
-Ground truth: ai/context/archive/indox-pre-2026-09/bina-comp-legacy-migration-spec.md
+Ground truth: ai/context/archive/indox-pre-2026-09/hacohen-legacy-migration-spec.md
 
   incoming_documents : direct column-for-column load. All 76 named CSV columns exist in
                        the target table with identical names (verified 2026-07-16),
@@ -496,7 +496,7 @@ def fetch_table_cols(args, table):
 
 # ---------------------------------------------------------------- main
 def main():
-    ap = argparse.ArgumentParser(description="Migrate Bina-comp legacy CSV -> supabase")
+    ap = argparse.ArgumentParser(description="Migrate Hacohen legacy CSV -> supabase")
     ap.add_argument("--source")
     ap.add_argument("--table", required=True, choices=["incoming_documents", "companies"])
     g = ap.add_mutually_exclusive_group(required=True)

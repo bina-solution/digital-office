@@ -35,7 +35,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
     /*__n8n__*/ meta: {},
     /*__n8n__*/ pinData: {},
     /*__n8n__*/ staticData: null,
-    /*__n8n__*/ shared: [{"updatedAt":"2026-07-30T23:43:25.358Z","createdAt":"2026-07-30T23:43:25.358Z","role":"workflow:owner","workflowId":"mailApi01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <shlomo@local.dev>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
+    /*__n8n__*/ shared: [{"updatedAt":"2026-07-30T23:43:25.358Z","createdAt":"2026-07-30T23:43:25.358Z","role":"workflow:owner","workflowId":"mailApi01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
     id: 'mailApi01',
     name: 'indox doc-context api',
     active: true,
@@ -122,8 +122,12 @@ return [{ json: { INLINE_ACTION: 'GET', filter: { SOURCE_LINK: { op: 'contains',
         position: [860, 300],
     })
     Shape = {
-        jsCode: `const rows = $input.all().map(i => i.json).filter(r => r && r.ID);
-return [{ json: { found: rows.length, docs: rows } }];`,
+        jsCode: `const all = $input.all().map(i => i.json).filter(r => r);
+const rows = all.filter(r => r.ID);
+// 'Call Indox Api' continues on error, so a failed lookup used to answer "found: 0" — an empty
+// office and a broken call were the same reply. Read the failure and answer with it.
+const failed = all.filter(r => r.error || r.errorMessage).map(r => String(r.error || r.errorMessage).slice(0, 200));
+return [{ json: { found: rows.length, docs: rows, failed: failed.length, failures: failed } }];`,
     };
 
     @node({
@@ -135,7 +139,7 @@ return [{ json: { found: rows.length, docs: rows } }];`,
     })
     Respond = {
         respondWith: 'json',
-        responseBody: '={{ { "found": $json.found, "docs": $json.docs } }}',
+        responseBody: '={{ { "found": $json.found, "docs": $json.docs, "failed": $json.failed, "failures": $json.failures } }}',
         options: {},
     };
 

@@ -1,0 +1,73 @@
+{
+  "id": "cad",
+  "title": {
+    "he": "מודלים תלת־ממד",
+    "en": "FreeCAD"
+  },
+  "summary": {
+    "he": "FreeCAD בדפדפן: מודלים, שרטוטי ייצור ופח (פריסה, מקדם K, DXF) — לתכנון ובדיקה של מה שהמודלים הפרמטריים בונים",
+    "en": "FreeCAD in the browser: models, production drawings and sheet metal (unfold, K-factor, DXF) — to design and check what the parametric models build"
+  },
+  "layer": 3,
+  "kind": "service",
+  "version": "0.2.0",
+  "compose": "docker-compose.yml",
+  "capabilities": [],
+  "use": [],
+  "connections": [],
+  "health": {
+    "structural": "auto",
+    "probe": {
+      "http": "http://cad:3000/",
+      "interval": "30s"
+    }
+  },
+  "resources": {
+    "cpus": "2",
+    "memory": "3G"
+  },
+  "routing": [
+    {
+      "host": "cad",
+      "port": 3000,
+      "service": "cad",
+      "auth": "sso",
+      "emit_labels": true,
+      "on_demand": {
+        "idle": "2h"
+      },
+      "module": {
+        "group": "עסק",
+        "icon": "box",
+        "embed": true,
+        "external": true,
+        "alias": "cad",
+        "id": "cad",
+        "name": "מודלים תלת־ממד",
+        "desc": "FreeCAD — מודלים, שרטוטי ייצור ופח",
+        "order": 38,
+        "url": "http://cad:3000",
+        "url_env": "CAD_URL"
+      },
+      "sso": {
+        "slug": "cad",
+        "display_name": "FreeCAD",
+        "default_host": "cad.localhost",
+        "base_url_env": "CAD_BASE_URL",
+        "local_twin": true
+      }
+    }
+  ],
+  "data": {
+    "volumes": [
+      "cad_config",
+      "cad_projects"
+    ],
+    "on_uninstall": "keep",
+    "note": "cad_projects holds the office's models (FreeCAD files, the STEP/glTF cad-api writes); cad_config is FreeCAD's own settings."
+  },
+  "agent": {
+    "context": "AGENT.md",
+    "order": 72
+  }
+}

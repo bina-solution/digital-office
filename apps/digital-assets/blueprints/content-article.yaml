@@ -1,0 +1,31 @@
+# מאמרי עומק — one subject in depth, 1,800–2,400 words: the 35 flagship open-source projects DGO runs or
+# will run, and the long essays (the triangle, the cost of a business's software, licences, privacy,
+# the company's own case). Shape and rules: content/BRIEF.md (`type: article`).
+# Each piece: `content.article.<slug>-<lang>`, created under this blueprint by the content importer.
+id: content-article
+version: 1
+order: 11
+extends:
+- content-library
+name:
+  he: מאמרי עומק
+  en: In-depth articles
+summary:
+  he: מאמר של 1,800–2,400 מילים לכל נושא — פרויקטי הדגל בקוד פתוח והמאמרים הגדולים — נשען על מחקר ועל
+    מה שרץ בלשכה באמת.
+  en: 1,800–2,400 words per subject — the flagship open-source projects and the long essays — built on
+    research and on what really runs in the office.
+slots:
+- key: content.article.hub-he
+  section: content
+  group: article
+  kind: richtext
+  lang: he
+  label:
+    he: פתיח עמוד המאמרים
+    en: Articles hub — opening text
+  constraints:
+    note: 60–120 words — the hub of the in-depth articles
+  targets:
+  - channel: website
+  - channel: google-search

@@ -3,6 +3,21 @@
    surface. Every URL is RELATIVE — the console serves the app at /a/sites/ and injects <base href>. */
 'use strict';
 
+/* ── the screen the shell hands over is a PATH, and this app's route is its hash ───────────────────
+   The console's tail IS the app's own URL under its mount — `#/m/sites/s/<id>/<tab>` arrives as
+   `/a/sites/s/<id>/<tab>` — while this screen routes on `location.hash` (`#/s/<id>/<tab>`). So the
+   arriving path is translated ONCE, on load, into the app's own grammar; from there nothing changes.
+   Measured 2026-10-12: without this the deep link opened the app and IGNORED the screen it named
+   (there was no reference to `location.pathname` in this file at all — gate G83 now asks for it). */
+(function adoptPath() {
+  try {
+    const mount = new URL(document.baseURI).pathname.replace(/\/+$/, "");
+    const p = location.pathname;
+    const rest = mount && p.indexOf(mount) === 0 ? p.slice(mount.length) : p;
+    if (rest && rest !== "/" && !location.hash) location.hash = rest;
+  } catch (e) { /* no path to adopt: the app opens where it always did */ }
+})();
+
 const $ = (id) => document.getElementById(id);
 const S = { overview: null, site: null, tab: 'overview', machines: [], checks: [], stack: null,
             files: null, file: null, scanSel: null, logs: null, wizard: null };
@@ -184,6 +199,12 @@ async function api(path, opts) {
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g,
   (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+// ONE IS SAID AS ONE (G86): a count of one is its own sentence — «1 אתרים» is not Hebrew — and
+// every other count is the number with the plural. The rule is written out in
+// apps/mail/mailview/static/app.js.
+const num = (n) => Number(n).toLocaleString('he-IL');
+const one = (n, single, many) => (Number(n) === 1 ? single : `${num(n)} ${many}`);
+
 function bytes(n) {
   n = Number(n || 0);
   if (n < 1024) return n + ' B';
@@ -194,7 +215,7 @@ function bytes(n) {
 function ago(ts) {
   if (!ts) return '—';
   const d = Math.max(0, Math.floor(Date.now() / 1000) - ts);
-  if (d < 60) return 'לפני ' + d + ' שניות';
+  if (d < 60) return d === 1 ? 'לפני שנייה' : 'לפני ' + d + ' שניות';
   if (d < 3600) return 'לפני ' + Math.floor(d / 60) + ' דקות';
   if (d < 86400) return 'לפני ' + Math.floor(d / 3600) + ' שעות';
   return 'לפני ' + Math.floor(d / 86400) + ' ימים';
@@ -238,10 +259,15 @@ async function render(force) {
   const parts = h.split('/').filter(Boolean);          // ['', 's', '<id>', '<tab>']
   $('title').textContent = 'אתרים';
   $('sub').textContent = 'האתרים של העסק — מי רץ, מי לא עונה, ומה צריך תיקון.';
+  // The chip is the address's, not the last screen's: a measuring screen shows «טוען…» until its own number
+  // arrives, a form measures nothing and hides it. Otherwise «טוען…» (the first paint's word) sits beside the
+  // wizard and the adoption screen for as long as they stay open — two screens that had already drawn.
+  const form = parts[0] === 'new' || parts[0] === 'adopt';
+  setState(form ? '' : 'טוען…');
   if (parts[0] === 's' && parts[1]) return detail(parts[1], parts[2] || 'overview', force);
   renderMenu(null, null);                 // the address, with no site open
-  if (parts[0] === 'new') return wizard();
-  if (parts[0] === 'adopt') return adopt();
+  if (form && parts[0] === 'new') return wizard();
+  if (form && parts[0] === 'adopt') return adopt();
   return overview(force);
 }
 
@@ -253,10 +279,9 @@ async function overview(force) {
   S.overview = d;
   const sites = d.sites || [];
   const down = sites.filter((s) => s.last_state === 'down').length;
-  $('state').className = 'live' + (down ? ' bad' : '');
-  $('state').textContent = sites.length
-    ? `${sites.length} אתרים · ${down ? down + ' לא עונים' : 'הכל עונה'}`
-    : 'אין אתרים עדיין';
+  setState(sites.length
+    ? `${one(sites.length, 'אתר אחד', 'אתרים')} · ${down ? one(down, 'אחד לא עונה', 'לא עונים') : 'הכל עונה'}`
+    : 'אין אתרים עדיין', down > 0);
 
   const machErr = d.machines_error
     ? `<div class="finding warn"><div class="ft">שירות המחשבים אינו זמין</div>
@@ -317,12 +342,24 @@ function emptyState() {
   </section>`;
 }
 
+// The chip beside the heading states what the OPEN SCREEN measured, so it belongs to the router and not to
+// whichever screen wrote it last: `setState` is the one writer, `null` hides it (a form measures nothing),
+// and the router calls it before dispatching. Left to each screen, the two that never wrote it (the new-site
+// wizard and adoption) kept the first paint's word, and «טוען…» sat beside a form that had already drawn.
+function setState(text, bad) {
+  const el = $('state');
+  if (!el) return;
+  // `hidden` cannot do this: `.live{display:inline-flex}` outranks the `[hidden]` rule in the browser's sheet.
+  el.style.display = text ? '' : 'none';
+  el.className = 'live' + (bad ? ' bad' : '');
+  el.textContent = text || '';
+}
+
 // A screen that could not be read says so the way this screen says a finding - what, why, what to do - and the
 // heading's chip stops saying «טוען…». It was drawn as command output (the log's box: a code font, red on red,
 // under the one word «שגיאה»), and the chip went on saying «טוען…» beside it for as long as the page stayed open.
 function fail(r) {
-  $('state').className = 'live bad';
-  $('state').textContent = 'לא נטען';
+  setState('לא נטען', true);
   $('view').innerHTML = `<div class="finding error"><div class="ft">המסך לא נטען</div>
     <div class="fd">${esc((r.body && (r.body.error || r.body.detail)) || binaSaid(r.status))}</div>
     <div class="fx">«רענון» קורא אותו שוב.</div></div>`;
@@ -383,9 +420,8 @@ async function detail(id, tab, force) {
   $('title').textContent = s.label || id;
   $('sub').textContent = (s.hosts || []).join(' · ') || 'ללא דומיין';
   const up = s.uptime || {};
-  $('state').className = 'live' + (s.last_state === 'down' ? ' bad' : '');
-  $('state').textContent = s.last_state === 'down' ? 'לא עונה'
-    : (up.uptime_pct == null ? 'אין דגימות' : up.uptime_pct + '% זמינות');
+  setState(s.last_state === 'down' ? 'לא עונה'
+    : (up.uptime_pct == null ? 'אין דגימות' : up.uptime_pct + '% זמינות'), s.last_state === 'down');
 
   $('view').innerHTML = `
     <section class="card">
@@ -451,7 +487,7 @@ async function tabOverview(s) {
       <td>${esc(e.kind)}</td><td>${esc(e.message)}</td></tr>`).join('');
   $('tab').innerHTML = `
     <section class="card"><h3>זמינות — 24 השעות האחרונות
-      <span class="hint">${samples.length} דגימות</span></h3>
+      <span class="hint">${samples.length === 1 ? 'דגימה אחת' : `${samples.length} דגימות`}</span></h3>
       ${sparkline(samples)}
       <div class="note">כל עמודה = דקה. אדום = לא ענה.</div>
       <div class="kv" style="margin-top:10px">
@@ -705,7 +741,7 @@ async function tabSettings(s) {
         <div><label>תיקייה על המחשב</label><input id="f-root" class="ltr" value="${esc(s.root)}"></div>
         <div><label>נתיב בדיקת חיים</label><input id="f-health" class="ltr" value="${esc(s.health_path)}"></div>
         <div><label>סף ציון יופי</label><input id="f-bmin" type="number" value="${esc(cfg.beauty_min || 70)}"></div>
-        <div><label>עמודי SEO בסריקה</label><input id="f-seopages" type="number" value="${esc(cfg.seo_pages || 20)}"></div>
+        <div><label>עמודי SEO בסריקה (לפחות; ה-sitemap נקרא כולו)</label><input id="f-seopages" type="number" value="${esc(cfg.seo_pages || 20)}"></div>
         <div><label>תדירות סריקת אבטחה (שעות)</label><input id="f-sech" type="number" value="${esc(cfg.security_hours || 24)}"></div>
       </div>
       <label class="row" style="margin-top:12px"><input type="checkbox" id="f-monitor"
@@ -840,8 +876,8 @@ async function tabSettings(s) {
     const b = r.body || {};
     const mapped = (b.pages || []).reduce((n, p) => n + (p.mapped || []).length, 0);
     const free = (b.unmapped || []).length;
-    $('pub-slots-out').innerHTML = `<p class="note">${mapped} ערכים כבר נכסים דיגיטליים ·
-      ${free} טקסטים/תמונות שעוד כתובים ביד · עודכן ${esc(ago(b.synced_at))}</p>`;
+    $('pub-slots-out').innerHTML = `<p class="note">${mapped === 1 ? 'ערך אחד כבר נכס דיגיטלי' : `${mapped} ערכים כבר נכסים דיגיטליים`} ·
+      ${free === 1 ? 'טקסט/תמונה אחד שעוד כתוב ביד' : `${free} טקסטים/תמונות שעוד כתובים ביד`} · עודכן ${esc(ago(b.synced_at))}</p>`;
   };
   $('del').onclick = () => del(s, false);
   $('del-purge').onclick = () => del(s, true);

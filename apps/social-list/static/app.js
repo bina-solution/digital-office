@@ -26,10 +26,11 @@ const MOUNT = (() => {
   }
 })();
 function reportRoute() {
-  if (window.parent === window) return;
-  const inner = location.hash.replace(/^#/, '') || '/';
-  try { window.parent.postMessage({ type: 'bina:route', path: inner.startsWith('/') ? inner : '/' + inner }, location.origin); }
-  catch (e) { /* an opaque parent — nothing to mirror */ }
+  // NOTHING IS POSTED, AND THAT IS THE CHANGE (2026-10-13): the shell reads the frame's own URL
+  // (`watchFrameRoute`), and this app already translates an arriving path into its own hash
+  // (`adoptPathRoute` above). Same change as `mailview` and `incoming`, both deployed and measured.
+  // This office does not run this app — its deploy-and-measure belongs to an office that does.
+  return;
 }
 
 const $ = (id) => document.getElementById(id);

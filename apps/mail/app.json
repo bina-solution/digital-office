@@ -88,6 +88,10 @@
     "n8n": "blueprint/n8n"
   },
   "compose": "docker-compose.yml",
+  "agent": {
+    "context": "AGENT.md",
+    "order": 16
+  },
   "routing": [
     {
       "host": "mailapi",

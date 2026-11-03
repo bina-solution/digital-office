@@ -183,6 +183,64 @@ def test_a_hook_runs_only_when_it_is_executable_the_rule_bbox_run_has(tmp_path, 
     assert app._run_hook(m, "onboard", 10) == {"ran": True, "rc": 0, "out": "brought up notes"}
 
 
+# ── convergence and sign-in: the apps the compiler names, not the enabled ones ─────────
+
+def test_convergence_checks_the_automations_the_compiler_lists_not_the_enabled_apps(monkeypatch):
+    """DGO-998, DGO-1001: an enabled app whose workflows another office holds is not checked here, and a
+    provider the plan pulls in (n8n, off in the state) is. The list is the compiler's (`blueprints`)."""
+    asked, applied, held = [], [], {"engine": False}
+
+    def present(aid):
+        asked.append(aid)
+        return held.get(aid, True)
+
+    def apply(aid, on):
+        applied.append(aid)
+        held[aid] = True
+        return {"ok": True, "detail": "imported"}
+    monkeypatch.setattr(app, "_load_state", lambda: {"web": {"state": "enabled", "workflows": "vps1"},
+                                                       "engine": {"state": "disabled"}})
+    monkeypatch.setattr(app, "_load_manifests", lambda: [dict(APP, id=aid, blueprints={"n8n": "flows"})
+                                                           for aid in ("web", "engine")])
+    monkeypatch.setattr(app, "_services_of", lambda m: [])
+    monkeypatch.setattr(app, "_disposition", lambda entry: (entry or {}).get("state", "disabled"))
+    monkeypatch.setattr(app, "_workflow_apps", lambda: (["engine"], None))
+    monkeypatch.setattr(app, "_blueprint_present", present)
+    monkeypatch.setattr(app, "_blueprint_apply", apply)
+    rep = app.reconcile_once()
+    assert applied == ["engine"] and "web" not in asked
+    assert rep["converged"] == [{"app": "engine", "action": "blueprint", "detail": "imported"}] and not rep["errors"]
+
+
+def test_convergence_that_cannot_ask_the_compiler_says_so_and_still_checks_the_enabled_apps(monkeypatch):
+    """The second reader of DGO-998: one app the compiler refuses must not stop every other app's
+    automations. The failure is an error, and the enabled apps that declare automations are checked."""
+    asked = []
+    monkeypatch.setattr(app, "_load_state", lambda: {"web": {"state": "enabled"}, "off": {"state": "disabled"}})
+    monkeypatch.setattr(app, "_load_manifests", lambda: [dict(APP, id=aid, blueprints={"n8n": "flows"})
+                                                           for aid in ("web", "off")] + [dict(APP, id="plain")])
+    monkeypatch.setattr(app, "_services_of", lambda m: [])
+    monkeypatch.setattr(app, "_disposition", lambda entry: (entry or {}).get("state", "disabled"))
+    monkeypatch.setattr(app, "_workflow_apps", lambda: (None, "ERROR ghost: blueprints.n8n -> flows is not a directory"))
+    monkeypatch.setattr(app, "_blueprint_present", lambda aid: asked.append(aid) or True)
+    rep = app.reconcile_once()
+    assert [e["app"] for e in rep["errors"]] == ["*"] and "not a directory" in rep["errors"][0]["error"]
+    assert asked == ["web"]
+
+
+def test_the_sign_in_refresh_runs_where_the_compiler_says_sign_in_runs(monkeypatch):
+    """DGO-999: the refresh looked for `forward-auth` among the ENABLED apps only, so an identity app pulled
+    in through the product's binding got none. It asks the compiler, and runs the refresh of the app it
+    names; when nothing runs sign-in, there is nothing to refresh."""
+    ran = []
+    monkeypatch.setattr(app, "_capability_provider", lambda cap: "idp" if cap == "forward-auth" else None)
+    monkeypatch.setattr(app, "_manifest", lambda aid: dict(APP, id=aid))
+    monkeypatch.setattr(app, "_run_hook", lambda m, verb, timeout: ran.append((m["id"], verb)) or {"rc": 0})
+    assert app._signin_refresh() == {"rc": 0} and ran == [("idp", "refresh")]
+    monkeypatch.setattr(app, "_capability_provider", lambda cap: None)
+    assert app._signin_refresh() is None and ran == [("idp", "refresh")]
+
+
 # ── arriving with data, and moving ────────────────────────────────────────────
 
 def test_arriving_with_data_restores_between_the_first_answer_and_the_apps_own_bootstrap(plane):

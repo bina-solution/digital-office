@@ -63,7 +63,7 @@ const isGroupJid = (jid) => String(jid || '').endsWith('@g.us');
  *  them as chats, and `src/whatsapp/chat_bot.js` already refuses to route them to a bot. */
 const isBroadcastJid = (jid) => String(jid || '').endsWith('@broadcast');
 
-/** `050-000-0006` from a JID. The archive stores the JID; the client shows a phone number. */
+/** `+972501112233` from a JID. The archive stores the JID; the client shows a phone number. */
 function jidPhone(jid) {
   const d = String(jid || '').split('@')[0].replace(/\D/g, '');
   return d ? `+${d}` : '';

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -35,6 +36,31 @@ type session struct {
 type signer struct {
 	key []byte
 	ttl time.Duration
+	// notBefore is sign-out: a person's sessions minted before it are refused (revoke). With the
+	// per-host hand-off every app host holds its own cookie, and no single response can clear them
+	// all. In memory: a restart forgets it, and the sessions it refused come back until they expire —
+	// the stated cost of a session with no store (the design note); rotating FORWARD_AUTH_SECRET is
+	// still the way to end everything for good.
+	mu        sync.Mutex
+	notBefore map[string]time.Time
+}
+
+// revoke refuses, from now on, every session of name minted before now — and in the same second: a
+// cookie carries its time in whole seconds, and one minted in the second of the sign-out cannot be told
+// from one minted just before it, so it is refused too (signing in again takes longer than that).
+func (s *signer) revoke(name string, now time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.notBefore == nil {
+		s.notBefore = map[string]time.Time{}
+	}
+	s.notBefore[name] = now.Truncate(time.Second).Add(time.Second)
+}
+
+func (s *signer) revokedBefore(name string) time.Time {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.notBefore[name]
 }
 
 // issue returns the cookie value and its expiry. The signed body is "<name>\n<unix expiry>",
@@ -85,6 +111,11 @@ func (s *signer) read(r *http.Request, now time.Time, store *userStore) (*sessio
 	// effect at once, instead of whenever that person's TTL happens to run out.
 	u, ok := store.byName[name]
 	if !ok || !now.Before(exp) {
+		return nil, errBadCookie
+	}
+	// minted before this person last signed out: refused (revoke). The cookie carries its expiry, so
+	// its minting second is the expiry less the TTL.
+	if nb := s.revokedBefore(name); !nb.IsZero() && exp.Add(-s.ttl).Before(nb) {
 		return nil, errBadCookie
 	}
 	return &session{User: u, Exp: exp}, nil

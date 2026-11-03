@@ -127,9 +127,9 @@
         root: { path: '/', total: DISK_TOTAL, used: diskUsed, free: DISK_TOTAL - diskUsed, percent: last.disk },
         top_paths: [
           { label: 'Docker',          path: '/var/lib/docker',                        size: Math.round(38*GB) },
-          { label: 'Deployment',      path: '/root/deployment-bina-comp',               size: Math.round(9.5*GB) },
-          { label: 'apitools storage',path: '/root/deployment-bina-comp/apitools/storage', size: Math.round(6.2*GB) },
-          { label: 'FV benchmarks',   path: '/root/deployment-bina-comp/feature-validation', size: Math.round(1.1*GB) },
+          { label: 'Deployment',      path: '/root/deployment-hacohen',               size: Math.round(9.5*GB) },
+          { label: 'apitools storage',path: '/root/deployment-hacohen/apitools/storage', size: Math.round(6.2*GB) },
+          { label: 'FV benchmarks',   path: '/root/deployment-hacohen/feature-validation', size: Math.round(1.1*GB) },
           { label: 'OS /usr',         path: '/usr',                                   size: Math.round(4.8*GB) },
           { label: 'var logs',        path: '/var/log',                               size: Math.round(0.6*GB) },
           { label: 'home',            path: '/home',                                  size: Math.round(0.3*GB) }

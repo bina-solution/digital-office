@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+#: authentik — the office moved to another domain: its people's sign-in addresses move with it
+#
+# rename-address — every authentik user whose address is <local>@<old domain> becomes <local>@<new domain>:
+# the SAME user (groups, consents), never a new one. Then AUTHENTIK_BOOTSTRAP_EMAIL in .env, decided from
+# STATE: it follows whenever no account holds the old address any more. The domains come from the
+# environment (DGO_RENAME_FROM, DGO_RENAME_TO, DGO_RENAME_DRY_RUN), set by `bbox rename-address [--dry-run]`.
+#
+# authentik allows two users one address, so users who ALREADY shared <local>@<old> move together; a move
+# is refused only when the new address belongs to someone who was not on the old domain — a different
+# person (FPG-34's third reader). Through authentik's own shell (`ak shell`, its Django), one transaction.
+# authentik being DOWN is a failure, not "nothing to move"; the dry run rolls back and exits non-zero when
+# the real run would refuse. Usernames (akadmin) are not addresses and are not touched. No secret is read.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # say, colors, running, read_env_value, env_set, rename_note, DN
+SRV="authentik-server-${DN}"
+OLD="$(printf '%s' "${DGO_RENAME_FROM:-}" | tr '[:upper:]' '[:lower:]')"
+NEW="$(printf '%s' "${DGO_RENAME_TO:-}" | tr '[:upper:]' '[:lower:]')"
+DRY="${DGO_RENAME_DRY_RUN:-0}"
+domain='^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$'
+if ! [[ "${OLD}" =~ ${domain} && "${NEW}" =~ ${domain} && "${OLD}" != "${NEW}" ]]; then
+  say "${cr}[authentik] rename-address: DGO_RENAME_FROM and DGO_RENAME_TO must be two different domains${c0}"
+  exit 1
+fi
+if ! running "${SRV}"; then
+  say "${cr}[authentik] rename-address: authentik is enabled here but not running — nothing was moved; run it and try again${c0}"
+  rename_note AUTHENTIK_BOOTSTRAP_EMAIL failed
+  exit 1
+fi
+KEYVAL="$(read_env_value AUTHENTIK_BOOTSTRAP_EMAIL)"
+OUT="$(docker exec -e DGO_RENAME_FROM="${OLD}" -e DGO_RENAME_TO="${NEW}" -e DGO_RENAME_DRY_RUN="${DRY}" \
+  -e DGO_KEY_VALUE="${KEYVAL}" "${SRV}" ak shell -c '
+import os
+from django.db import transaction
+from authentik.core.models import User
+old, new = os.environ["DGO_RENAME_FROM"], os.environ["DGO_RENAME_TO"]
+key = (os.environ.get("DGO_KEY_VALUE") or "").strip().lower()
+moved, refused = [], []
+def to_new(email):
+    return email.rsplit("@", 1)[0] + "@" + new
+def locals_on(dom):
+    return sorted({e.rsplit("@", 1)[0].lower() for e in User.objects.filter(email__iendswith="@" + dom).values_list("email", flat=True)})
+with transaction.atomic():
+    movers = list(User.objects.select_for_update().filter(email__iendswith="@" + old))
+    were_old = {u.pk for u in movers}
+    for u in movers:
+        target = to_new(u.email)
+        if User.objects.filter(email__iexact=target).exclude(pk__in=were_old).exists():
+            refused.append(u.email.rsplit("@", 1)[0])
+            continue
+        u.email = target
+        u.save(update_fields=["email"])
+        moved.append(u.email.rsplit("@", 1)[0])
+    follows = to_new(key) if key.endswith("@" + old) and not User.objects.filter(email__iexact=key).exists() else ""
+    present, behind = locals_on(new), locals_on(old)
+    if os.environ.get("DGO_RENAME_DRY_RUN") == "1":
+        transaction.set_rollback(True)
+print("MOVED=" + ",".join(moved))
+print("REFUSED=" + ",".join(refused))
+print("PRESENT=" + ",".join(present))
+print("BEHIND=" + ",".join(behind))
+print("FOLLOWS=" + follows)
+' 2>&1 | tr -d '\r')"
+RC=$?
+fact() { printf '%s\n' "${OUT}" | sed -n "s/^$1=//p" | tail -1; }
+moved="$(fact MOVED)"; refused="$(fact REFUSED)"; follows="$(fact FOLLOWS)"
+if [ "${RC}" -ne 0 ] || ! printf '%s\n' "${OUT}" | grep -q '^FOLLOWS='; then
+  say "${cr}[authentik] rename-address FAILED — nothing in authentik was changed (one transaction)${c0}"
+  printf '%s\n' "${OUT}" | grep -v '^[A-Z]*=' | grep -iv 'password\|secret\|token' | tail -6 | sed 's/^/  /'
+  rename_note AUTHENTIK_BOOTSTRAP_EMAIL failed
+  exit 1
+fi
+rename_note AUTHENTIK_BOOTSTRAP_EMAIL present "$(fact PRESENT)"
+rename_note AUTHENTIK_BOOTSTRAP_EMAIL behind "$(fact BEHIND)"
+if [ "${DRY}" = 1 ]; then
+  say "[authentik] DRY RUN, nothing changed — would move to @${NEW}: ${moved:-none}; AUTHENTIK_BOOTSTRAP_EMAIL → ${follows:-unchanged}; refused: ${refused:-none}"
+  [ -z "${refused}" ]; exit $?
+fi
+say "[authentik] sign-in addresses moved to @${NEW}: ${moved:-none}"
+{ [ -n "${moved}" ] || [ -n "${follows}" ]; } && rename_note - changed
+if [ -n "${follows}" ]; then
+  env_set AUTHENTIK_BOOTSTRAP_EMAIL "${follows}" && say "[authentik] AUTHENTIK_BOOTSTRAP_EMAIL now names ${follows}" \
+    || { say "${cr}[authentik] AUTHENTIK_BOOTSTRAP_EMAIL could not be written — run this again${c0}"; exit 1; }
+fi
+if [ -n "${refused}" ]; then
+  say "${cy}[authentik] NOT moved — the new address is someone else's: ${refused}${c0}"
+  exit 1
+fi
+exit 0

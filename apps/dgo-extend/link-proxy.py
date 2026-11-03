@@ -23,8 +23,11 @@ waited on; the plan is re-read when its file changes.
 from __future__ import annotations
 
 import argparse
+import hashlib
+import hmac
 import json
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -74,10 +77,204 @@ IDENTITY_FAMILY = b"x-authentik-"
 #: an app asked to fetch something "from the office that asked" (a move pulls the app's data from
 #: there) reads it here, and a peer cannot name a third office in its place.
 OFFICE_HEADER = b"x-dgo-office"
+#: What the door may write as the mapped user: the rule `platform/manager/serve.py`'s HEADER_RE holds.
+#: A value stored before that rule was asked ("owner\n") is never written — a line break in a header
+#: value ends the head early, and the signature line would carry it too (DGO-622).
+HEADER_VALUE = re.compile(r"^[A-Za-z0-9@._+\-]{1,128}\Z")
+#: An authority this door writes into `Host:` — `platform/manager/serve.py`'s AUTHORITY_RE.
+AUTHORITY = re.compile(r"^[a-z0-9]([a-z0-9.\-]{0,251})?(:\d{1,5})?\Z")
+#: A door's path allow-list entry (DGO-945) — `catalog.PATH_RE`: absolute, plain segments only, and
+#: linear: each repeat ends at its slash (a nested `(…+/?)*` backtracked for hours on one request line).
+PATH = re.compile(r"^/(?:[A-Za-z0-9._~-]+/)*[A-Za-z0-9._~-]*\Z")
+#: The headers that say where a request CAME FROM. A door with no tile is called by a machine, and the
+#: service behind it may decide by the caller's address (n8n's webhook allow-list reads `req.ip`
+#: through one trusted hop), so what the peer claims about it is removed, never passed on.
+FORWARDED = (b"x-forwarded-for", b"x-real-ip", b"forwarded", b"x-forwarded-host", b"x-forwarded-proto")
+
+
+def _plain_path(p) -> bool:
+    return isinstance(p, str) and bool(PATH.match(p)) and "/../" not in f"{p}/" and "/./" not in f"{p}/"
+
+
+def _path_allowed(head: bytes, paths: tuple) -> bool:
+    """Is the request line's target one of `paths` — or under one that ends in `/`? Exact otherwise:
+    `/webhook/meet-recordings` is that webhook, never `/webhook/meet-recordings/<another one>`. Read
+    from the RAW target and refused when it could be read two ways: an absolute-form URL, an escape
+    (`%2e%2e`), a dot segment or a backslash — the service would resolve those, and the check would
+    have passed the wrong path."""
+    line = head.split(b"\r\n", 1)[0].decode("latin-1")
+    parts = line.split(" ")
+    if len(parts) != 3:
+        return False
+    target = parts[1].split("?", 1)[0].split("#", 1)[0]
+    if not target.startswith("/") or "%" in target or "\\" in target or not _plain_path(target):
+        return False
+    return any(target == p or (p.endswith("/") and target.startswith(p)) for p in paths)
+
+
+def _split_head(head: bytes) -> bool:
+    """Does a header line hold a bare CR or LF? A line this door reads as ONE header, the app's
+    parser (Python's email parser behind http.server, among others) reads as TWO — so a peer could
+    hide an `x-dgo-office` or an identity header from the stripping inside another header's value
+    (second reader, DGO-945). Such a head is refused, never repaired."""
+    block = head.split(b"\r\n\r\n", 1)[0]
+    return any(b"\r" in line or b"\n" in line for line in block.split(b"\r\n"))
+
+# ── the identity, PROVED (DGO-545) ───────────────────────────────────────────────────────────────
+#: The signature that makes `x-authentik-username` checkable. That header is written by the door for
+#: every request that crosses a link, and any container on this office's network can write one too —
+#: which is exactly why the app that has to believe it (apps/project-pln/office_identity.py) refuses a
+#: bare one, and why a browser on a LINKED office's console never got past Plane's own sign-in. Over a
+#: link there is no cookie to ask this office's provider about: the person was authenticated by the
+#: OTHER office, whose answer is not ours to verify. So the door PROVES what it writes.
+#:
+#: The key is the pair's own secret, from the credential plane (`dgo_link*` — the value the pairing
+#: exchanged, or the one a converge wrote for a declared office; both ends hold it and nobody else
+#: does). What is signed is the protocol version, the office this door serves, the user the request
+#: becomes here, and the moment — so a signature is worthless to anyone who cannot read the vault, and
+#: stale within SIG_WINDOW seconds. An app verifies it by reading its own copy of the same secret.
+#:
+#: One header, space-separated. The reader is apps/project-pln/office_identity.py, so this line is a
+#: contract between two apps and is written out in apps/dgo-extend/README.md § "the door's signature":
+#:
+#:     x-dgo-identity: v1 <office> <user> <unix-seconds> <hex hmac-sha256 of "v1\n<office>\n<user>\n<ts>">
+ID_HEADER = b"x-dgo-identity"
+SIG_VERSION = "v1"
+#: How long a signature is good for. The two offices are the owner's own machines, minutes apart at
+#: worst, and a request that took longer than this to be delivered is not one this door is carrying.
+SIG_WINDOW = 300
+CONNECTIONS_URL = (os.environ.get("CONNECTIONS_URL") or "http://connections:8990").rstrip("/")
+#: `office -> (read_at, token)`. Read once per office per SIG_TTL: the vault is a service this door
+#: must not call per request, and a pair's secret does not rotate under a live link.
+SIG_TTL = 60.0
+_LINK_SECRETS: dict = {}
+_LINK_SECRETS_LOCK = threading.Lock()
 
 
 def log(message: str) -> None:
     print(f"[dgo-link] {message}", flush=True)
+
+
+def signed_text(office: str, user: str, ts: int) -> str:
+    """What is signed, and the whole of it. A function so the two halves cannot drift."""
+    return f"{SIG_VERSION}\n{office}\n{user}\n{int(ts)}"
+
+
+def link_secret(office: str) -> str:
+    """The secret this office shares with ONE linked office — the credential plane's own row.
+
+    Found by NAME, the same way `apps/dgo-extend/links.py` and `scripts/bbox_agent/client.py` find a
+    link's credentials: every `dgo_link` instance whose id names that office, first match wins. The id
+    is derived from facts both ends see (`dgo_link-<peer>`, or `dgo_link-<office>-<peer>-<direction>`
+    for a declared one), so the serving side and the app that verifies the signature look for the same
+    names — and a token that is missing (vault down, a link nobody wrote a secret for) is a LINK whose
+    identity cannot be proved, which is said in the log rather than papered over.
+    """
+    office = (office or "").strip().lower()
+    if not office:
+        return ""
+    now = time.time()
+    with _LINK_SECRETS_LOCK:
+        hit = _LINK_SECRETS.get(office)
+        if hit and now - hit[0] < SIG_TTL:
+            return hit[1]
+    token = ""
+    try:
+        with urllib.request.urlopen(
+                f"{CONNECTIONS_URL}/api/instances?protocol=dgo_link", timeout=8) as r:
+            rows = (json.loads(r.read() or b"{}").get("instances") or [])
+        for row in rows:
+            iid = str((row or {}).get("id") or "")
+            # an agent's credential a linked office handed over is not the pair's secret (DGO-1127),
+            # and `dgo_link-serve-vps1-…-agent` sorts before `dgo_link-vps1`
+            if iid.startswith("dgo_link-serve-") and iid.endswith("-agent"):
+                continue
+            if not names_office(row, office):
+                continue
+            with urllib.request.urlopen(
+                    f"{CONNECTIONS_URL}/api/instances/{iid}/secret", timeout=8) as r:
+                token = str((json.loads(r.read() or b"{}").get("secret") or {}).get("token") or "")
+            if token:
+                break
+    except (urllib.error.URLError, OSError, ValueError, TypeError) as e:
+        log(f"cannot read the link secret for {office} ({e}) — this door will pass the identity "
+            f"UNSIGNED, and an app that requires a signature will ask for a sign-in")
+        return ""
+    if not token:
+        log(f"no dgo_link credential names {office} — the identity this door writes for it is UNSIGNED")
+    with _LINK_SECRETS_LOCK:
+        _LINK_SECRETS[office] = (now, token)
+    return token
+
+
+def names_office(row: dict, office: str) -> bool:
+    """Is this `dgo_link` row the link with `office`? A pairing writes `dgo_link-<office>`; a converge writes
+    `dgo_link-<a>-<b>-<direction>` with `<a>-><b> <direction>` in its hint. Exact names only, never a split on
+    `-`: office ids carry hyphens (hp-laptop, portable-ubuntu), and that split left them with no signed identity
+    (hos-005). The checker, apps/project-pln/office_identity.py, matches the same way."""
+    iid = str((row or {}).get("id") or "").lower()
+    if iid == f"dgo_link-{office}":
+        return True
+    hint = str((row or {}).get("account_hint") or "").lower().split(" ", 1)[0]
+    return office in hint.split("->") if "->" in hint else False
+
+
+def identity_signature(office: str, user: str) -> bytes:
+    """The `x-dgo-identity` value for one request — empty when it cannot be proved."""
+    if not (office and user):
+        return b""
+    secret = link_secret(office)
+    if not secret:
+        return b""
+    ts = int(time.time())
+    mac = hmac.new(secret.encode("utf-8"), signed_text(office, user, ts).encode("utf-8"),
+                   hashlib.sha256).hexdigest()
+    return f"{SIG_VERSION} {office} {user} {ts} {mac}".encode("latin-1")
+
+
+# ── the access record (DGO-890): every request another office made through this office's door ────
+# The owner, 2026-10-21: "dgo extend should log exactly the app its sharing between dgo as there
+# accesed". One JSON line per request — which office asked, for which app, as which user here, what it
+# asked, what the app answered, how many bytes each way and how long it took — appended to a volume
+# the app (dgo-extend's API, `GET /api/link/access`) reads and the security app shows. The record is
+# written AFTER the connection closes (one request per connection, see `Door.rewrite`), so it costs
+# the request nothing; a write that fails is dropped, never raised into the connection.
+ACCESS_LOG = Path(os.environ.get("DGO_DOOR_ACCESS_LOG", "/doorlog/door-access.jsonl"))
+ACCESS_MAX_BYTES = int(os.environ.get("DGO_DOOR_ACCESS_MAX_BYTES", str(20 * 1024 * 1024)))
+_access_lock = threading.Lock()
+
+
+def access_record(rec: dict) -> None:
+    try:
+        line = (json.dumps(rec, ensure_ascii=False, separators=(",", ":")) + "\n").encode("utf-8")
+        with _access_lock:
+            ACCESS_LOG.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                if ACCESS_LOG.stat().st_size > ACCESS_MAX_BYTES:
+                    os.replace(ACCESS_LOG, ACCESS_LOG.with_name(ACCESS_LOG.name + ".1"))
+            except FileNotFoundError:
+                pass
+            with open(ACCESS_LOG, "ab") as fh:
+                fh.write(line)
+    except OSError:
+        pass
+
+
+def _request_line(head: bytes) -> tuple:
+    """(method, path) of a request head; ('', '') when the first line is not one."""
+    first = head.split(b"\r\n", 1)[0].decode("latin-1", "replace").split(" ")
+    if len(first) >= 2:
+        return first[0][:16], first[1][:300]
+    return "", ""
+
+
+def _status_of(first: bytes) -> int:
+    """The status of an HTTP answer from its first bytes (`HTTP/1.1 200 OK`); 0 when there is none."""
+    try:
+        parts = first.split(b"\r\n", 1)[0].split(b" ")
+        return int(parts[1]) if parts[0].startswith(b"HTTP/") else 0
+    except (IndexError, ValueError):
+        return 0
 
 
 # ── the delivery half: a listener per rule ────────────────────────────────────────────────────────
@@ -119,12 +316,18 @@ def _nodelay(sock: socket.socket) -> None:
             pass
 
 
-def _pump(src: socket.socket, dst: socket.socket) -> None:
+def _pump(src: socket.socket, dst: socket.socket, meter: dict | None = None) -> None:
+    """Copy one direction until it ends. `meter` (optional) is told how many bytes passed and keeps the
+    first bytes — what the access record reads the app's status from."""
     try:
         while True:
             data = src.recv(65536)
             if not data:
                 break
+            if meter is not None:
+                meter["bytes"] = meter.get("bytes", 0) + len(data)
+                if not meter.get("first"):
+                    meter["first"] = data[:64]
             dst.sendall(data)
     except OSError:
         pass
@@ -315,6 +518,8 @@ _CARD = ('<!doctype html><html lang="he" dir="rtl" data-card><head><meta charset
          'max-width:34em;margin:16px}p{margin:8px 0 0;color:var(--muted)}</style></head><body><div class="c"><b>%s</b>'
          '<p>%s</p><p>המסך הזה בודק שוב בעצמו.</p></div></body></html>')
 _SAID = {
+    "bad-head": (b"400 Bad Request", "הבקשה לא תקינה",
+                 "בכותרות הבקשה יש מעבר שורה בתוך שורה — הדלת לא מעבירה בקשה שאפשר לקרוא בשתי דרכים."),
     "no-app": (b"404 Not Found", "האפליקציה לא ניתנת כאן",
                "הלשכה ענתה, אבל היא לא נותנת אפליקציה בשם הזה ללשכות מקושרות."),
     "app-down": (b"502 Bad Gateway", "האפליקציה לא עונה",
@@ -343,13 +548,14 @@ def _say(client: socket.socket, reason: str, head: bytes = b"") -> None:
 
 
 def _host_of(head: bytes) -> str:
-    """The authority this request is for: lowercased, without its port."""
+    """The authority this request is for: lowercased, without its port, and without the trailing dot
+    of a fully qualified name (`drive.macbook.` is `drive.macbook`, and is routed as that)."""
     for line in head.split(b"\r\n")[1:]:
         if not line:
             break
         name, _, value = line.partition(b":")
         if name.strip().lower() == b"host":
-            return value.strip().decode("latin-1").lower().split(":", 1)[0]
+            return value.strip().decode("latin-1").lower().split(":", 1)[0].rstrip(".")
     return ""
 
 
@@ -444,6 +650,7 @@ class Door(threading.Thread):
     @staticmethod
     def _table(doc: dict) -> dict:
         table: dict[str, tuple] = {}
+        me = str(doc.get("office") or "").strip().lower()
         for app in doc.get("apps") or []:
             if not isinstance(app, dict):
                 continue
@@ -456,12 +663,19 @@ class Door(threading.Thread):
             if not name or not 1 <= port <= 65535:
                 continue
             ident = str((app.get("identity") or {}).get("to") or "")
+            if ident and not HEADER_VALUE.match(ident):   # DGO-622: never written; said once per table
+                log(f"{alias}: the mapped user {ident!r} is not a header value — this door writes no "
+                    f"identity for it until it is declared again")
+                ident = ""
             # WHAT TO CONNECT TO: the app's own compose service, not its id. The two differ for a
             # real app (`indox` is `incoming-documents`), and connecting to the id is a DNS failure
             # answered as `502` — the shape of "the office is linked and one app is missing", which
             # is the hardest kind of gap to notice.
             upstream = str(app.get("service") or "").strip().lower() or name
-            host = str(app.get("host") or "").strip().lower()
+            # Keyed as `_host_of` reads a request: without the port. A host declared WITH one
+            # (`plane.hp:8080`) never matched exactly, and lived on the first-label fallback that a
+            # two-label name no longer has (second reader, 2026-10-19).
+            host = str(app.get("host") or "").strip().lower().split(":", 1)[0].rstrip(".")
             if host:
                 table[host] = (upstream, port, ident)
             # The FIRST LABEL, always: an app with no declared authority (`host: ""`) is reached under
@@ -469,6 +683,59 @@ class Door(threading.Thread):
             # this office cannot know, and the alias is the only part of it that is ours.
             if alias:
                 table.setdefault(alias, (upstream, port, ident))
+                # …and `<alias>.<this office>`, the name every consuming office resolves it by (the
+                # network alias on its link proxy, which `where.sh` and `bbox remote` address): a
+                # two-label name is answered exactly or not at all (`route`).
+                if me:
+                    table.setdefault(f"{alias}.{me}", (upstream, port, ident))
+        # THE DOORS WITH NO TILE this office gives the asking office (DGO-945, `serve.services`): a
+        # capability another office's machines call — the recordings, the transcriber, a webhook. Its
+        # route is the fifth field: the PATHS it answers (empty = every path), held at `_serve` before
+        # a byte reaches the service. No identity is written for it, and a name an app answers under is
+        # never taken over (the catalog refuses the clash too).
+        for door in doc.get("services") or []:
+            if not isinstance(door, dict):
+                continue
+            alias = str(door.get("alias") or "").strip().lower()
+            upstream = str(door.get("service") or "").strip().lower()
+            try:
+                port = int(door.get("port"))
+            except (TypeError, ValueError):
+                continue
+            paths = door.get("paths")
+            if not alias or not upstream or not 1 <= port <= 65535 or alias in table:
+                continue
+            if paths is not None and (not isinstance(paths, list) or not paths
+                                      or not all(_plain_path(p) for p in paths)):
+                log(f"{alias}: the door's paths {paths!r} are not plain absolute paths — not served")
+                continue
+            route = (upstream, port, "", "", tuple(paths or ()))
+            table[alias] = route
+            if me:
+                table.setdefault(f"{alias}.{me}", route)
+        # WHAT OTHER OFFICES GAVE THIS ONE, handed on (`serve.shared`, catalog.reshare): one exact
+        # name per app, `<alias>.<origin>`, and never its first label — `plane` alone is this office's
+        # own app or nothing, and a name an own app answers under is never taken over. The upstream
+        # is this office's OWN door to the origin, and the fourth field is the authority the origin
+        # expects: the request reaches it as this office's own edge would have sent it. No identity
+        # is written here — the origin's door replaces it with what the ORIGIN maps this office to.
+        for sec in doc.get("shared") or []:
+            for app in (sec.get("apps") if isinstance(sec, dict) else None) or []:
+                if not isinstance(app, dict):
+                    continue
+                host = str(app.get("host") or "").strip().lower()
+                upstream = str(app.get("service") or "").strip().lower()
+                try:
+                    port = int(app.get("port"))
+                except (TypeError, ValueError):
+                    continue
+                # The origin's authority is written into `Host:` (`rewrite`): held to the compiler's
+                # rule here, the last door before the wire (DGO-622) — a value with a CRLF in it would
+                # be a second header, or a second request, toward the origin.
+                origin_host = str(app.get("origin_host") or "").strip().lower()
+                if not host or not upstream or not 1 <= port <= 65535 or not AUTHORITY.match(origin_host):
+                    continue
+                table.setdefault(host, (upstream, port, "", origin_host))
         return table
 
     def route(self, host: str) -> tuple | None:
@@ -479,7 +746,15 @@ class Door(threading.Thread):
             return None
         if host in table:
             return table[host]
-        first = host.split(".", 1)[0]
+        first, _, rest = host.partition(".")
+        # A TWO-LABEL name is another office's way of naming an app — `<alias>.<office>` — and is
+        # answered exactly or not at all; `.localhost` is the one exception (an authority, not an
+        # office). Falling to the first label served `drive.macbook` — a share of the MacBook's Drive
+        # that is gone (revoked, unlinked, or a stale tile on the consuming side) — with THIS office's
+        # own Drive, under this office's mapping (second reader, 2026-10-19). This office's own apps
+        # answer under `<alias>.<this office>` exactly (`_table`).
+        if rest and "." not in rest and rest != "localhost":
+            return None
         return table.get(first)
 
     # ── one connection ────────────────────────────────────────────────────────────────────────────
@@ -495,14 +770,16 @@ class Door(threading.Thread):
                 and b"upgrade" in fields.get(b"connection", b""))
 
     @staticmethod
-    def rewrite(head: bytes, ident: str, office: str = "") -> bytes:
+    def rewrite(head: bytes, ident: str, office: str = "", signature: bytes = b"",
+                host: str = "", forwarded: bool = True) -> bytes:
         """The head as the app must see it: the peer's identity claims REMOVED, ours written — the
-        user it becomes here (`ident`) and the office it came from (`office`, see OFFICE_HEADER).
+        user it becomes here (`ident`), the office it came from (`office`, see OFFICE_HEADER) and the
+        PROOF of both (`signature`, see ID_HEADER).
 
         The identity is not forwarded, it is replaced: a request that crossed a link arrives from a
         person this office never authenticated, and what it carries is the other office's user
         vocabulary (`IDENTITY_FAMILY`). The mapping in the catalog is what turns it into a user of
-        THIS office.
+        THIS office — and the signature is what lets an app here believe it (`identity_signature`).
 
         And it is ONE request per connection, except a websocket. The door rewrites the head it reads
         and copies bytes after it, so a second request on a kept-alive connection would reach the app
@@ -517,31 +794,84 @@ class Door(threading.Thread):
         # door → 400, for the same request). The caller sends the body bytes after this head.
         raw = head.split(b"\r\n\r\n", 1)[0].split(b"\r\n")
         lines = [raw[0]]
+        # `host` — a re-shared app's ORIGIN authority (`_table`): the Host this request is handed on
+        # under, and the authority of an `Origin` that named the one it arrived under, which the
+        # consuming edge writes for an app that checks who is calling. Nothing else is touched.
+        came = _host_of(head)
         for line in raw[1:]:
             name = line.split(b":", 1)[0].strip().lower()
-            if line and name not in (b"connection", OFFICE_HEADER) and not name.startswith(IDENTITY_FAMILY):
+            if host and name == b"host":
+                line = b"Host: " + host.encode("latin-1")
+            elif host and name == b"origin" and came:
+                scheme, sep, authority = line.split(b":", 1)[1].strip().decode("latin-1").partition("://")
+                if sep and authority.lower().split(":", 1)[0] == came:
+                    line = b"Origin: " + f"{scheme}://{host}".encode("latin-1")
+            # ID_HEADER is on the removal list for the same reason OFFICE_HEADER is: a peer could
+            # otherwise send its own, and an app that verified it would believe whatever it said.
+            # …and, for a door with no tile (`forwarded=False`, DGO-945), what the peer says about where
+            # the request came from: the service sees this door as its caller, and nothing a peer wrote.
+            if not forwarded and name in FORWARDED:
+                continue
+            if line and name not in (b"connection", OFFICE_HEADER, ID_HEADER) and not name.startswith(IDENTITY_FAMILY):
                 lines.append(line)
         lines.append(b"Connection: Upgrade" if Door.websocket(head) else b"Connection: close")
+        if ident and not HEADER_VALUE.match(ident):       # DGO-622: the last door before the wire
+            log(f"the mapped user {ident!r} is not a header value — not written, and nothing signed for it")
+            ident, signature = "", b""
         if ident:
             lines.append(IDENTITY_HEADER.title() + b": " + ident.encode("latin-1"))
         if office:
             lines.append(OFFICE_HEADER.title() + b": " + office.encode("latin-1"))
+        if signature:
+            lines.append(ID_HEADER.title() + b": " + signature)
         return b"\r\n".join(lines) + b"\r\n\r\n"
 
-    def _serve(self, client: socket.socket) -> None:
+    def _serve(self, client: socket.socket, peer: str = "") -> None:
+        t0 = time.monotonic()
         head = _head(client)
         if not head:
             client.close()
             return
+        if _split_head(head):
+            log("a request head with a bare CR or LF inside a line — refused, nothing forwarded")
+            _say(client, "bad-head", head)
+            return
         host = _host_of(head)
+        method, path = _request_line(head)
+        office = str(self.rule.get("office") or "")
+        rec = {"ts": round(time.time(), 3), "office": office, "peer_ip": peer, "host": host,
+               "app": host.split(".", 1)[0] if host else "", "user": "", "method": method, "path": path,
+               "status": 0, "bytes_in": 0, "bytes_out": 0, "ms": 0, "ws": False, "said": ""}
+
+        def done(status: int = 0, said: str = "", up: dict | None = None, down: dict | None = None) -> None:
+            rec["status"] = status
+            rec["said"] = said
+            rec["bytes_in"] = (up or {}).get("bytes", 0)
+            rec["bytes_out"] = (down or {}).get("bytes", 0)
+            rec["ms"] = int((time.monotonic() - t0) * 1000)
+            access_record(rec)
+
         route = self.route(host)
         if route is None:
             # A name nothing is served under is answered, not hung: the consuming side shows a page
             # that says what happened instead of a timeout nobody can read.
             log(f"{host or '(no Host header)'}: no app is served under that name")
             _say(client, "no-app", head)
+            done(404, "no-app")
             return
-        name, port, ident = route
+        name, port, ident = route[:3]
+        rec["user"] = ident
+        origin_host = route[3] if len(route) > 3 else ""
+        # A door with no tile (DGO-945) answers the paths its office declared and nothing else — one
+        # request per connection (`rewrite`), so the first head is the only one there is to check.
+        door = len(route) > 4
+        if door and route[4] and not _path_allowed(head, route[4]):
+            target = (head.split(b"\r\n", 1)[0].split(b" ") + [b"", b""])[1]
+            log(f"{host}: {target[:120].decode('latin-1', 'replace') or '(no target)'} is not a path "
+                f"this door answers")
+            _say(client, "no-app", head)
+            done(404, "path-not-served")
+            return
         try:
             infos = socket.getaddrinfo(name, port, type=socket.SOCK_STREAM)
             family, socktype, proto, _canon, addr = infos[0]
@@ -552,31 +882,39 @@ class Door(threading.Thread):
         except OSError as e:
             log(f"{host}: nothing answers at {name}:{port} ({e.strerror or e})")
             _say(client, "app-down", head)
+            done(502, "app-down")
             return
         rest = head[head.index(b"\r\n\r\n") + 4:]
+        up_m: dict = {"bytes": len(head)}
+        down_m: dict = {}
         try:
-            upstream.sendall(self.rewrite(head, ident, str(self.rule.get("office") or "")) + rest)
+            upstream.sendall(self.rewrite(head, ident, office, identity_signature(office, ident),
+                                          origin_host, forwarded=not door) + rest)
             if self.websocket(head):
                 # A websocket is the one connection that stays open — and only once the APP has
                 # agreed to it. Until its `101` nothing more of the client's is forwarded: an app
                 # that answers anything else has kept an ordinary connection, and what the client
                 # sends next on it would be a request this door never rewrote.
+                rec["ws"] = True
                 answer = _head(upstream)
                 client.sendall(answer)
+                down_m = {"bytes": len(answer), "first": answer[:64]}
                 if not answer.startswith(b"HTTP/1.1 101"):
-                    _pump(upstream, client)
+                    _pump(upstream, client, down_m)
                     upstream.close()
                     client.close()
+                    done(_status_of(answer), "", up_m, down_m)
                     return
                 upstream.settimeout(None)
         except OSError:
             upstream.close()
             client.close()
+            done(0, "send-failed", up_m, down_m)
             return
         _nodelay(client)
         _nodelay(upstream)
-        up = threading.Thread(target=_pump, args=(client, upstream), daemon=True)
-        down = threading.Thread(target=_pump, args=(upstream, client), daemon=True)
+        up = threading.Thread(target=_pump, args=(client, upstream, up_m), daemon=True)
+        down = threading.Thread(target=_pump, args=(upstream, client, down_m), daemon=True)
         up.start()
         down.start()
         up.join()
@@ -586,6 +924,7 @@ class Door(threading.Thread):
                 s.close()
             except OSError:
                 pass
+        done(_status_of(down_m.get("first") or b""), "", up_m, down_m)
 
     def run(self) -> None:
         try:
@@ -602,7 +941,7 @@ class Door(threading.Thread):
         srv.settimeout(1.0)
         while not self._halt.is_set():
             try:
-                client, _addr = srv.accept()
+                client, addr = srv.accept()
             except socket.timeout:
                 continue
             except OSError:
@@ -610,7 +949,9 @@ class Door(threading.Thread):
             if self._halt.is_set():
                 client.close()
                 break
-            threading.Thread(target=self._serve, args=(client,), daemon=True).start()
+            # the peer's tunnel address for a TCP door; a unix-socket door (a host bridge) has none
+            peer = addr[0] if isinstance(addr, tuple) and addr else ""
+            threading.Thread(target=self._serve, args=(client, peer), daemon=True).start()
         try:
             srv.close()
         except OSError:

@@ -1,7 +1,7 @@
 import { workflow, node, links } from '@n8n-as-code/transformer';
 
 // <workflow-map>
-// Workflow : Google Sheets MCP Server - agent.bina-comp
+// Workflow : Google Sheets MCP Server - agent.hacohen
 // Nodes   : 23  |  Connections: 6
 //
 // NODE INDEX
@@ -58,15 +58,15 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
     /*__n8n__*/ meta: null,
     /*__n8n__*/ pinData: null,
     /*__n8n__*/ staticData: null,
-    /*__n8n__*/ shared: [{"updatedAt":"2026-06-29T10:06:58.177Z","createdAt":"2026-06-29T10:06:58.177Z","role":"workflow:owner","workflowId":"gSheetMcpAgent01","projectId":"Wx6WPGz1tIrghF2r","project":{"updatedAt":"2026-06-29T10:06:28.586Z","createdAt":"2026-06-29T10:02:30.215Z","id":"Wx6WPGz1tIrghF2r","name":"Shlomo Laptop <shlomo@local.dev>","type":"personal","icon":null,"description":null,"creatorId":"147f2398-75f7-4139-8132-7c477ee5cdfd"}}],
+    /*__n8n__*/ shared: [{"updatedAt":"2026-06-29T10:06:58.177Z","createdAt":"2026-06-29T10:06:58.177Z","role":"workflow:owner","workflowId":"gSheetMcpAgent01","projectId":"Wx6WPGz1tIrghF2r","project":{"updatedAt":"2026-06-29T10:06:28.586Z","createdAt":"2026-06-29T10:02:30.215Z","id":"Wx6WPGz1tIrghF2r","name":"Shlomo Laptop <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"147f2398-75f7-4139-8132-7c477ee5cdfd"}}],
     id: 'gSheetMcpAgent01',
-    name: 'Google Sheets MCP Server - agent.bina-comp',
+    name: 'Google Sheets MCP Server - agent.hacohen',
     active: true,
     isArchived: false,
     tags: ['gwa-app', 'lifecycle:test'],
     settings: { executionOrder: 'v1', callerPolicy: 'workflowsFromSameOwner', availableInMCP: false },
 })
-export class GoogleSheetsMcpServerAgentBinaCompWorkflow {
+export class GoogleSheetsMcpServerAgentHacohenWorkflow {
     // =====================================================================
     // CONFIGURATION DES NOEUDS
     // =====================================================================
@@ -89,7 +89,7 @@ export class GoogleSheetsMcpServerAgentBinaCompWorkflow {
     @node({
         id: '8c2b82d3-f571-4af5-87ac-b26b46a2985c',
         name: 'Google Sheets - Read Data',
-        /*__n8n__*/ notes: "📊 READ SPREADSHEET DATA\n\nRetrieve and analyze data from Google Sheets. Perfect for AI to read, process, and extract insights from spreadsheet content.\n\nUse Cases:\n• \"Read data from the Sales sheet\"\n• \"Get all entries from A1:E100\"\n• \"Show me the data in the Budget spreadsheet\"\n• \"Extract customer information from the CRM sheet\"\n\nAI Parameters:\n• Document_ID: Target spreadsheet ID\n• Sheet_Name: Specific sheet tab name\n• Range: Cell range to read (optional)\n\nProduction AutomationValues shortcuts:\n- Document_ID `1SfWUiXCpzGcfgfqbd1xogN1sUpMIlsVajL-sKH4y11U`\n- For the companies sheet, pass Sheet_Name as gid `749586510` (display name `חברות`).\n- For incoming documents, pass Sheet_Name as gid `542119184` (display name `מסמכים נכנסים`).\n- For settings, pass Sheet_Name as gid `1467881049` (display name `הגדרות`).\nIf asked for latest/last rows, read the relevant sheet once and return the last rows from the result.\n\nSafety: this generic read is range-bounded. If no Range is supplied it reads A1:Z200 only. For AutomationValues summary/count/latest-row questions, prefer the AutomationValuesQuery tool because it returns compact results and avoids sending full sheets to the agent.\n\nSafety: this generic read is range-bounded. If no Range is supplied it reads A1:Z200 only. For AutomationValues summary/count/latest-row questions, prefer AutomationValuesQuery.",
+        /*__n8n__*/ notes: "📊 READ SPREADSHEET DATA\n\nRetrieve and analyze data from Google Sheets. Perfect for AI to read, process, and extract insights from spreadsheet content.\n\nUse Cases:\n• \"Read data from the Sales sheet\"\n• \"Get all entries from A1:E100\"\n• \"Show me the data in the Budget spreadsheet\"\n• \"Extract customer information from the CRM sheet\"\n\nAI Parameters:\n• Document_ID: Target spreadsheet ID\n• Sheet_Name: Specific sheet tab name\n• Range: Cell range to read (optional)\n\nProduction AutomationValues shortcuts:\n- Document_ID `1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0048`\n- For the companies sheet, pass Sheet_Name as gid `749586510` (display name `חברות`).\n- For incoming documents, pass Sheet_Name as gid `542119184` (display name `מסמכים נכנסים`).\n- For settings, pass Sheet_Name as gid `1467881049` (display name `הגדרות`).\nIf asked for latest/last rows, read the relevant sheet once and return the last rows from the result.\n\nSafety: this generic read is range-bounded. If no Range is supplied it reads A1:Z200 only. For AutomationValues summary/count/latest-row questions, prefer the AutomationValuesQuery tool because it returns compact results and avoids sending full sheets to the agent.\n\nSafety: this generic read is range-bounded. If no Range is supplied it reads A1:Z200 only. For AutomationValues summary/count/latest-row questions, prefer AutomationValuesQuery.",
         type: 'n8n-nodes-base.googleSheetsTool',
         version: 4.6,
         position: [680, 740],
@@ -534,9 +534,9 @@ Always backup important data first.`,
         documentId: {
             __rl: true,
             mode: 'list',
-            value: '1SfWUiXCpzGcfgfqbd1xogN1sUpMIlsVajL-sKH4y11U',
+            value: '1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0048',
             cachedResultName: 'Incoming Documents — solutionsbina',
-            cachedResultUrl: 'https://docs.google.com/spreadsheets/d/1SfWUiXCpzGcfgfqbd1xogN1sUpMIlsVajL-sKH4y11U/edit',
+            cachedResultUrl: 'https://docs.google.com/spreadsheets/d/1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0048/edit',
         },
     };
 
@@ -999,7 +999,7 @@ return [{ json: { operation, filters, includeFullRow, query: rawQuery, documentN
     IncomingDocumentsFilteredQuery = {
         documentId: {
             __rl: true,
-            value: '1SfWUiXCpzGcfgfqbd1xogN1sUpMIlsVajL-sKH4y11U',
+            value: '1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0048',
             mode: 'id',
             cachedResultName: 'Incoming Documents — solutionsbina',
         },
@@ -1009,7 +1009,7 @@ return [{ json: { operation, filters, includeFullRow, query: rawQuery, documentN
             mode: 'list',
             cachedResultName: 'מסמכים נכנסים',
             cachedResultUrl:
-                'https://docs.google.com/spreadsheets/d/1SfWUiXCpzGcfgfqbd1xogN1sUpMIlsVajL-sKH4y11U/edit#gid=225484521',
+                'https://docs.google.com/spreadsheets/d/1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0048/edit#gid=225484521',
         },
         filtersUI: {
             values: [

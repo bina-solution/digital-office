@@ -77,7 +77,7 @@ see — a green check with a stale settings file is a container that will not co
 $ docker exec n8n-local n8n import:credentials --input=/tmp/dgo65-testcred-arr.json
 Successfully imported 1 credential.
 $ docker exec n8n-local n8n export:credentials --id=dgo65keycheck0001 --decrypted --pretty
-… "data": { "name": "Authorization", "value": "dgo65-roundtrip-ok" }   ← the exact value written
+… "data": { "name": "Authorization", "value": "REDACTED" }   ← the exact value written
 ```
 
 **State of the 24 legacy rows after the switch** (stated plainly, because it is a repair someone

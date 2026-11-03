@@ -61,11 +61,21 @@ DEFAULT_DIR = "/tunnel"
 #: The link plane's own range (`net.py`): one /24 per pair, .1 this office, .2 the peer.
 TUNNEL_NET = ipaddress.ip_network("10.79.0.0/16")
 #: A Docker service name, which is what a delivery target may be: the proxy resolves it per
-#: connection, so anything that is not a name in this network is a rule pointing at nothing.
-SERVICE_RE = re.compile(r"^[a-z][a-z0-9-]{1,62}$")
+#: connection, so anything that is not a name in this network is a rule pointing at nothing. `\Z`, not
+#: `$`: Python's `$` also matches just BEFORE a trailing newline, so `^…$` passed "bina-ds\n" — a
+#: target of "bina-ds\n:3081" and, on a far end, a socket file with a line break in its name (DGO-615).
+SERVICE_RE = re.compile(r"^[a-z][a-z0-9-]{1,62}\Z")
 #: The plan's file name. One file: the firewall half of delivery is `firewall.py`'s (`from_tunnel`),
 #: rendered from the same declaration, so this half has no rules of its own to publish.
 PLAN_NAME = "link-proxy.json"
+#: Plans ANOTHER office rendered for this one, one file per office that renders
+#: (`link-proxy.d/<office>.json`, written by `converge._remote_delivery`). They are INPUTS: this office
+#: alone writes `PLAN_NAME`, from its own pairs and every shipped plan (`build_multi(shipped=…)`).
+#: The shipped plan used to BE `PLAN_NAME`, kept only while this office declared no pair of its own —
+#: measured on vps1 (2026-10-12 → 10-19): the day it paired with hp-laptop, its own render replaced
+#: the MacBook's plan within a minute of every converge, and the MacBook's doors and catalog were gone
+#: for a week behind a tunnel that handshook every two minutes.
+SHIPPED_DIR = "link-proxy.d"
 
 # ── the ONE DOOR a link gets (DGO-32) ─────────────────────────────────────────────────────────────
 #: Why a door and not a port per app: this office's registry holds four apps that answer on 8080, two
@@ -172,16 +182,33 @@ def _serve_doors(oid: str, slot: int, self_addr: str, peer_addr: str, own: dict,
     for app, spec in sorted(own.items()):
         if app == SELF_APP or app == catalog.WILDCARD:
             # The wildcard is not an app: it is "everything this office has, published" (see
-            # `catalog.publishable`). Its apps' agent ports cannot be enumerated from here — this
-            # module has no registry — so a wildcard-served office's agent APIs need their app named
-            # explicitly in `serve:`. The UI doors are all behind the door above and need no entry.
+            # `catalog.publishable`). It names no port of its own — its apps' agent doors arrive named
+            # in this map, because the caller enriches the office's `serve:` from the registry the apps
+            # declare themselves in (`catalog.serve_with_agents`, DGO-570). The UI doors are all behind
+            # the door above and need no entry.
             continue
         # The SECOND port of an agent app (DGO-32) keeps a door of its own: a CLI addresses a port,
         # and the door's Host routing cannot tell an adapter from the UI that shares its authority.
+        # It delivers to the SERVICE when the entry carries one (`mail` answers as `mailview`, DGO-38)
+        # — the same name the catalog publishes, so both ends of the link say one word.
+        name = str(spec.get("service") or app) if isinstance(spec, dict) else str(app)
+        # …and the agent port to the service that ANSWERS it, which is not always the UI's (DGO-1018):
+        # browser42's API is its task runner, mail's is mailapi. `catalog.serve_with_agents` carries it
+        # from the registry; an entry without it delivers to the UI's service, as before.
+        agent = str(spec.get("agent_api_service") or name) if isinstance(spec, dict) else name
+        note = "an agent API's own door"
+        if agent != name and not catalog.agent_service_ok(agent):
+            # A name the door does not take is never a target (DGO-615's shape: "bina-ds\n:3081"), and
+            # neither is this link's own namespace, which it shares with dgo-net and the carrier. Fall
+            # back to the UI's service rather than refuse: one refused rule takes the whole plan down.
+            # The catalog publishes no other pair (`catalog.build` holds the same rule). The plan says
+            # so: a fallback nobody can see was the 502 nobody could explain (the third reader).
+            note = f"an agent API's own door — {agent!r} is no service a door delivers to, so {name} answers"
+            agent = name
         for port in ports_of(app, spec)[1:]:
-            out.append({"office": oid, "direction": "serve", "app": app, "kind": "app",
-                        "port": _port(app, port), "target": f"{app}:{int(port)}",
-                        "clients": [peer_addr], "note": "an agent API's own door"})
+            out.append({"office": oid, "direction": "serve", "app": name, "kind": "app",
+                        "port": _port(name, port), "target": f"{agent}:{int(port)}",
+                        "clients": [peer_addr], "note": note})
     for rule in out:
         if host_doors:
             # The socket name carries the SLOT: an office that serves two peers has two doors, and
@@ -291,7 +318,8 @@ def _same_door(a: dict, b: dict) -> bool:
 
 def build_multi(home: dict, pairs: list[dict], served_by_peer: dict | None = None,
                 control_bind: str = "", halves: tuple[str, ...] = ("serve", "use"),
-                iface: str = "") -> dict:
+                iface: str = "", registry: dict | None = None,
+                shipped: dict | None = None) -> dict:
     """The delivery plan for EVERY pair this office holds: one rule set, one file, one namespace.
 
     Each pair is described by its caller — `net.py`'s pair list is the same fact:
@@ -309,7 +337,12 @@ def build_multi(home: dict, pairs: list[dict], served_by_peer: dict | None = Non
     """
     served_by_peer = served_by_peer or {}
     home_id = str(home.get("id") or "local")
-    own = catalog.with_control(home.get("serve"))
+    # The doors this office SERVES: its own `serve:` map, enriched with the agent port every served app
+    # declares in its own registry row (`catalog.serve_with_agents`, DGO-570) — passed IN, never read
+    # from disk here. A wildcard gives its adapters like any other declaration, an explicit `serve:`
+    # field still wins over it, and an app nobody serves gains nothing.
+    own = catalog.with_control(catalog.serve_with_agents(registry, home.get("serve"))
+                               if registry is not None else home.get("serve"))
     rules: list[dict] = []
     meta: list[dict] = []
     for pair in (pairs or []):
@@ -341,6 +374,16 @@ def build_multi(home: dict, pairs: list[dict], served_by_peer: dict | None = Non
                      "iface": iface or (WG_IF if host_doors else f"wg{slot}"),
                      "host_doors": host_doors,
                      "direction": mirror((link or {}).get("direction") or "use")})
+    # The plans other offices SHIPPED here (`read_shipped`): their rules join this office's own and go
+    # through the same clash check, so one namespace still holds one listener per address and port. A
+    # pair this office declares itself is its own to render — a shipped rule for it is not taken.
+    own = {m["office"] for m in meta}
+    for by, doc in sorted((shipped or {}).items()):
+        for pair in _shipped_pairs(doc):
+            if pair["office"] not in own:
+                meta.append({**pair, "rendered_by": by})
+        rules.extend({**r, "rendered_by": by} for r in doc.get("rules") or []
+                     if isinstance(r, dict) and str(r.get("office") or "") not in own)
     seen: list[dict] = []
     # The doors a declaration decides come first, so a listener that CAN move never takes a port one
     # of them needs: a pair's door, its catalog listener and everything this office serves are fixed
@@ -435,7 +478,7 @@ def _pair_rules(home_id: str, oid: str, pslot: int, side: int, link: dict, own: 
 def build(home: dict, offices: list[dict], served_by_peer: dict | None = None,
           control_bind: str = "", side: int = 1,
           halves: tuple[str, ...] = ("serve", "use"), host_doors: bool = False,
-          iface: str = "") -> dict:
+          iface: str = "", registry: dict | None = None) -> dict:
     """The delivery plan for a SINGLE-pair view — the shape every existing caller passes.
 
     `home` is this office's own record, `offices` the declarations of the peers it may be linked to
@@ -470,7 +513,7 @@ def build(home: dict, offices: list[dict], served_by_peer: dict | None = None,
             pslot = home_slot
         pairs.append({"office": office, "slot": pslot, "side": int(side),
                       "host_doors": host_doors, "link": link})
-    return build_multi(home, pairs, served_by_peer, control_bind, halves, iface)
+    return build_multi(home, pairs, served_by_peer, control_bind, halves, iface, registry)
 
 
 def write(base: str | Path, home: dict, offices: list[dict],
@@ -491,16 +534,20 @@ def write(base: str | Path, home: dict, offices: list[dict],
 
 def write_multi(base: str | Path, home: dict, pairs: list[dict], served_by_peer: dict | None = None,
                 control_bind: str = "", halves: tuple[str, ...] = ("serve", "use"),
-                iface: str = "") -> dict:
+                iface: str = "", registry: dict | None = None,
+                shipped: dict | None = None) -> dict:
     """Render EVERY pair's delivery and write it where the proxy container reads it.
 
     One file for all pairs, deliberately (see `build_multi`): the consumer loops over rules, and a
-    per-pair file would make it learn a notion of a pair it does not need.
+    per-pair file would make it learn a notion of a pair it does not need. Written whole, through a
+    temporary file, because the proxy polls it.
     """
-    plan = build_multi(home, pairs, served_by_peer, control_bind, halves, iface)
+    plan = build_multi(home, pairs, served_by_peer, control_bind, halves, iface, registry, shipped)
     directory = Path(base)
     directory.mkdir(parents=True, exist_ok=True)
-    (directory / PLAN_NAME).write_text(json.dumps(plan, indent=2) + "\n", encoding="utf-8")
+    tmp = directory / (PLAN_NAME + ".tmp")
+    tmp.write_text(json.dumps(plan, indent=2) + "\n", encoding="utf-8")
+    tmp.replace(directory / PLAN_NAME)
     return plan
 
 
@@ -513,6 +560,55 @@ def read(base: str | Path = DEFAULT_DIR) -> dict:
     except (OSError, ValueError):
         plan = {}
     return {"plan": plan, "present": bool(plan)}
+
+
+def read_shipped(base: str | Path = DEFAULT_DIR) -> dict[str, dict]:
+    """`{office: plan}` — every plan another office rendered for this one (`SHIPPED_DIR`).
+
+    A file that does not parse, or holds no rule list, is skipped rather than fatal: one office's
+    broken file must not close the doors every other pair delivers through.
+    """
+    out: dict[str, dict] = {}
+    for path in sorted((Path(base) / SHIPPED_DIR).glob("*.json")):
+        try:
+            doc = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(doc, dict) and isinstance(doc.get("rules"), list):
+            out[str(doc.get("rendered_by") or path.stem)] = doc
+    return out
+
+
+def keep_shipped(base: str | Path, plan: dict) -> bool:
+    """Save a plan an office of an older version wrote straight into `PLAN_NAME` as that office's
+    input file, before this office's own render replaces it. Never over a file that office wrote
+    since — that one is newer. Returns whether it saved."""
+    by = str((plan or {}).get("rendered_by") or "").strip()
+    if not by or not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,62}", by):
+        return False
+    target = Path(base) / SHIPPED_DIR / f"{by}.json"
+    if target.exists():
+        return False
+    target.parent.mkdir(parents=True, exist_ok=True)
+    tmp = target.with_suffix(".tmp")
+    tmp.write_text(json.dumps(plan, indent=2) + "\n", encoding="utf-8")
+    tmp.replace(target)
+    return True
+
+
+def _shipped_pairs(doc: dict) -> list[dict]:
+    """The pairs a shipped plan describes: its `pairs`, or — for a plan written before pairs existed —
+    the one pair its compatibility keys name."""
+    pairs = [p for p in doc.get("pairs") or [] if isinstance(p, dict) and p.get("office")]
+    if pairs or not int(doc.get("slot") or 0):
+        return pairs
+    oid = next((str(r.get("office")) for r in doc.get("rules") or []
+                if isinstance(r, dict) and r.get("office")), "")
+    if not oid:
+        return []
+    return [{"office": oid, "slot": int(doc["slot"]), "side": int(doc.get("side") or 2),
+             "self": str(doc.get("self") or ""), "iface": str(doc.get("wg_if") or WG_IF),
+             "host_doors": True}]
 
 
 def selftest() -> list[str]:
@@ -571,6 +667,23 @@ def selftest() -> list[str]:
     star = build({"id": "local", "tunnel": {"slot": 2}, "serve": {"*": {}}}, [vps1])
     if sorted(r["app"] for r in star["rules"]) != sorted([DOOR_APP, SELF_APP]):
         problems.append(f"a wildcard `serve:` renders the door and the catalog, got {star['rules']}")
+    # A name that ENDS in a line break is not a service name (DGO-615) — neither one this office serves
+    # nor one a peer publishes. `$` matched before the break and rendered both into a rule. Neither
+    # reaches the plan any more (`/api/link/serve` and catalog.validate ask the app id; served_by_peer
+    # skips a stored one), and the plan still refuses a name it cannot render if one is handed to it.
+    agent = {"port": 3080, "agent_api_port": 3081}
+    for whose, render in (
+            ("this office serves", lambda: build({"id": "local", "tunnel": {"slot": 2},
+                                                  "serve": {"bina-ds\n": agent}}, [vps1])),
+            ("a peer publishes", lambda: build({"id": "local", "tunnel": {"slot": 2}, "serve": {}},
+                                               [{"id": "vps1", "tunnel": {"slot": 2},
+                                                 "links": [{"office": "local", "direction": "serve"}]}],
+                                               {"vps1": {"bina-ds\n": agent}}))):
+        try:
+            render()
+            problems.append(f"an app name that ends in a line break ({whose}) must be refused, not rendered")
+        except LinkProxyError:
+            pass
 
     # The other direction: this office consumes the peer's apps, through ONE listener that carries the
     # consuming edge's Host header to the peer's door.
@@ -752,6 +865,38 @@ def selftest() -> list[str]:
         problems.append(f"a bidirectional far end needs a use door and a socket serve door, got {doors}")
     if not any(r.get("host_bind") == "10.79.2.2" for r in doors):
         problems.append(f"the socket door must say which address the machine's bridge stands for, got {doors}")
+
+    # A far end that ALSO has a pair of its own (vps1 from 2026-10-12: the MacBook's shipped plan, slot
+    # 2, beside its own pairing with hp-laptop, slot 3). Both survive one render; the shipped agent
+    # listener that collides with the own pair's moves into its pair's range; and a pair the office
+    # declares itself is never taken from a shipped plan.
+    shipped_doc = {**both_far, "rendered_by": "macbook"}
+    own_far = {"id": "vps1", "tunnel": {"slot": 1}, "serve": {"bina-ds": {"port": 3080, "agent_api_port": 3081}}}
+    hp = {"id": "hp-laptop", "tunnel": {"slot": 3, "side": 2},
+          "links": [{"office": "vps1", "direction": "both"}]}
+    merged = build_multi(own_far, [{"office": hp, "slot": 3, "side": 2}],
+                         {"hp-laptop": catalog.with_control({"bina-ds": {"port": 3080, "agent_api_port": 3081}})},
+                         control_bind="172.18.0.9", shipped={"macbook": shipped_doc})
+    offices = sorted({r["office"] for r in merged["rules"]})
+    mac_agent = [r["port"] for r in merged["rules"] if r["office"] == "macbook" and r.get("kind") == "agent"]
+    if offices != ["hp-laptop", "macbook"]:
+        problems.append(f"an office's own pair and a shipped plan render side by side, got {offices}")
+    if mac_agent != [agent_range(2)[0]]:
+        problems.append(f"a shipped agent listener that collides moves into its pair's range, got {mac_agent}")
+    if sorted(p["office"] for p in merged["pairs"]) != ["hp-laptop", "macbook"] or merged["slot"] != 3:
+        problems.append(f"the plan describes both pairs, its own first, got {merged['pairs']}")
+    if any(r["office"] == "hp-laptop" and r.get("rendered_by") for r in build_multi(
+            own_far, [{"office": hp, "slot": 3, "side": 2}], control_bind="172.18.0.9",
+            shipped={"hp-laptop": {"rules": [{"office": "hp-laptop", "direction": "use", "app": DOOR_APP,
+                                              "kind": "door", "port": 9099, "target": "10.79.3.1:9099",
+                                              "bind": "0.0.0.0"}]}})["rules"]):
+        problems.append("a pair this office declares itself is never rendered from a shipped plan")
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        if not keep_shipped(tmp, shipped_doc) or keep_shipped(tmp, shipped_doc):
+            problems.append("a legacy shipped plan is kept once, and never over the office's newer file")
+        if list(read_shipped(tmp)) != ["macbook"] or keep_shipped(tmp, {**shipped_doc, "rendered_by": "../x"}):
+            problems.append("read_shipped answers by office, and a name that is not an office id writes nothing")
     return problems
 
 

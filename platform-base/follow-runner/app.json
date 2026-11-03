@@ -1,0 +1,34 @@
+{
+  "id": "follow-runner",
+  "title": {
+    "he": "מעקב אחרי הגרסה היציבה",
+    "en": "Follow"
+  },
+  "layer": 1,
+  "kind": "service",
+  "version": "1.0.0",
+  "system": true,
+  "summary": {
+    "he": "לשכה שהסוכן שלה מריץ את bbox מתוך קונטיינר מקבלת את dgo-stable לבד, כל 30 דקות, עם בדיקת בריאות וחזרה אחורה",
+    "en": "An office whose bbox runs inside containers takes dgo-stable by itself, every 30 minutes, health-checked and rolled back"
+  },
+  "capabilities": [],
+  "use": [
+    {
+      "capability": "notify",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
+    }
+  ],
+  "connections": [],
+  "compose": "docker-compose.yml",
+  "routing": [],
+  "health": {
+    "structural": "auto"
+  },
+  "data": {
+    "volumes": [],
+    "on_uninstall": "keep"
+  }
+}

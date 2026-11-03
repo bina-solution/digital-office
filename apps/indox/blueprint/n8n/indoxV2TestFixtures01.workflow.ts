@@ -59,7 +59,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
     /*__n8n__*/ meta: {"templateCredsSetupCompleted":true},
     /*__n8n__*/ pinData: {},
     /*__n8n__*/ staticData: null,
-    /*__n8n__*/ shared: [{"updatedAt":"2026-07-30T23:42:27.037Z","createdAt":"2026-07-30T23:42:27.037Z","role":"workflow:owner","workflowId":"indoxV2TestFixtures01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <shlomo@local.dev>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
+    /*__n8n__*/ shared: [{"updatedAt":"2026-07-30T23:42:27.037Z","createdAt":"2026-07-30T23:42:27.037Z","role":"workflow:owner","workflowId":"indoxV2TestFixtures01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
     id: 'indoxV2TestFixtures01',
     name: 'INDOX Seed Fixtures',
     active: true,
@@ -329,7 +329,7 @@ return rows.map(r=>({json:{INLINE_ACTION:'TABLE_UPSERT', table:'settings', insta
 -- Guarded: fires only when the whole table is mail-less (a real deployment never is).
 -- id is GENERATED ALWAYS (see fixtures/schema.sql) — never supply it.
 insert into {{ (() => { const i = String($('When Called').first().json.__instance || ''); if (!/^[a-z][a-z0-9_]*$/.test(i)) { throw new Error('indoxV2TestFixtures01: no valid __instance — public fallback removed at the 2026-08-31 cutover'); } return 'indox_' + i; })() }}.companies ("instance", "שם חברה", "מזהה 1", "מייל 1")
-select 'incoming-documents-main', 'SV3S Sender Co', '998000111', 'sv3s-bs-sender@demo.indox'
+select 'incoming-documents-main', 'SV3S Sender Co', '900001041', 'person78-x-x@example.com'
 -- the guard is per-instance too: "does a mail-carrying company already exist" has to mean
 -- "...for THIS instance". Left global, the first instance's rows satisfy it forever and every
 -- later instance silently never receives its fixture — a suite that then fails for a reason
@@ -354,14 +354,14 @@ where not exists (select 1 from {{ (() => { const i = String($('When Called').fi
         operation: 'executeQuery',
         options: {},
         query: `=insert into {{ (() => { const i = String($('When Called').first().json.__instance || ''); if (!/^[a-z][a-z0-9_]*$/.test(i)) { throw new Error('indoxV2TestFixtures01: no valid __instance — public fallback removed at the 2026-08-31 cutover'); } return 'indox_' + i; })() }}.companies ("instance", "שם חברה", "מזהה 1")
-values ('incoming-documents-main', 'בניאס סחר בע"מ', '510605959'),
-       ('incoming-documents-main', 'כהן פור ש.א. בע"מ', '511022493'),
+values ('incoming-documents-main', 'בניאס סחר בע"מ', '500000179'),
+       ('incoming-documents-main', 'כהן פור ש.א. בע"מ', '500000146'),
        ('incoming-documents-main', 'אלקטרה מוצרי בנייה בע"מ', '511234567'),
-       ('incoming-documents-main', 'אגן מפעלי הנדסה (1988) בע"מ', '511301129'),
-       ('incoming-documents-main', 'דלתות תייר בע"מ', '511634388'),
-       ('incoming-documents-main', 'דיאור יבוא ושיווק בע"מ', '513105494'),
-       ('incoming-documents-main', 'פולירון תעשיות בע"מ', '513498345'),
-       ('incoming-documents-main', 'מפעל מתכת כפר מנחם בע"מ', '570043745')
+       ('incoming-documents-main', 'אגן מפעלי הנדסה (1988) בע"מ', '500000062'),
+       ('incoming-documents-main', 'דלתות תייר בע"מ', '500000161'),
+       ('incoming-documents-main', 'דיאור יבוא ושיווק בע"מ', '500000138'),
+       ('incoming-documents-main', 'פולירון תעשיות בע"מ', '500000187'),
+       ('incoming-documents-main', 'מפעל מתכת כפר מנחם בע"מ', '500000153')
 on conflict ("instance", "מזהה 1") do nothing;
 -- [fixed certainty 2026-09-02, owner Decision 8] THREE of the eight synthetic companies carry the
 -- per-company FIXED certainty (90) so the pipeline suite proves SelectType01's max(computed, fixed)
@@ -370,7 +370,7 @@ on conflict ("instance", "מזהה 1") do nothing;
 -- Idempotent: set on every seed.
 update {{ (() => { const i = String($('When Called').first().json.__instance || ''); if (!/^[a-z][a-z0-9_]*$/.test(i)) { throw new Error('indoxV2TestFixtures01: no valid __instance'); } return 'indox_' + i; })() }}.companies
    set "SELECTION_CERTAINTY" = 90
- where "instance" = 'incoming-documents-main' and "מזהה 1" in ('510605959', '511022493', '511234567');`,
+ where "instance" = 'incoming-documents-main' and "מזהה 1" in ('500000179', '500000146', '511234567');`,
     };
 
     // =====================================================================

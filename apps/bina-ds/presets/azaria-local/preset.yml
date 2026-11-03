@@ -1,0 +1,5 @@
+# Display text only (id = this directory's name). Installed into $DSH_HOME/.agent-presets by
+# bina-ds-llm-routes when the office has a local model route (tools/llm-routes.mjs, DGO-825).
+name: עזריה · מקומי
+description: עזריה על מודל מקומי — הנחיות קצרות וכלים מעטים, כדי שמודל קטן על מחשב של הלשכה יענה בזמן סביר, בלי שום API חיצוני.
+order: 1

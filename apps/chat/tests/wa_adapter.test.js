@@ -28,7 +28,7 @@ jest.mock('../src/services/sentry', () => ({ Sentry: { captureException: jest.fn
 const wa = require('../src/whatsapp/chat_bot');
 
 const frame = (over = {}) => ({
-  key: { id: 'wamid.X', remoteJid: 'person32@example.com', fromMe: false, ...(over.key || {}) },
+  key: { id: 'wamid.X', remoteJid: '972501112233@s.whatsapp.net', fromMe: false, ...(over.key || {}) },
   message: over.message !== undefined ? over.message : { conversation: 'שלום' },
   pushName: over.pushName !== undefined ? over.pushName : 'משה',
   messageTimestamp: over.messageTimestamp !== undefined ? over.messageTimestamp : 1785000000,
@@ -37,8 +37,8 @@ const frame = (over = {}) => ({
 describe('routing', () => {
   test('a DM becomes a 1:1 conversation keyed by the phone number', () => {
     const m = wa.normalise(frame());
-    expect(m).toMatchObject({ conversationId: 'person32@example.com', isGroup: false, fromMe: false });
-    expect(m.sender).toEqual({ id: '050-000-0006', name: 'משה' });
+    expect(m).toMatchObject({ conversationId: '972501112233@s.whatsapp.net', isGroup: false, fromMe: false });
+    expect(m.sender).toEqual({ id: '972501112233', name: 'משה' });
     expect(m.text).toBe('שלום');
     expect(m.timestamp).toBeInstanceOf(Date);
   });
@@ -46,15 +46,15 @@ describe('routing', () => {
   test('a group keeps the GROUP as the conversation and the PARTICIPANT as the sender', () => {
     // this is the split that used to force two near-identical handlers; the normalised shape carries
     // both, so one handler can reply to the group while tracking state per person
-    const m = wa.normalise(frame({ key: { remoteJid: '12345@g.us', participant: 'person41@example.com' } }));
+    const m = wa.normalise(frame({ key: { remoteJid: '12345@g.us', participant: '972509998888@s.whatsapp.net' } }));
     expect(m.conversationId).toBe('12345@g.us');
     expect(m.isGroup).toBe(true);
-    expect(m.sender.id).toBe('050-000-0012');
+    expect(m.sender.id).toBe('972509998888');
   });
 
   test('a LID-addressed DM is resolved through remoteJidAlt', () => {
-    const m = wa.normalise(frame({ key: { remoteJid: '999@lid', remoteJidAlt: 'person32@example.com' } }));
-    expect(m.conversationId).toBe('person32@example.com');
+    const m = wa.normalise(frame({ key: { remoteJid: '999@lid', remoteJidAlt: '972501112233@s.whatsapp.net' } }));
+    expect(m.conversationId).toBe('972501112233@s.whatsapp.net');
     expect(m.isGroup).toBe(false);
   });
 
@@ -63,8 +63,8 @@ describe('routing', () => {
   });
 
   test('a LID participant in a group falls back to participantAlt, and is skipped without one', () => {
-    const ok = wa.normalise(frame({ key: { remoteJid: '12345@g.us', participant: '888@lid', participantAlt: 'person41@example.com' } }));
-    expect(ok.sender.id).toBe('050-000-0012');
+    const ok = wa.normalise(frame({ key: { remoteJid: '12345@g.us', participant: '888@lid', participantAlt: '972509998888@s.whatsapp.net' } }));
+    expect(ok.sender.id).toBe('972509998888');
     expect(wa.normalise(frame({ key: { remoteJid: '12345@g.us', participant: '888@lid' } }))).toBeNull();
   });
 
@@ -116,8 +116,8 @@ describe('the backend and transport it presents to the runtime', () => {
 
   test('a bare phone number still resolves to a JID, so legacy callers keep working', async () => {
     const sock = { sendMessage: jest.fn(async () => ({})) };
-    await wa.backendFor(sock).sendMessage('050-000-0006', { text: 'hi' });
-    expect(sock.sendMessage).toHaveBeenCalledWith('person32@example.com', { text: 'hi' });
+    await wa.backendFor(sock).sendMessage('972501112233', { text: 'hi' });
+    expect(sock.sendMessage).toHaveBeenCalledWith('972501112233@s.whatsapp.net', { text: 'hi' });
   });
 
   test('react and typing map onto the Baileys calls they replaced', async () => {
@@ -149,7 +149,7 @@ describe('back-compat', () => {
     const sock = { sendMessage: jest.fn(), sendPresenceUpdate: jest.fn() };
     await wa.onMessage(sock, frame());
     expect(spy).toHaveBeenCalledWith(
-      expect.objectContaining({ conversationId: 'person32@example.com' }),
+      expect.objectContaining({ conversationId: '972501112233@s.whatsapp.net' }),
       expect.objectContaining({ connectionId: wa.WA_CONNECTION_ID }));
     spy.mockRestore();
   });

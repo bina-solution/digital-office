@@ -20,6 +20,10 @@
     }
   ],
   "compose": "docker-compose.yml",
+  "agent": {
+    "context": "AGENT.md",
+    "order": 97
+  },
   "routing": [
     {
       "host": "portainer",

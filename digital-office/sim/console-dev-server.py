@@ -91,13 +91,13 @@ form{{display:grid;gap:8px}} textarea{{min-height:70px;font:inherit}} button{{ju
 <form onsubmit="event.preventDefault();this.querySelector('textarea').value='';"><textarea placeholder="הערה…"></textarea><button>שליחה</button></form></section></main>
 <script>
 (function(){{
-  var BASE={json.dumps(base)};
-  function report(){{ var p=location.pathname.slice(BASE.length)||"/"; parent.postMessage({{type:"bina:route",path:p+location.search}},location.origin); }}
+  // No `bina:route` report: the shell reads the page's own URL (the same contract the live console
+  // keeps in `watchFrameRoute`/`watchWinRoute`). This mock used the retired office protocol, and the
+  // listener that read it was deleted 2026-10-13 — a post into nothing is dead code in the spec.
   document.addEventListener("click",function(e){{
     var a=e.target.closest("nav a"); if(!a) return; e.preventDefault();
     location.href=a.getAttribute("href");
   }});
-  report();
 }})();
 </script></body></html>"""
 
@@ -126,7 +126,6 @@ function set(p){ playing=p; document.getElementById('pp').textContent=p?'❚❚'
 document.getElementById('pp').onclick=function(){set(!playing)};
 window.addEventListener('message',function(e){ if(e.origin===location.origin&&e.data&&e.data.type==='bina:widget-action'&&e.data.id==='toggle') set(!playing); });
 set(false);
-parent.postMessage({type:'bina:route',path:'/'},location.origin);
 </script></body></html>"""
 
 

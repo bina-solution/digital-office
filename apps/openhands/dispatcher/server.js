@@ -45,8 +45,8 @@ const MAX_CONCURRENT = parseInt(process.env.DISPATCHER_MAX_CONCURRENT || '3', 10
 const DEFAULT_MODEL = process.env.DISPATCHER_DEFAULT_MODEL || 'DeepSeek V4 Pro'; // OpenHands profile name
 const PORT = parseInt(process.env.DISPATCHER_PORT || '8800', 10);
 const OH_STATE_PATH = process.env.OPENHANDS_STATE_PATH || '/.openhands-state';
-const VAULT_PATH = '/root/deployment-bina-comp/ai/obsidian';
-const SKILLS_PATH = '/root/deployment-bina-comp/.github/skills';
+const VAULT_PATH = '/root/deployment-hacohen/ai/obsidian';
+const SKILLS_PATH = '/root/deployment-hacohen/.github/skills';
 const RESPONSE_POLL_MS = parseInt(process.env.DISPATCHER_RESPONSE_POLL_MS || '1500', 10);
 const RESPONSE_POLL_MAX_MS = parseInt(process.env.DISPATCHER_RESPONSE_POLL_MAX_MS || '300000', 10); // 5 min
 
@@ -1024,8 +1024,8 @@ async function dispatchForTelegram(chatId, message, model, imageUrls, replyToMsg
       finalMessage += '\n   - "traefik.http.routers.NAME.tls.certresolver=myresolver"';
       finalMessage += '\n   - "traefik.http.services.NAME.loadbalancer.server.port=80"';
       finalMessage += '\n3. CRITICAL: For volume mounts in docker-compose.yml, use HOST paths not sandbox paths.';
-      finalMessage += '\n   /workspace/project/ maps to /root/deployment-bina-comp/ on the Docker host.';
-      finalMessage += '\n   Example: volumes: ["/root/deployment-bina-comp/YOUR_DIR:/usr/share/nginx/html:ro"]';
+      finalMessage += '\n   /workspace/project/ maps to /root/deployment-hacohen/ on the Docker host.';
+      finalMessage += '\n   Example: volumes: ["/root/deployment-hacohen/YOUR_DIR:/usr/share/nginx/html:ro"]';
       finalMessage += '\n4. The root /workspace/project/compose.yml includes all sub-project compose files via the `include` directive. Add yours:';
       finalMessage += '\n   `  - ./YOUR_DIR/docker-compose.yml`';
       finalMessage += '\n5. After adding: run `cd /workspace/project && docker compose up -d YOUR_SERVICE` to deploy.';

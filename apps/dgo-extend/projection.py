@@ -49,11 +49,14 @@ What this module refuses to do
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 from pathlib import Path
 
 import catalog
+
+log = logging.getLogger("dgo-extend.projection")
 
 #: How long a live fetch may take before the peer counts as unavailable. Short: this runs on a timer.
 FETCH_TIMEOUT = 8.0
@@ -64,7 +67,8 @@ DEFAULT_DIR = "/data"
 
 
 def state_block(catalogs: dict, home: dict, exclude: dict | None = None,
-                own_address: str = "", peer_addresses: dict | None = None) -> list[dict]:
+                own_address: str = "", peer_addresses: dict | None = None,
+                direct: set | None = None) -> list[dict]:
     """Fetched catalogs → the `remote:` entries the compiler validates. Pure.
 
     `home` is this office's own record, and `own_address` this office's own end of the pair as the
@@ -94,47 +98,81 @@ def state_block(catalogs: dict, home: dict, exclude: dict | None = None,
     addresses = {str(k): str(v) for k, v in (peer_addresses or {}).items() if v}
     out = []
     for office, doc in sorted((catalogs or {}).items()):
-        apps = []
-        for app in (doc.get("apps") or []):
-            if str(app.get("alias") or "").lower() in hide.get(office, set()):
+        entry = _entry(office, doc, hide.get(office, set()), addresses.get(office) or address)
+        if entry:
+            out.append(entry)
+    # An office a peer HANDS ON (`catalog.shared_sections`) is an entry of its own, reached through
+    # that peer: the peer's address and door (`via`), its own alias namespace. An office this one is
+    # linked to directly is always reached directly — `direct`, this office's own peers, whether or
+    # not their catalog has arrived — and one office is never two entries: the compiler refuses a
+    # block that names an office twice.
+    taken = {e["office"] for e in out} | {str(o) for o in (direct or ())}
+    for office, doc in sorted((catalogs or {}).items()):
+        sections, dropped = catalog.shared_sections(doc, str(home.get("id") or ""))
+        for why in dropped:
+            log.warning("serve.shared: %s", why)
+        for sec in sections:
+            if sec["office"] in taken or sec["office"] in (catalogs or {}):
                 continue
-            row = {
-                "app": app.get("app") or app.get("alias"),
-                "alias": app.get("alias"),
-                "port": app.get("port"),
-                "name": (app.get("title") or {}).get("he") or app.get("alias"),
-                "name_en": (app.get("title") or {}).get("en") or "",
-                "icon": app.get("icon") or "external",
-                "group": app.get("group") or "מרוחק",
-                "desc": app.get("desc") or "",
-                "order": app.get("order", 900),
-                "module": app.get("module") or {"kind": "embedded"},
-                "health": app.get("health") or "/healthz",
-            }
-            if (app.get("api") or {}).get("port"):
-                row["agent_api_port"] = app["api"]["port"]
-            if app.get("host"):
-                row["host"] = app["host"]
-            if (app.get("identity") or {}).get("to"):
-                row["identity"] = {"to": app["identity"]["to"]}
-            apps.append(row)
-        if not apps:
-            continue
-        entry = {"office": office,
-                 "label": doc.get("label") or {"he": office, "en": office},
-                 "link": office,
-                 "address": addresses.get(office) or address,
-                 "commit": doc.get("commit") or "",
-                 "fetched": int(doc.get("generated_at") or time.time()),
-                 "apps": apps}
-        # The port the PEER's link door answers on (DGO-32): published by the office that owns the
-        # door, never computed here. One listener per link, and the Host header picks the app behind
-        # it — so every UI route of that office targets this port, and the apps' own ports stay in the
-        # catalog only for the agent API (a CLI addresses a port, not a name).
-        if isinstance(doc.get("link"), dict) and doc["link"].get("port"):
-            entry["link_port"] = int(doc["link"]["port"])
-        out.append(entry)
+            entry = _entry(sec["office"], {**sec, "link": doc.get("link")},
+                           hide.get(sec["office"], set()), addresses.get(office) or address)
+            if entry:
+                entry.update(via=office, link=office)
+                out.append(entry)
+                taken.add(sec["office"])
     return out
+
+
+def _entry(office: str, doc: dict, hidden: set, address: str) -> dict | None:
+    """One office's `remote:` entry from the catalog rows it publishes — or None when nothing is left."""
+    apps = []
+    for app in (doc.get("apps") or []):
+        if str(app.get("alias") or "").lower() in hidden:
+            continue
+        row = {
+            "app": app.get("app") or app.get("alias"),
+            "alias": app.get("alias"),
+            "port": app.get("port"),
+            "name": (app.get("title") or {}).get("he") or app.get("alias"),
+            "name_en": (app.get("title") or {}).get("en") or "",
+            "icon": app.get("icon") or "external",
+            "group": app.get("group") or "מרוחק",
+            "desc": app.get("desc") or "",
+            "order": app.get("order", 900),
+            "module": app.get("module") or {"kind": "embedded"},
+            "health": app.get("health") or "/healthz",
+        }
+        if (app.get("api") or {}).get("port"):
+            row["agent_api_port"] = app["api"]["port"]
+        if app.get("host"):
+            row["host"] = app["host"]
+        if (app.get("identity") or {}).get("to"):
+            row["identity"] = {"to": app["identity"]["to"]}
+        apps.append(row)
+    # The DOORS WITH NO TILE the office gives this one (DGO-945): an address here and nothing else —
+    # the three facts the compiler reads (`serve.plan`), never a tile's presentation. Hidden like an
+    # app: the owner's "not this one" holds for a door too.
+    doors = [{"app": d.get("app"), "alias": d.get("alias"), "port": d.get("port")}
+             for d in (doc.get("services") or [])
+             if isinstance(d, dict) and str(d.get("alias") or "").lower() not in hidden]
+    if not apps and not doors:
+        return None
+    entry = {"office": office,
+             "label": doc.get("label") or {"he": office, "en": office},
+             "link": office,
+             "address": address,
+             "commit": doc.get("commit") or "",
+             "fetched": int(doc.get("generated_at") or time.time()),
+             "apps": apps}
+    if doors:
+        entry["services"] = doors
+    # The port the PEER's link door answers on (DGO-32): published by the office that owns the door,
+    # never computed here. One listener per link, and the Host header picks the app behind it — so
+    # every UI route of that office targets this port, and the apps' own ports stay in the catalog
+    # only for the agent API (a CLI addresses a port, not a name).
+    if isinstance(doc.get("link"), dict) and doc["link"].get("port"):
+        entry["link_port"] = int(doc["link"]["port"])
+    return entry
 
 
 #: THE CONTROL PLANE — the one service that holds this office's checkout and its engine. What this
@@ -277,7 +315,9 @@ def _rendered(block: list[dict]) -> dict[tuple[str, str], str]:
     out = {}
     for e in block or []:
         pair = [e.get("address"), e.get("link_port")]
-        for a in (e.get("apps") or []):
+        # …a door with no tile too (DGO-945): a new one is a new network alias, which only an apply
+        # renders — the same step a new app's route and tile wait for.
+        for a in list(e.get("apps") or []) + list(e.get("services") or []):
             out[(str(e.get("office") or ""), str(a.get("alias") or ""))] = \
                 json.dumps([a, pair], sort_keys=True, ensure_ascii=False)
     return out
@@ -422,10 +462,11 @@ def apply_plan(block: list[dict], plan: dict) -> list[dict]:
       (`linkproxy.AGENT_BASE`) — and `http://<alias>.<office>:<the published port>` would then be
       answered by the OTHER office's agent, since every alias here is one address.
     A peer the plan does not name (an older plan, a link this office was only given) keeps what the
-    catalog said.
+    catalog said. An office reached THROUGH a peer (`via`) is reached on that peer's pair — its address
+    and its door are the via pair's.
     """
     for entry in block:
-        mine = (plan or {}).get(entry.get("office")) or {}
+        mine = (plan or {}).get(entry.get("via") or entry.get("office")) or {}
         if mine.get("address"):
             entry["address"] = str(mine["address"])
         if mine.get("door"):
@@ -489,21 +530,114 @@ def catalog_url(home: dict = None, host: str = "", port: int = catalog.CATALOG_P
     return f"http://{host}:{int(port)}/api/link/catalog"
 
 
+#: How long a peer's agent credential is trusted before it is asked for again, and how long a pull
+#: that failed waits: a token the peer's agent re-mints is picked up within the first, and a peer that
+#: predates the route (a 404) is not asked every pass.
+AGENT_PULL_SECONDS = 3600
+AGENT_RETRY_SECONDS = 600
+_agent_pulls: dict = {}
+
+
+def pull_agents(cv, home: dict, oid: str, cat: dict, url: str, address: str = "",
+                now: float | None = None) -> dict:
+    """Take, over the link, the credential of every agent `oid` gives this office (DGO-1127).
+
+    The serving office's converge used to push it over ssh (`converge._handoff_agents`), so a pairing
+    and an office with no sshd never handed one over, and `bbox agent --office <oid>` was a 401. It is
+    asked here, through the pair's control listener (`url` is the catalog's), with the secret both
+    ends of the pair hold, and kept where `bbox agent` and `bbox remote` look for it:
+    `converge.agent_instance(oid, app)`. Per app `{instance, ok, changed | reason}`; never raises."""
+    import links
+    now = time.time() if now is None else now
+    # Only the apps that are due ask anything — the vault included: each secret read is a line in
+    # its grant log, and a pass runs every minute.
+    due = [a for a in (cat.get("apps") or []) if isinstance(a, dict) and isinstance(a.get("api"), dict)
+           and a["api"].get("port") and now >= _agent_pulls.get((oid, str(a.get("app") or "")), 0)]
+    if not due:
+        return {}
+    me = str(home.get("id") or "local")
+    try:
+        pair = links.pair_tokens(me, oid)
+        why = "" if pair else f"no secret for the pair with {oid} in this vault"
+    except links.LinkError as e:
+        pair, why = [], str(e)
+    if not pair:
+        for a in due:
+            _agent_pulls[(oid, str(a.get("app") or ""))] = now + AGENT_RETRY_SECONDS
+        return {"*": {"ok": False, "reason": why}}
+    base = url.rsplit("/api/link/catalog", 1)[0]
+    out = {}
+    for a in due:
+        app = str(a.get("app") or "")
+        iid = cv.agent_instance(oid, app)
+        try:
+            out[app] = _pull_one(cv, links, base, a, app, iid, me, oid, pair, address, now)
+        except Exception as e:                                # noqa: BLE001 — one peer's answer is not the pass
+            out[app] = {"instance": iid, "ok": False, "reason": f"{type(e).__name__}: {e}"}
+        _agent_pulls[(oid, app)] = now + (AGENT_PULL_SECONDS if out[app].get("ok") else AGENT_RETRY_SECONDS)
+    return out
+
+
+def _pull_one(cv, links, base: str, a: dict, app: str, iid: str, me: str, oid: str, pair: list,
+              address: str, now: float) -> dict:
+    """One app's credential: every secret this office holds for the pair is offered in turn (a stale
+    one is refused with 403 and the next is tried), then written — if the pair is still there."""
+    doc, status = {}, 0
+    for _name, secret in pair:
+        doc = cv._http_auth("GET", f"{base}/api/link/agent/{a.get('alias') or app}", secret,
+                            timeout=FETCH_TIMEOUT * 3)
+        doc = doc if isinstance(doc, dict) else {}
+        status = int(doc.get("_status", 200) or 0)
+        if status != 403 or doc.get("code") == "not_named":
+            break
+    if status == 403 and doc.get("code") == "not_named":
+        # The serving office no longer NAMES this agent (DGO-1127): a copy taken before is dropped here,
+        # so a token it stopped giving is not one this office keeps offering.
+        dropped = links.forget(iid, oid)
+        return {"instance": iid, "ok": False, "dropped": dropped,
+                "reason": f"{oid} does not name {app} for its agent token" + (" — the copy here was removed" if dropped else "")}
+    token = str(doc.get("token") or "") if status == 200 else ""
+    if len(token) < 32:
+        return {"instance": iid, "ok": False, "reason": f"HTTP {status}: {doc.get('error') or 'no token'}"}
+    # An unpair that ran while this pass was asking has removed the pair's secret: writing now would
+    # leave a credential with no pair behind it.
+    if not links.pair_tokens(me, oid):
+        return {"instance": iid, "ok": False, "reason": f"the pair with {oid} is gone"}
+    label = doc.get("label") if isinstance(doc.get("label"), str) else ""
+    changed = links.put({
+        "id": iid, "protocol": links.PROTOCOL,
+        "label": f"הסוכן של {label or oid} — {app}",
+        "account_hint": f"{me}->{oid} agent:{app}",
+        "secret": {"token": token, "office": oid, "label": label, "peer": me,
+                   "app": app, "alias": str(doc.get("alias") or app), "address": address,
+                   "port": int(doc.get("port") or a["api"]["port"]), "direction": "use",
+                   "created_at": int(now)}})
+    if changed:
+        log.info("the agent credential of %s/%s is in this vault (%s)", oid, app, iid)
+    return {"instance": iid, "ok": True, "changed": changed}
+
+
+def forget_agents(oid: str) -> None:
+    """An unpaired office's pulls are forgotten, so a pair made again is asked on the next pass."""
+    for key in [k for k in list(_agent_pulls) if k[0] == oid]:   # the projection thread may add keys meanwhile
+        _agent_pulls.pop(key, None)
+
+
 def fetch(cv, url: str, expect_office: str = "", timeout: float = FETCH_TIMEOUT) -> dict:
     """One peer's catalog, validated. Failures are states with a sentence, never exceptions."""
     try:
         doc = cv._http("GET", url, timeout=timeout)
     except Exception as e:                                   # noqa: BLE001 — a sleeping peer
         return {"error": f"{type(e).__name__}", "url": url}
-    # A NON-2xx IS "SHE DID NOT ANSWER", NOT A BAD CATALOG. This office's own link proxy answers 502
-    # with an empty body while the tunnel carries nothing (`cv._http` folds that into `_status`), and
-    # reading it as a payload ended in „catalog.office None אינו מזהה לשכה תקין” — a sentence about
-    # the SHAPE of a document, for a peer that never spoke, printed on the tooltip of a pair whose
-    # tunnel had not completed a single handshake (measured 2026-10-12, lnk-032).
+    # THE DOOR'S OWN ANSWER IS NOT A CATALOG. `cv._http` hands an HTTP error back as its body plus
+    # `_status`, and this office's link proxy answers a peer it cannot reach with an empty 502. Run
+    # through the catalog's validator, that read „catalog.office None אינו מזהה לשכה תקין” — a sentence
+    # about the SHAPE of a document, for a peer that never spoke (measured 2026-10-12, lnk-032, and
+    # 2026-10-15, DGO-541). Any non-2xx is "she did not answer"; a 502 says it through the link.
     status = doc.get("_status") if isinstance(doc, dict) else None
     if status is not None and not 200 <= int(status) < 300:
-        return {"error": f"הלשכה האחרת לא ענתה (HTTP {int(status)})", "url": url,
-                "status": int(status)}
+        why = "הלשכה לא ענתה דרך הקישור" if int(status) == 502 else "הקישור לא החזיר קטלוג"
+        return {"error": f"{why} (HTTP {int(status)})", "url": url, "status": int(status)}
     try:
         cat = catalog.parse(doc, expect_office)
     except catalog.CatalogError as e:
@@ -556,7 +690,7 @@ def sync(cv, base: str = DEFAULT_DIR, replan=None) -> dict:
     offices = [o for o in cv.declarations() if o.get("id") != home.get("id")]
     plan = own_plan(home, base)
     hidden = load_exclude(base)
-    pulled, errors = {}, {}
+    pulled, errors, agents = {}, {}, {}
     for peer in peers(home, offices):
         oid = peer["office"]
         # ONE LISTENER PER PAIR, so the URL is per PEER: `catalog_url` with the pair's own control port
@@ -575,6 +709,8 @@ def sync(cv, base: str = DEFAULT_DIR, replan=None) -> dict:
         if got.get("catalog"):
             pulled[peer["office"]] = got["catalog"]
             catalog.store(base, got["catalog"])
+            agents[oid] = pull_agents(cv, home, oid, got["catalog"], url,
+                                      address=str((plan.get(oid) or {}).get("address") or ""))
         else:
             errors[peer["office"]] = got.get("error") or "לא התקבל קטלוג"
     proxy = None
@@ -598,15 +734,17 @@ def sync(cv, base: str = DEFAULT_DIR, replan=None) -> dict:
     mine = peers(home, offices)
     stored = {o: d for o, d in catalog.load_all(base).items() if o in {p["office"] for p in mine}}
     block = state_block(projected(pulled, stored, errors), home, hidden,
-                        own_address=own_address_cached(cv), peer_addresses=peer_addresses)
+                        own_address=own_address_cached(cv), peer_addresses=peer_addresses,
+                        direct={p["office"] for p in mine})
     # The peer's tunnel address comes from the PLAN when the plan states it: `state_block` derives it
     # from THIS office's pair slot, and on the consuming side of a one-way link that slot is the
     # peer's (vps1 holds `slot: 1` as its own name while the pair is `10.79.2.0/24`), so the derived
     # address was `10.79.1.x` — a wrong value nothing routes by (the alias is what routes) and every
     # screen would print.
     for entry in block:
-        if peer_addresses.get(entry.get("office")):
-            entry["address"] = peer_addresses[entry["office"]]
+        pair = entry.get("via") or entry.get("office")       # a handed-on office rides its peer's pair
+        if peer_addresses.get(pair):
+            entry["address"] = peer_addresses[pair]
     # ...and OUR door for each pair, for the same reason (see apply_plan): the plan is the one place
     # that knows which port this office's proxy listens on for that peer.
     apply_plan(block, plan)
@@ -629,6 +767,7 @@ def sync(cv, base: str = DEFAULT_DIR, replan=None) -> dict:
             "applied": applied,
             "peers": [p["office"] for p in mine],
             "pulled": sorted(pulled), "stored": sorted(stored), "errors": errors,
+            "agents": {o: a for o, a in agents.items() if a},
             "hidden": hidden,
             "block": [{"office": e["office"], "apps": [a["alias"] for a in e["apps"]]} for e in block],
             # The block this pass WANTS declared, whole — beside what it managed to write. When the
@@ -829,6 +968,13 @@ def selftest() -> list[str]:
     got = write_state(refused, one)
     if got.get("written") or not got.get("refused"):
         problems.append(f"a refused block is reported with its reasons, never as written: {got}")
+    # A peer the link cannot reach: its door answers an empty 502, which `_http` hands back as
+    # {"_status": 502}. That is the peer not answering — never a malformed catalog (DGO-541).
+    door_url = "http://dgo-net:9003/api/link/catalog"
+    for status, word in ((502, "לא ענתה"), (404, "לא החזיר קטלוג")):
+        got = fetch(Plane({("GET", door_url): {"_status": status}}), door_url, "vps1")
+        if "catalog" in got or word not in str(got.get("error")) or "catalog.office" in str(got.get("error")):
+            problems.append(f"a door that answers {status} is said as the door's answer, got {got}")
     # ...and WHEN the office is brought in line: an app that is new, or one whose row changed (a
     # port that moved) — never because one went away, and never when nothing changed.
     moved_port = [dict(one[0], apps=[dict(one[0]["apps"][0], agent_api_port=10064)])]
@@ -852,6 +998,47 @@ def selftest() -> list[str]:
         entries, errs = serve.plan({"remote": block}, cat)
         if errs or len(entries) != 1 or not serve.render(entries, cat):
             problems.append(f"what the projection writes must compile: {errs}")
+
+    # `serve.shared` (2026-10-19): claude-cloud consumes vps1, and vps1 hands on hp-laptop's Plane.
+    cc = {"id": "claude-cloud", "tunnel": {"slot": 1}, "serve": {}}
+    plane = {"alias": "plane", "app": "project-pln", "title": {"he": "Plane"}, "port": 9003,
+             "host": "plane.hp-laptop", "service": "plane.hp-laptop", "origin_host": "plane.localhost"}
+    vps1 = {"office": "vps1", "label": {"he": "שרת"}, "link": {"port": 9004}, "generated_at": 5,
+            "apps": [{"alias": "drive", "app": "drive", "port": 8975}],
+            "shared": [{"office": "hp-laptop", "label": {"he": "HP"}, "apps": [plane]},
+                       {"office": "claude-cloud", "apps": [{"alias": "x", "port": 1, "host": "x.claude-cloud"}]}]}
+    # OUR door for the vps1 pair is the plan's (9104), not the number vps1 publishes (9004) — the case
+    # of an office with several pairs, where only the plan knows.
+    got = apply_plan(state_block({"vps1": vps1}, cc, peer_addresses={"vps1": "10.79.4.1"}),
+                     {"vps1": {"address": "10.79.4.1", "door": 9104}})
+    by = {e["office"]: e for e in got}
+    hp = by.get("hp-laptop") or {}
+    if sorted(by) != ["hp-laptop", "vps1"]:
+        problems.append(f"an office a peer hands on is an entry of its own — and this office never one, got {sorted(by)}")
+    if (hp.get("via"), hp.get("link"), hp.get("address"), hp.get("link_port")) != ("vps1", "vps1", "10.79.4.1", 9104):
+        problems.append(f"an office reached through a peer rides that peer's pair: its address and door, got {hp}")
+    if [(a["alias"], a.get("host")) for a in hp.get("apps") or []] != [("plane", "plane.hp-laptop")]:
+        problems.append(f"the handed-on app keeps the one name the peer's door answers it under, got {hp.get('apps')}")
+    direct = state_block({"vps1": vps1, "hp-laptop": {"office": "hp-laptop", "apps": [{"alias": "plane", "port": 8080}]}},
+                         cc, peer_addresses={"vps1": "10.79.4.1", "hp-laptop": "10.79.2.1"})
+    if [e.get("via") for e in direct if e["office"] == "hp-laptop"] != [None]:
+        problems.append("an office this one is linked to directly is reached directly, and is one entry")
+    # …and before its catalog has arrived: a direct peer that has not answered yet is not projected
+    # through another one, under the direct link's verdict (second reader, 2026-10-19).
+    if "hp-laptop" in {e["office"] for e in state_block({"vps1": vps1}, cc, direct={"vps1", "hp-laptop"})}:
+        problems.append("a direct peer whose catalog has not arrived is never reached through another office")
+    withapi = dict(vps1, shared=[{"office": "hp-laptop", "apps": [dict(plane, api={"port": 3081},
+                                                                        identity={"to": "owner"})]}])
+    leaked = [a for e in state_block({"vps1": withapi}, cc) if e.get("via") for a in e["apps"]]
+    if not leaked or any("agent_api_port" in a or "identity" in a for a in leaked):
+        problems.append(f"a handed-on app gets no agent port and no identity on this side, got {leaked}")
+    if state_block({"vps1": vps1}, cc, {"hp-laptop": ["plane"]}) and \
+            "hp-laptop" in {e["office"] for e in state_block({"vps1": vps1}, cc, {"hp-laptop": ["plane"]})}:
+        problems.append("what this office hides of an office it reaches through a peer is not projected")
+    if manager:
+        entries, errs = serve.plan({"remote": got}, cat)
+        if errs or sorted(e["office"] for e in entries) != ["hp-laptop", "vps1"]:
+            problems.append(f"a block with an office reached through a peer must compile: {errs}")
     return problems
 
 

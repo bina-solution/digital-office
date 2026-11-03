@@ -1,0 +1,37 @@
+/* notifications — the «התראות בטלפון הזה» card (push.js). Colours are the office's palette tokens only;
+   every control is at least 44px tall with 8px between them; it sits above the KPI strip. */
+.push-card{position:relative;display:flex;gap:12px;align-items:flex-start;margin:0 0 16px;padding:14px 16px;
+  background:var(--surface);color:var(--ink);border:1px solid var(--line);border-inline-start:3px solid var(--accent);
+  border-radius:var(--radius-sm,10px);box-shadow:var(--shadow)}
+.push-card[hidden]{display:none}
+.push-card[data-state=denied],.push-card[data-state=unsupported],.push-card[data-state=anon]{border-inline-start-color:var(--muted)}
+.push-ic{flex:none;width:40px;height:40px;border-radius:50%;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent-d)}
+.push-ic svg{width:20px;height:20px}
+.push-card[data-state=on] .push-ic{background:var(--accent);color:var(--accent-ink)}
+.push-main{flex:1 1 auto;min-width:0}
+.push-t{margin:0;font-size:15px;line-height:22px;font-weight:700}
+.push-x{margin:4px 0 0;color:var(--muted);font-size:13px;line-height:20px}
+.push-said{margin:8px 0 0;font-size:13px;line-height:20px;color:var(--ok)}
+.push-said.bad{color:var(--danger);font-weight:600}
+.push-acts{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.push-btn{min-height:44px;padding:8px 16px;justify-content:center;transition:background-color .15s ease,border-color .15s ease}
+.push-btn svg{width:16px;height:16px}
+.push-btn.push-pri{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.push-btn.push-pri:hover:not(:disabled){background:var(--accent-d);border-color:var(--accent-d);color:var(--accent-ink)}
+.push-close{position:absolute;inset-block-start:4px;inset-inline-end:4px;width:44px;height:44px;display:grid;place-items:center;
+  border:0;background:transparent;color:var(--muted);border-radius:var(--radius-sm,10px);cursor:pointer;font:inherit}
+.push-close svg{width:16px;height:16px}
+.push-close:hover{color:var(--ink);background:var(--surface-2)}
+.push-card:has(.push-close) .push-main{padding-inline-end:36px}
+.push-devs{margin-top:12px;font-size:13px}
+.push-devs summary{cursor:pointer;min-height:44px;display:flex;align-items:center;gap:6px;color:var(--muted)}
+.push-devs ul{list-style:none;margin:0;padding:0}
+.push-devs li{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 0;border-top:1px solid var(--line)}
+.push-reopen[hidden]{display:none}
+.push-reopen svg{width:15px;height:15px}
+@media (max-width:640px){
+  .push-card{padding:12px;gap:10px}
+  .push-ic{width:36px;height:36px}
+  .push-acts .push-btn{flex:1 1 auto}
+}
+@media (prefers-reduced-motion:reduce){.push-btn{transition:none}}

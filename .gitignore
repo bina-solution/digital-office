@@ -80,6 +80,9 @@ data/dock-shots/
 data/browser42/
 data/bina-ds/
 data/power/
+data/lan/
+# the frame gate's latest verdict per app (platform/manager/framecheck.py, #63)
+data/platform/
 production/n8n/workflows/_*
 # underscore-prefixed scripts = disposable one-off/debug helpers (same convention as workflows/_*)
 scripts/_*
@@ -103,10 +106,16 @@ apps/n8n/.credentials-state/
 next-7h/
 .tmp-indox-v2-ct/
 .n8n-push-stage/
+# `bbox n8n push`'s lock and its holder (apps/n8n/hooks/push): an office made from the public copy, which
+# holds the lock back, showed a dirty tree after its first push (DGO-1029). HERE the lock is also tracked,
+# as an empty file, and must stay so: untracked by a pull, a push holding it would keep a deleted file
+# locked while the next push locks a new one.
+/.n8n-push.lock
+/.n8n-push.lock.meta
 # sandbox-only build/test artifacts (never committed)
 scratchpad-mockbot/
 production/chat/_wa_data/
-production/whatsapp-bina-comp/_wa_media/
+production/whatsapp-hacohanim/_wa_media/
 Dockerfile.local
 proxy-ca.crt
 
@@ -126,6 +135,12 @@ platform-base/authentik/blueprints/zz-generated-apps.yaml
 # into traefik's own bind-mounted file-provider directory because an external server URL is not
 # expressible in a docker label; see platform/manager/serve.py.
 platform-base/traefik/config/zz-serve.yaml
+# The three writers that share that directory, same reasoning as zz-serve.yaml above: generated
+# config, not source. `sites/public.py` writes sites-public.yaml (the office's public paths),
+# `dgo-extend/converge.py` writes dgo-extend-peer.yaml, and the offices app writes offices-peer.yaml.
+platform-base/traefik/config/sites-public.yaml
+platform-base/traefik/config/dgo-extend-peer.yaml
+platform-base/traefik/config/offices-peer.yaml
 # --- signed app catalog (bbox catalog build) ---
 # The built index + app artifacts. Deliberately NOT under .generated/: that tree is compiled config
 # and reconcile.py keeps twenty archived generations of it, which would multiply the artifacts by
@@ -136,6 +151,13 @@ platform-base/traefik/config/zz-serve.yaml
 # The PUBLIC half lives in platform/trust/keyring.json and IS committed — a fresh clone must
 # already trust the catalog this deployment publishes. The SECRET half never leaves the machine.
 .catalog-signing-key.json
+
+# --- release signing (packaging/build-binaries.sh --keygen, packaging/relsign keygen) ---
+# The roots and the online signing key are PKCS#8 PEM files — root-a.pem, root-b.pem, signing.pem,
+# release-key.pem, whatever the owner names them. Their PUBLIC halves are committed (packaging/installer/
+# roots.txt); the private halves never enter a checkout: build-binaries.sh refuses to write one there
+# or sign with one from there, and this keeps a stray one out of `git add -A`.
+*.pem
 
 # packaging output — multi-GB artifacts, never committed
 dist/
@@ -227,3 +249,29 @@ data/.locks/
 # of untracking it (see issues/one-offices-desired-state-is-what-every-clone-starts-from.yaml); git
 # ignores this line for a file it still tracks, so it changes nothing until that step is taken.
 /platform.state.yaml
+# a native writer's copy of it (dgo set-state / office-set / remote-set write beside the file and
+# rename over it): left behind only by a writer killed mid-write
+/.platform.state.yaml.*
+
+# --- RUNTIME STATE OF THE OFFICE'S OWN MACHINE (never content, never the same twice) ---
+# `.dgo/` is what an office writes about ITSELF on the machine it runs on: the tunnel's own
+# `wg0.conf`/`nftables.rules`/`addressing.json`, and the door sockets it opens for a peer. The
+# declared truth lives in `apps/dgo-extend` and in the vault; this directory is the rendering of it
+# on one machine at one moment, and a clone that carried it would carry another machine's keys.
+/.dgo/
+
+# A pnpm content-addressable store created by a manual install, not by the build (the images install
+# their own). 2 MB of blobs that no build reads and no review can read.
+/.pnpm-store/
+
+# Hand-made backups of the desired state and of traefik's dynamic file. They are made by an operator
+# mid-repair (`*.bak-alpn`, `*.bak-pre-repair-*`) and are exactly as trustworthy as the repair was;
+# the tracked default is `platform.state.default.yaml` and the tracked dynamic file is
+# `platform-base/traefik/config/traefik-dynamic.yaml`.
+/platform.state.yaml.bak-*
+/platform-base/traefik/config/*.bak-*
+
+# --- project-pln's OUTBOX (DGO-1100, any-201) ---
+# The writes that found no path to Plane, kept until one is back: this office's own runtime state, like
+# the job locks above — it holds the words of tickets and copies of their files, never repository content.
+/.state/outbox/

@@ -94,8 +94,26 @@ log "ui-map — coverage report"
 python3 "$(npath "${UM_DIR}")/report.py" --raw "$(npath "${DATA}")/ui-raw-coverage.json" --results "$(npath "${DATA}")/ui-capture-results.json" --outdir "$(npath "${ART}")"
 
 log "ui-map — compose the one big image"
-python3 "$(npath "${UM_DIR}")/compose_map.py" --results "$(npath "${DATA}")/ui-capture-results.json" \
-  --inventory "$(npath "${DATA}")/ui-inventory.json" --coverage "$(npath "${ART}")/ui-code-coverage.json" --out "$(npath "${ART}")/ui-map"
+# The one big image needs Pillow, and a host without it (no network to pip from) is not a failed
+# capture: the per-view PNGs and the report above are the substance, the montage is the convenience.
+# Until this guard the step printed a 20-line traceback and the run still ended in a tick, so the
+# traceback read as a broken run in every log — say in one line that it was skipped and why.
+#
+# Where Pillow IS here, a ✓ that names the montage is earned by the montage, not by the attempt:
+# measured 2026-10-14, 75 real screenshots, no montage, and a tick on top of it — so the exit code AND
+# a non-empty file are checked before anything claims the image exists.
+BIG="${ART}/ui-map/ui-map.png"
+made_map=0
+if python3 -c "import PIL" 2>/dev/null; then
+  if ! python3 "$(npath "${UM_DIR}")/compose_map.py" --results "$(npath "${DATA}")/ui-capture-results.json" \
+       --inventory "$(npath "${DATA}")/ui-inventory.json" --coverage "$(npath "${ART}")/ui-code-coverage.json" --out "$(npath "${ART}")/ui-map"; then
+    die "ui-map — compose_map.py FAILED (its error is above): the montage was NOT composed and ${BIG} was NOT written."
+  fi
+  [ -s "${BIG}" ] || die "ui-map — compose_map.py exited 0 but ${BIG} is missing or empty; refusing to report a map that does not exist."
+  made_map=1
+else
+  warn "ui-map — one big image skipped: Pillow is not installed here (the per-view PNGs are complete)"
+fi
 
 # Report THIS run's results, not whatever png files happen to be lying on disk.
 #
@@ -110,7 +128,15 @@ n_cap="$(python3 -c "$(printf '%s\n' \
   "$(npath "${DATA}")/ui-capture-results.json" 2>/dev/null || echo 0)"
 [ "${n_cap:-0}" -gt 0 ] 2>/dev/null || die "capture produced NO results — ${DATA}/ui-capture-results.json is missing or empty. Screenshots on disk are from an earlier run and are NOT being reported as success."
 n_png="$(ls -1 "${SHOTS}"/*.png 2>/dev/null | wc -l | tr -d ' ')"
-ok "ui-map — done: ${n_cap} views captured THIS run; ${n_png} screenshots on disk + ${ART}/ui-map/ui-map.png"
+# The montage is named only when it was really made: the line ends with the file it says it
+# wrote, and after the guard above a host without Pillow would otherwise be told about a
+# file that does not exist — the same "measures the claim, not the work" mistake as the old
+# `ls *.png | wc -l` success line this block already carries a scar for.
+if [ "${made_map:-0}" = 1 ]; then
+  ok "ui-map — done: ${n_cap} views captured THIS run; ${n_png} screenshots on disk + ${ART}/ui-map/ui-map.png"
+else
+  ok "ui-map — done: ${n_cap} views captured THIS run; ${n_png} screenshots on disk (no montage — Pillow unavailable here)"
+fi
 
 # Optional gate (default off): fail if any first-party view went uncaptured.
 if [ "${UI_MAP_GATE:-0}" = 1 ]; then

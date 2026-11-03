@@ -71,7 +71,7 @@ host. What was completed + verified live, plus honest blockers:
 | **Web onboarding** — business-identity step + connections wizard | ✅ | console BFF proxies `apitools /business`; wizard step 1 = identity, blocks until onboarded |
 | **Separate onboarding model** — Authentik owns accounts, console owns setup | ✅ | `authentik-bootstrap` auto-mints akadmin; first-run lands authed user on install wizard |
 | **Security** — credential plane never unauthenticated | ✅ | `connections-local`/`console-local` gated with `authentik` (matched morning-local); localhost 200→gated |
-| **De-Bina-comp (branding)** — one `BUSINESS_NAME` feeds visible titles | ✅ | homepage title via `{{HOMEPAGE_VAR_BUSINESS_NAME}}`; glitchtip org default; verified substitution |
+| **De-Hacohen (branding)** — one `BUSINESS_NAME` feeds visible titles | ✅ | homepage title via `{{HOMEPAGE_VAR_BUSINESS_NAME}}`; glitchtip org default; verified substitution |
 | **WhatsApp QR in-console** — bot QR surfaced + polled to paired | ✅ | `/api/qr/<id>[/png]`, console modal, disconnect; real bot reachable (`reachable:true`); pairing IP-gated by WhatsApp (residential IP needed) |
 | **Disconnect / disable** — per-connection + per-feature | ✅ | `/api/disconnect` (oauth drop / qr logout / clear), `/api/features` toggles, console `נתק` buttons |
 | **connections-mode overlay** — whole stack off the credential plane | ✅ | `compose.connections.yml`: `depends_on connections(healthy)` + blanked secrets; apitools loads 8, ledger 200 |
@@ -118,14 +118,14 @@ So: the plane is built AND real consumers run off it AND there's a single-flag "
    mirror `auth_info` into the vault for portability across redeploys.
 4. **OAuth broker end-to-end** — MED. No public HTTPS needed (connections owns its redirect); needs the
    product's own Google client + a browser that can reach `connections.<host>`. Deploy-time.
-5. **De-Bina-comp: structural rename** — MED. Branding flows from `BUSINESS_NAME` (done). The remaining ~26
+5. **De-Hacohen: structural rename** — MED. Branding flows from `BUSINESS_NAME` (done). The remaining ~26
    refs are the `chat` **service identity** (dir/container/image) + n8n blueprint credential
    labels — a rename refactor, own change. Plus the INDOX "Tenant Setup" workflow (Drive tree + sheets +
    labels per business).
 
 **Done since last cycle:** ledger confirmed (apitools, item 6 removed) · 1-command bring-up (connections+
 console in prod compose) · web onboarding (business-identity step) · separate onboarding model · localhost
-security gating · de-Bina-comp branding slice (`BUSINESS_NAME`). The `console` shell (was item 5) is built
+security gating · de-Hacohen branding slice (`BUSINESS_NAME`). The `console` shell (was item 5) is built
 and federating 13 modules — no longer a remaining task.
 
 ## Environment note (this sandbox only — NOT project changes)

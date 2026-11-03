@@ -126,7 +126,7 @@
             <Name>binaos</Name>
             <DisplayName>BinaOS Test</DisplayName>
             <Group>Administrators</Group>
-            <Password><Value>BinaOS!test1</Value><PlainText>true</PlainText></Password>
+            <Password><Value>CHANGE_ME</Value><PlainText>true</PlainText></Password>
           </LocalAccount>
         </LocalAccounts>
       </UserAccounts>
@@ -137,7 +137,7 @@
         <Enabled>true</Enabled>
         <Username>binaos</Username>
         <LogonCount>99</LogonCount>
-        <Password><Value>BinaOS!test1</Value><PlainText>true</PlainText></Password>
+        <Password><Value>CHANGE_ME</Value><PlainText>true</PlainText></Password>
       </AutoLogon>
 
       <TimeZone>UTC</TimeZone>

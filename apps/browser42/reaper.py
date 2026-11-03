@@ -17,7 +17,7 @@ Runs as a sidecar (loop) or one-shot:
   python3 reaper.py              # loop forever, sweep every INTERVAL seconds
   python3 reaper.py --once       # sweep once and exit (manual cleanup)
 
-Env: CDP (default http://browser42-browser:9222), MAX_TABS (8), INTERVAL (30).
+Env: CDP (default http://browser42-browser:9222), MAX_TABS (BROWSER42_MAX_TABS, default 6), INTERVAL (30).
 Holds ONE long-lived connection and never calls browser.close()/context.close() — it only
 closes the specific untagged tabs it decides to reap. If the browser restarts the connection
 drops; the reaper waits for CDP and RECONNECTS (which re-wakes the headed Chrome), so the live
@@ -28,7 +28,7 @@ from pathlib import Path
 from urllib.request import Request, urlopen
 
 CDP      = os.environ.get("CDP", "http://browser42-browser:9222")
-MAX_TABS = int(os.environ.get("MAX_TABS", "6"))
+MAX_TABS = int(os.environ.get("MAX_TABS") or os.environ.get("BROWSER42_MAX_TABS") or "6")
 INTERVAL = int(os.environ.get("INTERVAL", "30"))
 ONCE     = "--once" in sys.argv
 GRACE_SECONDS = int(os.environ.get("GRACE_SECONDS", "60"))

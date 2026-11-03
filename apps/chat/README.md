@@ -1,7 +1,7 @@
-# WhatsApp Bina-comp Bot
+# WhatsApp Hacohanim Bot
 
 ## Overview
-The WhatsApp Bina-comp Bot is a feature-rich application designed to manage WhatsApp interactions for the Bina-comp organization. It includes an admin panel, a bot for automated messaging, and various utilities for managing users, referrals, and campaigns.
+The WhatsApp Hacohanim Bot is a feature-rich application designed to manage WhatsApp interactions for the Hacohanim organization. It includes an admin panel, a bot for automated messaging, and various utilities for managing users, referrals, and campaigns.
 
 ## Features
 

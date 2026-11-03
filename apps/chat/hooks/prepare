@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+#: mint chat's session secret into .env, once — a cookie signed with a public default can be forged (DGO-1221)
+# prepare — apps/chat's bring-up step, run by `bbox run` before the containers start (bbox names no app).
+#
+#   CHAT_SESSION_SECRET  the key chat signs its session cookies with (compose hands it in as SESSION_SECRET).
+#       Unset, chat fell back to the default written in its own source (src/config.js), which is public: anyone
+#       could sign a cookie this office's chat would believe. Minted here when it is missing or shorter than 32
+#       characters, and kept from then on, so a run never signs everyone out twice.
+#       Idempotent; never prints the value.
+set -euo pipefail
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+ENV_FILE="${REPO_ROOT}/.env"
+[ -f "$ENV_FILE" ] || { echo "[chat] no .env yet — nothing to prepare"; exit 0; }
+
+python3 - "$ENV_FILE" <<'PY'
+import re, secrets, sys
+
+path = sys.argv[1]
+with open(path, encoding="utf-8", newline="") as f:
+    text = f.read()
+nl = "\r\n" if "\r\n" in text else "\n"
+rx = re.compile(r"(?m)^[ \t]*CHAT_SESSION_SECRET[ \t]*=([^\r\n]*)")   # never the line's own \r (a CRLF .env)
+vals = [m.group(1).split(" #", 1)[0].strip().strip("'\"") for m in rx.finditer(text)]
+if vals and len(vals[-1]) >= 32:                 # the LAST assignment wins (compose's rule): an office's own key
+    sys.exit(0)
+line = "CHAT_SESSION_SECRET=" + secrets.token_hex(32)
+if vals:
+    text = rx.sub(lambda m: line, text)
+else:
+    text += ("" if not text or text.endswith(nl) else nl) + line + nl
+with open(path, "w", encoding="utf-8", newline="") as f:
+    f.write(text)
+print("[chat] minted CHAT_SESSION_SECRET (.env): chat's session cookies are signed with this office's own key "
+      "— whoever was signed in to chat signs in once more")
+PY
